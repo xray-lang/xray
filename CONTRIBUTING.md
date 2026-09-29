@@ -22,35 +22,20 @@ ctest --test-dir build --output-on-failure -R asan_focused
 
 Generated C is checked by the always-on W1-W4 well-formedness verifier before it is written or passed to a toolchain. A verifier failure is an internal compiler error and must be fixed at its source; there is no bypass switch.
 
-## Semantic contract changes
+## Design decisions
 
-Language syntax and API shape may be replaced directly, but the semantic layer
-in `contracts/` is versioned by git and guarded by anchor digests. A commit that
-changes a contract or one of its listed anchors must:
-
-1. update the affected contract text and `anchor-sha256` records;
-2. include one trailer per contract:
-
-   ```text
-   CONTRACT-CHANGE: contracts/<file>.md <one-line reason>
-   ```
-
-3. state which differential cases, KATs, generated-shape gates, and ports were
-   rerun, regenerated, or intentionally retired; and
-4. run `ctest --test-dir build --output-on-failure -R contract_freeze` after
-   committing, plus the affected semantic gates.
-
-Implementation-only edits outside registered anchors do not need a trailer.
-The gate deliberately defers trailer validation in a dirty working tree because
-the final commit message does not exist yet; clean post-commit and CI runs are
-fail-closed.
+Frozen language and implementation decisions live in the sibling `xray-docs`
+repository and are enforced by ordinary tests. A change that alters such a
+decision updates the owning document and the tests that carry it together, and
+its commit message states which differential cases, KATs, generated-shape gates
+and ports were rerun or retired. Commit messages carry no process trailers.
 
 ## Formatting
 
 There is no pre-commit hook. One used to run `clang-format -i` over staged
 files; it was deleted because it rewrote files after the commit had been
-composed, which staled contract anchors immediately and handed every branch a
-reformat of lines it never wrote. Formatting is checked, not applied.
+composed and handed every branch a reformat of lines it never wrote. Formatting
+is checked, not applied.
 
 Two checks, because the tree carries real debt. The hook only ever formatted
 files somebody had staged, so a file nobody staged since it landed was never

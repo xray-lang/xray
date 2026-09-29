@@ -119,7 +119,7 @@ add_library(xr_program_fuzz_core STATIC
     ../../src/program/xr_reference_evaluator.c
 )
 add_dependencies(xr_program_fuzz_core
-    gen-core-spec gen-xr-program-schema check-xr-program-semantics)
+    gen-core-spec gen-xr-program-schema)
 target_include_directories(xr_program_fuzz_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
 )

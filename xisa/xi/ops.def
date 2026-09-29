@@ -1466,7 +1466,7 @@
 ; RMW semantics (add/sub/fetch/swap/CAS/toggle) without a method-name payload.
 ;
 ; The :sync column declares the strongest happens-before edge the op can carry
-; (spec §16.9.2, contracts/memory-model.md). The user picks the actual order at
+; (spec §16.9.2). The user picks the actual order at
 ; run time via the `Ordering` argument, so the static declaration is the
 ; fail-closed upper bound: an acquire load must keep later memory operations
 ; from moving above it even when the argument turns out to be Relaxed, because

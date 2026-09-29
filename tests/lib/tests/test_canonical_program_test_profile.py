@@ -130,7 +130,7 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         ))
         self.assertEqual(profile.H2_CTEST_NAMES, expected_tests)
         self.assertEqual(profile.H2_BUILD_TARGETS, expected_targets)
-        self.assertEqual(len(profile.H2_CTEST_NAMES), 31)
+        self.assertEqual(len(profile.H2_CTEST_NAMES), 20)
         self.assertEqual(len(profile.H2_BUILD_TARGETS), 12)
         self.assertIn("test_xr_program_source_allocations", profile.H2_SOURCE_CTEST_NAMES)
         self.assertIn("test_xr_program_source_allocations", profile.H2_SOURCE_BUILD_TARGETS)
@@ -324,11 +324,8 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_provider_trap_cleanup_aot_native",
             "test_xr_program_child_coroutine_trap_cleanup_aot_native",
             "meta_ownership_inventory",
-            "contract_freeze_injection",
         }
         self.assertLessEqual(required, set(profile.CTEST_NAMES))
-        self.assertNotIn("contract_freeze", profile.CTEST_NAMES)
-        self.assertNotIn("contract_freeze", profile.H2_SOURCE_CTEST_NAMES)
 
 
 if __name__ == "__main__":

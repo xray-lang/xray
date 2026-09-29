@@ -43,7 +43,6 @@ def _is_skipped_dir(name: str) -> bool:
 
 SKIP_FILES = {
     Path("scripts/check_structural_object_json_map_boundary.py"),
-    Path("contracts/structural-object-json-map-boundary.md"),
 }
 
 

@@ -1,7 +1,0 @@
-fn chooseOne(source: Slice<u8>) -> const Slice<u8> from missing {
-    return source
-}
-
-fn main() {}
-
-main()

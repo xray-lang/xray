@@ -687,15 +687,6 @@ set_tests_properties(test_runtime_string_object PROPERTIES
     LABELS "runtime;abi;object;string;target-machine")
 
 add_test(
-    NAME check_runtime_string_object_boundary
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_runtime_string_object_boundary.py
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-set_tests_properties(check_runtime_string_object_boundary PROPERTIES
-    LABELS "runtime;abi;object;string;static-analysis;target-machine")
-
-add_test(
     NAME check_runtime_object_header_boundary
     COMMAND ${XRAY_PYTHON}
         ${CMAKE_SOURCE_DIR}/scripts/check_runtime_object_header_boundary.py
@@ -2491,35 +2482,6 @@ add_xray_unit_test(test_typed_dispatch vm/test_typed_dispatch.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_vm_decoded_cache vm/test_vm_decoded_cache.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
-if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_executable(typed_target_vm_benchmark
-        ${CMAKE_SOURCE_DIR}/tests/benchmarks/target-machine/typed_target_vm/benchmark.c
-        ${XR_TARGET_PROFILE_TEST_FIXTURE})
-    target_compile_definitions(typed_target_vm_benchmark PRIVATE
-        XR_TEST_HAS_PROCESS_SHUTDOWN=1)
-    target_include_directories(typed_target_vm_benchmark PRIVATE
-        ${XRAY_COMMON_INCLUDES}
-        ${CMAKE_BINARY_DIR}/generated
-        ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(typed_target_vm_benchmark PRIVATE xray_core)
-    add_test(NAME typed_target_vm_performance_gate
-        COMMAND ${XRAY_PYTHON}
-            ${CMAKE_SOURCE_DIR}/tests/benchmarks/target-machine/typed_target_vm/run.py
-            --benchmark $<TARGET_FILE:typed_target_vm_benchmark>
-            --policy ${CMAKE_SOURCE_DIR}/contracts/target-machine/baseline-manifest.json)
-    set_tests_properties(typed_target_vm_performance_gate PROPERTIES
-        LABELS "performance;target-machine;vm;typed-plan"
-        PROCESSORS 1
-        TIMEOUT 30)
-endif()
-add_test(NAME typed_target_vm_performance_runner_self_test
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/tests/benchmarks/target-machine/typed_target_vm/run.py
-        --self-test)
-set_tests_properties(typed_target_vm_performance_runner_self_test PROPERTIES
-    LABELS "performance;target-machine;self-test"
-    PROCESSORS 1
-    TIMEOUT 30)
 add_test(NAME typed_target_vm_call_staging_contract
     COMMAND ${XRAY_PYTHON}
         ${CMAKE_SOURCE_DIR}/scripts/check_typed_call_staging.py
@@ -3028,13 +2990,9 @@ target_include_directories(test_xrt_data_pointer_owner_freestanding PRIVATE
 )
 add_test(NAME test_xrt_data_pointer_owner_freestanding
     COMMAND $<TARGET_FILE:test_xrt_data_pointer_owner_freestanding>)
-# The C90 half of the same family. It was written, listed as a fixture in
-# contracts/semantic-owners.toml, and registered nowhere -- so the one thing it
-# proves, that the restricted data-pointer adapter compiles and runs under
-# strict ISO C90, was proved by nobody. Its null_test and byte_array_copy
-# siblings are registered below; check_semantic_owners.py even hardcodes a
-# requirement that the byte_array_copy one stays registered, and this file was
-# simply left out of that tuple.
+# The C90 half of the same family: it proves that the restricted data-pointer
+# adapter compiles and runs under strict ISO C90. Its null_test and
+# byte_array_copy siblings are registered below.
 #
 # Not add_xray_unit_test(): that macro links xray_core and does not set the
 # standard, and the whole value of a C90 KAT is compiling without either.
@@ -3685,4 +3643,3 @@ set_tests_properties(test_cgen_raw_slice PROPERTIES LABELS "aot;ownership" TIMEO
 
 # Include every test, even when new declarations are appended later.
 cmake_language(DEFER CALL xray_prepend_windows_asan_runtime_to_directory_tests)
-cmake_language(DEFER CALL xray_attach_contract_assertions)

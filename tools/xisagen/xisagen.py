@@ -709,6 +709,8 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         for target in targets:
             if target not in VALID_XI_TARGETS:
                 die(f"{path}: Xi op '{name}' uses unknown target '{target}'")
+        # The default label is part of the hashed semantic op identity. It is a
+        # stable name, not a path that must exist in the source tree.
         observable_contract = _xi_get_kw_str(
             form, ':observable-contract', 'contracts/xi-canonical-ops.md')
         contract_path = Path(observable_contract)
@@ -1253,11 +1255,6 @@ def build_semantic_owner_registry(rows: list[XiObservableOperation]) -> dict:
         'owners': payload['owners'],
         'operations': payload['operations'],
     }
-
-
-def generate_semantic_owner_registry_json(rows: list[XiObservableOperation]) -> str:
-    registry = build_semantic_owner_registry(rows)
-    return json.dumps(registry, indent=2, ensure_ascii=False) + '\n'
 
 
 def generate_semantic_owner_ids_header(explicit_owners: list[XiObservableOwnerDef],
@@ -7643,8 +7640,6 @@ def cmd_semantic_ops(args: list[str]):
             generate_xi_semantic_ops_header(ops, owners, observable_rows),
         'src/shared/xr_semantic_owner_ids_gen.h':
             generate_semantic_owner_ids_header(explicit_owners, observable_rows),
-        'contracts/semantic-owner-registry.json':
-            generate_semantic_owner_registry_json(observable_rows),
     }
     for relative, content in outputs.items():
         output = os.path.join(output_root, *relative.split('/'))

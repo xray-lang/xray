@@ -131,16 +131,6 @@ LSP_CANONICAL_DOC_FORBIDDEN = (
     'strstr(doc_text, "Slice<u8>") == NULL',
 )
 
-TOMBSTONE_ROWS = (
-    "legacy-scalar-type-spellings\tint|byte|float\tTK_INT|TK_BYTE|TK_FLOAT|XR_TREF_INT|XR_TREF_BYTE|XR_TREF_FLOAT\t"
-    "tests/compile_errors/type/retired_scalar_type_spellings_removed.xr\ti64|u8|f64",
-    "legacy-scalar-global-conversions\tint(value)|byte(value)|float(value)\tbuiltin_spelling|global conversion lowering\t"
-    "tests/compile_errors/type/retired_scalar_builtins_removed.xr\texpr as exact-type|i64.parse|f64.parse",
-    "legacy-strconv-module\timport strconv|strconv.*\tstdlib module factory|manifest|generated API owner\t"
-    "tests/fixtures/removed_compiler_surface/strconv_module_removed.xr\ti64.parse|i64.tryParse|f64.parse|f64.tryParse",
-)
-
-
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="strict")
 
@@ -510,7 +500,6 @@ def _check_host_source_types(root: Path, errors: list[str]) -> None:
 def _check_strconv(root: Path, errors: list[str]) -> None:
     checker = Path(__file__).resolve()
     allowed = {
-        (root / "contracts/capability-deletions.tsv").resolve(),
         (root / MODULE_NEGATIVE).resolve(),
         (root / MODULE_EXPECTED).resolve(),
     }
@@ -524,17 +513,6 @@ def _check_strconv(root: Path, errors: list[str]) -> None:
             errors.append(f"{_relative(path, root)}: removed strconv owner/reference remains")
 
 
-def _check_tombstones(root: Path, errors: list[str]) -> None:
-    path = root / "contracts/capability-deletions.tsv"
-    if not path.is_file():
-        errors.append("missing capability deletion inventory")
-        return
-    lines = _read(path).splitlines()
-    for row in TOMBSTONE_ROWS:
-        if lines.count(row) != 1:
-            errors.append(f"capability deletion row missing or duplicated: {row.split(chr(9), 1)[0]}")
-
-
 def verify(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     _check_registry(root, errors)
@@ -545,7 +523,6 @@ def verify(root: Path) -> tuple[list[str], int]:
     source_count = _check_source_corpus(root, errors)
     _check_host_source_types(root, errors)
     _check_strconv(root, errors)
-    _check_tombstones(root, errors)
     return errors, source_count
 
 
@@ -607,7 +584,6 @@ def self_test() -> int:
                "Undeclared variable 'int'\nUndeclared variable 'byte'\nUndeclared variable 'float'\n")
         _write(root / MODULE_NEGATIVE, 'import strconv\nstrconv.parseInt("42")\n')
         _write(root / MODULE_EXPECTED, "module 'strconv' not found in stdlib\n")
-        _write(root / "contracts/capability-deletions.tsv", "header\n" + "\n".join(TOMBSTONE_ROWS) + "\n")
         for rel in PUBLIC_BINDING_FILES + PUBLIC_TEXT_FILES + SCRIPT_SOURCE_OWNERS:
             _write(root / rel, "exact surface\n")
         _write(root / "src/frontend/parser/xparse_type.c", "exact scalar parser\n")

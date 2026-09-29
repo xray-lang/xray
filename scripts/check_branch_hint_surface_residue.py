@@ -10,15 +10,6 @@ import tempfile
 from pathlib import Path
 
 
-TOMBSTONE_HEADER = (
-    "capability_id\tsource_forms\tsemantic_forms\tnegative_fixture\treplacement"
-)
-TOMBSTONE_ROW = (
-    "source-branch-probability-hints\tlikely(bool)|unlikely(bool)\t"
-    "XI_COPY_KIND_LIKELY|XI_COPY_KIND_UNLIKELY\t"
-    "tests/compile_errors/type/branch_hint_builtins_removed.xr\t"
-    "ordinary bool control expressions"
-)
 NEGATIVE_FIXTURE = Path("tests/compile_errors/type/branch_hint_builtins_removed.xr")
 NEGATIVE_EXPECTED = Path(str(NEGATIVE_FIXTURE) + ".expected")
 # The oracle is written in the compile-error suite's expected-file grammar
@@ -88,17 +79,7 @@ def _iter_files(root: Path, roots: tuple[str, ...], suffixes: tuple[str, ...]):
             yield path
 
 
-def _check_tombstone(root: Path, errors: list[str]) -> None:
-    path = root / "contracts/capability-deletions.tsv"
-    if not path.is_file():
-        errors.append("missing capability-deletion tombstone inventory")
-        return
-    lines = [line.rstrip("\r\n") for line in _read(path).splitlines() if line.strip()]
-    if not lines or lines[0] != TOMBSTONE_HEADER:
-        errors.append("capability-deletion tombstone header drifted")
-    if lines.count(TOMBSTONE_ROW) != 1:
-        errors.append("source branch-hint deletion must have exactly one tombstone row")
-
+def _check_negative_fixture(root: Path, errors: list[str]) -> None:
     fixture = root / NEGATIVE_FIXTURE
     expected = root / NEGATIVE_EXPECTED
     if not fixture.is_file() or _read(fixture) != "var hot = likely(true)\nvar cold = unlikely(false)\n":
@@ -156,7 +137,7 @@ def _check_internal_macros(root: Path, errors: list[str]) -> int:
 
 def verify(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
-    _check_tombstone(root, errors)
+    _check_negative_fixture(root, errors)
     _check_semantic_residue(root, errors)
     _check_public_bindings(root, errors)
     internal_count = _check_internal_macros(root, errors)
@@ -171,7 +152,6 @@ def _write(path: Path, text: str) -> None:
 def self_test() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-branch-hint-residue-") as raw:
         root = Path(raw)
-        _write(root / "contracts/capability-deletions.tsv", TOMBSTONE_HEADER + "\n" + TOMBSTONE_ROW + "\n")
         _write(root / NEGATIVE_FIXTURE, "var hot = likely(true)\nvar cold = unlikely(false)\n")
         _write(root / NEGATIVE_EXPECTED,
                BRANCH_HINT_ORACLE)

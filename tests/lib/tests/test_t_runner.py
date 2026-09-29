@@ -310,7 +310,7 @@ class AutoRoutingTest(unittest.TestCase):
 
     def test_documentation_does_not_widen_an_owned_change(self):
         self.assert_route("h2", "src/program/xr_program_verify.c",
-                          "contracts/canonical-program-vm.md")
+                          "docs/canonical-program-vm.md")
 
     def test_backend_and_general_source_changes_keep_broad_floors(self):
         self.assert_route("t2", "src/aot/xi_cgen.c")
@@ -336,7 +336,7 @@ class AutoRoutingTest(unittest.TestCase):
 
     def test_clean_and_documentation_only_changes_use_bounded_t0(self):
         self.assert_route("t0")
-        self.assert_route("t0", "README.md", "contracts/notes.md")
+        self.assert_route("t0", "README.md", "docs/notes.md")
 
 
 class PhaseTimingTest(unittest.TestCase):

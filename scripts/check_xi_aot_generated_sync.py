@@ -45,7 +45,6 @@ XI_ARTIFACTS = (
     "src/plan/target/xr_target_instruction_gen.h",
     "src/shared/xr_semantic_owner_ids_gen.h",
     "src/vm/xr_vm_ops.def",
-    "contracts/semantic-owner-registry.json",
     "src/ir/xi_verify_gen.h",
     "src/ir/xi_lowering_coverage_gen.h",
     "src/ir/xi_emit_vm_gen.h",

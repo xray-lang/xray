@@ -509,8 +509,8 @@ jobs:
   # ===========================================================================
   # Formatting used to be enforced by a pre-commit hook that ran
   # `clang-format -i` on staged files. That hook was deleted: it rewrote files
-  # after the commit had been composed, so contract anchors went stale
-  # immediately, and every branch that touched a shared source file received a
+  # after the commit had been composed, and every branch that touched a shared
+  # source file received a
   # reformat of lines it never wrote, which surfaced as merge conflicts against
   # every other branch in flight. Formatting is a check now, not a mutation.
   #

@@ -292,8 +292,7 @@ H2_EDIT_PATH = re.compile(
     r"tests/unit/vm/(test_xr_program_vm(_runtime)?\.c|"
     r"xr_program_vm_embedded_fixture\.h)$|"
     r"tests/unit/aot/test_xr_program_aot(_class\.inc)?\.c$|"
-    r"scripts/check_xr_program_(semantics|source_contracts|vm_contracts|"
-    r"aot_contracts|h2_backend_differential)\.py$|"
+    r"scripts/check_xr_program_h2_backend_differential\.py$|"
     r"tests/lib/tests/test_h2_backend_differential\.py$)")
 CANONICAL_EDIT_PATH = re.compile(
     r"^(src/program/|src/aot/program/|src/vm/xr_(program_vm|typed_)|"

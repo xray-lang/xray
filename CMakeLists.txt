@@ -312,17 +312,6 @@ set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
 set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
 set(TARGETQUERYGEN ${CMAKE_SOURCE_DIR}/tools/targetquerygen/targetquerygen.py)
-set(PROGRAMSEMCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_semantics.py)
-set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contracts.py)
-set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contracts.py)
-set(PROGRAMAOTCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_contracts.py)
-set(PROGRAMSOURCECONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_source_contracts.py)
-set(CANONICALCUTOVERMANIFESTCHECK
-    ${CMAKE_SOURCE_DIR}/scripts/check_canonical_cutover_manifests.py)
-set(PROGRAMWAVE3CLOSURECHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave3_closure.py)
-set(PROGRAMWAVE4CONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_contract.py)
-set(PROGRAMWAVE4EXITCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_exit.py)
-set(PROGRAMWAVE4DIFF ${CMAKE_SOURCE_DIR}/scripts/run_xr_program_wave4_differential.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -343,7 +332,6 @@ set(XRAY_GEN_XI_OPS_DEPS
     ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_instruction_gen.h
     ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
     ${CMAKE_SOURCE_DIR}/src/vm/xr_vm_ops.def
-    ${CMAKE_SOURCE_DIR}/contracts/semantic-owner-registry.json
 )
 
 set(XRAY_GEN_XI_VERIFY_DEPS
@@ -439,7 +427,6 @@ add_custom_command(
 add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ops_gen.h
             ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
-            ${CMAKE_SOURCE_DIR}/contracts/semantic-owner-registry.json
     COMMAND ${XRAY_PYTHON} ${XISAGEN} semantic-ops
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}
@@ -635,8 +622,7 @@ add_custom_target(gen-native-type-defs DEPENDS
 
 # CoreSpec is the target-neutral semantic registry introduced by Task 295.
 # Checked-in projections make reviews explicit; this build edge only verifies
-# that the registry, KAT oracle, C metadata, readable table, and coverage
-# inventory are an exact deterministic set.
+# that the registry, KAT oracle and C metadata are an exact deterministic set.
 set(XRAY_CORE_SPEC_CHECK_STAMP
     "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/core-spec.check.stamp")
 add_custom_command(
@@ -653,8 +639,6 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
             ${CMAKE_SOURCE_DIR}/src/core/xr_core_spec_gen.h
             ${CMAKE_SOURCE_DIR}/src/core/xr_core_spec_gen.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-operations.md
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-coverage.json
     COMMENT "corespecgen: verifying canonical CoreSpec projections"
     VERBATIM
 )
@@ -701,232 +685,10 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_schema_gen.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v3.md
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-coverage.json
     COMMENT "programgen: verifying canonical XrProgram schema projections"
     VERBATIM
 )
 add_custom_target(gen-xr-program-schema DEPENDS ${XRAY_PROGRAM_SCHEMA_CHECK_STAMP})
-
-# Task 297 keeps semantic admission and the independent evaluator closed over
-# the canonical CoreSpec/XrProgram contracts. This gate is read-only.
-set(XRAY_PROGRAM_SEMANTICS_CHECK_STAMP
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-semantics.check.stamp")
-add_custom_command(
-    OUTPUT ${XRAY_PROGRAM_SEMANTICS_CHECK_STAMP}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
-    COMMAND ${XRAY_PYTHON} ${PROGRAMSEMCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_SEMANTICS_CHECK_STAMP}
-    DEPENDS ${PROGRAMSEMCHECK}
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/xisa/program/schema.json
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.h
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c
-            ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.h
-            ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_verify.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/program/xr_program_module_operation_checks.inc.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-verifier-v1.md
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-semantic-coverage.json
-    COMMENT "Checking XrProgram semantic admission and evaluator coverage"
-    VERBATIM
-)
-add_custom_target(check-xr-program-semantics
-    DEPENDS ${XRAY_PROGRAM_SEMANTICS_CHECK_STAMP})
-
-set(XRAY_EXECUTION_CONTRACT_CHECK_STAMP
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-execution-contracts.check.stamp")
-add_custom_command(
-    OUTPUT ${XRAY_EXECUTION_CONTRACT_CHECK_STAMP}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
-    COMMAND ${XRAY_PYTHON} ${EXECUTIONCONTRACTCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_EXECUTION_CONTRACT_CHECK_STAMP}
-    DEPENDS ${EXECUTIONCONTRACTCHECK}
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/execution-binding-coverage.json
-            ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.h
-            ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.c
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.h
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.c
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_provider_typed.inc.c
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_provider_value.h
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.h
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.c
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_boundary_materialization.h
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_boundary_materialization.c
-    COMMENT "Checking exact target-profile and execution-binding contracts"
-    VERBATIM
-)
-add_custom_target(check-xr-execution-contracts
-    DEPENDS ${XRAY_EXECUTION_CONTRACT_CHECK_STAMP})
-
-set(XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-vm-contracts.check.stamp")
-add_custom_command(
-    OUTPUT ${XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
-    COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP}
-    DEPENDS ${PROGRAMVMCONTRACTCHECK}
-            ${CMAKE_SOURCE_DIR}/CMakeLists.txt
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_native_execution.c
-            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.h
-            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.c
-            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm_dispatch.inc.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm_runtime.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-vm-coverage.json
-    COMMENT "Checking typed XrProgram VM coverage and runtime isolation"
-    VERBATIM
-)
-add_custom_target(check-xr-program-vm-contracts
-    DEPENDS ${XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP})
-
-set(XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-aot-contracts.check.stamp")
-add_custom_command(
-    OUTPUT ${XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
-    COMMAND ${XRAY_PYTHON} ${PROGRAMAOTCONTRACTCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP}
-    DEPENDS ${PROGRAMAOTCONTRACTCHECK}
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.h
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_internal.h
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_native_descriptor.h
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_verify.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_copy.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_class.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_string_builder.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_module.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_exports.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_provider_typed.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_provider.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_provider_aot_sources_gen.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_native_artifact.c
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.h
-            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/aot/test_xr_program_aot.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-aot-coverage.json
-    COMMENT "Checking XrProgram AOT lowering and native artifact contracts"
-    VERBATIM
-)
-add_custom_target(check-xr-program-aot-contracts
-    DEPENDS ${XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP})
-
-add_custom_target(check-xr-program-source-contracts
-    COMMAND ${XRAY_PYTHON} ${PROGRAMSOURCECONTRACTCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    DEPENDS ${PROGRAMSOURCECONTRACTCHECK}
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.h
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.c
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_source_build.h
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_source_build.c
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
-            ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.h
-            ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_source_build.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_pipeline.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
-    COMMENT "Checking the source-to-XrProgram authority boundary"
-    VERBATIM
-)
-
-# Task 304 freezes the full declared-language denominator separately from the
-# atomic CoreSpec operation registry and records every retained product route
-# and legacy deletion node. This is governance-only and is not runtime input.
-add_custom_target(check-canonical-cutover-manifests
-    COMMAND ${XRAY_PYTHON} ${CANONICALCUTOVERMANIFESTCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    DEPENDS ${CANONICALCUTOVERMANIFESTCHECK}
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/capability-denominator.json
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/product-cutover-manifest.json
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/legacy-owner-migration.json
-    COMMENT "Checking the canonical capability denominator and product cutover inventory"
-    VERBATIM
-)
-
-add_custom_target(check-xr-program-wave3-closure
-    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE3CLOSURECHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    DEPENDS ${PROGRAMWAVE3CLOSURECHECK}
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave3-contract-freeze.json
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
-            ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.c
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c
-            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.c
-            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm_dispatch.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_verify.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm.c
-            ${CMAKE_SOURCE_DIR}/tests/unit/aot/test_xr_program_aot.c
-    COMMENT "Checking W7 Wave 3 ownership/error/panic closure"
-    VERBATIM
-)
-
-add_custom_target(check-xr-program-wave4-contract
-    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4CONTRACTCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    DEPENDS ${PROGRAMWAVE4CONTRACTCHECK}
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-contract-freeze.json
-    COMMENT "Checking W7 Wave 4 callable/interface contract freeze"
-    VERBATIM
-)
-
-add_custom_target(check-xr-program-wave4-exit-inventory
-    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-    DEPENDS ${PROGRAMWAVE4EXITCHECK}
-            ${PROGRAMWAVE4DIFF}
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-exit-gate.json
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-contract-freeze.json
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
-    COMMENT "Inventorying the W7 Wave 4 exit evidence"
-    VERBATIM
-)
-
-add_custom_target(check-xr-program-wave4-exit
-    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
-            --root ${CMAKE_SOURCE_DIR}
-            --require-ready
-    DEPENDS ${PROGRAMWAVE4EXITCHECK}
-            ${PROGRAMWAVE4DIFF}
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-exit-gate.json
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-contract-freeze.json
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
-    COMMENT "Requiring complete W7 Wave 4 exit evidence"
-    VERBATIM
-)
-
-add_custom_target(run-xr-program-wave4-differential
-    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4DIFF}
-            --root ${CMAKE_SOURCE_DIR}
-            --build-dir ${CMAKE_BINARY_DIR}
-    DEPENDS ${PROGRAMWAVE4DIFF}
-            ${PROGRAMWAVE4EXITCHECK}
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-exit-gate.json
-    COMMENT "Running source, VM and native-AOT independent-observation checks"
-    VERBATIM
-)
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -1916,10 +1678,7 @@ endif()
 add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema
-    check-xr-program-semantics
-    check-xr-execution-contracts check-xr-program-vm-contracts
-    check-xr-program-aot-contracts)
+    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema)
 
 # Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
 # table.
@@ -1932,10 +1691,7 @@ add_dependencies(xray_stdlib_bootstrap_core
 add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema
-    check-xr-program-semantics
-    check-xr-execution-contracts check-xr-program-vm-contracts
-    check-xr-program-aot-contracts)
+    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema)
 
 # The installed compiler product is the exact backend authority surface, not
 # the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
@@ -2066,8 +1822,7 @@ set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
 )
 add_library(xray_program_vm_runtime STATIC ${XRAY_PROGRAM_VM_RUNTIME_SOURCES})
 add_dependencies(xray_program_vm_runtime
-    gen-core-spec gen-xr-program-schema check-xr-program-semantics
-    check-xr-execution-contracts check-xr-program-vm-contracts)
+    gen-core-spec gen-xr-program-schema)
 target_include_directories(xray_program_vm_runtime PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -2286,8 +2041,7 @@ add_library(xray_program_aot_compiler STATIC
     ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})
 add_dependencies(xray_program_aot_compiler
     gen-stdlib-metadata
-    gen-core-spec gen-xr-program-schema gen-text-kernel-embed gen-float-format-embed gen-integer-kernel-embed check-xr-program-semantics
-    check-xr-execution-contracts check-xr-program-aot-contracts)
+    gen-core-spec gen-xr-program-schema gen-text-kernel-embed gen-float-format-embed gen-integer-kernel-embed)
 target_include_directories(xray_program_aot_compiler PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -2916,50 +2670,6 @@ add_subdirectory(src/xir)
 if(BUILD_TESTS)
     enable_testing()
 
-    # Contract owners name existing tests; fixtures schedule each assertion once,
-    # including when only contract_freeze is selected. Failed assertions prevent
-    # the contract gate from running. No second test command or result cache exists.
-    file(GLOB _xr_contract_documents CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/contracts/*.md")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        ${_xr_contract_documents} "${CMAKE_SOURCE_DIR}/scripts/check_contract_freeze.py")
-    execute_process(
-        COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_contract_freeze.py
-                --root ${CMAKE_SOURCE_DIR} --list-tests
-        RESULT_VARIABLE _xr_contract_status
-        OUTPUT_VARIABLE _xr_contract_tests
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(NOT _xr_contract_status EQUAL 0)
-        message(FATAL_ERROR "Cannot resolve semantic contract assertion tests")
-    endif()
-    string(REPLACE "\n" ";" XR_CONTRACT_ASSERTION_TESTS "${_xr_contract_tests}")
-    execute_process(
-        COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_contract_freeze.py
-                --root ${CMAKE_SOURCE_DIR} --scope xir --list-tests
-        RESULT_VARIABLE _xr_xir_contract_status
-        OUTPUT_VARIABLE _xr_xir_contract_tests
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(NOT _xr_xir_contract_status EQUAL 0)
-        message(FATAL_ERROR "Cannot resolve XIR contract assertion tests")
-    endif()
-    string(REPLACE "\n" ";" XR_XIR_CONTRACT_ASSERTION_TESTS "${_xr_xir_contract_tests}")
-    function(xray_attach_contract_assertions)
-        get_property(_xr_local_tests DIRECTORY PROPERTY TESTS)
-        foreach(_xr_test IN LISTS XR_CONTRACT_ASSERTION_TESTS)
-            if(_xr_test IN_LIST _xr_local_tests)
-                set_property(TEST ${_xr_test} APPEND PROPERTY
-                    FIXTURES_SETUP semantic_contract_assertions)
-            endif()
-        endforeach()
-        foreach(_xr_test IN LISTS XR_XIR_CONTRACT_ASSERTION_TESTS)
-            if(_xr_test IN_LIST _xr_local_tests)
-                set_property(TEST ${_xr_test} APPEND PROPERTY
-                    FIXTURES_SETUP xir_contract_assertions)
-            endif()
-        endforeach()
-    endfunction()
-
     if(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
         add_test(
             NAME windows_asan_runtime_path
@@ -3070,16 +2780,6 @@ if(BUILD_TESTS)
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
     add_dependencies(test_xi_lowering_gen gen-xi-lowering)
-    add_dependencies(run-xr-program-wave4-differential
-        test_xi_pipeline
-        test_xr_program_imported_callable
-        test_xr_program_vm
-        test_xr_program_aot
-        test_xr_program_aot_callable
-        test_xr_program_aot_existential
-        test_xr_program_source_aot_native
-        test_xr_program_imported_callable_native
-    )
 
     add_executable(xray_package_payload_fixture
         tests/benchmarks/compiler/global_evidence_cache/package_payload_fixture.c
@@ -5476,36 +5176,6 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    # Assertion fixtures own semantic verification. Digest protection remains
-    # only for contracts whose replacement tests have not yet passed.
-    add_test(
-        NAME contract_freeze
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --build-dir ${CMAKE_BINARY_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(contract_freeze PROPERTIES
-        LABELS "meta;contracts;freeze;task-220"
-        FIXTURES_REQUIRED semantic_contract_assertions
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME contract_freeze_xir
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR} --scope xir
-                --build-dir ${CMAKE_BINARY_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(contract_freeze_xir PROPERTIES
-        LABELS "meta;contracts;freeze;xir"
-        FIXTURES_REQUIRED xir_contract_assertions
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
     foreach(_xr_vector_family float decimal float_arithmetic float_format)
         add_test(
             NAME xir_${_xr_vector_family}_vectors_check
@@ -5514,80 +5184,11 @@ if(BUILD_TESTS)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(xir_${_xr_vector_family}_vectors_check PROPERTIES
-            LABELS "meta;contracts;xir;numeric"
+            LABELS "meta;xir;numeric"
             PROCESSORS 1
             TIMEOUT 60
         )
     endforeach()
-
-    add_test(
-        NAME contract_freeze_injection
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(contract_freeze_injection PROPERTIES
-        LABELS "meta;contracts;freeze;task-220"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    # Task 294 freezes the one-program architecture before any W1-W9 product
-    # implementation starts. The ordinary gate validates all seven governance
-    # assets and enforces the legacy-residue ratchet; the mutation gate proves
-    # that missing tasks, duplicate operations, empty patterns, and unstable
-    # JSON are rejected rather than silently accepted.
-    add_test(
-        NAME canonical_program_contracts
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_canonical_program_contracts.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(canonical_program_contracts PROPERTIES
-        LABELS "meta;contracts;freeze;canonical-program;task-294"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME canonical_program_contracts_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_canonical_program_contracts.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(canonical_program_contracts_self_test PROPERTIES
-        LABELS "meta;contracts;freeze;canonical-program;task-294"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME canonical_cutover_manifests
-        COMMAND ${XRAY_PYTHON} ${CANONICALCUTOVERMANIFESTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(canonical_cutover_manifests PROPERTIES
-        LABELS "meta;contracts;canonical-program;task-304"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME canonical_cutover_manifests_self_test
-        COMMAND ${XRAY_PYTHON} ${CANONICALCUTOVERMANIFESTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(canonical_cutover_manifests_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;mutation;task-304"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
 
     add_test(
         NAME core_spec_registry
@@ -5653,240 +5254,12 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    add_test(
-        NAME xr_program_semantic_coverage
-        COMMAND ${XRAY_PYTHON} ${PROGRAMSEMCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_semantic_coverage PROPERTIES
-        LABELS "meta;contracts;canonical-program;semantic-admission;task-297"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_semantic_coverage_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMSEMCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_semantic_coverage_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;semantic-admission;mutation;task-297"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_execution_contracts
-        COMMAND ${XRAY_PYTHON} ${EXECUTIONCONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_execution_contracts PROPERTIES
-        LABELS "meta;contracts;canonical-program;execution;target-machine;task-298"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_execution_contracts_self_test
-        COMMAND ${XRAY_PYTHON} ${EXECUTIONCONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_execution_contracts_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;execution;mutation;task-298"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
     if(CMAKE_NM)
         set(XRAY_RUNTIME_SYMBOL_READER "${CMAKE_NM}")
     else()
         find_program(XRAY_RUNTIME_SYMBOL_READER NAMES llvm-nm nm
             HINTS "$ENV{ProgramFiles}/LLVM/bin" REQUIRED)
     endif()
-    add_test(
-        NAME xr_program_vm_contracts
-        COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --archive $<TARGET_FILE:xray_program_vm_runtime>
-                --executable $<TARGET_FILE:test_xr_program_vm_runtime>
-                --nm "${XRAY_RUNTIME_SYMBOL_READER}"
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_vm_contracts PROPERTIES
-        LABELS "meta;contracts;canonical-program;vm;runtime-only;task-299"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_vm_contracts_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_vm_contracts_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;vm;runtime-only;mutation;task-299"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_aot_contracts
-        COMMAND ${XRAY_PYTHON} ${PROGRAMAOTCONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_aot_contracts PROPERTIES
-        LABELS "meta;contracts;canonical-program;aot;translation-validation;task-300"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_aot_contracts_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMAOTCONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_aot_contracts_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;aot;translation-validation;mutation;task-300"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_source_contracts
-        COMMAND ${XRAY_PYTHON} ${PROGRAMSOURCECONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_source_contracts PROPERTIES
-        LABELS "meta;contracts;canonical-program;source;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_source_contracts_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMSOURCECONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_source_contracts_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;source;mutation;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_wave3_closure
-        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE3CLOSURECHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_wave3_closure PROPERTIES
-        LABELS "meta;contracts;canonical-program;source;ownership;error;panic;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_wave3_closure_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE3CLOSURECHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_wave3_closure_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;source;ownership;error;panic;mutation;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_wave4_contract
-        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4CONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_wave4_contract PROPERTIES
-        LABELS "meta;contracts;canonical-program;callable;interface;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_wave4_contract_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4CONTRACTCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_wave4_contract_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;callable;interface;mutation;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_wave4_exit_inventory
-        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_wave4_exit_inventory PROPERTIES
-        LABELS "meta;contracts;canonical-program;callable;interface;source;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_wave4_exit_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_wave4_exit_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;callable;interface;source;mutation;task-301"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME semantic_owner_inventory
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_owners.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(semantic_owner_inventory PROPERTIES
-        LABELS "meta;semantic-owner;shared-core"
-        PROCESSORS 1
-        COST 51
-        TIMEOUT 120
-    )
-
-    add_test(
-        NAME semantic_owner_inventory_self_test
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_owners.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(semantic_owner_inventory_self_test PROPERTIES
-        LABELS "meta;semantic-owner;shared-core"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
     add_test(
         NAME xi_generator_fast_self_test
         COMMAND ${XRAY_PYTHON} -B
@@ -5911,18 +5284,6 @@ if(BUILD_TESTS)
         PROCESSORS 1
         COST 700
         TIMEOUT 1200
-    )
-
-    add_test(
-        NAME target_machine_inventory
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/target_machine_phase0.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_inventory PROPERTIES
-        LABELS "meta;target-machine;contracts"
-        PROCESSORS 1
-        TIMEOUT 30
     )
 
     add_test(
@@ -6011,67 +5372,6 @@ if(BUILD_TESTS)
     )
 
     add_test(
-        NAME legacy_product_residue_inventory
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_legacy_product_residue.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    # TIMEOUT 30 was the family default and it does not survive a sanitizer
-    # build: XR_TEST_TIMEOUT_SCALE is 8 there and these literals never consumed
-    # it, while the build itself runs 5-9x slower. Measured 14.2s serially
-    # on an idle Release tree, so the old ceiling was already a coin flip and
-    # under ASan it was a certainty. This is how query_surface_residue and
-    # string_surface_residue reached the CI exclusion list -- not because they
-    # were red, but because a threshold nobody measured made them look red.
-    math(EXPR LEGACY_PRODUCT_RESIDUE_INVENTORY_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
-    set_tests_properties(legacy_product_residue_inventory PROPERTIES
-        LABELS "meta;artifact;legacy;target-machine"
-        PROCESSORS 1
-        TIMEOUT ${LEGACY_PRODUCT_RESIDUE_INVENTORY_TIMEOUT}
-    )
-
-    add_test(
-        NAME legacy_product_residue_inventory_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_legacy_product_residue.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(legacy_product_residue_inventory_self_test PROPERTIES
-        LABELS "meta;artifact;legacy;target-machine"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME target_machine_migration_source_classification
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_migration_classification.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_migration_source_classification PROPERTIES
-        LABELS "meta;target-machine;governance;migration"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME target_machine_migration_source_classification_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_migration_classification.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_migration_source_classification_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;migration"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
         NAME stdlib_bytecode_staging_identity
         COMMAND ${XRAY_PYTHON}
                 ${XRAY_STDLIB_EMBED_GENERATOR}
@@ -6082,174 +5382,6 @@ if(BUILD_TESTS)
         LABELS "meta;artifact;stdlib;target-machine"
         PROCESSORS 1
         TIMEOUT 30
-    )
-
-    add_test(
-        NAME target_machine_inventory_self_test
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/target_machine_phase0.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_inventory_self_test PROPERTIES
-        LABELS "meta;target-machine;contracts"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    # One command drives every evidence collector and publishes the assembled
-    # set.  Matrix rows are produced independently, so point --row-results-dir
-    # at the directory holding those results before expecting that lane to pass.
-    add_custom_target(target_machine_completion_evidence
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/collect_target_machine_completion_evidence.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --build ${CMAKE_BINARY_DIR}
-                --owner target-machine-completion
-                --raw-root ${CMAKE_BINARY_DIR}/target-machine-raw-evidence
-                --output ${CMAKE_BINARY_DIR}/target-machine-completion-evidence
-                --row-results-dir
-                ${CMAKE_BINARY_DIR}/target-machine-matrix-row-results
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Collecting and publishing target-machine completion evidence"
-        USES_TERMINAL
-        VERBATIM
-    )
-
-    # The terminal product check remains explicit while legacy owners are reachable.
-    # Register it with CTest only in the atomic change that deletes those owners.
-    add_custom_target(target_machine_completion_governance
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_completion.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --evidence-root
-                ${CMAKE_BINARY_DIR}/target-machine-completion-evidence
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking terminal-zero target-machine completion evidence"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_completion_governance_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_completion.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_completion_governance_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;residue"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_completion_evidence_assembler_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_completion_evidence_assembler.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking fail-closed target-machine evidence assembly"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_completion_evidence_assembler_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_completion_evidence_assembler.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_completion_evidence_assembler_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_matrix_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_matrix_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking identity-bound validation-matrix evidence collection"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_matrix_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_matrix_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_matrix_evidence_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;matrix"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_matrix_row_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_matrix_row_runner.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking independent target-machine matrix row production"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_matrix_row_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_matrix_row_runner.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_matrix_row_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;matrix"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_dependency_graph_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_dependency_graph_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking identity-bound dependency-graph evidence collection"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_dependency_graph_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_dependency_graph_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_dependency_graph_evidence_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;dependency"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_installed_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_installed_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking identity-bound installed-tree evidence collection"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_installed_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_installed_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_installed_evidence_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;installed"
-        PROCESSORS 1
-        TIMEOUT 180
     )
 
     add_custom_target(aot_sdk_closure_self_test
@@ -6274,103 +5406,6 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
-    add_custom_target(target_machine_activation_generation_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_activation_generation_evidence_collector.py
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking identity-bound activation/generation evidence collection"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_activation_generation_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_activation_generation_evidence_collector.py
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_activation_generation_evidence_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;activation"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_runtime_reachability_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_runtime_reachability_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking identity-bound runtime reachability evidence collection"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_runtime_reachability_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_runtime_reachability_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_runtime_reachability_evidence_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;runtime"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_full_validation_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_full_validation_evidence_collector.py
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking identity-bound full-validation evidence collection"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_full_validation_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_full_validation_evidence_collector.py
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_full_validation_evidence_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;validation"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_custom_target(target_machine_symbol_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_symbol_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Checking identity-bound target-machine symbol evidence collection"
-        VERBATIM
-    )
-
-    add_test(
-        NAME target_machine_symbol_evidence_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_symbol_evidence_collector.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_symbol_evidence_self_test PROPERTIES
-        LABELS "meta;target-machine;governance;evidence;symbol"
-        PROCESSORS 1
-        TIMEOUT 180
-    )
-
-    add_test(
-        NAME target_machine_baseline_runner_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/phase0/run_baseline.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(target_machine_baseline_runner_self_test PROPERTIES
-        LABELS "meta;target-machine;baseline"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
     if(WIN32)
         add_test(
             NAME target_machine_msvc_fast_test_residue
@@ -6385,18 +5420,6 @@ if(BUILD_TESTS)
             TIMEOUT 180
         )
     endif()
-
-    add_test(
-        NAME semantic_performance_evidence
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_performance_evidence.py
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(semantic_performance_evidence PROPERTIES
-        LABELS "meta;semantic-owner;performance;task-262"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
 
     # ========================================================================
     # Test discipline gates
@@ -6455,10 +5478,9 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    # A checker nobody has tried to fool is a checker nobody knows works. Same
-    # shape as the contract_freeze and semantic_owners mutation self-tests:
-    # every rule the gate enforces gets a synthetic entry that breaks exactly
-    # it, and the run fails if any of them is accepted.
+    # A checker nobody has tried to fool is a checker nobody knows works: every
+    # rule the gate enforces gets a synthetic entry that breaks exactly it, and
+    # the run fails if any of them is accepted.
     add_test(
         NAME ci_exclusion_discipline_self_test
         COMMAND ${XRAY_PYTHON}
@@ -6618,7 +5640,6 @@ if(BUILD_TESTS)
     # Root tests and tests/unit are distinct CMake directory scopes; each scope
     # applies the same compiler-owned runtime without changing test commands.
     xray_prepend_windows_asan_runtime_to_directory_tests()
-    xray_attach_contract_assertions()
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)

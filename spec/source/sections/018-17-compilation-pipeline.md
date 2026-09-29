@@ -75,9 +75,9 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 抽象 copy 只在 Built/Checked，物理 scalar-copy 只在 Lowered，不能仅改阶段标签。
 阶段转换重新验证并复制所有元数据，成功产物不借用输入；失败不发布部分产物。
 验证的结构、类型、支配关系和工作量有预算，未知阶段、操作和类型均拒绝。
-精确内部字段及断言入口见 `contracts/xir-stages.md`；该合同不授予执行资格。
+精确内部字段由 `test_xir_stages` 等断言验证；这些断言不授予执行资格。
 
-内部标量执行按 `contracts/xir-scalar-execution.md` 冻结：首个目标为x86_64小端、
+内部标量执行由 `test_xir_execution` 与 `test_xir_native` 验证：首个目标为x86_64小端、
 值边界使用本节所列现行 ABI。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
 帧槽偏移和边界布局，VM/C后端不得另行决定。bool/i64的SSA及帧槽为8字节，
 边界值为16字节（类型、零保留字段、i64载荷），bool载荷只准0/1，unit无帧槽。
@@ -85,7 +85,7 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 有符号算术须用无符号计算及受检除法避免宿主未定义行为，所有退出释放帧，标量结果独立存活。
 Checked不可执行；未知目标/ABI拒绝。此内部子集不授予模块、调用或可恢复ABI资格。
 
-内部可恢复调用受 `contracts/xir-resumable-calls.md` 约束。直接CALL引用模块函数身份，
+内部可恢复调用由 `test_xir_calls` 与 `test_xir_call_native` 验证。直接CALL引用模块函数身份，
 CALL参数通过函数自有操作数表传递，数量和类型须精确匹配声明；SUSPEND保存下一指令，THROW传递i64错误token。
 这些是内部XIR操作，不引入源码关键字，也不授予模块、泛型或stdlib缓存资格。
 VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不把待恢复的子调用留在C栈上。
@@ -112,7 +112,7 @@ bool/i64/string 类型以借用组调用实例配置的同步 provider；缺失�
 0–65536 个值，并受资源预算限制；未实现的源码类型与显示协议仍需单独验证。
 
 以上仅冻结内部 C 边界；源码 string 声明、模块实例、泛型库发布和最终产品资格仍分别验收。
-实际预算、并发、失败原子性及释放义务见 `contracts/xir-managed-values.md`。
+实际预算、并发、失败原子性及释放义务由 `test_xir_values` 与 `test_xir_value_allocations` 验证。
 XIR准入string参数/结果、COPY→OWNED_RETAIN、CONCAT_STRING与OUTPUT；
 lowering保存并复验全部拥有槽，VM与生成C在覆盖和退出时按此清理。字面量表由Program封存，源码生产仍待接入。
 
@@ -135,7 +135,7 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 初始化跨挂起保留单发布者；未发布读拒绝，失败清理逆序执行并保持失败粘滞。
 实例销毁禁止新准入并完成活动调用清理；独立结果不保留无关模块状态。
 恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
-精确准入、预算与租约责任见 `contracts/xir-program-instance.md`；这不授予源码或缓存格式资格。
+精确准入、预算与租约责任由 `test_xir_instances` 验证；这不授予源码或缓存格式资格。
 
 ### 17.9 新 XIR 源码准入边界
 
@@ -155,7 +155,7 @@ CALL/PRINT用args[0]/args[1]表示函数自有操作数表的起点/数量；非
 类型与支配关系。嵌套参数从左到右求值完成后才追加外层范围。Lowered保存并复验最大
 出站参数数量，稳定帧为其分配typed value暂存区并计入物理字节预算。
 泛型、完整stdlib、协程语法、foreign provider、parser完整
-OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口合同见 `contracts/xir-source-owner.md`。
+OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口由 `test_xir_source_admission` 与 `test_xir_source` 验证。
 
 标准库源码子模块`std/io/output`以普通函数发布writeStdout(string)->bool和
 writeStderr(string)->bool，只报告宿主typed provider接受结果。该模块的精确stdlib身份
@@ -175,7 +175,7 @@ Lowered 或旧格式读取器。
 发布前执行现有完整 Checked 语义与布局复验。重算摘要不能绕过类型、CFG/支配关系、
 可见性、import、初始化或槽权限。加载成功后输入存储可立即销毁；失败不发布产物，
 释放全部部分构造。VM 与 native 消费者继续使用同一复验后的 Lowered 转换。
-精确字段与预算合同见 `contracts/xir-checked-packet.md`。
+精确字段与预算由 `test_xir_checked` 验证。
 
 该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
@@ -206,8 +206,8 @@ CALL 的类型实参范围与值实参范围分别规范化并复验；替换后
 开放类型参数，不在执行期追加实例。实例调试名字不是 native 缓存身份凭证。
 
 成员见证、符号回调效应、用户声明的泛型类型构造器、类型推断、诊断来源序列化与完整标准库包
-链接/缓存配对仍待实现；本族未准入的效应/借用/callable 声明仍拒绝。精确接口合同为
-`contracts/xir-generic-templates.md`，不得用本族通过代替普通泛型完整资格。
+链接/缓存配对仍待实现；本族未准入的效应/借用/callable 声明仍拒绝。精确接口由
+`test_xir_generics` 与 `test_xir_source_generics` 验证，不得用本族通过代替普通泛型完整资格。
 
 ### 17.12 局部可变存储与结构化控制流
 
@@ -221,7 +221,7 @@ if/else与while条件必须bool；只执行选中分支，循环每次重新求�
 块内名字不外泄；无标签break/continue指向最内层while。值函数每条存活路径必须返回，拒绝不可达语句。
 本族接通具体i64加法/相等/小于与既有string加法；不授予无约束T任何运算见证。
 块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema与语义合同遵循§17.6，
-旧语义版本拒绝；没有第二条兼容检查路径。精确接口见 `contracts/xir-local-control-flow.md`。
+旧语义版本拒绝；没有第二条兼容检查路径。精确接口由 `test_xir_locals` 与 `test_xir_local_native` 验证。
 
 ### 17.13 布尔短路与C风格for
 
@@ -463,10 +463,10 @@ Abstract copy belongs to Built/Checked and physical scalar-copy to Lowered;
 changing a stage tag is insufficient. Transitions reverify and copy all metadata,
 publish no partial artifact on failure, and never borrow input storage. Structure,
 types, dominance, and verification work are bounded. Unknown stages, operations,
-and types reject. The exact internal fields and assertions are owned by
-`contracts/xir-stages.md`; this contract does not grant execution qualification.
+and types reject. The exact internal fields are verified by assertions such as
+`test_xir_stages`; these assertions do not grant execution qualification.
 
-Internal scalar execution is governed by `contracts/xir-scalar-execution.md`.
+Internal scalar execution is verified by `test_xir_execution` and `test_xir_native`.
 The initial target is little-endian x86_64 with the current value boundary ABI defined in this section. Layout
 queries include type, target, context, and ABI. Lowering stores authoritative
 frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
@@ -478,7 +478,7 @@ avoids host signed overflow, every exit releases its frame, and inline
 scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
 
-Internal resumable calls are governed by `contracts/xir-resumable-calls.md`.
+Internal resumable calls are verified by `test_xir_calls` and `test_xir_call_native`.
 Direct CALL names a module function and passes an owned operand-table range;
 argument count, types and result exactly match the declaration. SUSPEND saves the next
 instruction; THROW carries an i64 error token. These are internal XIR operations,
@@ -545,7 +545,7 @@ suspension, rejects unpublished reads and keeps failures sticky after reverse
 cleanup. Shutdown stops admission and drains execution; independent results do not
 retain unrelated module state. Resume matches both execution epoch and wake token.
 The initial instance interface admits exclusive driving by one host thread only.
-The precise internal contract is `contracts/xir-program-instance.md`; source and
+The precise internal interface is verified by `test_xir_instances`; source and
 serialized/cache admission require separate qualification.
 
 ### 17.9 New XIR Source Admission Boundary
@@ -577,7 +577,7 @@ appending the outer range. Lowered records and reverifies the maximum outgoing
 count; stable frames reserve typed-value staging and charge its physical bytes.
 Full generics, stdlib, coroutine
 syntax, foreign providers, parser OOM/input budgets, default CLI and product
-qualification remain separate. The interface contract is `contracts/xir-source-owner.md`.
+qualification remain separate. The interface is verified by `test_xir_source_admission` and `test_xir_source`.
 
 The standard-library source submodule std/io/output publishes ordinary
 writeStdout(string)->bool and writeStderr(string)->bool functions reporting host
@@ -604,7 +604,7 @@ cannot bypass types, CFG/dominance, visibility, imports, initialization or slot
 permissions. Input storage may be destroyed immediately after loading. Failure
 publishes nothing and frees all partial storage. Both VM and native consumers
 then use the same reverified Lowered transition. The precise wire and budget
-contract is `contracts/xir-checked-packet.md`.
+rules are verified by `test_xir_checked`.
 
 This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
 effects, diagnostic provenance, package linking, native-cache pairing, installer
@@ -649,7 +649,7 @@ are not native-cache identity proofs.
 Member witnesses, symbolic callback effects, user-declared generic type constructors, inference,
 diagnostic provenance serialization and complete stdlib package/cache pairing are
 still unavailable. Unadmitted effect/borrow/callable declarations continue to
-reject. The precise interface contract is `contracts/xir-generic-templates.md`;
+reject. The precise interface is verified by `test_xir_generics` and `test_xir_source_generics`;
 this family does not qualify all ordinary generic facilities.
 
 ### 17.12 Mutable Local Places and Structured Control Flow
@@ -672,8 +672,8 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema and semantic revisions follow §17.6; older revisions reject without a second checking path. The interface is frozen in
-`contracts/xir-local-control-flow.md`.
+schema and semantic revisions follow §17.6; older revisions reject without a second checking path. The interface is verified by
+`test_xir_locals` and `test_xir_local_native`.
 
 ### 17.13 Boolean Short Circuit and C-style For
 

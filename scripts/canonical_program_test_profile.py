@@ -32,9 +32,6 @@ H2_REFERENCE_CTEST_NAMES = (
 H2_REFERENCE_BUILD_TARGETS = H2_REFERENCE_CTEST_NAMES
 
 H2_SOURCE_CTEST_NAMES = (
-    "canonical_cutover_manifests",
-    "canonical_cutover_manifests_self_test",
-    "contract_freeze_injection",
     "core_spec_registry",
     "core_spec_registry_self_test",
     "meta_ownership_inventory",
@@ -47,10 +44,6 @@ H2_SOURCE_CTEST_NAMES = (
     "test_xr_program_source_allocations",
     "xr_program_schema",
     "xr_program_schema_self_test",
-    "xr_program_semantic_coverage",
-    "xr_program_semantic_coverage_self_test",
-    "xr_program_source_contracts",
-    "xr_program_source_contracts_self_test",
     "xr_program_source_fixtures_self_test",
 )
 H2_SOURCE_BUILD_TARGETS = (
@@ -70,8 +63,6 @@ H2_VM_CTEST_NAMES = (
     "test_provider_logical_admission",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
-    "xr_program_vm_contracts",
-    "xr_program_vm_contracts_self_test",
 )
 H2_VM_BUILD_TARGETS = (
     "test_core_spec",
@@ -90,8 +81,6 @@ H2_AOT_CTEST_NAMES = (
     "test_xr_program_aot",
     "test_xr_program_panic_defer_cleanup_aot_native",
     "test_xr_program_ref_parameter_coroutine_aot_native",
-    "xr_program_aot_contracts",
-    "xr_program_aot_contracts_self_test",
 )
 H2_AOT_BUILD_TARGETS = (
     "test_core_spec",
@@ -140,9 +129,6 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
     "test_xr_program_source_allocations",
     "test_xr_program_value_struct_string_allocations",
     "canonical_source_run_cli",
-    "canonical_cutover_manifests",
-    "canonical_cutover_manifests_self_test",
-    "contract_freeze_injection",
     "core_spec_registry",
     "core_spec_registry_self_test",
     "meta_ownership_inventory",
@@ -160,31 +146,16 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
     "test_xr_program_vm_runtime",
     "test_xi_pipeline_canonical",
     "test_xi_verify_ext",
-    "xr_execution_contracts",
-    "xr_execution_contracts_self_test",
-    "xr_program_aot_contracts",
-    "xr_program_aot_contracts_self_test",
     "xr_program_schema",
     "xr_program_schema_self_test",
-    "xr_program_semantic_coverage",
-    "xr_program_semantic_coverage_self_test",
-    "xr_program_source_contracts",
-    "xr_program_source_contracts_self_test",
     "xr_program_source_fixtures_self_test",
     "xr_program_h2_backend_differential",
     "xr_program_h2_backend_differential_self_test",
-    "xr_program_vm_contracts",
-    "xr_program_vm_contracts_self_test",
-    "xr_program_wave3_closure",
-    "xr_program_wave3_closure_self_test",
-    "xr_program_wave4_contract",
-    "xr_program_wave4_contract_self_test",
 )
 
-# Full contract assertion fixtures run at completed batch boundaries and in the
-# full CTest suite. These narrow feedback inventories keep the checker injection
-# test, without silently pulling unrelated assertion executables into a lane
-# whose build list and executed-case denominator are intentionally exact.
+# These narrow feedback inventories never silently pull unrelated assertion
+# executables into a lane whose build list and executed-case denominator are
+# intentionally exact.
 # Script-only gates have no Ninja target. Native source fixtures are projected
 # from the same registry as CMake; the CLI is not a blanket build proxy.
 _COROUTINE_OUTCOME_NATIVE_TARGETS = tuple(

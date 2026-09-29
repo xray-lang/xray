@@ -20,7 +20,7 @@ that happens to pass is not evidence. Each case runs its shape `ITERATIONS`
 times and reports the count of forbidden observations, so a regression shows
 up as a non-zero count rather than as a flake. Passing is still not proof —
 these tests can only refute, never confirm. They are paired with the static
-gates (`contracts/memory-model.md`, the op-table invariants in
+gates (spec §16.9.2 and the op-table invariants in
 `tests/unit/ir/test_xi_tbaa.c`), which is where confirmation comes from.
 
 ## Cases

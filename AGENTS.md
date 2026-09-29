@@ -115,8 +115,8 @@ The rules agents break most often:
   in the doc comment of the owning function or type.
 - **Commits carry no AI attribution or process-specific trailers.** No
   `Co-Authored-By` trailer naming Claude or any other tool, no tool as author
-  or committer, and no `CONTRACT-CHANGE:` trailer. Keep contract rationale in
-  the ordinary self-contained subject/body and in the governed evidence.
+  or committer, and no `CONTRACT-CHANGE:` trailer. Keep design rationale in
+  the ordinary self-contained subject/body.
 - **Allocate only through `xr_malloc`/`xr_free`**, check for NULL, and pass
   `xr_realloc` results through a temporary pointer. Non-`static` functions
   carry `XRAY_API`/`XR_FUNC`; preprocessor OS checks use `XR_OS_*`, never
@@ -126,26 +126,12 @@ The rules agents break most often:
   skip-and-continue, and never mask a bug with catch-and-ignore or a skipped
   test.
 
-## Semantic contract freeze
+## Design decisions and verification
 
-The machine-checked semantic contracts live in `contracts/`. Before changing a
-listed anchor, read the owning contract and decide whether existing diff cases,
-KATs, shape gates, or ports evidence must be migrated.
-
-- A contract's `verification-test` records bind its existing assertion tests to
-  the CTest `contract_freeze` fixture. Those tests execute once, and a failure
-  blocks the contract gate. They replace manual whole-source hashes only after
-  the replacement tests pass. Contracts still listing `anchor-sha256` retain
-  that protection and require refresh in the same commit until their failing
-  replacement tests are repaired and migrated. Declared verification tests also
-  run for contracts that still retain source hashes; both protections apply
-  during migration. Never refresh a runtime,
-  schema, provider, ABI, or artifact fingerprint merely to silence a failure.
-- Do not add a dedicated contract-change trailer to the commit message.
-- Record how affected evidence was rerun, regenerated, or retired. Retirement
-  must use the governed tombstone inventory; never silently delete evidence.
-- Run `ctest --test-dir build --output-on-failure -R contract_freeze` at the
-  completed batch boundary and after the commit. CTest includes required
-  assertion fixtures automatically; a skipped dependent gate is not PASS.
-  Preserve source/binary/content identity binding in the existing evidence
-  runners and governed evidence retirement inventories.
+Frozen language and implementation decisions are recorded in the sibling
+`xray-docs` repository (numbered task documents and design records) and are
+enforced by ordinary tests; there is no separate contract registry, digest
+anchor or contract gate. A change that alters a frozen decision updates the
+owning document and the tests that carry it in the same batch. Never refresh a
+runtime, schema, provider, ABI, or artifact fingerprint merely to silence a
+failure.

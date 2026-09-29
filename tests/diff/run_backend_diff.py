@@ -21,8 +21,7 @@ literal tag, and host-heap pointers written into the container.
 
 Observable contract = stdout + exit code, compared byte for byte (normalized
 stderr only when a lane enables that channel). Backend build logs are not
-program output and never enter the comparison. This is the contract frozen in
-contracts/differential-protocol.md.
+program output and never enter the comparison.
 
 Infrastructure -- subprocess handling, cache keys, directory locks, parallelism,
 the ratchet -- comes from the shared xraytest runtime, so this file holds only

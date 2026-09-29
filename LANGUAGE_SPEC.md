@@ -6740,7 +6740,7 @@ For this guarantee to be **total**, a defer body must **not reach a scheduler su
 
 ### 16.9 Concurrency Memory Model
 
-> Source of truth: `src/coro/xchannel.c`, `src/coro/xtask.c`, `src/coro/xtask_await.c`, the `:sync` column of `xisa/xi/ops.def`, `contracts/memory-model.md`.
+> Source of truth: `src/coro/xchannel.c`, `src/coro/xtask.c`, `src/coro/xtask_await.c`, the `:sync` column of `xisa/xi/ops.def`.
 
 This section defines when accesses by two execution agents to the same memory location are **ordered**. The `Ordering` enum in §10.9 describes one atomic operation; it is not enough to derive program behaviour. This section is.
 
@@ -6823,7 +6823,7 @@ The promotion points are exhaustive, and each applies to the reachable graph **d
 
 A synchronisation edge is not only a runtime promise; it also constrains optimisation. The `:sync` column of `xisa/xi/ops.def` declares the edge each Xi operation establishes (`none` / `acquire` / `release` / `acq-rel` / `seq-cst`). Where the edge's strength is chosen at run time by an `Ordering` argument, the declaration is the **strongest** edge that operation can carry — a fail-closed upper bound.
 
-From this follows one hard rule for every pass: **alias disjointness is not a licence to reorder**. Two memory operations must not be moved across an operation that carries a `:sync` edge or that may suspend, even when TBAA proves them disjoint. `xi_op_is_ordering_barrier()` is the single answer to that question, and `contracts/memory-model.md` freezes it.
+From this follows one hard rule for every pass: **alias disjointness is not a licence to reorder**. Two memory operations must not be moved across an operation that carries a `:sync` edge or that may suspend, even when TBAA proves them disjoint. `xi_op_is_ordering_barrier()` is the single answer to that question.
 
 ---
 
@@ -6903,10 +6903,10 @@ Abstract copy belongs to Built/Checked and physical scalar-copy to Lowered;
 changing a stage tag is insufficient. Transitions reverify and copy all metadata,
 publish no partial artifact on failure, and never borrow input storage. Structure,
 types, dominance, and verification work are bounded. Unknown stages, operations,
-and types reject. The exact internal fields and assertions are owned by
-`contracts/xir-stages.md`; this contract does not grant execution qualification.
+and types reject. The exact internal fields are verified by assertions such as
+`test_xir_stages`; these assertions do not grant execution qualification.
 
-Internal scalar execution is governed by `contracts/xir-scalar-execution.md`.
+Internal scalar execution is verified by `test_xir_execution` and `test_xir_native`.
 The initial target is little-endian x86_64 with the current value boundary ABI defined in this section. Layout
 queries include type, target, context, and ABI. Lowering stores authoritative
 frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
@@ -6918,7 +6918,7 @@ avoids host signed overflow, every exit releases its frame, and inline
 scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
 
-Internal resumable calls are governed by `contracts/xir-resumable-calls.md`.
+Internal resumable calls are verified by `test_xir_calls` and `test_xir_call_native`.
 Direct CALL names a module function and passes an owned operand-table range;
 argument count, types and result exactly match the declaration. SUSPEND saves the next
 instruction; THROW carries an i64 error token. These are internal XIR operations,
@@ -6985,7 +6985,7 @@ suspension, rejects unpublished reads and keeps failures sticky after reverse
 cleanup. Shutdown stops admission and drains execution; independent results do not
 retain unrelated module state. Resume matches both execution epoch and wake token.
 The initial instance interface admits exclusive driving by one host thread only.
-The precise internal contract is `contracts/xir-program-instance.md`; source and
+The precise internal interface is verified by `test_xir_instances`; source and
 serialized/cache admission require separate qualification.
 
 ### 17.9 New XIR Source Admission Boundary
@@ -7017,7 +7017,7 @@ appending the outer range. Lowered records and reverifies the maximum outgoing
 count; stable frames reserve typed-value staging and charge its physical bytes.
 Full generics, stdlib, coroutine
 syntax, foreign providers, parser OOM/input budgets, default CLI and product
-qualification remain separate. The interface contract is `contracts/xir-source-owner.md`.
+qualification remain separate. The interface is verified by `test_xir_source_admission` and `test_xir_source`.
 
 The standard-library source submodule std/io/output publishes ordinary
 writeStdout(string)->bool and writeStderr(string)->bool functions reporting host
@@ -7044,7 +7044,7 @@ cannot bypass types, CFG/dominance, visibility, imports, initialization or slot
 permissions. Input storage may be destroyed immediately after loading. Failure
 publishes nothing and frees all partial storage. Both VM and native consumers
 then use the same reverified Lowered transition. The precise wire and budget
-contract is `contracts/xir-checked-packet.md`.
+rules are verified by `test_xir_checked`.
 
 This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
 effects, diagnostic provenance, package linking, native-cache pairing, installer
@@ -7089,7 +7089,7 @@ are not native-cache identity proofs.
 Member witnesses, symbolic callback effects, user-declared generic type constructors, inference,
 diagnostic provenance serialization and complete stdlib package/cache pairing are
 still unavailable. Unadmitted effect/borrow/callable declarations continue to
-reject. The precise interface contract is `contracts/xir-generic-templates.md`;
+reject. The precise interface is verified by `test_xir_generics` and `test_xir_source_generics`;
 this family does not qualify all ordinary generic facilities.
 
 ### 17.12 Mutable Local Places and Structured Control Flow
@@ -7112,8 +7112,8 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema and semantic revisions follow §17.6; older revisions reject without a second checking path. The interface is frozen in
-`contracts/xir-local-control-flow.md`.
+schema and semantic revisions follow §17.6; older revisions reject without a second checking path. The interface is verified by
+`test_xir_locals` and `test_xir_local_native`.
 
 ### 17.13 Boolean Short Circuit and C-style For
 

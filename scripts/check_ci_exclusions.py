@@ -353,9 +353,8 @@ SELF_TEST_MUTATIONS = (
 def self_test() -> int:
     """Prove the gate rejects each way an entry can be wrong.
 
-    A checker nobody has tried to fool is a checker nobody knows works. This
-    mirrors the mutation self-tests contract_freeze and semantic_owners carry:
-    every rule above gets one synthetic entry that breaks exactly it, and the
+    A checker nobody has tried to fool is a checker nobody knows works. Every
+    rule above gets one synthetic entry that breaks exactly it, and the
     parse must object. The expiry rule is checked with --today rather than a
     stale date, so the self-test does not start failing on its own thirty days
     from now.
