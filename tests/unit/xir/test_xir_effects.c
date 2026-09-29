@@ -9,6 +9,7 @@
 #include "base/xmalloc.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_generic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
@@ -20,6 +21,13 @@ static void *effect_calloc(size_t n, size_t size) {
 static void effect_free(void *p) {
     if (p) { CHECK(live); --live; } xr_free(p);
 }
+static size_t match_attempts, match_fail=SIZE_MAX;
+static XrXirStatus effect_match(const XrXirModule *module, uint32_t caller,
+    const XrXirInstruction *call, XrXirType type, XrXirType actual, XrXirBudget *remaining) {
+    if (match_attempts++==match_fail) return XR_XIR_OUT_OF_MEMORY;
+    return xr_xir_call_type_matches(module,caller,call,type,actual,remaining);
+}
+#define xr_xir_call_type_matches effect_match
 #undef xr_calloc
 #undef xr_free
 #define xr_calloc(n, size) effect_calloc(n, size)
@@ -27,7 +35,9 @@ static void effect_free(void *p) {
 #include "xir/xxir_effects.c"
 #undef xr_calloc
 #undef xr_free
+#undef xr_xir_call_type_matches
 #include "xir_enum_ops_fixture.h"
+#include "xir_enum_generic_fixture.h"
 static XrXirArtifact *effect_fixture(bool suspends) {
     XrXirType parameter = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE; node.result = XR_XIR_UNIT;
@@ -182,7 +192,39 @@ static void effect_extreme_budgets(void) {
     budget.work=UINT64_MAX;
     CHECK(error_edge(&flow,0,0,NULL,true)==XR_XIR_BUDGET && !attempts && !live);
 }
+static void effect_generic_errors(void) {
+    enum_generic_cases();
+    XrXirArtifact *source=enum_generic_checked(0), *artifact=NULL;
+    XrXirModule built=*xr_xir_artifact_module(source); built.stage=XR_XIR_BUILT;
+    XrXirFunction functions[4]; memcpy(functions,built.functions,sizeof(functions));
+    XrXirInstruction ops[2]; memcpy(ops,functions[2].instructions,sizeof(ops));
+    ops[1]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{1},{0},0,{0}};
+    functions[2].instructions=ops; built.functions=functions;
+    CHECK(xr_xir_check(&built,NULL,&artifact,NULL)==XR_XIR_OK); xr_xir_artifact_free(source);
+    size_t allocations=effect_failures(artifact);
+    match_attempts=0; XrXirEffects *effects=NULL;
+    CHECK(xr_xir_effects_analyze(artifact,NULL,&effects)==XR_XIR_OK);
+    CHECK(xr_xir_effects_error(effects,1,(XrXirType)257,1));
+    CHECK(!xr_xir_effects_error(effects,1,(XrXirType)256,1));
+    CHECK(!xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
+    size_t sites=match_attempts; CHECK(sites); xr_xir_effects_free(effects);
+    for (size_t i=0;i<sites;++i) {
+        match_attempts=0; match_fail=i; effects=NULL;
+        CHECK(xr_xir_effects_analyze(artifact,NULL,&effects)==XR_XIR_OUT_OF_MEMORY && !effects && !live);
+    }
+    match_fail=SIZE_MAX;
+    EffectErrorAtom atoms[]={{(XrXirType)256,1},{(XrXirType)257,1}};
+    uint64_t errors[4]={0,0,4,0}, out=0;
+    XrXirEffects facts={0}; facts.count=4; facts.atom_count=2; facts.words=1; facts.atoms=atoms; facts.errors=errors;
+    ErrorFlow flow={0}; flow.module=xr_xir_artifact_module(artifact);
+    flow.function=&flow.module->functions[1]; flow.effects=&facts;
+    XrXirBudget budget=xr_xir_default_budget(); budget.metadata_bytes=0; flow.remaining=&budget;
+    CHECK(error_call(&flow,&flow.function->instructions[1],&out)==XR_XIR_BUDGET && !out);
+    xr_xir_artifact_free(artifact); CHECK(!live);
+    printf("Generic error substitution: %zu allocation failures, %zu matcher failures released\n",allocations,sites);
+}
 int main(void) {
+    effect_generic_errors();
     effect_extreme_budgets();
     effect_enum_ownership();
     effect_long_cycle();

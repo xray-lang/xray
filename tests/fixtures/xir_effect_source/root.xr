@@ -33,3 +33,13 @@ fn genericFail<T>(item:T)->i64 { throw GenericFault<T>.Bad { item:item } }
 export fn genericUse()->i64 { return genericFail<i64>(7) }
 export fn cellAfterYield()->i64 { var e = Fault.Bad; Coro.yield(); throw e }
 export fn cellAfterOutput()->i64 { var e = Fault.Bad; print(1); throw e }
+export fn genericCaught()->i64 { try { return genericFail<i64>(7) } catch(e:GenericFault<i64>) { return 37 } }
+fn genericHandled<T>(item:T)->i64 { try { return genericFail<T>(item) } catch(e:GenericFault<T>) { return 41 } }
+export fn genericHandledUse()->i64 { return genericHandled<i64>(7) }
+enum MissingFault<T> { Bad { item:T } }
+fn missingFail<T>(item:T)->i64 { throw MissingFault<T>.Bad { item:item } }
+export fn missingUse()->i64 { return missingFail<i64>(7) }
+fn throwParam<E:Error>(error:E)->i64 { throw error }
+export fn paramForward()->i64 { return throwParam<Fault>(Fault.Bad) }
+export fn paramCaught()->i64 { try { return throwParam<Fault>(Fault.Bad) } catch(e:Fault) { return 43 } }
+export fn dynamicKnownMix(f:fn()->i64, flag:bool)->i64 { if (flag) { throw Fault.Bad }; return f() }

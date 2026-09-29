@@ -14,6 +14,7 @@
 #include "xxir_effects.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
+#include "xxir_generic.h"
 #include "../base/xmalloc.h"
 
 typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectErrorAtom;

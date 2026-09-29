@@ -16,6 +16,36 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+static void source_generic_effects(const XrXirModule *module, const XrXirEffects *effects) {
+    bool open=false; uint32_t found=0;
+    for (uint32_t f=0;f<module->function_count;++f)
+        if (module->generics && module->generics[f].parameter_count) open=true;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *fn=&module->functions[f];
+        bool use=fn->name_length==10 && !memcmp(fn->name,"genericUse",10);
+        bool missing=fn->name_length==10 && !memcmp(fn->name,"missingUse",10);
+        bool parameter=fn->name_length>=10 && !memcmp(fn->name,"throwParam",10);
+        if (!use && !missing && !parameter) continue;
+        ++found;
+        CHECK(xr_xir_effects_function(effects,f)->throws==XR_XIR_EFFECT_MAY);
+        CHECK(!xr_xir_effects_error_unknown(effects,f));
+        CHECK(xr_xir_effects_error_unidentified(effects,f)==(missing && open));
+        if (parameter) CHECK(xr_xir_effects_error(effects,f,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
+            XR_XIR_ERROR_SYMBOLIC_VARIANT)==open);
+        if (use) {
+            uint32_t matches=0;
+            for (uint32_t t=0;t<module->types->count;++t) {
+                XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+                if (!xr_xir_effects_error(effects,f,type,0)) continue;
+                const XrXirTypeNode *node=xr_xir_type_node(module->types,type);
+                CHECK(node && node->nominal.argument_count==1 && node->nominal.arguments[0]==XR_XIR_I64);
+                ++matches;
+            }
+            CHECK(matches==1);
+        }
+    }
+    CHECK(found==3);
+}
 static void source_effects(const XrXirArtifact *artifact) {
     const struct { const char *name; XrXirEffect suspend, throws; } expected[] = {
         {"typedHandled", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
@@ -26,7 +56,7 @@ static void source_effects(const XrXirArtifact *artifact) {
         {"dynamicTyped", XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN},
         {"wrongTyped", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"parameterThrow", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
-        {"unknownParameter", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_UNKNOWN},
+        {"unknownParameter", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"localOverwrite", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"phiThrow", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"loopThrow", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
@@ -37,6 +67,11 @@ static void source_effects(const XrXirArtifact *artifact) {
         {"panicThrows", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"cellAfterYield", XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_MAY},
         {"cellAfterOutput", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"genericCaught", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
+        {"genericHandledUse", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
+        {"paramForward", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"paramCaught", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
+        {"dynamicKnownMix", XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_MAY},
         {"pure", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
         {"sleeper", XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_NONE},
         {"relay", XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_NONE},
@@ -64,9 +99,10 @@ static void source_effects(const XrXirArtifact *artifact) {
                 fprintf(stderr, "effect %s: suspend=%u throws=%u\n", expected[e].name, fact->suspend, fact->throws);
             CHECK(fact->suspend == expected[e].suspend && fact->throws == expected[e].throws); found = true;
             uint32_t mask = expected[e].throws == XR_XIR_EFFECT_MAY ? 1u : 0u;
+            if (!strcmp(expected[e].name,"unknownParameter")) mask=0;
             if (!strcmp(expected[e].name,"parameterThrow") || !strcmp(expected[e].name,"phiThrow") ||
                 !strcmp(expected[e].name,"loopThrow") || !strcmp(expected[e].name,"cellAfterCall") ||
-                !strcmp(expected[e].name,"cellAfterYield") || !strcmp(expected[e].name,"cellAfterOutput")) mask = 3;
+                !strcmp(expected[e].name,"cellAfterYield") || !strcmp(expected[e].name,"cellAfterOutput") || !strcmp(expected[e].name,"paramForward")) mask = 3;
             if (!strcmp(expected[e].name,"localOverwrite") || !strcmp(expected[e].name,"recursiveError") ||
                 !strcmp(expected[e].name,"recursivePeer") || !strcmp(expected[e].name,"panicThrows")) mask = 2;
             for (uint32_t t = 0; t < module->types->count; ++t) {
@@ -81,29 +117,13 @@ static void source_effects(const XrXirArtifact *artifact) {
                 CHECK(xr_xir_effects_error(effects,f,type,0) == (fault && (mask&1) != 0));
                 if (fault) CHECK(xr_xir_effects_error(effects,f,type,1) == ((mask&2) != 0));
             }
-            CHECK(xr_xir_effects_error_unknown(effects,f) == (expected[e].throws == XR_XIR_EFFECT_UNKNOWN));
+            CHECK(xr_xir_effects_error_unidentified(effects,f)==(!strcmp(expected[e].name,"unknownParameter")));
+            CHECK(xr_xir_effects_error_unknown(effects,f) == (expected[e].throws == XR_XIR_EFFECT_UNKNOWN || !strcmp(expected[e].name,"dynamicKnownMix")));
         }
         if (!found) fprintf(stderr, "missing effect function %s at stage %u\n", expected[e].name, module->stage);
         CHECK(found);
     }
-    bool generic_open=false, generic_found=false;
-    for (uint32_t f=0;f<module->function_count;++f) {
-        const XrXirFunction *fn=&module->functions[f];
-        if (fn->name_length<11 || memcmp(fn->name,"genericFail",11)) continue;
-        generic_found=true;
-        generic_open=module->generics && module->generics[f].parameter_count;
-        CHECK(xr_xir_effects_function(effects,f)->throws==XR_XIR_EFFECT_MAY);
-    }
-    CHECK(generic_found);
-    bool use_found=false;
-    for (uint32_t f=0;f<module->function_count;++f) {
-        const XrXirFunction *fn=&module->functions[f];
-        if (fn->name_length!=10 || memcmp(fn->name,"genericUse",10)) continue;
-        use_found=true;
-        CHECK(xr_xir_effects_function(effects,f)->throws==(generic_open ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_MAY));
-        CHECK(xr_xir_effects_error_unknown(effects,f)==generic_open);
-    }
-    CHECK(use_found);
+    source_generic_effects(module,effects);
     xr_xir_effects_free(effects);
 }
 int main(void) {
