@@ -21,13 +21,6 @@ static void *effect_calloc(size_t n, size_t size) {
 static void effect_free(void *p) {
     if (p) { CHECK(live); --live; } xr_free(p);
 }
-static size_t match_attempts, match_fail=SIZE_MAX;
-static XrXirStatus effect_match(const XrXirModule *module, uint32_t caller,
-    const XrXirInstruction *call, XrXirType type, XrXirType actual, XrXirBudget *remaining) {
-    if (match_attempts++==match_fail) return XR_XIR_OUT_OF_MEMORY;
-    return xr_xir_call_type_matches(module,caller,call,type,actual,remaining);
-}
-#define xr_xir_call_type_matches effect_match
 #undef xr_calloc
 #undef xr_free
 #define xr_calloc(n, size) effect_calloc(n, size)
@@ -35,7 +28,6 @@ static XrXirStatus effect_match(const XrXirModule *module, uint32_t caller,
 #include "xir/xxir_effects.c"
 #undef xr_calloc
 #undef xr_free
-#undef xr_xir_call_type_matches
 #include "xir_enum_ops_fixture.h"
 #include "xir_enum_generic_fixture.h"
 static XrXirArtifact *effect_fixture(bool suspends) {
@@ -202,28 +194,141 @@ static void effect_generic_errors(void) {
     functions[2].instructions=ops; built.functions=functions;
     CHECK(xr_xir_check(&built,NULL,&artifact,NULL)==XR_XIR_OK); xr_xir_artifact_free(source);
     size_t allocations=effect_failures(artifact);
-    match_attempts=0; XrXirEffects *effects=NULL;
+    XrXirEffects *effects=NULL;
     CHECK(xr_xir_effects_analyze(artifact,NULL,&effects)==XR_XIR_OK);
     CHECK(xr_xir_effects_error(effects,1,(XrXirType)257,1));
     CHECK(!xr_xir_effects_error(effects,1,(XrXirType)256,1));
     CHECK(!xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
-    size_t sites=match_attempts; CHECK(sites); xr_xir_effects_free(effects);
-    for (size_t i=0;i<sites;++i) {
-        match_attempts=0; match_fail=i; effects=NULL;
-        CHECK(xr_xir_effects_analyze(artifact,NULL,&effects)==XR_XIR_OUT_OF_MEMORY && !effects && !live);
-    }
-    match_fail=SIZE_MAX;
-    EffectErrorAtom atoms[]={{(XrXirType)256,1},{(XrXirType)257,1}};
-    uint64_t errors[4]={0,0,4,0}, out=0;
-    XrXirEffects facts={0}; facts.count=4; facts.atom_count=2; facts.words=1; facts.atoms=atoms; facts.errors=errors;
-    ErrorFlow flow={0}; flow.module=xr_xir_artifact_module(artifact);
-    flow.function=&flow.module->functions[1]; flow.effects=&facts;
-    XrXirBudget budget=xr_xir_default_budget(); budget.metadata_bytes=0; flow.remaining=&budget;
-    CHECK(error_call(&flow,&flow.function->instructions[1],&out)==XR_XIR_BUDGET && !out);
+    xr_xir_effects_free(effects);
+    XrXirBudget budget=xr_xir_default_budget(); budget.scratch_bytes=0;
+    EffectTerms terms={0}; terms.types=*xr_xir_artifact_module(artifact)->types; terms.remaining=&budget;
+    XrXirType argument=XR_XIR_I64, output=XR_XIR_UNIT;
+    XrXirGeneric arguments={0}; arguments.arguments=&argument; arguments.argument_count=1;
+    CHECK(effect_terms_substitute(&terms,(XrXirType)256,&arguments,&output)==XR_XIR_BUDGET);
+    CHECK(output==XR_XIR_UNIT); effect_terms_free(&terms);
     xr_xir_artifact_free(artifact); CHECK(!live);
-    printf("Generic error substitution: %zu allocation failures, %zu matcher failures released\n",allocations,sites);
+    printf("Generic error substitution: %zu allocation failures released\n",allocations);
+}
+static XrXirArtifact *effect_missing_fixture(bool wide) {
+    XrXirArtifact *source = enum_generic_checked(0), *artifact = NULL;
+    XrXirModule built = *xr_xir_artifact_module(source); built.stage = XR_XIR_BUILT;
+    XrXirFunction functions[4]; memcpy(functions, built.functions, sizeof(functions));
+    XrXirInstruction make[2]; memcpy(make, functions[2].instructions, sizeof(make));
+    make[1] = (XrXirInstruction){XR_XIR_THROW, XR_XIR_UNIT, {1}, {0}, 0, {0}};
+    functions[2].instructions = make; functions[2].result = XR_XIR_I64;
+    XrXirInstruction entry[3]; memcpy(entry, functions[1].instructions, sizeof(entry));
+    entry[1].type = XR_XIR_I64;
+    entry[2] = (XrXirInstruction){XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}};
+    XrXirBlock block = {0, 3, 0};
+    functions[1].instructions = entry; functions[1].instruction_count = 3; functions[1].blocks = &block;
+    built.functions = functions;
+    XrXirTypes types = *built.types; types.count = 1; built.types = &types;
+    XrXirNominalTable table = *types.nominals;
+    XrXirNominalDeclaration declaration = table.declarations[0];
+    XrXirNominalVariant variants[61]; char names[61][8];
+    if (wide) {
+        for (uint32_t i = 0; i < 61; ++i) {
+            int length = snprintf(names[i], sizeof(names[i]), "V%u", i); CHECK(length > 0);
+            variants[i] = (XrXirNominalVariant){{names[i], (uint32_t)length}, i > 1 ? 1u : 0u, i == 1 ? 1u : 0u};
+        }
+        declaration.variants = variants; declaration.variant_count = 61;
+        table.declarations = &declaration; types.nominals = &table;
+    }
+    CHECK(xr_xir_check(&built, NULL, &artifact, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(source); return artifact;
+}
+static void effect_missing_errors(bool wide) {
+    XrXirArtifact *artifact = effect_missing_fixture(wide);
+    size_t sites = effect_failures(artifact); XrXirEffects *effects = NULL;
+    CHECK(xr_xir_effects_analyze(artifact, NULL, &effects) == XR_XIR_OK);
+    CHECK(effects->words == (wide ? 2u : 1u));
+    CHECK(effects->atom_count == (wide ? 63u : 4u));
+    effect_expect(effects, 1, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY);
+    CHECK(!xr_xir_effects_error_unknown(effects, 1) && !xr_xir_effects_error_unidentified(effects, 1));
+    CHECK(!xr_xir_effects_error(effects, 1, (XrXirType)257, 1));
+    CHECK(error_bit(effects->errors + effects->words, effects->atom_count + 1));
+    xr_xir_artifact_free(artifact);
+    CHECK(xr_xir_effects_error(effects, 2, (XrXirType)256, 1));
+    xr_xir_effects_free(effects); CHECK(!live);
+    printf("Missing error identity, wide=%u: %zu allocation failures released\n", wide, sites);
+}
+static void effect_growing_cycle(void) {
+    XrXirArtifact *source = effect_missing_fixture(false), *artifact = NULL;
+    XrXirModule built = *xr_xir_artifact_module(source); built.stage = XR_XIR_BUILT;
+    XrXirFunction functions[4]; memcpy(functions, built.functions, sizeof(functions));
+    XrXirTypeNode nodes[2] = {built.types->nodes[0], {0}};
+    nodes[1].kind = XR_XIR_TYPE_ARRAY; nodes[1].element = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    nodes[1].parameter_span = 1;
+    XrXirTypes types = {nodes, 2, built.types->nominals}; built.types = &types;
+    XrXirInstruction ops[] = {
+        {XR_XIR_ENUM_NEW, (XrXirType)256, {0, 1}, {0}, 1, {0}},
+        {XR_XIR_ARRAY_NEW, (XrXirType)257, {1, 1}, {0}, 0, {0}},
+        {XR_XIR_CALL, XR_XIR_I64, {2, 1}, {0}, 2, {0, 1}},
+        {XR_XIR_THROW, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
+    uint32_t operands[] = {0, 0, 2}; XrXirBlock block = {0, 4, 0};
+    functions[2].instructions = ops; functions[2].instruction_count = 4; functions[2].blocks = &block;
+    functions[2].operands = operands; functions[2].operand_count = 3; built.functions = functions;
+    XrXirGeneric generics[4]; memcpy(generics, built.generics, sizeof(generics));
+    XrXirType argument = (XrXirType)257;
+    generics[2].arguments = &argument; generics[2].argument_count = 1; built.generics = generics;
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_check(&built,NULL,&artifact,&diagnostic);
+    if (status!=XR_XIR_OK) fprintf(stderr,"growing fixture: status=%u function=%u instruction=%u\n",status,diagnostic.function,diagnostic.instruction);
+    CHECK(status==XR_XIR_OK); xr_xir_artifact_free(source);
+    XrXirBudget budget = xr_xir_default_budget(); budget.work = 200000;
+    XrXirBudget proof = budget;
+    CHECK(xr_xir_verify_remaining(xr_xir_artifact_module(artifact), &proof, NULL) == XR_XIR_OK);
+    attempts = 0; XrXirEffects *effects = NULL;
+    CHECK(xr_xir_effects_analyze(artifact, &budget, &effects) == XR_XIR_BUDGET);
+    CHECK(!effects && !live && attempts > 50);
+    printf("Growing generic error cycle: budget exhausted after %zu allocations, no published summary\n", attempts);
+    xr_xir_artifact_free(artifact);
+}
+static void effect_term_shapes(void) {
+    XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, argument = XR_XIR_I64;
+    XrXirCallableParameter parameters[] = {{(XrXirType)257, 0}, {(XrXirType)257, 1}};
+    XrXirType nominal_argument = (XrXirType)258;
+    XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
+        {XR_XIR_TYPE_CELL, (XrXirType)256, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, (XrXirType)256, 0, 1, {0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {0, &nominal_argument, 1, NULL, 0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, (XrXirType)256, 0, 1, {0}}};
+    XrXirGeneric arguments = {0}; arguments.argument_count = 1; arguments.arguments = &argument;
+    XrXirBudget budget = xr_xir_default_budget(); uint64_t scratch = budget.scratch_bytes;
+    EffectTerms pool = {0}; pool.types = (XrXirTypes){nodes, 5, NULL}; pool.remaining = &budget;
+    attempts = 0; XrXirType result = XR_XIR_UNIT;
+    CHECK(effect_terms_substitute(&pool, (XrXirType)259, &arguments, &result) == XR_XIR_OK);
+    size_t sites = attempts;
+    const XrXirTypeNode *nominal = xr_xir_type_node(&pool.types, result);
+    CHECK(nominal && !nominal->parameter_span && nominal->kind == XR_XIR_TYPE_NOMINAL);
+    XrXirType callable_id = nominal->nominal.arguments[0];
+    XrXirTypeNode callable = *xr_xir_type_node(&pool.types, callable_id);
+    CHECK(callable.kind == XR_XIR_TYPE_CALLABLE && callable.parameter_count == 1 && !callable.parameters[0].mode);
+    const XrXirTypeNode *cell = xr_xir_type_node(&pool.types, callable.parameters[0].type);
+    CHECK(cell && cell->kind == XR_XIR_TYPE_CELL && cell->element == callable.result);
+    const XrXirTypeNode *array = xr_xir_type_node(&pool.types, cell->element);
+    CHECK(array && array->kind == XR_XIR_TYPE_ARRAY && array->element == XR_XIR_I64);
+    XrXirType repeated = XR_XIR_UNIT; uint32_t count = pool.types.count;
+    CHECK(effect_terms_substitute(&pool, (XrXirType)259, &arguments, &repeated) == XR_XIR_OK);
+    CHECK(repeated == result && pool.types.count == count);
+    CHECK(effect_terms_substitute(&pool, (XrXirType)260, &arguments, &repeated) == XR_XIR_OK);
+    CHECK(repeated != callable_id && xr_xir_type_node(&pool.types, repeated)->parameters[0].mode == 1);
+    effect_terms_free(&pool); CHECK(!live && budget.scratch_bytes == scratch);
+    for (size_t i = 0; i < sites; ++i) {
+        pool = (EffectTerms){0}; pool.types = (XrXirTypes){nodes, 5, NULL};
+        budget = xr_xir_default_budget(); pool.remaining = &budget;
+        attempts = 0; fail_at = i;
+        CHECK(effect_terms_substitute(&pool, (XrXirType)259, &arguments, &result) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(result == XR_XIR_UNIT); effect_terms_free(&pool);
+        CHECK(!live && budget.scratch_bytes == scratch);
+    }
+    fail_at = SIZE_MAX;
+    printf("Structural error terms: %zu allocation failures restored shared scratch\n", sites);
 }
 int main(void) {
+    effect_term_shapes();
+    effect_missing_errors(false); effect_missing_errors(true); effect_growing_cycle();
     effect_generic_errors();
     effect_extreme_budgets();
     effect_enum_ownership();

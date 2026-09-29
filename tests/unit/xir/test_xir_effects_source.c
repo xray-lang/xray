@@ -29,7 +29,7 @@ static void source_generic_effects(const XrXirModule *module, const XrXirEffects
         ++found;
         CHECK(xr_xir_effects_function(effects,f)->throws==XR_XIR_EFFECT_MAY);
         CHECK(!xr_xir_effects_error_unknown(effects,f));
-        CHECK(xr_xir_effects_error_unidentified(effects,f)==(missing && open));
+        CHECK(!xr_xir_effects_error_unidentified(effects,f));
         if (parameter) CHECK(xr_xir_effects_error(effects,f,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
             XR_XIR_ERROR_SYMBOLIC_VARIANT)==open);
         if (use) {
@@ -45,6 +45,25 @@ static void source_generic_effects(const XrXirModule *module, const XrXirEffects
         }
     }
     CHECK(found==3);
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *fn=&module->functions[f];
+        if (fn->name_length==19 && !memcmp(fn->name,"closureHandledCycle",19))
+            CHECK(xr_xir_effects_function(effects,f)->throws==XR_XIR_EFFECT_NONE);
+    }
+
+    const char *names[]={"closureCaught","closureDeepCaught","closureWrong","closureUnion","closureCallbackCaught"};
+    for (uint32_t n=0;n<5;++n) {
+        bool seen=false;
+        for (uint32_t f=0;f<module->function_count;++f) {
+            const XrXirFunction *fn=&module->functions[f];
+            if (fn->name_length!=strlen(names[n]) || memcmp(fn->name,names[n],fn->name_length)) continue;
+            seen=true;
+            CHECK(xr_xir_effects_function(effects,f)->throws==(n==2 ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
+            CHECK(!xr_xir_effects_error_unknown(effects,f) && !xr_xir_effects_error_unidentified(effects,f));
+        }
+        CHECK(seen);
+    }
+
 }
 static void source_effects(const XrXirArtifact *artifact) {
     const struct { const char *name; XrXirEffect suspend, throws; } expected[] = {

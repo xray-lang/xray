@@ -14,12 +14,11 @@
 #include "xxir_effects.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
-#include "xxir_generic.h"
 #include "../base/xmalloc.h"
 
 typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectErrorAtom;
 struct XrXirEffects {
-    uint32_t count, atom_count, words;
+    uint32_t count, atom_count, atom_capacity, words, source_type_count;
     XrXirFunctionEffects *functions;
     EffectErrorAtom *atoms;
     uint64_t *errors;
@@ -151,6 +150,7 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, u
     }
     return XR_XIR_OK;
 }
+#include "xxir_effect_terms.inc.c"
 #include "xxir_effect_errors.inc.c"
 
 XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,

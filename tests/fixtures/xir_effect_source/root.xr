@@ -43,3 +43,26 @@ fn throwParam<E:Error>(error:E)->i64 { throw error }
 export fn paramForward()->i64 { return throwParam<Fault>(Fault.Bad) }
 export fn paramCaught()->i64 { try { return throwParam<Fault>(Fault.Bad) } catch(e:Fault) { return 43 } }
 export fn dynamicKnownMix(f:fn()->i64, flag:bool)->i64 { if (flag) { throw Fault.Bad }; return f() }
+
+enum ClosureFault<T> { Bad { item:T } }
+fn closureFail<T>(x:T)->i64 { throw ClosureFault<T>.Bad { item:x } }
+fn closureBridge<T>(x:T)->i64 { return closureFail<Array<T>>([x]) }
+fn closureDeep<T>(x:T)->i64 { return closureBridge<Array<T>>([x]) }
+export fn closureCaught()->i64 { try { return closureBridge<i64>(7) } catch(e:ClosureFault<Array<i64>>) { return 59 } }
+export fn closureDeepCaught()->i64 { try { return closureDeep<i64>(7) } catch(e:ClosureFault<Array<Array<i64>>>) { return 61 } }
+export fn closureWrong()->i64 { try { return closureBridge<string>("x") } catch(e:ClosureFault<Array<i64>>) { return 0 } }
+export fn closureUnion(flag:bool)->i64 {
+    try { if (flag) { return closureBridge<i64>(7) }; return closureBridge<string>("x") }
+    catch(e:ClosureFault<Array<i64>>) { return 67 }
+    catch(e:ClosureFault<Array<string>>) { return 71 }
+}
+
+fn closureHandledCycle<T>(x:T)->i64 {
+    try { return closureHandledCycle<Array<T>>([x]) } catch(e) { return 0 }
+}
+fn closureCallback<T>(f:fn(T)->T)->i64 { return closureFail<fn(T)->T>(f) }
+fn closureIdentity(x:i64)->i64 { return x }
+export fn closureCallbackCaught()->i64 {
+    try { return closureCallback<i64>(closureIdentity) }
+    catch(e:ClosureFault<fn(i64)->i64>) { return 73 }
+}
