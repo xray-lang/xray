@@ -1977,7 +1977,7 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx.function_count;++f) {
             if (!ctx.bodies[f].initialization_regions) continue;
             location.function=f;
-            status=xr_xir_initialization_check(&built,&ctx.functions[f],
+            status=xr_xir_initialization_check(&built,f,
                 ctx.bodies[f].initialization_regions,&checking,&location);
         }
         if (status != XR_XIR_OK) {
@@ -1993,7 +1993,11 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
             const char *cause = location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
                 "E0387: an error can escape the defer body" :
                 location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND ?
-                "E0392: defer may suspend or create a task" : message;
+                "E0392: defer may suspend or create a task" :
+                location.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ ?
+                "read requires storage initialized on every incoming path" :
+                location.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE ?
+                "write may overwrite already initialized const storage" : message;
             source_fail(&ctx, site, status, cause);
         }
     }

@@ -770,13 +770,18 @@ static void uninitialized_packet(void) {
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(decoded); decoded = NULL;
     put32(packet.bytes + 137, 1); digest_packet(&packet);
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_VALUE && !decoded);
+    XrXirDiagnostic diagnostic = {0};
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, &diagnostic) == XR_XIR_BAD_VALUE && !decoded);
+    CHECK(diagnostic.status == XR_XIR_BAD_VALUE && diagnostic.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE &&
+        diagnostic.function == 0 && diagnostic.block == 0 && diagnostic.instruction == 2);
     memcpy(packet.bytes, original, sizeof(original));
     /* Repairing the digest must not hide removal of the initializing write. */
     put32(packet.bytes + 153, XR_XIR_SUSPEND); put32(packet.bytes + 161, 0);
     digest_packet(&packet);
     decoded = NULL;
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, &diagnostic) == XR_XIR_BAD_VALUE);
+    CHECK(diagnostic.status == XR_XIR_BAD_VALUE && diagnostic.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ &&
+        diagnostic.function == 0 && diagnostic.block == 0 && diagnostic.instruction == 2);
     CHECK(!decoded);
     xr_xir_checked_packet_free(&packet);
 }

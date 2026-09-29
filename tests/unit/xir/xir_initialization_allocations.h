@@ -34,12 +34,18 @@ static void initialization_region_allocations(void) {
             (XrXirInstruction){XR_XIR_LOCAL_READ,XR_XIR_STRING,{1},{0},0,{0}};
         XrXirBudget budget=xr_xir_default_budget();
         calls=0; fail_at=SIZE_MAX;
-        XrXirStatus status=xr_xir_initialization_check(&module,&function,&outer,&budget,NULL);
+        XrXirDiagnostic diagnostic={XR_XIR_BAD_STRUCTURE,17,99,99,XR_XIR_DIAGNOSTIC_CLEANUP_THROW};
+        XrXirStatus status=xr_xir_initialization_check(&module,0,&outer,&budget,&diagnostic);
         CHECK(status==(mode ? XR_XIR_BAD_VALUE : XR_XIR_OK) && !live);
+        CHECK(diagnostic.status==status && diagnostic.function==0);
+        CHECK(diagnostic.reason==(mode==1 ? XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ :
+            mode==2 ? XR_XIR_DIAGNOSTIC_READONLY_WRITE : XR_XIR_DIAGNOSTIC_NONE));
+        if (mode) CHECK(diagnostic.block==mode && diagnostic.instruction==(mode==1 ? 4u : 6u));
         size_t sites=calls; CHECK(sites>0);
         for (size_t site=0;site<sites;++site) {
             calls=0; fail_at=site; budget=xr_xir_default_budget();
-            CHECK(xr_xir_initialization_check(&module,&function,&outer,&budget,NULL)==XR_XIR_OUT_OF_MEMORY);
+            CHECK(xr_xir_initialization_check(&module,0,&outer,&budget,&diagnostic)==XR_XIR_OUT_OF_MEMORY);
+            CHECK(diagnostic.status==XR_XIR_OUT_OF_MEMORY && diagnostic.reason==XR_XIR_DIAGNOSTIC_NONE);
             CHECK(!live);
         }
         fail_at=SIZE_MAX;
@@ -47,13 +53,22 @@ static void initialization_region_allocations(void) {
     }
     outer.checkpoint=2; ops[6]=(XrXirInstruction){XR_XIR_LOCAL_READ,XR_XIR_STRING,{1},{0},0,{0}};
     XrXirBudget remaining=xr_xir_default_budget(), required=remaining;
-    CHECK(xr_xir_initialization_check(&module,&function,&outer,&remaining,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_initialization_check(&module,0,&outer,&remaining,NULL)==XR_XIR_OK);
     required.work-=remaining.work; required.metadata_bytes-=remaining.metadata_bytes;
     for (unsigned kind=0;kind<3;++kind) {
         XrXirBudget budget=required;
         if (kind==1) --budget.work;
         if (kind==2) --budget.metadata_bytes;
-        CHECK(xr_xir_initialization_check(&module,&function,&outer,&budget,NULL)==(kind ? XR_XIR_BUDGET : XR_XIR_OK));
+        XrXirDiagnostic diagnostic;
+        XrXirStatus status=xr_xir_initialization_check(&module,0,&outer,&budget,&diagnostic);
+        CHECK(status==(kind ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(diagnostic.status==status && diagnostic.reason==XR_XIR_DIAGNOSTIC_NONE);
         CHECK(!live);
     }
+    XrXirDiagnostic diagnostic={XR_XIR_OK,17,99,99,XR_XIR_DIAGNOSTIC_READONLY_WRITE};
+    CHECK(xr_xir_initialization_check(NULL,7,&outer,&remaining,&diagnostic)==XR_XIR_BAD_STRUCTURE);
+    CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE && diagnostic.function==7 &&
+        diagnostic.block==UINT32_MAX && diagnostic.instruction==UINT32_MAX && diagnostic.reason==XR_XIR_DIAGNOSTIC_NONE);
+    CHECK(xr_xir_initialization_check(&module,1,&outer,&remaining,&diagnostic)==XR_XIR_BAD_STRUCTURE);
+    CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE && diagnostic.function==1 && diagnostic.reason==XR_XIR_DIAGNOSTIC_NONE);
 }

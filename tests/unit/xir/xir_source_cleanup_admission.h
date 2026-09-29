@@ -22,7 +22,7 @@ static void source_cleanup_admission(XrXirSourceRequest *request, const char *pa
         {"fn unused(){defer{const f=fn()->i64{return 3};print(f())}}\n", "E0392"},
         {"fn unused(){defer{const f=fn()->i64{return 3}}}\n", NULL},
         {"fn unused<T>(v:T)->T{defer{const copy=v};return v}\n", NULL},
-        {"struct C{value:i64;constructor(){defer{print(this.value)};this.value=2}}\n", "constructed XIR failed"},
+        {"struct C{value:i64;constructor(){defer{print(this.value)};this.value=2}}\n", "read requires storage initialized"},
         {"struct C{const value:i64=1;constructor(){defer{this.value=2}}}\n", "field access is not permitted"},
         {"struct C{private value:i64=1;constructor(){} }\nfn f(){const c=C();defer{print(c.value)}}\n", "field access is not permitted"},
         {"struct C{private const value:i64=1;constructor(){defer{print(this.value)}}}\n", NULL},
@@ -30,10 +30,16 @@ static void source_cleanup_admission(XrXirSourceRequest *request, const char *pa
         {"struct C{const value:i64}\nfn f(){var c=C{value:1};c.value+=1}\n", "field access is not permitted"},
         {"struct C{private value:i64=1;constructor(){}}\nfn f(){var c=C();c.value+=1}\n", "field access is not permitted"},
         {"struct C{value:i64}\nfn f(c:C){c.value+=1}\n", "field mutation requires"},
-        {"struct C{value:i64;constructor(){this.value+=1}}\n", "constructed XIR failed"},
+        {"struct C{value:i64;constructor(){this.value+=1}}\n", "read requires storage initialized"},
         {"struct C{const value:i64=1;constructor(){this.value+=1}}\n", "field access is not permitted"},
         {"struct C{value:i8}\nfn f(){var c=C{value:1};c.value+=(1 as i64)}\n", "expression cannot satisfy its declared type"},
-        {"struct C<T>{value:T}\nfn f<T>(v:T){var c=C<T>{value:v};c.value+=v}\n", "declared concrete operand contract"}
+        {"struct C<T>{value:T}\nfn f<T>(v:T){var c=C<T>{value:v};c.value+=v}\n", "declared concrete operand contract"},
+        {"struct C{value:i64;constructor(ok:bool){if(ok){this.value=1};return}}\n", "read requires storage initialized"},
+        {"struct C{const value:i64;constructor(ok:bool){if(ok){this.value=1};this.value=2}}\n", "write may overwrite already initialized const storage"},
+        {"struct C{const value:i64;constructor(ok:bool){while(ok){this.value=1};this.value=2}}\n", "write may overwrite already initialized const storage"},
+        {"struct C{value:i64;constructor(){if(false){print(this.value)};this.value=1}}\n", "read requires storage initialized"},
+        {"struct C{const value:i64;constructor(ok:bool){if(ok){this.value=1}else{this.value=2}}}\n", NULL},
+        {"struct C{value:i64;constructor(){this.value=1;defer{this.value+=2};return}}\n", NULL}
     };
     unsigned failures = 0;
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
@@ -45,6 +51,8 @@ static void source_cleanup_admission(XrXirSourceRequest *request, const char *pa
         bool correct = valid ? status == XR_XIR_OK && result.checked && result.snapshot :
             status != XR_XIR_OK && !result.checked && view && !view->complete &&
             view->diagnostic.status == status && diagnostic.status == status &&
+            view->diagnostic.line == diagnostic.line && view->diagnostic.column == diagnostic.column &&
+            !strcmp(view->diagnostic.message, diagnostic.message) &&
             diagnostic.line > 0 && strstr(diagnostic.message, cases[i].code) != NULL;
         if (!correct) {
             fprintf(stderr, "cleanup source case %u: %u at %d:%d: %s\n", i, status,

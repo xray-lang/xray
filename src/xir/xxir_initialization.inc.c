@@ -144,7 +144,10 @@ static XrXirStatus initialization_reads(const InitializationGraph *graph, uint32
         if (!op) continue;
         context->location.instruction=node->instruction; context->location.block=node->block;
         if (local_write(op->op) && op->args[0]==place) {
-            if (readonly && (node->state&2)) return XR_XIR_BAD_VALUE;
+            if (readonly && (node->state&2)) {
+                context->location.reason=XR_XIR_DIAGNOSTIC_READONLY_WRITE;
+                return XR_XIR_BAD_VALUE;
+            }
             continue;
         }
         if (op->op==XR_XIR_PHI) continue;
@@ -152,8 +155,15 @@ static XrXirStatus initialization_reads(const InitializationGraph *graph, uint32
         if (!spend(&context->remaining.work,count)) return XR_XIR_BUDGET;
         for (uint32_t a=0;a<count;++a) {
             uint32_t id=xr_xir_op_uses_operand_table(op->op) ? node->function->operands[op->args[0]+a] : op->args[a];
-            if (id==place && (!(node->state&1) ||
-                (readonly && xr_xir_operand_role(op->op,a)==XR_XIR_OPERAND_WRITE))) return XR_XIR_BAD_VALUE;
+            if (id!=place) continue;
+            if (!(node->state&1)) {
+                context->location.reason=XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ;
+                return XR_XIR_BAD_VALUE;
+            }
+            if (readonly && xr_xir_operand_role(op->op,a)==XR_XIR_OPERAND_WRITE) {
+                context->location.reason=XR_XIR_DIAGNOSTIC_READONLY_WRITE;
+                return XR_XIR_BAD_VALUE;
+            }
         }
     }
     return XR_XIR_OK;
@@ -174,13 +184,14 @@ static XrXirStatus initialization_check(const XrXirFunction *function,
     }
     initialization_free(&graph); return status;
 }
-XrXirStatus xr_xir_initialization_check(const XrXirModule *module, const XrXirFunction *function,
+XrXirStatus xr_xir_initialization_check(const XrXirModule *module, uint32_t function,
     const XrXirInitializationRegion *regions, XrXirBudget *remaining, XrXirDiagnostic *diagnostic) {
-    if (!module || !function || !remaining) return XR_XIR_BAD_STRUCTURE;
-    VerifyContext context={*remaining,{0},module};
-    if (diagnostic) context.location=*diagnostic;
-    XrXirStatus status=initialization_check(function,regions,&context);
+    if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    if (!module || !module->functions || function>=module->function_count || !remaining) return XR_XIR_BAD_STRUCTURE;
+    VerifyContext context={*remaining,{XR_XIR_OK,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE},module};
+    XrXirStatus status=initialization_check(&module->functions[function],regions,&context);
     *remaining=context.remaining;
+    context.location.status=status;
     if (diagnostic) *diagnostic=context.location;
     return status;
 }
