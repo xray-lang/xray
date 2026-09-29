@@ -1087,7 +1087,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, XrXirTy
     }
     return source_function_value(ctx,node,binding,symbol,expected,value);
 }
-static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value);
+static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
 static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     switch (node->type) {
@@ -1104,7 +1104,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
     case AST_GROUPING: return expression_in(ctx, node->as.grouping, expected, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
     case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, expected, value);
-    case AST_FUNCTION_EXPR: return source_closure(ctx, node, value);
+    case AST_FUNCTION_EXPR: return source_closure(ctx, node, expected, value);
     case AST_STRUCT_LITERAL: return source_struct_literal(ctx, node, value);
     case AST_ENUM_CONSTRUCT: return source_enum_literal(ctx, node, value);
     case AST_MEMBER_SET: return source_struct_set(ctx, node, value);
@@ -1632,15 +1632,16 @@ static bool collect_declarations(SourceContext *ctx) {
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];
     AstNode *node = body->node;
-    if (parameter >= ctx->functions[function].parameter_count ||
-        node->as.function_decl.params[parameter]->default_value)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "callable promise requires a non-defaulted parameter");
+    if (parameter >= ctx->functions[function].parameter_count)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "callable promise parameter is missing");
     const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types, body->parameters[parameter]);
     if (!found || found->flags)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "callable promise target is invalid or duplicated");
     XrXirTypeNode qualified = *found;
     qualified.flags = XR_XIR_CALLABLE_NO_SUSPEND;
     if (!source_intern_type(ctx, qualified, &body->parameters[parameter])) return false;
+    if (body->argument_defaults && body->argument_defaults[parameter])
+        ctx->functions[body->argument_defaults[parameter]].result = body->parameters[parameter];
     ctx->function = function; ctx->module = body->module;
     return source_query_parameters(ctx, body->declaration);
 }
@@ -1658,7 +1659,7 @@ static bool source_promises(SourceContext *ctx, const XrXirSourcePromises *decla
         for (uint32_t f = 0; f < ctx->function_count; ++f) {
             if (!source_work(ctx, NULL)) return false;
             AstNode *node = ctx->bodies[f].node;
-            if (!node || node->type != AST_FUNCTION_DECL) continue;
+            if (!node || node->type != AST_FUNCTION_DECL || ctx->bodies[f].default_expression) continue;
             const XrXirFunction *function = &ctx->functions[f];
             uint32_t module = ctx->identities[f].module;
             if (ctx->modules[module].name_length != item->module.length ||
@@ -1866,7 +1867,9 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
     return true;
 }
 #include "xxir_source_cleanup.inc.c"
-static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
+    const XrXirTypeNode *context = xr_xir_callable_signature(&ctx->types, expected);
+    bool no_suspend = context && (context->flags & XR_XIR_CALLABLE_NO_SUSPEND);
     FunctionDeclNode *decl = &node->as.function_expr;
     if (decl->is_generator || decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_count ||
         decl->borrow_origin_count || !decl->body || decl->param_count < 0 || decl->param_count > 65536)
@@ -1898,6 +1901,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value
         scan.count + (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
     ctx->identities[index].module = ctx->module;
     ctx->identities[index].nominal_owner = ctx->identities[outer].nominal_owner;
+    ctx->identities[index].promises = no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0;
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
     ctx->function = index; ctx->locals = ctx->scope = NULL; ctx->loop = NULL; ctx->returned = false;
@@ -1906,6 +1910,11 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value
         source_type(ctx, decl->return_type, &ctx->functions[index].result) &&
         statement(ctx, decl->body, false) && finish_body(ctx) &&
         source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type);
+    if (ok && no_suspend) {
+        XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, type);
+        signature.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+        ok = source_intern_type(ctx, signature, &type);
+    }
     if (ok) {
         XrXirSourceType *query_parameters = decl->param_count ? source_alloc(ctx, (size_t) decl->param_count, sizeof(*query_parameters)) : NULL;
         ok = !decl->param_count || query_parameters;

@@ -13,11 +13,12 @@
 #include "xir_runtime_allocations.h"
 XR_DATA const XrXirProgramSpec effect_source_program;
 XR_DATA const uint32_t effect_source_entry;
-static void native_attempt(XrXirProgram *program) {
+XR_DATA const uint32_t effect_source_captured;
+static void native_attempt(XrXirProgram *program, uint32_t entry) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     XrXirInstance *instance = NULL;
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
-    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, effect_source_entry, NULL, 0);
+    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entry, NULL, 0);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
     XrXirValue value = {0};
     if (status == XR_XIR_CALL_RETURNED) {
@@ -34,7 +35,7 @@ int main(void) {
     size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        native_attempt(program);
+        native_attempt(program, effect_source_entry); native_attempt(program, effect_source_captured);
         if (!attempt) sites = runtime_attempts;
         CHECK(runtime_live == baseline && runtime_bytes == bytes);
     }

@@ -15,6 +15,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 XR_DATA const XrXirProgramSpec effect_source_program;
 XR_DATA const uint32_t effect_source_entry;
+XR_DATA const uint32_t effect_source_captured;
 typedef struct EffectMixed {
     XrXirArtifact *artifact;
     XrXirCallEntry *entries;
@@ -44,24 +45,28 @@ static void effect_mixed(bool callback_native) {
         CHECK(xr_xir_vm_bind(owner->artifact, f, &owner->bindings[f], &owner->entries[f]) == XR_XIR_OK);
         const XrXirFunction *function = &module->functions[f];
         bool callback = function->name_length == 4 && !memcmp(function->name, "pure", 4);
+        callback |= function->name_length >= 8 && !memcmp(function->name, "$closure", 8) &&
+            module->declarations->functions[f].promises == XR_XIR_FUNCTION_NO_SUSPEND;
         if (callback) ++callbacks;
         if (callback == callback_native) owner->entries[f] = effect_source_program.entries[f];
         CHECK((owner->entries[f].resume == effect_source_program.entries[f].resume) == (callback == callback_native));
     }
-    CHECK(callbacks == 1);
+    CHECK(callbacks == 5);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,
         module->declarations, {owner, effect_mixed_free}, module->types, xr_xir_program_proof(owner->artifact)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget){33554432, 64000000}, &program) == XR_XIR_OK);
     XrXirInstanceConfig config = xr_xir_instance_defaults(); XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_start(instance, effect_source_entry, NULL, 0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
-    XrXirValue value = {0};
-    CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
-    CHECK(value.type == XR_XIR_I64 && value.payload == 7);
+    for (unsigned i = 0; i < 2; ++i) {
+        CHECK(xr_xir_instance_start(instance, i ? effect_source_captured : effect_source_entry, NULL, 0) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        XrXirValue value = {0};
+        CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
+        CHECK(value.type == XR_XIR_I64 && value.payload == 7); xr_xir_value_drop(&value);
+    }
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program); xr_xir_value_drop(&value);
+    xr_xir_program_drop(program);
 }
 int main(void) {
     effect_mixed(false); CHECK(releases == 1);

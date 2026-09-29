@@ -376,6 +376,10 @@ allow = []
 
 #### 完整可运行示例
 
+当匿名函数字面量直接处于已声明的 `no_suspend` callable 期望上下文时，该上下文为这个新函数建立必须验证的承诺。函数体在定义处按当前泛型约束检查，未知或可能挂起的调用均拒绝；特化不得补足缺失证明。捕获的普通 callable 不会因此获得承诺。该规则不添加源码效应注解，不把 `verify` 性能要求当作声明，也不允许将已构造的普通函数值按实现体推导强化；脱离受限上下文的匿名函数仍是普通 callable。
+
+默认参数表达式采用参数声明的相同期望类型，并在定义处检查，即使没有调用省略该参数。返回受限 callable 不意味着默认值计算过程也承诺不挂起；省略参数时，默认值计算的效应仍属于调用方。
+
 闭包捕获与高阶函数：
 
 ```xray
@@ -1570,6 +1574,10 @@ Run `xray verify --contract perf-contracts.toml`. A contract checks existing sem
 **Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
 
 #### Worked Examples
+
+A function literal directly checked against an explicitly declared `no_suspend` callable context receives that obligation for its new function definition. Its body is checked under the current generic constraints; unknown or potentially suspending calls reject, and specialization cannot supply a missing proof. Captured ordinary callables do not acquire the promise. This rule adds no source effect annotation, does not turn performance `verify` requirements into declarations, and cannot strengthen an already constructed ordinary function value from inferred body effects. Without a restricted context, a function literal remains an ordinary callable.
+
+A default argument expression uses the parameter's declared expected type and is checked at its definition, even if no call omits that argument. Returning a restricted callable does not promise that computing the default cannot suspend; default evaluation effects still belong to the caller when an argument is omitted.
 
 Closure capture and higher-order functions:
 

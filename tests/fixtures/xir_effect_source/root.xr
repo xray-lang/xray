@@ -10,6 +10,25 @@ export fn rethrow()->i64 { try { return fail() } catch(e) { throw e } }
 export fn dynamic(f:fn()->i64)->i64 { return f() }
 export fn promisedUse()->i64 { return weaken(pure) }
 fn weaken(f:fn()->i64)->i64 { const first=dynamic(f); return dynamicHandled(f) }
+export fn capturedUse()->i64 {
+    const text="cap"+"tured"
+    const captured=weaken(fn()->i64 { if(text=="captured"){return 7}; return 0 })
+    return captured+literalDefault()+namedDefault()-14
+}
+fn literalDefault(f:fn()->i64=fn()->i64 { return 7 })->i64 { return f() }
+fn namedDefault(f:fn()->i64=pure)->i64 { return f() }
+fn rejectDefaultYield(f:fn()->i64=fn()->i64 { Coro.yield(); return 7 })->i64 { return f() }
+fn rejectDefaultName(f:fn()->i64=unpromisedPure)->i64 { return f() }
+fn unpromisedPure()->i64 { return 7 }
+fn defaultCondition()->bool { Coro.yield(); return true }
+fn effectDefault(f:fn()->i64=defaultCondition()?fn()->i64 { return 7 }:fn()->i64 { return 0 })->i64 { return f() }
+fn effectDefaultUse()->i64 { return effectDefault() }
+fn rejectYield(f:fn()->i64)->i64 { return f() }
+fn withYield()->i64 { return rejectYield(fn()->i64 { Coro.yield(); return 7 }) }
+fn rejectUnknown(f:fn()->i64)->i64 { return f() }
+fn withUnknown(f:fn()->i64)->i64 { return rejectUnknown(fn()->i64 { return f() }) }
+fn rejectGeneric(f:fn()->i64)->i64 { return f() }
+fn withGeneric<T>(value:T,f:fn()->i64)->i64 { return rejectGeneric(fn()->i64 { return f() }) }
 export fn dynamicHandled(f:fn()->i64)->i64 { try { return f() } catch(e) { return 11 } }
 export fn panicOnly()->i64 { try { return 1/0 } catch panic { return 13 } }
 export fn typedHandled()->i64 { try { return fail() } catch(e:Fault) { return 17 } }

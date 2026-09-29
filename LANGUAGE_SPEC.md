@@ -3104,6 +3104,10 @@ Run `xray verify --contract perf-contracts.toml`. A contract checks existing sem
 
 #### Worked Examples
 
+A function literal directly checked against an explicitly declared `no_suspend` callable context receives that obligation for its new function definition. Its body is checked under the current generic constraints; unknown or potentially suspending calls reject, and specialization cannot supply a missing proof. Captured ordinary callables do not acquire the promise. This rule adds no source effect annotation, does not turn performance `verify` requirements into declarations, and cannot strengthen an already constructed ordinary function value from inferred body effects. Without a restricted context, a function literal remains an ordinary callable.
+
+A default argument expression uses the parameter's declared expected type and is checked at its definition, even if no call omits that argument. Returning a restricted callable does not promise that computing the default cannot suspend; default evaluation effects still belong to the caller when an argument is omitted.
+
 Closure capture and higher-order functions:
 
 ```xray
