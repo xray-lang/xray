@@ -159,7 +159,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
             return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *element = xr_xir_type_node(types, node->element);
         bool nominal_cell = node->kind == XR_XIR_TYPE_CELL && element &&
-            element->kind == XR_XIR_TYPE_NOMINAL && !element->parameter_span &&
+            element->kind == XR_XIR_TYPE_NOMINAL &&
             (uint32_t) node->element - XR_XIR_CONSTRUCTED_TYPE_BASE < index;
         if (!nominal_cell && !type_component(types, node->element, index)) return XR_XIR_BAD_TYPE;
         span = xr_xir_type_span(types, node->element);

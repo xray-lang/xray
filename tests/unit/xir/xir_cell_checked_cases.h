@@ -11,6 +11,29 @@
  */
 #ifndef XR_XIR_CELL_CHECKED_CASES_H
 #define XR_XIR_CELL_CHECKED_CASES_H
+static void cell_generic_nominal_cases(void) {
+    for (unsigned mode = 0; mode < 8; ++mode) {
+        NominalFixture nominal; nominal_fixture(&nominal); nominal.constraint = 0;
+        NominalIdentityFixture identity; nominal_identity_fixture(&identity);
+        XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, closed = XR_XIR_I64;
+        XrXirTypeNode nodes[] = {
+            {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&argument,1,NULL,0}},
+            {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,1,{0}},
+            {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,&closed,1,NULL,0}}
+        };
+        XrXirTypes types = {nodes,3,&nominal.table};
+        if (mode == 1) nodes[1].parameter_span = 0;
+        if (mode == 2) nodes[1].element = (XrXirType)257;
+        if (mode == 3) nodes[1].element = (XrXirType)258;
+        if (mode == 4) nodes[1].element = XR_XIR_UNIT;
+        if (mode == 5) nodes[0].parameter_span = 0;
+        if (mode == 6) types.nominals = &identity.table;
+        if (mode == 7) nodes[2] = (XrXirTypeNode){XR_XIR_TYPE_CELL,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,1,{0}};
+        XrXirBudget budget = xr_xir_default_budget();
+        XrXirStatus status = xr_xir_types_verify(&types, &budget);
+        CHECK(mode ? status != XR_XIR_OK : status == XR_XIR_OK);
+    }
+}
 static void cell_local_checked_cases(void) {
     for (unsigned mode = 0; mode < 7; ++mode) {
         XrXirArtifact *base = checked_fixture(), *checked = NULL, *decoded = NULL;
@@ -56,6 +79,7 @@ static void cell_local_checked_cases(void) {
     }
 }
 static void cell_checked_cases(void) {
+    cell_generic_nominal_cases();
     cell_local_checked_cases();
     for (unsigned mode = 0; mode < 9; ++mode) {
         XrXirArtifact *base = checked_fixture(), *checked = NULL, *decoded = NULL;

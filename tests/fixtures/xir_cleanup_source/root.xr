@@ -103,3 +103,50 @@ struct UncapturedConstructor {
     get()->i64{return this.value}
 }
 export fn constructorUncaptured()->i64{return PlainConstructor().get()+UncapturedConstructor().get()}
+
+struct CompoundConstructed {
+    private value:i64 = 1
+    constructor(){defer{this.value+=2};this.value*=3}
+    get()->i64{return this.value}
+}
+struct CompoundFields {value:i64;other:i64}
+var compoundState=CompoundFields{value:1,other:2}
+fn compoundRhs()->i64{compoundState=CompoundFields{value:100,other:9};print("rhs");return 4}
+export fn memberCompound()->i64{
+    const result=(compoundState.value+=compoundRhs())
+    print(result)
+    print(compoundState.other)
+    var local=CompoundFields{value:3,other:4}
+    const before=local
+    defer{local.value+=1;defer{local.value*=2;print(local.value)};print(local.value)}
+    local.value+=2
+    print(before.value)
+    return CompoundConstructed().get()+compoundState.value
+}
+
+struct CompoundOperators {number:i64;small:i8;real:f32;text:string}
+struct ConcreteGenericField<T>{number:i64;payload:T}
+fn concreteGenericUpdate<T>(v:T)->T{var b=ConcreteGenericField<T>{number:1,payload:v};b.number+=2;return b.payload}
+export fn memberOperators()->string{
+    var b=CompoundOperators{number:7,small:127,real:1.5,text:"a"}
+    b.number+=3;b.number-=2;b.number*=3;b.number/=4;b.number%=4
+    b.number|=8;b.number&=11;b.number^=3;b.number<<=2;b.number>>=1
+    b.small+=1;b.small<<=256
+    b.real+=0.5;b.real*=3.0;b.real/=2.0;b.real-=1.0
+    const saved=(b.text+="b")
+    b.text+="c"
+    print(b.number);print(b.small as i64);print(b.real==(2.0 as f32));print(b.text)
+    return concreteGenericUpdate<string>(saved)
+}
+fn yieldingMemberRhs()->i64{compoundState=CompoundFields{value:100,other:9};Coro.yield();return 4}
+export fn memberResume()->i64{defer{print(compoundState.value)};const result=(compoundState.value+=yieldingMemberRhs());return result+compoundState.other}
+export fn memberCancel()->i64{defer{print(compoundState.value)};compoundState.value+=yieldingMemberRhs();return 0}
+fn throwingMemberRhs()->i64{compoundState=CompoundFields{value:100,other:9};throw Problem.Failed}
+fn zeroMemberRhs()->i64{compoundState=CompoundFields{value:100,other:9};return 0}
+export fn memberFailure()->i64{
+    var answer=0
+    try{compoundState.value+=throwingMemberRhs()}catch(e:Problem){print(compoundState.value);answer=compoundState.other}
+    compoundState=CompoundFields{value:3,other:4}
+    try{compoundState.value/=zeroMemberRhs()}catch panic{print(compoundState.value);return answer+compoundState.other}
+    return -1
+}

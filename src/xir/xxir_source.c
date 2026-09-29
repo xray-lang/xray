@@ -985,41 +985,7 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, XrXirType expec
     }
     return source_binary(ctx, node, node->type, left, right, value);
 }
-static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    CompoundAssignmentNode *assignment = &node->as.compound_assignment;
-    if (assignment->object || !assignment->name)
-        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "compound assignment requires a variable");
-    SourceName *symbol = visible_name(ctx, assignment->name);
-    if (!symbol || !symbol->mutable || (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment requires a mutable binding");
-    if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ_WRITE)) return false;
-    AstNodeType operation;
-    switch (assignment->op) {
-    case TK_PLUS_ASSIGN: operation = AST_BINARY_ADD; break;
-    case TK_MINUS_ASSIGN: operation = AST_BINARY_SUB; break;
-    case TK_MUL_ASSIGN: operation = AST_BINARY_MUL; break;
-    case TK_DIV_ASSIGN: operation = AST_BINARY_DIV; break;
-    case TK_MOD_ASSIGN: operation = AST_BINARY_MOD; break;
-    case TK_AND_ASSIGN: operation = AST_BINARY_BAND; break;
-    case TK_OR_ASSIGN: operation = AST_BINARY_BOR; break;
-    case TK_XOR_ASSIGN: operation = AST_BINARY_BXOR; break;
-    case TK_LSHIFT_ASSIGN: operation = AST_BINARY_LSHIFT; break;
-    case TK_RSHIFT_ASSIGN: operation = AST_BINARY_RSHIFT; break;
-    default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unknown compound assignment");
-    }
-    SourceValue left, right;
-    XrXirInstruction read = symbol->kind == SOURCE_LOCAL ?
-        (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type, {symbol->index, 0}, {0}, 0, {0}} :
-        (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0}, {0}, symbol->index, {0}};
-    bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
-    if (!emit(ctx, read, &left) || !expression_in(ctx, assignment->value, shift ? XR_XIR_UNIT : symbol->type, &right) ||
-        !source_binary(ctx, node, operation, left, right, value)) return false;
-    if (value->type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment cannot narrow its result");
-    XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?
-        (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {symbol->index, value->id}, {0}, 0, {0}} :
-        (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {value->id, 0}, {0}, symbol->index, {0}};
-    return emit(ctx, write, NULL);
-}
+#include "xxir_source_update.inc.c"
 static bool source_conditional(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     SourceValue condition, yes, no;
     TernaryNode *ternary = &node->as.ternary;
@@ -1736,7 +1702,8 @@ static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
         if (!capture_name(scan, node->as.assignment.name, node)) return false;
         break;
     case AST_COMPOUND_ASSIGNMENT:
-        if (node->as.compound_assignment.name && !capture_name(scan, node->as.compound_assignment.name, node)) return false;
+        if (!node->as.compound_assignment.object && node->as.compound_assignment.name &&
+            !capture_name(scan, node->as.compound_assignment.name, node)) return false;
         break;
     case AST_VAR_DECL: case AST_CONST_DECL:
         return capture_scan(node->as.var_decl.initializer, scan) && capture_bind(scan, node->as.var_decl.name, node);

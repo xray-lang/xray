@@ -18,6 +18,19 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
 #include "xir_cleanup_source_cases.h"
+static void cleanup_member_queries(const XrXirSourceView *view) {
+    unsigned fields = 0, root = 0;
+    CHECK(view && view->complete);
+    for (uint32_t i = 0; i < view->reference_count; ++i) {
+        const XrXirSourceReference *ref = &view->references[i];
+        CHECK(ref->target && ref->target <= view->declaration_count);
+        if (ref->access != XR_XIR_SOURCE_READ_WRITE) continue;
+        const XrXirSourceDeclaration *decl = &view->declarations[ref->target - 1];
+        if (decl->kind == XR_XIR_SOURCE_MEMBER && !strcmp(decl->name, "value")) ++fields;
+        if (decl->kind == XR_XIR_SOURCE_BINDING && !strcmp(decl->name, "compoundState")) ++root;
+    }
+    CHECK(fields >= 7 && root >= 5);
+}
 static XrXirArtifact *cleanup_source_lower(const char *path) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CLEANUP_FIXTURES};
@@ -27,6 +40,7 @@ static XrXirArtifact *cleanup_source_lower(const char *path) {
     if (status != XR_XIR_OK) fprintf(stderr, "cleanup source %u at %u:%d:%d %s\n", status,
         diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK);
+    cleanup_member_queries(xr_xir_source_snapshot_view(result.snapshot));
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_source_result_free(&result); xr_compiler_session_delete(session);
@@ -63,7 +77,7 @@ int main(int argc, char **argv) {
     XrXirArtifact *lowered = cleanup_source_lower(XR_CLEANUP_FIXTURES "/root.xr");
     const XrXirModule *module = xr_xir_artifact_module(lowered);
     cleanup_constructor_storage(module);
-    const char *names[] = {"scopes","loops","errors","panic","cancelled","generics","snapshot","constructorLate","constructorNested","constructorBare","constructorUncaptured","fatalReturn","fatalError","fatalPanic","fatalCancel"};
+    const char *names[] = {"scopes","loops","errors","panic","cancelled","generics","snapshot","constructorLate","constructorNested","constructorBare","constructorUncaptured","memberCompound","memberOperators","memberResume","memberCancel","memberFailure","fatalReturn","fatalError","fatalPanic","fatalCancel"};
     uint32_t functions[CLEANUP_SOURCE_FUNCTIONS + 4];
     for (unsigned n = 0; n < CLEANUP_SOURCE_FUNCTIONS + 4; ++n) {
         functions[n] = UINT32_MAX;

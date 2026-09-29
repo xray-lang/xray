@@ -25,7 +25,15 @@ static void source_cleanup_admission(XrXirSourceRequest *request, const char *pa
         {"struct C{value:i64;constructor(){defer{print(this.value)};this.value=2}}\n", "constructed XIR failed"},
         {"struct C{const value:i64=1;constructor(){defer{this.value=2}}}\n", "field access is not permitted"},
         {"struct C{private value:i64=1;constructor(){} }\nfn f(){const c=C();defer{print(c.value)}}\n", "field access is not permitted"},
-        {"struct C{private const value:i64=1;constructor(){defer{print(this.value)}}}\n", NULL}
+        {"struct C{private const value:i64=1;constructor(){defer{print(this.value)}}}\n", NULL},
+        {"struct C{value:i64}\nfn f(){const c=C{value:1};c.value+=1}\n", "field mutation requires"},
+        {"struct C{const value:i64}\nfn f(){var c=C{value:1};c.value+=1}\n", "field access is not permitted"},
+        {"struct C{private value:i64=1;constructor(){}}\nfn f(){var c=C();c.value+=1}\n", "field access is not permitted"},
+        {"struct C{value:i64}\nfn f(c:C){c.value+=1}\n", "field mutation requires"},
+        {"struct C{value:i64;constructor(){this.value+=1}}\n", "constructed XIR failed"},
+        {"struct C{const value:i64=1;constructor(){this.value+=1}}\n", "field access is not permitted"},
+        {"struct C{value:i8}\nfn f(){var c=C{value:1};c.value+=(1 as i64)}\n", "expression cannot satisfy its declared type"},
+        {"struct C<T>{value:T}\nfn f<T>(v:T){var c=C<T>{value:v};c.value+=v}\n", "declared concrete operand contract"}
     };
     unsigned failures = 0;
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {

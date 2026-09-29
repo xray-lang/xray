@@ -86,21 +86,23 @@ static bool source_constructor_return(SourceContext *ctx, AstNode *node) {
         !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0, {0}}, NULL)) return false;
     ctx->returned = true; return true;
 }
+static bool source_constructor_store(SourceContext *ctx, AstNode *node, uint32_t field, SourceValue value) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    XrXirType storage;
+    if (!source_work(ctx, node) || !source_constructor_storage_type(ctx, visible_name(ctx, "this")->type, field, &storage)) return false;
+    XrXirOp op = xr_xir_type_is_cell(&ctx->types, storage) ?
+        (body->constructor_captured ? XR_XIR_CELL_WRITE : XR_XIR_CELL_LOCAL_WRITE) : XR_XIR_LOCAL_WRITE;
+    return emit(ctx, (XrXirInstruction) {op, XR_XIR_UNIT, {body->constructor_places[field], value.id}, {0}, 0, {0}}, NULL);
+}
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name,
     SourceValue *value, AstNode *incoming) {
     uint32_t field; XrXirType type;
     unsigned access = incoming ? (source_constructor_active(ctx) ? 2u : 1u) : 0u;
     if (!source_struct_field(ctx, node, visible_name(ctx, "this")->type, name, access, &field, &type)) return false;
-    SourceFunction *body = &ctx->bodies[ctx->function];
-    uint32_t place = body->constructor_places[field];
     if (!incoming) return source_constructor_read(ctx, node, field, value);
     if (!expression_in(ctx, incoming, type, value)) return false;
     if (value->type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor field type mismatch");
-    XrXirType storage;
-    if (!source_constructor_storage_type(ctx, visible_name(ctx, "this")->type, field, &storage)) return false;
-    XrXirOp op = xr_xir_type_is_cell(&ctx->types, storage) ?
-        (body->constructor_captured ? XR_XIR_CELL_WRITE : XR_XIR_CELL_LOCAL_WRITE) : XR_XIR_LOCAL_WRITE;
-    return emit(ctx, (XrXirInstruction) {op, XR_XIR_UNIT, {place, value->id}, {0}, 0, {0}}, NULL);
+    return source_constructor_store(ctx, node, field, *value);
 }
 static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, AstNode *node, uint32_t *next) {
     MethodDeclNode *method = &node->as.method_decl;

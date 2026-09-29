@@ -190,14 +190,14 @@ static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType typ
         const XrXirNominalField *field = &decl->fields[f];
         if (strlen(name) != field->name.length || memcmp(name, field->name.bytes, field->name.length)) continue;
         bool owner = ctx->identities[ctx->function].nominal_owner == found->nominal.declaration + 1;
-        if ((!owner && (field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))) || (write == 1 && !(field->flags & XR_XIR_FIELD_MUTABLE)) || (write == 2 && !owner))
+        if ((!owner && (field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))) || ((write == 1 || write == 3) && !(field->flags & XR_XIR_FIELD_MUTABLE)) || (write == 2 && !owner))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field access is not permitted");
         uint32_t declaration = found->nominal.declaration;
         SourceSubstitution substitution = {found->nominal.arguments, found->nominal.argument_count};
         if (!source_substitute(ctx, &substitution, field->type, 0, field_type)) return false;
         *index = f;
         return source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
-            ctx->nominal_members[declaration][f], write ? XR_XIR_SOURCE_WRITE : XR_XIR_SOURCE_READ);
+            ctx->nominal_members[declaration][f], write == 3 ? XR_XIR_SOURCE_READ_WRITE : write ? XR_XIR_SOURCE_WRITE : XR_XIR_SOURCE_READ);
     }
     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unknown struct field");
 }
@@ -264,22 +264,4 @@ static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceVal
     uint32_t index; XrXirType type;
     if (!source_struct_field(ctx, node, receiver.type, node->as.member_access.name, false, &index, &type)) return false;
     return emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
-}
-static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    MemberSetNode *set = &node->as.member_set;
-    if (source_constructor_receiver(ctx, set->object)) return source_constructor_field(ctx, node, set->member, value, set->value);
-    SourceName *root = set->object->type == AST_VARIABLE ? visible_name(ctx, set->object->as.variable.name) : NULL;
-    if (root && root->type == XR_XIR_PANIC_INFO && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo field writes require class support");
-    if (!root || !root->mutable || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field mutation requires a mutable named root");
-    uint32_t index; XrXirType type; SourceValue place, incoming;
-    if (!source_struct_field(ctx, node, root->type, set->member, true, &index, &type) ||
-        !source_query_reference(ctx, set->object, root, root, XR_XIR_SOURCE_READ_WRITE)) return false;
-    XrXirInstruction op = {root->kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
-        root->type, {root->kind == SOURCE_SLOT ? 0 : root->index, 0}, {0}, root->kind == SOURCE_SLOT ? root->index : 0, {0}};
-    if (!emit(ctx, op, &place) || !expression_in(ctx, set->value, type, &incoming)) return false;
-    if (incoming.type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field assignment type mismatch");
-    if (!emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_SET, XR_XIR_UNIT, {place.id, incoming.id}, {0}, index, {0}}, NULL)) return false;
-    *value = incoming; return true;
 }
