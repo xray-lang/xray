@@ -50,6 +50,17 @@ static void inference_source_allocation_fixture(XrCompilerSession *session,
     printf("%s: %zu source/query/inference OOM sites; no partial result\n",label,sites);
 }
 static void inference_source_allocations(XrCompilerSession *session) {
+    inference_source_allocation_fixture(session,"Unit logical locals and captures",
+        "fn nop(){}\nfn work(){var u:();const c=nop();const text=\"retained\";"
+        "const f=fn(){u=nop();Coro.yield();const t=text;return c};defer{u=nop()};f();return u}\n"
+        "export fn answer()->i64{work();return 41}\n");
+    inference_source_allocation_fixture(session,"Explicit non-call Unit contexts",
+        "var count=0\nfn nop(){count+=1}\n"
+        "fn grouped(){return (nop())}\n"
+        "fn conditional(){return true ? grouped() : nop()}\n"
+        "fn matched(){return match(true){true->{conditional()},false->nop()}}\n"
+        "fn invoke(f:fn()){return f()}\n"
+        "export fn answer()->i64{matched();invoke(fn(){return matched()});return count+39}\n");
     inference_source_allocation_fixture(session,"Dead catch initialization region","enum E { Bad {text:string} }\nfn accept(text:string)->string{return text}\nstruct C { const value:string\n constructor(){try{}catch(E.Bad{text}){this.value=accept(text)};this.value=\"normal\"}}\nconst c=C()\n");
     inference_source_allocation_fixture(session,"Interface inference producer",
         "interface I<A>{map<U:Sendable>(seed:A,value:U)->U}\n"

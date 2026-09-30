@@ -12,7 +12,7 @@
 typedef struct SourceRequirementValueRequest {
     SourceValue receiver;
     SourceTypeArguments *arguments;
-    XrXirType expected;
+    SourceExpectedType expected;
 } SourceRequirementValueRequest;
 typedef struct SourceRequirementHelper {
     SourceRequirementSelection selected;
@@ -115,7 +115,7 @@ static bool source_requirement_value(SourceContext *ctx, AstNode *node,
     helper.substitution = (SourceSubstitution){types,count};
     if (!source_requirement_prove(ctx,node,helper.selected.member,application,helper.substitution,&helper.signature)) return false;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,helper.signature);
-    const XrXirTypeNode *expected = xr_xir_callable_signature(&ctx->types,request->expected);
+    const XrXirTypeNode *expected = request->expected.present ? xr_xir_callable_signature(&ctx->types,request->expected.type) : NULL;
     if (expected && expected->flags & XR_XIR_CALLABLE_NO_SUSPEND) {
         if (!(callable.flags & XR_XIR_CALLABLE_NO_SUSPEND))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"qualified reference requires an explicit requirement promise");

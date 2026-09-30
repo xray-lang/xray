@@ -1,0 +1,4 @@
+import "./base" as base
+import "./worker" as worker
+export fn answer()->i64{worker.work();return base.count()+37}
+export fn text()->string{return base.message()}

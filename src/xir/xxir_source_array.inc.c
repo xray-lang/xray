@@ -89,26 +89,27 @@ static bool source_array_receiver(SourceContext *ctx, AstNode *node, AstNode *in
         return source_array_read_place(ctx, node, root, value);
     return expression(ctx, node, value);
 }
-static bool source_array_literal(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
+static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     ArrayLiteralNode *literal = &node->as.array_literal;
     if (literal->is_repeat || literal->count < 0 ||
         (literal->count && !literal->elements))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal needs an admitted explicit element list");
-    if (expected && !xr_xir_type_is_array(&ctx->types, expected))
+    if (expected.present && !xr_xir_type_is_array(&ctx->types, expected.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal cannot satisfy a non-Array context");
-    XrXirType element = expected ? xr_xir_array_element(&ctx->types, expected) : XR_XIR_UNIT;
-    if (!literal->count && !element)
+    SourceExpectedType element = {expected.present,XR_XIR_UNIT};
+    if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
+    if (!literal->count && !element.present)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "empty Array literal needs an element context");
     SourceValue *elements = literal->count ? source_alloc(ctx, (size_t) literal->count, sizeof(*elements)) : NULL;
     if (literal->count && !elements) return false;
     for (int i = 0; i < literal->count; ++i) {
-        if (!source_plan_expression(ctx, literal->elements[i], (SourceExpectedType){element != XR_XIR_UNIT,element}, &elements[i])) return false;
-        if (!i && !element) element = elements[i].type;
-        if (elements[i].type != element)
+        if (!source_plan_expression(ctx, literal->elements[i], element, &elements[i])) return false;
+        if (!i && !element.present) element = (SourceExpectedType){true,elements[i].type};
+        if (elements[i].type != element.type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal elements require one exact type");
     }
-    XrXirType array = expected;
-    if (!source_array_element_type(ctx, element, &array) || !source_native_array_declaration(ctx)) return false;
+    XrXirType array = XR_XIR_UNIT;
+    if (!source_array_element_type(ctx, element.type, &array) || !source_native_array_declaration(ctx)) return false;
     if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}},
         elements, (uint32_t) literal->count, value)) return false;
     return source_query_target_reference(ctx, source_query_range(ctx, node, NULL),

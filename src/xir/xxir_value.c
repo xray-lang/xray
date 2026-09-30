@@ -164,7 +164,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
         if (!layout || !node || layout->field_count != node->nominal.field_count) return false;
         for (uint32_t i=0;i<layout->field_count;++i) {
-            if (!class_field_leaf(node->nominal.fields[i])) return false;
+            if (!xr_xir_type_is_class_field(xr_xir_type_arena_types(object->arena), node->nominal.fields[i])) return false;
             XrXirValue field=class_field_value(object,i);
             if (!value_header_valid(&field)) return false;
         }

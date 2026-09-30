@@ -191,8 +191,8 @@ static bool source_struct_fields(SourceContext *ctx) {
                 if (!source_type(ctx, field->field_type, &types[f]) || types[f] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
                 if (symbol->node->type == AST_CLASS_DECL && (field->initializer ||
-                    (types[f] != XR_XIR_BOOL && !xr_xir_type_is_number(types[f]) && types[f] != XR_XIR_STRING)))
-                    return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit scalar or string constructor value");
+                    !xr_xir_type_is_class_field(&ctx->types, types[f])))
+                    return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit admitted constructor value");
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) strlen(field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
                     (field->is_const ? 0 : XR_XIR_FIELD_MUTABLE)};

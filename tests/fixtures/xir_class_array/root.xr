@@ -1,0 +1,5 @@
+import {Bag,TextBag} from "./value"
+import {advance,text,exits} from "./reader"
+export fn answer()->i64 {var input=[40];const first=Bag(input);const alias=first;const other=Bag(input);const before=first.read();const result=advance(alias);if(exits()==41 && result==41 && first.read()[0]==41 && other.read()[0]==40 && input[0]==40 && before[0]==40){return 41}else{return 0}}
+export fn retained()->TextBag {const b=TextBag(["original"]);const result=text(b);return b}
+export fn suspended()->i64{const b=Bag([41]);defer{print(b.read()[0])};Coro.yield();return b.read()[0]}

@@ -37,7 +37,7 @@ static bool source_static_select(SourceContext *ctx, AstNode *node, SourceStatic
     return true;
 }
 static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticMethod *selected,
-    XrXirType expected, SourceValue *value) {
+    SourceExpectedType expected, SourceValue *value) {
     const XrXirFunction *function = &ctx->functions[selected->method->index];
     uint32_t count = function->parameter_count;
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
@@ -73,7 +73,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         source_recipe_group(ctx,op,prepared.values,prepared.count,value);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
-    XrXirType expected, SourceValue *value) {
+    SourceExpectedType expected, SourceValue *value) {
     SourceEnumSelection enumeration = {0};
     if (!source_enum_select(ctx, node, &enumeration)) return false;
     if (enumeration.owner) {

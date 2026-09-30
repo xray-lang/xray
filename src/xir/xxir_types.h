@@ -19,6 +19,8 @@ XR_FUNC bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirStatus xr_xir_callable_weakening(const XrXirTypes *types,
     XrXirType source, XrXirType target, uint64_t *work);
 XR_FUNC bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type);
+/* Current class body leaf capability; grants no access or generic proof. */
+XR_FUNC bool xr_xir_type_is_class_field(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_cell(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_nominal(const XrXirTypes *types, XrXirType type);
 /* Classification grants neither descriptor validity nor operation authority. */

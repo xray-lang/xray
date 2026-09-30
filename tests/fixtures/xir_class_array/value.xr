@@ -1,0 +1,2 @@
+export final class Bag { private items:Array<i64>; constructor(items:Array<i64>){this.items=items} read()->Array<i64>{return this.items} replace(items:Array<i64>){this.items=items} }
+export final class TextBag { private items:Array<string>; constructor(items:Array<string>){this.items=items} read()->Array<string>{return this.items} replace(items:Array<string>){this.items=items} }

@@ -34,7 +34,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_new(XrXirType type, const XrXirValue *fiel
     if (count > admission->work) return XR_XIR_VALUE_LIMIT;
     admission->work-=count;
     for (uint32_t i=0;i<count;++i) {
-        if (!class_field_leaf(node->nominal.fields[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (!xr_xir_type_is_class_field(types, node->nominal.fields[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirValueStatus status=xr_xir_value_admit(&fields[i],node->nominal.fields[i],admission);
         if (status != XR_XIR_VALUE_OK) return status;
     }

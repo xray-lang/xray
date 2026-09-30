@@ -27,6 +27,12 @@ static void generic_method_packet_cases(void) {
     CHECK(xr_xir_checked_read(generic_method_golden,sizeof(generic_method_golden),NULL,&decoded,NULL) == XR_XIR_OK);
     generic_method_owned_assert(xr_xir_artifact_module(decoded)->types->interfaces);
     xr_xir_artifact_free(decoded);
+    /* Exact old semantic revision with a freshly valid wire digest. */
+    memcpy(packet.bytes,generic_method_golden,packet.length);
+    put32(packet.bytes+12,47);digest_packet(&packet);decoded=NULL;
+    XrXirDiagnostic previous={0};
+    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,&previous)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!decoded && previous.status==XR_XIR_BAD_STRUCTURE);
     const struct { size_t offset; uint32_t value; } attacks[] = {
         {8,17}, {12,45}, {8,18}, {12,46},
         {GENERIC_METHOD_MAP_OWN,UINT32_MAX}, {GENERIC_METHOD_MAP_OWN,0},

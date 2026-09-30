@@ -131,13 +131,13 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
     return true;
 }
 #include "xxir_source_match_alternatives.inc.c"
-static bool source_match_body(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
-    if (node->type != AST_BLOCK) return source_plan_expression(ctx, node, (SourceExpectedType){expected != XR_XIR_UNIT,expected}, value);
+static bool source_match_body(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
+    if (node->type != AST_BLOCK) return source_plan_expression(ctx, node, expected, value);
     *value=(SourceValue){0,XR_XIR_UNIT};
     for (int i=0;i<node->as.block.count;++i) {
         AstNode *part=node->as.block.statements[i];
         if (i+1==node->as.block.count && part->type==AST_EXPR_STMT)
-            return source_plan_expression(ctx, part->as.expr_stmt, (SourceExpectedType){expected != XR_XIR_UNIT,expected}, value);
+            return source_plan_expression(ctx, part->as.expr_stmt, expected, value);
         if (!statement(ctx,part,false)) return false;
         if (ctx->returned) {
             if (i+1!=node->as.block.count) return source_fail(ctx,part,XR_XIR_BAD_STRUCTURE,"unreachable match statements are not admitted");
@@ -146,7 +146,7 @@ static bool source_match_body(SourceContext *ctx, AstNode *node, XrXirType expec
     }
     return true;
 }
-static bool source_match(SourceContext *ctx, AstNode *node, XrXirType expected, bool result_required, SourceValue *value) {
+static bool source_match(SourceContext *ctx, AstNode *node, SourceExpectedType expected, bool result_required, SourceValue *value) {
     MatchExprNode *match=&node->as.match_expr; SourceValue receiver;
     SourceExpressionPlan *plan=ctx->active_expression;
     if (!plan || plan->syntax!=node || !plan->left || !source_plan_complete(ctx,plan->left,&receiver)) return false;
@@ -172,7 +172,7 @@ static bool source_match(SourceContext *ctx, AstNode *node, XrXirType expected, 
         }
         SourceValue output;
         if (prepared->values[i]) {
-            prepared->values[i]->expected=(SourceExpectedType){expected!=XR_XIR_UNIT,expected};
+            prepared->values[i]->expected=expected;
             if (!source_plan_complete(ctx,prepared->values[i],&output)) return false;
         } else if (!source_match_body(ctx,arm->body,expected,&output)) return false;
         if (!ctx->returned) {

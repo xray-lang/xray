@@ -23,7 +23,7 @@ static bool source_numeric_plan(SourceContext *ctx, AstNode *site,
     if (!request->expected.present && !request->permit_default) {
         *output = (SourceNumericRecipe){0}; return true;
     }
-    XrXirType expected = request->expected.type;
+    XrXirType expected = request->expected.present ? request->expected.type : XR_XIR_UNIT;
     SourceNumericRecipe recipe = {true,XR_XIR_CONST_INT,XR_XIR_I64,0};
     uint64_t bits = 0;
     if (request->decimal) {
@@ -46,14 +46,14 @@ static bool source_numeric_emit(SourceContext *ctx, const SourceNumericRecipe *r
     if (!recipe->ready) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"unresolved numeric recipe cannot be emitted");
     return source_recipe_record(ctx,(XrXirInstruction){recipe->operation,recipe->type,{0},{0},recipe->payload,{0}},value);
 }
-static bool source_decimal(SourceContext *ctx, const SourceDecimal *literal, XrXirType expected, SourceValue *value) {
-    SourceNumericRequest request = {NULL,literal,{expected != XR_XIR_UNIT,expected},true};
+static bool source_decimal(SourceContext *ctx, const SourceDecimal *literal, SourceExpectedType expected, SourceValue *value) {
+    SourceNumericRequest request = {NULL,literal,expected,true};
     SourceNumericRecipe recipe;
     return source_numeric_plan(ctx,literal->node,&request,&recipe) && source_numeric_emit(ctx,&recipe,value);
 }
 static bool source_integer(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
-    XrXirType expected, SourceValue *value) {
-    SourceNumericRequest request = {literal,NULL,{expected != XR_XIR_UNIT,expected},true};
+    SourceExpectedType expected, SourceValue *value) {
+    SourceNumericRequest request = {literal,NULL,expected,true};
     SourceNumericRecipe recipe;
     return source_numeric_plan(ctx,node,&request,&recipe) && source_numeric_emit(ctx,&recipe,value);
 }

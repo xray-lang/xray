@@ -63,6 +63,33 @@ static void source_plan_context_cases(void) {
     CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && !numeric.ready);
     request.expected = (SourceExpectedType){true,XR_XIR_I8};
     CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && numeric.ready && numeric.type == XR_XIR_I8 && numeric.payload == 41);
+    request.expected=(SourceExpectedType){false,(XrXirType)UINT32_MAX};
+    request.permit_default=true;
+    CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && numeric.ready && numeric.type==XR_XIR_I64);
+    request.expected=(SourceExpectedType){false,XR_XIR_F32};
+    CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && numeric.type==XR_XIR_I64);
+    SourceConditionalRecipe conditional={0};
+    CHECK(source_conditional_plan(&ctx,NULL,XR_XIR_I8,XR_XIR_I64,
+        (SourceExpectedType){false,XR_XIR_UNIT},&conditional) && conditional.result==XR_XIR_I64);
+    CHECK(source_conditional_plan(&ctx,NULL,XR_XIR_I8,XR_XIR_I64,
+        (SourceExpectedType){false,(XrXirType)UINT32_MAX},&conditional) && conditional.result==XR_XIR_I64);
+    CHECK(source_conditional_plan(&ctx,NULL,XR_XIR_UNIT,XR_XIR_UNIT,
+        (SourceExpectedType){true,XR_XIR_UNIT},&conditional) && conditional.result==XR_XIR_UNIT);
+    CHECK(!source_conditional_plan(&ctx,NULL,XR_XIR_I64,XR_XIR_I64,
+        (SourceExpectedType){true,XR_XIR_UNIT},&conditional));
+    ctx.diagnostic.status=XR_XIR_OK;
+    XrXirTypeNode promises[2]={
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_NO_SUSPEND,0,{0}}};
+    XrXirFunctionIdentity identity={0}; ctx.identities=&identity;
+    ctx.types=(XrXirTypes){promises,2,NULL,NULL};
+    XrXirType target=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+    CHECK(source_reference_promise(&ctx,NULL,0,
+        (SourceExpectedType){false,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1)},&target));
+    CHECK(target==(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE && !ctx.memory);
+    ctx.types=(XrXirTypes){0};
+    request.expected=(SourceExpectedType){true,XR_XIR_I8};
+    CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric));
     SourceNumericRecipe saved = numeric; literal.magnitude = 128;
     CHECK(!source_numeric_plan(&ctx,NULL,&request,&numeric));
     CHECK(ctx.diagnostic.status == XR_XIR_BAD_TYPE && numeric.type == saved.type && numeric.payload == saved.payload);

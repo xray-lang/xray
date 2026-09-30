@@ -420,6 +420,7 @@ static void method_promise_allocations(XrCompilerSession *session) {
 #include "xir_source_iteration_allocations.h"
 #include "xir_source_inference_allocations.h"
 #include "xir_source_plan_budget_cases.h"
+#include "xir_source_class_array_allocations.h"
 #include "xir_source_region_output_cases.h"
 #include "xir_query_coalloc_cases.h"
 #include "xir_call_storage_cases.h"
@@ -471,6 +472,7 @@ int main(void) {
     source_requirement_value_allocations(session);
     source_enum_identity_allocations(session);
     source_class_allocations(session);
+    source_class_array_allocations(session);
     source_iteration_allocations(session);
     inference_source_allocations(session);
     inference_source_allocation_fixture(session,"Unit result context producer",

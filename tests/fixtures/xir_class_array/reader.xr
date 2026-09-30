@@ -1,0 +1,6 @@
+import {Bag,TextBag} from "./value"
+export fn advance(b:Bag)->i64 {var snapshot=b.read();snapshot[0]=41;b.replace(snapshot);return b.read()[0]}
+export fn text(b:TextBag)->string {var snapshot=b.read();snapshot[0]="mapped";b.replace(snapshot);return b.read()[0]}
+enum Failure{Bad}
+const cleaned=Atomic(0)
+export fn exits()->i64{try{const b=TextBag(["temporary"]);defer{cleaned.fetchAdd(1)};throw Failure.Bad}catch(e){};if(cleaned.load()==1){return 41}else{return 0}}

@@ -13,10 +13,6 @@ enum { XIR_OBJECT_CLASS = 0x100u };
 typedef struct XirClassObject { XirObject object; } XirClassObject;
 _Static_assert(_Alignof(XirClassObject) >= _Alignof(int64_t), "class body alignment");
 _Static_assert((uint32_t)XR_XIR_TYPE_NOMINAL < (uint32_t)XIR_OBJECT_CLASS, "class object tag is not a type-node kind");
-static bool class_field_leaf(XrXirType type) {
-    return xr_xir_integer_bits(type) != 0 || xr_xir_float_bits(type) != 0 ||
-        type == XR_XIR_BOOL || type == XR_XIR_STRING;
-}
 static const XrXirStorageLayout *class_body_layout(const XirObject *object) {
     if (!object || object->kind != XIR_OBJECT_CLASS ||
         !xr_xir_type_is_class(xr_xir_type_arena_types(object->arena),object->type)) return NULL;

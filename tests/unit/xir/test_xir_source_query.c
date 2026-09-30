@@ -794,6 +794,7 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_dependency_ready_cases.h"
 #include "xir_source_iteration_cases.h"
 #include "xir_source_unit_context_cases.h"
+#include "xir_source_unit_local_cases.h"
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -807,6 +808,7 @@ int main(void) {
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
     source_dependency_ready_cases(&request);
     source_unit_context_cases(&request);
+    source_unit_local_cases(&request);
     source_class_definition_cases(&request);
     source_iteration_definition_cases(&request);
     source_generic_requirement_positive(&request);

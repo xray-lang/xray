@@ -53,6 +53,12 @@ static bool type_has_kind(const XrXirTypes *types, XrXirType type, uint32_t kind
 bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_CALLABLE);
 }
+XR_FUNC bool xr_xir_type_is_class_field(const XrXirTypes *types, XrXirType type) {
+    if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return true;
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && node->kind == XR_XIR_TYPE_ARRAY && !node->parameter_span &&
+        (node->element == XR_XIR_I64 || node->element == XR_XIR_STRING);
+}
 bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_ARRAY);
 }
@@ -166,7 +172,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
             remaining->work -= node->nominal.field_count;
             for (uint32_t f=0; f<node->nominal.field_count; ++f) {
                 XrXirType field=node->nominal.fields[f];
-                if (field!=XR_XIR_BOOL && !xr_xir_type_is_number(field) && field!=XR_XIR_STRING)
+                if (!xr_xir_type_is_class_field(types, field))
                     return XR_XIR_BAD_TYPE;
             }
         }

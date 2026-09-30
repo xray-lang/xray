@@ -853,11 +853,13 @@ static void panic_handler_structure(void) {
 }
 
 #include "xir_class_core_cases.h"
+#include "xir_class_array_core_cases.h"
 #include "xir_method_owner_cases.h"
 
 int main(void) {
     method_owner_cases();
     class_core_cases();
+    class_array_core_cases();
     panic_handler_structure();
     error_filter_guards();
     nominal_kind_boundaries();

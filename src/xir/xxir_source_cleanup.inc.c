@@ -19,7 +19,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
         if (fields > 65536 || scan.count - 1 > 65536 - fields)
             return source_fail(ctx, node, XR_XIR_BUDGET, "constructor cleanup capture budget exhausted");
         for (SourceCapture *q = scan.captures; q; q = q->next)
-            if (q != p && q->index > p->index) q->index = q->index - 1 + fields;
+            if (q != p && q->source->kind != SOURCE_UNIT_LOCAL && q->index > p->index) q->index = q->index - 1 + fields;
         scan.count = scan.count - 1 + fields;
         break;
     }
@@ -59,6 +59,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
     if (!ok) return false;
     for (SourceCapture *p = scan.captures; p; p = p->next) {
+        if (p->source->kind == SOURCE_UNIT_LOCAL) continue;
         XrXirType type = p->source->type;
         if (p->source->mutable && !source_cell_type(ctx, type, &type)) return false;
         if (p->source->construction) {

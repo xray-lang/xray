@@ -67,6 +67,9 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
 }
 static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType type, SourceValue *value) {
     if (!source_work(ctx, node)) return false;
+    if (type == XR_XIR_UNIT) {
+        *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true;
+    }
     if (type == XR_XIR_BOOL)
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, type, {0}, {0}, 0, {0}}, value);
     if (xr_xir_type_is_number(type)) {
