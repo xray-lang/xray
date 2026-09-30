@@ -931,3 +931,31 @@ export fn genericMethodArray()->Array<i64> {
     const mapper=Adapter<i64,string>{seed:0,label:"adapter"}
     return copyValue<i64,Adapter<i64,string>,i64>(mapper,[41])
 }
+
+import { inferMap, explicitMap, inferCopy, explicitCopy } from "./inference_reader"
+import { InferenceAdapter, inferenceVisitsCount } from "./inference_value"
+export fn inferenceCount()->i64 { return inferenceVisitsCount() }
+export fn inferenceInferredNumber()->i64 {
+    const mapper=InferenceAdapter<string,i64>{label:"adapter",seed:0}
+    return inferMap<i64,InferenceAdapter<string,i64>,bool,i64>(mapper,0,true,41)
+}
+export fn inferenceInferredText()->string {
+    const mapper=InferenceAdapter<string,i64>{label:"adapter",seed:0}
+    return inferMap<i64,InferenceAdapter<string,i64>,bool,string>(mapper,0,true,"map"+"ped")
+}
+export fn inferenceInferredArray()->Array<i64> {
+    const mapper=InferenceAdapter<string,i64>{label:"adapter",seed:0}
+    return inferCopy<i64,InferenceAdapter<string,i64>,bool,i64>(mapper,true,[41])
+}
+export fn inferenceExplicitNumber()->i64 {
+    const mapper=InferenceAdapter<string,i64>{label:"adapter",seed:0}
+    return explicitMap<i64,InferenceAdapter<string,i64>,bool,i64>(mapper,0,true,41)
+}
+export fn inferenceExplicitText()->string {
+    const mapper=InferenceAdapter<string,i64>{label:"adapter",seed:0}
+    return explicitMap<i64,InferenceAdapter<string,i64>,bool,string>(mapper,0,true,"map"+"ped")
+}
+export fn inferenceExplicitArray()->Array<i64> {
+    const mapper=InferenceAdapter<string,i64>{label:"adapter",seed:0}
+    return explicitCopy<i64,InferenceAdapter<string,i64>,bool,i64>(mapper,true,[41])
+}

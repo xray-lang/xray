@@ -140,7 +140,7 @@ enum Wrap<T> where T: Comparable { ... }
 
 普通实例方法或静态方法的 `where` 可以约束方法自身及外层名义类型的类型参数；方法不必另有 `<...>`。其有效条件为外层声明条件、自身内联条件与方法 `where` 条件的合取，只作用于该方法，不改变类型本身的构造、保存或其他方法准入。方法体、默认值及嵌套闭包在此定义上下文检查；直接调用和方法取值都必须由调用方证明条件，不能等具体实例补足缺失的泛型证明。名称仍唯一，条件失败不触发另选重载，也不扩大可见性、receiver 权限或效应承诺。
 
-其他声明的 `where` 只约束该声明自身的类型参数。未知约束主体及类型参数遮蔽是编译错误。同一已准入标记条件重复出现等同单次条件，仍计入检查预算；未知标记不能因重复或特化而获准。当前新 XIR 普通名义值类型的 read/static 条件方法支持 Sendable/Error 标记与具名接口应用的合取，保留接口完整有序实参，并按方法外层及自身的整组参数环境证明。普通 read 接口要求、显式 struct/enum 实现及受约束泛型成员调用已接入静态见证；对于没有自身参数的接口要求，实现候选不能额外增加方法类型参数，条件必须由名义声明前提蕴含。对于有Q个自身参数的要求，实现必须有相同own数量并按ordinal重定基；条件由名义前提与原要求方法前提蕴含，实现体仍按自身声明检查。接口方法自身泛型的显式调用和内联约束正在接通，尚未取得实现资格；推断、自身where解析和方法取值仍OPEN。已有普通方法泛型能力不代替接口方法验证。条件构造器、accessor、override、接口成员条件和其余见证声明族仍待分别实现，未接通者拒绝；不代表语言目标被删除。
+其他声明的 `where` 只约束该声明自身的类型参数。未知约束主体及类型参数遮蔽是编译错误。同一已准入标记条件重复出现等同单次条件，仍计入检查预算；未知标记不能因重复或特化而获准。当前新 XIR 普通名义值类型的 read/static 条件方法支持 Sendable/Error 标记与具名接口应用的合取，保留接口完整有序实参，并按方法外层及自身的整组参数环境证明。普通 read 接口要求、显式 struct/enum 实现及受约束泛型成员调用已接入静态见证；对于没有自身参数的接口要求，实现候选不能额外增加方法类型参数，条件必须由名义声明前提蕴含。对于有Q个自身参数的要求，实现必须有相同own数量并按ordinal重定基；条件由名义前提与原要求方法前提蕴含，实现体仍按自身声明检查。接口方法自身泛型的显式调用和内联约束已有Windows范围验证，完整安全资格未取得；自身where解析与值形状推断正在接通，结果上下文推断、接口方法取值和完整双向目标仍OPEN。已有普通方法泛型能力不代替接口方法验证。条件构造器、accessor、override、接口成员条件和其余见证声明族仍待分别实现，未接通者拒绝；不代表语言目标被删除。
 
 #### 键等价关系
 
@@ -176,6 +176,8 @@ Pair("key", 100)            // K=string, V=i64
 推断算法是**双向推断**：
 - 从参数推断（调用位置实参类型 → 类型参数）。
 - 从返回值推断（上下文期望类型 → 类型参数）。
+
+推断只从原签名与实际值类型、已确定的前序实参上下文和期望结果收集类型证据；约束和具体implements不能凭空选择类型。外层类型或原接口应用的参数先固定，仅求解被调用声明的自身参数；调用者符号保留真实声明身份。实参按语言求值顺序各检查并发射一次，不能试探后重跑。完整实参组形成后，显式与推断调用使用相同约束证明、权限检查、转换、Checked实例身份和来源复验。当前首个增量只接值形状与前序上下文，未接通的结果及更完整上下文能力保留为上述双向目标。
 
 #### 显式实例化
 
@@ -454,7 +456,7 @@ enum Wrap<T> where T: Comparable { ... }
 
 An ordinary instance or static method's `where` clause may constrain its own type parameters and those of its enclosing nominal type, even when the method introduces no `<...>` parameters. Its effective requirements conjoin the enclosing declaration's requirements, its own inline requirements and its `where` requirements. They apply only to that method, without strengthening type construction, storage or other methods. The body, defaults and nested closures are checked in this definition context. Direct calls and method values require proof in the caller's context; concrete instantiation cannot supply a missing generic proof. Names remain unique: a failed condition does not select another overload or grant visibility, receiver authority or effect promises.
 
-Other declarations' `where` clauses constrain only their own type parameters. Unknown subjects and parameter shadowing are errors. Repeating the same admitted marker is equivalent to one requirement and remains charged to checking budgets; repetition or specialization cannot admit an unknown marker. New XIR supports conjunctions of Sendable/Error markers and named interface applications for ordinary nominal value types' read/static conditional methods. Applications retain their complete ordered arguments, and proof uses the full enclosing and method parameter environment. Ordinary read interface requirements, explicit struct/enum implementations, and constrained generic member calls now use static witnesses. For a requirement without own parameters, the implementation cannot add method parameters and its conditions must follow from nominal premises. For a requirement with Q own parameters, the implementation must have the same own arity, rebased by ordinal; its conditions follow from nominal and original requirement-method premises, while its body checks against its own declaration. Explicit generic interface calls and inline constraints are being implemented and are not yet qualified. Inference, own where parsing and method values remain OPEN. Existing ordinary generic methods do not replace interface-method validation. Conditional constructors, accessors, overrides, interface member conditions, and remaining witness declaration families still require separate implementation and reject until admitted; they remain part of the language target.
+Other declarations' `where` clauses constrain only their own type parameters. Unknown subjects and parameter shadowing are errors. Repeating the same admitted marker is equivalent to one requirement and remains charged to checking budgets; repetition or specialization cannot admit an unknown marker. New XIR supports conjunctions of Sendable/Error markers and named interface applications for ordinary nominal value types' read/static conditional methods. Applications retain their complete ordered arguments, and proof uses the full enclosing and method parameter environment. Ordinary read interface requirements, explicit struct/enum implementations, and constrained generic member calls now use static witnesses. For a requirement without own parameters, the implementation cannot add method parameters and its conditions must follow from nominal premises. For a requirement with Q own parameters, the implementation must have the same own arity, rebased by ordinal; its conditions follow from nominal and original requirement-method premises, while its body checks against its own declaration. Explicit generic interface calls and inline constraints have Windows scope qualification, while full safety remains unqualified. Own where parsing and value-shape inference are being connected. Expected-result inference, interface method values and the complete bidirectional target remain OPEN. Existing ordinary generic methods do not replace interface-method validation. Conditional constructors, accessors, overrides, interface member conditions, and remaining witness declaration families still require separate implementation and reject until admitted; they remain part of the language target.
 
 #### The key relation
 
@@ -490,6 +492,8 @@ Pair("key", 100)            // K=string, V=i64
 The inference algorithm is **bidirectional**:
 - From arguments (call-site argument types → type parameters).
 - From the return type (contextual expected type → type parameters).
+
+Inference collects type evidence from original signatures, actual values, determined earlier-argument context and expected results; constraints or concrete implements cannot invent an argument. Enclosing nominal or original interface arguments are fixed before solving the callee own suffix, and caller symbols retain their authentic declaration identities. Each argument checks and emits once in language evaluation order, without speculative replay. Complete explicit and inferred tuples use the same constraint proof, access, conversion, Checked identity and provenance verification. The first incremental consumer covers value shapes and earlier context only; remaining result and context support stays part of the bidirectional target above.
 
 #### Explicit instantiation
 

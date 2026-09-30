@@ -14,10 +14,20 @@
 #include "base/xmalloc.h"
 #include "xir/xxir_program.h"
 static size_t runtime_attempts, runtime_fail_at = SIZE_MAX, runtime_live, runtime_bytes;
-static struct { void *pointer; size_t bytes; } runtime_owned[16384];
+typedef struct RuntimeAllocationRecord { void *pointer; size_t bytes; } RuntimeAllocationRecord;
+static RuntimeAllocationRecord *runtime_owned;
+static size_t runtime_owned_capacity;
 static void runtime_record(void *pointer, size_t bytes) {
     if (!pointer) return;
-    CHECK(runtime_live < sizeof(runtime_owned) / sizeof(runtime_owned[0]) && bytes <= SIZE_MAX - runtime_bytes);
+    CHECK(bytes <= SIZE_MAX - runtime_bytes);
+    /* Bookkeeping is outside the runtime injection boundary. Every runtime
+     * allocation still receives its original fault index and physical count. */
+    if (runtime_live == runtime_owned_capacity) {
+        CHECK(runtime_owned_capacity <= SIZE_MAX / 2 / sizeof(*runtime_owned));
+        size_t capacity = runtime_owned_capacity ? runtime_owned_capacity * 2 : 256;
+        RuntimeAllocationRecord *grown = xr_realloc(runtime_owned,capacity * sizeof(*grown));
+        CHECK(grown); runtime_owned = grown; runtime_owned_capacity = capacity;
+    }
     runtime_owned[runtime_live].pointer = pointer;
     runtime_owned[runtime_live++].bytes = bytes; runtime_bytes += bytes;
 }
@@ -31,10 +41,15 @@ static void *runtime_calloc(size_t count, size_t size) {
     void *pointer = xr_calloc(count, size); runtime_record(pointer, count * size); return pointer;
 }
 static void runtime_free(void *pointer) {
-    for (size_t i = 0; i < runtime_live; ++i) if (runtime_owned[i].pointer == pointer) {
+    if (runtime_live && runtime_owned[runtime_live - 1].pointer == pointer)
+        runtime_bytes -= runtime_owned[--runtime_live].bytes;
+    else for (size_t i = 0; i < runtime_live; ++i) if (runtime_owned[i].pointer == pointer) {
         runtime_bytes -= runtime_owned[i].bytes; runtime_owned[i] = runtime_owned[--runtime_live]; break;
     }
     xr_free(pointer);
+    if (!runtime_live) {
+        xr_free(runtime_owned); runtime_owned = NULL; runtime_owned_capacity = 0;
+    }
 }
 static void *runtime_realloc(void *pointer, size_t size) {
     if (runtime_attempts++ == runtime_fail_at) return NULL;

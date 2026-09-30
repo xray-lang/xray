@@ -262,7 +262,7 @@ int main(void) {
         "fn unused<T,T>(x:T)->T { return x }\n",
         "fn unused<T>(x:U)->T { return x }\n",
         "fn id<T>(x:T)->T { return x }\nid<i64>(true)\n",
-        "fn id<T>(x:T)->T { return x }\nid(1)\n",
+        "fn id<T,U>(x:T)->T { return x }\nid(1)\n",
         "fn id<T>(x:T)->T { return x }\nid<i64,string>(1)\n",
         "fn id(x:i64)->i64 { return x }\nid<i64>(1)\n",
         "import \"./lib\" as lib\nfn open<T>(x:T)->T { return lib.required<T>(x) }\n",

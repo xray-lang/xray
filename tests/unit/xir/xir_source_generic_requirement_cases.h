@@ -129,7 +129,7 @@ static void source_generic_requirement_rejections(XrXirSourceRequest *request) {
         ("interface I { map<U,U>(value:U)->U }\n"),
         ("interface I { map<U>(value:U)->U }\n"
          "struct S implements I { map(value:i64)->i64{return value} }\n"),
-        ("interface I { map<U>(value:U)->U }\n"
+        ("interface I { map<U,V>(value:U)->U }\n"
          "fn unused<T:I>(receiver:T)->i64{return receiver.map(41)}\n"),
         ("interface I { map<U>(value:U)->U }\n"
          "fn unused<T:I>(receiver:T)->i64{return receiver.map<i64,string>(41)}\n"),
@@ -148,7 +148,7 @@ static void source_generic_requirement_rejections(XrXirSourceRequest *request) {
     const char *reasons[] = {
         "method type argument does not prove", "implementation witness definition obligations failed",
         "implementation witness definition obligations failed", "duplicates or shadows", "failed to parse module",
-        "matching own parameters", "exact explicit type arguments", "exact explicit type arguments",
+        "matching own parameters", "cannot infer all method type arguments", "exact explicit type arguments",
         "implementation witness definition obligations failed", "source declaration type structure is invalid",
         "source declaration type structure is invalid"
     };

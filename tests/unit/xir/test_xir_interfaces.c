@@ -34,6 +34,7 @@ static void counted_free(void *p) { if (p) { CHECK(live); --live; } xr_free(p); 
 #include "xir/xxir_constraint_proof.c"
 #include "xir/xxir_implementation.c"
 #include "xir/xxir_implementation_verify.c"
+#include "xir/xxir_type_inference.c"
 #include "xir_interface_member_cases.h"
 #include "xir_interface_access_cases.h"
 #include "xir_generic_method_access_cases.h"
@@ -41,6 +42,7 @@ static void counted_free(void *p) { if (p) { CHECK(live); --live; } xr_free(p); 
 #include "xir_constraint_proof_cases.h"
 #include "xir_implementation_semantic_cases.h"
 #include "xir_generic_method_proof_cases.h"
+#include "xir_type_inference_cases.h"
 #include "xir_generic_method_authority_cases.h"
 
 typedef struct Fixture {
@@ -247,6 +249,7 @@ static void interface_parameters_remain_declaration_scoped(void) {
     }
 }
 int main(void) {
+    type_inference_cases();
     implementation_semantic_cases(); generic_method_proof_cases(); generic_method_authority_cases();
     interface_closure_cases();
     constraint_proof_cases();

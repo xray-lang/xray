@@ -707,17 +707,7 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
     arguments->substitution = substitution; return true;
 }
 #include "xxir_source_arguments.inc.c"
-static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
-    SourceSubstitution *substitution, XrXirInstruction *op) {
-    CallExprNode *call = &node->as.call_expr;
-    const XrXirFunction *function = &ctx->functions[target->index];
-    if (!source_argument_arity(ctx, node, target->index, (uint32_t)call->arg_count)) return false;
-    SourceTypeArguments arguments = {call->type_args,(uint32_t) call->type_arg_count,{0}};
-    *op = (XrXirInstruction) {XR_XIR_CALL,XR_XIR_UNIT,{0},{0},target->index, {0}};
-    if (!source_instantiation(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,target->index,0},&arguments) ||
-        !source_substitute(ctx,&arguments.substitution,function->result,0,&op->type)) return false;
-    *substitution = arguments.substitution; return true;
-}
+#include "xxir_source_direct_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 #include "xxir_source_array.inc.c"
 #include "xxir_source_string.inc.c"
@@ -769,9 +759,6 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         }
         if (!source_static_select(ctx, callee, &selected)) return false;
         if (selected.method) {
-            SourceTypeArguments arguments = {call->type_args, (uint32_t)call->type_arg_count, {0}};
-            if (!source_method_instantiation(ctx, node, selected.method->index, selected.substitution, &arguments)) return false;
-            selected.substitution = arguments.substitution;
             binding = target = selected.method;
         } else if (base && base->kind == SOURCE_MODULE) { binding = base; target = imported_declaration(ctx, base, member->name); }
         else if (source_constructor_receiver(ctx, member->object) &&
@@ -816,6 +803,15 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         return source_nominal_apply(ctx, target, call->type_args, (uint32_t)call->type_arg_count, &type) &&
             source_constructor_call(ctx, node, type, binding, target, value);
     }
+    if (target && target->kind == SOURCE_FUNCTION) {
+        SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL};
+        SourceDirectArguments prepared = {0};
+        if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
+        XrXirInstruction call_op = {XR_XIR_CALL,prepared.result,{0},{0},target->index,{0}};
+        return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&call_op) &&
+            source_query_reference(ctx,callee,binding,target,XR_XIR_SOURCE_CALL) &&
+            emit_group(ctx,call_op,prepared.values,prepared.count,value);
+    }
     XrXirTypeNode signature = {0};
     if (!print && !atomic && !stream && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION)) {
         if (call->type_arg_count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call has no generic declaration parameters");
@@ -827,24 +823,14 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     }
     if ((print || atomic || stream || method != XR_XIR_INVALID) && call->type_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "primitive does not admit explicit type arguments");
-    XrXirInstruction op = {0}; SourceSubstitution substitution = {0};
-    if (selected.method) {
-        substitution = selected.substitution;
-        op = (XrXirInstruction) {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, target->index, {0}};
-        if (!source_argument_arity(ctx, node, target->index, (uint32_t)call->arg_count) ||
-            !source_substitute(ctx, &substitution, ctx->functions[target->index].result, 0, &op.type)) return false;
-    } else if (target && target->kind == SOURCE_FUNCTION && !prepare_call(ctx, node, target, &substitution, &op)) return false;
-    if (target && target->kind == SOURCE_FUNCTION &&
-        !source_query_reference(ctx, callee, binding, target, XR_XIR_SOURCE_CALL)) return false;
-    uint32_t argument_count = op.op == XR_XIR_CALL ? ctx->functions[target->index].parameter_count : (uint32_t)call->arg_count;
+    XrXirInstruction op = {0};
+    uint32_t argument_count = (uint32_t)call->arg_count;
     SourceValue *args = argument_count ? source_alloc(ctx, argument_count, sizeof(*args)) : NULL;
     if (argument_count && !args) return false;
     for (int i = 0; i < call->arg_count; ++i) {
         if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "ref and move arguments require an implemented contract");
         XrXirType expected = XR_XIR_UNIT;
-        if (op.op == XR_XIR_CALL && !source_substitute(ctx, &substitution,
-            ctx->functions[target->index].parameters[i], 0, &expected)) return false;
         if (indirect.type) expected = signature.parameters[i].type;
         if (atomic || method == XR_XIR_ATOMIC_I64_FETCH_ADD) expected = XR_XIR_I64;
         if (stream) expected = XR_XIR_STRING;
@@ -876,11 +862,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Atomic fetchAdd requires i64");
         op = (XrXirInstruction) {method, XR_XIR_I64, {receiver.id, call->arg_count ? args[0].id : 0}, {0, 0}, 0, {0}};
     }
-    if (op.op == XR_XIR_CALL)
-        for (uint32_t p = (uint32_t)call->arg_count; p < argument_count; ++p)
-            if (!source_argument_default(ctx, node, target->index, p, &substitution, &args[p])) return false;
-    if (op.op == XR_XIR_CALL && !source_type_arguments(ctx, node, substitution.types, substitution.count, &op)) return false;
-    if (op.op == XR_XIR_CALL || op.op == XR_XIR_PRINT)
+    if (op.op == XR_XIR_PRINT)
         return emit_group(ctx, op, args, argument_count, value);
     return emit(ctx, op, value);
 }
@@ -1910,16 +1892,22 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
     return true;
 }
 static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
-    XrXirCallableParameter *parameters) {
+    XrXirCallableParameter *parameters, const XrXirTypeNode *context) {
     if (!source_capture_parameters(ctx, node, scan)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     FunctionDeclNode *decl = &node->as.function_expr;
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         XrXirType type;
-        if (!param->type || param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest ||
-            !source_type(ctx, param->type, &type) || type == XR_XIR_UNIT)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter contract is not implemented in XIR");
+        if (!source_work(ctx, node)) return false;
+        if (param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest ||
+            (!param->type && !context))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter requires an annotation or complete callable context");
+        if (param->type) {
+            if (!source_type(ctx, param->type, &type)) return false;
+        } else type = context->parameters[i].type;
+        if (type == XR_XIR_UNIT)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter cannot be unit");
         SourceName *symbol = add_name(ctx, &ctx->locals, param->name, node);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t) i; symbol->type = type;
@@ -1936,11 +1924,24 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
 #include "xxir_source_cleanup.inc.c"
 static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     const XrXirTypeNode *context = xr_xir_callable_signature(&ctx->types, expected);
+    /* The node pool can grow while parameter annotations and the body are built.
+     * Callable parameter storage is source-arena owned and does not relocate. */
+    XrXirTypeNode context_copy = {0};
+    if (context) { context_copy = *context; context = &context_copy; }
     bool no_suspend = context && (context->flags & XR_XIR_CALLABLE_NO_SUSPEND);
     FunctionDeclNode *decl = &node->as.function_expr;
     if (decl->is_generator || decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_count ||
         decl->borrow_origin_count || !decl->body || decl->param_count < 0 || decl->param_count > 65536)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closure contract is not implemented in XIR");
+    if (context) {
+        if (context->parameter_count != (uint32_t) decl->param_count)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure arity differs from its callable context");
+        for (uint32_t p = 0; p < context->parameter_count; ++p) {
+            if (!source_work(ctx, node)) return false;
+            if (context->parameters[p].mode != XR_PARAM_READ)
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure context requires an unsupported parameter mode");
+        }
+    }
     SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0};
     if (!capture_scan(node, &scan)) return false;
     if (scan.count > 65536 - (uint32_t) decl->param_count || ctx->next_closure >= ctx->function_count - 1)
@@ -1951,7 +1952,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected
     body->generic_owner = ctx->bodies[outer].generic_owner;
     body->type_parameters = ctx->bodies[outer].type_parameters;
     body->type_parameter_count = ctx->bodies[outer].type_parameter_count;
-    body->infer_result = !decl->return_type;
+    body->infer_result = !decl->return_type && !context;
     ctx->generics[index].parameter_count = ctx->generics[outer].parameter_count;
     ctx->generics[index].constraints = ctx->generics[outer].constraints;
     char *name = source_alloc(ctx, 32, sizeof(*name));
@@ -1975,8 +1976,12 @@ static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
     ctx->function = index; ctx->locals = ctx->scope = NULL; ctx->loop = NULL; ctx->returned = false;
     XrXirType type = XR_XIR_UNIT;
-    bool ok = closure_parameters(ctx, node, &scan, parameters) &&
-        source_type(ctx, decl->return_type, &ctx->functions[index].result) &&
+    bool ok = closure_parameters(ctx, node, &scan, parameters, context);
+    if (ok) {
+        if (decl->return_type) ok = source_type(ctx, decl->return_type, &ctx->functions[index].result);
+        else if (context) ctx->functions[index].result = context->result;
+    }
+    ok = ok &&
         statement(ctx, decl->body, false) && finish_body(ctx) &&
         source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type);
     if (ok && no_suspend) {

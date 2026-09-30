@@ -777,6 +777,12 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_enum_witness_cases.h"
 #include "xir_witness_provenance_cases.h"
 #include "xir_source_generic_requirement_cases.h"
+#include "xir_source_contextual_lambda_cases.h"
+#include "xir_source_requirement_inference_cases.h"
+#include "xir_source_ordinary_inference_cases.h"
+#include "xir_own_where_source_access_cases.h"
+#include "xir_source_inference_equivalence_cases.h"
+#include "xir_source_method_where_cases.h"
 #include "xir_generic_witness_provenance_cases.h"
 int main(void) {
     nominal_query_boundary();
@@ -791,6 +797,15 @@ int main(void) {
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
     source_generic_requirement_positive(&request);
     source_generic_requirement_rejections(&request);
+    source_requirement_inference_cases(&request);
+    source_ordinary_inference_cases(&request);
+    source_contextual_lambda_cases(&request);
+    own_where_source_access_cases(&request);
+    own_where_self_bound_cases(&request);
+    source_inference_equivalence_cases(&request);
+    source_inference_phantom_cases(&request);
+    source_interface_method_where_positive(&request);
+    source_interface_method_where_rejections(&request);
     generic_witness_provenance_cases(&request);
     source_witness_cases(&request);
     source_witness_inheritance_cases(&request);

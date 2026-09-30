@@ -36,7 +36,8 @@ static void *source_counted_calloc(size_t count, size_t size) {
     return pointer;
 }
 static void source_counted_free(void *pointer) {
-    for (size_t i = 0; i < live; ++i) if (owned[i] == pointer) {
+    if (live && owned[live - 1] == pointer) --live;
+    else for (size_t i = 0; i < live; ++i) if (owned[i] == pointer) {
         owned[i] = owned[--live]; break;
     }
     xr_free(pointer);
@@ -64,6 +65,7 @@ static int source_fault_resolve(XrModuleResolver *resolver, const char *specifie
 #define xr_free(pointer) source_counted_free(pointer)
 #include "xir/xxir_source_query.c"
 #define xr_module_resolver_resolve source_fault_resolve
+#include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
 #undef xr_module_resolver_resolve
 #include "xir_nominal_fixture.h"
@@ -393,6 +395,7 @@ static void method_promise_allocations(XrCompilerSession *session) {
 #include "xir_constraint_query_allocations.h"
 #include "xir_implementation_query_allocations.h"
 #include "xir_generic_method_query_allocations.h"
+#include "xir_source_inference_allocations.h"
 int main(void) {
     generic_method_query_allocations();
     implementation_query_allocations();
@@ -432,6 +435,7 @@ int main(void) {
     resolver_fault = 0;
     array_source_allocations(session);
     method_promise_allocations(session);
+    inference_source_allocations(session);
     xr_compiler_session_delete(session);
     printf("Source-owner allocation failures: %zu; no partial artifact or live metadata\n", count);
     CHECK(!live); xr_free(owned); owned = NULL; owned_capacity = 0;

@@ -49,6 +49,7 @@ XR_FUNC void *ast_alloc_array(XrCompilerSession *session, size_t elem_size, size
     XR_DCHECK(session != NULL, "ast_alloc_array: NULL compiler session");
     if (count == 0)
         return NULL;
+    XR_CHECK(elem_size != 0 && count <= SIZE_MAX / elem_size, "ast_alloc_array: array size overflow");
     return ast_alloc(session, elem_size * count);
 }
 

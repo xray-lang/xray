@@ -5,7 +5,12 @@
  * Licensed under the MIT License
  *
  * xxir_source_requirement_calls.inc.c - Definition-bound abstract method calls
+ *
+ * KEY CONCEPT:
+ *   Incremental own evidence preserves original requirement authority and
+ *   evaluates each argument once before complete tuple proof and publication.
  */
+#include "xxir_type_inference.h"
 static bool source_reify_type(SourceContext *ctx, AstNode *site,
     const XrXirTypes *pool, XrXirType input, XrXirType *output) {
     if (!source_work(ctx,site)) return false;
@@ -43,25 +48,14 @@ static bool source_reify_application(SourceContext *ctx, AstNode *site,
     *output = (XrXirInterfaceApplication){input->declaration,arguments,input->argument_count};
     return true;
 }
-static bool source_requirement_instantiation(SourceContext *ctx, AstNode *node,
-    uint32_t member, XrXirInterfaceApplication application, SourceSubstitution *substitution,
+static bool source_requirement_prove(SourceContext *ctx, AstNode *node,
+    uint32_t member, XrXirInterfaceApplication application, SourceSubstitution substitution,
     XrXirType *signature) {
-    CallExprNode *call = &node->as.call_expr;
     const XrXirInterfaceMethod *method = &ctx->interfaces.declarations[application.declaration].methods[member];
-    uint32_t own = method->own_parameter_count, parent = application.argument_count;
-    if (call->type_arg_count < 0 || (uint32_t)call->type_arg_count != own || (own && !call->type_args))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method requires its exact explicit type arguments");
-    if (parent > 65536 || own > 65536 - parent)
-        return source_fail(ctx,node,XR_XIR_BUDGET,"interface method type argument count exhausted");
-    uint32_t count = parent + own;
-    XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
-    if (count && !types) return false;
-    for (uint32_t p = 0; p < parent; ++p) {
-        if (!source_work(ctx,node)) return false;
-        types[p] = application.arguments[p];
-    }
-    for (uint32_t p = 0; p < own; ++p)
-        if (!source_work(ctx,node) || !source_type(ctx,call->type_args[p],&types[parent+p])) return false;
+    uint32_t own = method->own_parameter_count, parent = application.argument_count, count = substitution.count;
+    const XrXirType *types = substitution.types;
+    if (parent > 65536 || own > 65536-parent || count != parent+own)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"requirement substitution shape mismatch");
     SourceSubstitution prefix = {types,parent};
     if (!source_instantiation_prove(ctx,node,
         (XrXirDeclarationContext){XR_XIR_CONTEXT_INTERFACE,application.declaration,0},prefix)) return false;
@@ -77,8 +71,7 @@ static bool source_requirement_instantiation(SourceContext *ctx, AstNode *node,
         if (status != XR_XIR_OK)
             return source_fail(ctx,node,status,"method type argument does not prove the declared constraint");
     }
-    *substitution = (SourceSubstitution){types,count};
-    return source_substitute(ctx,substitution,method->signature,0,signature);
+    return source_substitute(ctx,&substitution,method->signature,0,signature);
 }
 static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceValue receiver, SourceValue *value) {
@@ -102,6 +95,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     if (status != XR_XIR_OK) return source_fail(ctx,node,status,"interface requirements are invalid");
     closure_scratch -= ctx->budget.scratch_bytes;
     bool ok = false;
+    XrXirInferenceState *inference = NULL;
     const XrXirInterfaceRequirement *selected = NULL;
     for (uint32_t r = 0; r < xr_xir_interface_closure_requirement_count(closure); ++r) {
         const XrXirInterfaceRequirement *requirement = xr_xir_interface_closure_requirement(closure,r);
@@ -113,23 +107,78 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     const XrXirTypes *pool = xr_xir_interface_closure_types(closure);
     XrXirType signature;
     XrXirInterfaceApplication application;
-    SourceSubstitution substitution;
     if (!source_reify_application(ctx,node,pool,
-        xr_xir_interface_closure_application(closure,selected->application),&application) ||
-        !source_requirement_instantiation(ctx,node,selected->member,application,&substitution,&signature)) goto done;
-    XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);
-    if ((uint32_t)call->arg_count != callable.parameter_count) {
-        source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method requires its exact explicit arguments"); goto done;
+        xr_xir_interface_closure_application(closure,selected->application),&application)) goto done;
+    const XrXirInterfaceMethod *method = &ctx->interfaces.declarations[application.declaration].methods[selected->member];
+    /* Copy the node before argument expressions append to the descriptor arena. */
+    XrXirTypeNode formal = *xr_xir_callable_signature(&ctx->types,method->signature);
+    uint32_t own = method->own_parameter_count, parent = application.argument_count;
+    if (parent > 65536 || own > 65536-parent || call->type_arg_count < 0 ||
+        (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))) {
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method requires its exact explicit type arguments or an omitted list"); goto done;
     }
-    SourceValue *arguments = source_alloc(ctx,(uint64_t)callable.parameter_count + 1,sizeof(*arguments));
+    if ((uint32_t)call->arg_count != formal.parameter_count) {
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument arity mismatch"); goto done;
+    }
+    uint32_t count = parent+own;
+    XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
+    if (count && !types) goto done;
+    for (uint32_t p = 0; p < parent; ++p) {
+        if (!source_work(ctx,node)) goto done;
+        types[p] = application.arguments[p];
+    }
+    bool inferred = own && !call->type_arg_count;
+    if (inferred) {
+        XrXirInferenceRequest request = {&ctx->types,application.arguments,parent,own,
+            ctx->generics[ctx->function].parameter_count};
+        status = xr_xir_inference_begin(&request,&ctx->budget,&inference);
+        if (status != XR_XIR_OK) { source_fail(ctx,node,status,"method inference could not begin"); goto done; }
+    } else for (uint32_t p = 0; p < own; ++p)
+        if (!source_work(ctx,node) || !source_type(ctx,call->type_args[p],&types[parent+p])) goto done;
+    SourceSubstitution substitution = {types,count};
+    SourceValue *arguments = source_alloc(ctx,(uint64_t)formal.parameter_count+1,sizeof(*arguments));
     if (!arguments) goto done;
     arguments[0] = receiver;
-    for (uint32_t p = 0; p < callable.parameter_count; ++p) {
+    for (uint32_t p = 0; p < formal.parameter_count; ++p) {
         if (call->arg_accesses && call->arg_accesses[p] != XR_CALL_ARG_PLAIN) {
             source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument must be read"); goto done;
         }
-        if (!expression_in(ctx,call->arguments[p],callable.parameters[p].type,&arguments[p + 1])) goto done;
-        if (arguments[p + 1].type != callable.parameters[p].type) {
+        XrXirType expected = XR_XIR_UNIT;
+        if (inferred) {
+            XrXirInferenceKnown known = {0};
+            status = xr_xir_inference_expected_known(inference,&ctx->types,formal.parameters[p].type,&known);
+            if (status != XR_XIR_OK) { source_fail(ctx,node,status,"method inference context is invalid"); goto done; }
+            if (known.known) {
+                SourceSubstitution partial = {known.arguments,known.argument_count};
+                if (!source_substitute(ctx,&partial,formal.parameters[p].type,0,&expected)) goto done;
+            }
+        } else if (!source_substitute(ctx,&substitution,formal.parameters[p].type,0,&expected)) goto done;
+        if (!expression_in(ctx,call->arguments[p],expected,&arguments[p+1])) goto done;
+        if (inferred) {
+            XrXirType evidence = arguments[p+1].type;
+            const XrXirTypeNode *wanted = xr_xir_callable_signature(&ctx->types,formal.parameters[p].type);
+            const XrXirTypeNode *actual = xr_xir_callable_signature(&ctx->types,evidence);
+            if (wanted && !wanted->flags && actual && actual->flags == XR_XIR_CALLABLE_NO_SUSPEND) {
+                XrXirTypeNode ordinary = *actual; ordinary.flags = 0;
+                if (!source_intern_type(ctx,ordinary,&evidence)) goto done;
+                status = xr_xir_callable_weakening(&ctx->types,arguments[p+1].type,evidence,&ctx->budget.work);
+                if (status != XR_XIR_OK) { source_fail(ctx,node,status,"callable inference view is invalid"); goto done; }
+            }
+            status = xr_xir_inference_observe(inference,&ctx->types,
+                (XrXirInferencePair){formal.parameters[p].type,evidence});
+            if (status != XR_XIR_OK) { source_fail(ctx,node,status,"method type evidence is inconsistent"); goto done; }
+        }
+    }
+    if (inferred) {
+        status = xr_xir_inference_finalize(inference,&ctx->types,types,count);
+        if (status != XR_XIR_OK) { source_fail(ctx,node,status,"cannot infer all method type arguments; supply an explicit list"); goto done; }
+        xr_xir_inference_dispose(inference); inference = NULL;
+    }
+    if (!source_requirement_prove(ctx,node,selected->member,application,substitution,&signature)) goto done;
+    XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);
+    for (uint32_t p = 0; p < callable.parameter_count; ++p) {
+        if (!source_expect(ctx,node,callable.parameters[p].type,&arguments[p+1])) goto done;
+        if (arguments[p+1].type != callable.parameters[p].type) {
             source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument type mismatch"); goto done;
         }
     }
@@ -140,6 +189,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
             ctx->interface_member_declarations[selected->origin_interface][selected->member],XR_XIR_SOURCE_CALL) &&
         emit_group(ctx,op,arguments,callable.parameter_count + 1,value);
 done:
+    xr_xir_inference_dispose(inference);
     xr_xir_interface_closure_free(closure);
     ctx->budget.scratch_bytes += closure_scratch; return ok;
 }

@@ -1,0 +1,9 @@
+import { InferenceMapper } from "./inference_contract"
+const inferenceVisits=Atomic(0)
+export fn inferenceVisitsCount()->i64 { return inferenceVisits.load() }
+export struct InferenceAdapter<X,Y> implements InferenceMapper<Y> {
+    label:X
+    seed:Y
+    map<V:Sendable>(seed:Y,value:V)->V { inferenceVisits.fetchAdd(1); return value }
+    copy<W:Sendable>(value:Array<W>)->Array<W> { inferenceVisits.fetchAdd(1); return value }
+}

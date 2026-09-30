@@ -24,6 +24,9 @@
 #include "xir_source_method_promises.h"
 #include "xir_source_witness_promises.h"
 #include "xir_source_generic_requirement_promises.h"
+#include "xir_source_inference_promises.h"
+#include "xir_source_contextual_lambda_promises.h"
+#include "xir_source_method_where_promises.h"
 static void source_generic_effects(const XrXirModule *module, const XrXirEffects *effects) {
     bool open=false; uint32_t found=0;
     for (uint32_t f=0;f<module->function_count;++f)
@@ -216,6 +219,9 @@ int main(int argc, char **argv) {
     source_method_promise_cases(&request, argc == 2 ? argv[1] : NULL);
     source_witness_promise_cases(&request, argc == 2 ? argv[1] : NULL);
     source_generic_requirement_promises(&request, argc == 2 ? argv[1] : NULL);
+    source_inference_promises(&request);
+    source_contextual_lambda_promises(&request);
+    source_interface_method_where_promises(&request, argc == 2 ? argv[1] : NULL);
     source_declared_input(&request, &result); source_promise_retained(result.checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);

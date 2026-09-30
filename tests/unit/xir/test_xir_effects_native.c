@@ -25,6 +25,8 @@ XR_DATA const XrXirProgramSpec witness_inherited_program;
 XR_DATA const uint32_t witness_inherited_selected_entry;
 XR_DATA const XrXirProgramSpec witness_generic_method_program;
 XR_DATA const uint32_t witness_generic_method_selected_entry;
+XR_DATA const XrXirProgramSpec witness_generic_where_program;
+XR_DATA const uint32_t witness_generic_where_selected_entry;
 XR_DATA const XrXirProgramSpec witness_cross_program;
 XR_DATA const uint32_t witness_cross_selected_entry;
 static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expected) {
@@ -43,10 +45,10 @@ static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expect
 }
 static void native_witness_promises(void) {
     const XrXirProgramSpec *specs[] = {&witness_direct_program,&witness_callback_program,
-        &witness_inherited_program,&witness_cross_program,&witness_generic_method_program};
+        &witness_inherited_program,&witness_cross_program,&witness_generic_method_program,&witness_generic_where_program};
     const uint32_t entries[] = {witness_direct_selected_entry,witness_callback_selected_entry,
-        witness_inherited_selected_entry,witness_cross_selected_entry,witness_generic_method_selected_entry};
-    for (uint32_t i = 0; i < 5; ++i) {
+        witness_inherited_selected_entry,witness_cross_selected_entry,witness_generic_method_selected_entry,witness_generic_where_selected_entry};
+    for (uint32_t i = 0; i < sizeof(specs)/sizeof(*specs); ++i) {
         XrXirProgram *program = NULL;
         CHECK(xr_xir_program_seal(specs[i],(XrXirProgramBudget){33554432,64000000},
             &program) == XR_XIR_OK);

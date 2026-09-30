@@ -372,6 +372,9 @@ add_custom_command(OUTPUT ${XIR_CHECKED_GENERATED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_contract.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_reader.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_value.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/inference_contract.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/inference_reader.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/inference_value.xr
         ${CMAKE_SOURCE_DIR}/stdlib/io/output.xr
     VERBATIM)
 add_executable(test_xir_packet_vm xir/test_xir_packet_vm.c ${XIR_CHECKED_GENERATED})
@@ -950,6 +953,35 @@ add_xray_unit_test(test_lexer_trivia frontend/test_lexer_trivia.c)
 add_xray_bootstrap_unit_test(test_parser frontend/test_parser.c)
 add_xray_bootstrap_unit_test(test_parser_type_scope frontend/test_parser_type_scope.c)
 add_xray_bootstrap_unit_test(test_parser_recoverable frontend/test_parser_recoverable.c)
+if(TARGET xray_core_objs AND TARGET xray_stdlib_bootstrap_core)
+    add_xray_bootstrap_unit_test(test_parser_where_limits frontend/test_parser_where_limits.c)
+    set_tests_properties(test_parser_where_limits PROPERTIES LABELS "unit;parser;ownership;safety")
+    # The injected AST translation unit supplies every xast symbol. Archive the
+    # already-compiled bootstrap objects so its original xast object is extracted
+    # only if needed; never link the OBJECT aggregate directly to this executable.
+    add_library(xray_ast_test_bootstrap STATIC
+        $<TARGET_OBJECTS:xray_core_objs>
+        $<TARGET_OBJECTS:xray_stdlib_bootstrap_core>)
+    # OBJECT targets in INTERFACE_LINK_LIBRARIES propagate usage requirements
+    # (including system/libffi libraries), not their objects. The objects above
+    # are therefore present only in the archive and remain demand-loaded.
+    target_link_libraries(xray_ast_test_bootstrap INTERFACE
+        xray_core_objs xray_stdlib_bootstrap_core)
+    add_executable(test_ast_allocation_failure frontend/test_ast_allocation_failure.c)
+    target_include_directories(test_ast_allocation_failure PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(test_ast_allocation_failure PRIVATE xray_ast_test_bootstrap)
+    foreach(parser_boundary IN ITEMS test_parser_where_limits test_ast_allocation_failure)
+        if(MSVC)
+            target_compile_options(${parser_boundary} PRIVATE /W4 /WX)
+        else()
+            target_compile_options(${parser_boundary} PRIVATE -Wall -Wextra -Werror)
+        endif()
+    endforeach()
+    add_test(NAME test_ast_allocation_failure
+        COMMAND ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:test_ast_allocation_failure>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/frontend/check_ast_allocation_failure.cmake)
+    set_tests_properties(test_ast_allocation_failure PROPERTIES LABELS "unit;parser;ownership;safety" TIMEOUT 45)
+endif()
 add_xray_bootstrap_unit_test(test_parser_asi frontend/test_parser_asi.c)
 add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
 add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)

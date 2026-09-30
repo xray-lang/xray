@@ -61,34 +61,16 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its declaration owner");
-    const XrXirFunction *function = &ctx->functions[method->index];
-    if (!source_argument_arity(ctx, node, method->index, (uint32_t)call->arg_count + 1))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its exact value arguments");
-    const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, receiver.type);
-    SourceTypeArguments type_arguments = {call->type_args, (uint32_t)call->type_arg_count, {0}};
-    if (!source_method_instantiation(ctx, node, method->index,
-        (SourceSubstitution) {type->nominal.arguments, type->nominal.argument_count}, &type_arguments)) return false;
-    SourceSubstitution substitution = type_arguments.substitution;
-    SourceValue *arguments = source_alloc(ctx, function->parameter_count, sizeof(*arguments));
-    if (!arguments) return false;
-    arguments[0] = receiver;
-    for (uint32_t i = 1; i <= (uint32_t)call->arg_count; ++i) {
-        if (call->arg_accesses && call->arg_accesses[i - 1] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "READ method argument cannot transfer or borrow a root");
-        XrXirType expected;
-        if (!source_substitute(ctx, &substitution, function->parameters[i], 0, &expected) ||
-            !expression_in(ctx, call->arguments[i - 1], expected, &arguments[i])) return false;
-        if (arguments[i].type != expected)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method argument type mismatch");
-    }
-    for (uint32_t p = (uint32_t)call->arg_count + 1; p < function->parameter_count; ++p)
-        if (!source_argument_default(ctx, node, method->index, p, &substitution, &arguments[p])) return false;
-    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, method->index, {0}};
-    return source_substitute(ctx, &substitution, function->result, 0, &op.type) &&
-        source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
-        source_query_target_reference(ctx, source_query_range(ctx, call->callee, NULL),
-            method->declaration, XR_XIR_SOURCE_CALL) &&
-        emit_group(ctx, op, arguments, function->parameter_count, value);
+    const XrXirTypeNode *type = xr_xir_type_node(&ctx->types,receiver.type);
+    SourceDirectRequest direct = {method->index,
+        {type->nominal.arguments,type->nominal.argument_count},&receiver};
+    SourceDirectArguments prepared = {0};
+    if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
+    XrXirInstruction op = {XR_XIR_CALL,prepared.result,{0},{0},method->index,{0}};
+    return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&op) &&
+        source_query_target_reference(ctx,source_query_range(ctx,call->callee,NULL),
+            method->declaration,XR_XIR_SOURCE_CALL) &&
+        emit_group(ctx,op,prepared.values,prepared.count,value);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
     XrXirType expected, SourceValue *value) {

@@ -1911,6 +1911,9 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         return_type = xr_parse_type_annotation(parser);
     }
 
+    /* Only method-local parameters may be subjects; bound types retain the full lexical scope. */
+    xr_parse_where_clause(parser, type_params, type_param_count);
+
     // Interface method signature ends with semicolon (optional)
     xr_parser_match(parser, TK_SEMICOLON);
 

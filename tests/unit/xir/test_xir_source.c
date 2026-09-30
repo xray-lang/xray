@@ -19,6 +19,8 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
+#include "xir_source_inference_execution.h"
+#include "xir_source_inference_selection.h"
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
 #include "xir_source_cases.h"
 int main(int argc, char **argv) {
@@ -56,6 +58,7 @@ int main(int argc, char **argv) {
     CHECK(status == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
+    SourceInferenceEntries inference_entries = source_inference_select(module);
     uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX, numeric_pause = UINT32_MAX, bound_result = UINT32_MAX, witness_result = UINT32_MAX, enum_witness_result = UINT32_MAX, enum_generic_witness_result = UINT32_MAX, generic_method_number = UINT32_MAX, generic_method_text = UINT32_MAX, generic_method_array = UINT32_MAX;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) result = i;
@@ -84,7 +87,11 @@ int main(int argc, char **argv) {
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result, enum_witness_result, enum_generic_witness_result, generic_method_number, generic_method_text, generic_method_array}, results);
     runtime_source_failures(program, (RuntimeSourceEntries){entry, resume_text, numeric_pause, enum_witness_result, enum_generic_witness_result, generic_method_number, generic_method_text, generic_method_array});
+    XrXirValue inference_retained[2][6] = {{{0}}};
+    source_inference_pair(program,inference_entries,inference_retained);
+    source_inference_runtime_failures(program,inference_entries);
     xr_xir_program_drop(program);
+    source_inference_retained_drop(inference_retained);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Real source modules, independent state and output passed in Lowered VM");
     if (runtime_live) {

@@ -1,0 +1,13 @@
+import { InferenceMapper } from "./inference_contract"
+export fn inferMap<A,T:InferenceMapper<A>,K,U:Sendable>(mapper:T,seed:A,unused:K,value:U)->U {
+    return mapper.map(seed,value)
+}
+export fn explicitMap<A,T:InferenceMapper<A>,K,U:Sendable>(mapper:T,seed:A,unused:K,value:U)->U {
+    return mapper.map<U>(seed,value)
+}
+export fn inferCopy<A,T:InferenceMapper<A>,K,U:Sendable>(mapper:T,unused:K,value:Array<U>)->Array<U> {
+    return mapper.copy(value)
+}
+export fn explicitCopy<A,T:InferenceMapper<A>,K,U:Sendable>(mapper:T,unused:K,value:Array<U>)->Array<U> {
+    return mapper.copy<U>(value)
+}

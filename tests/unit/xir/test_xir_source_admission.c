@@ -219,7 +219,7 @@ static const char *const rejected[] = {
     "struct C{static f<T,T>(value:T)->T{return value}}\n",
     "struct C<T>{static f<U>(value:T)->U{return value}}\n",
     "struct C<T>{static f<U>(value:U=1)->U{return value}}\n",
-    "struct C<T>{static f<U>(value:U)->U{return value}}\nC<i64>.f(1)\n",
+    "struct C<T>{static f<U,V>(value:U)->U{return value}}\nC<i64>.f(1)\n",
     "struct C<T>{static f<U>(value:U)->U{return value}}\nC.f<i64,string>(\"bad\")\n",
     "struct C<T>{value:T\nf<U>(value:U)->U{return value}}\nconst c=C<i64>{value:1}\nconst f=c.f\n",
     "fn require<T:Sendable>(value:T)->T{return value}\nstruct C<T>{static f<U>(value:U)->U{return require<U>(value)}}\n",
@@ -506,6 +506,7 @@ static void static_import_authority(const XrXirSourceRequest *request, const cha
 }
 static void constructor_admission(const XrXirSourceRequest *request, const char *root) {
     const char *const sources[] = {
+        "struct C<T>{static f<U>(value:U)->U{return value}}\nC<i64>.f(1)\n",
         "fn require<T:Sendable>(value:T)->T{return value}\nstruct C<T:Sendable>{static f<U:Sendable>(outer:T,value:U)->U{return require<U>(value)}}\nprint(C<i64>.f<string>(7,\"yes\"))\n",
 
         "struct C { static value<T>(x:T)->T { return x } }\nprint(C.value<i64>(7))\nconst f=C.value<string>\nprint(f(\"yes\"))\n",

@@ -1113,11 +1113,21 @@ void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_co
         /* `where` is spelling, not a second mechanism: the clause appends to the
          * same constraint list `<T: A>` fills, so one enforcement path (E0358)
          * covers both and they compose on the same parameter. */
+        if (target->constraint_count < 0 || added_count > INT_MAX - target->constraint_count) {
+            xr_parser_error(parser, "where constraint count exceeds parser limits");
+            return;
+        }
         int merged_count = target->constraint_count + added_count;
+        if ((size_t)merged_count > SIZE_MAX / sizeof(XrTypeRef *)) {
+            xr_parser_error(parser, "where constraint storage exceeds parser limits");
+            return;
+        }
         XrTypeRef **merged = (XrTypeRef **) ast_alloc_array(
             parser->compiler_session, sizeof(XrTypeRef *), (size_t) merged_count);
-        if (!merged)
-            continue;
+        if (!merged) {
+            xr_parser_error(parser, "where constraint allocation failed");
+            return;
+        }
         for (int i = 0; i < target->constraint_count; i++)
             merged[i] = target->constraints[i];
         for (int i = 0; i < added_count; i++)
