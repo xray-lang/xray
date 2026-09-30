@@ -131,7 +131,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 17 && XR_XIR_CHECKED_CONTRACT == 45 && XR_XIR_OP_COUNT == 110, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 18 && XR_XIR_CHECKED_CONTRACT == 46 && XR_XIR_OP_COUNT == 110, "packet revision");
     _Static_assert(XR_XIR_PANIC_CATCH == 97 && XR_XIR_PANIC_CODE == 98 && XR_XIR_PANIC_MESSAGE == 99 &&
         XR_XIR_PANIC_INFO == 15, "panic wire identities");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
@@ -164,8 +164,8 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0x2b, 0x1a, 0xcc, 0x27, 0x57, 0xdd, 0x72, 0xcb, 0xa1, 0x3e, 0xc1, 0x09, 0x64, 0x58, 0x3f, 0x05,
-        0x70, 0xa5, 0xb4, 0x1c, 0x58, 0x62, 0xfa, 0x40, 0x00, 0xaa, 0xfe, 0xf9, 0x0f, 0x8f, 0xb1, 0x5e
+        0xe3, 0xb4, 0x44, 0x78, 0xcb, 0x14, 0xf1, 0x56, 0x3c, 0xe6, 0x4b, 0xca, 0x28, 0xac, 0x06, 0xdc,
+        0x63, 0xf8, 0x7b, 0x05, 0xa9, 0xca, 0xbc, 0xe8, 0xd0, 0x9d, 0x0c, 0x86, 0xd0, 0xd2, 0x33, 0xb2
     };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[213]; memcpy(original, packet.bytes, sizeof(original));
@@ -969,7 +969,11 @@ static void match_fault_shape(void) {
 #include "xir_interface_checked_cases.h"
 #include "xir_constraint_packet_cases.h"
 #include "xir_implementation_packet_cases.h"
+#include "xir_generic_method_packet_cases.h"
+#include "xir_generic_method_boundary_cases.h"
 int main(void) {
+    generic_method_packet_cases();
+    generic_method_boundary_cases();
     implementation_packet_cases();
     constraint_packet_cases();
     interface_checked_cases();

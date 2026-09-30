@@ -43,6 +43,43 @@ static bool source_reify_application(SourceContext *ctx, AstNode *site,
     *output = (XrXirInterfaceApplication){input->declaration,arguments,input->argument_count};
     return true;
 }
+static bool source_requirement_instantiation(SourceContext *ctx, AstNode *node,
+    uint32_t member, XrXirInterfaceApplication application, SourceSubstitution *substitution,
+    XrXirType *signature) {
+    CallExprNode *call = &node->as.call_expr;
+    const XrXirInterfaceMethod *method = &ctx->interfaces.declarations[application.declaration].methods[member];
+    uint32_t own = method->own_parameter_count, parent = application.argument_count;
+    if (call->type_arg_count < 0 || (uint32_t)call->type_arg_count != own || (own && !call->type_args))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method requires its exact explicit type arguments");
+    if (parent > 65536 || own > 65536 - parent)
+        return source_fail(ctx,node,XR_XIR_BUDGET,"interface method type argument count exhausted");
+    uint32_t count = parent + own;
+    XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
+    if (count && !types) return false;
+    for (uint32_t p = 0; p < parent; ++p) {
+        if (!source_work(ctx,node)) return false;
+        types[p] = application.arguments[p];
+    }
+    for (uint32_t p = 0; p < own; ++p)
+        if (!source_work(ctx,node) || !source_type(ctx,call->type_args[p],&types[parent+p])) return false;
+    SourceSubstitution prefix = {types,parent};
+    if (!source_instantiation_prove(ctx,node,
+        (XrXirDeclarationContext){XR_XIR_CONTEXT_INTERFACE,application.declaration,0},prefix)) return false;
+    XrXirDeclarations declarations;
+    XrXirModule module = source_module_view(ctx,&declarations);
+    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
+    for (uint32_t p = 0; p < own; ++p) {
+        if (!source_work(ctx,node)) return false;
+        XrXirConstraintUse use = {&module,
+            {XR_XIR_CONTEXT_INTERFACE_METHOD,application.declaration,member},parent+p,types,count};
+        XrXirStatus status = xr_xir_constraints_prove(&context,&use,&ctx->budget);
+        if (status == XR_XIR_OK) status = xr_xir_type_access(&module,ctx->function,types[parent+p],&ctx->budget);
+        if (status != XR_XIR_OK)
+            return source_fail(ctx,node,status,"method type argument does not prove the declared constraint");
+    }
+    *substitution = (SourceSubstitution){types,count};
+    return source_substitute(ctx,substitution,method->signature,0,signature);
+}
 static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceValue receiver, SourceValue *value) {
     uint32_t parameter = (uint32_t)receiver.type - XR_XIR_TYPE_PARAMETER_BASE;
@@ -50,8 +87,8 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     if (parameter >= generic->parameter_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"receiver has no declaration parameter context");
     CallExprNode *call = &node->as.call_expr;
-    if (call->type_arg_count || call->arg_count < 0)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface requirement has no method type arguments");
+    if (call->arg_count < 0 || (call->arg_count && !call->arguments))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method arguments are malformed");
     const char *name = call->callee->as.member_access.name;
     XrXirTypes input = ctx->types;
     const XrXirConstraint *constraint = &generic->constraints[parameter];
@@ -59,8 +96,9 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"receiver has no declared interface requirements");
     XrXirInterfaceClosure *closure = NULL;
     uint64_t closure_scratch = ctx->budget.scratch_bytes;
-    XrXirStatus status = xr_xir_interface_closure_build(&ctx->interfaces,&input,
-        constraint->interfaces,constraint->interface_count,&ctx->budget,&closure);
+    XrXirInterfaceClosureRoots roots = {&ctx->interfaces,&input,
+        constraint->interfaces,constraint->interface_count,generic->parameter_count};
+    XrXirStatus status = xr_xir_interface_closure_build(&roots,&ctx->budget,&closure);
     if (status != XR_XIR_OK) return source_fail(ctx,node,status,"interface requirements are invalid");
     closure_scratch -= ctx->budget.scratch_bytes;
     bool ok = false;
@@ -75,8 +113,10 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     const XrXirTypes *pool = xr_xir_interface_closure_types(closure);
     XrXirType signature;
     XrXirInterfaceApplication application;
-    if (!source_reify_type(ctx,node,pool,selected->signature,&signature) ||
-        !source_reify_application(ctx,node,pool,xr_xir_interface_closure_application(closure,selected->application),&application)) goto done;
+    SourceSubstitution substitution;
+    if (!source_reify_application(ctx,node,pool,
+        xr_xir_interface_closure_application(closure,selected->application),&application) ||
+        !source_requirement_instantiation(ctx,node,selected->member,application,&substitution,&signature)) goto done;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);
     if ((uint32_t)call->arg_count != callable.parameter_count) {
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method requires its exact explicit arguments"); goto done;
@@ -95,7 +135,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     }
     XrXirInstruction op = {XR_XIR_CALL_REQUIREMENT,callable.result,{0},
         {selected->origin_interface,selected->member},0,{0}};
-    ok = source_type_arguments(ctx,node,application.arguments,application.argument_count,&op) &&
+    ok = source_type_arguments(ctx,node,substitution.types,substitution.count,&op) &&
         source_query_target_reference(ctx,source_query_range(ctx,call->callee,NULL),
             ctx->interface_member_declarations[selected->origin_interface][selected->member],XR_XIR_SOURCE_CALL) &&
         emit_group(ctx,op,arguments,callable.parameter_count + 1,value);

@@ -776,6 +776,8 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_witness_inheritance_cases.h"
 #include "xir_source_enum_witness_cases.h"
 #include "xir_witness_provenance_cases.h"
+#include "xir_source_generic_requirement_cases.h"
+#include "xir_generic_witness_provenance_cases.h"
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -787,6 +789,9 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
+    source_generic_requirement_positive(&request);
+    source_generic_requirement_rejections(&request);
+    generic_witness_provenance_cases(&request);
     source_witness_cases(&request);
     source_witness_inheritance_cases(&request);
     source_enum_witness_cases(&request);

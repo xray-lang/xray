@@ -329,13 +329,17 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         checked_interface_parents(c, &d);
         uint32_t count_methods = checked_u32(c, d.method_count);
-        XrXirInterfaceMethod *methods = checked_array(c, d.methods, count_methods, sizeof(*methods), 12);
+        XrXirInterfaceMethod *methods = checked_array(c, d.methods, count_methods, sizeof(*methods), 16);
         d.methods = methods; d.method_count = methods ? count_methods : 0;
         for (uint32_t j = 0; j < d.method_count && c->status == XR_XIR_OK; ++j) {
             XrXirInterfaceMethod method = methods[j];
             method.name = checked_nominal_name(c, method.name);
             method.signature = (XrXirType) checked_u32(c, (uint32_t) method.signature);
             method.receiver = checked_u32(c, method.receiver);
+            uint32_t own = checked_count(c,method.own_parameter_count,&c->remaining.parameters);
+            XrXirConstraint *own_constraints = checked_constraints(c,method.constraints,own);
+            method.constraints = own_constraints;
+            method.own_parameter_count = own_constraints ? own : 0;
             if (c->reading) methods[j] = method;
         }
         if (c->reading) declarations[i] = d;

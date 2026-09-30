@@ -39,7 +39,7 @@ static void implementation_semantic_fixture(ImplementationSemanticFixture *f) {
     f->parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     f->meter = member_case_type(1); f->box_parameter = member_case_type(2); f->box_meter = member_case_type(3);
     f->nodes[0].kind = XR_XIR_TYPE_CALLABLE; f->nodes[0].result = XR_XIR_I64;
-    f->method = (XrXirInterfaceMethod){{"measure",7},member_case_type(0),0};
+    f->method = (XrXirInterfaceMethod){{"measure",7},member_case_type(0),0,0,NULL};
     f->interface = (XrXirInterfaceDeclaration){{"m",1},{"Measure",7},1,NULL,0,NULL,0,&f->method,1};
     f->interfaces = (XrXirInterfaceTable){&f->interface,1};
     f->application = (XrXirInterfaceApplication){0,NULL,0};
@@ -103,7 +103,7 @@ static void implementation_semantic_bindings(void) {
 }
 static void implementation_semantic_concrete(void) {
     ImplementationSemanticFixture f; implementation_semantic_fixture(&f);
-    XrXirProofContext context = {&f.module,{XR_XIR_CONTEXT_CLOSED,0}};
+    XrXirProofContext context = {&f.module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_interface_prove(&context,&f.module,f.box_meter,f.application,&budget)==XR_XIR_OK);
     XrXirWitnessRequest request = {&f.module,f.box_meter,f.application,0}; XrXirWitness witness = {0};
@@ -130,7 +130,7 @@ static void implementation_semantic_cross_pool(void) {
     XrXirNominalTable nominal_table = {nominals,2,NULL};
     XrXirTypes types = {nodes,5,&nominal_table,NULL};
     XrXirModule actual = {0}; actual.types = &types;
-    XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0}};
+    XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
     XrXirWitnessRequest request = {&source.module,box,source.application,0};
     XrXirWitness witness = {0}; XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_witness_resolve(&context,&request,&budget,&witness)==XR_XIR_OK);

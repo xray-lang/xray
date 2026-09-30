@@ -24,6 +24,9 @@ typedef struct XrXirInterfaceMethod {
     XrXirType signature;
     /* Zero denotes the ordinary read receiver. */
     uint32_t receiver;
+    /* Only method-owned constraints; expressions use the parent-plus-own scope. */
+    uint32_t own_parameter_count;
+    const XrXirConstraint *constraints;
 } XrXirInterfaceMethod;
 
 typedef struct XrXirInterfaceDeclaration {

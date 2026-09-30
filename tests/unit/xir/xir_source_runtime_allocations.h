@@ -12,6 +12,12 @@
 #ifndef XIR_SOURCE_RUNTIME_ALLOCATIONS_H
 #define XIR_SOURCE_RUNTIME_ALLOCATIONS_H
 #include "xir_runtime_allocations.h"
+#include "xir/xxir_array.h"
+
+typedef struct RuntimeSourceEntries {
+    uint32_t entry, resume_text, numeric_pause, enum_witness, enum_generic_witness;
+    uint32_t generic_method_number, generic_method_text, generic_method_array;
+} RuntimeSourceEntries;
 
 static bool runtime_sink(void *context, const XrXirOutputGroup *group) {
     (void) context;
@@ -27,15 +33,14 @@ static XrXirCallStatus runtime_drive(XrXirInstance *instance) {
     }
     return result.outcome.status;
 }
-static void runtime_source_attempt(XrXirProgram *program, uint32_t entry, uint32_t resume_text, uint32_t numeric_pause,
-    uint32_t enum_witness, uint32_t enum_generic_witness) {
+static void runtime_source_attempt(XrXirProgram *program, RuntimeSourceEntries entries) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     config.output = (XrXirOutputProvider) {runtime_sink, NULL};
     XrXirInstance *instance = NULL; XrXirValue result = {0}, argument = {XR_XIR_BOOL, 0, 1};
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
-    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entry, NULL, 0);
+    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entries.entry, NULL, 0);
     if (status == XR_XIR_CALL_READY) status = runtime_drive(instance);
-    uint32_t enum_entries[] = {enum_witness,enum_generic_witness};
+    uint32_t enum_entries[] = {entries.enum_witness,entries.enum_generic_witness};
     for (uint32_t f = 0; f < 2 && status == XR_XIR_CALL_RETURNED; ++f) {
         status = xr_xir_instance_start(instance,enum_entries[f],NULL,0);
         if (status == XR_XIR_CALL_READY) status = runtime_drive(instance);
@@ -46,9 +51,28 @@ static void runtime_source_attempt(XrXirProgram *program, uint32_t entry, uint32
             xr_xir_value_drop(&value);
         }
     }
+    XrXirValue generic[3] = {{0}};
+    uint32_t generic_entries[] = {entries.generic_method_number,entries.generic_method_text,entries.generic_method_array};
+    for (uint32_t f = 0; f < 3 && status == XR_XIR_CALL_RETURNED; ++f) {
+        status = xr_xir_instance_start(instance,generic_entries[f],NULL,0);
+        if (status == XR_XIR_CALL_READY) status = runtime_drive(instance);
+        if (status == XR_XIR_CALL_RETURNED) {
+            CHECK(xr_xir_instance_take_result(instance,&generic[f]) == XR_XIR_CALL_RETURNED);
+            if (!f) CHECK(generic[f].type == XR_XIR_I64 && generic[f].payload == 41);
+            else if (f == 1) {
+                const char *bytes = NULL; size_t length = 0;
+                CHECK(generic[f].type == XR_XIR_STRING && xr_xir_string_view(&generic[f],&bytes,&length));
+                CHECK(length == 6 && !memcmp(bytes,"mapped",6));
+            } else {
+                XrXirValueAdmission admission = {xr_xir_value_arena(&generic[f]),NULL,NULL,NULL,1000000,65536};
+                int64_t length = 0;
+                CHECK(xr_xir_array_len(&generic[f],&admission,&length) == XR_XIR_VALUE_OK && length == 1);
+            }
+        }
+    }
     for (uint32_t i = 0; i < 2 && status == XR_XIR_CALL_RETURNED; ++i) {
         argument.payload = i;
-        status = xr_xir_instance_start(instance, numeric_pause, &argument, 1);
+        status = xr_xir_instance_start(instance, entries.numeric_pause, &argument, 1);
         if (status == XR_XIR_CALL_READY) status = runtime_drive(instance);
         if (status == XR_XIR_CALL_RETURNED) {
             XrXirValue numeric = {0};
@@ -58,24 +82,24 @@ static void runtime_source_attempt(XrXirProgram *program, uint32_t entry, uint32
         }
     }
     argument.payload = 1;
-    if (status == XR_XIR_CALL_RETURNED) status = xr_xir_instance_start(instance, resume_text, &argument, 1);
+    if (status == XR_XIR_CALL_RETURNED) status = xr_xir_instance_start(instance, entries.resume_text, &argument, 1);
     if (status == XR_XIR_CALL_READY) status = runtime_drive(instance);
     if (status == XR_XIR_CALL_RETURNED)
         CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
     else CHECK(runtime_fail_at != SIZE_MAX && status == XR_XIR_CALL_OOM);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    for (uint32_t f = 0; f < 3; ++f) xr_xir_value_drop(&generic[f]);
     if (status == XR_XIR_CALL_RETURNED) {
         const char *bytes = NULL; size_t length = 0;
         CHECK(xr_xir_string_view(&result, &bytes, &length) && length == 3 && !memcmp(bytes, "ry!", 3));
         xr_xir_value_drop(&result);
     }
 }
-static void runtime_source_failures(XrXirProgram *program, uint32_t entry, uint32_t resume_text, uint32_t numeric_pause,
-    uint32_t enum_witness, uint32_t enum_generic_witness) {
+static void runtime_source_failures(XrXirProgram *program, RuntimeSourceEntries entries) {
     size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        runtime_source_attempt(program, entry, resume_text, numeric_pause, enum_witness, enum_generic_witness);
+        runtime_source_attempt(program,entries);
         if (!attempt) sites = runtime_attempts;
         CHECK(runtime_live == baseline && runtime_bytes == bytes);
     }

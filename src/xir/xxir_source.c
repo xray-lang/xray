@@ -84,6 +84,7 @@ typedef struct SourceTypeScope {
     AstNode *node;
     XrGenericParam **parameters;
     uint32_t count, generic_owner;
+    uint32_t interface_member;
 } SourceTypeScope;
 typedef struct SourceContext {
     XrModuleGraph *graph;
@@ -505,7 +506,7 @@ static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected,
     if (expected == XR_XIR_ERROR) {
         XrXirDeclarations declarations;
         XrXirModule module = source_module_view(ctx,&declarations);
-        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
         XrXirStatus status = xr_xir_type_markers_prove(&context,value->type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
         if (status != XR_XIR_OK) return source_fail(ctx, node, status, "Error conversion requires an enum proof");
         return emit(ctx, (XrXirInstruction) {XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {value->id, 0}, {0}, 0, {0}}, value);
@@ -678,7 +679,7 @@ static bool source_instantiation_prove(SourceContext *ctx, AstNode *node,
     XrXirDeclarationContext callee, SourceSubstitution substitution) {
     XrXirDeclarations declarations;
     XrXirModule view = source_module_view(ctx,&declarations);
-    XrXirProofContext context = {&view,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+    XrXirProofContext context = {&view,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
     for (uint32_t i = 0; i < substitution.count; ++i) {
         if (!source_work(ctx, node)) return false;
         XrXirConstraintUse use = {&view,callee,i,substitution.types,substitution.count};
@@ -713,7 +714,7 @@ static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
     if (!source_argument_arity(ctx, node, target->index, (uint32_t)call->arg_count)) return false;
     SourceTypeArguments arguments = {call->type_args,(uint32_t) call->type_arg_count,{0}};
     *op = (XrXirInstruction) {XR_XIR_CALL,XR_XIR_UNIT,{0},{0},target->index, {0}};
-    if (!source_instantiation(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,target->index},&arguments) ||
+    if (!source_instantiation(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,target->index,0},&arguments) ||
         !source_substitute(ctx,&arguments.substitution,function->result,0,&op->type)) return false;
     *substitution = arguments.substitution; return true;
 }
@@ -1093,7 +1094,7 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
         arguments.count = (uint32_t) node->as.function_ref.type_arg_count;
     }
     XrXirInstruction op = {XR_XIR_FUNCTION_REF,XR_XIR_UNIT,{0},{0},symbol->index, {0}};
-    if (!source_instantiation(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,symbol->index},&arguments)) return false;
+    if (!source_instantiation(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,symbol->index,0},&arguments)) return false;
     uint32_t count = function->parameter_count;
     XrXirCallableParameter *parameters = count ? source_alloc(ctx,count,sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
@@ -1403,7 +1404,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         if (!expression(ctx, node->as.throw_stmt.expression, &value)) return false;
         XrXirDeclarations declarations;
         XrXirModule module = source_module_view(ctx,&declarations);
-        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
         XrXirStatus status = xr_xir_type_markers_prove(&context,value.type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
         if (status != XR_XIR_OK)
             return source_fail(ctx, node, status, "throw requires a proved enum error value");

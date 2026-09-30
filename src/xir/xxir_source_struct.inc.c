@@ -117,7 +117,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_parameter_count = count;
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_constraints = constraints;
     SourceTypeScope saved = ctx->type_scope;
-    ctx->type_scope = (SourceTypeScope){true,node,parameters,count,count ? symbol->declaration : 0};
+    ctx->type_scope = (SourceTypeScope){true,node,parameters,count,count ? symbol->declaration : 0,0};
     source_query_binding_type(ctx, symbol); ctx->type_scope = saved; return true;
 }
 static bool source_nominal_constraints(SourceContext *ctx) {
@@ -131,7 +131,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
         const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[d];
         uint32_t count = declaration->parameter_count;
         ctx->module = owner->module;
-        ctx->type_scope = (SourceTypeScope){true,owner->node,parameters,count,count ? owner->declaration : 0};
+        ctx->type_scope = (SourceTypeScope){true,owner->node,parameters,count,count ? owner->declaration : 0,0};
         XrXirConstraint *constraints = (XrXirConstraint *)declaration->constraints;
         for (uint32_t p = 0; p < count && ok; ++p)
             ok = source_parameter_constraints(ctx,owner->node,parameters[p],&constraints[p]);
@@ -153,7 +153,7 @@ static bool source_struct_fields(SourceContext *ctx) {
             if (symbol->kind != SOURCE_NOMINAL || symbol->node->type != AST_STRUCT_DECL) continue;
             ClassDeclNode *decl = &symbol->node->as.struct_decl;
             ctx->type_scope = (SourceTypeScope){true,symbol->node,decl->type_params,
-                (uint32_t)decl->type_param_count,decl->type_param_count ? symbol->declaration : 0};
+                (uint32_t)decl->type_param_count,decl->type_param_count ? symbol->declaration : 0,0};
             uint32_t count = (uint32_t) decl->field_count;
             XrXirNominalField *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
             XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;

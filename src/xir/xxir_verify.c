@@ -248,7 +248,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
 }
 
 static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, XrXirType type) {
-    XrXirProofContext proof = {context->module, {XR_XIR_CONTEXT_FUNCTION, function}};
+    XrXirProofContext proof = {context->module, {XR_XIR_CONTEXT_FUNCTION,function,0}};
     XrXirStatus status = xr_xir_type_use_verify(&proof, type, &context->remaining);
     /* Naming checks for substituted types are discharged by original-definition
      * verification and complete correspondence before this module can publish. */

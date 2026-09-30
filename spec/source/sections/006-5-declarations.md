@@ -835,7 +835,7 @@ xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 
 InterfaceDecl ::= 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // 方法签名
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // 方法签名
                  |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
 ```
 
@@ -892,6 +892,8 @@ fn describe(s: Shape) -> string {
 实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
 
 泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，其效应由公开合同给出，未承诺者按未知 callable 上界处理；实现须在定义处证明这些义务。
+
+接口要求可有自身类型参数，例如 `I<A>.map<U:C<A>>(value:U)->U`。接口外围与方法自身参数按真实owner及ordinal分别绑定，完整空间为 `[interface parent, method own]`；自身名字不遮蔽外围，条件可引用后续自身参数。自身where仅约束自身参数。调用的显式列表只填own，parent来自定义处约束应用；调用方必须证明全部条件。继承同名方法按own数量、完整签名和alpha对齐后的条件双向蕴含比较，重复与冗余祖先幂等，同时保留全部原要求身份。实现向量为 `[nominal parent, method own]`；其条件只能由名义前提与原要求方法前提蕴含，不能用实现自身条件自证，实现体仍按自身声明检查。Checked特化及独立来源复验保留完整nominal+own实参，即使own未出现在物理签名中也不能省略。
 
 Checked 拥有约束、接口应用、要求身份和显式实现映射。单态化只选择已证明的见证，转换为普通调用并复验后进入 Lowered；不得重新按具体类型的成员名猜选实现。普通实例在不可变 Program 封存前完成，无运行时泛型字典或未解见证 fallback。此规则不取消接口值及可覆写 class 方法的动态分派。
 
@@ -2077,7 +2079,7 @@ xray's interface implementation is **explicit** (unlike Go's structural implemen
 InterfaceDecl ::= 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // method signature
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // method signature
                  |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
 ```
 
@@ -2134,6 +2136,8 @@ Inheritance must be acyclic, including unused declarations. The same originating
 A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. No general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
 
 Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its public contract bounds effects, with undeclared effects using the unknown-callable upper bound. Implementations prove these obligations at definition time.
+
+An interface requirement may declare its own type parameters, such as `I<A>.map<U:C<A>>(value:U)->U`. Interface parents and method parameters bind to authentic owners and ordinals in `[interface parent, method own]` order. Own names cannot shadow parents, and conditions may refer to later own parameters. A method where clause constrains only its own parameters. Explicit call arguments fill only the own suffix; the prefix comes from definition-site constraint applications, and the caller proves every condition. Inherited same-named methods compare own arity, complete signatures and alpha-aligned conditions by mutual entailment; duplicate and redundant ancestors are idempotent while all original identities remain. An implementation uses `[nominal parent, method own]`, and its conditions must follow from nominal and original requirement-method premises without using its own conditions to prove itself. Its body still checks against its own declaration. Checked specialization and independent provenance retain the complete nominal-plus-own tuple, even for parameters absent from the physical signature.
 
 Checked owns constraints, interface applications, requirement identities and explicit implementation maps. Monomorphization selects only proved witnesses, converts them to ordinary calls and rechecks before Lowered; it cannot guess an implementation by looking up the concrete type's member name again. Ordinary instances complete before immutable Program sealing, without runtime generic dictionaries or unresolved-witness fallback. This rule does not remove dynamic dispatch for interface values or overridable class methods.
 

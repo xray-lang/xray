@@ -33,6 +33,23 @@ static XrXirStatus interface_same_name(XrXirLiteral a, XrXirLiteral b,
     *same = a.length == b.length && !memcmp(a.bytes, b.bytes, a.length);
     return XR_XIR_OK;
 }
+static XrXirStatus interface_method_shape(const XrXirInterfaceMethod *method,
+    uint32_t parent_count, const XrXirTypes *types, XrXirBudget *b) {
+    if (!!method->constraints != !!method->own_parameter_count) return XR_XIR_BAD_STRUCTURE;
+    if (parent_count > 65536 || method->own_parameter_count > 65536 - parent_count ||
+        method->own_parameter_count > b->parameters) return XR_XIR_BUDGET;
+    uint32_t count = parent_count + method->own_parameter_count;
+    uint64_t bytes = (uint64_t)method->own_parameter_count * sizeof(*method->constraints);
+    if (!interface_charge(b,bytes,method->own_parameter_count)) return XR_XIR_BUDGET;
+    b->parameters -= method->own_parameter_count;
+    XrXirStatus status = interface_name(method->name,b);
+    if (status != XR_XIR_OK) return status;
+    if (method->receiver || !xr_xir_callable_signature(types,method->signature)) return XR_XIR_BAD_TYPE;
+    status = xr_xir_type_expression_shape(types,method->signature,count,b);
+    for (uint32_t p = 0; status == XR_XIR_OK && p < method->own_parameter_count; ++p)
+        status = xr_xir_constraint_structure(types,method->constraints[p],count,b);
+    return status;
+}
 static XrXirStatus interface_declaration(const XrXirInterfaceDeclaration *d,
     const XrXirTypes *types, XrXirBudget *b) {
     if (d->exported > 1 || (!!d->constraints != !!d->parameter_count) ||
@@ -51,10 +68,7 @@ static XrXirStatus interface_declaration(const XrXirInterfaceDeclaration *d,
     }
     for (uint32_t m = 0; m < d->method_count; ++m) {
         const XrXirInterfaceMethod *method = &d->methods[m];
-        status = interface_name(method->name, b);
-        if (status != XR_XIR_OK) return status;
-        if (method->receiver || !xr_xir_callable_signature(types, method->signature)) return XR_XIR_BAD_TYPE;
-        status = xr_xir_type_expression_shape(types, method->signature, d->parameter_count, b);
+        status = interface_method_shape(method,d->parameter_count,types,b);
         if (status != XR_XIR_OK) return status;
         for (uint32_t earlier = 0; earlier < m; ++earlier) {
             bool same;
@@ -159,7 +173,11 @@ void xr_xir_interfaces_free(XrXirInterfaceTable *table) {
         xr_free((void *)d->module.bytes); xr_free((void *)d->name.bytes);
         xr_xir_constraint_array_free((XrXirConstraint *)d->constraints, d->parameter_count);
         xr_xir_interface_applications_free((XrXirInterfaceApplication *)d->parents, d->parent_count);
-        for (uint32_t m = 0; d->methods && m < d->method_count; ++m) xr_free((void *)d->methods[m].name.bytes);
+        for (uint32_t m = 0; d->methods && m < d->method_count; ++m) {
+            xr_free((void *)d->methods[m].name.bytes);
+            xr_xir_constraint_array_free((XrXirConstraint *)d->methods[m].constraints,
+                d->methods[m].own_parameter_count);
+        }
         xr_free((void *)d->methods);
     }
     xr_free((void *)table->declarations); xr_free(table);
@@ -188,6 +206,11 @@ static bool interface_copy_declaration(const XrXirInterfaceDeclaration *source, 
     for (uint32_t m = 0; m < d->method_count; ++m) {
         methods[m].signature = source->methods[m].signature; methods[m].receiver = source->methods[m].receiver;
         if (!interface_copy_name(source->methods[m].name, &methods[m].name)) return false;
+        XrXirConstraint *own = NULL;
+        if (xr_xir_constraint_array_copy_verified(source->methods[m].constraints,
+            source->methods[m].own_parameter_count,&own) != XR_XIR_OK) return false;
+        methods[m].constraints = own;
+        methods[m].own_parameter_count = source->methods[m].own_parameter_count;
     }
     return true;
 }

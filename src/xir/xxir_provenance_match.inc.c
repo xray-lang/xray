@@ -48,10 +48,18 @@ static XrXirStatus provenance_requirement_match(ProvenanceMatch *c, const XrXirO
     uint32_t count = generic ? generic->argument_count : 0;
     if (from->type_arguments[0] > count || from->type_arguments[1] > count - from->type_arguments[0])
         return XR_XIR_BAD_STRUCTURE;
-    XrXirInterfaceApplication root = {from->targets[0],from->type_arguments[1] ?
-        generic->arguments + from->type_arguments[0] : NULL,from->type_arguments[1]};
+    const XrXirInterfaceTable *interfaces = c->source->types ? c->source->types->interfaces : NULL;
+    if (!interfaces || from->targets[0] >= interfaces->count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInterfaceDeclaration *interface = &interfaces->declarations[from->targets[0]];
+    if (from->targets[1] >= interface->method_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInterfaceMethod *method = &interface->methods[from->targets[1]];
+    uint32_t parent = interface->parameter_count, own = method->own_parameter_count;
+    if (parent > 65536 || own > 65536 - parent || from->type_arguments[1] != parent+own)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirInterfaceApplication root = {from->targets[0],parent ?
+        generic->arguments + from->type_arguments[0] : NULL,parent};
     XrXirInterfaceClosureRequest substitution = {c->source->types,c->destination->types,
-        &root,1,origin->arguments,origin->argument_count};
+        &root,1,origin->arguments,origin->argument_count,0};
     XrXirInterfaceClosure *closure = NULL;
     uint64_t scratch_before = c->remaining->scratch_bytes;
     XrXirStatus status = xr_xir_interface_closure_substitute(&substitution,c->remaining,&closure);
@@ -67,17 +75,44 @@ static XrXirStatus provenance_requirement_match(ProvenanceMatch *c, const XrXirO
     if (status == XR_XIR_OK && !application) status = XR_XIR_BAD_STRUCTURE;
     if (status == XR_XIR_OK) {
         XrXirModule actual = *c->destination; actual.types = xr_xir_interface_closure_types(closure);
-        XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0}};
+        XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
         XrXirWitnessRequest request = {c->source,
             xr_xir_operand_type(function,function->operands[to->args[0]]),*application,from->targets[1]};
         XrXirWitness witness = {0};
         status = xr_xir_witness_resolve(&context,&request,c->remaining,&witness);
         const XrXirOrigin *target = &c->origins[to->immediate];
-        if (status == XR_XIR_OK && (target->function != witness.function ||
-            target->argument_count != witness.argument_count)) status = XR_XIR_BAD_STRUCTURE;
+        if (status == XR_XIR_OK && (witness.argument_count > 65536 || own > 65536-witness.argument_count ||
+            target->function != witness.function || target->argument_count != witness.argument_count+own))
+            status = XR_XIR_BAD_STRUCTURE;
         for (uint32_t a = 0; a < witness.argument_count && status == XR_XIR_OK; ++a)
             status = xr_xir_type_substitution_matches_between(actual.types,c->destination->types,
                 NULL,0,witness.arguments[a],target->arguments[a],c->remaining);
+        for (uint32_t a = 0; a < own && status == XR_XIR_OK; ++a)
+            status = xr_xir_type_substitution_matches_between(c->source->types,c->destination->types,
+                origin->arguments,origin->argument_count,generic->arguments[from->type_arguments[0]+parent+a],
+                target->arguments[witness.argument_count+a],c->remaining);
+        if (status == XR_XIR_OK && own) {
+            uint32_t total = parent+own;
+            uint64_t bytes = (uint64_t)total*sizeof(XrXirType);
+            if (bytes > SIZE_MAX || bytes > c->remaining->scratch_bytes || total > c->remaining->work)
+                status = XR_XIR_BUDGET;
+            else {
+                c->remaining->scratch_bytes -= bytes; c->remaining->work -= total;
+                XrXirType *arguments = xr_malloc((size_t)bytes);
+                if (!arguments) status = XR_XIR_OUT_OF_MEMORY;
+                else {
+                    if (parent) memcpy(arguments,application->arguments,parent*sizeof(*arguments));
+                    memcpy(arguments+parent,target->arguments+witness.argument_count,own*sizeof(*arguments));
+                    for (uint32_t a = 0; a < own && status == XR_XIR_OK; ++a) {
+                        XrXirConstraintUse use = {c->source,
+                            {XR_XIR_CONTEXT_INTERFACE_METHOD,root.declaration,from->targets[1]},parent+a,arguments,total};
+                        status = xr_xir_constraints_prove(&context,&use,c->remaining);
+                    }
+                    xr_free(arguments);
+                }
+                c->remaining->scratch_bytes += bytes;
+            }
+        }
     }
     xr_xir_interface_closure_free(closure);
     c->remaining->scratch_bytes += scratch_owned; return status;
@@ -127,9 +162,9 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
         if (origin->function >= c->source->function_count ||
             origin->argument_count != (c->source->generics ? c->source->generics[origin->function].parameter_count : 0))
             return XR_XIR_BAD_STRUCTURE;
-        XrXirProofContext environment = {c->destination, {XR_XIR_CONTEXT_CLOSED, 0}};
+        XrXirProofContext environment = {c->destination, {XR_XIR_CONTEXT_CLOSED,0,0}};
         for (uint32_t a = 0; a < origin->argument_count; ++a) {
-            XrXirConstraintUse use = {c->source, {XR_XIR_CONTEXT_FUNCTION, origin->function},
+            XrXirConstraintUse use = {c->source, {XR_XIR_CONTEXT_FUNCTION,origin->function,0},
                 a, origin->arguments, origin->argument_count};
             XrXirStatus status = xr_xir_type_constraints(c->destination,f,origin->arguments[a],
                 (XrXirConstraint){0},c->remaining);
@@ -266,9 +301,9 @@ static XrXirStatus provenance_nominal_instances(ProvenanceMatch *c, const XrXirN
         const XrXirNominalDeclaration *d = &source->declarations[node->nominal.declaration];
         if (node->nominal.argument_count != d->parameter_count || node->nominal.field_count != d->field_count)
             return XR_XIR_BAD_STRUCTURE;
-        XrXirProofContext environment = {c->destination,{XR_XIR_CONTEXT_CLOSED,0}};
+        XrXirProofContext environment = {c->destination,{XR_XIR_CONTEXT_CLOSED,0,0}};
         for (uint32_t a = 0; a < d->parameter_count; ++a) {
-            XrXirConstraintUse use = {c->source,{XR_XIR_CONTEXT_NOMINAL,node->nominal.declaration},a,
+            XrXirConstraintUse use = {c->source,{XR_XIR_CONTEXT_NOMINAL,node->nominal.declaration,0},a,
                 node->nominal.arguments,node->nominal.argument_count};
             XrXirStatus status = xr_xir_constraints_prove(&environment,&use,c->remaining);
             if (status != XR_XIR_OK) return status;

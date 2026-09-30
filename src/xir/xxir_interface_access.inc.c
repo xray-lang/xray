@@ -69,8 +69,12 @@ static XrXirStatus verify_interface_access(const XrXirModule *module, XrXirBudge
         }
         for (uint32_t m = 0; m < declaration->method_count; ++m) {
             if (!spend(&remaining->work, 1)) return XR_XIR_BUDGET;
+            const XrXirInterfaceMethod *method = &declaration->methods[m];
+            status = interface_constraint_access(module,owner,method->constraints,
+                method->own_parameter_count,remaining);
+            if (status != XR_XIR_OK) return status;
             status = xr_xir_type_access(module, scope->modules[owner].initializer,
-                declaration->methods[m].signature, remaining);
+                method->signature, remaining);
             if (status != XR_XIR_OK) return status;
         }
     }

@@ -1,0 +1,7 @@
+import { Mapper } from "./method_contract"
+export struct Adapter<X,Y> implements Mapper<X> {
+    seed:X
+    label:Y
+    map<V:Sendable>(seed:X,value:V)->V { return value }
+    copy<W:Sendable>(value:Array<W>)->Array<W> { return value }
+}

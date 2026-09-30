@@ -165,8 +165,8 @@ static bool source_manifest_requirement(SourceContext *ctx, SourceDeclarationTar
     }
     if (!source_intern_type(ctx,signature,&requirement->signature)) return false;
     SourceTypeScope saved = ctx->type_scope; uint32_t module = ctx->module;
-    source_interface_scope(ctx,owner);
-    bool ok = source_interface_method_query(ctx,owner,target.member,requirement->signature);
+    bool ok = source_interface_method_scope(ctx,owner,target.member) &&
+        source_interface_method_query(ctx,owner,target.member,requirement);
     ctx->type_scope = saved; ctx->module = module; return ok;
 }
 static bool source_manifests_bind(SourceContext *ctx) {

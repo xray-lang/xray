@@ -14,11 +14,19 @@
 #include "xxir_interface.h"
 
 typedef enum XrXirContextKind {
-    XR_XIR_CONTEXT_FUNCTION, XR_XIR_CONTEXT_NOMINAL, XR_XIR_CONTEXT_INTERFACE, XR_XIR_CONTEXT_CLOSED
+    XR_XIR_CONTEXT_FUNCTION, XR_XIR_CONTEXT_NOMINAL, XR_XIR_CONTEXT_INTERFACE, XR_XIR_CONTEXT_CLOSED,
+    XR_XIR_CONTEXT_INTERFACE_METHOD, XR_XIR_CONTEXT_CONFORMANCE_METHOD
 } XrXirContextKind;
+/* Old declaration kinds require member == 0. INTERFACE_METHOD selects an
+ * interface declaration and direct member. CONFORMANCE_METHOD selects an
+ * implementation record and binding, is valid only for ProofContext.owner,
+ * and requires previously admitted implementation shape/signature priors.
+ * Its facts are nominal constraints plus the original requirement own bounds;
+ * implementation function constraints are never imported as facts. */
 typedef struct XrXirDeclarationContext {
     XrXirContextKind kind;
     uint32_t declaration;
+    uint32_t member;
 } XrXirDeclarationContext;
 typedef struct XrXirProofContext {
     const XrXirModule *module;

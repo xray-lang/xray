@@ -22,7 +22,7 @@ static bool source_enum_fields(SourceContext *ctx) {
         EnumDeclNode *source = &owner->node->as.enum_decl;
         ctx->module = owner->module; ctx->function = owner->module;
         ctx->type_scope = (SourceTypeScope){true,owner->node,source->type_params,
-            (uint32_t)source->type_param_count,source->type_param_count ? owner->declaration : 0};
+            (uint32_t)source->type_param_count,source->type_param_count ? owner->declaration : 0,0};
         uint32_t count = 0;
         for (int v = 0; v < source->member_count; ++v) {
             AstNode *member = source->members[v];

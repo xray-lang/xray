@@ -32,7 +32,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) { ok = false; break; }
         ctx->module = owner->module;
         ctx->type_scope = (SourceTypeScope){true,owner->node,declaration.parameters,
-            (uint32_t)declaration.parameter_count,declaration.parameter_count ? owner->declaration : 0};
+            (uint32_t)declaration.parameter_count,declaration.parameter_count ? owner->declaration : 0,0};
         uint32_t first = next;
         for (int i = 0; i < declaration.interface_count && ok; ++i) {
             XrXirImplementation *record = &records[next++]; record->nominal_declaration = d;
@@ -61,14 +61,33 @@ static bool source_implementation_promises(SourceContext *ctx, uint32_t function
     }
     return true;
 }
+static bool source_implementation_signature(SourceContext *ctx, AstNode *node,
+    const XrXirImplementationBinding *binding, uint32_t nominal_count, XrXirType *signature) {
+    const XrXirInterfaceMethod *method =
+        &ctx->interfaces.declarations[binding->requirement.declaration].methods[binding->member];
+    uint32_t parent = binding->requirement.argument_count, own = method->own_parameter_count;
+    if (parent > 65536 || own > 65536 - parent || nominal_count > 65536 - own)
+        return source_fail(ctx,node,XR_XIR_BUDGET,"implementation method parameter count exhausted");
+    uint32_t count = parent + own;
+    XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
+    if (count && !types) return false;
+    for (uint32_t p = 0; p < count; ++p) {
+        if (!source_work(ctx,node)) return false;
+        types[p] = p < parent ? binding->requirement.arguments[p] :
+            (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + nominal_count + p-parent);
+    }
+    SourceSubstitution substitution = {types,count};
+    return source_substitute(ctx,&substitution,method->signature,0,signature);
+}
 static bool source_implementation_bindings(SourceContext *ctx, XrXirImplementation *implementation) {
     SourceName *owner = ctx->nominal_sources[implementation->nominal_declaration];
     ctx->module = owner->module;
     XrXirTypes input = ctx->types;
+    uint32_t nominal_count = ctx->nominals.declarations[owner->index].parameter_count;
     XrXirInterfaceClosure *closure = NULL;
     uint64_t closure_scratch = ctx->budget.scratch_bytes;
-    XrXirStatus status = xr_xir_interface_closure_build(&ctx->interfaces,&input,
-        &implementation->interface,1,&ctx->budget,&closure);
+    XrXirInterfaceClosureRoots roots = {&ctx->interfaces,&input,&implementation->interface,1,nominal_count};
+    XrXirStatus status = xr_xir_interface_closure_build(&roots,&ctx->budget,&closure);
     if (status != XR_XIR_OK) return source_fail(ctx,owner->node,status,"implementation requirements are invalid");
     closure_scratch -= ctx->budget.scratch_bytes;
     bool ok = false;
@@ -84,15 +103,15 @@ static bool source_implementation_bindings(SourceContext *ctx, XrXirImplementati
         SourceName *method = find_name(ctx,ctx->nominal_methods[owner->index],name);
         if (!method) { source_fail(ctx,owner->node,XR_XIR_BAD_TYPE,"explicit implementation is missing a method"); goto done; }
         if (ctx->identities[method->index].method_kind != XR_XIR_READ_METHOD ||
-            ctx->generics[method->index].parameter_count != ctx->nominals.declarations[owner->index].parameter_count) {
-            source_fail(ctx,method->node,XR_XIR_BAD_TYPE,"interface implementation requires an ordinary read instance method"); goto done;
+            ctx->generics[method->index].parameter_count != nominal_count + requirement->own_parameter_count) {
+            source_fail(ctx,method->node,XR_XIR_BAD_TYPE,"interface implementation requires a read instance method with matching own parameters"); goto done;
         }
         XrXirType signature;
         if (!source_reify_application(ctx,owner->node,pool,
-            xr_xir_interface_closure_application(closure,requirement->application),&bindings[r].requirement) ||
-            !source_reify_type(ctx,owner->node,pool,requirement->signature,&signature)) goto done;
+            xr_xir_interface_closure_application(closure,requirement->application),&bindings[r].requirement)) goto done;
         bindings[r].member = requirement->member; bindings[r].function = method->index;
-        if (!source_implementation_promises(ctx,method->index,signature)) goto done;
+        if (!source_implementation_signature(ctx,owner->node,&bindings[r],nominal_count,&signature) ||
+            !source_implementation_promises(ctx,method->index,signature)) goto done;
     }
     implementation->bindings = bindings; implementation->binding_count = count; ok = true;
 done:

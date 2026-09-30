@@ -12,7 +12,7 @@ static XrXirArtifact *implementation_packet_fixture(void) {
     XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0};
     XrXirNominalTable nominals = {&nominal,1,NULL};
     XrXirConstraint constraint = {0};
-    XrXirInterfaceMethod method = {{"measure",7},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0};
+    XrXirInterfaceMethod method = {{"measure",7},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0,0,NULL};
     XrXirInterfaceDeclaration interface = {{"alpha",5},{"Measure",7},1,&constraint,1,NULL,0,&method,1};
     XrXirInterfaceTable interfaces = {&interface,1};
     XrXirTypes types = {nodes,2,&nominals,&interfaces};

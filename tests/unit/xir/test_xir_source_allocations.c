@@ -130,7 +130,7 @@ static void snapshot_interface_allocations(void) {
         XrXirType argument = XR_XIR_I64;
         XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE;
         node.result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
-        XrXirInterfaceMethod method = {{member,3},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0};
+        XrXirInterfaceMethod method = {{member,3},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0,0,NULL};
         XrXirInterfaceApplication parent = {0,&argument,1};
         XrXirInterfaceDeclaration declarations[] = {
             {{module,5},{name,7},1,&constraint,1,NULL,0,&method,1},
@@ -392,7 +392,9 @@ static void method_promise_allocations(XrCompilerSession *session) {
 }
 #include "xir_constraint_query_allocations.h"
 #include "xir_implementation_query_allocations.h"
+#include "xir_generic_method_query_allocations.h"
 int main(void) {
+    generic_method_query_allocations();
     implementation_query_allocations();
     constraint_query_allocations();
     snapshot_interface_allocations();

@@ -197,7 +197,7 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
 static XrXirStatus source_catch_type_proof(SourceContext *ctx, XrXirType type) {
     XrXirDeclarations declarations;
     XrXirModule view = source_module_view(ctx,&declarations);
-    XrXirProofContext context = {&view,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+    XrXirProofContext context = {&view,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
     XrXirStatus status = xr_xir_type_markers_prove(&context,type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
     return status == XR_XIR_OK ? xr_xir_type_access(&view,ctx->function,type,&ctx->budget) : status;
 }

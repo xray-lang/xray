@@ -5,6 +5,10 @@
  * Licensed under the MIT License
  *
  * xxir_interface_members.h - Exact inherited requirement consistency
+ *
+ * KEY CONCEPT:
+ *   One application expansion kernel retains original obligations and compares
+ *   method-local binders after lifting them beyond the authentic ambient scope.
  */
 #ifndef XXIR_INTERFACE_MEMBERS_H
 #define XXIR_INTERFACE_MEMBERS_H
@@ -16,6 +20,8 @@ typedef struct XrXirInterfaceRequirement {
     XrXirType signature;
     XrXirLiteral name;
     uint32_t receiver;
+    uint32_t own_parameter_count;
+    const XrXirConstraint *constraints;
 } XrXirInterfaceRequirement;
 
 /* Inputs require structural and acyclic validation in one parameter context.
@@ -23,6 +29,8 @@ typedef struct XrXirInterfaceRequirement {
  * they must be freed before those inputs. They own application arrays and newly
  * materialized descriptors. Scratch IDs belong exclusively to closure_types and
  * must not enter persistent XIR; consumers must reify into their own type arena.
+ * Method own parameters are alpha-lifted to ambient_parameter_count + j.
+ * Ambient count is the authentic caller count, never the largest used span.
  * Failure preserves the budget and leaves output NULL. */
 typedef struct XrXirInterfaceClosureRequest {
     const XrXirTypes *source_types, *actual_types;
@@ -30,14 +38,20 @@ typedef struct XrXirInterfaceClosureRequest {
     uint32_t root_count;
     const XrXirType *arguments;
     uint32_t argument_count;
+    uint32_t ambient_parameter_count;
 } XrXirInterfaceClosureRequest;
+typedef struct XrXirInterfaceClosureRoots {
+    const XrXirInterfaceTable *table;
+    const XrXirTypes *types;
+    const XrXirInterfaceApplication *roots;
+    uint32_t root_count, ambient_parameter_count;
+} XrXirInterfaceClosureRoots;
 /* Root expressions and the interface catalog belong to source_types. The
  * complete substitution belongs to actual_types, whose pool is borrowed. */
 XR_FUNC XrXirStatus xr_xir_interface_closure_substitute(
     const XrXirInterfaceClosureRequest *request, XrXirBudget *budget,
     XrXirInterfaceClosure **output);
-XR_FUNC XrXirStatus xr_xir_interface_closure_build(const XrXirInterfaceTable *table,
-    const XrXirTypes *types, const XrXirInterfaceApplication *roots, uint32_t root_count,
+XR_FUNC XrXirStatus xr_xir_interface_closure_build(const XrXirInterfaceClosureRoots *request,
     XrXirBudget *budget, XrXirInterfaceClosure **output);
 XR_FUNC const XrXirTypes *xr_xir_interface_closure_types(const XrXirInterfaceClosure *closure);
 XR_FUNC uint32_t xr_xir_interface_closure_application_count(const XrXirInterfaceClosure *closure);

@@ -14,6 +14,7 @@
 #include "xir/xxir_program.h"
 #include "xir/xxir_output.h"
 #include "xir/xxir_enum.h"
+#include "xir/xxir_array.h"
 #include "xir_bitwise_cases.h"
 typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
@@ -644,7 +645,7 @@ static void source_match_faults(XrXirInstance *instance, uint32_t function) {
         }
     }
 }
-typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result, enum_witness_result, enum_generic_witness_result; } SourceFunctions;
+typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result, enum_witness_result, enum_generic_witness_result, generic_method_number, generic_method_text, generic_method_array; } SourceFunctions;
 static XrXirValue source_error(XrXirInstance *instance, uint32_t function) {
     XrXirValue args[]={{XR_XIR_I64,0,32},{XR_XIR_I64,0,0},{XR_XIR_I64,0,0}}, error={0};
     CHECK(xr_xir_instance_start(instance,function,args,3)==XR_XIR_CALL_READY);
@@ -669,6 +670,24 @@ static void source_error_drop(XrXirValue *error) {
         xr_xir_value_drop(&field);
     }
     xr_xir_value_drop(error); xr_xir_domain_drop(domain);
+}
+static void source_generic_result_drop(XrXirValue *value, uint32_t kind) {
+    if (!kind) CHECK(value->type == XR_XIR_I64 && value->payload == 41);
+    else if (kind == 1) {
+        const char *bytes = NULL; size_t length = 0;
+        CHECK(value->type == XR_XIR_STRING && xr_xir_string_view(value,&bytes,&length));
+        CHECK(length == 6 && !memcmp(bytes,"mapped",6));
+    } else {
+        XrXirDomain *domain = NULL; XrXirValue item = {0}; XrXirFaultDetail fault = {0};
+        CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
+        XrXirValueAdmission admission = {xr_xir_value_arena(value),domain,NULL,NULL,1000000,65536};
+        int64_t length = 0;
+        CHECK(xr_xir_array_len(value,&admission,&length) == XR_XIR_VALUE_OK && length == 1);
+        CHECK(xr_xir_array_get(value,0,&admission,&item,&fault) == XR_XIR_VALUE_OK);
+        CHECK(item.type == XR_XIR_I64 && item.payload == 41);
+        xr_xir_value_drop(&item); xr_xir_domain_drop(domain);
+    }
+    xr_xir_value_drop(value);
 }
 static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions functions, XrXirValue *results) {
     SourceOutput outputs[2] = {{0, false}, {0, true}};
@@ -729,6 +748,13 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 41);
     }
+    XrXirValue generic_results[2][3] = {{{0}}};
+    uint32_t generic_entries[] = {functions.generic_method_number,functions.generic_method_text,functions.generic_method_array};
+    for (uint32_t f = 0; f < 3; ++f) for (uint32_t i = 0; i < 2; ++i) {
+        CHECK(xr_xir_instance_start(instances[i],generic_entries[f],NULL,0) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_take_result(instances[i],&generic_results[i][f]) == XR_XIR_CALL_RETURNED);
+    }
     XrXirValue bound[2] = {{0}, {0}}, bound_text[2] = {{0}, {0}};
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.bound_result, NULL, 0) == XR_XIR_CALL_READY);
@@ -746,6 +772,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         CHECK(xr_xir_instance_stop(instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start_function(instances[i], &bound[i], NULL, 0) == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
+        for (uint32_t f = 0; f < 3; ++f) source_generic_result_drop(&generic_results[i][f],f);
         source_error_drop(&errors[i]);
         XrXirValue copy = {0};
         CHECK(xr_xir_value_copy(&bound[i], &copy) == XR_XIR_VALUE_OK);

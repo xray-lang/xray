@@ -47,7 +47,7 @@ static void source_interface_scope(SourceContext *ctx, SourceName *owner) {
     InterfaceDeclNode *declaration = &owner->node->as.interface_decl;
     ctx->module = owner->module;
     ctx->type_scope = (SourceTypeScope){true,owner->node,declaration->type_params,
-        (uint32_t)declaration->type_param_count,declaration->type_param_count ? owner->declaration : 0};
+        (uint32_t)declaration->type_param_count,declaration->type_param_count ? owner->declaration : 0,0};
 }
 static bool source_interface_constraints(SourceContext *ctx) {
     SourceTypeScope saved = ctx->type_scope;
@@ -62,8 +62,40 @@ static bool source_interface_constraints(SourceContext *ctx) {
     }
     ctx->type_scope = saved; ctx->module = module; return ok;
 }
+static bool source_interface_method_scope(SourceContext *ctx, SourceName *owner, uint32_t member) {
+    source_interface_scope(ctx,owner);
+    InterfaceDeclNode *parent = &owner->node->as.interface_decl;
+    AstNode *node = parent->methods[member];
+    if (!node || node->type != AST_INTERFACE_METHOD)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"interface method declaration required");
+    InterfaceMethodNode *method = &node->as.interface_method;
+    uint32_t prefix = (uint32_t)parent->type_param_count;
+    if (method->type_param_count < 0 || (uint32_t)method->type_param_count > 65536 - prefix ||
+        (method->type_param_count && !method->type_params))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method parameter scope is malformed");
+    uint32_t own = (uint32_t)method->type_param_count, count = prefix + own;
+    XrGenericParam **parameters = count ? source_alloc(ctx,count,sizeof(*parameters)) : NULL;
+    if (count && !parameters) return false;
+    for (uint32_t p = 0; p < count; ++p) {
+        if (!source_work(ctx,node)) return false;
+        XrGenericParam *parameter = p < prefix ? parent->type_params[p] : method->type_params[p-prefix];
+        if (!parameter || !parameter->name || !*parameter->name)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method type parameter is malformed");
+        for (uint32_t earlier = 0; earlier < p; ++earlier) {
+            if (!source_work(ctx,node)) return false;
+            if (!strcmp(parameter->name,parameters[earlier]->name))
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method type parameter duplicates or shadows a parameter");
+        }
+        parameters[p] = parameter;
+    }
+    uint32_t identity = ctx->interface_member_declarations[owner->index][member];
+    ctx->type_scope = (SourceTypeScope){true,owner->node,parameters,count,
+        own ? identity : prefix ? owner->declaration : 0,member + 1};
+    return true;
+}
 static bool source_interface_method_query(SourceContext *ctx, SourceName *owner,
-    uint32_t member, XrXirType signature) {
+    uint32_t member, const XrXirInterfaceMethod *method) {
+    XrXirType signature = method->signature;
     const XrXirTypeNode *callable = xr_xir_callable_signature(&ctx->types, signature);
     if (!callable) return source_fail(ctx, owner->node, XR_XIR_BAD_TYPE, "interface method signature is missing");
     uint32_t count = callable->parameter_count;
@@ -77,10 +109,19 @@ static bool source_interface_method_query(SourceContext *ctx, SourceName *owner,
     XrXirSourceDeclaration *query = (XrXirSourceDeclaration *)&ctx->query.declarations[id - 1];
     query->type = source_query_type(ctx, callable->result);
     query->parameters = parameters; query->parameter_count = count;
-    query->generic_parent = ctx->type_scope.generic_owner;
-    query->generic_parent_count = ctx->type_scope.count;
-    query->generic_parameter_count = ctx->type_scope.count;
-    query->generic_constraints = ctx->interfaces.declarations[owner->index].constraints;
+    const XrXirInterfaceDeclaration *parent = &ctx->interfaces.declarations[owner->index];
+    uint32_t total = parent->parameter_count + method->own_parameter_count;
+    XrXirConstraint *constraints = total ? source_alloc(ctx,total,sizeof(*constraints)) : NULL;
+    if (total && !constraints) return false;
+    for (uint32_t p = 0; p < total; ++p) {
+        if (!source_work(ctx,owner->node)) return false;
+        constraints[p] = p < parent->parameter_count ? parent->constraints[p] :
+            method->constraints[p-parent->parameter_count];
+    }
+    query->generic_parent = parent->parameter_count ? owner->declaration : 0;
+    query->generic_parent_count = parent->parameter_count;
+    query->generic_parameter_count = total;
+    query->generic_constraints = constraints;
     return true;
 }
 static bool source_interface_method(SourceContext *ctx, SourceName *owner,
@@ -89,7 +130,7 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     if (!node || node->type != AST_INTERFACE_METHOD)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "interface method declaration required");
     InterfaceMethodNode *method = &node->as.interface_method;
-    if (method->receiver_mode != XR_PARAM_READ || method->type_param_count || method->attr_count ||
+    if (method->receiver_mode != XR_PARAM_READ || method->attr_count ||
         method->borrow_origin_count || method->borrow_origin_syntax || method->param_count < 0 ||
         method->param_count > 65536 || (method->param_count && !method->params))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method contract is not admitted");
@@ -99,6 +140,12 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_MEMBER, owner->declaration,
         source_query_range(ctx, node, method->name))) return false;
     ctx->interface_member_declarations[owner->index][member] = symbol->declaration;
+    if (!source_interface_method_scope(ctx,owner,member)) return false;
+    uint32_t own = (uint32_t)method->type_param_count;
+    XrXirConstraint *constraints = own ? source_alloc(ctx,own,sizeof(*constraints)) : NULL;
+    if (own && !constraints) return false;
+    for (uint32_t p = 0; p < own; ++p)
+        if (!source_parameter_constraints(ctx,node,method->type_params[p],&constraints[p])) return false;
     uint32_t count = (uint32_t)method->param_count;
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
@@ -121,8 +168,8 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     XrXirType result, signature;
     if (!source_type(ctx, method->return_type, &result) ||
         !source_signature(ctx, parameters, count, result, &signature)) return false;
-    *output = (XrXirInterfaceMethod){{method->name,(uint32_t)strlen(method->name)},signature,0};
-    return source_interface_method_query(ctx, owner, member, signature);
+    *output = (XrXirInterfaceMethod){{method->name,(uint32_t)strlen(method->name)},signature,0,own,constraints};
+    return source_interface_method_query(ctx, owner, member, output);
 }
 static bool source_interface_signature(SourceContext *ctx, SourceName *owner) {
     InterfaceDeclNode *declaration = &owner->node->as.interface_decl;

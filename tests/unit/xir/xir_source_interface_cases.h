@@ -15,7 +15,8 @@ static void source_interface_context_cases(XrXirSourceRequest *request) {
         "interface I<T> { values()->Array<T> }\nstruct Box<T> { values:Array<T> }\n",
         "interface I<U> {}\nstruct C<T> { value:T; "
             "static constrained<U>(value:U)->U where T:I<U> { return value } "
-            "static identity(value:T)->T { return value } }\n"
+            "static identity(value:T)->T { return value } }\n",
+        "interface I { get<T>(x:T)->T }\n"
     };
     for (uint32_t i = 0; i < sizeof(sources) / sizeof(*sources); ++i) {
         write_source(request->entry_path,sources[i]);
@@ -96,8 +97,7 @@ static void source_interface_facts(XrXirSourceRequest *request) {
         ("interface I<T> {}\nfn take<T:I<U>,U>(x:T,y:U)->U { return y }\n"
             "fn bad<T,U>(x:T,y:U)->U { return take<T,U>(x,y) }\n"),
         "interface I { get()->i64 }\nstruct S implements I { static get()->i64 { return 41 } }\n",
-        "interface I { value:i64 }\n",
-        "interface I { get<T>(x:T)->T }\n"
+        "interface I { value:i64 }\n"
     };
     for (uint32_t i = 0; i < sizeof(rejected) / sizeof(*rejected); ++i) {
         write_source(request->entry_path,rejected[i]);

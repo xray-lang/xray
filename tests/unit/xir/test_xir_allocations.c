@@ -113,6 +113,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_constraint_packet_allocations.h"
 #include "xir_implementation_allocations.h"
 #include "xir_implementation_packet_allocations.h"
+#include "xir_generic_method_allocations.h"
 static void function_allocation_failures(void) {
     for (unsigned cancel = 0; cancel < 2; ++cancel) {
         calls = 0; fail_at = SIZE_MAX;
@@ -491,6 +492,8 @@ static void nominal_pool_allocation_failures(void) {
 }
 
 int main(void) {
+    generic_method_clone_allocations();
+    generic_method_packet_allocations();
     implementation_copy_allocations();
     implementation_packet_allocations();
     constraint_packet_allocation_failures();

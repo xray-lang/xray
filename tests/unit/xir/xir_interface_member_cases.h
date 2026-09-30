@@ -38,8 +38,8 @@ static void member_fixture(MemberFixture *f) {
     f->nodes[6] = f->nodes[5]; f->nodes[6].parameters = f->parameter_modes; f->nodes[6].parameter_count = 1;
     f->nodes[7] = f->nodes[6]; f->nodes[7].parameters = f->parameter_modes + 1;
     f->types = (XrXirTypes){f->nodes,8,NULL,NULL};
-    f->methods[0] = (XrXirInterfaceMethod){{"get",3},member_case_type(1),0};
-    f->methods[1] = (XrXirInterfaceMethod){{"get",3},member_case_type(5),0};
+    f->methods[0] = (XrXirInterfaceMethod){{"get",3},member_case_type(1),0,0,NULL};
+    f->methods[1] = (XrXirInterfaceMethod){{"get",3},member_case_type(5),0,0,NULL};
     f->parents[0] = (XrXirInterfaceApplication){0,&f->array_parameter,1};
     f->parents[1] = (XrXirInterfaceApplication){0,&f->array_parameter,1};
     f->parents[2] = (XrXirInterfaceApplication){1,&f->parameter,1};
@@ -84,7 +84,7 @@ static void interface_member_semantics(void) {
     CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==XR_XIR_BAD_TYPE && !live);
     member_fixture(&f);
     /* A direct redeclaration must agree after composing both inheritance edges. */
-    XrXirInterfaceMethod direct = {{"get",3},member_case_type(2),0};
+    XrXirInterfaceMethod direct = {{"get",3},member_case_type(2),0,0,NULL};
     f.declarations[3].methods = &direct; f.declarations[3].method_count = 1;
     budget = xr_xir_default_budget();
     CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==XR_XIR_OK && !live);

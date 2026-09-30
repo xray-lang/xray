@@ -308,7 +308,7 @@ StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
 
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
@@ -653,7 +653,7 @@ StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
 
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?

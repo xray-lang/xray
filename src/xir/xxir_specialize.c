@@ -242,14 +242,34 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         uint32_t declaration = (uint32_t)op->immediate;
         if (op->op == XR_XIR_CALL_REQUIREMENT) {
             XrXirModule actual = {XR_XIR_CHECKED,c->functions,c->count,NULL,NULL,&c->types,NULL};
-            XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0}};
+            XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
+            const XrXirInterfaceDeclaration *interface = &c->source->types->interfaces->declarations[op->targets[0]];
+            const XrXirInterfaceMethod *method = &interface->methods[op->targets[1]];
+            uint32_t parent = interface->parameter_count, own = method->own_parameter_count;
+            if (parent > 65536 || own > 65536 - parent || count != parent + own) {
+                c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;
+            }
+            for (uint32_t a = 0; a < own; ++a) {
+                XrXirConstraintUse use = {c->source,
+                    {XR_XIR_CONTEXT_INTERFACE_METHOD,op->targets[0],op->targets[1]},parent+a,types,count};
+                c->diagnostic.status = xr_xir_constraints_prove(&context,&use,&c->remaining);
+                if (c->diagnostic.status != XR_XIR_OK) return false;
+            }
             XrXirWitnessRequest request = {c->source,
                 xr_xir_operand_type(function,function->operands[op->args[0]]),
-                {op->targets[0],types,count},op->targets[1]};
+                {op->targets[0],parent ? types : NULL,parent},op->targets[1]};
             XrXirWitness witness = {0};
             c->diagnostic.status = xr_xir_witness_resolve(&context,&request,&c->remaining,&witness);
             if (c->diagnostic.status != XR_XIR_OK) return false;
-            declaration = witness.function; types = (XrXirType *)witness.arguments; count = witness.argument_count;
+            if (witness.argument_count > 65536 || own > 65536 - witness.argument_count) {
+                c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;
+            }
+            uint32_t complete_count = witness.argument_count + own;
+            XrXirType *complete = spec_alloc(c,complete_count,sizeof(*complete));
+            if ((complete_count && !complete) || !spec_work(c,complete_count)) return false;
+            if (witness.argument_count) memcpy(complete,witness.arguments,witness.argument_count*sizeof(*complete));
+            if (own) memcpy(complete+witness.argument_count,types+parent,own*sizeof(*complete));
+            declaration = witness.function; types = complete; count = complete_count;
             op->op = XR_XIR_CALL; op->targets[0] = op->targets[1] = 0;
         }
         uint32_t target = spec_intern(c, declaration, types, count);

@@ -33,7 +33,7 @@ XrXirStatus xr_xir_type_constraints(const XrXirModule *module, uint32_t function
     if (!module || constraints.interface_count || constraints.interfaces ||
         constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
-    XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,function}};
+    XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
     return xr_xir_type_markers_prove(&context,type,constraints.markers,remaining);
 }
 XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
@@ -110,8 +110,8 @@ XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
     for (uint32_t a = 0; a < count; ++a) {
         XrXirStatus status = xr_xir_type_satisfies(module, caller, from->arguments[first + a], (XrXirConstraint){0}, remaining);
         if (status != XR_XIR_OK) return status;
-        XrXirProofContext context = {module, {XR_XIR_CONTEXT_FUNCTION, caller}};
-        XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_FUNCTION, (uint32_t)call->immediate}, a,
+        XrXirProofContext context = {module, {XR_XIR_CONTEXT_FUNCTION,caller,0}};
+        XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_FUNCTION,(uint32_t)call->immediate,0}, a,
             from->arguments + first, count};
         status = xr_xir_constraints_prove(&context, &use, remaining);
         if (status != XR_XIR_OK) return status;

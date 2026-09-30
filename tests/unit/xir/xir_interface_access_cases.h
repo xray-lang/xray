@@ -35,7 +35,7 @@ static void interface_access_cases(void) {
         nodes[2].kind = XR_XIR_TYPE_CALLABLE; nodes[2].result = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
         XrXirType argument = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
         XrXirConstraint constraint = {0};
-        XrXirInterfaceMethod method = {{"get",3},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 2),0};
+        XrXirInterfaceMethod method = {{"get",3},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 2),0,0,NULL};
         XrXirInterfaceApplication parent = {1,&argument,1};
         XrXirInterfaceDeclaration interfaces[] = {
             {{"alpha",5},{"Child",5},1,NULL,0,&parent,1,&method,1},

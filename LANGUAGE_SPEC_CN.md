@@ -3548,7 +3548,7 @@ xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 
 InterfaceDecl ::= 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // 方法签名
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // 方法签名
                  |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
 ```
 
@@ -3605,6 +3605,8 @@ fn describe(s: Shape) -> string {
 实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
 
 泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，其效应由公开合同给出，未承诺者按未知 callable 上界处理；实现须在定义处证明这些义务。
+
+接口要求可有自身类型参数，例如 `I<A>.map<U:C<A>>(value:U)->U`。接口外围与方法自身参数按真实owner及ordinal分别绑定，完整空间为 `[interface parent, method own]`；自身名字不遮蔽外围，条件可引用后续自身参数。自身where仅约束自身参数。调用的显式列表只填own，parent来自定义处约束应用；调用方必须证明全部条件。继承同名方法按own数量、完整签名和alpha对齐后的条件双向蕴含比较，重复与冗余祖先幂等，同时保留全部原要求身份。实现向量为 `[nominal parent, method own]`；其条件只能由名义前提与原要求方法前提蕴含，不能用实现自身条件自证，实现体仍按自身声明检查。Checked特化及独立来源复验保留完整nominal+own实参，即使own未出现在物理签名中也不能省略。
 
 Checked 拥有约束、接口应用、要求身份和显式实现映射。单态化只选择已证明的见证，转换为普通调用并复验后进入 Lowered；不得重新按具体类型的成员名猜选实现。普通实例在不可变 Program 封存前完成，无运行时泛型字典或未解见证 fallback。此规则不取消接口值及可覆写 class 方法的动态分派。
 
@@ -5067,7 +5069,7 @@ enum Wrap<T> where T: Comparable { ... }
 
 普通实例方法或静态方法的 `where` 可以约束方法自身及外层名义类型的类型参数；方法不必另有 `<...>`。其有效条件为外层声明条件、自身内联条件与方法 `where` 条件的合取，只作用于该方法，不改变类型本身的构造、保存或其他方法准入。方法体、默认值及嵌套闭包在此定义上下文检查；直接调用和方法取值都必须由调用方证明条件，不能等具体实例补足缺失的泛型证明。名称仍唯一，条件失败不触发另选重载，也不扩大可见性、receiver 权限或效应承诺。
 
-其他声明的 `where` 只约束该声明自身的类型参数。未知约束主体及类型参数遮蔽是编译错误。同一已准入标记条件重复出现等同单次条件，仍计入检查预算；未知标记不能因重复或特化而获准。当前新 XIR 普通名义值类型的 read/static 条件方法支持 Sendable/Error 标记与具名接口应用的合取，保留接口完整有序实参，并按方法外层及自身的整组参数环境证明。普通 read 接口要求、显式 struct/enum 实现及受约束泛型成员调用已接入静态见证；实现候选不能拥有额外方法类型参数，其有效条件必须由名义声明前提蕴含。已有普通方法泛型能力不代表接口泛型方法已接通。条件构造器、accessor、override、接口成员条件和其余见证声明族仍待分别实现，未接通者拒绝；不代表语言目标被删除。
+其他声明的 `where` 只约束该声明自身的类型参数。未知约束主体及类型参数遮蔽是编译错误。同一已准入标记条件重复出现等同单次条件，仍计入检查预算；未知标记不能因重复或特化而获准。当前新 XIR 普通名义值类型的 read/static 条件方法支持 Sendable/Error 标记与具名接口应用的合取，保留接口完整有序实参，并按方法外层及自身的整组参数环境证明。普通 read 接口要求、显式 struct/enum 实现及受约束泛型成员调用已接入静态见证；对于没有自身参数的接口要求，实现候选不能额外增加方法类型参数，条件必须由名义声明前提蕴含。对于有Q个自身参数的要求，实现必须有相同own数量并按ordinal重定基；条件由名义前提与原要求方法前提蕴含，实现体仍按自身声明检查。接口方法自身泛型的显式调用和内联约束正在接通，尚未取得实现资格；推断、自身where解析和方法取值仍OPEN。已有普通方法泛型能力不代替接口方法验证。条件构造器、accessor、override、接口成员条件和其余见证声明族仍待分别实现，未接通者拒绝；不代表语言目标被删除。
 
 #### 键等价关系
 
@@ -7721,7 +7723,7 @@ StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
 
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?

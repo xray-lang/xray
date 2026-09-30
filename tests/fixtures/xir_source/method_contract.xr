@@ -1,0 +1,4 @@
+export interface Mapper<A> {
+    map<U:Sendable>(seed:A,value:U)->U
+    copy<V:Sendable>(value:Array<V>)->Array<V>
+}

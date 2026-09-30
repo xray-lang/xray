@@ -361,7 +361,7 @@ static void constructed_metadata(void) {
     CHECK(!xr_xir_type_node(&types,(XrXirType)261));
     CHECK(!xr_xir_type_node(&types,(XrXirType)XR_XIR_CONSTRUCTED_TYPE_LIMIT));
     XrXirModule marker_module = {0}; marker_module.stage = XR_XIR_BUILT; marker_module.types = &types;
-    XrXirProofContext marker_context = {&marker_module,{XR_XIR_CONTEXT_CLOSED,0}};
+    XrXirProofContext marker_context = {&marker_module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     CHECK(xr_xir_type_markers_prove(&marker_context,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_OK);
     CHECK(xr_xir_type_markers_prove(&marker_context,(XrXirType)259,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_BAD_TYPE);
     budget.work = 0;
@@ -487,7 +487,7 @@ static XrXirStatus nominal_context_use(const XrXirTypes *types, XrXirType type,
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
     XrXirGeneric generics[] = {{0},{0},{constraints,count,NULL,0}};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,types,NULL};
-    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,2}};
+    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,2,0}};
     XrXirStatus status = xr_xir_types_structure_verify(types,budget);
     return status == XR_XIR_OK ? xr_xir_type_use_verify(&context,type,budget) : status;
 }

@@ -1,0 +1,7 @@
+import { Mapper } from "./method_contract"
+export fn mapValue<A,T:Mapper<A>,U:Sendable>(mapper:T,seed:A,value:U)->U {
+    return mapper.map<U>(seed,value)
+}
+export fn copyValue<A,T:Mapper<A>,U:Sendable>(mapper:T,value:Array<U>)->Array<U> {
+    return mapper.copy<U>(value)
+}

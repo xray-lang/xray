@@ -87,6 +87,6 @@ static bool source_method_instantiation(SourceContext *ctx, AstNode *node, uint3
     for (uint32_t p = 0; p < own; ++p)
         if (!source_work(ctx,node) || !source_type(ctx,arguments->refs[p],&types[prefix + p])) return false;
     SourceSubstitution substitution = {types,generic->parameter_count};
-    if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index},substitution)) return false;
+    if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) return false;
     arguments->substitution = substitution; return true;
 }

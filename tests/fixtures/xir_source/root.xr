@@ -916,3 +916,18 @@ export fn enumWitnessResult()->i64 { return readMeasure<Reading>(Reading.fromVal
 export fn enumGenericWitnessResult()->i64 {
     return readMeasure<ReadingBox<Meter>>(ReadingBox<Meter>.fromValue(Meter{value:41}))
 }
+
+import { mapValue, copyValue } from "./method_reader"
+import { Adapter } from "./method_value"
+export fn genericMethodNumber()->i64 {
+    const mapper=Adapter<i64,string>{seed:0,label:"adapter"}
+    return mapValue<i64,Adapter<i64,string>,i64>(mapper,0,41)
+}
+export fn genericMethodText()->string {
+    const mapper=Adapter<i64,string>{seed:0,label:"adapter"}
+    return mapValue<i64,Adapter<i64,string>,string>(mapper,0,"map"+"ped")
+}
+export fn genericMethodArray()->Array<i64> {
+    const mapper=Adapter<i64,string>{seed:0,label:"adapter"}
+    return copyValue<i64,Adapter<i64,string>,i64>(mapper,[41])
+}

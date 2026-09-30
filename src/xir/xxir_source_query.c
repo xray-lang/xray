@@ -148,8 +148,11 @@ static void query_interfaces(SourceQueryCopy *copy, XrXirTypes *types) {
         decls[i].parents = query_applications(copy, decls[i].parents, decls[i].parent_count);
         XrXirInterfaceMethod *methods = query_copy(copy, decls[i].methods, decls[i].method_count, sizeof(*methods));
         decls[i].methods = methods;
-        for (uint32_t m = 0; methods && m < decls[i].method_count && copy->status == XR_XIR_OK; ++m)
+        for (uint32_t m = 0; methods && m < decls[i].method_count && copy->status == XR_XIR_OK; ++m) {
             query_literal(copy, &methods[m].name);
+            methods[m].constraints = query_constraints(copy,methods[m].constraints,
+                methods[m].own_parameter_count);
+        }
     }
 }
 static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {

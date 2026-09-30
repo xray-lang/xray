@@ -36,9 +36,12 @@ static void counted_free(void *p) { if (p) { CHECK(live); --live; } xr_free(p); 
 #include "xir/xxir_implementation_verify.c"
 #include "xir_interface_member_cases.h"
 #include "xir_interface_access_cases.h"
+#include "xir_generic_method_access_cases.h"
 #include "xir_interface_closure_cases.h"
 #include "xir_constraint_proof_cases.h"
 #include "xir_implementation_semantic_cases.h"
+#include "xir_generic_method_proof_cases.h"
+#include "xir_generic_method_authority_cases.h"
 
 typedef struct Fixture {
     char name[8], method[4];
@@ -56,7 +59,7 @@ static void fixture(Fixture *f) {
     f->parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; f->concrete = XR_XIR_I64;
     f->signature.kind = XR_XIR_TYPE_CALLABLE; f->signature.result = f->parameter; f->signature.parameter_span = 1;
     f->types = (XrXirTypes){&f->signature, 1, NULL, NULL};
-    f->member = (XrXirInterfaceMethod){{f->method, 3}, (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, 0};
+    f->member = (XrXirInterfaceMethod){{f->method, 3}, (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, 0,0,NULL};
     f->parents[0] = (XrXirInterfaceApplication){0, &f->parameter, 1};
     f->parents[1] = (XrXirInterfaceApplication){0, &f->concrete, 1};
     f->declarations[0] = (XrXirInterfaceDeclaration){{"alpha",5},{f->name,7},1,&f->constraint,1,NULL,0,&f->member,1};
@@ -244,10 +247,11 @@ static void interface_parameters_remain_declaration_scoped(void) {
     }
 }
 int main(void) {
-    implementation_semantic_cases();
+    implementation_semantic_cases(); generic_method_proof_cases(); generic_method_authority_cases();
     interface_closure_cases();
     constraint_proof_cases();
     interface_access_cases();
+    generic_method_access_cases();
     interface_member_cases();
     ownership_and_oom(); rejection_and_budget(); inherited_contexts(); checked_owner_lifetime();
     interface_parameters_remain_declaration_scoped();

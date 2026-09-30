@@ -13,7 +13,7 @@ static XrXirArtifact *interface_allocation_fixture(void) {
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, argument = XR_XIR_I64;
     XrXirTypeNode signature = {0};
     signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = parameter; signature.parameter_span = 1;
-    XrXirInterfaceMethod method = {{"measure",7},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0};
+    XrXirInterfaceMethod method = {{"measure",7},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0,0,NULL};
     XrXirInterfaceApplication parents[] = {{0,&parameter,1},{0,&argument,1}};
     XrXirInterfaceDeclaration declarations[] = {
         {{"alpha",5},{"Measure",7},1,&constraint,1,NULL,0,&method,1},

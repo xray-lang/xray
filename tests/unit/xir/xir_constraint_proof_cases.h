@@ -47,8 +47,8 @@ static void constraint_proof_fixture(ConstraintProofFixture *f) {
     f->base.nodes[7].element = f->parameters[1]; f->base.nodes[7].parameter_span = 2;
     f->module.stage = XR_XIR_BUILT; f->module.functions = f->functions; f->module.function_count = 3;
     f->module.generics = f->generics; f->module.types = &f->base.types;
-    f->context = (XrXirProofContext){&f->module,{XR_XIR_CONTEXT_FUNCTION,1}};
-    f->use = (XrXirConstraintUse){&f->module,{XR_XIR_CONTEXT_FUNCTION,0},1,f->parameters,2};
+    f->context = (XrXirProofContext){&f->module,{XR_XIR_CONTEXT_FUNCTION,1,0}};
+    f->use = (XrXirConstraintUse){&f->module,{XR_XIR_CONTEXT_FUNCTION,0,0},1,f->parameters,2};
 }
 static XrXirStatus constraint_proof_status(ConstraintProofFixture *f) {
     XrXirBudget budget = xr_xir_default_budget();
@@ -79,17 +79,17 @@ static void constraint_proof_owners(void) {
     f.use.parameter = 0;
     CHECK(constraint_proof_status(&f)==XR_XIR_OK);
     f.context.owner.declaration = 2; CHECK(constraint_proof_status(&f)==XR_XIR_BAD_TYPE);
-    f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,0};
+    f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,0,0};
     CHECK(constraint_proof_status(&f)==XR_XIR_BAD_TYPE);
     XrXirType same[] = {f.parameters[0],f.parameters[0]}; f.use.arguments = same;
-    f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_INTERFACE,1};
+    f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_INTERFACE,1,0};
     CHECK(constraint_proof_status(&f)==XR_XIR_BAD_TYPE);
-    f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,1};
+    f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,1,0};
     CHECK(constraint_proof_status(&f)==XR_XIR_OK);
     f.nominal_constraints[0] = f.constraints[0][0];
-    f.use.declaration = (XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,0};
+    f.use.declaration = (XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,0,0};
     CHECK(constraint_proof_status(&f)==XR_XIR_OK);
-    f.use.declaration = (XrXirDeclarationContext){XR_XIR_CONTEXT_INTERFACE,1};
+    f.use.declaration = (XrXirDeclarationContext){XR_XIR_CONTEXT_INTERFACE,1,0};
     f.base.declarations[1].constraints = f.nominal_constraints;
     f.use.argument_count = 1; CHECK(constraint_proof_status(&f)==XR_XIR_OK);
 }
@@ -225,13 +225,13 @@ static void constraint_proof_malformed(void) {
     CHECK(constraint_proof_status(&f)!=XR_XIR_OK);
     constraint_proof_fixture(&f); f.use.declaration_module = NULL;
     CHECK(constraint_proof_status(&f)==XR_XIR_BAD_STRUCTURE);
-    constraint_proof_fixture(&f); f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0};
+    constraint_proof_fixture(&f); f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0,0};
     CHECK(constraint_proof_status(&f)==XR_XIR_BAD_TYPE);
     constraint_proof_fixture(&f);
     XrXirConstraint empty = {0}; XrXirGeneric generic = {&empty,1,NULL,0};
     XrXirFunction function = {0};
     XrXirModule actual = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL};
-    f.context = (XrXirProofContext){&actual,{XR_XIR_CONTEXT_FUNCTION,0}};
+    f.context = (XrXirProofContext){&actual,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirType actual_arguments[] = {XR_XIR_I64,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE};
     f.use.arguments = actual_arguments;
     CHECK(constraint_proof_status(&f)==XR_XIR_BAD_TYPE);
@@ -248,13 +248,13 @@ static void constraint_proof_shared_type_walk(void) {
     XrXirTypes types = {nodes,DEPTH,NULL,NULL}; XrXirConstraint empty = {0};
     XrXirGeneric generic = {&empty,1,NULL,0}; XrXirFunction function = {0};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL};
-    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0}};
+    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirBudget structure = xr_xir_default_budget();
     CHECK(xr_xir_types_structure_verify(&types,&structure)==XR_XIR_OK);
     XrXirBudget budget = xr_xir_default_budget(); budget.work = 1600;
     CHECK(xr_xir_type_use_verify(&context,member_case_type(DEPTH-1),&budget)==XR_XIR_OK);
     CHECK(!live);
-    context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0};
+    context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0,0};
     budget = xr_xir_default_budget(); budget.work = 1600;
     CHECK(xr_xir_type_use_verify(&context,member_case_type(DEPTH-1),&budget)==XR_XIR_BAD_TYPE);
     CHECK(!live);
@@ -262,7 +262,7 @@ static void constraint_proof_shared_type_walk(void) {
 static void constraint_proof_interface_identity_work(void) {
     enum { COUNT = 16 };
     XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = XR_XIR_I64;
-    XrXirInterfaceMethod method = {{"measure",7},member_case_type(0),0};
+    XrXirInterfaceMethod method = {{"measure",7},member_case_type(0),0,0,NULL};
     XrXirInterfaceDeclaration declaration = {{"m",1},{"Measure",7},1,NULL,0,NULL,0,&method,1};
     XrXirInterfaceTable interfaces = {&declaration,1};
     XrXirTypes types = {&signature,1,NULL,&interfaces};
@@ -270,7 +270,7 @@ static void constraint_proof_interface_identity_work(void) {
     XrXirConstraint constraints[COUNT] = {0}; constraints[0] = (XrXirConstraint){0,&application,1};
     XrXirGeneric generic = {constraints,COUNT,NULL,0}; XrXirFunction function = {0};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL};
-    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0}};
+    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirBudget structure = xr_xir_default_budget();
     CHECK(xr_xir_types_structure_verify(&types,&structure)==XR_XIR_OK);
     CHECK(xr_xir_generics_structure_verify(&module,&structure)==XR_XIR_OK);

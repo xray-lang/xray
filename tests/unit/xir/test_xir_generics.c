@@ -249,7 +249,7 @@ static void error_marker_definition(void) {
     }
     xr_xir_checked_packet_free(&packet);
     XrXirBudget budget=xr_xir_default_budget(); budget.work=0;
-    XrXirProofContext proof = {&built,{XR_XIR_CONTEXT_FUNCTION,0}};
+    XrXirProofContext proof = {&built,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     CHECK(xr_xir_type_markers_prove(&proof,parameter,XR_XIR_CONSTRAINT_ERROR,&budget)==XR_XIR_BUDGET);
     budget=xr_xir_default_budget();
     CHECK(xr_xir_type_markers_prove(&proof,parameter,XR_XIR_CONSTRAINT_MASK,&budget)==XR_XIR_BAD_TYPE);

@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
+#include "xir_generic_method_old_cache.h"
 XR_DATA const XrXirProgramSpec effect_source_program;
 XR_DATA const uint32_t effect_source_entry;
 XR_DATA const uint32_t effect_source_captured;
@@ -22,6 +23,8 @@ XR_DATA const XrXirProgramSpec witness_callback_program;
 XR_DATA const uint32_t witness_callback_selected_entry;
 XR_DATA const XrXirProgramSpec witness_inherited_program;
 XR_DATA const uint32_t witness_inherited_selected_entry;
+XR_DATA const XrXirProgramSpec witness_generic_method_program;
+XR_DATA const uint32_t witness_generic_method_selected_entry;
 XR_DATA const XrXirProgramSpec witness_cross_program;
 XR_DATA const uint32_t witness_cross_selected_entry;
 static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expected) {
@@ -40,10 +43,10 @@ static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expect
 }
 static void native_witness_promises(void) {
     const XrXirProgramSpec *specs[] = {&witness_direct_program,&witness_callback_program,
-        &witness_inherited_program,&witness_cross_program};
+        &witness_inherited_program,&witness_cross_program,&witness_generic_method_program};
     const uint32_t entries[] = {witness_direct_selected_entry,witness_callback_selected_entry,
-        witness_inherited_selected_entry,witness_cross_selected_entry};
-    for (uint32_t i = 0; i < 4; ++i) {
+        witness_inherited_selected_entry,witness_cross_selected_entry,witness_generic_method_selected_entry};
+    for (uint32_t i = 0; i < 5; ++i) {
         XrXirProgram *program = NULL;
         CHECK(xr_xir_program_seal(specs[i],(XrXirProgramBudget){33554432,64000000},
             &program) == XR_XIR_OK);
@@ -60,6 +63,7 @@ static void native_witness_promises(void) {
     }
 }
 int main(void) {
+    generic_method_old_cache(&effect_source_program);
     native_witness_promises();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&effect_source_program,

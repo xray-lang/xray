@@ -76,6 +76,16 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope has no authentic declaration owner");
         uint32_t count = owner->kind == SOURCE_INTERFACE ? ctx->interfaces.declarations[owner->index].parameter_count :
             ctx->nominals.declarations[owner->index].parameter_count;
+        if (ctx->type_scope.interface_member) {
+            uint32_t member = ctx->type_scope.interface_member - 1;
+            if (owner->kind != SOURCE_INTERFACE || member >= (uint32_t)node->as.interface_decl.method_count)
+                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope method owner is invalid");
+            AstNode *method = node->as.interface_decl.methods[member];
+            if (!method || method->type != AST_INTERFACE_METHOD || method->as.interface_method.type_param_count < 0 ||
+                (uint32_t)method->as.interface_method.type_param_count > 65536 - count)
+                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope method parameters are invalid");
+            count += (uint32_t)method->as.interface_method.type_param_count;
+        }
         status = element != XR_XIR_UNIT && !xr_xir_type_is_cell(&ctx->types,element) &&
             xr_xir_type_span(&ctx->types,element) <= count ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         /* This is declaration construction only. The complete module discharges
@@ -89,7 +99,7 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
         /* Explicit implementations are bound after every signature exists.
          * Module constraint verification must discharge this use before bodies. */
     } else {
-        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
         status = xr_xir_type_use_verify(&context,element,&ctx->budget);
         if (status == XR_XIR_OK) status = xr_xir_type_access(&module,ctx->function,element,&ctx->budget);
     }

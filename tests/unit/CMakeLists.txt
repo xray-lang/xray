@@ -369,6 +369,9 @@ add_custom_command(OUTPUT ${XIR_CHECKED_GENERATED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/measure_contract.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/measure_reader.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/measure_value.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_contract.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_reader.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_value.xr
         ${CMAKE_SOURCE_DIR}/stdlib/io/output.xr
     VERBATIM)
 add_executable(test_xir_packet_vm xir/test_xir_packet_vm.c ${XIR_CHECKED_GENERATED})
