@@ -447,9 +447,11 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         break;
     case XR_XIR_SLOT_INIT:
     case XR_XIR_SLOT_STORE:
-        append(buffer, "        value = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-            "        status = xr_xir_instance_slot_write(view, %uu, &value, %s);\n",
-            (uint32_t) module->declarations->slots[op->immediate].type, layout->offsets[op->args[0]],
+        if (xr_xir_slot_is_unit(module->declarations->slots,module->declarations->slot_count,op))
+            append(buffer,"        value = (XrXirValue) {0};\n");
+        else append(buffer, "        value = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            (uint32_t) module->declarations->slots[op->immediate].type, layout->offsets[op->args[0]]);
+        append(buffer,"        status = xr_xir_instance_slot_write(view, %uu, &value, %s);\n",
             (uint32_t) op->immediate, op->op == XR_XIR_SLOT_INIT ? "true" : "false");
         break;
     case XR_XIR_ATOMIC_I64_NEW:

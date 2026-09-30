@@ -1,0 +1,3 @@
+import "./failing" as failing
+print("ROOT-NEVER")
+export fn answer()->i64{return 41}

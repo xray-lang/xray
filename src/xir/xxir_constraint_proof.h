@@ -51,6 +51,13 @@ XR_FUNC XrXirStatus xr_xir_constraint_structure(const XrXirTypes *types,
     XrXirConstraint constraint, uint32_t parameter_count, XrXirBudget *budget);
 XR_FUNC XrXirStatus xr_xir_type_use_verify(const XrXirProofContext *context,
     XrXirType type, XrXirBudget *budget);
+/* Intrinsic ordinary-value admission, not a user-visible marker. Parameters
+ * derive copy/save obligations from this exact binder. This does not promise
+ * any particular closed physical class carrier, layout or execution authority.
+ * Unit and internal Cell are outside the current ordinary-argument IR domain;
+ * no resource/view carrier is represented by this API. */
+XR_FUNC XrXirStatus xr_xir_type_storage_prove(const XrXirProofContext *context,
+    XrXirType type, XrXirBudget *budget);
 XR_FUNC XrXirStatus xr_xir_type_markers_prove(const XrXirProofContext *context,
     XrXirType type, uint32_t markers, XrXirBudget *budget);
 XR_FUNC XrXirStatus xr_xir_context_constraints_verify(const XrXirProofContext *context,

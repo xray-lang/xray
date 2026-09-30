@@ -494,14 +494,17 @@ XrXirCallStatus xr_xir_instance_slot_write(XrXirCallView *view, uint32_t slot,
     if (!instance || slot >= instance->program->declarations->slot_count) return XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t function = xr_xir_call_current_entry(view->activation), module = d->slots[slot].module;
-    if (d->functions[function].module != module || !xr_xir_value_argument(value, instance->program->arena, d->slots[slot].type))
+    if (d->functions[function].module != module || !(d->slots[slot].type == XR_XIR_UNIT ?
+            (value && value_unit(*value)) :
+            xr_xir_value_argument(value, instance->program->arena, d->slots[slot].type)))
         return XR_XIR_CALL_BAD_STATE;
     if (publish ? (instance->published[slot] || instance->current_module != module ||
                    d->modules[module].initializer != function) :
                   (!instance->published[slot] || !d->slots[slot].mutable || module != d->root_module))
         return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
-    XrXirCallStatus admitted = admit_instance_value(admission, value, d->slots[slot].type);
+    XrXirCallStatus admitted = d->slots[slot].type == XR_XIR_UNIT ? XR_XIR_CALL_READY :
+        admit_instance_value(admission, value, d->slots[slot].type);
     if (admitted != XR_XIR_CALL_READY) return admitted;
     XrXirValue owned = {0};
     XrXirCallStatus status = value_call_status(xr_xir_value_copy(value, &owned));

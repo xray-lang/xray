@@ -83,7 +83,9 @@ static bool scalar(XrXirType type) {
 
 static uint32_t operand_count(const XrXirFunction *function, const XrXirInstruction *op,
                               const XrXirModule *module) {
-    (void) module;
+    if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
+        return module->declarations ? xr_xir_slot_payload_operands(module->declarations->slots,
+            module->declarations->slot_count,op) : 1u;
     if (xr_xir_op_uses_operand_table(op->op)) return op->args[1];
     return op->op == XR_XIR_RETURN ? (function->result != XR_XIR_UNIT) : op_rules[op->op].operands;
 }
@@ -209,7 +211,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
             !xr_xir_type_is_nominal(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
-        (rule->result == RULE_VALUE && !xr_xir_type_in_context(module, caller_id, op->type)) ||
+        (rule->result == RULE_VALUE && !(op->op == XR_XIR_SLOT_LOAD && op->type == XR_XIR_UNIT) &&
+            !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
     uint32_t operands = operand_count(function, op, module);
@@ -696,6 +699,10 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
         if (declaration) status = xr_xir_type_substitution_matches(types, instance->arguments,
             instance->argument_count, declaration->fields[field].type, actual, &context->remaining);
         else status = instance->field_count == fields && instance->fields[field] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        if (status == XR_XIR_OK) {
+            XrXirProofContext proof={context->module,{XR_XIR_CONTEXT_FUNCTION,context->location.function,0}};
+            status=xr_xir_type_storage_prove(&proof,actual,&context->remaining);
+        }
         if (status == XR_XIR_OK) status = local_operand(types, function, op, value, write ? 1 : i);
         if (status == XR_XIR_OK) status = value_use(function, graph, instruction, value, construct || write ? actual : type);
         if (status != XR_XIR_OK) return status;

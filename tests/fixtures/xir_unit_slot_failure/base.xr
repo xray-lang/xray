@@ -1,0 +1,6 @@
+export enum InitFailure<T> { Stopped { message:T, count:i64 } }
+const counter=Atomic(0)
+const retained="initialization-owned-long-payload-after-owner-destruction"
+const unitA:()=print("A")
+export fn next()->i64{return counter.fetchAdd(1)}
+export fn message()->string{return retained}

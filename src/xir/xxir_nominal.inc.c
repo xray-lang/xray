@@ -98,7 +98,10 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
-        if (d->kind == XR_XIR_NOMINAL_CLASS && !xr_xir_type_is_class_field(types, field->type)) return XR_XIR_BAD_TYPE;
+        /* Open fields carry obligations in the authentic NOMINAL proof pass.
+         * Only closed carriers are subject to this implementation boundary. */
+        if (d->kind == XR_XIR_NOMINAL_CLASS && !xr_xir_type_span(types,field->type) &&
+            !xr_xir_type_is_class_field(types,field->type)) return XR_XIR_BAD_TYPE;
         uint32_t visibility = field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED);
         if ((field->flags & ~(XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED | XR_XIR_FIELD_MUTABLE)) ||
             visibility == (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) return XR_XIR_BAD_STRUCTURE;

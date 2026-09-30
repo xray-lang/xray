@@ -1,0 +1,15 @@
+import "./base" as base
+export fn work(){
+    var empty:()
+    const fixed:()=base.initialized()
+    var mutable:()=fixed
+    var inferred=empty
+    const chosen=true ? empty : fixed
+    const matched=match(true){true->empty,false->fixed}
+    const keep=base.message()
+    const captured=fn(){mutable=base.mark(3);const read=inferred;Coro.yield();return keep==base.message() ? (true ? mutable : chosen) : matched}
+    defer{empty=base.mark(4);const read=fixed}
+    captured()
+    if(true){inferred=empty}else{inferred=fixed}
+    return (inferred)
+}

@@ -116,6 +116,7 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
     case XR_XIR_SLOT_INIT:
     case XR_XIR_SLOT_STORE:
         value = (XrXirValue) {(uint32_t) run->module->declarations->slots[op->immediate].type, 0,
+            xr_xir_slot_is_unit(run->module->declarations->slots,run->module->declarations->slot_count,op) ? 0 :
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         status = xr_xir_instance_slot_write(run->view, (uint32_t) op->immediate, &value, op->op == XR_XIR_SLOT_INIT);
         break;

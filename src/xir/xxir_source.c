@@ -10,6 +10,7 @@
  *   Source names are resolved before lowering and never rediscovered at runtime.
  */
 #include "xxir_source.h"
+#include "xxir_operand_roles.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_implementation.h"
 #include "xxir_implementation_verify.h"
@@ -39,7 +40,7 @@ typedef struct SourceManifest {
     XrModuleIdentityAuthority authority;
     XrDeclarationManifest *declarations;
 } SourceManifest;
-typedef enum SourceKind { SOURCE_SLOT, SOURCE_FUNCTION, SOURCE_MODULE, SOURCE_IMPORT, SOURCE_LOCAL, SOURCE_UNIT_LOCAL, SOURCE_NOMINAL, SOURCE_INTERFACE } SourceKind;
+typedef enum SourceKind { SOURCE_SLOT, SOURCE_UNIT_SLOT, SOURCE_FUNCTION, SOURCE_MODULE, SOURCE_IMPORT, SOURCE_LOCAL, SOURCE_UNIT_LOCAL, SOURCE_NOMINAL, SOURCE_INTERFACE } SourceKind;
 typedef struct SourceName {
     struct SourceName *next;
     const char *name, *imported;
@@ -56,7 +57,7 @@ static bool source_local_name(const SourceName *name) {
     return name && (name->kind == SOURCE_LOCAL || name->kind == SOURCE_UNIT_LOCAL);
 }
 static bool source_name_ready(const SourceName *name) {
-    return name && (name->kind == SOURCE_UNIT_LOCAL ||
+    return name && (name->kind == SOURCE_UNIT_LOCAL || name->kind == SOURCE_UNIT_SLOT ||
         ((name->kind == SOURCE_LOCAL || name->kind == SOURCE_SLOT) && name->type != XR_XIR_UNIT));
 }
 typedef struct SourceErrorContext SourceErrorContext;
@@ -1208,7 +1209,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_ASSIGNMENT: {
         SourceName *symbol = visible_name(ctx, node->as.assignment.name);
         SourceValue assigned;
-        if (!symbol || !symbol->mutable || (!source_local_name(symbol) && symbol->kind != SOURCE_SLOT))
+        if (!symbol || !symbol->mutable || (!source_local_name(symbol) && symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_UNIT_SLOT))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "assignment requires a mutable binding");
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_WRITE)) return false;
         if (!source_plan_expression(ctx, node->as.assignment.value, (SourceExpectedType){true,symbol->type}, &assigned)) return false;
@@ -1220,7 +1221,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
             if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT,
                 {symbol->index, assigned.id}, {0}, 0, {0}}, NULL)) return false;
         }
-        else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {assigned.id, 0}, {0, 0}, symbol->index, {0}}, NULL)) return false;
+        else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {assigned.type == XR_XIR_UNIT ? 0 : assigned.id, 0}, {0, 0}, symbol->index, {0}}, NULL)) return false;
         *value = assigned; return true;
     }
     default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "expression syntax is not implemented in XIR");
@@ -1429,7 +1430,6 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     if (decl->initializer) {
         if (!source_plan_expression(ctx, decl->initializer, (SourceExpectedType){decl->type_annotation != NULL,annotation}, &initial)) return false;
     } else if (!source_default_value(ctx, node, annotation, &initial)) return false;
-    if (top && initial.type == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "module Unit binding is not implemented in XIR");
     if (decl->type_annotation && annotation != initial.type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "binding annotation mismatch");
     SourceName *symbol;
@@ -1437,8 +1437,9 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         symbol = find_name(ctx, ctx->names[ctx->module], decl->name);
         if (!symbol || symbol->kind != SOURCE_SLOT) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "binding declaration missing");
         symbol->type = initial.type; ctx->slots[symbol->index].type = initial.type;
+        if (initial.type == XR_XIR_UNIT) symbol->kind = SOURCE_UNIT_SLOT;
         source_query_binding_type(ctx, symbol);
-        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {initial.id, 0}, {0, 0}, symbol->index, {0}}, NULL);
+        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {initial.type == XR_XIR_UNIT ? 0 : initial.id, 0}, {0, 0}, symbol->index, {0}}, NULL);
     }
     for (SourceName *p = ctx->locals; p != ctx->scope; p = p->next) {
         if (!source_work(ctx, node)) return false;
@@ -1504,7 +1505,7 @@ static bool source_increment(SourceContext *ctx, AstNode *node) {
     const char *name = node->type == AST_INC ? node->as.inc.name : node->as.dec.name;
     SourceName *symbol = visible_name(ctx, name);
     if (!symbol || !symbol->mutable || !xr_xir_type_is_integer(symbol->type) ||
-        (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT))
+        (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_UNIT_SLOT))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "increment requires a mutable integer binding");
     if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ_WRITE)) return false;
     SourceValue old, one, result;
@@ -2397,7 +2398,7 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     bool declarations_ready = source_query_modules(&ctx) && collect_declarations(&ctx);
     ctx.declarations_building = false;
     if (declarations_ready && source_manifests_bind(&ctx) &&
-        source_implementations_bind(&ctx) && build_bodies(&ctx)) {
+        source_implementations_bind(&ctx) && build_bodies(&ctx) && source_class_carriers(&ctx)) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(&ctx,&declarations);
         XrXirDiagnostic location = {0};

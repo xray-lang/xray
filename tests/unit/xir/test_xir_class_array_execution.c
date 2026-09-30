@@ -43,14 +43,17 @@ int main(void){
  class_array_independent_cases();class_array_retained_independent();
  const int argc=XR_CLASS_ARRAY_MIXED?2:1;XrXirProgramSpec spec=source_class_array_program;XrXirProgram *program=NULL;
  class_array_contract_packet(spec.proof.bytes,spec.proof.length);
- uint8_t *old_proof=class_array_old_contract(spec.proof.bytes,spec.proof.length);
+ for(uint8_t revision=47;revision<=48;++revision){
+ uint8_t *old_proof=class_array_old_contract(spec.proof.bytes,spec.proof.length,revision);
  uint8_t old_identity[32];xr_sha256(old_proof,spec.proof.length,old_identity);
  XrXirProgramSpec previous=spec;previous.proof.bytes=old_proof;previous.proof.identity=old_identity;
  size_t before_live=runtime_live,before_bytes=runtime_bytes;
  program=(XrXirProgram *)(uintptr_t)1;
  C(xr_xir_program_seal(&previous,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_BAD_STRUCTURE);
- C(!program && runtime_live==before_live && runtime_bytes==before_bytes);free(old_proof);
+ C(!program && runtime_live==before_live && runtime_bytes==before_bytes);free(old_proof);}
  XrXirProgramSpec old=spec;old.abi_version=23;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
+ C(xr_xir_program_seal(&old,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_BAD_LAYOUT && !program);
+ old=spec;old.abi_version=24;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
  C(xr_xir_program_seal(&old,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_BAD_LAYOUT && !program);
  old=spec;old.target.abi_version=13;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
  C(xr_xir_program_seal(&old,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_BAD_LAYOUT && !program);

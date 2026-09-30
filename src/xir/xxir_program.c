@@ -48,7 +48,7 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, const XrXirBudget
     if (status != XR_XIR_OK) return status;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
         const XrXirSlot *slot = &spec->declarations->slots[s];
-        if (xr_xir_type_is_cell(spec->types, slot->type) || !program_value_type(spec, slot->type) || (xr_xir_type_is_callable(spec->types, slot->type) &&
+        if (xr_xir_type_is_cell(spec->types, slot->type) || (slot->type != XR_XIR_UNIT && !program_value_type(spec, slot->type)) || (xr_xir_type_is_callable(spec->types, slot->type) &&
             slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {

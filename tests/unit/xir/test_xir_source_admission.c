@@ -310,7 +310,7 @@ static const char *const rejected[] = {
 
     "Coro.yield(1)\n",
     "Coro.yield<i64>()\n",
-    "const x = Coro.yield()\n",
+    "const x:i64 = Coro.yield()\n",
     "const Coro = Atomic(1)\nCoro.yield()\n",
     "fn unused(Coro:i64) { Coro.yield() }\n",
     "Coro.missing()\n",
@@ -636,6 +636,45 @@ static void nested_pattern_budgets(const XrXirSourceRequest *request, const char
         }
     }
 }
+static void unit_slot_admission(const XrXirSourceRequest *request, const char *root) {
+    const char *sources[] = {"const x = Coro.yield()\n",
+        "const x:() = Coro.yield()\n", "var x:()\n"};
+    for (uint32_t run=0;run<3;++run) {
+        write_source(root,sources[run]);
+        XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
+        CHECK(xr_xir_source_check(request,&result,&diagnostic)==XR_XIR_OK);
+        CHECK(result.checked && result.snapshot && diagnostic.status==XR_XIR_OK);
+        CHECK(xr_xir_artifact_verify(result.checked,NULL,NULL)==XR_XIR_OK);
+        const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+        CHECK(view && view->complete);
+        uint32_t bindings=0;
+        for (uint32_t d=0;d<view->declaration_count;++d) {
+            const XrXirSourceDeclaration *binding=&view->declarations[d];
+            if (binding->kind!=XR_XIR_SOURCE_BINDING || strcmp(binding->name,"x")) continue;
+            CHECK(binding->type.known && binding->type.type==XR_XIR_UNIT &&
+                binding->mutable==(run==2));
+            ++bindings;
+        }
+        CHECK(bindings==1);
+        const XrXirModule *module=xr_xir_artifact_module(result.checked);
+        const XrXirDeclarations *declarations=module->declarations;
+        CHECK(declarations && declarations->slot_count==1 &&
+            declarations->slots[0].type==XR_XIR_UNIT && declarations->slots[0].mutable==(run==2 ? 1u : 0u));
+        uint32_t initializer=declarations->modules[declarations->root_module].initializer;
+        CHECK(initializer<module->function_count);
+        const XrXirFunction *function=&module->functions[initializer];
+        uint32_t suspends=0,publishes=0;
+        for (uint32_t i=0;i<function->instruction_count;++i) {
+            const XrXirInstruction *op=&function->instructions[i];
+            if (op->op==XR_XIR_SUSPEND) { CHECK(!publishes); ++suspends; }
+            if (op->op==XR_XIR_SLOT_INIT) {
+                CHECK(op->immediate==0 && !op->args[0] && !op->args[1]); ++publishes;
+            }
+        }
+        CHECK(publishes==1 && suspends==(run<2 ? 1u : 0u));
+        xr_xir_source_result_free(&result);
+    }
+}
 int main(void) {
     stdlib_resolution();
 
@@ -651,6 +690,7 @@ int main(void) {
     primitive_authority(session, absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB, NULL};
+    unit_slot_admission(&request,root);
     source_integer_contexts(&request, root);
     source_decimal_contexts(&request, root);
     enum_admission(&request, root);

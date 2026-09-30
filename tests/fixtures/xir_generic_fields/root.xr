@@ -1,0 +1,6 @@
+final class Box<T> { value:T constructor(value:T){this.value=value} get()->T{return this.value} set(value:T){this.value=value} }
+final class Pair<K,V> { first:K second:V constructor(k:K,v:V){this.first=k;this.second=v} left()->K{return this.first} right()->V{return this.second} }
+final class Container<T> { items:Array<T> constructor(items:Array<T>){this.items=items} get()->Array<T>{return this.items} }
+fn forward<T>(value:T)->T{return Box<T>(value).get()}
+export fn answer()->i64{const box=Box<i64>(40);const alias=box;const other=Box<i64>(40);alias.set(41);const p=Pair<string,i64>("mapped",forward<i64>(41));const reverse=Pair<i64,string>(41,"mapped");const a=Container<i64>([41]);if(box.get()==41 && other.get()==40 && p.right()==41 && reverse.left()==41 && a.get()[0]==41 && Box<bool>(true).get()){return 41}else{return 0}}
+export fn retained()->string{return Container<string>([Pair<i64,string>(41,"mapped").right()]).get()[0]}

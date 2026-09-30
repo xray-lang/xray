@@ -1,0 +1,8 @@
+const counter=Atomic(0)
+const text="unit-owned-long-string-survives-instance-and-program-destruction"
+export fn mark(n:i64){counter.fetchAdd(1);print(n)}
+export fn count()->i64{return counter.load()}
+export fn message()->string{return text}
+
+const boot:()=mark(1)
+export fn initialized(){return boot}

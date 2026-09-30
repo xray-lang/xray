@@ -1,0 +1,6 @@
+import "./base" as base
+import "./worker" as worker
+var boot:()=base.mark(2)
+final class Box<T>{value:T constructor(v:T){this.value=v} get()->T{return this.value}}
+export fn answer()->i64{boot=base.initialized();const box=Box<i64>(37);worker.work();return base.count()+box.get()}
+export fn text()->string{return Box<string>(base.message()).get()}

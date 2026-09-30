@@ -47,7 +47,7 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         if (!work || !*work) return XR_XIR_BUDGET;
         --*work;
         uint32_t id = (uint32_t) type;
-        if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
+        if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
             type == XR_XIR_ATOMIC_I64) return XR_XIR_OK;
         if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
             const XrXirConstraint *fact = constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
@@ -409,11 +409,20 @@ XrXirStatus xr_xir_type_use_verify(const XrXirProofContext *context, XrXirType t
     if (status == XR_XIR_OK) status = proof_type(&proof,type);
     return proof_run(&proof,status);
 }
+XR_FUNC XrXirStatus xr_xir_type_storage_prove(const XrXirProofContext *context,
+    XrXirType type, XrXirBudget *budget) {
+    ConstraintProof proof = {0};
+    XrXirStatus status = proof_begin(&proof,context,budget);
+    if (status == XR_XIR_OK && !constraint_argument_shape(proof.environment.types,type,
+        proof.environment.parameter_count)) status = XR_XIR_BAD_TYPE;
+    if (status == XR_XIR_OK) status = proof_type(&proof,type);
+    return proof_run(&proof,status);
+}
 XrXirStatus xr_xir_type_markers_prove(const XrXirProofContext *context,
     XrXirType type, uint32_t markers, XrXirBudget *budget) {
     ConstraintProof proof = {0}; XrXirStatus status = proof_begin(&proof,context,budget);
     if (status != XR_XIR_OK) return proof_run(&proof,status);
-    if (!constraint_argument_shape(proof.environment.types,type,proof.environment.parameter_count))
+    if (type != XR_XIR_UNIT && !constraint_argument_shape(proof.environment.types,type,proof.environment.parameter_count))
         return proof_run(&proof,XR_XIR_BAD_TYPE);
     status = proof_type(&proof,type);
     if (status == XR_XIR_OK) status = constraint_markers(&proof.environment,type,markers,&budget->work);
@@ -485,7 +494,9 @@ static XrXirStatus proof_nominal_declaration(const XrXirModule *module, uint32_t
     const XrXirNominalDeclaration *d = &module->types->nominals->declarations[index];
     XrXirStatus status = xr_xir_context_constraints_verify(&context,budget);
     for (uint32_t f = 0; status == XR_XIR_OK && f < d->field_count; ++f)
-        status = xr_xir_type_use_verify(&context,d->fields[f].type,budget);
+        status = d->kind == XR_XIR_NOMINAL_CLASS ?
+            xr_xir_type_storage_prove(&context,d->fields[f].type,budget) :
+            xr_xir_type_use_verify(&context,d->fields[f].type,budget);
     return status;
 }
 static XrXirStatus proof_interface_declaration(const XrXirModule *module, uint32_t index, XrXirBudget *budget) {

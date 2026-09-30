@@ -190,9 +190,13 @@ static bool source_struct_fields(SourceContext *ctx) {
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "stored field contract is not admitted");
                 if (!source_type(ctx, field->field_type, &types[f]) || types[f] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
-                if (symbol->node->type == AST_CLASS_DECL && (field->initializer ||
-                    !xr_xir_type_is_class_field(&ctx->types, types[f])))
-                    return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit admitted constructor value");
+                if (symbol->node->type == AST_CLASS_DECL) {
+                    if (field->initializer)
+                        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit admitted constructor value");
+                    if (!xr_xir_type_span(&ctx->types,types[f]) &&
+                        !xr_xir_type_is_class_field(&ctx->types,types[f]))
+                        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field carrier is not implemented");
+                }
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) strlen(field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
                     (field->is_const ? 0 : XR_XIR_FIELD_MUTABLE)};
@@ -336,4 +340,29 @@ static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceVal
     uint32_t index; XrXirType type;
     if (!source_struct_field(ctx, node, receiver.type, node->as.member_access.name, false, &index, &type)) return false;
     return source_recipe_record(ctx, (XrXirInstruction) {xr_xir_type_is_class(&ctx->types,receiver.type) ? XR_XIR_CLASS_GET : XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
+}
+
+/* This is a target carrier boundary after collection, not a generic premise.
+ * Closed applications use their original ordered arguments. Symbolic fields
+ * are proved by the ordinary NOMINAL/FUNCTION proof pass in Checked. */
+static bool source_class_carriers(SourceContext *ctx) {
+    for (uint32_t t=0;t<ctx->types.count;++t) {
+        if (!source_work(ctx,NULL)) return false;
+        XrXirType id=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+        if (!xr_xir_type_is_class(&ctx->types,id)) continue;
+        const XrXirTypeNode *node=xr_xir_type_node(&ctx->types,id);
+        uint32_t owner=node->nominal.declaration;
+        SourceSubstitution substitution={node->nominal.arguments,node->nominal.argument_count};
+        const XrXirNominalDeclaration *decl=&ctx->nominals.declarations[owner];
+        SourceName *symbol=ctx->nominal_sources[owner];
+        for (uint32_t f=0;f<decl->field_count;++f) {
+            XrXirType field;
+            if (!source_substitute(ctx,&substitution,decl->fields[f].type,0,&field)) return false;
+            if (!xr_xir_type_span(&ctx->types,field) && !xr_xir_type_is_class_field(&ctx->types,field)) {
+                ctx->module=symbol->module;
+                return source_fail(ctx,symbol->node,XR_XIR_BAD_TYPE,"class field carrier is not implemented");
+            }
+        }
+    }
+    return true;
 }

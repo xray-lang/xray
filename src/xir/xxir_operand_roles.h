@@ -12,6 +12,18 @@
 #ifndef XXIR_OPERAND_ROLES_H
 #define XXIR_OPERAND_ROLES_H
 #include "xxir.h"
+#include "xxir_declarations.h"
+
+/* Classification is not permission or publication evidence. */
+static inline bool xr_xir_slot_is_unit(const XrXirSlot *slots, uint32_t count,
+                                      const XrXirInstruction *op) {
+    return slots && op && op->immediate >= 0 && (uint64_t)op->immediate < count &&
+        slots[op->immediate].type == XR_XIR_UNIT;
+}
+static inline uint32_t xr_xir_slot_payload_operands(const XrXirSlot *slots, uint32_t count,
+                                                  const XrXirInstruction *op) {
+    return xr_xir_slot_is_unit(slots,count,op) ? 0u : 1u;
+}
 
 typedef enum XrXirPlaceKind {
     XR_XIR_PLACE_NONE, XR_XIR_PLACE_LOCAL, XR_XIR_PLACE_CELL, XR_XIR_PLACE_SLOT,

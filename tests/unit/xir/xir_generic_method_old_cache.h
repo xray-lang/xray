@@ -40,7 +40,7 @@ static void generic_method_old_cache(const XrXirProgramSpec *native) {
     }
     xr_free(bytes);
 }
-_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 24,"runtime program metadata ABI");
+_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 25,"runtime program metadata ABI");
 _Static_assert(sizeof(void *) != 8 || sizeof(XrXirNominalIdentity) == 72,"runtime nominal identity stride");
 _Static_assert(sizeof(void *) != 8 || offsetof(XrXirNominalIdentity,flags) == 68,"runtime nominal final fact offset");
 _Static_assert(sizeof(XrXirFunctionIdentity) == 28,"runtime identity stride remains unchanged");

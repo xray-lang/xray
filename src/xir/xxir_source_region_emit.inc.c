@@ -173,6 +173,8 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             operand_end+=op.args[1];
         } else {
             uint32_t count=op.op==XR_XIR_RETURN ? output->result!=XR_XIR_UNIT : role.values;
+            if (op.op==XR_XIR_SLOT_INIT || op.op==XR_XIR_SLOT_STORE)
+                count=xr_xir_slot_payload_operands(ctx->slots,ctx->slot_count,&op);
             for (uint32_t a=0;a<count;++a)
                 if (!source_region_value(map,value_count,op.args[a],&op.args[a],seal)) goto invalid;
         }

@@ -172,7 +172,8 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
             remaining->work -= node->nominal.field_count;
             for (uint32_t f=0; f<node->nominal.field_count; ++f) {
                 XrXirType field=node->nominal.fields[f];
-                if (!xr_xir_type_is_class_field(types, field))
+                if ((!types->nominals->declarations || !xr_xir_type_span(types,field)) &&
+                    !xr_xir_type_is_class_field(types,field))
                     return XR_XIR_BAD_TYPE;
             }
         }

@@ -791,11 +791,13 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_requirement_value_boundaries.h"
 #include "xir_source_requirement_value_provenance.h"
 #include "xir_source_class_cases.h"
+#include "xir_generic_storage_cases.h"
 #include "xir_source_dependency_ready_cases.h"
 #include "xir_source_iteration_cases.h"
 #include "xir_source_unit_context_cases.h"
 #include "xir_source_unit_local_cases.h"
 int main(void) {
+    generic_storage_cases();
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory, absolute, sizeof(absolute)));
