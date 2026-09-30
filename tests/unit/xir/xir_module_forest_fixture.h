@@ -30,7 +30,7 @@ static XrXirArtifact *module_forest_fixture(bool invalid) {
     const XrXirBlock blocks[] = {{0, 4, 0, 0}, {0, 3, 0, 0}, {0, 2, 0, 0}};
     const XrXirType callable = (XrXirType)256;
     const XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_I64, 0, 0, {0}};
-    const XrXirTypes types = {&signature, 1, NULL};
+    const XrXirTypes types = {&signature, 1, NULL, NULL};
     const XrXirInstruction bind[] = {
         {XR_XIR_FUNCTION_REF, (XrXirType)256, {0}, {0}, 5, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}

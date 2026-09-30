@@ -279,7 +279,7 @@ static XrXirStatus spec_nominal_seed(SpecContext *c) {
     if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
     if (!spec_work(c, source->count)) return c->diagnostic.status;
     memcpy(nodes, source->nodes, (size_t) source->count * sizeof(*nodes));
-    c->types = (XrXirTypes) {nodes, source->count, source->nominals}; c->node_capacity = source->count;
+    c->types = (XrXirTypes) {nodes, source->count, source->nominals, NULL}; c->node_capacity = source->count;
     for (uint32_t i = 0; i < source->count; ++i)
         if (!source->nodes[i].parameter_span) c->closed.node_cache[i] = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i);
     return XR_XIR_OK;
@@ -328,6 +328,7 @@ XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *b
     if (!output) { c.diagnostic.status = XR_XIR_BAD_STRUCTURE; goto done; }
     *output = NULL;
     if (!c.source || c.source->stage != XR_XIR_CHECKED) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
+    if (c.source->types && c.source->types->interfaces) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
     c.diagnostic.status = xr_xir_artifact_verify(checked, &limits, &c.diagnostic);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     if (c.source->types && c.source->types->nominals) {

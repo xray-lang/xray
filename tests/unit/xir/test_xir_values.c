@@ -99,7 +99,7 @@ static void *thread_entry(void *pointer) { copy_worker(pointer); return NULL; }
 #endif
 static XrXirTypeArena *string_cell_arena(XrXirDomain *domain) {
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING};
-    XrXirTypes types = {&node, 1, NULL};
+    XrXirTypes types = {&node, 1, NULL, NULL};
     XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.metadata_bytes = 65536; budget.work = 100;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
@@ -245,7 +245,7 @@ static void arena_identity_and_revocation(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 258},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
-    XrXirTypes types = {nodes, 5, NULL};
+    XrXirTypes types = {nodes, 5, NULL, NULL};
     XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
     XrXirTypeArena *arena = NULL, *foreign = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
@@ -302,7 +302,7 @@ static void arena_identity_and_revocation(void) {
 #include "xir_nominal_fixture.h"
 static void nominal_arena_admission(void) {
     NominalFixture f; nominal_fixture(&f);
-    XrXirTypes types = {NULL, 0, &f.table};
+    XrXirTypes types = {NULL, 0, &f.table, NULL};
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirDomainStats initial = xr_xir_domain_stats(domain);
@@ -330,7 +330,7 @@ static void nominal_arena_ownership(void) {
     NominalIdentityFixture f; nominal_identity_fixture(&f);
     XrXirType field_types[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, field_types, 2}};
-    XrXirTypes types = {&node, 1, &f.table};
+    XrXirTypes types = {&node, 1, &f.table, NULL};
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;

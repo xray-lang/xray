@@ -1015,7 +1015,7 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
     if (types->count) append(buffer, "%s_type_nodes", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, ", types->count);
     if (types->nominals) append(buffer, "&%s_nominals", prefix); else append(buffer, "NULL");
-    append(buffer, "};\n");
+    append(buffer, ", NULL};\n");
 }
 static void emit_proof(CBuffer *buffer, const XrXirArtifact *artifact, const char *prefix) {
     XrXirProgramProof proof = xr_xir_program_proof(artifact);

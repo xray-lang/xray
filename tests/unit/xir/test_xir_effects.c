@@ -34,7 +34,7 @@ static void effect_free(void *p) {
 static XrXirArtifact *effect_fixture(bool suspends) {
     XrXirType parameter = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE; node.result = XR_XIR_UNIT;
-    XrXirTypes types = {&node, 1, NULL};
+    XrXirTypes types = {&node, 1, NULL, NULL};
     XrXirInstruction a[] = {{XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, 1, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirInstruction b[] = {{XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, 0, {0}},
@@ -272,7 +272,7 @@ static void effect_growing_cycle(void) {
     XrXirTypeNode nodes[2] = {built.types->nodes[0], {0}};
     nodes[1].kind = XR_XIR_TYPE_ARRAY; nodes[1].element = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     nodes[1].parameter_span = 1;
-    XrXirTypes types = {nodes, 2, built.types->nominals}; built.types = &types;
+    XrXirTypes types = {nodes, 2, built.types->nominals, NULL}; built.types = &types;
     XrXirInstruction ops[] = {
         {XR_XIR_ENUM_NEW, (XrXirType)256, {0, 1}, {0}, 1, {0}},
         {XR_XIR_ARRAY_NEW, (XrXirType)257, {1, 1}, {0}, 0, {0}},
@@ -309,7 +309,7 @@ static void effect_term_shapes(void) {
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, (XrXirType)256, 0, 1, {0}}};
     XrXirGeneric arguments = {0}; arguments.argument_count = 1; arguments.arguments = &argument;
     XrXirBudget budget = xr_xir_default_budget(); uint64_t scratch = budget.scratch_bytes;
-    EffectTerms pool = {0}; pool.types = (XrXirTypes){nodes, 5, NULL}; pool.remaining = &budget;
+    EffectTerms pool = {0}; pool.types = (XrXirTypes){nodes, 5, NULL, NULL}; pool.remaining = &budget;
     attempts = 0; XrXirType result = XR_XIR_UNIT;
     CHECK(effect_terms_substitute(&pool, (XrXirType)259, &arguments, &result) == XR_XIR_OK);
     size_t sites = attempts;
@@ -329,7 +329,7 @@ static void effect_term_shapes(void) {
     CHECK(repeated != callable_id && xr_xir_type_node(&pool.types, repeated)->parameters[0].mode == 1);
     effect_terms_free(&pool); CHECK(!live && budget.scratch_bytes == scratch);
     for (size_t i = 0; i < sites; ++i) {
-        pool = (EffectTerms){0}; pool.types = (XrXirTypes){nodes, 5, NULL};
+        pool = (EffectTerms){0}; pool.types = (XrXirTypes){nodes, 5, NULL, NULL};
         budget = xr_xir_default_budget(); pool.remaining = &budget;
         attempts = 0; fail_at = i;
         CHECK(effect_terms_substitute(&pool, (XrXirType)259, &arguments, &result) == XR_XIR_OUT_OF_MEMORY);
@@ -415,7 +415,7 @@ static void effect_qualified_callable(void) {
     XrXirArtifact *base = effect_fixture(false), *checked = NULL;
     XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirTypeNode node = built.types->nodes[0]; node.flags = XR_XIR_CALLABLE_NO_SUSPEND;
-    XrXirTypes types = {&node, 1, NULL}; built.types = &types;
+    XrXirTypes types = {&node, 1, NULL, NULL}; built.types = &types;
     XrXirFunctionIdentity ids[8]; memcpy(ids, built.declarations->functions, sizeof(ids));
     ids[0].promises = ids[2].promises = XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirDeclarations declarations = *built.declarations; declarations.functions = ids; built.declarations = &declarations;
@@ -444,7 +444,7 @@ static void effect_mixed_callable_witness(void) {
     XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirTypeNode nodes[2] = {built.types->nodes[0], built.types->nodes[0]};
     nodes[1].flags = XR_XIR_CALLABLE_NO_SUSPEND;
-    XrXirTypes types = {nodes, 2, NULL}; built.types = &types;
+    XrXirTypes types = {nodes, 2, NULL, NULL}; built.types = &types;
     XrXirFunction functions[8]; memcpy(functions, built.functions, sizeof(functions)); built.functions = functions;
     XrXirType parameters[] = {(XrXirType)257, (XrXirType)256};
     XrXirInstruction ops[] = {{XR_XIR_CALL_INDIRECT, XR_XIR_UNIT, {0}, {0}, 0, {0}},
@@ -467,7 +467,7 @@ static void effect_callable_weakening(void) {
     XrXirTypeNode nodes[2] = {
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[0], 1, XR_XIR_I64, 0, 0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[1], 1, XR_XIR_I64, XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
-    XrXirTypes types = {nodes, 2, NULL};
+    XrXirTypes types = {nodes, 2, NULL, NULL};
     XrXirType source = (XrXirType)257;
     XrXirInstruction ops[] = {
         {XR_XIR_FUNCTION_WEAKEN, (XrXirType)256, {0}, {0}, 0, {0}},

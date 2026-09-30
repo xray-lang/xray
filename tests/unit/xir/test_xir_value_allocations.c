@@ -66,6 +66,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 
 
 #include "xir/xxir_types.c"
+#include "xir/xxir_interface.c"
+#include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_type_arena.c"
 #include "xir/xxir_value.c"
@@ -223,7 +225,7 @@ static XrXirTypeArena *allocation_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 260},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
-    XrXirTypes types = {nodes, 7, NULL};
+    XrXirTypes types = {nodes, 7, NULL, NULL};
     XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.metadata_bytes = 65536; budget.work = 65536;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
@@ -295,7 +297,7 @@ static void arena_allocation_cases(void) {
     XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter,
         .parameter_count = 1, .result = XR_XIR_I64};
-    XrXirTypes types = {&node, 1, NULL};
+    XrXirTypes types = {&node, 1, NULL, NULL};
     XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 10; budget.metadata_bytes = 65536; budget.work = 100;
     XrXirBudget before = budget;
     XrXirTypeArena *arena = NULL;
@@ -360,7 +362,7 @@ static void deep_arena_release(void) {
         nodes[i].kind = XR_XIR_TYPE_ARRAY;
         nodes[i].element = i ? (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i - 1) : XR_XIR_STRING;
     }
-    XrXirTypes types = {nodes, count, NULL};
+    XrXirTypes types = {nodes, count, NULL, NULL};
     XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.metadata_bytes = 1024 * 1024; budget.work = 8 * 1024 * 1024;
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1024 * 1024, &domain) == XR_XIR_VALUE_OK);
@@ -379,7 +381,7 @@ static void nominal_arena_allocation(void) {
     NominalIdentityFixture f; nominal_identity_fixture(&f);
     XrXirType field_types[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, field_types, 2}};
-    XrXirTypes types = {&node, 1, &f.table};
+    XrXirTypes types = {&node, 1, &f.table, NULL};
     calls = 0; fail_at = SIZE_MAX;
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
@@ -499,7 +501,7 @@ static void enum_arena_allocations(void) {
     }
     fail_at = SIZE_MAX; b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
     CHECK(xr_xir_nominal_project(&f.table, &b, &projection) == XR_XIR_OK);
-    XrXirTypes types = {NULL, 0, projection}; XrXirTypeArena *arena = NULL;
+    XrXirTypes types = {NULL, 0, projection, NULL}; XrXirTypeArena *arena = NULL;
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     size_t baseline = live; b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000}; calls = 0; fail_at = 0;
     CHECK(xr_xir_type_arena_new(domain, &types, &b, &arena) == XR_XIR_VALUE_OOM && !arena && live == baseline);
@@ -565,7 +567,7 @@ static void enum_value_ownership(void) {
     const XrXirType type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     node.nominal.fields = field_types; node.nominal.field_count = 2;
-    const XrXirTypes types = {&node, 1, &table};
+    const XrXirTypes types = {&node, 1, &table, NULL};
     XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(live == 0 && xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);

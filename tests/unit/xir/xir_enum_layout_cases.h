@@ -24,7 +24,7 @@ static void enum_storage_layout(void) {
         nodes[i].kind = XR_XIR_TYPE_NOMINAL; nodes[i].nominal.declaration = i;
         nodes[i].nominal.fields = i ? outer_types : inner_types; nodes[i].nominal.field_count = 3;
     }
-    XrXirTypes types = {nodes, 2, &table};
+    XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirBudget budget = xr_xir_default_budget(); XrXirLayout layout = {0};
     uint32_t offsets[3] = {99, 99, 99};
@@ -56,7 +56,7 @@ static void enum_tag_widths(void) {
     XrXirNominalIdentity identity = {{"alpha", 5}, {"Unit", 4}, 1, 0, NULL, 0, XR_XIR_NOMINAL_ENUM, variants, 1};
     XrXirNominalTable table = {NULL, 1, &identity};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
-    XrXirTypes types = {&node, 1, &table};
+    XrXirTypes types = {&node, 1, &table, NULL};
     const uint32_t counts[] = {1, 2, 256, 257}, widths[] = {0, 1, 1, 2};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     for (uint32_t i = 0; i < 4; ++i) {

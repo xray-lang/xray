@@ -18,7 +18,7 @@ static XrXirArtifact *struct_set_checked(unsigned invalid) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&argument,1,NULL,0}},
         {XR_XIR_TYPE_CELL,pair,NULL,0,XR_XIR_UNIT,0,0,{0}}};
-    XrXirTypes types = {nodes,2,&nominal.table};
+    XrXirTypes types = {nodes,2,&nominal.table, NULL};
     XrXirInstruction init[] = {
         {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},7, {0}},

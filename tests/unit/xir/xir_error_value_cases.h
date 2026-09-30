@@ -19,7 +19,7 @@ static void error_deep_value_cases(void) {
     const XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {0, NULL, 0, &field_type, 1}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_ERROR}};
-    const XrXirTypes types = {nodes, 2, &table};
+    const XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
     CHECK(!live && xr_xir_domain_new(4194304, &domain) == XR_XIR_VALUE_OK);
@@ -74,7 +74,7 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
         nodes[i] = types->nodes[0]; nodes[i].nominal.declaration = i;
     }
     ids[2].kind = XR_XIR_NOMINAL_STRUCT; ids[2].variants = NULL; ids[2].variant_count = 0;
-    XrXirNominalTable table = {NULL, 3, ids}; XrXirTypes local = {nodes, 3, &table};
+    XrXirNominalTable table = {NULL, 3, ids}; XrXirTypes local = {nodes, 3, &table, NULL};
     XrXirBudget budget = {.parameters = 1000, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 100000};
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(admission->domain, &local, &budget, &arena) == XR_XIR_VALUE_OK);

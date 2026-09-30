@@ -32,7 +32,7 @@ static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
         f.declarations[1].module = (XrXirLiteral) {"library", 7};
         f.fields[0].type = (XrXirType) 256;
     }
-    XrXirTypes types = {nodes, nominal ? 4 : 2, nominal ? &f.table : NULL};
+    XrXirTypes types = {nodes, nominal ? 4 : 2, nominal ? &f.table : NULL, NULL};
     XrXirInstruction init[] = {
         {XR_XIR_CALL, a, {0}, {0}, 3, {0}},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 1, {0}},

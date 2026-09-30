@@ -21,7 +21,7 @@ static XrXirArtifact *callable_fixture(void) {
     XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, XR_XIR_STRING, 0, 0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, fn0, 0, 0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
-    XrXirTypes types = {signatures, 3, NULL};
+    XrXirTypes types = {signatures, 3, NULL, NULL};
     XrXirInstruction caller_ops[] = {{XR_XIR_CALL, fn1, {0, 1}, {0}, 1, {0, 1}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
     XrXirInstruction generic_ops[] = {{XR_XIR_COPY, generic, {0}, {0}, 0, {0}},
@@ -45,7 +45,7 @@ static XrXirArtifact *function_ir_fixture(void) {
     XrXirGeneric generics[] = {{0}, {NULL,0,&concrete,1}, {&constraint,1,NULL,0}};
     XrXirCallableParameter input = {XR_XIR_I64, 0};
     XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input, 1, XR_XIR_I64, 0, 0, {0}};
-    XrXirTypes types = {&signature, 1, NULL};
+    XrXirTypes types = {&signature, 1, NULL, NULL};
     XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirInstruction root[] = {{XR_XIR_FUNCTION_REF, (XrXirType) 256, {0}, {0}, 2, {0,1}},
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7, {0}},
@@ -73,7 +73,7 @@ static XrXirArtifact *generic_callable_fixture(void) {
     XrXirCallableParameter components[] = {{t,0}, {XR_XIR_STRING,0}};
     XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components,1,t,0,1, {0}},
         {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components+1,1,XR_XIR_STRING,0,0, {0}}};
-    XrXirTypes table = {signatures,2, NULL};
+    XrXirTypes table = {signatures,2, NULL, NULL};
     XrXirType parameters[] = {(XrXirType)257,XR_XIR_STRING,(XrXirType)256,t}, argument = XR_XIR_STRING;
     XrXirConstraint constraint = {0};
     uint32_t arguments[] = {0,1}, indirect = 1;
@@ -111,7 +111,7 @@ static XrXirArtifact *constructed_fixture(void) {
         {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,inputs+2,1,(XrXirType)264,0,0, {0}},
         {XR_XIR_TYPE_CELL,(XrXirType)265,NULL,0,XR_XIR_UNIT,0,0, {0}}
     };
-    XrXirTypes types = {nodes,12, NULL};
+    XrXirTypes types = {nodes,12, NULL, NULL};
     XrXirType parameters[] = {(XrXirType)261,(XrXirType)262,(XrXirType)265,(XrXirType)266,
         (XrXirType)257,(XrXirType)258};
     XrXirType arguments[] = {XR_XIR_I64,XR_XIR_STRING};

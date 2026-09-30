@@ -349,7 +349,7 @@ static void constructed_metadata(void) {
         {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536, {0}}
     };
-    XrXirTypes types = {nodes,5, NULL};
+    XrXirTypes types = {nodes,5, NULL, NULL};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_OK);
     CHECK(xr_xir_type_is_array(&types,(XrXirType)256));
@@ -445,7 +445,7 @@ static void nominal_metadata_cases(void) {
     CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f);
     XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1), NULL, 0, XR_XIR_UNIT, 0, 2, {0}};
-    XrXirTypes types = {&node, 1, NULL}; f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypes types = {&node, 1, NULL, NULL}; f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_verify(&f.table, &types, &b) == XR_XIR_BAD_TYPE);
     node.element = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
@@ -472,7 +472,7 @@ static void nominal_metadata_cases(void) {
 
 static void nominal_pool_ownership(void) {
     NominalFixture f; nominal_fixture(&f);
-    XrXirTypes types = {NULL, 0, &f.table};
+    XrXirTypes types = {NULL, 0, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
     XrXirTypes *copy = NULL;
@@ -497,7 +497,7 @@ static void nominal_instance_metadata(void) {
     XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, &argument, 1, NULL, 0}}};
-    XrXirTypes types = {nodes, 3, &f.table};
+    XrXirTypes types = {nodes, 3, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
     for (unsigned mode = 0; mode < 11; ++mode) {
@@ -541,7 +541,7 @@ static void nominal_argument_identity(void) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments, 2, NULL, 0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 2, 2, NULL, 0}}};
-    XrXirTypes types = {nodes, 2, &f.table};
+    XrXirTypes types = {nodes, 2, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
     nodes[1].nominal.arguments = arguments; budget = xr_xir_default_budget();
@@ -562,7 +562,7 @@ static void nominal_context_proofs(void) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_ARRAY, argument, NULL, 0, XR_XIR_UNIT, 0, 2, {0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 2, {0, &argument, 1, NULL, 0}}};
-    XrXirTypes types = {nodes, 2, &f.table};
+    XrXirTypes types = {nodes, 2, &f.table, NULL};
     const XrXirType nominal = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirConstraint allowed[] = {{0}, {XR_XIR_CONSTRAINT_SENDABLE}}, denied[] = {{XR_XIR_CONSTRAINT_SENDABLE}, {0}};
     XrXirBudget initial = xr_xir_default_budget(), budget = initial;
@@ -595,7 +595,7 @@ static void nominal_context_proofs(void) {
 static void nominal_kind_boundaries(void) {
     EnumMetadataFixture f; enum_metadata_fixture(&f);
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
-    XrXirTypes types = {&node, 1, &f.table};
+    XrXirTypes types = {&node, 1, &f.table, NULL};
     XrXirType type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     CHECK(xr_xir_type_is_nominal(&types, type));
     CHECK(xr_xir_type_is_enum(&types, type) && !xr_xir_type_is_struct(&types, type));
@@ -667,7 +667,7 @@ static void enum_metadata_cases(void) {
     CHECK(xr_xir_nominal_clone(&f.table, NULL, &b, &copy) == XR_XIR_BUDGET && !copy && b.work == 1);
     XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL; node.nominal.fields = fields; node.nominal.field_count = 2;
-    XrXirTypes types = {&node, 1, &f.table}; b = xr_xir_default_budget();
+    XrXirTypes types = {&node, 1, &f.table, NULL}; b = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types, &b) == XR_XIR_OK);
 }
 
@@ -703,7 +703,7 @@ static void error_filter_guards(void) {
         EnumMetadataFixture f; enum_metadata_fixture(&f);
         XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING};
         XrXirTypeNode node = {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {0, NULL, 0, fields, 2}};
-        XrXirTypes types = {&node, 1, &f.table};
+        XrXirTypes types = {&node, 1, &f.table, NULL};
         XrXirType parameters[] = {XR_XIR_ERROR, XR_XIR_ERROR};
         XrXirInstruction ops[] = {
             {XR_XIR_ERROR_IS, XR_XIR_BOOL, {0}, {0}, 256, {0}},
@@ -756,7 +756,7 @@ static void panic_handler_packets(const XrXirArtifact *checked) {
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].blocks[1].panic == 2);
     xr_xir_artifact_free(decoded); decoded = NULL;
-    CHECK(packet.length == 485 && packet.bytes[117] == 2);
+    CHECK(packet.length == 489 && packet.bytes[117] == 2);
     CHECK(packet.bytes[345] == XR_XIR_PANIC_CATCH && packet.bytes[385] == XR_XIR_COPY);
     const struct { size_t offset; uint8_t value; } attacks[] = {
         {101, 2}, {117, 1}, {117, 3}, {117, 0}, {133, 2},

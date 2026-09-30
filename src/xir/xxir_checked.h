@@ -12,8 +12,8 @@
 #ifndef XXIR_CHECKED_H
 #define XXIR_CHECKED_H
 #include "xxir.h"
-#define XR_XIR_CHECKED_SCHEMA 14u
-#define XR_XIR_CHECKED_CONTRACT 42u
+#define XR_XIR_CHECKED_SCHEMA 15u
+#define XR_XIR_CHECKED_CONTRACT 43u
 typedef struct XrXirCheckedPacket {
     uint8_t *bytes;
     size_t length;

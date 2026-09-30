@@ -24,7 +24,7 @@ static void storage_cache_cases(void) {
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {1, NULL, 0, outer, 3}},
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {2, NULL, 0, NULL, 0}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_STRING}};
-    XrXirTypes types = {nodes, 4, &table};
+    XrXirTypes types = {nodes, 4, &table, NULL};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(!live && xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirBudget initial = (XrXirBudget) {.parameters = 65536, .metadata_bytes = 1048576, .scratch_bytes = 1048576, .work = 16777216}, budget = initial;
@@ -91,7 +91,7 @@ static void storage_cache_shared_graph(void) {
     /* The root contains the same completed subtree twice. */
     XrXirType roots[] = {(XrXirType)257, (XrXirType)257};
     nodes[0].nominal.fields = roots; nodes[0].nominal.field_count = 2;
-    XrXirTypes types = {nodes, COUNT, &table}; XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
+    XrXirTypes types = {nodes, COUNT, &table, NULL}; XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(!live && xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirBudget budget = (XrXirBudget) {.parameters = 65536, .metadata_bytes = 1048576, .scratch_bytes = 1048576, .work = 16777216};
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);

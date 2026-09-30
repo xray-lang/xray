@@ -34,7 +34,7 @@ static void xir_array_metadata_init(XirArrayMetadataFixture *f) {
     f->nodes[0] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
     f->nodes[1] = (XrXirTypeNode) {XR_XIR_TYPE_CELL, array, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
     f->nodes[2] = (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_I64, 0, 0, {0}};
-    f->types = (XrXirTypes) {f->nodes, 3, NULL};
+    f->types = (XrXirTypes) {f->nodes, 3, NULL, NULL};
     f->init[0] = (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}};
     f->init[1] = (XrXirInstruction) {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     f->init[2] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};

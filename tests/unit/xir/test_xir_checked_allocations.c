@@ -50,6 +50,8 @@ static void packet_free(void *p) {
 #define xr_calloc(count, size) packet_calloc(count, size)
 #define xr_free(p) packet_free(p)
 #include "xir/xxir_types.c"
+#include "xir/xxir_interface.c"
+#include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"

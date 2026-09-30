@@ -23,7 +23,7 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     call[0].immediate = 3; CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_STRUCTURE); call[0].immediate = 2;
     XrXirInstruction saved_call = call[0];
     XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = XR_XIR_UNIT;
-    XrXirTypes types = {&signature, 1, NULL}; module->types = &types;
+    XrXirTypes types = {&signature, 1, NULL, NULL}; module->types = &types;
     call[0].op = XR_XIR_FUNCTION_REF; call[0].type = (XrXirType)256;
     CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_OK);
     call[0].immediate = 3; CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
@@ -74,7 +74,9 @@ static void cleanup_role_cases(void) {
         if (!memcmp(packet.bytes + i, identities, sizeof(identities))) { at = i; ++matches; }
     CHECK(matches == 1);
     put32(packet.bytes + 8, 12); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 8, 14); put32(packet.bytes + 12, 34); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 8, 14); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 8, XR_XIR_CHECKED_SCHEMA);
+    put32(packet.bytes + 12, 34); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 35); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 36); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 37); digest_packet(&packet); rejected(packet.bytes, packet.length);
@@ -82,7 +84,9 @@ static void cleanup_role_cases(void) {
     put32(packet.bytes + 12, 39); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 40); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 41); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 42); digest_packet(&packet);
+    put32(packet.bytes + 12, 42); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 8, XR_XIR_CHECKED_SCHEMA);
+    put32(packet.bytes + 12, XR_XIR_CHECKED_CONTRACT); digest_packet(&packet);
     put32(packet.bytes + at + 3 * 24 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + at + 3 * 24 + 16, 3); digest_packet(&packet);
     put32(packet.bytes + at + 2 * 24 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);

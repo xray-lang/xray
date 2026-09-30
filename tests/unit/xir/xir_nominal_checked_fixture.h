@@ -22,7 +22,7 @@ static XrXirArtifact *nominal_checked_fixture(unsigned mode) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments, 1, NULL, 0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 1, 1, NULL, 0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, arguments, 1, NULL, 0}}};
-    XrXirTypes types = {mode == 2 ? nodes + 1 : mode ? nodes : NULL, mode == 3 ? 4u : mode == 2 ? 3u : mode ? 1u : 0u, &f.table};
+    XrXirTypes types = {mode == 2 ? nodes + 1 : mode ? nodes : NULL, mode == 3 ? 4u : mode == 2 ? 3u : mode ? 1u : 0u, &f.table, NULL};
     if (mode == 1 || mode == 3) f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     built.types = &types;
     XrXirFunctionIdentity identities[9];

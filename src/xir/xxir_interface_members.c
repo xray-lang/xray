@@ -1,0 +1,260 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_interface_members.c - Bounded inherited application consistency
+ *
+ * KEY CONCEPT:
+ *   Composed substitutions use the existing structural type matcher; original
+ *   declarations keep every obligation even when member lookup can merge names.
+ */
+#include "xxir_interface_members.h"
+#include "xxir_types.h"
+#include "../base/xmalloc.h"
+#include <string.h>
+
+typedef struct MemberMemory { struct MemberMemory *next; } MemberMemory;
+typedef struct MemberApplication {
+    struct MemberApplication *next;
+    uint32_t declaration, count;
+    XrXirType *arguments;
+} MemberApplication;
+typedef struct MemberRequirement {
+    struct MemberRequirement *next;
+    XrXirLiteral name;
+    XrXirType signature;
+    uint32_t receiver;
+} MemberRequirement;
+typedef struct MemberTypeValue {
+    struct MemberTypeValue *next;
+    XrXirType source, result;
+} MemberTypeValue;
+typedef struct MemberTypeMap { MemberTypeValue *values; } MemberTypeMap;
+typedef struct MemberTypeWalk {
+    struct MemberTypeWalk *parent;
+    XrXirType source;
+    uint32_t next;
+} MemberTypeWalk;
+typedef struct MemberContext {
+    const XrXirInterfaceTable *table;
+    const XrXirTypes *source;
+    XrXirTypes types;
+    uint32_t capacity, root_count;
+    XrXirType *root_arguments;
+    MemberMemory *memory;
+    MemberApplication *applications, *tail;
+    MemberRequirement *requirements;
+    XrXirBudget remaining;
+    XrXirStatus status;
+} MemberContext;
+
+static bool member_work(MemberContext *c, uint64_t work) {
+    if (c->status != XR_XIR_OK) return false;
+    if (work > c->remaining.work) { c->status = XR_XIR_BUDGET; return false; }
+    c->remaining.work -= work; return true;
+}
+static void *member_alloc(MemberContext *c, uint64_t count, size_t size) {
+    if (!count || c->status != XR_XIR_OK) return NULL;
+    if (count > (SIZE_MAX - sizeof(MemberMemory)) / size ||
+        sizeof(MemberMemory) + count * size > c->remaining.scratch_bytes) {
+        c->status = XR_XIR_BUDGET; return NULL;
+    }
+    size_t bytes = sizeof(MemberMemory) + (size_t)count * size;
+    MemberMemory *memory = xr_calloc(1, bytes);
+    if (!memory) { c->status = XR_XIR_OUT_OF_MEMORY; return NULL; }
+    c->remaining.scratch_bytes -= bytes;
+    memory->next = c->memory; c->memory = memory; return memory + 1;
+}
+static void member_dispose(MemberContext *c) {
+    while (c->memory) { MemberMemory *next = c->memory->next; xr_free(c->memory); c->memory = next; }
+}
+/* Distinct pool views request structural comparison even for closed nodes.
+ * Root parameters retain their declaration context through identity arguments. */
+static bool member_equal(MemberContext *c, XrXirType a, XrXirType b) {
+    if (!member_work(c, 1)) return false;
+    if (a == b) return true;
+    XrXirTypes from = c->types;
+    XrXirBudget match = c->remaining;
+    match.metadata_bytes = match.scratch_bytes;
+    XrXirStatus status = xr_xir_type_substitution_matches_between(&from, &c->types,
+        c->root_arguments, c->root_count, a, b, &match);
+    c->remaining.work = match.work; c->remaining.scratch_bytes = match.metadata_bytes;
+    if (status != XR_XIR_OK && status != XR_XIR_BAD_TYPE) c->status = status;
+    return status == XR_XIR_OK;
+}
+static bool member_ready(MemberContext *c, const MemberApplication *app,
+    const MemberTypeMap *map, XrXirType type, XrXirType *result) {
+    if (!member_work(c, 1)) return false;
+    uint32_t id = (uint32_t)type;
+    if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
+        uint32_t index = id - XR_XIR_TYPE_PARAMETER_BASE;
+        if (index >= app->count) { c->status = XR_XIR_BAD_TYPE; return false; }
+        *result = app->arguments[index]; return true;
+    }
+    const XrXirTypeNode *node = xr_xir_type_node(c->source, type);
+    if (!node || !node->parameter_span) { *result = type; return true; }
+    for (MemberTypeValue *value = map->values; value && member_work(c, 1); value = value->next)
+        if (value->source == type) { *result = value->result; return true; }
+    return false;
+}
+static XrXirType member_remap(MemberContext *c, const MemberApplication *app,
+    const MemberTypeMap *map, XrXirType type) {
+    XrXirType result = XR_XIR_UNIT;
+    if (!member_ready(c, app, map, type, &result) && c->status == XR_XIR_OK)
+        c->status = XR_XIR_BAD_TYPE;
+    return result;
+}
+static XrXirType member_node(MemberContext *c, XrXirTypeNode node) {
+    uint32_t limit = XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    if (c->types.count == limit) { c->status = XR_XIR_BUDGET; return XR_XIR_UNIT; }
+    if (c->types.count == c->capacity) {
+        uint32_t capacity = c->capacity > limit / 2 ? limit : c->capacity ? c->capacity * 2 : 8;
+        XrXirTypeNode *nodes = member_alloc(c, capacity, sizeof(*nodes));
+        if (!nodes || !member_work(c, c->types.count)) return XR_XIR_UNIT;
+        if (c->types.count) memcpy(nodes, c->types.nodes, c->types.count * sizeof(*nodes));
+        c->types.nodes = nodes; c->capacity = capacity;
+    }
+    ((XrXirTypeNode *)c->types.nodes)[c->types.count] = node;
+    return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + c->types.count++);
+}
+static void member_span(MemberContext *c, XrXirTypeNode *node, XrXirType child) {
+    uint32_t span = xr_xir_type_span(&c->types, child);
+    if (span > node->parameter_span) node->parameter_span = span;
+}
+static XrXirType member_substitute_node(MemberContext *c, const MemberApplication *app,
+    const MemberTypeMap *map, XrXirTypeNode node) {
+    node.parameter_span = 0;
+    if (node.kind == XR_XIR_TYPE_CALLABLE) {
+        XrXirCallableParameter *parameters = member_alloc(c, node.parameter_count, sizeof(*parameters));
+        if (node.parameter_count && !parameters) return XR_XIR_UNIT;
+        for (uint32_t p = 0; p < node.parameter_count && c->status == XR_XIR_OK; ++p) {
+            parameters[p] = node.parameters[p];
+            parameters[p].type = member_remap(c, app, map, parameters[p].type);
+            member_span(c, &node, parameters[p].type);
+        }
+        node.parameters = parameters; node.result = member_remap(c, app, map, node.result);
+        member_span(c, &node, node.result);
+    } else if (node.kind == XR_XIR_TYPE_NOMINAL) {
+        XrXirType *arguments = member_alloc(c, node.nominal.argument_count, sizeof(*arguments));
+        if (node.nominal.argument_count && !arguments) return XR_XIR_UNIT;
+        for (uint32_t a = 0; a < node.nominal.argument_count && c->status == XR_XIR_OK; ++a) {
+            arguments[a] = member_remap(c, app, map, node.nominal.arguments[a]);
+            member_span(c, &node, arguments[a]);
+        }
+        node.nominal.arguments = arguments;
+        /* Equality uses the nominal declaration and arguments, not field layout. */
+        node.nominal.fields = NULL; node.nominal.field_count = 0;
+    } else {
+        node.element = member_remap(c, app, map, node.element); member_span(c, &node, node.element);
+    }
+    return c->status == XR_XIR_OK ? member_node(c, node) : XR_XIR_UNIT;
+}
+static MemberTypeWalk *member_type_push(MemberContext *c, MemberTypeWalk *parent, XrXirType type) {
+    MemberTypeWalk *frame = member_alloc(c, 1, sizeof(*frame));
+    if (frame) *frame = (MemberTypeWalk){parent,type,0};
+    return frame;
+}
+/* Only referenced abstract nodes enter this sparse substitution cache. Closed
+ * descriptors stay in the original pool; every descent follows a smaller ID. */
+static XrXirType member_resolve(MemberContext *c, const MemberApplication *app,
+    MemberTypeMap *map, XrXirType type) {
+    XrXirType result = XR_XIR_UNIT;
+    if (member_ready(c,app,map,type,&result)) return result;
+    if (c->status != XR_XIR_OK) return XR_XIR_UNIT;
+    MemberTypeWalk *frame = member_type_push(c,NULL,type);
+    while (frame && member_work(c,1)) {
+        const XrXirTypeNode *node = xr_xir_type_node(c->source,frame->source);
+        if (!node) { c->status = XR_XIR_BAD_TYPE; break; }
+        uint32_t components = node->kind == XR_XIR_TYPE_NOMINAL ? node->nominal.argument_count :
+            node->kind == XR_XIR_TYPE_CALLABLE ? node->parameter_count + 1 : 1;
+        if (frame->next == components) {
+            result = member_substitute_node(c,app,map,*node);
+            MemberTypeValue *value = member_alloc(c,1,sizeof(*value));
+            if (!value) break;
+            *value = (MemberTypeValue){map->values,frame->source,result}; map->values = value;
+            frame = frame->parent; continue;
+        }
+        XrXirType child = node->element;
+        if (node->kind == XR_XIR_TYPE_NOMINAL) child = node->nominal.arguments[frame->next];
+        if (node->kind == XR_XIR_TYPE_CALLABLE)
+            child = frame->next < node->parameter_count ? node->parameters[frame->next].type : node->result;
+        if (member_ready(c,app,map,child,&result)) { ++frame->next; continue; }
+        if (c->status != XR_XIR_OK) break;
+        if ((uint32_t)child >= (uint32_t)frame->source) { c->status = XR_XIR_BAD_TYPE; break; }
+        frame = member_type_push(c,frame,child);
+    }
+    return c->status == XR_XIR_OK ? member_remap(c,app,map,type) : XR_XIR_UNIT;
+}
+static void member_application(MemberContext *c, uint32_t declaration, XrXirType *arguments) {
+    uint32_t count = c->table->declarations[declaration].parameter_count;
+    for (MemberApplication *a = c->applications; a && member_work(c, 1); a = a->next) {
+        if (a->declaration != declaration) continue;
+        bool same = true;
+        for (uint32_t p = 0; p < count && same; ++p) same = member_equal(c, a->arguments[p], arguments[p]);
+        if (same) return;
+    }
+    MemberApplication *app = member_alloc(c, 1, sizeof(*app));
+    if (!app) return;
+    app->declaration = declaration; app->count = count; app->arguments = arguments;
+    if (c->tail) c->tail->next = app; else c->applications = app;
+    c->tail = app;
+}
+static void member_requirement(MemberContext *c, const XrXirInterfaceMethod *method, XrXirType signature) {
+    for (MemberRequirement *r = c->requirements; r; r = r->next) {
+        if (!member_work(c, (uint64_t)method->name.length + 1)) return;
+        if (r->name.length != method->name.length || memcmp(r->name.bytes, method->name.bytes, r->name.length)) continue;
+        if (r->receiver != method->receiver || !member_equal(c, r->signature, signature)) {
+            if (c->status == XR_XIR_OK) c->status = XR_XIR_BAD_TYPE;
+            return;
+        }
+    }
+    MemberRequirement *requirement = member_alloc(c, 1, sizeof(*requirement));
+    if (!requirement) return;
+    *requirement = (MemberRequirement){c->requirements, method->name, signature, method->receiver};
+    c->requirements = requirement;
+}
+static void member_expand(MemberContext *c, const MemberApplication *app) {
+    const XrXirInterfaceDeclaration *d = &c->table->declarations[app->declaration];
+    MemberTypeMap map = {0};
+    for (uint32_t m = 0; m < d->method_count && member_work(c, 1); ++m) {
+        XrXirType signature = member_resolve(c, app, &map, d->methods[m].signature);
+        if (c->status == XR_XIR_OK) member_requirement(c, &d->methods[m], signature);
+    }
+    for (uint32_t p = 0; p < d->parent_count && member_work(c, 1); ++p) {
+        const XrXirInterfaceApplication *parent = &d->parents[p];
+        XrXirType *arguments = member_alloc(c, parent->argument_count, sizeof(*arguments));
+        if (parent->argument_count && !arguments) return;
+        for (uint32_t a = 0; a < parent->argument_count && c->status == XR_XIR_OK; ++a)
+            arguments[a] = member_resolve(c, app, &map, parent->arguments[a]);
+        if (c->status == XR_XIR_OK) member_application(c, parent->declaration, arguments);
+    }
+}
+static void member_root(MemberContext *c, uint32_t root) {
+    if (c->source) {
+        c->types = *c->source; c->types.interfaces = NULL;
+        c->capacity = c->types.count;
+    }
+    c->root_count = c->table->declarations[root].parameter_count;
+    c->root_arguments = member_alloc(c, c->root_count, sizeof(*c->root_arguments));
+    if (c->root_count && !c->root_arguments) return;
+    for (uint32_t p = 0; p < c->root_count && member_work(c, 1); ++p)
+        c->root_arguments[p] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + p);
+    if (c->status == XR_XIR_OK) member_application(c, root, c->root_arguments);
+    for (MemberApplication *app = c->applications; app && member_work(c, 1); app = app->next)
+        member_expand(c, app);
+}
+XR_FUNC XrXirStatus xr_xir_interfaces_verify_members_verified(
+    const XrXirInterfaceTable *table, const XrXirTypes *types, XrXirBudget *budget) {
+    if (!budget || (table && (!table->count || !table->declarations))) return XR_XIR_BAD_STRUCTURE;
+    if (!table) return XR_XIR_OK;
+    XrXirBudget remaining = *budget;
+    for (uint32_t root = 0; root < table->count; ++root) {
+        MemberContext c = {0}; c.table = table; c.source = types; c.remaining = remaining;
+        member_root(&c, root); member_dispose(&c);
+        if (c.status != XR_XIR_OK) return c.status;
+        remaining = c.remaining;
+    }
+    *budget = remaining; return XR_XIR_OK;
+}

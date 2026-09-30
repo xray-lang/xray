@@ -55,7 +55,7 @@ static void weaken_authority_cases(void) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, 0, 0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
-    XrXirTypes types = {nodes, 2, NULL};
+    XrXirTypes types = {nodes, 2, NULL, NULL};
     XrXirType capture = XR_XIR_STRING, strong_type = (XrXirType)257;
     XrXirCallEntry entries[7];
     for (unsigned f = 0; f < 7; ++f)

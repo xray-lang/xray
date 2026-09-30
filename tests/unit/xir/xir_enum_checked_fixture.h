@@ -14,7 +14,7 @@ static XrXirArtifact *enum_checked_fixture(void) {
     XrXirArtifact *base = checked_fixture(), *checked = NULL;
     XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
     EnumMetadataFixture f; enum_metadata_fixture(&f);
-    XrXirTypes types = {NULL, 0, &f.table}; built.types = &types;
+    XrXirTypes types = {NULL, 0, &f.table, NULL}; built.types = &types;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f)); xr_xir_artifact_free(base);
     return checked;

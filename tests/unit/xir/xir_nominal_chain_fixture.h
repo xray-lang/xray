@@ -31,7 +31,7 @@ static XrXirArtifact *nominal_chain_fixture(uint32_t depth, uint32_t field_count
             {i, NULL, 0, NULL, 0}};
     }
     XrXirNominalTable table = {declarations, depth, NULL};
-    XrXirTypes types = {nodes, depth, &table}; built.types = &types;
+    XrXirTypes types = {nodes, depth, &table, NULL}; built.types = &types;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(base);
     memset(names, 0xCC, sizeof(names)); memset(fields, 0xCC, sizeof(fields));

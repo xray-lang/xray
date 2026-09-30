@@ -124,7 +124,7 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
     DrainWitness w = {0}; w.late_gate = late_gate; w.malformed = malformed;
     XrXirTypeNode nodes[2] = {0}; nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].result = XR_XIR_I64;
     nodes[1].kind = XR_XIR_TYPE_CELL; nodes[1].element = XR_XIR_I64;
-    XrXirTypes types = {nodes,2,NULL};
+    XrXirTypes types = {nodes,2,NULL, NULL};
     XrXirType parameters[] = {(XrXirType)257,(XrXirType)256};
     XrXirCallEntry entries[] = {
         {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,drain_initializer,NULL,&w,0,0},

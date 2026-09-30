@@ -62,7 +62,7 @@ static void floating_value_admission(void) {
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrXirTypeNode node = {XR_XIR_TYPE_CELL,cases[i].type,NULL,0,XR_XIR_UNIT,0,0, {0}};
-        XrXirTypes types = {&node,1, NULL};
+        XrXirTypes types = {&node,1, NULL, NULL};
         XrXirBudget budget = {.parameters = 16, .metadata_bytes = 4096, .work = 64};
         XrXirTypeArena *arena = NULL;
         CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena) == XR_XIR_VALUE_OK);

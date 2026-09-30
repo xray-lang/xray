@@ -19,7 +19,7 @@ static XrXirTypeArena *array_value_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 259},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 257},
     };
-    XrXirTypes types = {nodes, 6, NULL};
+    XrXirTypes types = {nodes, 6, NULL, NULL};
     XrXirBudget budget = {0}; budget.metadata_bytes = 65536; budget.work = 10000;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);

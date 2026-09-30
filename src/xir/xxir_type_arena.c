@@ -42,7 +42,7 @@ static XrXirStorageLayout *arena_storage(ArenaNominalCursor *c, const XrXirTypes
 static XrXirValueStatus arena_pool_size(const XrXirTypes *types, XrXirBudget *budget,
                                        size_t *output) {
     XrXirBudget remaining = *budget;
-    if (types && types->nominals && types->nominals->declarations) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (types && (types->interfaces || (types->nominals && types->nominals->declarations))) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirStatus verified = xr_xir_types_verify(types, &remaining);
     if (verified != XR_XIR_OK)
         return verified == XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT :
@@ -94,7 +94,7 @@ XR_FUNC XrXirValueStatus xr_xir_type_arena_new(XrXirDomain *domain, const XrXirT
     uint32_t count = types ? types->count : 0;
     XrXirTypeNode *nodes = (XrXirTypeNode *) (arena + 1);
     XrXirCallableParameter *parameters = (XrXirCallableParameter *) (nodes + count);
-    arena->types = (XrXirTypes) {count ? nodes : NULL, count, NULL};
+    arena->types = (XrXirTypes) {count ? nodes : NULL, count, NULL, NULL};
     for (uint32_t i = 0; i < count; ++i) {
         nodes[i] = types->nodes[i];
         nodes[i].parameters = nodes[i].parameter_count ? parameters : NULL;

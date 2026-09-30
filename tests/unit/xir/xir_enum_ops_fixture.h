@@ -17,7 +17,7 @@ static XrXirArtifact *enum_ops_checked(unsigned invalid, bool wrong_variant) {
     XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,NULL,0,fields,2,XR_XIR_NOMINAL_ENUM,variants,2};
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
-    XrXirTypes types = {&node,1,&table};
+    XrXirTypes types = {&node,1,&table, NULL};
     XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},

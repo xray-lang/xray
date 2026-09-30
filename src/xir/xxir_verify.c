@@ -828,6 +828,8 @@ static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage sta
     return status;
 }
 
+#include "xxir_interface_access.inc.c"
+
 static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirBudget *remaining) {
     const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
     if (!table) return XR_XIR_OK;
@@ -901,7 +903,8 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
         }
     }
     if (status == XR_XIR_OK) {
-        if (module->types && ((!module->generics && !module->types->nominals) || module->stage == XR_XIR_LOWERED))
+        if (module->types && module->types->interfaces && module->stage == XR_XIR_LOWERED) status = XR_XIR_BAD_STAGE;
+        if (module->types && ((!module->generics && !module->types->nominals && !module->types->interfaces) || module->stage == XR_XIR_LOWERED))
             for (uint32_t t = 0; t < module->types->count; ++t)
                 if (module->types->nodes[t].parameter_span) status = XR_XIR_BAD_TYPE;
     }
@@ -910,6 +913,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
             &context.remaining.metadata_bytes, &context.remaining.work);
     }
     if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining);
+    if (status == XR_XIR_OK) status = verify_interface_access(module, &context.remaining);
     if (status == XR_XIR_OK) status = xr_xir_generics_verify(module, &context.remaining);
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;

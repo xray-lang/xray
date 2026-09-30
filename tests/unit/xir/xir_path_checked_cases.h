@@ -47,7 +47,7 @@ static void path_array_checked_cases(void) {
     XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)256}};
-    XrXirTypes types = {nodes,2,NULL}; XrXirType parameter = (XrXirType)257;
+    XrXirTypes types = {nodes,2,NULL, NULL}; XrXirType parameter = (XrXirType)257;
     const XrXirInstruction original[] = {
         {XR_XIR_LOCAL_UNINIT,(XrXirType)257,{0},{0},0,{0}},
         {XR_XIR_LOCAL_WRITE,XR_XIR_UNIT,{1,0},{0},0,{0}},
@@ -128,7 +128,7 @@ static void path_ancestor_checked_cases(void) {
     XrXirType argument = array;
     XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_ARRAY,.element = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_NOMINAL,.nominal = {0,&argument,1,NULL,0}}};
-    XrXirTypes types = {nodes,2,&nominal.table};
+    XrXirTypes types = {nodes,2,&nominal.table, NULL};
     XrXirInstruction init[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirInstruction main[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};

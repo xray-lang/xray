@@ -10,6 +10,7 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_interface.h"
 #include "../base/xmalloc.h"
 
 XrXirStatus xr_xir_callable_weakening(const XrXirTypes *types,
@@ -230,7 +231,7 @@ static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index, uint64_t
 XrXirStatus xr_xir_types_verify(const XrXirTypes *types, XrXirBudget *remaining) {
     if (!types) return XR_XIR_OK;
     if (!remaining || (types->count != 0) != (types->nodes != NULL) ||
-        (!types->count && !types->nominals)) return XR_XIR_BAD_STRUCTURE;
+        (!types->count && !types->nominals && !types->interfaces)) return XR_XIR_BAD_STRUCTURE;
     if (types->count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_BUDGET;
     uint64_t bytes = sizeof(*types) + (uint64_t) types->count * sizeof(*types->nodes);
     if (bytes > SIZE_MAX || bytes > remaining->metadata_bytes || types->count > remaining->work) return XR_XIR_BUDGET;
@@ -242,7 +243,8 @@ XrXirStatus xr_xir_types_verify(const XrXirTypes *types, XrXirBudget *remaining)
     }
     XrXirStatus status = nominal_table_verify(types->nominals, types, remaining);
     if (status == XR_XIR_OK) status = nominal_nodes_verify(types, remaining);
-    return status == XR_XIR_OK ? nominal_layout_verify(types, remaining) : status;
+    if (status == XR_XIR_OK) status = nominal_layout_verify(types, remaining);
+    return status == XR_XIR_OK ? xr_xir_interfaces_verify_structure(types->interfaces, types, remaining) : status;
 }
 void xr_xir_types_free(XrXirTypes *types) {
     if (!types) return;
@@ -253,13 +255,14 @@ void xr_xir_types_free(XrXirTypes *types) {
             xr_free((void *) types->nodes[i].nominal.fields);
         }
     xr_xir_nominal_free((XrXirNominalTable *) types->nominals);
+    xr_xir_interfaces_free((XrXirInterfaceTable *) types->interfaces);
     xr_free((void *) types->nodes); xr_free(types);
 }
 XrXirStatus xr_xir_types_clone(const XrXirTypes *types, XrXirTypes **output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
     *output = NULL;
     if (!types) return XR_XIR_OK;
-    if ((types->count != 0) != (types->nodes != NULL) || (!types->count && !types->nominals) ||
+    if ((types->count != 0) != (types->nodes != NULL) || (!types->count && !types->nominals && !types->interfaces) ||
         types->count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_BAD_STRUCTURE;
     XrXirTypes *copy = xr_calloc(1, sizeof(*copy));
     if (!copy) return XR_XIR_OUT_OF_MEMORY;
@@ -289,6 +292,10 @@ XrXirStatus xr_xir_types_clone(const XrXirTypes *types, XrXirTypes **output) {
     XrXirStatus status = nominal_copy_table(types->nominals, &nominals);
     if (status != XR_XIR_OK) { xr_xir_types_free(copy); return status; }
     copy->nominals = nominals;
+    XrXirInterfaceTable *interfaces = NULL;
+    status = xr_xir_interfaces_copy_verified(types->interfaces, &interfaces);
+    if (status != XR_XIR_OK) { xr_xir_types_free(copy); return status; }
+    copy->interfaces = interfaces;
     *output = copy; return XR_XIR_OK;
 }
 XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value) {

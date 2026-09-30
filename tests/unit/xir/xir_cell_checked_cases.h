@@ -21,7 +21,7 @@ static void cell_generic_nominal_cases(void) {
             {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,1,{0}},
             {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,&closed,1,NULL,0}}
         };
-        XrXirTypes types = {nodes,3,&nominal.table};
+        XrXirTypes types = {nodes,3,&nominal.table, NULL};
         if (mode == 1) nodes[1].parameter_span = 0;
         if (mode == 2) nodes[1].element = (XrXirType)257;
         if (mode == 3) nodes[1].element = (XrXirType)258;
@@ -41,7 +41,7 @@ static void cell_local_checked_cases(void) {
         XrXirFunction functions[9]; memcpy(functions, built.functions, sizeof(functions));
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
         XrXirTypeNode node = {XR_XIR_TYPE_CELL, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
-        XrXirTypes types = {&node, 1, NULL}; built.types = &types;
+        XrXirTypes types = {&node, 1, NULL, NULL}; built.types = &types;
         XrXirInstruction ops[] = {
             {XR_XIR_LOCAL_UNINIT, (XrXirType)256, {0}, {0}, 0, {0}},
             {XR_XIR_CELL_LOCAL_WRITE, XR_XIR_UNIT, {2,1}, {0}, 0, {0}},
@@ -88,7 +88,7 @@ static void cell_checked_cases(void) {
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
         XrXirTypeNode nodes[] = {{XR_XIR_TYPE_CELL,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
             {XR_XIR_TYPE_CELL,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}}};
-        XrXirTypes types = {nodes,2, NULL}; built.types = &types;
+        XrXirTypes types = {nodes,2, NULL, NULL}; built.types = &types;
         XrXirInstruction ops[] = {
             {XR_XIR_CELL_NEW, (XrXirType)256, {1}, {0}, 0, {0}},
             {XR_XIR_CELL_READ, XR_XIR_STRING, {2}, {0}, 0, {0}},

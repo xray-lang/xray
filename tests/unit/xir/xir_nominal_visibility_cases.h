@@ -20,7 +20,7 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, arguments, 1, fields, 2}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 1, 1, fields + 2, 2}},
         {XR_XIR_TYPE_CELL, (XrXirType)257, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
-    XrXirTypes types = {nodes, 3, &table};
+    XrXirTypes types = {nodes, 3, &table, NULL};
     XrXirProgram *original = NULL;
     CHECK(xr_xir_program_seal(base, (XrXirProgramBudget) {2097152, 16000000}, &original) == XR_XIR_OK);
     xr_xir_program_drop(original);

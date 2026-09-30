@@ -22,7 +22,7 @@ static XrXirArtifact *path_program_fixture(unsigned kind) {
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {0,&argument,1,NULL,0}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = pair},
         {.kind = XR_XIR_TYPE_CELL, .element = root}};
-    XrXirTypes types = {nodes,4,&nominal.table};
+    XrXirTypes types = {nodes,4,&nominal.table, NULL};
     XrXirInstruction init[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},11,{0}},
         {XR_XIR_ARRAY_NEW,items,{0,1},{0},0,{0}},

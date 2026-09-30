@@ -35,7 +35,7 @@ static XrXirArtifact *nominal_field_closure_fixture(unsigned mode) {
         nodes[at+2] = (XrXirTypeNode){XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,&i64,1,NULL,0}};
         fields[1].type = (XrXirType)(257+at);
     }
-    XrXirTypes types = {nodes,mode+2,&table}; built.types = &types;
+    XrXirTypes types = {nodes,mode+2,&table, NULL}; built.types = &types;
     CHECK(!built.generics);
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
     xr_xir_artifact_free(base); return checked;

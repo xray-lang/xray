@@ -21,7 +21,7 @@ static XrXirArtifact *capture_checked(bool throwing) {
     ErrorFixture error; error_fixture_init(&error,false);
     error.declaration.module = (XrXirLiteral){"root",4};
     XrXirTypeNode nodes[] = {signature,error.node};
-    XrXirTypes types = {nodes,2,&error.table};
+    XrXirTypes types = {nodes,2,&error.table, NULL};
     XrXirInstruction init[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
     XrXirInstruction root[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},17, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};

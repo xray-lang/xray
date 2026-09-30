@@ -380,7 +380,7 @@ static void native_array_binding_decisions(XrXirSourceRequest *request, const ch
 static void nominal_query_boundary(void) {
     XrXirNominalIdentity identity = {0};
     XrXirNominalTable declarations = {NULL, 1, &identity};
-    XrXirTypes types = {NULL, 0, &declarations};
+    XrXirTypes types = {NULL, 0, &declarations, NULL};
     XrXirSourceView view = {0}; view.types = &types;
     XrXirBudget budget = xr_xir_default_budget(), original = budget;
     XrXirSourceSnapshot *snapshot = (XrXirSourceSnapshot *) (uintptr_t) 1;

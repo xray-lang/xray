@@ -41,7 +41,7 @@ static void nominal_ordered_matching(void) {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,arguments[2],2,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,2,{0,arguments[3],2,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,arguments[4],2,NULL,0}}};
-    XrXirTypes types = {nodes,6,&f.table}; XrXirBudget budget = xr_xir_default_budget();
+    XrXirTypes types = {nodes,6,&f.table, NULL}; XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_OK);
     for (unsigned i = 0; i < 4; ++i) {
         budget = xr_xir_default_budget();
@@ -97,7 +97,7 @@ static void cross_pool_substitution(void) {
     XrXirTypeNode target_nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_BOOL, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
         {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
         {XR_XIR_TYPE_ARRAY, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
-    XrXirTypes source = {source_nodes, 2, NULL}, target = {target_nodes, 3, NULL};
+    XrXirTypes source = {source_nodes, 2, NULL, NULL}, target = {target_nodes, 3, NULL, NULL};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_type_substitution_matches_between(&source,&target,&actual,1,(XrXirType)256,(XrXirType)257,&budget) == XR_XIR_OK);
     CHECK(xr_xir_type_substitution_matches_between(&source,&target,&actual,1,(XrXirType)256,(XrXirType)256,&budget) == XR_XIR_BAD_TYPE);
@@ -114,7 +114,7 @@ static void nominal_argument_visibility(void) {
     nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
         {0, &argument, 1, NULL, 0}};
     ((XrXirConstraint *) module.types->nominals->declarations[0].constraints)[0].markers = 0;
-    XrXirTypes types = {nodes, 4, module.types->nominals}; module.types = &types;
+    XrXirTypes types = {nodes, 4, module.types->nominals, NULL}; module.types = &types;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_type_access(&module, 4, (XrXirType)259, &budget) == XR_XIR_BAD_TYPE);
@@ -238,7 +238,7 @@ static void error_marker_definition(void) {
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(checked);
-    CHECK(packet.length==185 && packet.bytes[165]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==189 && packet.bytes[165]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(decoded); decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
@@ -303,8 +303,8 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(valid, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(valid);
-    CHECK(packet.length > 44 && packet.bytes[packet.length - 44] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 44] = 0; rehash_generic(&packet);
+    CHECK(packet.length > 48 && packet.bytes[packet.length - 48] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[packet.length - 48] = 0; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_checked_packet_free(&packet);
     xr_xir_artifact_free(checked);
@@ -361,7 +361,7 @@ static void array_definition_constraints(void) {
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_I64,0,0, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}}};
-    XrXirTypes types = {nodes,4, NULL}; built.types = &types;
+    XrXirTypes types = {nodes,4, NULL, NULL}; built.types = &types;
     XrXirFunction functions[2]; memcpy(functions,built.functions,sizeof(functions)); built.functions = functions;
     XrXirGeneric generics[2]; memcpy(generics,built.generics,sizeof(generics)); built.generics = generics;
     XrXirInstruction ops[4]; memcpy(ops,functions[0].instructions,sizeof(ops)); functions[0].instructions = ops;
@@ -400,7 +400,7 @@ static void deep_body_substitution(void) {
         nodes[i] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY,
             (XrXirType) (i ? XR_XIR_CONSTRUCTED_TYPE_BASE + i - 1 : XR_XIR_TYPE_PARAMETER_BASE),
             NULL, 0, XR_XIR_UNIT, 0, 1, {0}};
-    XrXirTypes types = {nodes, DEPTH, NULL}; built.types = &types;
+    XrXirTypes types = {nodes, DEPTH, NULL, NULL}; built.types = &types;
     XrXirFunction functions[2]; memcpy(functions, built.functions, sizeof(functions)); built.functions = functions;
     XrXirInstruction body[] = {
         {XR_XIR_ARRAY_NEW, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + DEPTH - 1), {0}, {0}, 0, {0}},

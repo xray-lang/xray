@@ -153,11 +153,13 @@ typedef struct XrXirTypeNode {
     XrXirNominalType nominal;
 } XrXirTypeNode;
 typedef struct XrXirNominalTable XrXirNominalTable;
+typedef struct XrXirInterfaceTable XrXirInterfaceTable;
 
 typedef struct XrXirTypes {
     const XrXirTypeNode *nodes;
     uint32_t count;
     const XrXirNominalTable *nominals;
+    const XrXirInterfaceTable *interfaces;
 } XrXirTypes;
 
 typedef struct XrXirProvenance XrXirProvenance;

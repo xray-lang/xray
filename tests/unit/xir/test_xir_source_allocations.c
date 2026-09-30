@@ -75,7 +75,7 @@ static void snapshot_nominal_allocations(void) {
             XrXirType argument = XR_XIR_I64, fields[] = {XR_XIR_I64, XR_XIR_STRING};
             XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
             node.nominal = (XrXirNominalType) {0, &argument, 1, fields, 2};
-            XrXirTypes types = {declaration_only ? NULL : &node, declaration_only ? 0 : 1, &fixture.table};
+            XrXirTypes types = {declaration_only ? NULL : &node, declaration_only ? 0 : 1, &fixture.table, NULL};
             XrXirSourceView view = {0}; view.types = &types; view.diagnostic.status = XR_XIR_BAD_TYPE;
             XrXirBudget budget = xr_xir_default_budget();
             attempts = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
@@ -122,6 +122,59 @@ static void snapshot_nominal_allocations(void) {
         printf("Nominal query snapshot (%u): %zu allocation failure sites\n", declaration_only, sites);
     }
 }
+static void snapshot_interface_allocations(void) {
+    size_t sites = 0;
+    for (size_t site = 0; site <= sites; ++site) {
+        char name[] = "Measure", member[] = "get", module[] = "alpha";
+        XrXirConstraint constraint = {0};
+        XrXirType argument = XR_XIR_I64;
+        XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE;
+        node.result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
+        XrXirInterfaceMethod method = {{member,3},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0};
+        XrXirInterfaceApplication parent = {0,&argument,1};
+        XrXirInterfaceDeclaration declarations[] = {
+            {{module,5},{name,7},1,&constraint,1,NULL,0,&method,1},
+            {{module,5},{"Concrete",8},1,NULL,0,&parent,1,NULL,0}
+        };
+        XrXirInterfaceTable table = {declarations,2};
+        XrXirTypes types = {&node,1,NULL,&table};
+        XrXirSourceView view = {0}; view.types = &types;
+        XrXirBudget initial = xr_xir_default_budget(), budget = initial;
+        attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
+        XrXirSourceSnapshot *snapshot = NULL;
+        XrXirStatus status = xr_xir_source_snapshot_copy(&view,&budget,&snapshot);
+        if (!site) {
+            CHECK(status == XR_XIR_OK && snapshot); sites = attempts;
+            XrXirBudget required = initial;
+            required.work -= budget.work; required.metadata_bytes -= budget.metadata_bytes;
+            for (unsigned boundary = 0; boundary < 3; ++boundary) {
+                XrXirBudget limit = required;
+                if (boundary == 1) --limit.work;
+                if (boundary == 2) --limit.metadata_bytes;
+                XrXirSourceSnapshot *bounded = NULL;
+                CHECK(xr_xir_source_snapshot_copy(&view,&limit,&bounded) ==
+                    (boundary ? XR_XIR_BUDGET : XR_XIR_OK));
+                CHECK((bounded != NULL) == !boundary);
+                xr_xir_source_snapshot_free(bounded);
+            }
+            memset(name,0xcc,sizeof(name)); memset(member,0xcc,sizeof(member));
+            memset(module,0xcc,sizeof(module)); memset(declarations,0xcc,sizeof(declarations));
+            memset(&node,0xcc,sizeof(node)); memset(&parent,0xcc,sizeof(parent));
+            constraint.markers = UINT32_MAX; argument = XR_XIR_UNIT;
+            const XrXirTypes *copy = xr_xir_source_snapshot_view(snapshot)->types;
+            CHECK(copy != &types && copy->interfaces != &table);
+            const XrXirInterfaceDeclaration *decls = copy->interfaces->declarations;
+            CHECK(copy->interfaces->count == 2 && !memcmp(decls[0].name.bytes,"Measure",7));
+            CHECK(!memcmp(decls[0].module.bytes,"alpha",5));
+            CHECK(!memcmp(decls[0].methods[0].name.bytes,"get",3));
+            CHECK(!decls[0].constraints[0].markers && decls[1].parents[0].arguments[0] == XR_XIR_I64);
+            budget = initial; CHECK(xr_xir_types_verify(copy,&budget) == XR_XIR_OK);
+        } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
+        xr_xir_source_snapshot_free(snapshot); CHECK(!live);
+    }
+    fail_at = SIZE_MAX;
+    printf("Interface query snapshot: %zu allocation failure sites\n",sites);
+}
 static void snapshot_enum_allocations(void) {
     for (unsigned payload = 0; payload < 2; ++payload) {
         size_t sites = 0;
@@ -132,7 +185,7 @@ static void snapshot_enum_allocations(void) {
             XrXirNominalDeclaration declaration = {{"alpha", 5}, {"Choice", 6}, 1,
                 NULL, 0, payload ? &field : NULL, payload, XR_XIR_NOMINAL_ENUM, variants, 2};
             XrXirNominalTable table = {&declaration, 1, NULL};
-            XrXirTypes types = {NULL, 0, &table};
+            XrXirTypes types = {NULL, 0, &table, NULL};
             XrXirSourceView view = {0}; view.types = &types;
             XrXirBudget budget = xr_xir_default_budget();
             attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
@@ -178,7 +231,7 @@ static void snapshot_type_allocations(void) {
         {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
         {XR_XIR_TYPE_CELL, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}
     };
-    const XrXirTypes types = {nodes, 3, NULL};
+    const XrXirTypes types = {nodes, 3, NULL, NULL};
     XrXirSourceView view = {0}; view.types = &types;
     view.diagnostic.status = XR_XIR_BAD_TYPE;
     XrXirBudget budget = xr_xir_default_budget();
@@ -337,6 +390,7 @@ static void method_promise_allocations(XrCompilerSession *session) {
     printf("Method promise source ownership: %zu OOM sites; no partial publication\n", sites);
 }
 int main(void) {
+    snapshot_interface_allocations();
     snapshot_enum_allocations();
     source_nominal_substitution_failures();
     snapshot_nominal_allocations();

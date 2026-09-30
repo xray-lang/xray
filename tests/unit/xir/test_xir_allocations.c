@@ -73,6 +73,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 #define xr_realloc(pointer, size) counted_realloc(pointer, size)
 
 #include "xir/xxir_types.c"
+#include "xir/xxir_interface.c"
+#include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir_specialize.c"
@@ -103,6 +105,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_function_cases.h"
 #include "xir_instance_admission_cases.h"
 #include "xir_initialization_allocations.h"
+#include "xir_interface_packet_allocations.h"
 static void function_allocation_failures(void) {
     for (unsigned cancel = 0; cancel < 2; ++cancel) {
         calls = 0; fail_at = SIZE_MAX;
@@ -463,7 +466,7 @@ static void nominal_pool_allocation_failures(void) {
     XrXirType argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}}};
-    XrXirTypes types = {nodes, 2, &f.table};
+    XrXirTypes types = {nodes, 2, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
     calls = 0; fail_at = SIZE_MAX;
@@ -481,6 +484,7 @@ static void nominal_pool_allocation_failures(void) {
 }
 
 int main(void) {
+    interface_packet_allocation_failures();
     nominal_pool_allocation_failures();
     nominal_allocation_failures();
     segment_cases();

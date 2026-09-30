@@ -12,6 +12,7 @@
  */
 #include "xxir_checked.h"
 #include "xxir_nominal.h"
+#include "xxir_interface.h"
 #include "xxir_internal.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
@@ -254,10 +255,62 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         if (c->reading) declarations[i] = d;
     }
 }
+static void checked_interface_parents(CheckedCursor *c, XrXirInterfaceDeclaration *d) {
+    uint32_t count = checked_u32(c, d->parent_count);
+    XrXirInterfaceApplication *parents = checked_array(c, d->parents, count, sizeof(*parents), 8);
+    d->parents = parents; d->parent_count = parents ? count : 0;
+    for (uint32_t i = 0; i < d->parent_count && c->status == XR_XIR_OK; ++i) {
+        XrXirInterfaceApplication app = parents[i];
+        app.declaration = checked_u32(c, app.declaration);
+        uint32_t arguments = checked_u32(c, app.argument_count);
+        XrXirType *types = checked_array(c, app.arguments, arguments, sizeof(*types), 4);
+        app.arguments = types; app.argument_count = types ? arguments : 0;
+        for (uint32_t a = 0; a < app.argument_count && c->status == XR_XIR_OK; ++a) {
+            XrXirType type = (XrXirType) checked_u32(c, (uint32_t) types[a]);
+            if (c->reading) types[a] = type;
+        }
+        if (c->reading) parents[i] = app;
+    }
+}
+static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t count) {
+    if (!count || c->status != XR_XIR_OK) return;
+    XrXirInterfaceTable *table = checked_array(c, types->interfaces, 1, sizeof(*table), 24);
+    if (c->reading) types->interfaces = table;
+    if (!table) return;
+    XrXirInterfaceDeclaration *declarations = checked_array(c, table->declarations, count, sizeof(*declarations), 24);
+    if (c->reading) { table->declarations = declarations; table->count = declarations ? count : 0; }
+    if (!declarations) return;
+    for (uint32_t i = 0; i < count && c->status == XR_XIR_OK; ++i) {
+        XrXirInterfaceDeclaration d = declarations[i];
+        d.module = checked_nominal_name(c, d.module);
+        d.name = checked_nominal_name(c, d.name);
+        d.exported = checked_u32(c, d.exported);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
+        XrXirConstraint *constraints = checked_array(c, d.constraints, parameters, sizeof(*constraints), 4);
+        d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
+        for (uint32_t p = 0; p < d.parameter_count && c->status == XR_XIR_OK; ++p) {
+            uint32_t markers = checked_u32(c, constraints[p].markers);
+            if (c->reading) constraints[p].markers = markers;
+        }
+        checked_interface_parents(c, &d);
+        uint32_t count_methods = checked_u32(c, d.method_count);
+        XrXirInterfaceMethod *methods = checked_array(c, d.methods, count_methods, sizeof(*methods), 12);
+        d.methods = methods; d.method_count = methods ? count_methods : 0;
+        for (uint32_t j = 0; j < d.method_count && c->status == XR_XIR_OK; ++j) {
+            XrXirInterfaceMethod method = methods[j];
+            method.name = checked_nominal_name(c, method.name);
+            method.signature = (XrXirType) checked_u32(c, (uint32_t) method.signature);
+            method.receiver = checked_u32(c, method.receiver);
+            if (c->reading) methods[j] = method;
+        }
+        if (c->reading) declarations[i] = d;
+    }
+}
 static void checked_types(CheckedCursor *c, XrXirModule *m) {
     uint32_t count = checked_u32(c, m->types ? m->types->count : 0);
     uint32_t nominals = checked_u32(c, m->types && m->types->nominals ? m->types->nominals->count : 0);
-    if (c->status != XR_XIR_OK || (!count && !nominals)) return;
+    uint32_t interfaces = checked_u32(c, m->types && m->types->interfaces ? m->types->interfaces->count : 0);
+    if (c->status != XR_XIR_OK || (!count && !nominals && !interfaces)) return;
     if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE) { c->status = XR_XIR_BUDGET; return; }
     XrXirTypes *types = checked_array(c, m->types, 1, sizeof(*types), 12);
     if (!types) return;
@@ -305,6 +358,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
         if (c->reading) signatures[i] = s;
     }
     checked_nominals(c, types, nominals);
+    checked_interfaces(c, types, interfaces);
 }
 static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenance);
 static void checked_provenance(CheckedCursor *c, XrXirModule *m, bool allowed) {

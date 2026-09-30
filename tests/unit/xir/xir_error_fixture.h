@@ -38,7 +38,7 @@ static inline void error_fixture_init(ErrorFixture *f, bool runtime) {
     f->field_types[0] = XR_XIR_I64; f->field_types[1] = XR_XIR_STRING;
     f->node.kind = XR_XIR_TYPE_NOMINAL;
     if (runtime) { f->node.nominal.fields=f->field_types; f->node.nominal.field_count=2; }
-    f->types = (XrXirTypes) {&f->node,1,&f->table};
+    f->types = (XrXirTypes) {&f->node,1,&f->table, NULL};
 }
 static inline XrXirTypeArena *error_fixture_arena(XrXirDomain *domain) {
     ErrorFixture f; error_fixture_init(&f,true);

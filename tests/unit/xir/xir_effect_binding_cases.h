@@ -49,7 +49,7 @@ static void effect_binding_cases(void) {
             nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].result = XR_XIR_I64;
         }
         nodes[1].flags = XR_XIR_CALLABLE_NO_SUSPEND;
-        XrXirTypes types = {nodes, 2, NULL};
+        XrXirTypes types = {nodes, 2, NULL, NULL};
         XrXirType qualified = (XrXirType)257;
         XrXirCallEntry entries[7];
         for (unsigned f = 0; f < 7; ++f)

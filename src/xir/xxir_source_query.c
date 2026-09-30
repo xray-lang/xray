@@ -11,6 +11,7 @@
  */
 #include "xxir_source_query_internal.h"
 #include "xxir_nominal.h"
+#include "xxir_interface.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
@@ -88,12 +89,34 @@ static void query_nominals(SourceQueryCopy *copy, XrXirTypes *types) {
             query_literal(copy, &variants[j].name);
     }
 }
+static void query_interfaces(SourceQueryCopy *copy, XrXirTypes *types) {
+    const XrXirInterfaceTable *source = types->interfaces;
+    if (!source) return;
+    XrXirInterfaceTable *table = query_copy(copy, source, 1, sizeof(*table));
+    types->interfaces = table;
+    if (!table) return;
+    XrXirInterfaceDeclaration *decls = query_copy(copy, source->declarations, source->count, sizeof(*decls));
+    table->declarations = decls;
+    for (uint32_t i = 0; decls && i < source->count && copy->status == XR_XIR_OK; ++i) {
+        query_literal(copy, &decls[i].module); query_literal(copy, &decls[i].name);
+        decls[i].constraints = query_copy(copy, decls[i].constraints, decls[i].parameter_count, sizeof(*decls[i].constraints));
+        XrXirInterfaceApplication *parents = query_copy(copy, decls[i].parents, decls[i].parent_count, sizeof(*parents));
+        decls[i].parents = parents;
+        for (uint32_t p = 0; parents && p < decls[i].parent_count && copy->status == XR_XIR_OK; ++p)
+            parents[p].arguments = query_copy(copy, parents[p].arguments, parents[p].argument_count, sizeof(*parents[p].arguments));
+        XrXirInterfaceMethod *methods = query_copy(copy, decls[i].methods, decls[i].method_count, sizeof(*methods));
+        decls[i].methods = methods;
+        for (uint32_t m = 0; methods && m < decls[i].method_count && copy->status == XR_XIR_OK; ++m)
+            query_literal(copy, &methods[m].name);
+    }
+}
 static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {
     if (!source) { copy->snapshot->view.types = NULL; return; }
     XrXirTypes *types = query_copy(copy, source, 1, sizeof(*types));
     if (!types) return;
     copy->snapshot->view.types = types;
     query_nominals(copy, types);
+    query_interfaces(copy, types);
     XrXirTypeNode *nodes = query_copy(copy, source->nodes, source->count, sizeof(*nodes));
     types->nodes = nodes;
     if (!nodes) return;

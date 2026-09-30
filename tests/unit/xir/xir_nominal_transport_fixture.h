@@ -18,7 +18,7 @@ static XrXirArtifact *nominal_transport_fixture(void) {
     NominalFixture nominal; nominal_fixture(&nominal); nominal.table.count = 1;
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
         {0, &argument, 1, NULL, 0}};
-    XrXirTypes types = {&node, 1, &nominal.table};
+    XrXirTypes types = {&node, 1, &nominal.table, NULL};
     XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirInstruction entry[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};

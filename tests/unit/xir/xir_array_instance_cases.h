@@ -190,7 +190,7 @@ static void array_instance_cases(void) {
             {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}},
             {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},
             {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}}};
-        XrXirTypes types = {nodes,3, NULL};
+        XrXirTypes types = {nodes,3, NULL, NULL};
         uint32_t dependency = 1;
         XrXirSourceModule modules[] = {{"array",5,mode ? NULL : &dependency,mode ? 0 : 1,0},
             {"library",7,NULL,0,2}};

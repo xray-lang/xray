@@ -31,7 +31,7 @@ static XrXirArtifact *nominal_generic_fixture(bool expressions) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments, 1, NULL, 0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 1, 1, NULL, 0}}};
     if (expressions) f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirTypes types = {nodes, expressions ? 3 : 1, &f.table};
+    XrXirTypes types = {nodes, expressions ? 3 : 1, &f.table, NULL};
     built.functions = functions; built.function_count = 4; built.generics = generics;
     built.declarations = &declarations; built.types = &types;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);

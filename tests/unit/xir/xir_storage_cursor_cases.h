@@ -25,7 +25,7 @@ static XrXirTypeArena *storage_cursor_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)257},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};
-    const XrXirTypes types = {nodes, 6, &table};
+    const XrXirTypes types = {nodes, 6, &table, NULL};
     XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);

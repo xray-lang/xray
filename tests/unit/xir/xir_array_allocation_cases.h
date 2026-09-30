@@ -10,7 +10,7 @@
 #define XIR_ARRAY_ALLOCATION_CASES_H
 static XrXirTypeArena *array_allocation_arena(XrXirDomain *domain,
                                             const XrXirTypeNode *nodes, uint32_t count) {
-    XrXirTypes types = {nodes, count, NULL}; XrXirTypeArena *arena = NULL;
+    XrXirTypes types = {nodes, count, NULL, NULL}; XrXirTypeArena *arena = NULL;
     XrXirBudget budget = {0}; budget.work = UINT64_MAX; budget.metadata_bytes = 1024 * 1024;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     return arena;
