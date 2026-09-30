@@ -80,6 +80,25 @@ add_xray_python_unit_test(test_canonical_program_test_profile
 add_xray_python_unit_test(xr_program_h2_backend_differential_self_test
     test_h2_backend_differential.py)
 
+add_executable(test_xtoml base/test_xtoml.c ${CMAKE_SOURCE_DIR}/src/base/xtoml.c)
+target_include_directories(test_xtoml PRIVATE ${CMAKE_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test_xtoml PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xtoml PRIVATE -Wall -Wextra -Werror)
+endif()
+add_executable(test_xtoml_allocations base/test_xtoml_allocations.c)
+target_include_directories(test_xtoml_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test_xtoml_allocations PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xtoml_allocations PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xtoml_allocations COMMAND test_xtoml_allocations)
+set_tests_properties(test_xtoml_allocations PROPERTIES LABELS "unit;metadata;ownership")
+add_test(NAME test_xtoml COMMAND test_xtoml)
+set_tests_properties(test_xtoml PROPERTIES LABELS "unit;metadata;ownership")
+
 # ============================================================================
 # value/ — Value system
 # ============================================================================

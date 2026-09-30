@@ -61,6 +61,19 @@ XR_FUNC void xtoml_free(XrTomlValue *v) {
     xr_free(v);
 }
 
+/* Consume owned text, including when node allocation fails. */
+static XrTomlValue *new_string(char *text) {
+    if (!text)
+        return NULL;
+    XrTomlValue *value = alloc_value(XR_TOML_STRING);
+    if (!value) {
+        xr_free(text);
+        return NULL;
+    }
+    value->as.string = text;
+    return value;
+}
+
 /* ========== Table Helpers ========== */
 
 static XrTomlValue *new_table(void) {
@@ -88,17 +101,13 @@ static int table_find(XrTomlValue *t, const char *key) {
     return -1;
 }
 
-/* Set key=value in table. If key exists, replaces value. */
+/* Insert an unassigned key. Ownership transfers only on success. */
 static bool table_set(XrTomlValue *t, const char *key, XrTomlValue *val) {
     if (!t || t->type != XR_TOML_TABLE || !key)
         return false;
 
-    int idx = table_find(t, key);
-    if (idx >= 0) {
-        xtoml_free(t->as.table.members[idx].value);
-        t->as.table.members[idx].value = val;
-        return true;
-    }
+    if (table_find(t, key) >= 0)
+        return false;
 
     if (t->as.table.count >= t->as.table.capacity) {
         int new_cap = t->as.table.capacity * 2;
@@ -109,7 +118,10 @@ static bool table_set(XrTomlValue *t, const char *key, XrTomlValue *val) {
         t->as.table.members = tmp;
         t->as.table.capacity = new_cap;
     }
-    t->as.table.members[t->as.table.count].key = xr_strdup(key);
+    char *copy = xr_strdup(key);
+    if (!copy)
+        return false;
+    t->as.table.members[t->as.table.count].key = copy;
     t->as.table.members[t->as.table.count].value = val;
     t->as.table.count++;
     return true;
@@ -207,14 +219,14 @@ static void buf_reset(TomlCtx *p) {
 
 static void buf_char(TomlCtx *p, char c) {
     buf_ensure(p, p->buf_len + 2);
-    if (p->buf)
+    if (!p->error)
         p->buf[p->buf_len++] = c;
 }
 
 static char *buf_dup(TomlCtx *p) {
     buf_ensure(p, p->buf_len + 1);
-    if (!p->buf)
-        return xr_strdup("");
+    if (p->error)
+        return NULL;
     p->buf[p->buf_len] = '\0';
     return xr_strdup(p->buf);
 }
@@ -321,10 +333,7 @@ static XrTomlValue *parse_basic_string(TomlCtx *p) {
             }
         } else {
             /* Empty string "" */
-            XrTomlValue *v = alloc_value(XR_TOML_STRING);
-            if (v)
-                v->as.string = xr_strdup("");
-            return v;
+            return new_string(xr_strdup(""));
         }
     }
 
@@ -438,12 +447,8 @@ static XrTomlValue *parse_basic_string(TomlCtx *p) {
     p->error = true;
     return NULL;
 
-done: {
-    XrTomlValue *v = alloc_value(XR_TOML_STRING);
-    if (v)
-        v->as.string = buf_dup(p);
-    return v;
-}
+done:
+    return new_string(buf_dup(p));
 }
 
 /* Parse literal string (single-quoted, no escapes). */
@@ -472,10 +477,7 @@ static XrTomlValue *parse_literal_string(TomlCtx *p) {
                 p->col = 1;
             }
         } else {
-            XrTomlValue *v = alloc_value(XR_TOML_STRING);
-            if (v)
-                v->as.string = xr_strdup("");
-            return v;
+            return new_string(xr_strdup(""));
         }
     }
 
@@ -612,6 +614,8 @@ static XrTomlValue *parse_number(TomlCtx *p) {
             buf_char(p, start[i]);
     }
     buf_char(p, '\0');
+    if (p->error)
+        return NULL;
     char *num = p->buf;
     (void) p->buf_len; /* num is NUL-terminated in buf */
 
@@ -720,7 +724,12 @@ static XrTomlValue *parse_array_value(TomlCtx *p) {
             xtoml_free(arr);
             return NULL;
         }
-        array_push(arr, val);
+        if (!array_push(arr, val)) {
+            xtoml_free(val);
+            xtoml_free(arr);
+            p->error = true;
+            return NULL;
+        }
 
         skip_ws_nl(p);
         if (AT_END(p))
@@ -805,6 +814,10 @@ static XrTomlValue *parse_inline_table(TomlCtx *p) {
         }
         set_nested(p, tbl, keys, nkeys, val);
         free_keys(keys, nkeys);
+        if (p->error) {
+            xtoml_free(tbl);
+            return NULL;
+        }
 
         skip_ws(p);
         if (AT_END(p))
@@ -993,40 +1006,32 @@ static char **parse_key_path(TomlCtx *p, int *nkeys) {
 
 /* ========== Nested Value Setting ========== */
 
-/* Get or create nested table along key path, then set the leaf value.
- * Keys array: keys[0..nkeys-2] are intermediate tables, keys[nkeys-1] is leaf. */
+/* Consume val on every path; an unsuccessful assignment invalidates the document. */
 static void set_nested(TomlCtx *p, XrTomlValue *root, char **keys, int nkeys, XrTomlValue *val) {
     XrTomlValue *cur = root;
     for (int i = 0; i < nkeys - 1; i++) {
         int idx = table_find(cur, keys[i]);
         if (idx >= 0) {
             XrTomlValue *existing = cur->as.table.members[idx].value;
-            if (existing->type == XR_TOML_TABLE) {
-                cur = existing;
-            } else {
-                /* Conflict: overwrite with new table */
-                XrTomlValue *nt = new_table();
-                if (!nt) {
-                    p->error = true;
-                    return;
-                }
-                xtoml_free(existing);
-                cur->as.table.members[idx].value = nt;
-                cur = nt;
-            }
+            if (existing->type != XR_TOML_TABLE)
+                goto fail;
+            cur = existing;
         } else {
             XrTomlValue *nt = new_table();
-            if (!nt) {
-                p->error = true;
-                return;
+            if (!nt)
+                goto fail;
+            if (!table_set(cur, keys[i], nt)) {
+                xtoml_free(nt);
+                goto fail;
             }
-            table_set(cur, keys[i], nt);
             cur = nt;
         }
     }
-    if (nkeys > 0) {
-        table_set(cur, keys[nkeys - 1], val);
-    }
+    if (nkeys > 0 && table_set(cur, keys[nkeys - 1], val))
+        return;
+fail:
+    xtoml_free(val);
+    p->error = true;
 }
 
 /* ========== Table Header Navigation ========== */
@@ -1056,7 +1061,10 @@ static XrTomlValue *get_or_create_table(XrTomlValue *root, char **keys, int nkey
             XrTomlValue *nt = new_table();
             if (!nt)
                 return NULL;
-            table_set(cur, keys[i], nt);
+            if (!table_set(cur, keys[i], nt)) {
+                xtoml_free(nt);
+                return NULL;
+            }
             cur = nt;
         }
     }
@@ -1088,7 +1096,10 @@ static XrTomlValue *get_or_create_array_table(XrTomlValue *root, char **keys, in
             XrTomlValue *nt = new_table();
             if (!nt)
                 return NULL;
-            table_set(cur, keys[i], nt);
+            if (!table_set(cur, keys[i], nt)) {
+                xtoml_free(nt);
+                return NULL;
+            }
             cur = nt;
         }
     }
@@ -1108,13 +1119,19 @@ static XrTomlValue *get_or_create_array_table(XrTomlValue *root, char **keys, in
         arr = new_array();
         if (!arr)
             return NULL;
-        table_set(cur, last_key, arr);
+        if (!table_set(cur, last_key, arr)) {
+            xtoml_free(arr);
+            return NULL;
+        }
     }
 
     XrTomlValue *nt = new_table();
     if (!nt)
         return NULL;
-    array_push(arr, nt);
+    if (!array_push(arr, nt)) {
+        xtoml_free(nt);
+        return NULL;
+    }
     return nt;
 }
 
