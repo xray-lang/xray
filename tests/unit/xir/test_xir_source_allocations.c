@@ -163,7 +163,7 @@ static void array_source_allocations(XrCompilerSession *session) {
     CHECK(fputs("fn first<T>(a:Array<T>)->T{return a[0]}\nvar a=[\"x\"]\na.push(a[0])\na.set(0,\"y\")\n"
         "print(len(a),first<string>(a),a.get(1))\n", file) >= 0 && fclose(file) == 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL, NULL};
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
         attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
@@ -264,7 +264,7 @@ static void method_promise_allocations(XrCompilerSession *session) {
         "print(invoke(Box<i64>{value:23}.get),Box<i64>{value:29}.call())\n", file) >= 0);
     CHECK(fclose(file) == 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL, NULL};
     XrXirSourceResult baseline = {0};
     CHECK(xr_xir_source_check(&request, &baseline, NULL) == XR_XIR_OK);
     const XrXirDeclarations *decls = xr_xir_artifact_module(baseline.checked)->declarations;
@@ -298,7 +298,7 @@ int main(void) {
     snapshot_type_allocations();
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL};
+    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_1 = {0};
     XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, NULL);

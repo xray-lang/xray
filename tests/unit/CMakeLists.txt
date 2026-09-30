@@ -255,6 +255,34 @@ target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_S
 add_xray_bootstrap_executable(test_xir_source_admission xir/test_xir_source_admission.c)
 add_xray_bootstrap_executable(test_xir_source_generics xir/test_xir_source_generics.c)
 add_xray_bootstrap_executable(test_xir_source_query xir/test_xir_source_query.c)
+add_xray_bootstrap_executable(test_xir_source_packages xir/test_xir_source_packages.c)
+target_link_libraries(test_xir_source_packages PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+if(MSVC)
+    target_compile_options(test_xir_source_packages PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_source_packages PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_packages COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_source_packages.py $<TARGET_FILE:test_xir_source_packages>)
+set_tests_properties(test_xir_source_packages PROPERTIES LABELS "unit;xir;metadata;ownership")
+set(XIR_PACKAGE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_package_fixture.c)
+add_custom_command(OUTPUT ${XIR_PACKAGE_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_source_packages.py
+        $<TARGET_FILE:test_xir_source_packages> ${XIR_PACKAGE_GENERATED}
+    DEPENDS test_xir_source_packages ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_source_packages.py
+    VERBATIM)
+add_executable(test_xir_package_native xir/test_xir_package_native.c ${XIR_PACKAGE_GENERATED})
+target_link_libraries(test_xir_package_native PRIVATE xray_xir_scalar)
+if(MSVC)
+    target_compile_options(test_xir_package_native PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_package_native PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_package_native COMMAND test_xir_package_native)
+set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;execution;ownership;abi")
+
+
 target_link_libraries(test_xir_source_query PRIVATE xray_xir_source)
 target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)

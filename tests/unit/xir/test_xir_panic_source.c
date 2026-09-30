@@ -52,7 +52,7 @@ static void panic_emit(XrXirArtifact *lowered, const uint32_t *functions, const 
 static XrXirArtifact *panic_source_lower(const char *path) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_PANIC_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_source_check(&request, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "panic source %u at %u:%d:%d %s\n", status,

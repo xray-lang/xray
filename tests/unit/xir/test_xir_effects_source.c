@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 2);
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_EFFECT_FIXTURES};
-    XrXirSourceRequest request = {session, XR_EFFECT_FIXTURES "/root.xr", &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, XR_EFFECT_FIXTURES "/root.xr", &authority, NULL, NULL, NULL, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_source_check(&request, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "%u at %d:%d: %s\n", status,

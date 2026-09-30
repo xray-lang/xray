@@ -14,6 +14,7 @@
 #include "xxir_source_query.h"
 #include "../module/xmodule_identity.h"
 struct XrCompilerSession;
+struct XrLockfile;
 typedef struct XrXirSourcePromise {
     XrXirLiteral module;
     XrXirLiteral function;
@@ -34,6 +35,8 @@ typedef struct XrXirSourceRequest {
     const XrXirBudget *budget;
     const char *stdlib_path;
     const XrXirSourcePromises *declarations;
+    /* Borrowed for this synchronous check; package imports require exact entries. */
+    struct XrLockfile *lockfile;
 } XrXirSourceRequest;
 XR_FUNC XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic);

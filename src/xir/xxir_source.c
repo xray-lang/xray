@@ -2054,7 +2054,7 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     if (!request || !request->session || !request->entry_path || !request->authority || !output) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
-    XrModuleResolverConfig config = {request->stdlib_path, NULL};
+    XrModuleResolverConfig config = {request->stdlib_path, request->lockfile};
     resolver = xr_module_resolver_new(&config);
     ctx.graph = resolver ? xr_module_graph_new(request->session, resolver) : NULL;
     if (!ctx.graph) { source_fail(&ctx, NULL, XR_XIR_OUT_OF_MEMORY, "module graph allocation failed"); goto done; }

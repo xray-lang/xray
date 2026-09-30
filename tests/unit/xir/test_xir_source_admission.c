@@ -59,7 +59,7 @@ static void primitive_authority(XrCompilerSession *session, const char *director
     const char *body = "export fn emit(value: string) -> bool { return __writeStderr(value) }\n";
     write_source(output, body); write_source(other, body);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, directory};
-    XrXirSourceRequest request = {session, output, &authority, NULL, XR_SOURCE_STDLIB, NULL};
+    XrXirSourceRequest request = {session, output, &authority, NULL, XR_SOURCE_STDLIB, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_1 = {0};
     XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, NULL);
@@ -650,7 +650,7 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     primitive_authority(session, absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB, NULL};
+    XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB, NULL, NULL};
     source_integer_contexts(&request, root);
     source_decimal_contexts(&request, root);
     enum_admission(&request, root);
