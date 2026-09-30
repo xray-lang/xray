@@ -65,7 +65,7 @@ static void xir_array_metadata_init(XirArrayMetadataFixture *f) {
     f->functions[2] = (XrXirFunction) {"read", 4, &f->worker_parameter, 1, XR_XIR_I64, &f->blocks[2], 1, f->worker, 2, NULL, 0};
     f->source = (XrXirSourceModule) {"app", 3, NULL, 0, 0};
     f->slot = (XrXirSlot) {0, array, 1};
-    f->declarations = (XrXirDeclarations) {&f->source, 1, f->identities, &f->slot, 1, NULL, 0, 0, 1};
+    f->declarations = (XrXirDeclarations) {&f->source, 1, f->identities, &f->slot, 1, NULL, 0, 0, 1, NULL};
     f->module = (XrXirModule) {XR_XIR_BUILT, f->functions, 3, &f->declarations, NULL, &f->types, NULL};
 }
 #endif // XIR_ARRAY_METADATA_FIXTURE_H

@@ -112,7 +112,7 @@ static XrXirArtifact *path_program_fixture(unsigned kind) {
         {.exported = 1},{.exported = 1}};
     XrXirSlot slots[] = {{0,root,1},{0,root,0}};
     XrXirLiteral literals[] = {{"old",3},{"new",3},{"edited",6}};
-    XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,3,0,4};
+    XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,3,0,4, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,7,&declarations,NULL,&types,NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};

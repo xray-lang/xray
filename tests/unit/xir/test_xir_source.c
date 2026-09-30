@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     CHECK(status == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
-    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX, numeric_pause = UINT32_MAX, bound_result = UINT32_MAX;
+    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX, numeric_pause = UINT32_MAX, bound_result = UINT32_MAX, witness_result = UINT32_MAX;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) result = i;
         if (module->functions[i].name_length == 9 && !memcmp(module->functions[i].name, "calculate", 9)) calculate = i;
@@ -65,9 +65,10 @@ int main(int argc, char **argv) {
         if (module->functions[i].name_length == 10 && !memcmp(module->functions[i].name, "stackDepth", 10)) stack_depth = i;
         if (module->functions[i].name_length == 12 && !memcmp(module->functions[i].name, "numericPause", 12)) numeric_pause = i;
         if (module->functions[i].name_length == 11 && !memcmp(module->functions[i].name, "boundResult", 11)) bound_result = i;
+        if (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "witnessResult", 13)) witness_result = i;
         if (module->functions[i].name_length == 7 && !memcmp(module->functions[i].name, "advance", 7)) advance = i;
     }
-    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX && bound_result != UINT32_MAX);
+    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX && bound_result != UINT32_MAX && witness_result != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {1048576, 64000000}, &program) == XR_XIR_BUDGET);
@@ -76,7 +77,7 @@ int main(int argc, char **argv) {
     if (seal_status != XR_XIR_OK) fprintf(stderr, "source seal status: %u\n", (unsigned)seal_status);
     CHECK(seal_status == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result}, results);
+    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result}, results);
     runtime_source_failures(program, entry, resume_text, numeric_pause);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);

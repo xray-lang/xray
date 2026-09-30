@@ -168,7 +168,7 @@ static void snapshot_interface_allocations(void) {
             CHECK(!memcmp(decls[0].module.bytes,"alpha",5));
             CHECK(!memcmp(decls[0].methods[0].name.bytes,"get",3));
             CHECK(!decls[0].constraints[0].markers && decls[1].parents[0].arguments[0] == XR_XIR_I64);
-            budget = initial; CHECK(xr_xir_types_verify(copy,&budget) == XR_XIR_OK);
+            budget = initial; CHECK(xr_xir_types_structure_verify(copy,&budget) == XR_XIR_OK);
         } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
         xr_xir_source_snapshot_free(snapshot); CHECK(!live);
     }
@@ -216,7 +216,7 @@ static void snapshot_enum_allocations(void) {
                 CHECK(owned_decl->variants[0].field_count == 0 && owned_decl->variants[1].field_count == payload);
                 CHECK(!memcmp(owned_decl->variants[0].name.bytes, "None", 4));
                 CHECK(!memcmp(owned_decl->variants[1].name.bytes, "Some", 4));
-                budget = xr_xir_default_budget(); CHECK(xr_xir_types_verify(copy, &budget) == XR_XIR_OK);
+                budget = xr_xir_default_budget(); CHECK(xr_xir_types_structure_verify(copy, &budget) == XR_XIR_OK);
             } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
             xr_xir_source_snapshot_free(snapshot); CHECK(!live);
         }
@@ -235,7 +235,7 @@ static void snapshot_type_allocations(void) {
     XrXirSourceView view = {0}; view.types = &types;
     view.diagnostic.status = XR_XIR_BAD_TYPE;
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
     size_t sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         attempts = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
@@ -334,6 +334,7 @@ static bool source_nominal_substitution_case(SourceContext *ctx) {
     CHECK(!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "first", false, &field_index, &field_type));
     CHECK(ctx->diagnostic.status == XR_XIR_BAD_TYPE && ctx->query.reference_count == references);
     ctx->diagnostic = (XrXirSourceDiagnostic) {0}; identity.nominal_owner = 1;
+    identity.method_kind = XR_XIR_MEMBER_HELPER;
     if (!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "first", true, &field_index, &field_type)) return false;
     CHECK(field_type == XR_XIR_I64);
     CHECK(!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "second", true, &field_index, &field_type));
@@ -390,7 +391,9 @@ static void method_promise_allocations(XrCompilerSession *session) {
     printf("Method promise source ownership: %zu OOM sites; no partial publication\n", sites);
 }
 #include "xir_constraint_query_allocations.h"
+#include "xir_implementation_query_allocations.h"
 int main(void) {
+    implementation_query_allocations();
     constraint_query_allocations();
     snapshot_interface_allocations();
     snapshot_enum_allocations();

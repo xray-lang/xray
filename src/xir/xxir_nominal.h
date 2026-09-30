@@ -57,7 +57,7 @@ typedef struct XrXirNominalTable {
 } XrXirNominalTable;
 /* Metadata helpers grant no executable type or source admission.
  * Budgets and outputs publish only after complete successful validation. */
-XR_FUNC XrXirStatus xr_xir_nominal_verify(const XrXirNominalTable *table,
+XR_FUNC XrXirStatus xr_xir_nominal_structure_verify(const XrXirNominalTable *table,
     const XrXirTypes *types, XrXirBudget *budget);
 XR_FUNC XrXirStatus xr_xir_nominal_clone(const XrXirNominalTable *table,
     const XrXirTypes *types, XrXirBudget *budget, XrXirNominalTable **output);

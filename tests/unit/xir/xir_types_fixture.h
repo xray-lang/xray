@@ -61,8 +61,8 @@ static XrXirArtifact *function_ir_fixture(void) {
         {"echo",4,&parameter,1,parameter,&blocks[2],1,target,2,NULL,0}
     };
     XrXirSourceModule source = {"root",4,NULL,0,0};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0}, {0,1, 0, 0, 0, 0}, {0,0, 0, 0, 0, 0}};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);

@@ -28,7 +28,7 @@ static XrXirArtifact *cleanup_frontier_fixture(unsigned attack) {
     XrXirFunctionIdentity identities[3] = {{0}};
     identities[2].cleanup_owner = 2;
     XrXirSourceModule source = {"root", 4, NULL, 0, 0};
-    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 1};
+    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 1, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 3, &declarations, NULL, NULL, NULL};
     if (attack == 1) blocks[0].frontier = 2;
     if (attack == 2) blocks[1].frontier = UINT32_MAX;

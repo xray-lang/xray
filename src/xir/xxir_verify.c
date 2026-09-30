@@ -20,6 +20,8 @@
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_initialization.h"
+#include "xxir_constraint_proof.h"
+#include "xxir_implementation_verify.h"
 #include "../base/xmalloc.h"
 #include <limits.h>
 
@@ -108,6 +110,8 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     return XR_XIR_OK;
 }
 
+#include "xxir_requirement_verify.inc.c"
+
 static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirInstruction *op, XrXirStage stage,
                                     const XrXirModule *module, XrXirBudget *remaining) {
@@ -125,6 +129,10 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
     if ((op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
+    if (op->op == XR_XIR_CALL_REQUIREMENT) {
+        XrXirStatus status = requirement_shape(function, op, module, remaining);
+        if (status != XR_XIR_OK) return status;
+    }
     if (op->op == XR_XIR_CELL_NEW && (!module->declarations || !xr_xir_type_is_cell(module->types, op->type))) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_CELL_READ && xr_xir_type_is_cell(module->types, op->type)) return XR_XIR_BAD_TYPE;
     if (xr_xir_op_references_function(op->op)) {
@@ -166,7 +174,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             generic_status = xr_xir_call_type_matches(module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type, remaining);
             if (generic_status != XR_XIR_OK) return generic_status;
         }
-        if (module->declarations) {
+        if (module->declarations && !requirement_origin(module,caller_id,(uint32_t)(op - function->instructions))) {
             const XrXirDeclarations *d = module->declarations;
             uint32_t caller_module = d->functions[caller_id].module;
             uint32_t callee_module = d->functions[op->immediate].module;
@@ -211,10 +219,10 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     for (uint32_t i = 0; i < rule->edges; ++i)
         if (!op->targets[i] || op->targets[i] >= function->block_count)
             return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t i = rule->edges; i < 2; ++i)
+    for (uint32_t i = op->op == XR_XIR_CALL_REQUIREMENT ? 2 : rule->edges; i < 2; ++i)
         if (op->targets[i])
             return XR_XIR_BAD_STRUCTURE;
-    if (!xr_xir_op_references_function(op->op) &&
+    if (!xr_xir_op_uses_type_arguments(op->op) &&
         (op->type_arguments[0] || op->type_arguments[1])) return XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_CONST_BOOL || op->op == XR_XIR_LOCAL_UNINIT) {
         if (op->immediate != 0 && op->immediate != 1)
@@ -240,9 +248,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
 }
 
 static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, XrXirType type) {
-    const XrXirGeneric *generic = context->module->generics ? &context->module->generics[function] : NULL;
-    XrXirStatus status = xr_xir_type_context_verify(context->module->types, type,
-        generic ? generic->constraints : NULL, generic ? generic->parameter_count : 0, &context->remaining);
+    XrXirProofContext proof = {context->module, {XR_XIR_CONTEXT_FUNCTION, function}};
+    XrXirStatus status = xr_xir_type_use_verify(&proof, type, &context->remaining);
     /* Naming checks for substituted types are discharged by original-definition
      * verification and complete correspondence before this module can publish. */
     if (status != XR_XIR_OK || context->module->provenance) return status;
@@ -305,7 +312,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             const XrXirInstruction *op = &function->instructions[i];
             visibility = type_use_context(context, function_id, op->type);
             if (visibility != XR_XIR_OK) return visibility;
-            if ((xr_xir_op_references_function(op->op)) && !spend(&context->remaining.work, op->type_arguments[1])) return XR_XIR_BUDGET;
+            if (xr_xir_op_uses_type_arguments(op->op) && !spend(&context->remaining.work, op->type_arguments[1])) return XR_XIR_BUDGET;
             if ((xr_xir_op_references_function(op->op)) && context->module->declarations) {
                 const XrXirDeclarations *d = context->module->declarations;
                 uint32_t caller = (uint32_t) (function - context->module->functions);
@@ -319,7 +326,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             XrXirStatus status = instruction_shape(function, op, stage, context->module, &context->remaining);
             if (status != XR_XIR_OK)
                 return status;
-            if ((xr_xir_op_references_function(op->op)) && op->type_arguments[1]) {
+            if (xr_xir_op_uses_type_arguments(op->op) && op->type_arguments[1]) {
                 if (op->type_arguments[0] != type_end) return XR_XIR_BAD_STRUCTURE;
                 type_end += op->type_arguments[1];
             }
@@ -767,6 +774,8 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!spend(&context->remaining.work, count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a) {
             XrXirType operand_type = indirect ? indirect->parameters[a].type : expected;
+            if (op->op == XR_XIR_CALL_REQUIREMENT)
+                operand_type = xr_xir_operand_type(function, function->operands[op->args[0] + a]);
             if (xr_xir_op_references_function(op->op)) {
                 uint32_t operand = function->operands[op->args[0] + a];
                 if (operand >= (uint64_t) function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
@@ -790,7 +799,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
                 if (operand_type != XR_XIR_BOOL && !xr_xir_type_is_number(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
-            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF ?
+            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF ?
                 function->operands[op->args[0] + a] : op->args[a];
             XrXirStatus status = local_operand(context->module->types, function, op, id, a);
             if (status == XR_XIR_OK) status = value_use(function, graph, i, id, operand_type);
@@ -875,6 +884,23 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirBudget *rem
     return xr_xir_provenance_functions_match(&p->source->module, module, p->origins, remaining, diagnostic);
 }
 
+static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirBudget *remaining) {
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        if (!!function->parameters != !!function->parameter_count) return XR_XIR_BAD_STRUCTURE;
+        if (function->parameter_count > remaining->parameters ||
+            !spend(&remaining->work,(uint64_t)function->parameter_count + 1)) return XR_XIR_BUDGET;
+        uint32_t count = module->generics ? module->generics[f].parameter_count : 0;
+        XrXirStatus status = xr_xir_type_expression_shape(module->types,function->result,count,remaining);
+        for (uint32_t p = 0; p < function->parameter_count && status == XR_XIR_OK; ++p) {
+            if (function->parameters[p] == XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
+            status = xr_xir_type_expression_shape(module->types,function->parameters[p],count,remaining);
+        }
+        if (status != XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 #include "xxir_effect_obligations.inc.c"
 
 XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *remaining,
@@ -896,7 +922,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
              !spend(&context.remaining.metadata_bytes, sizeof(XrXirArtifact)))
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
-        status = xr_xir_types_verify(module->types, &context.remaining);
+        status = xr_xir_types_structure_verify(module->types, &context.remaining);
         if (status == XR_XIR_OK && module->types && module->types->nominals) {
             bool identities = module->types->nominals->identities != NULL;
             if (identities != (module->stage == XR_XIR_LOWERED)) status = XR_XIR_BAD_STAGE;
@@ -913,8 +939,13 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
             &context.remaining.metadata_bytes, &context.remaining.work);
     }
     if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining);
-    if (status == XR_XIR_OK) status = xr_xir_generics_verify(module, &context.remaining);
+    if (status == XR_XIR_OK) status = xr_xir_generics_structure_verify(module, &context.remaining);
+    if (status == XR_XIR_OK) status = verify_signature_structure(module, &context.remaining);
     if (status == XR_XIR_OK) status = verify_interface_access(module, &context.remaining);
+    if (status == XR_XIR_OK && module->stage == XR_XIR_LOWERED && module->declarations &&
+        module->declarations->implementations) status = XR_XIR_BAD_STAGE;
+    if (status == XR_XIR_OK) status = xr_xir_implementations_verify(module, &context.remaining);
+    if (status == XR_XIR_OK) status = xr_xir_module_constraints_verify(module, &context.remaining);
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;
         const XrXirFunction *entry = &module->functions[d->entry_function];

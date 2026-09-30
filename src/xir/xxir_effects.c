@@ -14,6 +14,7 @@
 #include "xxir_effects.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
+#include "xxir_interface.h"
 #include "../base/xmalloc.h"
 
 typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectErrorAtom;
@@ -58,6 +59,18 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
     case XR_XIR_SUSPEND: effect->suspend = XR_XIR_EFFECT_MAY; return true;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return true;
+    case XR_XIR_CALL_REQUIREMENT: {
+        const XrXirInterfaceTable *table = module->types ? module->types->interfaces : NULL;
+        if (!table || instruction->targets[0] >= table->count) return false;
+        const XrXirInterfaceDeclaration *declaration = &table->declarations[instruction->targets[0]];
+        if (instruction->targets[1] >= declaration->method_count) return false;
+        const XrXirTypeNode *signature = xr_xir_callable_signature(module->types,
+            declaration->methods[instruction->targets[1]].signature);
+        if (!signature) return false;
+        if (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) && effect->suspend < XR_XIR_EFFECT_UNKNOWN)
+            effect->suspend = XR_XIR_EFFECT_UNKNOWN;
+        return true;
+    }
     case XR_XIR_CALL_INDIRECT:
     case XR_XIR_INVOKE_INDIRECT: {
         XrXirType type = xr_xir_operand_type(function, (uint32_t)instruction->immediate);

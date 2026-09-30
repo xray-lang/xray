@@ -41,9 +41,9 @@ static XrXirArtifact *struct_ops_checked(unsigned invalid) {
         {"entry",5,NULL,0,XR_XIR_I64,&five,1,entry,5,operands,2},
         {"make",4,parameters,2,pair,&six,1,make,6,operands,2}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0};
-    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0},{0,1,0, 0, 0, 0},{0,1,1, 0, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1,1, 0, 0, 0, XR_XIR_CONSTRUCTOR}};
     XrXirLiteral literal = {"constructed",11};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL};
     if (invalid == 1) identities[2].nominal_owner = 0;
     if (invalid == 2) make[1].immediate = -1;

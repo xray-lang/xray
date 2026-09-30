@@ -103,7 +103,7 @@ static void shadow_and_imports(const XrXirSourceView *view) {
 static void constructed_facts(const XrXirSourceView *view) {
     CHECK(view->types && view->types->nodes);
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(view->types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(view->types, &budget) == XR_XIR_OK);
     unsigned generic_cells = 0, scalar_cells = 0, callable_cells = 0;
     for (uint32_t i = 0; i < view->types->count; ++i) {
         const XrXirTypeNode *node = &view->types->nodes[i];
@@ -199,26 +199,51 @@ static XrXirSourceResult accepted(const XrXirSourceRequest *request) {
     return result;
 }
 static void publication_budgets(XrXirSourceRequest *request) {
-    write_source(request->entry_path, "fn identity(value:i64)->i64 { var held=value; return held }\nconst callback=identity\n");
+    /* Long local names add query-owned bytes without growing executable XIR.
+     * Probe a bounded family so verifier cost cannot hide publication failure. */
     for (unsigned mode = 0; mode < 2; ++mode) {
-        uint64_t low = 0, high = 65536;
-        XrXirBudget budget = xr_xir_default_budget();
-        request->budget = &budget;
-        while (low + 1 < high) {
-            uint64_t middle = low + (high - low) / 2;
-            if (mode) budget.work = middle; else budget.metadata_bytes = middle;
-            XrXirSourceResult result = {0};
-            XrXirStatus status = xr_xir_source_check(request, &result, NULL);
-            CHECK(status == XR_XIR_OK || status == XR_XIR_BUDGET);
-            if (status == XR_XIR_OK) { CHECK(result.checked && result.snapshot); high = middle; }
-            else { CHECK(!result.checked && !result.snapshot); low = middle; }
-            xr_xir_source_result_free(&result);
+        bool publication_failed = false;
+        for (size_t length = 32; length <= 2048 && !publication_failed; length *= 4) {
+            char name[2049], source[4352];
+            memset(name,'q',length); name[length] = 0;
+            int written = snprintf(source,sizeof(source),
+                "fn identity(value:i64)->i64 { var %s=value; return %s }\nconst callback=identity\n",name,name);
+            CHECK(written > 0 && (size_t)written < sizeof(source));
+            write_source(request->entry_path,source);
+            uint64_t low = 0, high = 65536;
+            XrXirBudget budget = xr_xir_default_budget(); request->budget = &budget;
+            if (mode) budget.work = high; else budget.metadata_bytes = high;
+            XrXirSourceResult successful = {0}; XrXirSourceDiagnostic upper = {0};
+            XrXirStatus status = xr_xir_source_check(request,&successful,&upper);
+            if (status != XR_XIR_OK) fprintf(stderr,"publication upper mode=%u name=%zu cap=%llu status=%u: %s\n",
+                mode,length,(unsigned long long)high,(unsigned)status,upper.message);
+            CHECK(status == XR_XIR_OK && successful.checked && successful.snapshot);
+            CHECK(xr_xir_source_snapshot_view(successful.snapshot)->complete);
+            xr_xir_source_result_free(&successful);
+            while (low + 1 < high) {
+                uint64_t middle = low + (high - low) / 2;
+                if (mode) budget.work = middle; else budget.metadata_bytes = middle;
+                XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+                status = xr_xir_source_check(request,&result,&diagnostic);
+                if (status != XR_XIR_OK && status != XR_XIR_BUDGET)
+                    fprintf(stderr,"publication probe mode=%u name=%zu cap=%llu status=%u: %s\n",
+                        mode,length,(unsigned long long)middle,(unsigned)status,diagnostic.message);
+                CHECK(status == XR_XIR_OK || status == XR_XIR_BUDGET);
+                if (status == XR_XIR_OK) {
+                    CHECK(result.checked && result.snapshot && xr_xir_source_snapshot_view(result.snapshot)->complete);
+                    high = middle;
+                } else { CHECK(!result.checked && !result.snapshot); low = middle; }
+                xr_xir_source_result_free(&result);
+            }
+            if (mode) budget.work = low; else budget.metadata_bytes = low;
+            XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+            CHECK(xr_xir_source_check(request,&result,&diagnostic) == XR_XIR_BUDGET);
+            CHECK(!result.checked && !result.snapshot);
+            publication_failed = !strcmp(diagnostic.message,"source query snapshot publication failed");
+            fprintf(stderr,"publication boundary mode=%u name=%zu fail=%llu pass=%llu stage=%s\n",
+                mode,length,(unsigned long long)low,(unsigned long long)high,diagnostic.message);
         }
-        if (mode) budget.work = low; else budget.metadata_bytes = low;
-        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic;
-        CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BUDGET);
-        CHECK(!result.checked && !result.snapshot);
-        CHECK(!strcmp(diagnostic.message, "source query snapshot publication failed"));
+        CHECK(publication_failed);
     }
     request->budget = NULL;
 }
@@ -645,7 +670,7 @@ static void source_enum_facts(XrXirSourceRequest *request) {
         CHECK(nominal->variants[i].field_count == (i ? 1u : 0u));
     }
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(view->types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(view->types, &budget) == XR_XIR_OK);
     const XrXirSourceDeclaration *some=declaration(view,"Some",owner->id);
     const XrXirSourceDeclaration *other=declaration(view,"Other",owner->id);
     const XrXirSourceDeclaration *ordinal=declaration(view,"ordinal",owner->id);
@@ -747,6 +772,8 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
     CHECK(facts==1); xr_xir_source_result_free(&result);
 }
 #include "xir_source_interface_cases.h"
+#include "xir_source_witness_cases.h"
+#include "xir_witness_provenance_cases.h"
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -758,6 +785,8 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
+    source_witness_cases(&request);
+    witness_provenance_cases(&request);
     source_interface_facts(&request);
     source_struct_facts(&request);
     source_enum_facts(&request);

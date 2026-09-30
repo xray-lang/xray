@@ -1,0 +1,2 @@
+import { Measure } from "./measure_contract"
+export fn readMeasure<T:Measure>(value:T)->i64 { return value.measure() }

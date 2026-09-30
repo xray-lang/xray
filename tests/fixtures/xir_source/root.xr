@@ -908,3 +908,7 @@ const conditionalRead=conditionalBox.captured()
 const conditionalStatic=alpha.ConditionalBox<i64>.forward<string>
 print(conditionalForward<string>(conditionalBox),conditionalRead(),conditionalStatic("static",fn(item:string)->string{return "explicit"}),
     alpha.ConditionalBox<i64>.forward<string>("default"),conditionalError())
+
+import { readMeasure } from "./measure_reader"
+import { Meter, MeasureBox } from "./measure_value"
+export fn witnessResult()->i64 { return readMeasure<MeasureBox<Meter>>(MeasureBox<Meter>{value:Meter{value:41}}) }

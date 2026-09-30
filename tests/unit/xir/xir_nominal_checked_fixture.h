@@ -28,7 +28,7 @@ static XrXirArtifact *nominal_checked_fixture(unsigned mode) {
     XrXirFunctionIdentity identities[9];
     CHECK(built.function_count == 9);
     memcpy(identities, built.declarations->functions, sizeof(identities));
-    if (mode == 3) identities[4].nominal_owner = 1;
+    if (mode == 3) { identities[4].nominal_owner = 1; identities[4].method_kind = XR_XIR_MEMBER_HELPER; }
     XrXirDeclarations declarations = *built.declarations;
     declarations.functions = identities; built.declarations = &declarations;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);

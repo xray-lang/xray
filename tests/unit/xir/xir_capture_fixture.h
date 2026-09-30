@@ -65,9 +65,9 @@ static XrXirArtifact *capture_checked(bool throwing) {
     }
     XrXirGeneric generics[] = {{0},{0},{NULL,0,&concrete,1},{0},{0},{&constraint,1,NULL,0}};
     XrXirSourceModule source = {"root",4,NULL,0,0};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0},{0,1, 0, 0, 0, 0},{0,1, 0, 0, 0, 0},{0,0, 0, 0, 0, 0},{0,1, 0, 0, 0, 0},{0,0, 0, 0, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirLiteral literal = {"captured",8};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);

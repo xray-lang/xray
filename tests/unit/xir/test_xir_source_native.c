@@ -16,14 +16,14 @@
 #include "xir_source_runtime_allocations.h"
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
-XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result;
+XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result, fixture_source_witness_result;
 int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&fixture_source_program, (XrXirProgramBudget) {16777216, 1}, &program) == XR_XIR_BUDGET && !program);
     CHECK(xr_xir_program_seal(&fixture_source_program, (XrXirProgramBudget) {33554432, 64000000}, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, fixture_source_program.declarations->entry_function,
-        (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result}, results);
+        (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result, fixture_source_witness_result}, results);
     runtime_source_failures(program, fixture_source_program.declarations->entry_function, fixture_source_resume_text, fixture_source_numeric_pause);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);

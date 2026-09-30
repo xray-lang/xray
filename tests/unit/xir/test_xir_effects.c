@@ -68,7 +68,7 @@ static XrXirArtifact *effect_fixture(bool suspends) {
         {"entry", 5, NULL, 0, XR_XIR_I64, &pair, 1, entry, 2, NULL, 0}};
     XrXirSourceModule source = {"root", 4, NULL, 0, 6};
     XrXirFunctionIdentity identities[8] = {{0}};
-    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7};
+    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL};
     XrXirArtifact *artifact = NULL; XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_check(&module, NULL, &artifact, &diagnostic);

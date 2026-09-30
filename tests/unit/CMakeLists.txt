@@ -351,7 +351,7 @@ add_test(NAME test_xir_package_native COMMAND test_xir_package_native)
 set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;execution;ownership;abi")
 
 
-target_link_libraries(test_xir_source_query PRIVATE xray_xir_source)
+target_link_libraries(test_xir_source_query PRIVATE xray_xir_source xray_xir_vm)
 target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
 add_xray_bootstrap_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
@@ -366,6 +366,9 @@ add_custom_command(OUTPUT ${XIR_CHECKED_GENERATED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/alpha.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/beta.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/measure_contract.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/measure_reader.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/measure_value.xr
         ${CMAKE_SOURCE_DIR}/stdlib/io/output.xr
     VERBATIM)
 add_executable(test_xir_packet_vm xir/test_xir_packet_vm.c ${XIR_CHECKED_GENERATED})

@@ -141,7 +141,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->modules[2] = (XrXirSourceModule) {"alpha", 5, NULL, 0, 2};
     uint32_t owners[] = {0, 1, 2, 0, 2, 1, 0, 0, 0, 2};
     for (uint32_t i = 0; i < 10; ++i) {
-        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0};
+        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0, XR_XIR_NON_MEMBER};
         f->entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
             sizeof(Frame), initializer, cleanup, &f->env[owners[i]], 0, 0};
     }
@@ -159,7 +159,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->slots[2] = (XrXirSlot) {0, XR_XIR_STRING, 1};
     f->literals[0] = (XrXirLiteral) {"A\0\xe4\xb8\xad", 5};
     f->literals[1] = (XrXirLiteral) {"independent", 11};
-    f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3};
+    f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3, NULL};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL, {0}};
     if (mode==2) { error_fixture_init(&f->error,false); f->spec.types=&f->error.types; }
@@ -303,7 +303,7 @@ static void failed_initialization(void) {
     }
 }
 static void seal_rejection(void) {
-    for (uint32_t invalid = 0; invalid < 26; ++invalid) {
+    for (uint32_t invalid = 0; invalid < 27; ++invalid) {
         Fixture f; fixture(&f, 0);
         uint32_t cycle = 0;
         uint8_t identity[32];
@@ -356,6 +356,12 @@ static void seal_rejection(void) {
             f.spec.abi_version = 21;
             f.spec.declarations = (const XrXirDeclarations *) (uintptr_t) 1;
             break;
+        case 26:
+            f.spec.abi_version = 22;
+            f.spec.declarations = (const XrXirDeclarations *) (uintptr_t) 1;
+            f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
+            f.spec.proof.bytes = (const uint8_t *) (uintptr_t) 1;
+            break;
         }
         XrXirProgram *program = NULL;
         XrXirStatus status = xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {invalid == 9 ? 1 : 2097152, 16000000}, &program);
@@ -363,7 +369,7 @@ static void seal_rejection(void) {
         CHECK(status != XR_XIR_OK);
         if (invalid >= 15 && invalid <= 18) CHECK(status == XR_XIR_BAD_LAYOUT);
         if (invalid >= 19 && invalid < 25) CHECK(status == XR_XIR_BAD_STRUCTURE);
-        if (invalid == 25) CHECK(status == XR_XIR_BAD_LAYOUT);
+        if (invalid >= 25) CHECK(status == XR_XIR_BAD_LAYOUT);
         CHECK(!program && !f.witness.releases);
     }
 }

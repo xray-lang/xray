@@ -102,7 +102,7 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
     ErrorFixture error; error_fixture_init(&error,false);
     const XrXirSourceModule source={"alpha",5,NULL,0,3};
     const XrXirFunctionIdentity ids[5]={{0}};
-    const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,4};
+    const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,4, NULL};
     const XrXirModule module = {XR_XIR_BUILT, functions, 5, &declarations, generic ? generics : NULL, &error.types, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;

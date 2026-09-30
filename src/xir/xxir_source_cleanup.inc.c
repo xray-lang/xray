@@ -33,9 +33,9 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     ctx->generics[index].parameter_count = ctx->generics[outer].parameter_count;
     ctx->generics[index].constraints = ctx->generics[outer].constraints;
     char *name = source_alloc(ctx, 32, sizeof(*name));
-    body->parameters = source_alloc(ctx, scan.count, sizeof(*body->parameters));
+    body->parameters = scan.count ? source_alloc(ctx,scan.count,sizeof(*body->parameters)) : NULL;
     SourceValue *captures = source_alloc(ctx, scan.count, sizeof(*captures));
-    if (!name || !body->parameters || !captures) return false;
+    if (!name || (scan.count && !body->parameters) || !captures) return false;
     snprintf(name, 32, "$cleanup%u", index);
     SourceName declaration = {0}; declaration.name = name; declaration.node = node;
     if (!source_query_declare(ctx, &declaration, XR_XIR_SOURCE_FUNCTION, owner->declaration,
@@ -44,6 +44,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     ctx->functions[index] = (XrXirFunction){name, (uint32_t)strlen(name), body->parameters,
         scan.count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
     ctx->identities[index] = ctx->identities[outer];
+    ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ctx->identities[index].exported = 0; ctx->identities[index].cleanup_owner = outer + 1;
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;

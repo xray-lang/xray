@@ -68,6 +68,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_types.c"
 #include "xir/xxir_constraints.c"
 #include "xir/xxir_constraint_proof.c"
+#include "xir/xxir_implementation.c"
+#include "xir/xxir_implementation_verify.c"
 #include "xir/xxir_interface.c"
 #include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
@@ -492,7 +494,7 @@ static void string_predicate_allocations(void) {
 static void enum_arena_allocations(void) {
     EnumMetadataFixture f; enum_metadata_fixture(&f);
     XrXirBudget b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000}; XrXirNominalTable *projection = NULL;
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_OK);
     size_t sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX; b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};

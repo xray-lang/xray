@@ -105,15 +105,17 @@ static void interface_member_resources(void) {
     MemberFixture f; member_fixture(&f);
     XrXirBudget original = xr_xir_default_budget(), spent = original;
     CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&spent)==XR_XIR_OK);
+    CHECK(spent.scratch_bytes == original.scratch_bytes && spent.work < original.work);
     XrXirBudget exact = original;
-    exact.work -= spent.work; exact.scratch_bytes -= spent.scratch_bytes;
+    exact.work -= spent.work;
     for (unsigned boundary = 0; boundary < 3; ++boundary) {
         XrXirBudget budget = exact;
         if (boundary == 1) --budget.work;
-        if (boundary == 2) --budget.scratch_bytes;
+        if (boundary == 2) budget.scratch_bytes = 0;
         XrXirBudget before = budget;
         CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==
             (boundary ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(budget.scratch_bytes == before.scratch_bytes);
         if (boundary) CHECK(!memcmp(&budget,&before,sizeof(budget)));
         CHECK(!live);
     }

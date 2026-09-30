@@ -195,11 +195,11 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
     return true;
 }
 static XrXirStatus source_catch_type_proof(SourceContext *ctx, XrXirType type) {
-    XrXirDeclarations declarations = {0};
-    declarations.modules = ctx->modules; declarations.module_count = (uint32_t)ctx->graph->spec_count;
-    declarations.functions = ctx->identities;
-    XrXirModule view = {XR_XIR_BUILT,ctx->functions,ctx->function_count,&declarations,ctx->generics,&ctx->types,NULL};
-    return xr_xir_type_satisfies(&view,ctx->function,type,(XrXirConstraint){.markers = XR_XIR_CONSTRAINT_ERROR},&ctx->budget);
+    XrXirDeclarations declarations;
+    XrXirModule view = source_module_view(ctx,&declarations);
+    XrXirProofContext context = {&view,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+    XrXirStatus status = xr_xir_type_markers_prove(&context,type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
+    return status == XR_XIR_OK ? xr_xir_type_access(&view,ctx->function,type,&ctx->budget) : status;
 }
 static bool source_try(SourceContext *ctx, AstNode *node) {
     TryCatchNode *attempt = &node->as.try_catch;

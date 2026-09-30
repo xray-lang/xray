@@ -28,12 +28,18 @@ typedef struct XrXirSourceModule {
 typedef enum XrXirMemberAccess {
     XR_XIR_MEMBER_PUBLIC, XR_XIR_MEMBER_PRIVATE, XR_XIR_MEMBER_PROTECTED
 } XrXirMemberAccess;
+typedef enum XrXirMethodKind {
+    XR_XIR_NON_MEMBER, XR_XIR_READ_METHOD, XR_XIR_STATIC_METHOD,
+    XR_XIR_CONSTRUCTOR, XR_XIR_MEMBER_HELPER
+} XrXirMethodKind;
+typedef struct XrXirImplementationTable XrXirImplementationTable;
 
 typedef struct XrXirFunctionIdentity {
     uint32_t module, exported, nominal_owner, member_access;
     /* Zero for ordinary functions; otherwise one plus the lexical owner index. */
     uint32_t cleanup_owner;
     uint32_t promises;
+    uint32_t method_kind;
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u
@@ -51,5 +57,6 @@ typedef struct XrXirDeclarations {
     const XrXirLiteral *literals;
     uint32_t literal_count;
     uint32_t root_module, entry_function;
+    const XrXirImplementationTable *implementations;
 } XrXirDeclarations;
 #endif // XXIR_DECLARATIONS_H

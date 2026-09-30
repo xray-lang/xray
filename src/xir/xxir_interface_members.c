@@ -37,7 +37,7 @@ typedef struct MemberTypeWalk {
 } MemberTypeWalk;
 typedef struct MemberContext {
     const XrXirInterfaceTable *table;
-    const XrXirTypes *source;
+    const XrXirTypes *source, *base;
     XrXirTypes types;
     uint32_t capacity, root_count;
     XrXirType *root_arguments;
@@ -100,7 +100,7 @@ static bool member_ready(MemberContext *c, const MemberApplication *app,
         *result = app->arguments[index]; return true;
     }
     const XrXirTypeNode *node = xr_xir_type_node(c->source, type);
-    if (!node || !node->parameter_span) { *result = type; return true; }
+    if (!node || (!node->parameter_span && c->source == c->base)) { *result = type; return true; }
     for (MemberTypeValue *value = map->values; value && member_work(c, 1); value = value->next)
         if (value->source == type) { *result = value->result; return true; }
     return false;
@@ -247,8 +247,8 @@ static void member_expand(MemberContext *c, const MemberApplication *app) {
     }
 }
 static void member_roots(MemberContext *c, const XrXirInterfaceApplication *roots, uint32_t count) {
-    if (c->source) {
-        c->types = *c->source; c->types.interfaces = NULL;
+    if (c->base) {
+        c->types = *c->base; c->types.interfaces = NULL;
         c->capacity = c->types.count;
     }
     for (uint32_t r = 0; r < count && member_work(c,1); ++r) {
@@ -301,8 +301,46 @@ XR_FUNC XrXirStatus xr_xir_interface_closure_build(const XrXirInterfaceTable *ta
     if (output) *output = NULL;
     if (!output || !budget || (!!roots != !!root_count) ||
         (table && (!table->count || !table->declarations))) return XR_XIR_BAD_STRUCTURE;
-    MemberContext c = {0}; c.table = table; c.source = types; c.remaining = *budget;
+    MemberContext c = {0}; c.table = table; c.source = types; c.base = types; c.remaining = *budget;
     member_roots(&c,roots,root_count);
+    if (c.status == XR_XIR_OK) *output = member_publish(&c);
+    if (c.status == XR_XIR_OK) *budget = c.remaining;
+    member_dispose(&c); return c.status;
+}
+XR_FUNC XrXirStatus xr_xir_interface_closure_substitute(
+    const XrXirInterfaceClosureRequest *request, XrXirBudget *budget,
+    XrXirInterfaceClosure **output) {
+    if (output) *output = NULL;
+    if (!request || !budget || !output || (!!request->roots != !!request->root_count) ||
+        (!!request->arguments != !!request->argument_count)) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInterfaceTable *table = request->source_types ? request->source_types->interfaces : NULL;
+    if (request->root_count && (!table || !table->declarations)) return XR_XIR_BAD_STRUCTURE;
+    MemberContext c = {0}; c.table = table; c.source = request->source_types;
+    c.base = request->actual_types; c.remaining = *budget;
+    if (c.base) { c.types = *c.base; c.capacity = c.types.count; }
+    MemberApplication substitution = {0};
+    substitution.arguments = (XrXirType *)request->arguments; substitution.count = request->argument_count;
+    MemberTypeMap map = {0};
+    for (uint32_t a = 0; a < request->argument_count && member_work(&c,1); ++a) {
+        uint32_t span = xr_xir_type_span(c.base,request->arguments[a]);
+        if (span > c.root_count) c.root_count = span;
+    }
+    c.root_arguments = member_alloc(&c,c.root_count,sizeof(*c.root_arguments));
+    for (uint32_t a = 0; a < c.root_count && member_work(&c,1); ++a)
+        c.root_arguments[a] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + a);
+    for (uint32_t r = 0; r < request->root_count && member_work(&c,1); ++r) {
+        const XrXirInterfaceApplication *root = &request->roots[r];
+        if (root->declaration >= table->count || (!!root->arguments != !!root->argument_count) ||
+            root->argument_count != table->declarations[root->declaration].parameter_count) {
+            c.status = XR_XIR_BAD_STRUCTURE; break;
+        }
+        XrXirType *arguments = member_alloc(&c,root->argument_count,sizeof(*arguments));
+        for (uint32_t a = 0; a < root->argument_count && member_work(&c,1); ++a)
+            arguments[a] = member_resolve(&c,&substitution,&map,root->arguments[a]);
+        if (c.status == XR_XIR_OK) member_application(&c,root->declaration,arguments);
+    }
+    for (MemberApplication *app = c.applications; app && member_work(&c,1); app = app->next)
+        member_expand(&c,app);
     if (c.status == XR_XIR_OK) *output = member_publish(&c);
     if (c.status == XR_XIR_OK) *budget = c.remaining;
     member_dispose(&c); return c.status;
@@ -334,7 +372,7 @@ XR_FUNC XrXirStatus xr_xir_interfaces_verify_members_verified(
     if (!table) return XR_XIR_OK;
     XrXirBudget remaining = *budget;
     for (uint32_t root = 0; root < table->count; ++root) {
-        MemberContext c = {0}; c.table = table; c.source = types; c.remaining = remaining;
+        MemberContext c = {0}; c.table = table; c.source = types; c.base = types; c.remaining = remaining;
         uint32_t count = table->declarations[root].parameter_count;
         XrXirType *arguments = member_alloc(&c,count,sizeof(*arguments));
         for (uint32_t a = 0; a < count && member_work(&c,1); ++a)
@@ -343,6 +381,8 @@ XR_FUNC XrXirStatus xr_xir_interfaces_verify_members_verified(
         if (c.status == XR_XIR_OK) member_roots(&c,&application,1);
         member_dispose(&c);
         if (c.status != XR_XIR_OK) return c.status;
+        /* No closure escapes: all context-owned reservations were released. */
+        c.remaining.scratch_bytes = remaining.scratch_bytes;
         remaining = c.remaining;
     }
     *budget = remaining; return XR_XIR_OK;

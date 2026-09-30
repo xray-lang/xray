@@ -54,7 +54,7 @@ static XrXirStatus interface_declaration(const XrXirInterfaceDeclaration *d,
         status = interface_name(method->name, b);
         if (status != XR_XIR_OK) return status;
         if (method->receiver || !xr_xir_callable_signature(types, method->signature)) return XR_XIR_BAD_TYPE;
-        status = xr_xir_type_context_verify_shape(types, method->signature, d->constraints, d->parameter_count, b);
+        status = xr_xir_type_expression_shape(types, method->signature, d->parameter_count, b);
         if (status != XR_XIR_OK) return status;
         for (uint32_t earlier = 0; earlier < m; ++earlier) {
             bool same;
@@ -82,9 +82,7 @@ static XrXirStatus interface_parents(const XrXirInterfaceTable *table,
         for (uint32_t a = 0; a < app->argument_count; ++a) {
             XrXirType type = app->arguments[a];
             if (type == XR_XIR_UNIT || xr_xir_type_is_cell(types, type)) return XR_XIR_BAD_TYPE;
-            XrXirStatus status = xr_xir_type_context_verify_shape(types, type, d->constraints, d->parameter_count, b);
-            if (status == XR_XIR_OK) status = xr_xir_type_markers(types, type, parent->constraints[a].markers,
-                d->constraints, d->parameter_count, &b->work);
+            XrXirStatus status = xr_xir_type_expression_shape(types, type, d->parameter_count, b);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -97,7 +95,7 @@ static XrXirStatus interface_acyclic(const XrXirInterfaceTable *table, XrXirBudg
     b->scratch_bytes -= bytes;
     unsigned char *color = xr_calloc(table->count, 1);
     InterfaceWalk *stack = xr_calloc(table->count, sizeof(*stack));
-    if (!color || !stack) { xr_free(color); xr_free(stack); return XR_XIR_OUT_OF_MEMORY; }
+    if (!color || !stack) { xr_free(color); xr_free(stack); b->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t root = 0; root < table->count && status == XR_XIR_OK; ++root) {
         if (!interface_charge(b, 0, 1)) { status = XR_XIR_BUDGET; break; }
@@ -114,7 +112,7 @@ static XrXirStatus interface_acyclic(const XrXirInterfaceTable *table, XrXirBudg
             color[next] = 1; stack[depth++] = (InterfaceWalk){next, 0};
         }
     }
-    xr_free(stack); xr_free(color); return status;
+    xr_free(stack); xr_free(color); b->scratch_bytes += bytes; return status;
 }
 static XrXirStatus interface_structure(const XrXirInterfaceTable *table,
     const XrXirTypes *types, XrXirBudget *b) {
@@ -144,22 +142,6 @@ static XrXirStatus interface_structure(const XrXirInterfaceTable *table,
     }
     status = interface_acyclic(table, b);
     if (status == XR_XIR_OK) status = xr_xir_interfaces_verify_members_verified(table, &descriptors, b);
-    for (uint32_t d = 0; status == XR_XIR_OK && d < table->count; ++d) {
-        const XrXirInterfaceDeclaration *declaration = &table->declarations[d];
-        XrXirConstraintEnvironment environment = {&descriptors, declaration->constraints, declaration->parameter_count};
-        status = xr_xir_constraint_environment_verify(&environment, b);
-        for (uint32_t p = 0; status == XR_XIR_OK && p < declaration->parent_count; ++p) {
-            const XrXirInterfaceApplication *app = &declaration->parents[p];
-            for (uint32_t a = 0; status == XR_XIR_OK && a < app->argument_count; ++a)
-                status = xr_xir_type_context_verify(&descriptors, app->arguments[a],
-                    declaration->constraints, declaration->parameter_count, b);
-            if (status == XR_XIR_OK) status = xr_xir_constraint_arguments(&environment,
-                table->declarations[app->declaration].constraints, app->arguments, app->argument_count, b);
-        }
-        for (uint32_t m = 0; status == XR_XIR_OK && m < declaration->method_count; ++m)
-            status = xr_xir_type_context_verify(&descriptors, declaration->methods[m].signature,
-                declaration->constraints, declaration->parameter_count, b);
-    }
     return status;
 }
 XrXirStatus xr_xir_interfaces_verify_structure(const XrXirInterfaceTable *table,

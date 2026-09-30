@@ -12,6 +12,7 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_constraint_proof.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_vm.h"
 #include "base/xsha256.h"
@@ -42,7 +43,7 @@ static void nominal_ordered_matching(void) {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,2,{0,arguments[3],2,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,arguments[4],2,NULL,0}}};
     XrXirTypes types = {nodes,6,&f.table, NULL}; XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types,&budget) == XR_XIR_OK);
     for (unsigned i = 0; i < 4; ++i) {
         budget = xr_xir_default_budget();
         XrXirType expected = (XrXirType)(i == 3 ? 260 : 256);
@@ -248,11 +249,12 @@ static void error_marker_definition(void) {
     }
     xr_xir_checked_packet_free(&packet);
     XrXirBudget budget=xr_xir_default_budget(); budget.work=0;
-    CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_ERROR,&constraint,1,&budget.work)==XR_XIR_BUDGET);
+    XrXirProofContext proof = {&built,{XR_XIR_CONTEXT_FUNCTION,0}};
+    CHECK(xr_xir_type_markers_prove(&proof,parameter,XR_XIR_CONSTRAINT_ERROR,&budget)==XR_XIR_BUDGET);
     budget=xr_xir_default_budget();
-    CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_MASK,&constraint,1,&budget.work)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_type_markers_prove(&proof,parameter,XR_XIR_CONSTRAINT_MASK,&budget)==XR_XIR_BAD_TYPE);
     constraint.markers = XR_XIR_CONSTRAINT_MASK;
-    CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_MASK,&constraint,1,&budget.work)==XR_XIR_OK);
+    CHECK(xr_xir_type_markers_prove(&proof,parameter,XR_XIR_CONSTRAINT_MASK,&budget)==XR_XIR_OK);
 }
 static void rejected_templates(void) {
     for (unsigned mode = 0; mode < 12; ++mode) {
@@ -412,7 +414,12 @@ static void deep_body_substitution(void) {
     xr_xir_artifact_free(fixture); memset(nodes, 0xCC, sizeof(nodes));
     XrXirBudget budget = xr_xir_default_budget(); budget.work = 20000;
     XrXirBudget original = budget;
-    CHECK(xr_xir_artifact_verify(checked, &budget, NULL) == XR_XIR_OK);
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_artifact_verify(checked, &budget, &diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr,"deep body verify depth=%u work=%llu status=%u at %u/%u/%u reason=%u\n",
+        DEPTH,(unsigned long long)budget.work,(unsigned)status,diagnostic.function,diagnostic.block,
+        diagnostic.instruction,(unsigned)diagnostic.reason);
+    CHECK(status == XR_XIR_OK);
     CHECK(xr_xir_specialize(checked, &budget, &closed, NULL) == XR_XIR_BUDGET && !closed);
     CHECK(!memcmp(&budget, &original, sizeof(budget)));
     CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);

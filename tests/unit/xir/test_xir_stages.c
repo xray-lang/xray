@@ -16,6 +16,7 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_constraint_proof.h"
 #include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -351,7 +352,7 @@ static void constructed_metadata(void) {
     };
     XrXirTypes types = {nodes,5, NULL, NULL};
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types,&budget) == XR_XIR_OK);
     CHECK(xr_xir_type_is_array(&types,(XrXirType)256));
     CHECK(!xr_xir_type_is_callable(&types,(XrXirType)256));
     CHECK(xr_xir_type_is_cell(&types,(XrXirType)257));
@@ -359,10 +360,12 @@ static void constructed_metadata(void) {
     CHECK(!xr_xir_type_is_owned(NULL,(XrXirType)256));
     CHECK(!xr_xir_type_node(&types,(XrXirType)261));
     CHECK(!xr_xir_type_node(&types,(XrXirType)XR_XIR_CONSTRUCTED_TYPE_LIMIT));
-    CHECK(xr_xir_type_markers(&types,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,NULL,0,&budget.work) == XR_XIR_OK);
-    CHECK(xr_xir_type_markers(&types,(XrXirType)259,XR_XIR_CONSTRAINT_SENDABLE,NULL,0,&budget.work) == XR_XIR_BAD_TYPE);
+    XrXirModule marker_module = {0}; marker_module.stage = XR_XIR_BUILT; marker_module.types = &types;
+    XrXirProofContext marker_context = {&marker_module,{XR_XIR_CONTEXT_CLOSED,0}};
+    CHECK(xr_xir_type_markers_prove(&marker_context,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_type_markers_prove(&marker_context,(XrXirType)259,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_BAD_TYPE);
     budget.work = 0;
-    CHECK(xr_xir_type_markers(&types,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,NULL,0,&budget.work) == XR_XIR_BUDGET);
+    CHECK(xr_xir_type_markers_prove(&marker_context,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_BUDGET);
     XrXirLayout layout;
     CHECK(xr_xir_layout(&types,(XrXirType)256,&fixture_target,XR_XIR_LAYOUT_STORAGE,&layout) == XR_XIR_OK);
     CHECK(layout.size == 8 && layout.alignment == 8);
@@ -390,7 +393,7 @@ static void constructed_metadata(void) {
         if (attack == 16) { nodes[3].kind = XR_XIR_TYPE_CELL; nodes[3].element = (XrXirType)257; }
         if (attack == 17) input.type = (XrXirType)257;
         budget = xr_xir_default_budget();
-        CHECK(xr_xir_types_verify(&types,&budget) != XR_XIR_OK);
+        CHECK(xr_xir_types_structure_verify(&types,&budget) != XR_XIR_OK);
         memcpy(nodes,saved,sizeof(nodes)); input.type = (XrXirType)256;
     }
     XrXirGeneric generic = {NULL,65536,NULL,0};
@@ -403,15 +406,15 @@ static void constructed_metadata(void) {
     budget = xr_xir_default_budget();
     CHECK(xr_xir_type_satisfies(&context,0,(XrXirType)257,(XrXirConstraint){0},&budget) == XR_XIR_BAD_TYPE);
     budget = xr_xir_default_budget(); budget.metadata_bytes = 1;
-    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_BUDGET);
+    CHECK(xr_xir_types_structure_verify(&types,&budget) == XR_XIR_BUDGET);
     budget = xr_xir_default_budget(); budget.work = types.count;
-    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_BUDGET);
+    CHECK(xr_xir_types_structure_verify(&types,&budget) == XR_XIR_BUDGET);
     XrXirTypes *copy = NULL;
     CHECK(xr_xir_types_clone(&types,&copy) == XR_XIR_OK && copy && copy->nodes != nodes);
     CHECK(copy->nodes[2].parameters != &input);
     memset(nodes,0xCC,sizeof(nodes)); memset(&input,0xCC,sizeof(input));
     budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(copy,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(copy,&budget) == XR_XIR_OK);
     xr_xir_types_free(copy);
 }
 
@@ -421,66 +424,97 @@ static void constructed_metadata(void) {
 static void nominal_metadata_cases(void) {
     NominalFixture f; nominal_fixture(&f);
     XrXirBudget b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_OK);
     f.declarations[1].module = f.declarations[0].module;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
     nominal_fixture(&f); f.fields[1].name = f.fields[0].name;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
     nominal_fixture(&f); f.declarations[0].parameter_count = 0; f.declarations[0].constraints = NULL;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.constraint.markers = 4;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.fields[0].flags = XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
     nominal_fixture(&f); f.module[2] = 0;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
     nominal_fixture(&f); f.fields[0].type = XR_XIR_UNIT;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f);
     XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1), NULL, 0, XR_XIR_UNIT, 0, 2, {0}};
     XrXirTypes types = {&node, 1, NULL, NULL}; f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, &types, &b) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, &types, &b) == XR_XIR_BAD_TYPE);
     node.element = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, &types, &b) == XR_XIR_OK);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, &types, &b) == XR_XIR_OK);
     node.kind = XR_XIR_TYPE_CELL;
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, &types, &b) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, &types, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); b = xr_xir_default_budget(); b.work = 1;
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BUDGET && b.work == 1);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BUDGET && b.work == 1);
     b = xr_xir_default_budget(); b.metadata_bytes = 1;
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BUDGET && b.metadata_bytes == 1);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BUDGET && b.metadata_bytes == 1);
     b = xr_xir_default_budget();
     XrXirNominalTable *copy = NULL;
     CHECK(xr_xir_nominal_clone(&f.table, NULL, &b, &copy) == XR_XIR_OK && copy);
     memset(&f, 0xCC, sizeof(f));
     b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(copy, NULL, &b) == XR_XIR_OK);
+    CHECK(xr_xir_nominal_structure_verify(copy, NULL, &b) == XR_XIR_OK);
     CHECK(copy->count == 2 && memcmp(copy->declarations[0].module.bytes, "alpha", 5) == 0);
     CHECK(copy->declarations[0].constraints[0].markers == XR_XIR_CONSTRAINT_SENDABLE);
     CHECK(memcmp(copy->declarations[0].fields[0].name.bytes, "value", 5) == 0);
     xr_xir_nominal_free(copy);
 }
 
+static XrXirStatus nominal_context_use(const XrXirTypes *types, XrXirType type,
+    const XrXirConstraint *constraints, uint32_t count, XrXirBudget *budget) {
+    XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    XrXirBlock block = {0,1,0,0};
+    XrXirFunction functions[] = {
+        {"alpha_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
+        {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
+        {"use",3,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0}};
+    uint32_t dependency = 1;
+    XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0},{"other",5,NULL,0,1}};
+    XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
+    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
+    XrXirGeneric generics[] = {{0},{0},{constraints,count,NULL,0}};
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,types,NULL};
+    XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,2}};
+    XrXirStatus status = xr_xir_types_structure_verify(types,budget);
+    return status == XR_XIR_OK ? xr_xir_type_use_verify(&context,type,budget) : status;
+}
+static XrXirStatus nominal_catalog_semantics(const XrXirTypes *types, XrXirBudget *budget) {
+    XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    XrXirBlock block = {0,1,0,0};
+    XrXirFunction functions[] = {
+        {"alpha_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
+        {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0}};
+    uint32_t dependency = 1;
+    XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0},{"other",5,NULL,0,1}};
+    XrXirFunctionIdentity identities[] = {{0},{.module=1}};
+    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
+    XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,types,NULL};
+    return xr_xir_verify(&module,budget,NULL);
+}
 static void nominal_pool_ownership(void) {
     NominalFixture f; nominal_fixture(&f);
     XrXirTypes types = {NULL, 0, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
     XrXirTypes *copy = NULL;
     CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OK && copy && copy->nominals);
     CHECK(copy->nominals != &f.table && copy->nominals->declarations != f.declarations);
     memset(&f, 0xCC, sizeof(f));
     budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(copy, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(copy, &budget) == XR_XIR_OK);
     CHECK(memcmp(copy->nominals->declarations[0].name.bytes, "Pair", 4) == 0);
     Fixture source; fixture_init(&source); source.module.types = copy;
     XrXirArtifact *artifact = NULL;
@@ -488,7 +522,7 @@ static void nominal_pool_ownership(void) {
     xr_xir_types_free(copy);
     types.nominals = NULL;
     budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
 }
 
 static void nominal_instance_metadata(void) {
@@ -499,7 +533,7 @@ static void nominal_instance_metadata(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, &argument, 1, NULL, 0}}};
     XrXirTypes types = {nodes, 3, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
     for (unsigned mode = 0; mode < 11; ++mode) {
         XrXirTypeNode saved = nodes[2]; XrXirType saved_argument = argument;
         if (mode == 0) nodes[2].nominal.declaration = 2;
@@ -514,19 +548,19 @@ static void nominal_instance_metadata(void) {
         if (mode == 9) nodes[0].kind = XR_XIR_TYPE_CELL;
         if (mode == 10) { nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].element = XR_XIR_UNIT; nodes[0].result = XR_XIR_STRING; }
         budget = xr_xir_default_budget();
-        CHECK(xr_xir_types_verify(&types, &budget) != XR_XIR_OK);
+        CHECK(nominal_catalog_semantics(&types, &budget) != XR_XIR_OK);
         nodes[2] = saved; argument = saved_argument;
         nodes[0] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
     }
     nodes[0].nominal.declaration = 1; budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
     nodes[0].nominal.declaration = 0;
     XrXirTypes *copy = NULL;
     CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OK);
     CHECK(copy->nodes[1].nominal.arguments != &argument);
     argument = XR_XIR_UNIT; memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes));
     budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(copy, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(copy, &budget) == XR_XIR_OK);
     CHECK(copy->nodes[1].nominal.arguments[0] == (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE);
     xr_xir_types_free(copy);
 }
@@ -543,17 +577,17 @@ static void nominal_argument_identity(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 2, 2, NULL, 0}}};
     XrXirTypes types = {nodes, 2, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
     nodes[1].nominal.arguments = arguments; budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
     for (uint32_t i = 0; i < 2; ++i) {
         f.declarations[i].parameter_count = 0; f.declarations[i].constraints = NULL;
         nodes[i].nominal = (XrXirNominalType) {i, NULL, 0, NULL, 0};
     }
     f.fields[0].type = XR_XIR_I64; budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
     types.nominals = NULL; budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_BAD_TYPE);
 }
 
 static void nominal_context_proofs(void) {
@@ -566,29 +600,34 @@ static void nominal_context_proofs(void) {
     const XrXirType nominal = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirConstraint allowed[] = {{0}, {.markers = XR_XIR_CONSTRAINT_SENDABLE}}, denied[] = {{.markers = XR_XIR_CONSTRAINT_SENDABLE}, {0}};
     XrXirBudget initial = xr_xir_default_budget(), budget = initial;
-    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
+    CHECK(nominal_context_use(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
     uint64_t bytes = initial.metadata_bytes - budget.metadata_bytes, work = initial.work - budget.work;
+    CHECK(bytes > 0 && work > 0);
     budget = initial;
-    CHECK(xr_xir_type_context_verify(&types, nominal, denied, 2, &budget) == XR_XIR_BAD_TYPE);
+    CHECK(nominal_context_use(&types, nominal, denied, 2, &budget) == XR_XIR_BAD_TYPE);
     budget = initial;
-    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 1, &budget) == XR_XIR_BAD_TYPE);
+    CHECK(nominal_context_use(&types, nominal, allowed, 1, &budget) == XR_XIR_BAD_TYPE);
     for (unsigned mode = 0; mode < 3; ++mode) {
         budget = initial; budget.metadata_bytes = bytes; budget.work = work;
         if (mode == 1) --budget.metadata_bytes;
         if (mode == 2) --budget.work;
-        CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) ==
-            (mode ? XR_XIR_BUDGET : XR_XIR_OK));
+        XrXirStatus status = nominal_context_use(&types, nominal, allowed, 2, &budget);
+        if (status != (mode ? XR_XIR_BUDGET : XR_XIR_OK))
+            fprintf(stderr,"nominal context mode=%u bytes=%llu work=%llu status=%u remaining=%llu/%llu\n",
+                mode,(unsigned long long)bytes,(unsigned long long)work,(unsigned)status,
+                (unsigned long long)budget.metadata_bytes,(unsigned long long)budget.work);
+        CHECK(status == (mode ? XR_XIR_BUDGET : XR_XIR_OK));
     }
     argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE; budget = initial;
-    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
+    CHECK(nominal_context_use(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
     budget = initial;
-    CHECK(xr_xir_type_context_verify(&types, nominal, denied, 2, &budget) == XR_XIR_BAD_TYPE);
+    CHECK(nominal_context_use(&types, nominal, denied, 2, &budget) == XR_XIR_BAD_TYPE);
     argument = nominal; budget = initial;
-    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) == XR_XIR_BAD_TYPE);
+    CHECK(nominal_context_use(&types, nominal, allowed, 2, &budget) == XR_XIR_BAD_TYPE);
     argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     /* A well-formed pool still needs the separate use-site context proofs above. */
     budget = initial;
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
 }
 
 #include "xir_enum_metadata_fixture.h"
@@ -631,7 +670,7 @@ static void nominal_kind_boundaries(void) {
 static void enum_metadata_cases(void) {
     EnumMetadataFixture f; enum_metadata_fixture(&f);
     XrXirBudget b = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_OK);
     for (unsigned bad = 0; bad < 9; ++bad) {
         enum_metadata_fixture(&f);
         if (bad == 0) f.declaration.kind = 2;
@@ -644,14 +683,14 @@ static void enum_metadata_cases(void) {
         if (bad == 7) { f.variants[1].field_count = 2; f.variants[2].field_begin = 2; f.variants[2].field_count = 0; }
         if (bad == 8) f.variants[2].field_count = 0;
         b = xr_xir_default_budget(); XrXirBudget original = b;
-        CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
         CHECK(!memcmp(&b, &original, sizeof(b)));
     }
     enum_metadata_fixture(&f); f.fields[0].type = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
-    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     XrXirConstraint constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     f.declaration.parameter_count = 1; f.declaration.constraints = &constraint;
-    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
+    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_OK);
     enum_metadata_fixture(&f); XrXirNominalTable *copy = NULL, *projected = NULL, *second = NULL;
     b = xr_xir_default_budget(); CHECK(xr_xir_nominal_clone(&f.table, NULL, &b, &copy) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f));
@@ -668,7 +707,7 @@ static void enum_metadata_cases(void) {
     XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL; node.nominal.fields = fields; node.nominal.field_count = 2;
     XrXirTypes types = {&node, 1, &f.table, NULL}; b = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &b) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &b) == XR_XIR_OK);
 }
 
 static void error_filter_packets(const XrXirArtifact *checked) {
@@ -725,8 +764,8 @@ static void error_filter_guards(void) {
             {"entry", 5, NULL, 0, XR_XIR_I64, &entry_block, 1, entry_ops, 2, NULL, 0}, function};
         uint32_t dependency = 0;
         XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0}, {"root", 4, &dependency, 1, 1}};
-        XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0}};
-        XrXirDeclarations declarations = {modules, 2, identities, NULL, 0, NULL, 0, 1, 2};
+        XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
+        XrXirDeclarations declarations = {modules, 2, identities, NULL, 0, NULL, 0, 1, 2, NULL};
         XrXirModule module = {XR_XIR_BUILT, functions, 4, &declarations, NULL, &types, NULL};
         if (mode == 1) ops[2].args[0] = 1;
         if (mode == 2) { ops[1].targets[0] = 2; ops[1].targets[1] = 1; }

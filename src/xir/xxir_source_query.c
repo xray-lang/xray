@@ -12,6 +12,7 @@
 #include "xxir_source_query_internal.h"
 #include "xxir_nominal.h"
 #include "xxir_interface.h"
+#include "xxir_implementation.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
@@ -62,6 +63,29 @@ static XrXirConstraint *query_constraints(SourceQueryCopy *copy,
     for (uint32_t i = 0; constraints && i < count && copy->status == XR_XIR_OK; ++i)
         constraints[i].interfaces = query_applications(copy, source[i].interfaces, source[i].interface_count);
     return constraints;
+}
+static void query_application(SourceQueryCopy *copy, XrXirInterfaceApplication *app) {
+    if (!!app->arguments != !!app->argument_count) { copy->status = XR_XIR_BAD_STRUCTURE; return; }
+    app->arguments = query_copy(copy, app->arguments, app->argument_count, sizeof(*app->arguments));
+}
+static void query_implementations(SourceQueryCopy *copy, const XrXirImplementationTable *source) {
+    copy->snapshot->view.implementations = NULL;
+    if (!source || copy->status != XR_XIR_OK) return;
+    if (!source->records || !source->count) { copy->status = XR_XIR_BAD_STRUCTURE; return; }
+    XrXirImplementationTable *table = query_copy(copy, source, 1, sizeof(*table));
+    copy->snapshot->view.implementations = table;
+    if (!table) return;
+    XrXirImplementation *records = query_copy(copy, source->records, source->count, sizeof(*records));
+    table->records = records;
+    for (uint32_t i = 0; records && i < source->count && copy->status == XR_XIR_OK; ++i) {
+        query_application(copy, &records[i].interface);
+        if (!!records[i].bindings != !!records[i].binding_count) { copy->status = XR_XIR_BAD_STRUCTURE; break; }
+        XrXirImplementationBinding *bindings = query_copy(copy, records[i].bindings,
+            records[i].binding_count, sizeof(*bindings));
+        records[i].bindings = bindings;
+        for (uint32_t b = 0; bindings && b < records[i].binding_count && copy->status == XR_XIR_OK; ++b)
+            query_application(copy, &bindings[b].requirement);
+    }
 }
 static void query_modules(SourceQueryCopy *copy, const XrXirSourceView *source) {
     XrXirSourceQueryModule *modules = query_copy(copy, source->modules, source->module_count, sizeof(*modules));
@@ -159,6 +183,7 @@ XrXirStatus xr_xir_source_snapshot_copy(const XrXirSourceView *view,
     snapshot->view = *view;
     SourceQueryCopy copy = {snapshot, remaining, XR_XIR_OK};
     query_modules(&copy, view); query_declarations(&copy, view); query_types(&copy, view->types);
+    query_implementations(&copy, view->implementations);
     snapshot->view.references = query_copy(&copy, view->references, view->reference_count, sizeof(*view->references));
     snapshot->view.expressions = query_copy(&copy, view->expressions, view->expression_count, sizeof(*view->expressions));
     if (copy.status != XR_XIR_OK) { xr_xir_source_snapshot_free(snapshot); return copy.status; }

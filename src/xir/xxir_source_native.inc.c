@@ -63,10 +63,8 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     return true;
 }
 static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
-    XrXirDeclarations declarations = {0};
-    declarations.modules = ctx->modules; declarations.module_count = (uint32_t)ctx->graph->spec_count;
-    declarations.functions = ctx->identities;
-    XrXirModule module = {XR_XIR_BUILT, ctx->functions, ctx->function_count, &declarations, ctx->generics, &ctx->types, NULL};
+    XrXirDeclarations declarations;
+    XrXirModule module = source_module_view(ctx,&declarations);
     XrXirStatus status;
     if (ctx->type_scope.active) {
         AstNode *node = ctx->type_scope.node;
@@ -76,14 +74,25 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
         SourceName *owner = name ? find_name(ctx, ctx->names[ctx->module], name) : NULL;
         if (!owner || owner->node != node || (owner->kind != SOURCE_INTERFACE && owner->kind != SOURCE_NOMINAL))
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope has no authentic declaration owner");
-        const XrXirConstraint *constraints = owner->kind == SOURCE_INTERFACE ?
-            ctx->interfaces.declarations[owner->index].constraints : ctx->nominals.declarations[owner->index].constraints;
         uint32_t count = owner->kind == SOURCE_INTERFACE ? ctx->interfaces.declarations[owner->index].parameter_count :
             ctx->nominals.declarations[owner->index].parameter_count;
-        status = xr_xir_type_context_verify(&ctx->types,element,constraints,count,&ctx->budget);
-        /* Module declarations are completed after type signatures. Their checked
-         * admission verifies naming authority for every field and requirement. */
-    } else status = xr_xir_type_satisfies(&module, ctx->function, element, (XrXirConstraint){0}, &ctx->budget);
+        status = element != XR_XIR_UNIT && !xr_xir_type_is_cell(&ctx->types,element) &&
+            xr_xir_type_span(&ctx->types,element) <= count ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        /* This is declaration construction only. The complete module discharges
+         * nested type obligations after all explicit implementations are bound. */
+    } else if (ctx->declarations_building) {
+        if (ctx->function >= ctx->function_count || !ctx->generics)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"function type declaration context is missing");
+        uint32_t count = ctx->generics[ctx->function].parameter_count;
+        status = element == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types,element) ? XR_XIR_BAD_TYPE :
+            xr_xir_type_expression_shape(&ctx->types,element,count,&ctx->budget);
+        /* Explicit implementations are bound after every signature exists.
+         * Module constraint verification must discharge this use before bodies. */
+    } else {
+        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+        status = xr_xir_type_use_verify(&context,element,&ctx->budget);
+        if (status == XR_XIR_OK) status = xr_xir_type_access(&module,ctx->function,element,&ctx->budget);
+    }
     if (status != XR_XIR_OK)
         return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);

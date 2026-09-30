@@ -136,6 +136,39 @@ static bool source_manifest_parameters(SourceContext *ctx, uint32_t function, co
     }
     return true;
 }
+static bool source_manifest_requirement(SourceContext *ctx, SourceDeclarationTarget target,
+    const XrDeclarationRecord *record) {
+    SourceName *owner = ctx->interface_sources[target.interface];
+    AstNode *node = owner->node->as.interface_decl.methods[target.member];
+    InterfaceMethodNode *method = &node->as.interface_method;
+    XrXirInterfaceMethod *requirement = (XrXirInterfaceMethod *)&ctx->interfaces.declarations[target.interface].methods[target.member];
+    XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types,requirement->signature);
+    if (record->no_suspend) signature.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
+    XrXirCallableParameter *parameters = signature.parameter_count ?
+        source_alloc(ctx,signature.parameter_count,sizeof(*parameters)) : NULL;
+    if (signature.parameter_count && !parameters) return false;
+    if (signature.parameter_count) memcpy(parameters,signature.parameters,signature.parameter_count * sizeof(*parameters));
+    signature.parameters = parameters;
+    for (uint32_t p = 0; p < record->parameter_count; ++p) {
+        uint32_t selected = UINT32_MAX;
+        for (int a = 0; a < method->param_count; ++a) {
+            if (!source_work(ctx,node)) return false;
+            if (!strcmp(record->parameters[p],method->params[a]->name)) selected = (uint32_t)a;
+        }
+        if (selected == UINT32_MAX)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface declaration parameter name is missing");
+        const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types,parameters[selected].type);
+        if (!found || found->flags)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface callable promise target is invalid or duplicated");
+        XrXirTypeNode qualified = *found; qualified.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+        if (!source_intern_type(ctx,qualified,&parameters[selected].type)) return false;
+    }
+    if (!source_intern_type(ctx,signature,&requirement->signature)) return false;
+    SourceTypeScope saved = ctx->type_scope; uint32_t module = ctx->module;
+    source_interface_scope(ctx,owner);
+    bool ok = source_interface_method_query(ctx,owner,target.member,requirement->signature);
+    ctx->type_scope = saved; ctx->module = module; return ok;
+}
 static bool source_manifests_bind(SourceContext *ctx) {
     for (SourceManifest *manifest = ctx->manifests; manifest; manifest = manifest->next) {
         if (!manifest->declarations) continue;
@@ -148,11 +181,15 @@ static bool source_manifests_bind(SourceContext *ctx) {
             SourceDeclarationSelector selector = {{canonical, (uint32_t)strlen(canonical)},
                 {record->name, (uint32_t)strlen(record->name)},
                 {record->owner, record->owner ? (uint32_t)strlen(record->owner) : 0}};
-            uint32_t function;
-            bool found = source_declaration_target(ctx, &selector, &function); xr_free(canonical);
+            SourceDeclarationTarget target = {0};
+            bool found = source_declaration_target(ctx,&selector,&target); xr_free(canonical);
             if (!found) return false;
-            if (record->no_suspend) ctx->identities[function].promises = XR_XIR_FUNCTION_NO_SUSPEND;
-            if (!source_manifest_parameters(ctx, function, record)) return false;
+            if (target.requirement) {
+                if (!source_manifest_requirement(ctx,target,record)) return false;
+            } else {
+                if (record->no_suspend) ctx->identities[target.function].promises = XR_XIR_FUNCTION_NO_SUSPEND;
+                if (!source_manifest_parameters(ctx,target.function,record)) return false;
+            }
         }
     }
     return true;

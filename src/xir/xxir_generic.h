@@ -14,7 +14,7 @@
 #include "xxir.h"
 XR_FUNC XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *budget,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remaining);
+XR_FUNC XrXirStatus xr_xir_generics_structure_verify(const XrXirModule *module, XrXirBudget *remaining);
 XR_FUNC XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **output);
 XR_FUNC void xr_xir_generics_free(XrXirGeneric *generics, uint32_t functions);
 XR_FUNC bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type);

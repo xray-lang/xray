@@ -111,10 +111,10 @@ static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
         {"captured",8,NULL,0,XR_XIR_STRING,&blocks[5],1,captured,8,captured_operands,3}};
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"root",4,&dependency,1,0},{"library",7,NULL,0,1}};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0},{1,0, 0, 0, 0, 0},{0,0, 0, 0, 0, 0},{1,1, 0, 0, 0, 0},{0,1, 0, 0, 0, 0},{0,1, 0, 0, 0, 0},{0,1, 0, 0, 0, 0},{0,1, 0, 0, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirSlot slots[] = {{1,a,0},{0,a,1},{0,a,1}};
     XrXirLiteral literals[] = {{"red",3},{"blue",4},{"green",5}};
-    XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2};
+    XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,8,&declarations,NULL,&types, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};

@@ -113,7 +113,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
 }
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
-    if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->super_name || decl->interface_count ||
+    if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->super_name ||
         decl->is_packed || decl->explicit_align || decl->attr_count || decl->field_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct declaration contract is not admitted");
     return source_nominal_declare(ctx, node, decl->name, decl->type_params,
@@ -194,7 +194,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                 source_struct_function_scope(ctx, index, symbol);
                 ctx->bodies[index].declaration = ctx->nominal_members[symbol->index][f];
                 bool visible = nominal->exported && !(nominal->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED));
-                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0};
+                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER};
             }
         }
     }

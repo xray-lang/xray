@@ -95,7 +95,7 @@ static void source_interface_facts(XrXirSourceRequest *request) {
         "interface I<T> {}\nfn unused<T:I>(x:T)->T { return x }\n",
         ("interface I<T> {}\nfn take<T:I<U>,U>(x:T,y:U)->U { return y }\n"
             "fn bad<T,U>(x:T,y:U)->U { return take<T,U>(x,y) }\n"),
-        "interface I { get()->i64 }\nstruct S implements I { get()->i64 { return 41 } }\n",
+        "interface I { get()->i64 }\nstruct S implements I { static get()->i64 { return 41 } }\n",
         "interface I { value:i64 }\n",
         "interface I { get<T>(x:T)->T }\n"
     };

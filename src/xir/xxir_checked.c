@@ -13,6 +13,7 @@
 #include "xxir_checked.h"
 #include "xxir_nominal.h"
 #include "xxir_interface.h"
+#include "xxir_implementation.h"
 #include "xxir_internal.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
@@ -124,6 +125,42 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         if (c->reading) operands[i] = value;
     }
 }
+static void checked_application(CheckedCursor *c, XrXirInterfaceApplication *app) {
+    app->declaration = checked_u32(c, app->declaration);
+    uint32_t count = checked_u32(c, app->argument_count);
+    XrXirType *arguments = checked_array(c, app->arguments, count, sizeof(*arguments), 4);
+    app->arguments = arguments; app->argument_count = arguments ? count : 0;
+    for (uint32_t a = 0; a < app->argument_count && c->status == XR_XIR_OK; ++a) {
+        XrXirType type = (XrXirType)checked_u32(c, (uint32_t)arguments[a]);
+        if (c->reading) arguments[a] = type;
+    }
+}
+static void checked_implementations(CheckedCursor *c, XrXirDeclarations *d) {
+    uint32_t count = checked_u32(c, d->implementations ? d->implementations->count : 0);
+    if (!count || c->status != XR_XIR_OK) return;
+    XrXirImplementationTable *table = checked_array(c, d->implementations, 1, sizeof(*table), 16);
+    if (c->reading) d->implementations = table;
+    if (!table) return;
+    XrXirImplementation *records = checked_array(c, table->records, count, sizeof(*records), 16);
+    if (c->reading) { table->records = records; table->count = records ? count : 0; }
+    for (uint32_t i = 0; records && i < count && c->status == XR_XIR_OK; ++i) {
+        XrXirImplementation record = records[i];
+        record.nominal_declaration = checked_u32(c, record.nominal_declaration);
+        checked_application(c, &record.interface);
+        uint32_t bindings_count = checked_u32(c, record.binding_count);
+        XrXirImplementationBinding *bindings = checked_array(c, record.bindings,
+            bindings_count, sizeof(*bindings), 16);
+        record.bindings = bindings; record.binding_count = bindings ? bindings_count : 0;
+        for (uint32_t b = 0; b < record.binding_count && c->status == XR_XIR_OK; ++b) {
+            XrXirImplementationBinding binding = bindings[b];
+            checked_application(c, &binding.requirement);
+            binding.member = checked_u32(c, binding.member);
+            binding.function = checked_u32(c, binding.function);
+            if (c->reading) bindings[b] = binding;
+        }
+        if (c->reading) records[i] = record;
+    }
+}
 static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_t functions) {
     d->module_count = checked_u32(c, d->module_count);
     d->slot_count = checked_u32(c, d->slot_count);
@@ -145,7 +182,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         m.initializer = checked_u32(c, m.initializer);
         if (c->reading) modules[i] = m;
     }
-    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 24);
+    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 28);
     d->functions = identities;
     for (uint32_t i = 0; i < functions && c->status == XR_XIR_OK; ++i) {
         XrXirFunctionIdentity id = identities[i];
@@ -154,6 +191,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         id.member_access = checked_u32(c, id.member_access);
         id.cleanup_owner = checked_u32(c, id.cleanup_owner);
         id.promises = checked_u32(c, id.promises);
+        id.method_kind = checked_u32(c, id.method_kind);
         if (c->reading) identities[i] = id;
     }
     XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 12);
@@ -172,6 +210,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         literal.bytes = checked_blob(c, literal.bytes, &literal.length);
         if (c->reading) literals[i] = literal;
     }
+    checked_implementations(c, d);
 }
 static XrXirInterfaceApplication *checked_applications(CheckedCursor *c,
     const XrXirInterfaceApplication *source, uint32_t *count) {
@@ -180,14 +219,7 @@ static XrXirInterfaceApplication *checked_applications(CheckedCursor *c,
     *count = applications ? size : 0;
     for (uint32_t i = 0; i < *count && c->status == XR_XIR_OK; ++i) {
         XrXirInterfaceApplication app = applications[i];
-        app.declaration = checked_u32(c, app.declaration);
-        uint32_t arguments = checked_u32(c, app.argument_count);
-        XrXirType *types = checked_array(c, app.arguments, arguments, sizeof(*types), 4);
-        app.arguments = types; app.argument_count = types ? arguments : 0;
-        for (uint32_t a = 0; a < app.argument_count && c->status == XR_XIR_OK; ++a) {
-            XrXirType type = (XrXirType) checked_u32(c, (uint32_t) types[a]);
-            if (c->reading) types[a] = type;
-        }
+        checked_application(c, &app);
         if (c->reading) applications[i] = app;
     }
     return applications;
@@ -410,7 +442,7 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenan
     }
     if (c->status != XR_XIR_OK) return;
     if (declarations) {
-        XrXirDeclarations *owned = checked_array(c, m->declarations, 1, sizeof(*owned), 20);
+        XrXirDeclarations *owned = checked_array(c, m->declarations, 1, sizeof(*owned), 24);
         m->declarations = owned;
         if (!owned) return;
         XrXirDeclarations d = *owned;

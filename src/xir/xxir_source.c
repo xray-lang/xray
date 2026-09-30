@@ -11,6 +11,9 @@
  */
 #include "xxir_source.h"
 #include "xxir_constraint_proof.h"
+#include "xxir_implementation.h"
+#include "xxir_implementation_verify.h"
+#include "xxir_interface_members.h"
 #include "xxir_initialization.h"
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
@@ -98,6 +101,8 @@ typedef struct SourceContext {
     XrXirNominalTable nominals;
     SourceTypeScope type_scope;
     XrXirInterfaceTable interfaces;
+    XrXirImplementationTable implementations;
+    bool implementations_ready, declarations_building;
     SourceName **interface_sources, **interface_members;
     uint32_t **interface_member_declarations;
     uint32_t **nominal_members, **nominal_variants;
@@ -120,6 +125,15 @@ typedef struct SourceContext {
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
 
+static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
+    *declarations = (XrXirDeclarations){ctx->modules,(uint32_t)ctx->graph->spec_count,ctx->identities,
+        ctx->slots,ctx->slot_count,ctx->literals,ctx->literal_count,(uint32_t)ctx->graph->entry_index,
+        ctx->function_count ? ctx->function_count - 1 : 0,
+        ctx->implementations.count ? &ctx->implementations : NULL};
+    return (XrXirModule){XR_XIR_BUILT,ctx->functions,ctx->function_count,declarations,
+        ctx->has_generics ? ctx->generics : NULL,
+        ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL,NULL};
+}
 static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, const char *message) {
     if (ctx->diagnostic.status == XR_XIR_OK) {
         if (!node && ctx->type_scope.active) node = ctx->type_scope.node;
@@ -489,9 +503,10 @@ static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected,
         return emit(ctx, (XrXirInstruction){XR_XIR_FUNCTION_WEAKEN, expected, {value->id, 0}, {0}, 0, {0}}, value);
     }
     if (expected == XR_XIR_ERROR) {
-        const XrXirGeneric *generic = &ctx->generics[ctx->function];
-        XrXirStatus status = xr_xir_type_markers(&ctx->types, value->type, XR_XIR_CONSTRAINT_ERROR,
-            generic->constraints, generic->parameter_count, &ctx->budget.work);
+        XrXirDeclarations declarations;
+        XrXirModule module = source_module_view(ctx,&declarations);
+        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+        XrXirStatus status = xr_xir_type_markers_prove(&context,value->type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
         if (status != XR_XIR_OK) return source_fail(ctx, node, status, "Error conversion requires an enum proof");
         return emit(ctx, (XrXirInstruction) {XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {value->id, 0}, {0}, 0, {0}}, value);
     }
@@ -661,14 +676,12 @@ static bool source_type_arguments(SourceContext *ctx, AstNode *node, const XrXir
 }
 static bool source_instantiation_prove(SourceContext *ctx, AstNode *node,
     XrXirDeclarationContext callee, SourceSubstitution substitution) {
-    XrXirDeclarations declarations = {0};
-    declarations.modules = ctx->modules; declarations.module_count = (uint32_t)ctx->graph->spec_count;
-    declarations.functions = ctx->identities;
-    XrXirModule view = {XR_XIR_BUILT,ctx->functions,ctx->function_count,&declarations,ctx->generics,&ctx->types,NULL};
+    XrXirDeclarations declarations;
+    XrXirModule view = source_module_view(ctx,&declarations);
     XrXirProofContext context = {&view,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
     for (uint32_t i = 0; i < substitution.count; ++i) {
         if (!source_work(ctx, node)) return false;
-        XrXirConstraintUse use = {callee,i,substitution.types,substitution.count};
+        XrXirConstraintUse use = {&view,callee,i,substitution.types,substitution.count};
         XrXirStatus status = xr_xir_constraints_prove(&context, &use, &ctx->budget);
         if (status == XR_XIR_OK)
             status = xr_xir_type_access(&view,ctx->function,substitution.types[i],&ctx->budget);
@@ -716,6 +729,7 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_panic.inc.c"
 #include "xxir_source_methods.inc.c"
+#include "xxir_source_requirement_calls.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -777,6 +791,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
             if (receiver.type == XR_XIR_PANIC_INFO)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo methods require class support");
+            if ((uint32_t)receiver.type >= XR_XIR_TYPE_PARAMETER_BASE &&
+                (uint32_t)receiver.type < XR_XIR_TYPE_PARAMETER_LIMIT)
+                return source_requirement_call(ctx,node,receiver,value);
             if (xr_xir_type_is_nominal(&ctx->types, receiver.type)) {
                 SourceName *member_method = source_method_find(ctx, receiver.type, member->name);
                 if (member_method) return source_method_call(ctx, node, receiver, member_method, value);
@@ -1384,9 +1401,10 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_THROW_STMT: {
         SourceValue value = {0};
         if (!expression(ctx, node->as.throw_stmt.expression, &value)) return false;
-        const XrXirGeneric *generic = &ctx->generics[ctx->function];
-        XrXirStatus status = xr_xir_type_markers(&ctx->types, value.type, XR_XIR_CONSTRAINT_ERROR,
-            generic->constraints, generic->parameter_count, &ctx->budget.work);
+        XrXirDeclarations declarations;
+        XrXirModule module = source_module_view(ctx,&declarations);
+        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function}};
+        XrXirStatus status = xr_xir_type_markers_prove(&context,value.type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
         if (status != XR_XIR_OK)
             return source_fail(ctx, node, status, "throw requires a proved enum error value");
         if (ctx->bodies[ctx->function].error_context) {
@@ -1484,7 +1502,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
         }
     }
-    ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported, 0, 0, 0, 0};
+    ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported, 0, 0, 0, 0, XR_XIR_NON_MEMBER};
     return source_query_parameters(ctx, symbol->declaration);
 }
 static bool source_same_text(const char *first, const char *second) {
@@ -1679,37 +1697,52 @@ static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint
 typedef struct SourceDeclarationSelector {
     XrXirLiteral module, function, owner;
 } SourceDeclarationSelector;
-static bool source_declaration_target(SourceContext *ctx, const SourceDeclarationSelector *item, uint32_t *output) {
+typedef struct SourceDeclarationTarget {
+    bool requirement;
+    uint32_t function, interface, member;
+} SourceDeclarationTarget;
+static bool source_declaration_target(SourceContext *ctx, const SourceDeclarationSelector *item,
+    SourceDeclarationTarget *output) {
     if (!item->module.bytes || !item->module.length || !item->function.bytes ||
         !item->function.length || (item->owner.length && !item->owner.bytes))
-        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "unsupported source declaration promise");
-    uint32_t selected = UINT32_MAX;
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"unsupported source declaration promise");
+    uint32_t matches = 0;
     for (uint32_t f = 0; f < ctx->function_count; ++f) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!source_work(ctx,NULL)) return false;
         AstNode *node = ctx->bodies[f].node;
         if (!node || ctx->bodies[f].default_expression) continue;
         uint32_t owner = ctx->identities[f].nominal_owner;
         if (item->owner.length) {
             if (node->type != AST_METHOD_DECL || node->as.method_decl.is_constructor || !owner) continue;
             const XrXirLiteral *name = &ctx->nominals.declarations[owner - 1].name;
-            if (name->length != item->owner.length || memcmp(name->bytes, item->owner.bytes, name->length)) continue;
+            if (name->length != item->owner.length || memcmp(name->bytes,item->owner.bytes,name->length)) continue;
         } else if (node->type != AST_FUNCTION_DECL || owner) continue;
         const XrXirFunction *function = &ctx->functions[f];
         uint32_t module = ctx->identities[f].module;
         if (ctx->modules[module].name_length != item->module.length ||
-            memcmp(ctx->modules[module].name, item->module.bytes, item->module.length) ||
+            memcmp(ctx->modules[module].name,item->module.bytes,item->module.length) ||
             item->function.length != function->name_length ||
-            memcmp(function->name, item->function.bytes, function->name_length)) continue;
-        if (selected != UINT32_MAX)
-            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "ambiguous source declaration promise");
-        selected = f;
+            memcmp(function->name,item->function.bytes,function->name_length)) continue;
+        *output = (SourceDeclarationTarget){false,f,0,0}; ++matches;
     }
-    if (selected == UINT32_MAX)
-        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source declaration promise target is missing");
-    *output = selected;
-    return true;
+    for (uint32_t d = 0; item->owner.length && d < ctx->interfaces.count; ++d) {
+        const XrXirInterfaceDeclaration *declaration = &ctx->interfaces.declarations[d];
+        if (!source_work(ctx,ctx->interface_sources[d]->node)) return false;
+        if (declaration->module.length != item->module.length || declaration->name.length != item->owner.length ||
+            memcmp(declaration->module.bytes,item->module.bytes,item->module.length) ||
+            memcmp(declaration->name.bytes,item->owner.bytes,item->owner.length)) continue;
+        for (uint32_t m = 0; m < declaration->method_count; ++m) {
+            const XrXirLiteral *name = &declaration->methods[m].name;
+            if (!source_work(ctx,ctx->interface_sources[d]->node)) return false;
+            if (name->length != item->function.length || memcmp(name->bytes,item->function.bytes,name->length)) continue;
+            *output = (SourceDeclarationTarget){true,0,d,m}; ++matches;
+        }
+    }
+    return matches == 1 || source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,
+        matches ? "ambiguous source declaration promise" : "source declaration promise target is missing");
 }
 #include "xxir_source_manifest.inc.c"
+#include "xxir_source_implements.inc.c"
 static bool finish_body(SourceContext *ctx) {
     XrXirFunction *function = &ctx->functions[ctx->function];
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -1916,10 +1949,11 @@ static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected
     ctx->generics[index].parameter_count = ctx->generics[outer].parameter_count;
     ctx->generics[index].constraints = ctx->generics[outer].constraints;
     char *name = source_alloc(ctx, 32, sizeof(*name));
-    body->parameters = source_alloc(ctx, scan.count + (uint32_t) decl->param_count, sizeof(*body->parameters));
+    uint32_t parameter_count = scan.count + (uint32_t)decl->param_count;
+    body->parameters = parameter_count ? source_alloc(ctx,parameter_count,sizeof(*body->parameters)) : NULL;
     XrXirCallableParameter *parameters = decl->param_count ? source_alloc(ctx, (uint32_t) decl->param_count, sizeof(*parameters)) : NULL;
     SourceValue *captures = source_alloc(ctx, scan.count, sizeof(*captures));
-    if (!name || !body->parameters || (decl->param_count && !parameters) || !captures) return false;
+    if (!name || (parameter_count && !body->parameters) || (decl->param_count && !parameters) || !captures) return false;
     snprintf(name, 32, "$closure%u", index);
     SourceName declaration = {0}; declaration.name = name; declaration.node = node;
     if (!source_query_declare(ctx, &declaration, XR_XIR_SOURCE_FUNCTION, ctx->bodies[outer].declaration,
@@ -1929,6 +1963,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected
         scan.count + (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
     ctx->identities[index].module = ctx->module;
     ctx->identities[index].nominal_owner = ctx->identities[outer].nominal_owner;
+    ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ctx->identities[index].promises = no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0;
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
@@ -2048,6 +2083,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         return;
     }
     ctx->query.complete = ctx->diagnostic.status == XR_XIR_OK;
+    ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
     ctx->query.diagnostic = ctx->diagnostic;
     ctx->query.types = ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL;
     XrXirBudget remaining = ctx->budget;
@@ -2081,11 +2117,13 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
     ctx.query_ready = true;
-    if (source_query_modules(&ctx) && collect_declarations(&ctx) &&
-        source_manifests_bind(&ctx) && build_bodies(&ctx)) {
-        XrXirDeclarations declarations = {ctx.modules, (uint32_t) ctx.graph->spec_count, ctx.identities,
-            ctx.slots, ctx.slot_count, ctx.literals, ctx.literal_count, (uint32_t) ctx.graph->entry_index, ctx.function_count - 1};
-        XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, ctx.types.count || ctx.types.nominals || ctx.types.interfaces ? &ctx.types : NULL, NULL};
+    ctx.declarations_building = true;
+    bool declarations_ready = source_query_modules(&ctx) && collect_declarations(&ctx);
+    ctx.declarations_building = false;
+    if (declarations_ready && source_manifests_bind(&ctx) &&
+        source_implementations_bind(&ctx) && build_bodies(&ctx)) {
+        XrXirDeclarations declarations;
+        XrXirModule built = source_module_view(&ctx,&declarations);
         XrXirDiagnostic location = {0};
         XrXirStatus status = xr_xir_check(&built, &checking, &output->checked, &location);
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx.function_count;++f) {

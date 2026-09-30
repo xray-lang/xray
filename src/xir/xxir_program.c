@@ -25,6 +25,8 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
     if (spec->abi_version != XR_XIR_PROGRAM_ABI_VERSION ||
         spec->target.architecture != XR_XIR_ARCH_X86_64 || spec->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
         return XR_XIR_BAD_LAYOUT;
+    if (spec->declarations->implementations || (spec->types && spec->types->interfaces))
+        return XR_XIR_BAD_STAGE;
     uint64_t fixed = sizeof(XrXirProgram) + (uint64_t) spec->entry_count * sizeof(XrXirCallEntry) +
         (uint64_t) spec->declarations->module_count * (sizeof(uint32_t) * 2 + 1);
     if (fixed > *bytes || fixed > SIZE_MAX) return XR_XIR_BUDGET;
@@ -32,7 +34,7 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
     XrXirBudget signature_budget = {0};
     signature_budget.metadata_bytes = *bytes; signature_budget.work = *work;
     signature_budget.parameters = 65536;
-    XrXirStatus status = xr_xir_types_verify(spec->types, &signature_budget);
+    XrXirStatus status = xr_xir_types_structure_verify(spec->types, &signature_budget);
     if (status != XR_XIR_OK) return status;
     if (spec->types) for (uint32_t t = 0; t < spec->types->count; ++t)
         if (spec->types->nodes[t].parameter_span) return XR_XIR_BAD_TYPE;

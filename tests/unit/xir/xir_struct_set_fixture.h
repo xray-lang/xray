@@ -70,10 +70,10 @@ static XrXirArtifact *struct_set_checked(unsigned invalid) {
         {"entry",5,NULL,0,XR_XIR_I64,&all,1,entry,28,printed,5},
         {"replace",7,NULL,0,XR_XIR_I64,&six,1,replace,6,replace_values,2}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0};
-    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0},{0,1,0, 0, 0, 0},{0,0,0, 0, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirLiteral literals[] = {{"roots",5},{"replacement",11}};
     XrXirSlot slots[] = {{0,pair,1},{0,pair,0}};
-    XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,2,0,1};
+    XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,2,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL};
     if (invalid == 1) entry[4].args[0] = 0;
     if (invalid == 2) nominal.fields[0].flags = 0;

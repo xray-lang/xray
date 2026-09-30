@@ -89,11 +89,11 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
     const XrXirSourceModule modules[] = {
         {"root", 4, imports, 2, 0}, {"beta", 4, NULL, 0, 1}, {"alpha", 5, NULL, 0, 2}
     };
-    const XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0}, {2, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0}, {1, 1, 0, 0, 0, 0}, {0, 1, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0}};
+    const XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
     const XrXirSlot slots[] = {{2, XR_XIR_ATOMIC_I64, 0}, {1, XR_XIR_ATOMIC_I64, 0},
         {2, XR_XIR_STRING, 0}, {1, XR_XIR_STRING, 0}, {0, XR_XIR_STRING, 1}};
     const XrXirLiteral literals[] = {{"A\0\xe4\xb8\xad", 5}, {"B\xf0\x9f\x98\x80", 5}, {"root", 4}, {"updated", 7}, {NULL, 0}};
-    const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3};
+    const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3, NULL};
     ErrorFixture error; error_fixture_init(&error,false);
     const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, mode == 2 ? &error.types : NULL, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

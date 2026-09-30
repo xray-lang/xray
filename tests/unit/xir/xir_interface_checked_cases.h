@@ -35,8 +35,8 @@ static XrXirArtifact *interface_checked_fixture(void) {
         {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1},{"other",5,&dependency,1,2}};
-    XrXirFunctionIdentity identities[] = {{0,1,0,0,0,0},{0,0,0,0,0,0},{1,0,0,0,0,0}};
-    XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0};
+    XrXirFunctionIdentity identities[] = {{0,1,0,0,0,0, XR_XIR_NON_MEMBER},{0,0,0,0,0,0, XR_XIR_NON_MEMBER},{1,0,0,0,0,0, XR_XIR_NON_MEMBER}};
+    XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module,NULL,&artifact,NULL) == XR_XIR_OK);
@@ -102,6 +102,16 @@ static void interface_checked_cases(void) {
     CHECK(!memcmp(table->declarations[0].methods[0].name.bytes,"measure",7));
     CHECK(table->declarations[1].parents[0].arguments[0] == XR_XIR_TYPE_PARAMETER_BASE);
     CHECK(table->declarations[2].parents[0].arguments[0] == XR_XIR_I64);
+    XrXirArtifact *closed = NULL, *lowered = NULL;
+    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
+    const XrXirModule *projected = xr_xir_artifact_module(closed);
+    CHECK(!projected->types || !projected->types->interfaces);
+    CHECK(projected->provenance && projected->functions[0].instructions[0].immediate == 41);
+    CHECK(xr_xir_artifact_verify(closed,NULL,NULL) == XR_XIR_OK);
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_artifact_verify(lowered,NULL,NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed);
     xr_xir_artifact_free(decoded);
 }
 #endif // XIR_INTERFACE_CHECKED_CASES_H

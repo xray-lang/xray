@@ -33,19 +33,15 @@ XrXirStatus xr_xir_type_constraints(const XrXirModule *module, uint32_t function
     if (!module || constraints.interface_count || constraints.interfaces ||
         constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
-    const XrXirGeneric *generic = module->generics ? &module->generics[function] : NULL;
-    XrXirStatus context = xr_xir_type_context_verify(module->types, type,
-        generic ? generic->constraints : NULL, generic ? generic->parameter_count : 0, remaining);
-    if (context != XR_XIR_OK || !constraints.markers) return context;
-    return xr_xir_type_markers(module->types, type, constraints.markers, generic ? generic->constraints : NULL,
-        generic ? generic->parameter_count : 0, &remaining->work);
+    XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,function}};
+    return xr_xir_type_markers_prove(&context,type,constraints.markers,remaining);
 }
 XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
     XrXirType type, XrXirConstraint constraints, XrXirBudget *remaining) {
     XrXirStatus status = xr_xir_type_constraints(module, function, type, constraints, remaining);
     return status == XR_XIR_OK ? xr_xir_type_access(module, function, type, remaining) : status;
 }
-XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remaining) {
+XrXirStatus xr_xir_generics_structure_verify(const XrXirModule *module, XrXirBudget *remaining) {
     if (!module->generics) return XR_XIR_OK;
     if (module->stage == XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     uint64_t table_bytes = (uint64_t) module->function_count * sizeof(*module->generics);
@@ -68,11 +64,9 @@ XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remai
             XrXirStatus status = xr_xir_constraint_structure(module->types, g->constraints[p], g->parameter_count, remaining);
             if (status != XR_XIR_OK) return status;
         }
-        XrXirConstraintEnvironment environment = {module->types, g->constraints, g->parameter_count};
-        XrXirStatus status = xr_xir_constraint_environment_verify(&environment, remaining);
-        if (status != XR_XIR_OK) return status;
         for (uint32_t a = 0; a < g->argument_count; ++a) {
-            status = xr_xir_type_satisfies(module, f, g->arguments[a], (XrXirConstraint){0}, remaining);
+            if (g->arguments[a] == XR_XIR_UNIT || xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;
+            XrXirStatus status = xr_xir_type_expression_shape(module->types,g->arguments[a],g->parameter_count,remaining);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -117,7 +111,7 @@ XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
         XrXirStatus status = xr_xir_type_satisfies(module, caller, from->arguments[first + a], (XrXirConstraint){0}, remaining);
         if (status != XR_XIR_OK) return status;
         XrXirProofContext context = {module, {XR_XIR_CONTEXT_FUNCTION, caller}};
-        XrXirConstraintUse use = {{XR_XIR_CONTEXT_FUNCTION, (uint32_t)call->immediate}, a,
+        XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_FUNCTION, (uint32_t)call->immediate}, a,
             from->arguments + first, count};
         status = xr_xir_constraints_prove(&context, &use, remaining);
         if (status != XR_XIR_OK) return status;

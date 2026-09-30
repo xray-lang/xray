@@ -644,7 +644,7 @@ static void source_match_faults(XrXirInstance *instance, uint32_t function) {
         }
     }
 }
-typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result; } SourceFunctions;
+typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result; } SourceFunctions;
 static XrXirValue source_error(XrXirInstance *instance, uint32_t function) {
     XrXirValue args[]={{XR_XIR_I64,0,32},{XR_XIR_I64,0,0},{XR_XIR_I64,0,0}}, error={0};
     CHECK(xr_xir_instance_start(instance,function,args,3)==XR_XIR_CALL_READY);
@@ -717,6 +717,11 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         CHECK(xr_xir_instance_start(instances[i], functions.advance, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 59);
+    }
+    for (uint32_t i = 0; i < 2; ++i) {
+        CHECK(xr_xir_instance_start(instances[i], functions.witness_result, NULL, 0) == XR_XIR_CALL_READY);
+        XrXirCallResult witness = xr_xir_instance_poll(instances[i]).outcome;
+        CHECK(witness.status == XR_XIR_CALL_RETURNED && witness.value.payload == 41);
     }
     XrXirValue bound[2] = {{0}, {0}}, bound_text[2] = {{0}, {0}};
     for (uint32_t i = 0; i < 2; ++i) {

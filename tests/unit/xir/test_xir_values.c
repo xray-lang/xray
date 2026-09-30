@@ -319,7 +319,7 @@ static void nominal_arena_admission(void) {
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
     types.nodes = &node; types.count = 1;
     XrXirBudget proof = budget;
-    CHECK(xr_xir_types_verify(&types, &proof) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &proof) == XR_XIR_OK);
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(!arena && budget.metadata_bytes == bytes && budget.work == work);
     CHECK(xr_xir_domain_stats(domain).allocations == initial.allocations);

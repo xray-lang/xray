@@ -24,6 +24,18 @@ typedef struct XrXirInterfaceRequirement {
  * materialized descriptors. Scratch IDs belong exclusively to closure_types and
  * must not enter persistent XIR; consumers must reify into their own type arena.
  * Failure preserves the budget and leaves output NULL. */
+typedef struct XrXirInterfaceClosureRequest {
+    const XrXirTypes *source_types, *actual_types;
+    const XrXirInterfaceApplication *roots;
+    uint32_t root_count;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+} XrXirInterfaceClosureRequest;
+/* Root expressions and the interface catalog belong to source_types. The
+ * complete substitution belongs to actual_types, whose pool is borrowed. */
+XR_FUNC XrXirStatus xr_xir_interface_closure_substitute(
+    const XrXirInterfaceClosureRequest *request, XrXirBudget *budget,
+    XrXirInterfaceClosure **output);
 XR_FUNC XrXirStatus xr_xir_interface_closure_build(const XrXirInterfaceTable *table,
     const XrXirTypes *types, const XrXirInterfaceApplication *roots, uint32_t root_count,
     XrXirBudget *budget, XrXirInterfaceClosure **output);

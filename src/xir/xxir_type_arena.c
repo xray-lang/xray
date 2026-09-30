@@ -43,7 +43,7 @@ static XrXirValueStatus arena_pool_size(const XrXirTypes *types, XrXirBudget *bu
                                        size_t *output) {
     XrXirBudget remaining = *budget;
     if (types && (types->interfaces || (types->nominals && types->nominals->declarations))) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirStatus verified = xr_xir_types_verify(types, &remaining);
+    XrXirStatus verified = xr_xir_types_structure_verify(types, &remaining);
     if (verified != XR_XIR_OK)
         return verified == XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT :
             verified == XR_XIR_OUT_OF_MEMORY ? XR_XIR_VALUE_OOM : XR_XIR_VALUE_BAD_ARGUMENT;

@@ -35,7 +35,7 @@ static XrXirArtifact *constraint_packet_fixture(uint32_t markers) {
     XrXirGeneric generics[] = {{0},{0},{&constraint,1,NULL,0}};
     XrXirSourceModule source = {"alpha",5,NULL,0,1};
     XrXirFunctionIdentity identities[] = {{0},{0},{0}};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,&types,NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module,NULL,&artifact,NULL) == XR_XIR_OK && artifact);

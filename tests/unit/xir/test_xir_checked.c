@@ -100,10 +100,10 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
         if (!m) initializer = at;
         at += 4;
     }
-    size_t identities = at, slot_data = at + (size_t) functions * 24;
+    size_t identities = at, slot_data = at + (size_t) functions * 28;
     size_t literal_data = slot_data + (size_t) slots * 12;
     const size_t offsets[] = {declarations, declarations + 12, declarations + 16,
-        dependencies + 4, initializer, identities + 4 * 24 + 4, slot_data, literal_data + 4, identities + 4 * 24 + 8};
+        dependencies + 4, initializer, identities + 4 * 28 + 4, slot_data, literal_data + 4, identities + 4 * 28 + 8};
     const uint32_t values[] = {UINT32_MAX, 1, 0, 1, 3, 0, 1, UINT32_MAX, 1};
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         CHECK(offsets[i] + 4 <= packet->length);
@@ -131,7 +131,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 16 && XR_XIR_CHECKED_CONTRACT == 44 && XR_XIR_OP_COUNT == 109, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 17 && XR_XIR_CHECKED_CONTRACT == 45 && XR_XIR_OP_COUNT == 110, "packet revision");
     _Static_assert(XR_XIR_PANIC_CATCH == 97 && XR_XIR_PANIC_CODE == 98 && XR_XIR_PANIC_MESSAGE == 99 &&
         XR_XIR_PANIC_INFO == 15, "panic wire identities");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
@@ -164,8 +164,9 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0x59, 0xfc, 0xb5, 0xfa, 0x8c, 0x79, 0x51, 0x3f, 0xca, 0x99, 0x42, 0xa3, 0x67, 0x53, 0xad, 0x9a,
-        0x77, 0x80, 0x02, 0x9e, 0x96, 0xf9, 0xa4, 0x9a, 0xb0, 0xce, 0xb0, 0x52, 0xc2, 0x1c, 0xf7, 0xca};
+        0x2b, 0x1a, 0xcc, 0x27, 0x57, 0xdd, 0x72, 0xcb, 0xa1, 0x3e, 0xc1, 0x09, 0x64, 0x58, 0x3f, 0x05,
+        0x70, 0xa5, 0xb4, 0x1c, 0x58, 0x62, 0xfa, 0x40, 0x00, 0xaa, 0xfe, 0xf9, 0x0f, 0x8f, 0xb1, 0x5e
+    };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[213]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 141; offset <= 145; offset += 4) {
@@ -300,7 +301,7 @@ static void generic_callable_depth(void) {
     }
     XrXirTypes table = {signatures,258, NULL, NULL}; module.types = &table;
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&table,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&table,&budget) == XR_XIR_OK);
     const XrXirInstruction *call = &module.functions[0].instructions[0];
     CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)256,(XrXirType)385,&budget) == XR_XIR_OK);
     CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)384,(XrXirType)513,&budget) == XR_XIR_OK);
@@ -563,7 +564,12 @@ static void deep_nominal_fields(void) {
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(base); memset(nodes, 0xCC, sizeof(nodes)); memset(fields, 0xCC, sizeof(fields));
     XrXirBudget budget = xr_xir_default_budget(); budget.work = 30000;
-    CHECK(xr_xir_artifact_verify(checked, &budget, NULL) == XR_XIR_OK);
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_artifact_verify(checked, &budget, &diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr,"deep nominal verify depth=%u work=%llu status=%u at %u/%u/%u reason=%u\n",
+        DEPTH,(unsigned long long)budget.work,(unsigned)status,diagnostic.function,diagnostic.block,
+        diagnostic.instruction,(unsigned)diagnostic.reason);
+    CHECK(status == XR_XIR_OK);
     CHECK(xr_xir_specialize(checked, &budget, &closed, NULL) == XR_XIR_BUDGET && !closed);
     CHECK(budget.work == 30000);
     CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
@@ -685,7 +691,7 @@ static void nominal_projection_cases(void) {
         CHECK(xr_xir_types_clone(types, &copy) == XR_XIR_OK);
         xr_xir_artifact_free(lowered);
         XrXirBudget budget = xr_xir_default_budget();
-        CHECK(xr_xir_types_verify(copy, &budget) == XR_XIR_OK);
+        CHECK(xr_xir_types_structure_verify(copy, &budget) == XR_XIR_OK);
         CHECK(!memcmp(copy->nominals->identities[0].module.bytes, "alpha", 5));
         xr_xir_types_free(copy);
     }
@@ -962,7 +968,9 @@ static void match_fault_shape(void) {
 #include "xir_path_checked_cases.h"
 #include "xir_interface_checked_cases.h"
 #include "xir_constraint_packet_cases.h"
+#include "xir_implementation_packet_cases.h"
 int main(void) {
+    implementation_packet_cases();
     constraint_packet_cases();
     interface_checked_cases();
     path_array_checked_cases(); path_field_checked_cases(); path_ancestor_checked_cases();

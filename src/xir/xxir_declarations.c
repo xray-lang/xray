@@ -12,6 +12,7 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_implementation.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_utf8_core.h"
 
@@ -104,6 +105,7 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
         (d->slot_count && !d->slots) || (d->literal_count && !d->literals)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
+            d->functions[i].method_kind > XR_XIR_MEMBER_HELPER ||
             (d->functions[i].promises & ~XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_BAD_STRUCTURE;
     if (d->functions[d->entry_function].module != d->root_module ||
         d->functions[d->entry_function].nominal_owner) return XR_XIR_BAD_STRUCTURE;
@@ -148,10 +150,6 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
         status = xr_xir_type_access(&scope, d->modules[slot->module].initializer, slot->type, &access_budget);
         *bytes = access_budget.metadata_bytes; *work = access_budget.work;
         if (status != XR_XIR_OK) return status;
-        if (slot->module != d->root_module) {
-            XrXirStatus sendable = xr_xir_type_markers(types, slot->type, XR_XIR_CONSTRAINT_SENDABLE, NULL, 0, work);
-            if (sendable != XR_XIR_OK) return sendable;
-        }
         if (slot->mutable && slot->type == XR_XIR_ATOMIC_I64) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t i = 0; i < d->literal_count; ++i) {
@@ -177,6 +175,7 @@ static void *declaration_copy(const void *input, size_t bytes) {
 }
 void xr_xir_declarations_free(XrXirDeclarations *d) {
     if (!d) return;
+    xr_xir_implementations_free((XrXirImplementationTable *)d->implementations);
     if (d->modules) for (uint32_t i = 0; i < d->module_count; ++i) {
         xr_free((void *) d->modules[i].name);
         xr_free((void *) d->modules[i].dependencies);
@@ -192,6 +191,7 @@ XrXirStatus xr_xir_declarations_clone(const XrXirDeclarations *source, uint32_t 
     XrXirDeclarations *copy = xr_calloc(1, sizeof(*copy));
     if (!copy) return XR_XIR_OUT_OF_MEMORY;
     *copy = *source;
+    copy->implementations = NULL;
     copy->modules = xr_calloc(source->module_count, sizeof(*source->modules));
     copy->functions = declaration_copy(source->functions, (size_t) functions * sizeof(*source->functions));
     copy->slots = declaration_copy(source->slots, (size_t) source->slot_count * sizeof(*source->slots));
@@ -213,6 +213,10 @@ XrXirStatus xr_xir_declarations_clone(const XrXirDeclarations *source, uint32_t 
         to->bytes = declaration_copy(from->bytes, from->length);
         if (from->length && !to->bytes) goto failed;
     }
+    XrXirImplementationTable *implementations = NULL;
+    XrXirStatus status = xr_xir_implementations_copy_verified(source->implementations, &implementations);
+    if (status != XR_XIR_OK) { xr_xir_declarations_free(copy); return status; }
+    copy->implementations = implementations;
     *output = copy;
     return XR_XIR_OK;
  failed:

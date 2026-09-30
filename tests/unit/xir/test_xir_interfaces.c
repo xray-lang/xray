@@ -32,10 +32,13 @@ static void counted_free(void *p) { if (p) { CHECK(live); --live; } xr_free(p); 
 #include "xir/xxir_interface_members.c"
 #include "xir/xxir_constraints.c"
 #include "xir/xxir_constraint_proof.c"
+#include "xir/xxir_implementation.c"
+#include "xir/xxir_implementation_verify.c"
 #include "xir_interface_member_cases.h"
 #include "xir_interface_access_cases.h"
 #include "xir_interface_closure_cases.h"
 #include "xir_constraint_proof_cases.h"
+#include "xir_implementation_semantic_cases.h"
 
 typedef struct Fixture {
     char name[8], method[4];
@@ -107,19 +110,25 @@ static void rejection_and_budget(void) {
     }
     Fixture f; fixture(&f); XrXirBudget original = xr_xir_default_budget(), spent = original;
     CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&spent)==XR_XIR_OK && !live);
+    CHECK(spent.scratch_bytes == original.scratch_bytes);
+    CHECK(spent.work < original.work && spent.metadata_bytes < original.metadata_bytes);
     XrXirBudget exact = original;
-    exact.metadata_bytes -= spent.metadata_bytes; exact.scratch_bytes -= spent.scratch_bytes;
+    exact.metadata_bytes -= spent.metadata_bytes;
     exact.work -= spent.work; exact.parameters -= spent.parameters;
     for (unsigned boundary = 0; boundary < 5; ++boundary) {
         XrXirBudget budget = exact;
         if (boundary == 1) --budget.metadata_bytes;
-        if (boundary == 2) --budget.scratch_bytes;
+        if (boundary == 2) budget.scratch_bytes = 0;
         if (boundary == 3) --budget.work;
         if (boundary == 4) --budget.parameters;
         XrXirInterfaceTable *copy = NULL;
         CHECK(xr_xir_interfaces_clone(&f.table,&f.types,&budget,&copy)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(budget.scratch_bytes == (boundary == 2 ? 0 : original.scratch_bytes));
         CHECK((copy!=NULL)==!boundary); xr_xir_interfaces_free(copy); CHECK(!live);
     }
+    XrXirBudget no_scratch = original; no_scratch.scratch_bytes = 0;
+    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&no_scratch)==XR_XIR_BUDGET);
+    CHECK(!no_scratch.scratch_bytes && !live);
 }
 static XrXirStatus check_interface_module(const XrXirTypes *types, XrXirFunction function,
     XrXirArtifact **checked, XrXirDiagnostic *diagnostic) {
@@ -130,8 +139,8 @@ static XrXirStatus check_interface_module(const XrXirTypes *types, XrXirFunction
         {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1},{"other",5,&dependency,1,2}};
-    XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0};
+    XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER}};
+    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL};
     return xr_xir_check(&module,NULL,checked,diagnostic);
 }
@@ -167,15 +176,32 @@ static void checked_owner_lifetime(void) {
     fail_at = SIZE_MAX;
     printf("Checked interface owner: %zu allocation failure sites\n",sites);
 }
+static XrXirStatus inherited_module_verify(Fixture *f, XrXirBudget *budget) {
+    XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    XrXirBlock block = {0,1,0,0}, entry_block = {0,2,0,0};
+    XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    XrXirFunction functions[] = {
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
+        {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0}};
+    uint32_t dependency = 0;
+    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0},{"other",5,&dependency,1,1}};
+    XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
+    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
+    XrXirTypes types = f->types; types.interfaces = &f->table;
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL};
+    return xr_xir_verify(&module,budget,NULL);
+}
 static void inherited_contexts(void) {
     Fixture f; fixture(&f);
     XrXirConstraint parent_constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     f.declarations[0].constraints = &parent_constraint;
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&budget)==XR_XIR_BAD_TYPE);
+    CHECK(inherited_module_verify(&f,&budget)==XR_XIR_BAD_TYPE);
     f.constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
     budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&budget)==XR_XIR_OK);
+    CHECK(inherited_module_verify(&f,&budget)==XR_XIR_OK);
     XrXirInterfaceApplication cycle = {1,&f.parameter,1};
     f.declarations[0].parents = &cycle; f.declarations[0].parent_count = 1;
     budget = xr_xir_default_budget();
@@ -218,6 +244,7 @@ static void interface_parameters_remain_declaration_scoped(void) {
     }
 }
 int main(void) {
+    implementation_semantic_cases();
     interface_closure_cases();
     constraint_proof_cases();
     interface_access_cases();

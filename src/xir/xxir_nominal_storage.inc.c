@@ -122,7 +122,7 @@ XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType typ
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         (field_count != 0) != (field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
     XrXirBudget budget = *remaining;
-    XrXirStatus status = xr_xir_types_verify(types, &budget);
+    XrXirStatus status = xr_xir_types_structure_verify(types, &budget);
     if (status != XR_XIR_OK) return status;
     const XrXirTypeNode *root = xr_xir_type_node(types, type);
     if (!root || root->kind != XR_XIR_TYPE_NOMINAL || root->parameter_span ||

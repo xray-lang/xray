@@ -105,36 +105,6 @@ uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node ? node->parameter_span : 0;
 }
-XrXirStatus xr_xir_type_markers(const XrXirTypes *types, XrXirType type, uint32_t required,
-    const XrXirConstraint *constraints, uint32_t parameter_count, uint64_t *work) {
-    if (required & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
-    if (required & XR_XIR_CONSTRAINT_ERROR) {
-        if (!work || !*work) return XR_XIR_BUDGET;
-        --*work;
-        uint32_t id = (uint32_t) type;
-        bool parameter = id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT;
-        if (parameter ? (!constraints || id - XR_XIR_TYPE_PARAMETER_BASE >= parameter_count ||
-            !(constraints[id - XR_XIR_TYPE_PARAMETER_BASE].markers & XR_XIR_CONSTRAINT_ERROR)) :
-            (type != XR_XIR_ERROR && !xr_xir_type_is_enum(types, type))) return XR_XIR_BAD_TYPE;
-    }
-    if (!(required & XR_XIR_CONSTRAINT_SENDABLE)) return XR_XIR_OK;
-    for (;;) {
-        if (!work || !*work) return XR_XIR_BUDGET;
-        --*work;
-        uint32_t id = (uint32_t) type;
-        if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-            type == XR_XIR_ATOMIC_I64) return XR_XIR_OK;
-        if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
-            return constraints && id - XR_XIR_TYPE_PARAMETER_BASE < parameter_count &&
-                (constraints[id - XR_XIR_TYPE_PARAMETER_BASE].markers & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
-        const XrXirTypeNode *node = xr_xir_type_node(types, type);
-        if (!node || node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_BAD_TYPE;
-        if ((uint32_t) node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
-            (uint32_t) node->element < XR_XIR_CONSTRUCTED_TYPE_LIMIT && (uint32_t) node->element >= id)
-            return XR_XIR_BAD_TYPE;
-        type = node->element;
-    }
-}
 static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     uint32_t id = (uint32_t) type;
     if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
@@ -248,29 +218,9 @@ XrXirStatus xr_xir_type_descriptors_verify(const XrXirTypes *types, XrXirBudget 
     if (status == XR_XIR_OK) status = nominal_layout_verify(types, remaining);
     return status;
 }
-XrXirStatus xr_xir_types_verify(const XrXirTypes *types, XrXirBudget *remaining) {
+XrXirStatus xr_xir_types_structure_verify(const XrXirTypes *types, XrXirBudget *remaining) {
     XrXirStatus status = xr_xir_type_descriptors_verify(types, remaining);
     if (status == XR_XIR_OK && types) status = xr_xir_interfaces_verify_structure(types->interfaces, types, remaining);
-    const XrXirNominalTable *table = types ? types->nominals : NULL;
-    for (uint32_t d = 0; status == XR_XIR_OK && table && table->declarations && d < table->count; ++d) {
-        const XrXirNominalDeclaration *declaration = &table->declarations[d];
-        XrXirConstraintEnvironment environment = {types, declaration->constraints, declaration->parameter_count};
-        status = xr_xir_constraint_environment_verify(&environment, remaining);
-        for (uint32_t f = 0; status == XR_XIR_OK && f < declaration->field_count; ++f)
-            status = xr_xir_type_context_verify(types, declaration->fields[f].type,
-                declaration->constraints, declaration->parameter_count, remaining);
-    }
-    for (uint32_t n = 0; status == XR_XIR_OK && types && n < types->count; ++n) {
-        const XrXirTypeNode *node = &types->nodes[n];
-        if (node->parameter_span || node->kind != XR_XIR_TYPE_NOMINAL || !table || !table->declarations) continue;
-        /* Every closed nominal application has its own pool node. Checking its
-         * local obligations once covers nested applications without rescanning
-         * every earlier descriptor for each independent callable or array. */
-        const XrXirNominalDeclaration *declaration = &table->declarations[node->nominal.declaration];
-        XrXirConstraintEnvironment environment = {types, NULL, 0};
-        status = xr_xir_constraint_arguments(&environment, declaration->constraints,
-            node->nominal.arguments, node->nominal.argument_count, remaining);
-    }
     return status;
 }
 void xr_xir_types_free(XrXirTypes *types) {

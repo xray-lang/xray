@@ -75,6 +75,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_types.c"
 #include "xir/xxir_constraints.c"
 #include "xir/xxir_constraint_proof.c"
+#include "xir/xxir_implementation.c"
+#include "xir/xxir_implementation_verify.c"
 #include "xir/xxir_interface.c"
 #include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
@@ -109,6 +111,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_initialization_allocations.h"
 #include "xir_interface_packet_allocations.h"
 #include "xir_constraint_packet_allocations.h"
+#include "xir_implementation_allocations.h"
+#include "xir_implementation_packet_allocations.h"
 static void function_allocation_failures(void) {
     for (unsigned cancel = 0; cancel < 2; ++cancel) {
         calls = 0; fail_at = SIZE_MAX;
@@ -453,7 +457,7 @@ static void nominal_allocation_failures(void) {
     calls = 0; fail_at = SIZE_MAX;
     budget = xr_xir_default_budget();
     uint64_t initial_work = budget.work;
-    CHECK(xr_xir_nominal_verify(&f.table, NULL, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &budget) == XR_XIR_OK);
     uint64_t verify_work = initial_work - budget.work;
     budget = xr_xir_default_budget(); budget.work = verify_work;
     CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_BUDGET);
@@ -471,7 +475,7 @@ static void nominal_pool_allocation_failures(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}}};
     XrXirTypes types = {nodes, 2, &f.table, NULL};
     XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
     calls = 0; fail_at = SIZE_MAX;
     XrXirTypes *copy = NULL;
     CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OK && copy->nominals);
@@ -487,6 +491,8 @@ static void nominal_pool_allocation_failures(void) {
 }
 
 int main(void) {
+    implementation_copy_allocations();
+    implementation_packet_allocations();
     constraint_packet_allocation_failures();
     interface_packet_allocation_failures();
     nominal_pool_allocation_failures();

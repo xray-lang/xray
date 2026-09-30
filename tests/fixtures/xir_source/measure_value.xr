@@ -1,0 +1,3 @@
+import { Measure } from "./measure_contract"
+export struct Meter implements Measure { value:i64; measure()->i64 { return this.value } }
+export struct MeasureBox<T:Measure> implements Measure { value:T; measure()->i64 { return this.value.measure() } }

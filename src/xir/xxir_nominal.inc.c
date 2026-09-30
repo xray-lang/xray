@@ -100,7 +100,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         status = nominal_name(field->name, b);
         if (status != XR_XIR_OK) return status;
         if (!nominal_field_type(types, field->type, d->parameter_count)) return XR_XIR_BAD_TYPE;
-        status = xr_xir_type_context_verify_shape(types, field->type, d->constraints, d->parameter_count, b);
+        status = xr_xir_type_expression_shape(types, field->type, d->parameter_count, b);
         if (status != XR_XIR_OK) return status;
         uint32_t begin = 0;
         status = nominal_field_begin(d->kind, d->variants, d->variant_count, f, b, &begin);
@@ -140,22 +140,13 @@ static XrXirStatus nominal_table_verify(const XrXirNominalTable *table,
     }
     *budget = remaining; return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_nominal_verify(const XrXirNominalTable *table,
+XR_FUNC XrXirStatus xr_xir_nominal_structure_verify(const XrXirNominalTable *table,
     const XrXirTypes *types, XrXirBudget *budget) {
     if (!budget) return XR_XIR_BAD_STRUCTURE;
     XrXirBudget remaining = *budget;
-    XrXirStatus status = xr_xir_types_verify(types, &remaining);
+    XrXirStatus status = xr_xir_types_structure_verify(types, &remaining);
     if (status == XR_XIR_OK && (!types || table != types->nominals))
         status = nominal_table_verify(table, types, &remaining);
-    for (uint32_t d = 0; status == XR_XIR_OK && table && table->declarations &&
-        (!types || table != types->nominals) && d < table->count; ++d) {
-        const XrXirNominalDeclaration *declaration = &table->declarations[d];
-        XrXirConstraintEnvironment environment = {types, declaration->constraints, declaration->parameter_count};
-        status = xr_xir_constraint_environment_verify(&environment, &remaining);
-        for (uint32_t f = 0; status == XR_XIR_OK && f < declaration->field_count; ++f)
-            status = xr_xir_type_context_verify(types, declaration->fields[f].type,
-                declaration->constraints, declaration->parameter_count, &remaining);
-    }
     if (status == XR_XIR_OK) *budget = remaining;
     return status;
 }
@@ -226,7 +217,7 @@ XR_FUNC XrXirStatus xr_xir_nominal_clone(const XrXirNominalTable *table,
     *output = NULL;
     if (!budget) return XR_XIR_BAD_STRUCTURE;
     XrXirBudget remaining = *budget;
-    XrXirStatus status = xr_xir_nominal_verify(table, types, &remaining);
+    XrXirStatus status = xr_xir_nominal_structure_verify(table, types, &remaining);
     if (status != XR_XIR_OK || !table) return status;
     if (table->identities) {
         if (!nominal_identity_copy_work(table, &remaining)) return XR_XIR_BUDGET;
@@ -292,14 +283,7 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirBudget *bu
                 node->nominal.argument_count, d->fields[f].type, node->nominal.fields[f], budget);
             if (status != XR_XIR_OK) return status;
         }
-        for (uint32_t a = 0; a < d->parameter_count; ++a) {
-            if (!nominal_charge(budget, 0, 1)) return XR_XIR_BUDGET;
-            if (!xr_xir_type_span(types, node->nominal.arguments[a]) &&
-                d->constraints[a].markers) {
-                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a].markers, NULL, 0, &budget->work);
-                if (status != XR_XIR_OK) return status;
-            }
-        }
+
     }
     return XR_XIR_OK;
 }

@@ -209,6 +209,7 @@ static void member_reference_authority(XrXirSourceRequest *request, const char *
             XrXirFunctionIdentity *id = (XrXirFunctionIdentity *)&module->declarations->functions[op->immediate];
             XrXirFunctionIdentity saved = *id;
             id->nominal_owner = 1; id->exported = 0; id->member_access = XR_XIR_MEMBER_PRIVATE;
+            id->method_kind = XR_XIR_MEMBER_HELPER;
             bool same_owner = module->declarations->functions[f].nominal_owner == 1;
             CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) ==
                 (same_owner ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE));

@@ -30,7 +30,7 @@ static void cell_generic_nominal_cases(void) {
         if (mode == 6) types.nominals = &identity.table;
         if (mode == 7) nodes[2] = (XrXirTypeNode){XR_XIR_TYPE_CELL,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,1,{0}};
         XrXirBudget budget = xr_xir_default_budget();
-        XrXirStatus status = xr_xir_types_verify(&types, &budget);
+        XrXirStatus status = xr_xir_types_structure_verify(&types, &budget);
         CHECK(mode ? status != XR_XIR_OK : status == XR_XIR_OK);
     }
 }

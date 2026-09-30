@@ -54,12 +54,12 @@ static XrXirArtifact *module_forest_fixture(bool invalid) {
         {"extra", 5, NULL, 0, 0}, {"root", 4, &dependency, 1, 1}, {"leaf", 4, NULL, 0, 2}
     };
     const XrXirFunctionIdentity identities[] = {
-        {0}, {1,0,0,0,0,0}, {2,0,0,0,0,0}, {1,0,0,0,0,0}, {0,1,0,0,0,0}, {2,1,0,0,0,0},
-        {1,1,0,0,0,0}, {1,1,0,0,0,0}
+        {0}, {1,0,0,0,0,0, XR_XIR_NON_MEMBER}, {2,0,0,0,0,0, XR_XIR_NON_MEMBER}, {1,0,0,0,0,0, XR_XIR_NON_MEMBER}, {0,1,0,0,0,0, XR_XIR_NON_MEMBER}, {2,1,0,0,0,0, XR_XIR_NON_MEMBER},
+        {1,1,0,0,0,0, XR_XIR_NON_MEMBER}, {1,1,0,0,0,0, XR_XIR_NON_MEMBER}
     };
     const XrXirSlot slot = {0, XR_XIR_STRING, 0};
     const XrXirLiteral literal = {"must not initialize", 19};
-    const XrXirDeclarations declarations = {modules, 3, identities, &slot, 1, &literal, 1, 1, 3};
+    const XrXirDeclarations declarations = {modules, 3, identities, &slot, 1, &literal, 1, 1, 3, NULL};
     const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
