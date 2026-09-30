@@ -81,7 +81,8 @@ static void cleanup_role_cases(void) {
     put32(packet.bytes + 12, 38); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 39); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 40); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 41); digest_packet(&packet);
+    put32(packet.bytes + 12, 41); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 42); digest_packet(&packet);
     put32(packet.bytes + at + 3 * 24 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + at + 3 * 24 + 16, 3); digest_packet(&packet);
     put32(packet.bytes + at + 2 * 24 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);

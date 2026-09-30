@@ -78,6 +78,8 @@ static XrXirValueStatus admit_function_binding(void *context, const XrXirFunctio
     if ((gate->instance != instance && !(instance->stopping && !gate->instance && instance_cleanup_grant(instance))) ||
         gate->program != instance->program ||
         binding->entry >= instance->program->entry_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!instance->program->active_modules[instance->program->declarations->functions[binding->entry].module])
+        return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypeNode *signature = xr_xir_callable_signature(instance->program->types, type);
     const XrXirCallEntry *entry = &instance->program->entries[binding->entry];
     if (signature && (signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
@@ -150,7 +152,7 @@ static XrXirAction initialization_resume(XrXirCallView *view) {
         ++instance->cursor;
         instance->current_module = UINT32_MAX;
     }
-    if (instance->cursor < d->module_count) {
+    if (instance->cursor < instance->program->initialization_count) {
         instance->current_module = instance->program->order[instance->cursor];
         *phase = 1;
         instance_trace(instance, XR_XIR_MODULE_BEGIN, instance->current_module);
@@ -251,6 +253,7 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     }
     const XrXirDeclarations *d = instance->program->declarations;
     if (entry >= instance->program->entry_count ||
+        !instance->program->active_modules[d->functions[entry].module] ||
         (!binding && entry != d->entry_function && !d->functions[entry].exported)) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *requested = &instance->program->entries[entry];
     if (requested->cleanup_owner) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -530,6 +533,8 @@ static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValu
     if ((gate->instance != instance && !(instance->stopping && !gate->instance && instance_cleanup_grant(instance))) ||
         gate->program != instance->program ||
         binding->entry >= instance->program->entry_count) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!instance->program->active_modules[instance->program->declarations->functions[binding->entry].module])
+        return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus admitted = admit_instance_value(admission, value, (XrXirType) value->type);
     if (admitted != XR_XIR_CALL_READY) return admitted;
     *entry = binding->entry; return XR_XIR_CALL_READY;
@@ -587,6 +592,8 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, ui
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t caller = xr_xir_call_current_entry(view->activation);
     uint32_t from = d->functions[caller].module, to = d->functions[entry].module;
+    if (!instance->program->active_modules[from] || !instance->program->active_modules[to])
+        return XR_XIR_CALL_BAD_ARGUMENT;
     if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
         !(d->functions[entry].promises & XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (target->cleanup_owner || entry == d->modules[to].initializer || !xr_xir_module_imports(d, from, to) ||

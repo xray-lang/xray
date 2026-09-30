@@ -27,6 +27,54 @@ macro(add_xray_unit_test name source)
 endmacro()
 
 if(WIN32)
+    add_executable(test_windows_utf8 base/test_windows_utf8.c)
+    target_include_directories(test_windows_utf8 PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    if(MSVC)
+        target_compile_options(test_windows_utf8 PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(test_windows_utf8 PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME test_windows_utf8 COMMAND test_windows_utf8)
+    set_tests_properties(test_windows_utf8 PROPERTIES LABELS "unit;ownership;windows")
+    add_executable(test_windows_paths base/test_windows_paths.c
+        ${CMAKE_SOURCE_DIR}/src/base/xfileio.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/fs_win.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c)
+    target_include_directories(test_windows_paths PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    if(MSVC)
+        target_compile_options(test_windows_paths PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(test_windows_paths PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME test_windows_paths
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/base/test_windows_paths.py
+            $<TARGET_FILE:test_windows_paths>)
+    set_tests_properties(test_windows_paths PROPERTIES LABELS "unit;ownership;windows;filesystem")
+    add_test(NAME test_windows_unicode_paths
+        COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_windows_unicode_paths.py
+            --xray $<TARGET_FILE:xray>)
+    set_tests_properties(test_windows_unicode_paths PROPERTIES
+        LABELS "integration;cli;windows;vm;aot" TIMEOUT 600 COST 180)
+    add_executable(test_file_read_windows base/test_file_read_windows.c)
+    target_include_directories(test_file_read_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_executable(test_declaration_file_windows base/test_declaration_file_windows.c)
+    target_include_directories(test_declaration_file_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    foreach(file_test test_file_read_windows test_declaration_file_windows)
+        if(MSVC)
+            target_compile_options(${file_test} PRIVATE /W4 /WX)
+        else()
+            target_compile_options(${file_test} PRIVATE -Wall -Wextra -Werror)
+        endif()
+    endforeach()
+    add_test(NAME test_file_read_windows
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/base/test_file_read_windows.py
+            $<TARGET_FILE:test_file_read_windows>)
+    set_tests_properties(test_file_read_windows PROPERTIES LABELS "unit;metadata;ownership;windows")
+    add_test(NAME test_declaration_file_windows
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/base/test_declaration_file_windows.py
+            $<TARGET_FILE:test_declaration_file_windows>)
+    set_tests_properties(test_declaration_file_windows PROPERTIES LABELS "unit;metadata;ownership;windows")
+
     add_executable(test_random_windows stdlib/test_random_windows.c
         ${CMAKE_SOURCE_DIR}/src/os/win/random_win.c)
     target_include_directories(test_random_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -99,12 +147,22 @@ set_tests_properties(test_xtoml_allocations PROPERTIES LABELS "unit;metadata;own
 add_test(NAME test_xtoml COMMAND test_xtoml)
 set_tests_properties(test_xtoml PROPERTIES LABELS "unit;metadata;ownership")
 
+add_executable(test_declaration_manifest module/test_declaration_manifest.c)
+target_include_directories(test_declaration_manifest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test_declaration_manifest PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_declaration_manifest PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_declaration_manifest COMMAND test_declaration_manifest)
+set_tests_properties(test_declaration_manifest PROPERTIES LABELS "unit;metadata;ownership")
+
 # ============================================================================
 # value/ — Value system
 # ============================================================================
 
-add_executable(test_xir_effects_source xir/test_xir_effects_source.c)
-target_link_libraries(test_xir_effects_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen xray_core)
+add_xray_bootstrap_executable(test_xir_effects_source xir/test_xir_effects_source.c)
+target_link_libraries(test_xir_effects_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_effects_source PRIVATE XR_EFFECT_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source")
 if(MSVC)
     target_compile_options(test_xir_effects_source PRIVATE /W4 /WX)
@@ -119,6 +177,7 @@ add_custom_command(OUTPUT ${XIR_EFFECT_GENERATED}
     COMMAND $<TARGET_FILE:test_xir_effects_source> ${XIR_EFFECT_GENERATED}
     DEPENDS test_xir_effects_source ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/methods.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/default_selector.xr
     VERBATIM)
 add_executable(test_xir_effects_native xir/test_xir_effects_native.c ${XIR_EFFECT_GENERATED})
 target_link_libraries(test_xir_effects_native PRIVATE xray_xir_scalar)
@@ -3016,7 +3075,8 @@ add_xray_unit_test(test_resolver module/test_resolver.c)
 if(NOT WIN32)
   add_xray_unit_test(test_module_resolver module/test_module_resolver.c)
 endif()
-add_xray_unit_test(test_module_graph module/test_module_graph.c)
+add_xray_bootstrap_unit_test(test_module_graph module/test_module_graph.c)
+target_compile_definitions(test_module_graph PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
 add_xray_unit_test(test_module_publication module/test_module_publication.c)
 add_xray_unit_test(test_module_identity module/test_module_identity.c)
 target_compile_definitions(test_module_identity PRIVATE

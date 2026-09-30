@@ -38,13 +38,23 @@ typedef enum {
 
 typedef struct XrTomlValue XrTomlValue;
 
+typedef enum {
+    XR_TOML_TABLE_IMPLICIT,
+    XR_TOML_TABLE_DOTTED,
+    XR_TOML_TABLE_HEADER,
+    XR_TOML_TABLE_INLINE
+} XrTomlTableOrigin;
+
 typedef struct XrTomlMember {
     char *key;
+    size_t key_length;
     XrTomlValue *value;
 } XrTomlMember;
 
 struct XrTomlValue {
     XrTomlType type;
+    uint32_t depth; /* Root is zero; every table member and array element adds one. */
+    size_t string_length; /* String/datetime bytes, excluding the terminator. */
     union {
         char *string; /* XR_TOML_STRING / XR_TOML_DATETIME */
         int64_t integer;
@@ -54,16 +64,39 @@ struct XrTomlValue {
             XrTomlValue **items;
             int count;
             int capacity;
+            bool table_sequence; /* Created by [[headers]], never a value array. */
         } array;
         struct {
             XrTomlMember *members;
             int count;
             int capacity;
+            XrTomlTableOrigin origin;
         } table;
     } as;
 };
 
 /* ========== Parse / Free ========== */
+
+typedef struct XrTomlParseBudget {
+    size_t input_bytes;
+    size_t allocation_bytes; /* Cumulative requested bytes, including each realloc. */
+    size_t work; /* Input bytes plus one and compared key length per table candidate. */
+    uint32_t depth; /* Effective maximum is capped at 128 for recursive destruction. */
+} XrTomlParseBudget;
+
+typedef enum XrTomlParseStatus {
+    XR_TOML_PARSE_OK,
+    XR_TOML_PARSE_INVALID,
+    XR_TOML_PARSE_LIMIT,
+    XR_TOML_PARSE_OUT_OF_MEMORY
+} XrTomlParseStatus;
+
+/* Both entry points use the same parser. The default budget is 16 MiB of input
+ * and 64 MiB each of cumulative allocations and work, with depth 128.
+ * Optional work_used receives consumed work on success and failure.
+ * No partial DOM escapes on failure. */
+XR_FUNC XrTomlValue *xtoml_parse_limited(const char *data, size_t len,
+    XrTomlParseBudget budget, XrTomlParseStatus *status, size_t *work_used);
 
 /* Parse TOML text into a DOM tree. Returns root table, or NULL on
  * fatal error. The returned tree must be freed with xtoml_free(). */

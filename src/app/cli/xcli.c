@@ -8,12 +8,15 @@
  * xcli.c - Xray command line thin entry point
  *
  * KEY CONCEPT:
- *   Only main() lives here. It installs the crash handler and delegates
+ *   Only the platform entry point lives here. It installs the crash handler and delegates
  *   all routing to xr_cli_main() in xcli_dispatch.c.
  *   No command table, no arg_offset, no help printing.
  */
 
 #include "xcli_dispatch.h"
+#ifdef XR_OS_WINDOWS
+#include "../../base/xwindows_utf8.h"
+#endif
 #include "../../runtime/xr_process_shutdown.h"
 #include "../../runtime/mem/xcycle_detector.h"
 #include <signal.h>
@@ -64,7 +67,7 @@ static void crash_handler(int sig) {
 }
 #endif
 
-int main(int argc, char **argv) {
+static int run_cli(int argc, char **argv) {
     atexit(xr_process_shutdown);
     /* MSVC's CRT (and most libc implementations) fully buffer stdout when
      * it is connected to a pipe — exactly the configuration the regression
@@ -112,3 +115,19 @@ int main(int argc, char **argv) {
 #endif
     return rc;
 }
+
+#ifdef XR_OS_WINDOWS
+int wmain(int argc, wchar_t **wide_argv) {
+    XrWinPathStatus status;
+    char **argv = xr_win_utf16_arguments(argc, wide_argv, &status);
+    if (!argv) {
+        fputs("xray: invalid Windows arguments or argument allocation failed\n", stderr);
+        return 1;
+    }
+    int result = run_cli(argc, argv);
+    xr_win_utf8_arguments_free(argc, argv);
+    return result;
+}
+#else
+int main(int argc, char **argv) { return run_cli(argc, argv); }
+#endif

@@ -15,14 +15,22 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef XR_OS_WINDOWS
-#include <windows.h>
+#include "xwindows_utf8.h"
 #endif
 
 char *xr_file_read_all(const char *path, const char *mode, size_t *out_size) {
     if (!path || !mode)
         return NULL;
 
+#ifdef XR_OS_WINDOWS
+    XrWinPathStatus converted;
+    wchar_t *wide_path = xr_win_utf8_path(path, &converted);
+    wchar_t *wide_mode = wide_path ? xr_win_utf8_path(mode, &converted) : NULL;
+    FILE *f = wide_path && wide_mode ? _wfopen(wide_path, wide_mode) : NULL;
+    xr_free(wide_mode); xr_free(wide_path);
+#else
     FILE *f = fopen(path, mode);
+#endif
     if (!f)
         return NULL;
 
@@ -144,11 +152,18 @@ char *xr_realpath(const char *path) {
         return NULL;
 
 #ifdef XR_OS_WINDOWS
-    char resolved[4096];
-    DWORD len = GetFullPathNameA(path, sizeof(resolved), resolved, NULL);
-    if (len == 0 || len >= sizeof(resolved))
-        return NULL;
-    return xr_strdup(resolved);
+    XrWinPathStatus converted;
+    wchar_t *wide = xr_win_utf8_path(path, &converted);
+    if (!wide) return NULL;
+    DWORD units = GetFullPathNameW(wide, 0, NULL, NULL);
+    if (!units || units > 32768) { xr_free(wide); return NULL; }
+    wchar_t *resolved = xr_malloc((size_t)units * sizeof(wchar_t));
+    if (!resolved) { xr_free(wide); return NULL; }
+    DWORD length = GetFullPathNameW(wide, units, resolved, NULL);
+    xr_free(wide);
+    char *result = length && length < units ? xr_win_utf16_text(resolved, &converted) : NULL;
+    xr_free(resolved);
+    return result;
 #else
     char *rp = realpath(path, NULL);
     if (!rp)

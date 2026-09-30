@@ -19,6 +19,7 @@
 #include "xstdlib_embedded.h"
 #include "../base/xchecks.h"
 #include "../base/xfileio.h"
+#include "../os/os_file_read.h"
 #include "../base/xforward_decl.h"
 #include "../base/xhash.h"
 #include "../base/xlog.h"
@@ -165,7 +166,7 @@ static int graph_add_spec(XrModuleGraph *g, const char *canonical, const char *l
 
     /* An unindexed spec would let the same canonical id be added twice,
      * so roll the slot back instead of leaving a half-registered entry. */
-    if (!s->canonical || (logical_path && !s->logical_path) ||
+    if (!s->canonical || (logical_path && !s->logical_path) || (source_path && !s->source_path) ||
         (authority && authority->namespace_id && !s->authority.namespace_id) ||
         (authority && authority->physical_root && !s->authority.physical_root) ||
         !xr_hashmap_set(g->id_index, s->canonical, (void *) (intptr_t) (idx + 1))) {
@@ -387,27 +388,56 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
     from_spec->status = XR_MODSPEC_RESOLVED;
 }
 
-static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
-                                  const char *entry_logical_path, const char *entry_source_path,
-                                  XrModuleKind entry_kind,
-                                  const XrModuleIdentityAuthority *entry_authority,
-                                  const char *entry_source, char **out_err) {
+typedef struct GraphSourceRoot {
+    const char *canonical, *logical_path, *source_path;
+    XrModuleKind kind;
+    const XrModuleIdentityAuthority *authority;
+    const char *source;
+} GraphSourceRoot;
+
+static bool graph_optional_equal(const char *a, const char *b) {
+    return a && b ? strcmp(a, b) == 0 : a == b;
+}
+
+static void graph_invalidate_order(XrModuleGraph *g) {
+    xr_free(g->topo_order); g->topo_order = NULL; g->topo_count = 0;
+    xr_free(g->cycle_desc); g->cycle_desc = NULL; g->has_cycle = false;
+    for (int i = 0; i < g->spec_count; ++i) {
+        g->specs[i].topo_index = -1;
+        g->specs[i].scc_id = -1;
+    }
+}
+
+static int graph_expand(XrModuleGraph *g, const GraphSourceRoot *root, char **out_err) {
     XR_DCHECK(g != NULL, "xr_module_graph_build: NULL graph");
-    if (!g || !entry_canonical) {
+    if (!g || !root || !root->canonical) {
         if (out_err)
             *out_err = xr_strdup("NULL graph or entry");
         return -1;
     }
 
-    /* Add entry spec */
-    int entry_idx = graph_add_spec(g, entry_canonical, entry_logical_path, entry_source_path,
-                                   entry_kind, entry_authority);
+    int entry_idx = xr_module_graph_find(g, root->canonical);
+    if (entry_idx >= 0) {
+        const XrModuleSpec *found = &g->specs[entry_idx];
+        if (found->kind != root->kind || found->authority.kind != root->authority->kind ||
+            !graph_optional_equal(found->source_path, root->source_path) ||
+            !graph_optional_equal(found->authority.namespace_id, root->authority->namespace_id) ||
+            !graph_optional_equal(found->authority.physical_root, root->authority->physical_root)) {
+            if (out_err) *out_err = xr_strdup("module identity has conflicting source authority");
+            return -1;
+        }
+        if (found->status >= XR_MODSPEC_RESOLVED) return 0;
+    }
+    graph_invalidate_order(g);
+    if (entry_idx < 0)
+        entry_idx = graph_add_spec(g, root->canonical, root->logical_path, root->source_path,
+                                   root->kind, root->authority);
     if (entry_idx < 0) {
         if (out_err)
             *out_err = xr_strdup("failed to add entry module");
         return -1;
     }
-    g->entry_index = entry_idx;
+    if (g->entry_index < 0) g->entry_index = entry_idx;
 
     /* BFS: process each spec in queue order.
      * spec_count grows as new modules are discovered. */
@@ -416,7 +446,7 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
 
         /* Skip stdlib native (no source to parse).  The in-memory entry is
          * the only source-less spec that still has source text. */
-        bool is_memory_entry = (qi == g->entry_index && entry_source != NULL);
+        bool is_memory_entry = (qi == entry_idx && root->source != NULL);
         if (!spec->source_path && !is_memory_entry)
             continue;
 
@@ -426,7 +456,7 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
 
         /* Parse source */
         char *owned_source = NULL;
-        const char *source = entry_source;
+        const char *source = root->source;
         if (spec->embedded_source) {
             source = xr_get_embedded_stdlib(spec->authority.namespace_id);
             if (!source) {
@@ -441,7 +471,13 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
                 return -1;
             }
         } else if (!is_memory_entry) {
-            owned_source = xr_file_read_all(spec->source_path, "r", NULL);
+            XrFileBytes input = {0};
+            XrFileReadStatus read_status = xr_file_read_under_root(spec->authority.physical_root,
+                spec->logical_path, SIZE_MAX - 1, &input);
+            if (read_status == XR_FILE_READ_OK && !memchr(input.data, 0, input.size))
+                owned_source = input.data;
+            else
+                xr_free(input.data);
             source = owned_source;
             if (!source) {
                 xr_log_warning("module_graph", "cannot read: %s", spec->source_path);
@@ -459,7 +495,7 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
         xr_free(owned_source);
 
         if (!ast) {
-            const char *failed_path = spec->source_path ? spec->source_path : entry_canonical;
+            const char *failed_path = spec->source_path ? spec->source_path : root->canonical;
             xr_log_warning("module_graph", "parse failed: %s", failed_path);
             if (out_err) {
                 char buf[1024];
@@ -486,7 +522,7 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
     return 0;
 }
 
-XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
+static int graph_include_path(XrModuleGraph *g, const char *entry_path,
                                   const XrModuleIdentityAuthority *entry_authority,
                                   char **out_err) {
     if (!entry_path || !entry_authority) {
@@ -523,20 +559,38 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
         entry_authority->kind == XR_MODULE_IDENTITY_STDLIB
             ? XR_MOD_STDLIB
             : (entry_authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE);
-    int rc = graph_build_from_entry(g, entry_identity, entry_logical_path, abs_path, entry_kind,
-                                    entry_authority, NULL, out_err);
+    GraphSourceRoot root = {entry_identity, entry_logical_path, abs_path, entry_kind, entry_authority, NULL};
+    int rc = graph_expand(g, &root, out_err);
     xr_free(entry_identity);
     xr_free(entry_logical_path);
     xr_free(abs_path);
     return rc;
 }
 
+XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
+                                  const XrModuleIdentityAuthority *entry_authority, char **out_err) {
+    if (!g || g->spec_count) {
+        if (out_err) *out_err = xr_strdup("entry build requires an empty graph");
+        return -1;
+    }
+    return graph_include_path(g, entry_path, entry_authority, out_err);
+}
+
+XR_FUNC int xr_module_graph_include(XrModuleGraph *g, const char *source_path,
+                                    const XrModuleIdentityAuthority *authority, char **out_err) {
+    if (!g || g->entry_index < 0) {
+        if (out_err) *out_err = xr_strdup("additional source requires an existing graph entry");
+        return -1;
+    }
+    return graph_include_path(g, source_path, authority, out_err);
+}
+
 XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
                                          const XrModuleIdentityAuthority *entry_authority,
                                          const char *entry_source, char **out_err) {
-    if (!entry_source) {
+    if (!g || g->spec_count || !entry_source) {
         if (out_err)
-            *out_err = xr_strdup("NULL entry_source");
+            *out_err = xr_strdup("memory entry requires an empty graph and source");
         return -1;
     }
     char *entry_identity = NULL;
@@ -546,8 +600,8 @@ XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
             *out_err = xr_strdup("memory module requires an explicit valid identity");
         return -1;
     }
-    int rc = graph_build_from_entry(g, entry_identity, NULL, NULL, XR_MOD_MEMORY, entry_authority,
-                                    entry_source, out_err);
+    GraphSourceRoot root = {entry_identity, NULL, NULL, XR_MOD_MEMORY, entry_authority, entry_source};
+    int rc = graph_expand(g, &root, out_err);
     xr_free(entry_identity);
     return rc;
 }

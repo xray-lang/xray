@@ -75,7 +75,7 @@ static bool request_valid(const XrCliCanonicalSourceRequest *request) {
 static bool read_source_fingerprint(const char *path, XrFingerprint *fingerprint, char *error,
                                     size_t error_size) {
     size_t size = 0u;
-    char *source = xr_file_read_all(path, "r", &size);
+    char *source = xr_file_read_all(path, "rb", &size);
     if (!source) {
         snprintf(error, error_size, "cannot open entry source");
         return false;

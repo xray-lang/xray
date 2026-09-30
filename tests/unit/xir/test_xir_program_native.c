@@ -15,6 +15,9 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
+#include "xir_module_forest_cases.h"
+#include "xir_module_forest_seal_cases.h"
+extern const XrXirProgramSpec forest_program;
 #include "xir_program_cases.h"
 #include "xir_capture_cases.h"
 #include "xir_array_program_cases.h"
@@ -66,6 +69,8 @@ static void enum_metadata_descriptors(void) {
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
 }
 int main(void) {
+    XrXirProgram *forest = module_forest_seal(&forest_program);
+    module_forest_cases(forest);
     const XrXirProgramSpec *paths[] = {&path0_program,&path1_program,&path2_program};
     for (unsigned kind = 0; kind < 3; ++kind) {
         XrXirProgram *program = NULL;

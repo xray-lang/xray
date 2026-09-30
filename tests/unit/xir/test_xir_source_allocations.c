@@ -163,7 +163,7 @@ static void array_source_allocations(XrCompilerSession *session) {
     CHECK(fputs("fn first<T>(a:Array<T>)->T{return a[0]}\nvar a=[\"x\"]\na.push(a[0])\na.set(0,\"y\")\n"
         "print(len(a),first<string>(a),a.get(1))\n", file) >= 0 && fclose(file) == 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL};
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
         attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
@@ -264,21 +264,16 @@ static void method_promise_allocations(XrCompilerSession *session) {
         "print(invoke(Box<i64>{value:23}.get),Box<i64>{value:29}.call())\n", file) >= 0);
     CHECK(fclose(file) == 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL, NULL};
-    XrXirSourceResult baseline = {0};
-    CHECK(xr_xir_source_check(&request, &baseline, NULL) == XR_XIR_OK);
-    const XrXirDeclarations *decls = xr_xir_artifact_module(baseline.checked)->declarations;
-    const XrXirSourceModule *module = &decls->modules[decls->root_module];
-    char name[8192]; CHECK(module->name_length < sizeof(name));
-    memcpy(name, module->name, module->name_length);
-    XrXirLiteral identity = {name, module->name_length};
-    xr_xir_source_result_free(&baseline); CHECK(!live);
-    XrXirSourcePromise records[] = {
-        {identity, {"get",3}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box",3}},
-        {identity, {"call",4}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box",3}},
-        {identity, {"call",4}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {"Box",3}},
-        {identity, {"invoke",6}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}}};
-    XrXirSourcePromises declarations = {records, 4}; request.declarations = &declarations;
+    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL};
+    char manifest_path[8192];
+    CHECK(snprintf(manifest_path, sizeof(manifest_path), "%s/xray.toml", absolute) > 0);
+    file = fopen(manifest_path, "wb"); CHECK(file);
+    CHECK(fputs("[declarations]\nversion=1\n"
+        "[[declarations.function]]\nmodule=\"root.xr\"\nowner=\"Box\"\nname=\"get\"\nno_suspend=true\n"
+        "[[declarations.function]]\nmodule=\"root.xr\"\nowner=\"Box\"\nname=\"call\"\nno_suspend=true\n"
+        "no_suspend_parameters=[\"f\"]\n"
+        "[[declarations.function]]\nmodule=\"root.xr\"\nname=\"invoke\"\nno_suspend_parameters=[\"f\"]\n", file) >= 0);
+    CHECK(fclose(file) == 0);
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
         attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
@@ -289,7 +284,7 @@ static void method_promise_allocations(XrCompilerSession *session) {
         xr_xir_source_result_free(&result); CHECK(!live);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_test_unlink(path) == 0 && xr_test_rmdir(directory) == 0);
+    CHECK(xr_test_unlink(manifest_path) == 0 && xr_test_unlink(path) == 0 && xr_test_rmdir(directory) == 0);
     printf("Method promise source ownership: %zu OOM sites; no partial publication\n", sites);
 }
 int main(void) {
@@ -298,7 +293,7 @@ int main(void) {
     snapshot_type_allocations();
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, NULL};
+    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL};
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_1 = {0};
     XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, NULL);

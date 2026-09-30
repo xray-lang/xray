@@ -20,6 +20,8 @@
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
 #include "../module/xmodule_graph.h"
+#include "../module/xdeclaration_load.h"
+#include "../os/os_file_read.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xast_walk.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -28,6 +30,11 @@
 #include <limits.h>
 
 typedef struct SourceMemory { struct SourceMemory *next; } SourceMemory;
+typedef struct SourceManifest {
+    struct SourceManifest *next;
+    XrModuleIdentityAuthority authority;
+    XrDeclarationManifest *declarations;
+} SourceManifest;
 typedef enum SourceKind { SOURCE_SLOT, SOURCE_FUNCTION, SOURCE_MODULE, SOURCE_IMPORT, SOURCE_LOCAL, SOURCE_NOMINAL } SourceKind;
 typedef struct SourceName {
     struct SourceName *next;
@@ -73,6 +80,7 @@ typedef struct SourceContext {
     XrXirBudget budget;
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory;
+    SourceManifest *manifests;
     uint64_t allocated;
     XrXirFunction *functions;
     SourceFunction *bodies;
@@ -1649,52 +1657,40 @@ static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint
     ctx->function = function; ctx->module = body->module;
     return source_query_parameters(ctx, body->declaration);
 }
-static bool source_promises(SourceContext *ctx, const XrXirSourcePromises *declarations) {
-    if (!declarations) return true;
-    if (declarations->count && !declarations->items)
-        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source declaration table is missing");
-    for (uint32_t d = 0; d < declarations->count; ++d) {
-        const XrXirSourcePromise *item = &declarations->items[d];
+typedef struct SourceDeclarationSelector {
+    XrXirLiteral module, function, owner;
+} SourceDeclarationSelector;
+static bool source_declaration_target(SourceContext *ctx, const SourceDeclarationSelector *item, uint32_t *output) {
+    if (!item->module.bytes || !item->module.length || !item->function.bytes ||
+        !item->function.length || (item->owner.length && !item->owner.bytes))
+        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "unsupported source declaration promise");
+    uint32_t selected = UINT32_MAX;
+    for (uint32_t f = 0; f < ctx->function_count; ++f) {
         if (!source_work(ctx, NULL)) return false;
-        if (!item->module.bytes || !item->module.length || !item->function.bytes ||
-            !item->function.length || (item->owner.length && !item->owner.bytes) ||
-            item->promises != XR_XIR_FUNCTION_NO_SUSPEND)
-            return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "unsupported source declaration promise");
-        uint32_t selected = UINT32_MAX;
-        for (uint32_t f = 0; f < ctx->function_count; ++f) {
-            if (!source_work(ctx, NULL)) return false;
-            AstNode *node = ctx->bodies[f].node;
-            if (!node || ctx->bodies[f].default_expression) continue;
-            uint32_t owner = ctx->identities[f].nominal_owner;
-            if (item->owner.length) {
-                if (node->type != AST_METHOD_DECL || node->as.method_decl.is_constructor || !owner) continue;
-                const XrXirLiteral *name = &ctx->nominals.declarations[owner - 1].name;
-                if (name->length != item->owner.length || memcmp(name->bytes, item->owner.bytes, name->length)) continue;
-            } else if (node->type != AST_FUNCTION_DECL || owner) continue;
-            const XrXirFunction *function = &ctx->functions[f];
-            uint32_t module = ctx->identities[f].module;
-            if (ctx->modules[module].name_length != item->module.length ||
-                memcmp(ctx->modules[module].name, item->module.bytes, item->module.length) ||
-                item->function.length != function->name_length ||
-                memcmp(function->name, item->function.bytes, function->name_length)) continue;
-            if (selected != UINT32_MAX)
-                return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "ambiguous source declaration promise");
-            selected = f;
-        }
-        if (selected == UINT32_MAX)
-            return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source declaration promise target is missing");
-        if (item->parameter) {
-            AstNode *node = ctx->bodies[selected].node;
-            uint32_t offset = node->type == AST_METHOD_DECL && !node->as.method_decl.is_static ? 1 : 0;
-            if (!source_parameter_promise(ctx, selected, item->parameter - 1 + offset)) return false;
-            continue;
-        }
-        if (ctx->identities[selected].promises)
-            return source_fail(ctx, ctx->bodies[selected].node, XR_XIR_BAD_STRUCTURE, "duplicate source declaration promise");
-        ctx->identities[selected].promises = item->promises;
+        AstNode *node = ctx->bodies[f].node;
+        if (!node || ctx->bodies[f].default_expression) continue;
+        uint32_t owner = ctx->identities[f].nominal_owner;
+        if (item->owner.length) {
+            if (node->type != AST_METHOD_DECL || node->as.method_decl.is_constructor || !owner) continue;
+            const XrXirLiteral *name = &ctx->nominals.declarations[owner - 1].name;
+            if (name->length != item->owner.length || memcmp(name->bytes, item->owner.bytes, name->length)) continue;
+        } else if (node->type != AST_FUNCTION_DECL || owner) continue;
+        const XrXirFunction *function = &ctx->functions[f];
+        uint32_t module = ctx->identities[f].module;
+        if (ctx->modules[module].name_length != item->module.length ||
+            memcmp(ctx->modules[module].name, item->module.bytes, item->module.length) ||
+            item->function.length != function->name_length ||
+            memcmp(function->name, item->function.bytes, function->name_length)) continue;
+        if (selected != UINT32_MAX)
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "ambiguous source declaration promise");
+        selected = f;
     }
+    if (selected == UINT32_MAX)
+        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source declaration promise target is missing");
+    *output = selected;
     return true;
 }
+#include "xxir_source_manifest.inc.c"
 static bool finish_body(SourceContext *ctx) {
     XrXirFunction *function = &ctx->functions[ctx->function];
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -2058,13 +2054,16 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     resolver = xr_module_resolver_new(&config);
     ctx.graph = resolver ? xr_module_graph_new(request->session, resolver) : NULL;
     if (!ctx.graph) { source_fail(&ctx, NULL, XR_XIR_OUT_OF_MEMORY, "module graph allocation failed"); goto done; }
-    if (xr_module_graph_build(ctx.graph, request->entry_path, request->authority, &error) != 0 ||
-        xr_module_graph_topological_sort(ctx.graph) != 0 || ctx.graph->has_cycle || ctx.graph->entry_index < 0) {
+    if (xr_module_graph_build(ctx.graph, request->entry_path, request->authority, &error) != 0) {
+        source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph build failed"); goto done;
+    }
+    if (!source_manifests_load(&ctx)) goto done;
+    if (xr_module_graph_topological_sort(ctx.graph) != 0 || ctx.graph->has_cycle || ctx.graph->entry_index < 0) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
     ctx.query_ready = true;
     if (source_query_modules(&ctx) && collect_declarations(&ctx) &&
-        source_promises(&ctx, request->declarations) && build_bodies(&ctx)) {
+        source_manifests_bind(&ctx) && build_bodies(&ctx)) {
         XrXirDeclarations declarations = {ctx.modules, (uint32_t) ctx.graph->spec_count, ctx.identities,
             ctx.slots, ctx.slot_count, ctx.literals, ctx.literal_count, (uint32_t) ctx.graph->entry_index, ctx.function_count - 1};
         XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, ctx.types.count || ctx.types.nominals ? &ctx.types : NULL, NULL};
@@ -2102,6 +2101,8 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
 done:
     source_query_publish(&ctx, output);
     xr_free(error);
+    for (SourceManifest *manifest = ctx.manifests; manifest; manifest = manifest->next)
+        xr_declaration_manifest_free(manifest->declarations);
     while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_free(ctx.memory); ctx.memory = next; }
     xr_module_graph_free(ctx.graph); xr_module_resolver_free(resolver);
     if (diagnostic) *diagnostic = ctx.diagnostic;

@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_program_fixture.h"
+#include "xir_module_forest_fixture.h"
 #include "xir_capture_fixture.h"
 #include "xir_array_program_fixture.h"
 #include "xir_nominal_checked_fixture.h"
@@ -30,6 +31,12 @@
 int main(int argc, char **argv) {
     FILE *file = argc == 2 ? fopen(argv[1], "wb") : NULL;
     CHECK(argc == 1 || (argc == 2 && file));
+    XrXirArtifact *forest = module_forest_fixture(false); XrXirCSource forest_source = {0};
+    CHECK(xr_xir_emit_c(forest, "forest", 200000, &forest_source) == XR_XIR_OK);
+    xr_xir_artifact_free(forest);
+    CHECK(!strstr(forest_source.text, "xr_xir_vm") && !strstr(forest_source.text, "({"));
+    if (file) CHECK(fwrite(forest_source.text, 1, forest_source.length, file) == forest_source.length);
+    xr_xir_c_source_free(&forest_source);
     for (unsigned kind = 0; kind < 3; ++kind) {
         XrXirArtifact *artifact = path_program_fixture(kind);
         XrXirCSource source = {0}; char prefix[32];

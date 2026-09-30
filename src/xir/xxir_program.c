@@ -26,7 +26,7 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
         spec->target.architecture != XR_XIR_ARCH_X86_64 || spec->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
         return XR_XIR_BAD_LAYOUT;
     uint64_t fixed = sizeof(XrXirProgram) + (uint64_t) spec->entry_count * sizeof(XrXirCallEntry) +
-        (uint64_t) spec->declarations->module_count * sizeof(uint32_t) * 2;
+        (uint64_t) spec->declarations->module_count * (sizeof(uint32_t) * 2 + 1);
     if (fixed > *bytes || fixed > SIZE_MAX) return XR_XIR_BUDGET;
     *bytes -= fixed;
     XrXirBudget signature_budget = {0};
@@ -81,8 +81,33 @@ static void program_dispose(XrXirProgram *program) {
     xr_xir_type_arena_drop(program->arena);
     xr_xir_declarations_free(program->declarations);
     xr_free(program->order);
+    xr_free(program->active_modules);
     xr_free(program->module_slots);
     xr_free(program);
+}
+static XrXirStatus program_execution_order(XrXirProgram *program, uint64_t *work) {
+    const XrXirDeclarations *d = program->declarations;
+    XrXirStatus status = xr_xir_declarations_order(d, program->order, work);
+    if (status != XR_XIR_OK) return status;
+    program->active_modules[d->root_module] = 1;
+    for (uint32_t i = d->module_count; i > 0; --i) {
+        uint32_t id = program->order[i - 1];
+        if (!*work) return XR_XIR_BUDGET;
+        --*work;
+        if (!program->active_modules[id]) continue;
+        const XrXirSourceModule *module = &d->modules[id];
+        if (module->dependency_count > *work) return XR_XIR_BUDGET;
+        *work -= module->dependency_count;
+        for (uint32_t dep = 0; dep < module->dependency_count; ++dep)
+            program->active_modules[module->dependencies[dep]] = 1;
+    }
+    if (d->module_count > *work) return XR_XIR_BUDGET;
+    *work -= d->module_count;
+    for (uint32_t i = 0; i < d->module_count; ++i) {
+        uint32_t id = program->order[i];
+        if (program->active_modules[id]) program->order[program->initialization_count++] = id;
+    }
+    return XR_XIR_OK;
 }
 XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget limits, XrXirProgram **output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
@@ -104,8 +129,9 @@ XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget
     program->entry_count = spec->entry_count;
     program->entries = xr_calloc(spec->entry_count, sizeof(*program->entries));
     program->order = xr_calloc(spec->declarations->module_count, sizeof(*program->order));
+    program->active_modules = xr_calloc(spec->declarations->module_count, 1);
     program->module_slots = xr_calloc(spec->declarations->module_count, sizeof(*program->module_slots));
-    if (!program->entries || !program->order || !program->module_slots) {
+    if (!program->entries || !program->order || !program->active_modules || !program->module_slots) {
         status = XR_XIR_OUT_OF_MEMORY; goto failed;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
@@ -138,7 +164,7 @@ XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget
     }
     status = xr_xir_declarations_clone(spec->declarations, spec->entry_count, &program->declarations);
     if (status != XR_XIR_OK) goto failed;
-    status = xr_xir_declarations_order(program->declarations, program->order, &work);
+    status = program_execution_order(program, &work);
     if (status != XR_XIR_OK) goto failed;
     for (uint32_t i = 0; i < program->declarations->slot_count; ++i)
         ++program->module_slots[program->declarations->slots[i].module];

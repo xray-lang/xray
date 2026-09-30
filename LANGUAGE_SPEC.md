@@ -3102,6 +3102,33 @@ Run `xray verify --contract perf-contracts.toml`. A contract checks existing sem
 
 **Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
 
+#### Package-owned declaration promises (implementation pending)
+
+A project or package may declare stable function interface obligations in its root `xray.toml`. This section is distinct from `xray verify` requirements and native-provider axioms: the same Checked checker must prove every Xray promise at its definition, without obtaining it from a particular specialization or inferred properties of a selected implementation.
+
+```toml
+[declarations]
+version = 1
+
+[[declarations.function]]
+module = "src/worker.xr"
+name = "apply"
+no_suspend = true
+no_suspend_parameters = ["callback"]
+
+[[declarations.function]]
+module = "src/box.xr"
+owner = "Box"
+name = "get"
+no_suspend = true
+```
+
+An absent `declarations` section supplies no explicit promises through this carrier. A present section requires integer `version = 1` and a nonempty `function` record array. Unknown fields in the section or records, unknown versions, and incorrect types reject rather than being ignored. Every record requires nonempty `module` and `name` strings. Omitting `owner` selects a top-level function; a supplied owner must be a nonempty exact declaration name. `no_suspend` accepts only boolean `true`; a supplied `no_suspend_parameters` must be a nonempty array of distinct explicit parameter names. Each record supplies at least a function obligation or a parameter obligation. A module/owner/name selection may occur only once.
+
+`module` is a `/`-separated logical `.xr` file path inside the owning authority root, not an import alias or canonical identity. Absolute paths, backslashes, empty segments, `.` and `..`, another package namespace, and physical paths resolving outside the root reject. Parameter names bind at the definition, excluding an instance receiver; missing, ambiguous, or non-callable parameters reject. The currently admitted carrier selects top-level functions and ordinary instance/static methods of an exact nominal owner. Constructors, cleanup functions, and synthetic helpers cannot be named by external selectors. This subset does not remove remaining declaration families or nested/result callable qualifiers from the language objective.
+
+Each manifest constrains only its owning project or package. A consumer cannot strengthen an imported package's promises, and the loader must not search parents or inherit another declaration section. Selection grants no private access, field or construction permission, and changes no generic definition-context constraints. All explicit records must resolve to actual definitions and be checked, including unused targets and modules not imported by the current entry. Additional package checking must not add initialized modules or effects to the entry's execution graph. Published Checked identities retain proved obligations; specialization and generated-content rechecking cannot add or remove promises. This public carrier is not yet connected to product entry points; the examples do not claim existing CLI configuration support.
+
 #### Worked Examples
 
 A function literal directly checked against an explicitly declared `no_suspend` callable context receives that obligation for its new function definition. Its body is checked under the current generic constraints; unknown or potentially suspending calls reject, and specialization cannot supply a missing proof. Captured ordinary callables do not acquire the promise. This rule adds no source effect annotation, does not turn performance `verify` requirements into declarations, and cannot strengthen an already constructed ordinary function value from inferred body effects. Without a restricted context, a function literal remains an ordinary callable.

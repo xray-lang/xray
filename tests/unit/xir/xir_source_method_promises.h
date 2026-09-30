@@ -50,51 +50,42 @@ static void source_method_promise_execute(XrXirArtifact *checked, const char *ou
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY); xr_xir_program_drop(program);
 }
 static void source_method_promise_cases(const XrXirSourceRequest *request, const char *output) {
-    XrXirSourceRequest probe = *request;
-    probe.entry_path = XR_EFFECT_FIXTURES "/methods.xr"; probe.declarations = NULL;
-    XrXirSourceResult baseline = {0};
-    CHECK(xr_xir_source_check(&probe, &baseline, NULL) == XR_XIR_OK);
-    const XrXirDeclarations *decls = xr_xir_artifact_module(baseline.checked)->declarations;
-    XrXirLiteral module = {decls->modules[decls->root_module].name, decls->modules[decls->root_module].name_length};
-    XrXirSourcePromise records[] = {
-        {module, {"get", 3}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box", 3}},
-        {module, {"identity", 8}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box", 3}},
-        {module, {"invoke", 6}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}},
-        {module, {"invokeStatic", 12}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}},
-        {module, {"call", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {"Box", 3}},
-        {module, {"callStatic", 10}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {"Box", 3}},
-        {module, {"call", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box", 3}},
-        {module, {"callStatic", 10}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box", 3}},
-        {module, {"sleeper", 7}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box", 3}}};
-    XrXirSourcePromises table = {records, 8}; probe.declarations = &table;
+    XrXirSourceRequest probe = *request; char path[8192];
+    source_fixture_path(request, "methods.xr", path); probe.entry_path = path;
+    SourceTestDeclaration records[] = {
+        {"get", "Box", NULL, true}, {"identity", "Box", NULL, true},
+        {"invoke", NULL, "f", false}, {"invokeStatic", NULL, "f", false},
+        {"call", "Box", "f", true}, {"callStatic", "Box", "f", true},
+        {"sleeper", "Box", NULL, true}};
+    source_manifest_write(&probe, "methods.xr", records, 6);
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_source_check(&probe, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "method promise: %s\n", diagnostic.message);
     CHECK(status == XR_XIR_OK); source_method_promise_execute(result.checked, output);
     xr_xir_source_result_free(&result);
-    XrXirSourcePromise original = records[0];
+    SourceTestDeclaration original = records[0];
     for (uint32_t i = 0; i < 4; ++i) {
         records[0] = original;
-        if (i == 0) records[0].owner = (XrXirLiteral){0};
-        if (i == 1) records[0].owner = (XrXirLiteral){"Missing", 7};
-        if (i == 2) records[0].owner = (XrXirLiteral){"Other", 5};
-        if (i == 3) records[0].parameter = 1;
+        if (i == 0) records[0].owner = NULL;
+        if (i == 1) records[0].owner = "Missing";
+        if (i == 2) records[0].owner = "Other";
+        if (i == 3) records[0].parameter = "this";
+        source_manifest_write(&probe, "methods.xr", records, 6);
         memset(&diagnostic, 0, sizeof(diagnostic));
         CHECK(xr_xir_source_check(&probe, &result, &diagnostic) != XR_XIR_OK);
         CHECK(strstr(diagnostic.message, i < 2 ? "target is missing" :
-            i == 2 ? "explicit target promise" : "parameter is missing"));
+            i == 2 ? "explicit target promise" : "parameter name is missing"));
         CHECK(!result.checked); xr_xir_source_result_free(&result);
     }
-    records[0] = original; table.count = 9;
+    records[0] = original; source_manifest_write(&probe, "methods.xr", records, 7);
     memset(&diagnostic, 0, sizeof(diagnostic));
     CHECK(xr_xir_source_check(&probe, &result, &diagnostic) == XR_XIR_BAD_TYPE);
     CHECK(!result.checked && strstr(diagnostic.message, "declared no_suspend"));
     xr_xir_source_result_free(&result);
-    records[8] = original;
+    records[6] = original; source_manifest_write(&probe, "methods.xr", records, 7);
     memset(&diagnostic, 0, sizeof(diagnostic));
     CHECK(xr_xir_source_check(&probe, &result, &diagnostic) == XR_XIR_BAD_STRUCTURE);
-    CHECK(!result.checked && strstr(diagnostic.message, "duplicate"));
-    xr_xir_source_result_free(&result);
-    xr_xir_source_result_free(&baseline);
+    CHECK(!result.checked && strstr(diagnostic.message, "manifest admission failed"));
+    xr_xir_source_result_free(&result); source_manifest_raw(request, "");
 }
 #endif // XIR_SOURCE_METHOD_PROMISES_H

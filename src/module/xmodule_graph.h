@@ -128,13 +128,21 @@ XR_FUNC void xr_module_source_fingerprint(const char *source, XrFingerprint *out
 /* Free the graph and all owned specs/ASTs. */
 XR_FUNC void xr_module_graph_free(XrModuleGraph *g);
 
-/* Build the graph by BFS from an entry source file.
+/* Build an empty graph by BFS from an entry source file.
  * Parses each discovered module and collects its import edges.
  * Returns 0 on success, -1 on error (e.g. file not found).
  * On error, *out_err is set to a descriptive message (caller frees). */
 XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
                                   const XrModuleIdentityAuthority *entry_authority,
                                   char **out_err);
+
+/* Add a source and its imports without changing the existing entry or adding
+ * a synthetic import edge. Existing identities must retain their exact source
+ * authority. New modules invalidate the topological order. This extends the
+ * checking graph, not an execution or initialization closure. On error discard
+ * the graph; partial discovery is owned by it and freed with it. */
+XR_FUNC int xr_module_graph_include(XrModuleGraph *g, const char *source_path,
+                                    const XrModuleIdentityAuthority *authority, char **out_err);
 
 /* Build the graph from an in-memory entry source.
  * The caller-supplied memory authority is mandatory.

@@ -52,7 +52,16 @@
 #include <io.h>
 #endif
 #include <direct.h>
-#define XR_CLI_CHMOD _chmod
+#include "../../base/xwindows_utf8.h"
+static int cli_chmod_utf8(const char *path, int mode) {
+    XrWinPathStatus status;
+    wchar_t *wide = xr_win_utf8_path(path, &status);
+    if (!wide) return -1;
+    int result = _wchmod(wide, mode);
+    xr_free(wide);
+    return result;
+}
+#define XR_CLI_CHMOD cli_chmod_utf8
 #else
 #include <sys/stat.h>
 #include <unistd.h>

@@ -9,22 +9,18 @@
 #ifndef XIR_SOURCE_PROMISE_CASES_H
 #define XIR_SOURCE_PROMISE_CASES_H
 static void source_synthetic_promise_case(const XrXirSourceRequest *request) {
-    XrXirSourceRequest probe = *request;
-    probe.entry_path = XR_EFFECT_FIXTURES "/default_selector.xr"; probe.declarations = NULL;
-    XrXirSourceResult baseline = {0};
-    CHECK(xr_xir_source_check(&probe, &baseline, NULL) == XR_XIR_OK);
-    const XrXirDeclarations *decls = xr_xir_artifact_module(baseline.checked)->declarations;
-    XrXirLiteral module = {decls->modules[decls->root_module].name, decls->modules[decls->root_module].name_length};
-    XrXirSourcePromise item = {module, {"$argument_default", 17}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {0}};
-    XrXirSourcePromises table = {&item, 1}; probe.declarations = &table;
+    XrXirSourceRequest probe = *request; char path[8192];
+    source_fixture_path(request, "default_selector.xr", path); probe.entry_path = path;
+    SourceTestDeclaration item = {"$argument_default", NULL, NULL, true};
     for (uint32_t p = 0; p < 2; ++p) {
-        item.parameter = p;
+        item.parameter = p ? "f" : NULL;
+        source_manifest_write(&probe, "default_selector.xr", &item, 1);
         XrXirSourceResult denied = {0}; XrXirSourceDiagnostic diagnostic = {0};
         CHECK(xr_xir_source_check(&probe, &denied, &diagnostic) == XR_XIR_BAD_STRUCTURE);
         CHECK(!denied.checked && strstr(diagnostic.message, "target is missing"));
         xr_xir_source_result_free(&denied);
     }
-    xr_xir_source_result_free(&baseline);
+    source_manifest_raw(request, "");
 }
 static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     const XrXirModule *input = xr_xir_artifact_module(checked);
@@ -77,45 +73,39 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
 }
-static void source_callable_promise_cases(XrXirSourceRequest *request, const XrXirArtifact *baseline, const char *output) {
+static void source_callable_promise_cases(XrXirSourceRequest *request, const char *output) {
     source_synthetic_promise_case(request);
-    const XrXirDeclarations *decls = xr_xir_artifact_module(baseline)->declarations;
-    XrXirLiteral module = {decls->modules[decls->root_module].name, decls->modules[decls->root_module].name_length};
     const char *reject[] = {"rejectYield", "rejectUnknown", "rejectGeneric", "rejectDefaultYield", "rejectDefaultName"};
     for (unsigned i = 0; i < 5; ++i) {
-        XrXirSourcePromise item = {module, {reject[i], (uint32_t)strlen(reject[i])}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}};
-        XrXirSourcePromises table = {&item, 1}; request->declarations = &table;
+        SourceTestDeclaration item = {reject[i], NULL, "f", false};
+        source_manifest_write(request, "root.xr", &item, 1);
         XrXirSourceResult denied = {0}; XrXirSourceDiagnostic diagnostic = {0};
         CHECK(xr_xir_source_check(request, &denied, &diagnostic) == XR_XIR_BAD_TYPE);
         CHECK(!denied.checked);
         if (i < 4) CHECK(strstr(diagnostic.message, "declared no_suspend"));
         xr_xir_source_result_free(&denied);
     }
-    XrXirSourcePromise items[] = {
-        {module, {"dynamic", 7}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}},
-        {module, {"dynamic", 7}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {0}},
-        {module, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {0}},
-        {module, {"weaken", 6}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}},
-        {module, {"literalDefault", 14}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}},
-        {module, {"namedDefault", 12}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}},
-        {module, {"effectDefault", 13}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}},
-        {module, {"dynamic", 7}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}}};
-    XrXirSourcePromises declarations = {items, 7}; request->declarations = &declarations;
+    SourceTestDeclaration items[] = {
+        {"dynamic", NULL, "f", true}, {"pure", NULL, NULL, true},
+        {"weaken", NULL, "f", false}, {"literalDefault", NULL, "f", false},
+        {"namedDefault", NULL, "f", false}, {"effectDefault", NULL, "f", false},
+        {"dynamic", NULL, "f", true}};
     for (uint32_t i = 0; i < 4; ++i) {
-        declarations.count = i == 0 ? 2 : i == 1 ? 8 : 7;
-        items[0].parameter = i == 2 ? 2 : 1;
-        if (i == 3) items[0].function = (XrXirLiteral){"parameterThrow", 14};
+        items[0].parameter = i == 2 ? "missing" : "f";
+        if (i == 3) { items[0].name = "parameterThrow"; items[0].parameter = "e"; }
+        source_manifest_write(request, "root.xr", items, i == 0 ? 1 : i == 1 ? 7 : 6);
         XrXirSourceResult result = {0};
-        CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_BAD_TYPE);
+        CHECK(xr_xir_source_check(request, &result, NULL) == (i == 1 ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE));
         CHECK(!result.checked); xr_xir_source_result_free(&result);
     }
-    items[0].function = (XrXirLiteral){"dynamic", 7};
-    items[7] = (XrXirSourcePromise){module, {"effectDefaultUse", 16}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {0}};
-    declarations.count = 8;
+    items[0] = (SourceTestDeclaration){"dynamic", NULL, "f", true};
+    items[6] = (SourceTestDeclaration){"effectDefaultUse", NULL, NULL, true};
+    source_manifest_write(request, "root.xr", items, 7);
     XrXirSourceResult rejected_default = {0}; XrXirSourceDiagnostic default_diagnostic = {0};
     CHECK(xr_xir_source_check(request, &rejected_default, &default_diagnostic) == XR_XIR_BAD_TYPE);
     CHECK(!rejected_default.checked && strstr(default_diagnostic.message, "declared no_suspend"));
-    xr_xir_source_result_free(&rejected_default); declarations.count = 7;
+    xr_xir_source_result_free(&rejected_default);
+    source_manifest_write(request, "root.xr", items, 6);
     XrXirSourceResult result = {0};
     CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
     const XrXirModule *checked_module = xr_xir_artifact_module(result.checked);
@@ -140,7 +130,7 @@ static void source_callable_promise_cases(XrXirSourceRequest *request, const XrX
     }
     CHECK(found);
     XrXirArtifact *checked = result.checked; result.checked = NULL;
-    xr_xir_source_result_free(&result); request->declarations = NULL;
+    xr_xir_source_result_free(&result); source_manifest_raw(request, "");
     memset(items, 0xCC, sizeof(items)); source_qualified_vm(checked, output);
 }
 #endif // XIR_SOURCE_PROMISE_CASES_H

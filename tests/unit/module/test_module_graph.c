@@ -22,18 +22,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ========== Isolate Stub ========== */
-
-/* The graph builder needs a compiler session for parsing. */
-#include "xray.h"
-#include "xray_vm.h"
-
 /* ========== Test Fixtures ========== */
 
 static char g_tmpdir[512];
 static char g_created_files[32][1024];
 static size_t g_created_file_count;
-static XrVMRuntime *g_iso;
 static XrCompilerSession *g_session;
 
 static void setup(void) {
@@ -124,6 +117,13 @@ TEST(graph_single_file_no_imports) {
     ASSERT_EQ_INT(g->entry_index, 0);
     ASSERT_NOT_NULL(g->specs[0].ast);
     ASSERT_EQ_INT(g->specs[0].status, XR_MODSPEC_RESOLVED);
+    char *raw_source = xr_file_read_all(abs_path("main.xr"), "rb", NULL);
+    ASSERT_NOT_NULL(raw_source);
+    XrFingerprint expected_fingerprint;
+    xr_module_source_fingerprint(raw_source, &expected_fingerprint);
+    xr_free(raw_source);
+    ASSERT_EQ_INT(memcmp(&g->specs[0].source_content_fingerprint, &expected_fingerprint,
+        sizeof(expected_fingerprint)), 0);
 
     rc = xr_module_graph_topological_sort(g);
     ASSERT_EQ_INT(rc, 0);
@@ -345,18 +345,126 @@ TEST(graph_parse_failure_is_build_failure) {
 
 /* ========== Main ========== */
 
+TEST(graph_additional_root_preserves_entry) {
+    setup();
+    create_file("main.xr", "var value = 1\n");
+    create_file("extra.xr", "import \"./leaf\"\nvar extra = 2\n");
+    create_file("leaf.xr", "var leaf = 3\n");
+    XrModuleResolverConfig cfg = {0};
+    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, g_tmpdir};
+    char *err = NULL;
+    ASSERT_EQ_INT(build_script_graph(g, abs_path("main.xr"), &err), 0);
+    struct AstNode *entry_ast = g->specs[g->entry_index].ast;
+    ASSERT_EQ_INT(xr_module_graph_topological_sort(g), 0);
+    ASSERT_EQ_INT(xr_module_graph_include(g, abs_path("extra.xr"), &authority, &err), 0);
+    ASSERT_NULL(err);
+    ASSERT_EQ_INT(g->entry_index, 0);
+    ASSERT_EQ_INT(g->spec_count, 3);
+    ASSERT_TRUE(g->specs[0].ast == entry_ast);
+    ASSERT_EQ_INT(g->specs[0].dep_count, 0);
+    ASSERT_EQ_INT(g->specs[1].dep_count, 1);
+    ASSERT_EQ_INT(g->specs[1].dep_indices[0], 2);
+    ASSERT_NULL(g->topo_order);
+    ASSERT_EQ_INT(g->topo_count, 0);
+    ASSERT_EQ_INT(g->specs[0].topo_index, -1);
+    ASSERT_EQ_INT(xr_module_graph_topological_sort(g), 0);
+    ASSERT_EQ_INT(g->topo_count, 3);
+    ASSERT_TRUE(g->specs[2].topo_index < g->specs[1].topo_index);
+    int *order = g->topo_order;
+    struct AstNode *extra_ast = g->specs[1].ast;
+    ASSERT_EQ_INT(xr_module_graph_include(g, abs_path("extra.xr"), &authority, &err), 0);
+    ASSERT_EQ_INT(xr_module_graph_include(g, abs_path("leaf.xr"), &authority, &err), 0);
+    ASSERT_EQ_INT(xr_module_graph_include(g, abs_path("main.xr"), &authority, &err), 0);
+    ASSERT_EQ_INT(g->spec_count, 3);
+    ASSERT_TRUE(g->topo_order == order && g->specs[1].ast == extra_ast);
+    ASSERT_EQ_INT(build_script_graph(g, abs_path("extra.xr"), &err), -1);
+    ASSERT_NOT_NULL(err);
+    ASSERT_EQ_INT(g->entry_index, 0);
+    xr_free(err);
+    xr_module_graph_free(g); xr_module_resolver_free(r); teardown();
+}
+
+TEST(graph_additional_root_failures) {
+    setup();
+    create_file("main.xr", "var value = 1\n");
+    create_file("invalid.xr", "var value =\n");
+    create_file("cycle.xr", "import \"./cycle\"\n");
+    create_file("unresolved.xr", "import \"./absent\"\n");
+    XrModuleResolverConfig cfg = {0};
+    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, g_tmpdir};
+    const char *names[] = {"invalid.xr", "cycle.xr", "unresolved.xr", "absent.xr"};
+    for (int i = 0; i < 4; ++i) {
+        XrModuleGraph *g = xr_module_graph_new(g_session, r);
+        char *err = NULL;
+        ASSERT_EQ_INT(xr_module_graph_include(g, abs_path("main.xr"), &authority, &err), -1);
+        ASSERT_NOT_NULL(err); xr_free(err); err = NULL;
+        ASSERT_EQ_INT(g->spec_count, 0);
+        ASSERT_EQ_INT(build_script_graph(g, abs_path("main.xr"), &err), 0);
+        ASSERT_EQ_INT(xr_module_graph_topological_sort(g), 0);
+        int result = xr_module_graph_include(g, abs_path(names[i]), &authority, &err);
+        ASSERT_EQ_INT(result, i == 1 ? 0 : -1);
+        ASSERT_EQ_INT(g->entry_index, 0);
+        ASSERT_EQ_INT(g->specs[0].dep_count, 0);
+        if (i == 1) {
+            ASSERT_NULL(err);
+            ASSERT_NULL(g->topo_order);
+            ASSERT_EQ_INT(xr_module_graph_topological_sort(g), -1);
+            ASSERT_TRUE(g->has_cycle);
+        } else {
+            ASSERT_NOT_NULL(err);
+        }
+        xr_free(err); xr_module_graph_free(g);
+    }
+    xr_module_resolver_free(r); teardown();
+}
+
+TEST(graph_additional_root_conflicting_authority) {
+    setup();
+    create_file("main.xr", "var value = 1\n");
+    char other_directory[512], other_path[1024];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-test-graph-other", other_directory, sizeof(other_directory)), 0);
+    char *other_root = xr_realpath(other_directory);
+    ASSERT_NOT_NULL(other_root);
+    int length = snprintf(other_path, sizeof(other_path), "%s/main.xr", other_root);
+    ASSERT_TRUE(length > 0 && (size_t)length < sizeof(other_path));
+    FILE *file = fopen(other_path, "w");
+    ASSERT_NOT_NULL(file);
+    ASSERT_TRUE(fputs("var value = 2\n", file) >= 0);
+    ASSERT_EQ_INT(fclose(file), 0);
+    XrModuleResolverConfig cfg = {0};
+    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_PROJECT, "graph-project", g_tmpdir};
+    char *err = NULL;
+    ASSERT_EQ_INT(xr_module_graph_build(g, abs_path("main.xr"), &authority, &err), 0);
+    ASSERT_EQ_INT(xr_module_graph_topological_sort(g), 0);
+    struct AstNode *ast = g->specs[0].ast;
+    int *order = g->topo_order;
+    authority.physical_root = other_root;
+    ASSERT_EQ_INT(xr_module_graph_include(g, other_path, &authority, &err), -1);
+    ASSERT_NOT_NULL(err);
+    ASSERT_NOT_NULL(strstr(err, "conflicting source authority"));
+    ASSERT_EQ_INT(g->entry_index, 0);
+    ASSERT_EQ_INT(g->spec_count, 1);
+    ASSERT_TRUE(g->specs[0].ast == ast && g->topo_order == order);
+    xr_free(err); xr_module_graph_free(g); xr_module_resolver_free(r);
+    ASSERT_EQ_INT(remove(other_path), 0);
+    ASSERT_EQ_INT(xr_test_rmdir(other_root), 0);
+    xr_free(other_root); teardown();
+}
+
 TEST_MAIN_BEGIN()
 
-/* Global isolate for all tests */
-XrVMConfig vm_config = {0};
-g_iso = xray_vm_new_full(&vm_config);
-g_session = xr_compiler_session_current_for_isolate(g_iso);
+/* Parsing owns a compiler session independently of runtime initialization. */
+g_session = xr_compiler_session_new(NULL);
 /* Not ASSERT_NOT_NULL: its bail-out is a bare `return`, which cannot carry an
  * exit status out of main(). Without a session no test below can run, so report
  * the failed precondition and leave with the suite's failure status. */
 if (!g_session) {
-    printf("\033[31mFAIL\033[0m no compiler session for the test isolate\n");
-    xray_vm_delete(g_iso);
+    printf("\033[31mFAIL\033[0m no compiler session for the graph tests\n");
     XR_TEST_PROCESS_SHUTDOWN();
     return 1;
 }
@@ -368,6 +476,9 @@ RUN_TEST_SUITE("Build - Basic");
 RUN_TEST(graph_single_file_no_imports);
 RUN_TEST(graph_linear_deps);
 RUN_TEST(graph_diamond_deps);
+RUN_TEST(graph_additional_root_preserves_entry);
+RUN_TEST(graph_additional_root_failures);
+RUN_TEST(graph_additional_root_conflicting_authority);
 
 RUN_TEST_SUITE("Cycle Detection");
 RUN_TEST(graph_cycle_self);
@@ -379,8 +490,7 @@ RUN_TEST(graph_find_by_canonical);
 RUN_TEST(graph_entry_not_found);
 RUN_TEST(graph_parse_failure_is_build_failure);
 
-xray_vm_delete(g_iso);
-g_iso = NULL;
+xr_compiler_session_delete(g_session);
 g_session = NULL;
 
 TEST_MAIN_END()

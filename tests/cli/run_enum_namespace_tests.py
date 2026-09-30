@@ -29,8 +29,13 @@ def main():
         folder = Path(temporary)
         (folder / "xray.toml").write_text(
             '[project]\nname="enum-execution"\nmain="main.xr"\n', encoding="utf-8")
-        for name, source in cases.items():
-            (folder / "main.xr").write_text(source, encoding="utf-8")
+        variants = [(name, source, ending) for name, source in cases.items()
+                    for ending in ("LF", "CRLF")]
+        for name, source, ending in variants:
+            raw = source.encode("utf-8")
+            if ending == "CRLF":
+                raw = raw.replace(b"\n", b"\r\n")
+            (folder / "main.xr").write_bytes(raw)
             expected = (name + "\n").encode()
             vm = checked([compiler, "run", "main.xr"], folder)
             output = folder / (name + (".exe" if os.name == "nt" else ""))
@@ -40,7 +45,7 @@ def main():
                 if result.stdout.replace(b"\r\n", b"\n") != expected or result.stderr:
                     raise RuntimeError(f"{name} {backend}: unexpected output "
                                        f"{result.stdout!r} {result.stderr!r}")
-                print(f"{name} {backend}: exact output PASS", flush=True)
+                print(f"{name} {ending} {backend}: exact output PASS", flush=True)
     return 0
 
 

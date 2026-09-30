@@ -3087,6 +3087,33 @@ allow = []
 
 **推导覆盖面**（状态：部分实现）：`requires` 目前只有 `no_semantic_alloc`、`no_suspend`、`no_throw`（semantic scope）与 `no_runtime_heap`（backend scope）由真实分析 pass 支撑。`no_block`、`no_thread_block`、`no_panic`、`no_abort` 所对应的语义 effect 位当前没有任何 pass 推导，因此 `xray verify` 拒绝这四项并报告"无推导来源"，而不是空真地通过。相应分析实现后，这四项才会被接受。
 
+#### 包拥有的声明承诺（实现待接通）
+
+项目或包可在其根目录的 `xray.toml` 中声明稳定的函数接口义务。该区与 `xray verify` 要求及 native provider 公理分开：每条 Xray 承诺必须在定义处由同一 Checked 检查器证明，不能从某次特化或被选函数的推导结果反向取得。
+
+```toml
+[declarations]
+version = 1
+
+[[declarations.function]]
+module = "src/worker.xr"
+name = "apply"
+no_suspend = true
+no_suspend_parameters = ["callback"]
+
+[[declarations.function]]
+module = "src/box.xr"
+owner = "Box"
+name = "get"
+no_suspend = true
+```
+
+没有 `declarations` 区表示没有此载体提供的显式承诺；存在时，必须包含整数 `version = 1` 和非空 `function` 记录数组。该区及记录中的未知字段、未知版本或错误类型均拒绝，不默默忽略。每条记录必须有非空 `module` 和 `name`；`owner` 省略表示顶层函数，出现时必须为非空且精确的声明名。`no_suspend` 只接受布尔 `true`；`no_suspend_parameters` 出现时必须为非空、无重复的显式参数名数组。每条记录至少提供函数自身义务或参数义务；同一 module/owner/name 只能有一条记录。
+
+`module` 是所属 authority 根内的、使用 `/` 的 `.xr` 逻辑文件路径，不是 import alias 或 canonical identity。绝对路径、反斜杠、空路径段、`.`、`..`、另一包的 namespace 及物理解析后越出根的路径均拒绝。参数名在定义处绑定，排除 instance receiver；缺失、歧义、非 callable 参数拒绝。当前载体支持顶层函数和精确名义 owner 下的普通 instance/static 方法；构造器、清理器和合成辅助函数不能由外部选择器命名。尚未准入的声明族及嵌套/返回 callable 限定不因本子集从语言目标中删除。
+
+每份 manifest 只约束它所属项目或包，消费者不能加强导入包的承诺，不向父目录搜索或继承另一份声明区。选择不给予私有访问、字段或构造权限，也不改变泛型定义处约束。全部显式记录都必须解析到实际定义并检查，包括未调用或未被当前入口 import 的目标；但额外的包级检查不能增加入口运行图中的初始化模块或副作用。Checked 发布身份保留已证明的义务，特化和生成内容复验不可以增删承诺。该公开载体尚未接通产品入口，不能把示例视为现有 CLI 已支持的配置。
+
 #### 完整可运行示例
 
 当匿名函数字面量直接处于已声明的 `no_suspend` callable 期望上下文时，该上下文为这个新函数建立必须验证的承诺。函数体在定义处按当前泛型约束检查，未知或可能挂起的调用均拒绝；特化不得补足缺失证明。捕获的普通 callable 不会因此获得承诺。该规则不添加源码效应注解，不把 `verify` 性能要求当作声明，也不允许将已构造的普通函数值按实现体推导强化；脱离受限上下文的匿名函数仍是普通 callable。

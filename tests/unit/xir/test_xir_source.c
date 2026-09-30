@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = xr_compiler_session_new(NULL);
     CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, NULL};
+    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirSourceDiagnostic diagnostic;
     XrXirSourceResult query_result_1 = {0};

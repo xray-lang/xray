@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
+#include "xir_module_forest_fixture.h"
+#include "xir_module_forest_cases.h"
 #include "xir_program_fixture.h"
 #include "xir_program_cases.h"
 #include "xir_capture_fixture.h"
@@ -264,6 +266,10 @@ static void array_mixed(void) {
     }
 }
 int main(void) {
+    CHECK(!module_forest_fixture(true));
+    XrXirArtifact *forest = module_forest_fixture(false); XrXirProgram *forest_program = NULL;
+    CHECK(xr_xir_vm_program_take(&forest, (XrXirProgramBudget){2097152,16000000}, &forest_program) == XR_XIR_OK);
+    module_forest_cases(forest_program);
     path_program_mixed();
     for (unsigned kind = 0; kind < 3; ++kind) {
         XrXirArtifact *artifact = path_program_fixture(kind); XrXirProgram *program = NULL;

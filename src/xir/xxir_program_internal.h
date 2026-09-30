@@ -22,6 +22,8 @@ struct XrXirProgram {
     uint32_t entry_count;
     XrXirDeclarations *declarations;
     uint32_t *order;
+    uint32_t initialization_count;
+    uint8_t *active_modules;
     uint32_t *module_slots;
     XrXirCodeLease code;
     XrXirTypeArena *arena;

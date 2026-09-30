@@ -57,19 +57,6 @@ XrXirStatus xr_xir_declarations_order(const XrXirDeclarations *d, uint32_t *orde
         done[best] = 1;
         order[step] = best;
     }
-    memset(done, 0, d->module_count);
-    done[d->root_module] = 1;
-    for (uint32_t i = d->module_count; i > 0; --i) {
-        uint32_t id = order[i - 1];
-        if (!declaration_spend(work, 1)) { status = XR_XIR_BUDGET; goto finish; }
-        if (!done[id]) continue;
-        for (uint32_t dep = 0; dep < d->modules[id].dependency_count; ++dep) {
-            if (!declaration_spend(work, 1)) { status = XR_XIR_BUDGET; goto finish; }
-            done[d->modules[id].dependencies[dep]] = 1;
-        }
-    }
-    for (uint32_t m = 0; m < d->module_count; ++m)
-        if (!done[m]) { status = XR_XIR_BAD_STRUCTURE; break; }
  finish:
     xr_free(done);
     return status;
