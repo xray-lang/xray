@@ -880,8 +880,22 @@ fn describe(s: Shape) -> string {
 - 实现类**必须**提供所有接口成员（方法同名同参同返回；属性同名同类型）。
 - 接口方法声明中的**返回类型可省略**（默认 `()`）。
 - 接口方法默认 `abstract`（无方法体）。
-- 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类必须有相应字段。
+- 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类型可提供同类型的字段或访问器。const 属性要求可读，普通属性要求可读可写；实现的读取/写入权限不能窄于对应接口要求。
 - 实现类可以提供额外的方法（接口仅定义最小集）。
+
+#### 方法要求身份与静态泛型见证
+
+接口身份由 canonical module 与声明名确定，接口应用另含有序类型实参。成员身份属于其原始接口声明；继承展开不创建新的身份。类型参数按所属声明和序号绑定。实现关系由名义类型声明中的显式 `implements` 建立，一个类型与一个接口应用至多声明一次；同名方法本身不证明实现关系。
+
+继承必须无环，包括未使用的声明。同源成员经相同类型替换到达时去重；不同来源的同名成员仅在完整合同完全相同时合并查找，同时保留全部实现义务。合同包括成员种类、receiver、参数数目/模式/类型、结果类型与 callable 承诺；不相同则拒绝歧义，不按继承、约束或导入顺序挑选。重新声明继承成员同样须精确匹配。参数名字不参与签名比较，但 manifest 按各声明自己的参数名字绑定。
+
+实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
+
+泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，其效应由公开合同给出，未承诺者按未知 callable 上界处理；实现须在定义处证明这些义务。
+
+Checked 拥有约束、接口应用、要求身份和显式实现映射。单态化只选择已证明的见证，转换为普通调用并复验后进入 Lowered；不得重新按具体类型的成员名猜选实现。普通实例在不可变 Program 封存前完成，无运行时泛型字典或未解见证 fallback。此规则不取消接口值及可覆写 class 方法的动态分派。
+
+这些是目标合同，当前新 XIR 尚未接通接口见证。首个接入族为普通 read receiver 方法、显式 struct 实现与泛型成员调用；属性、其他 receiver、泛型方法、class/override 和接口值仍须分别实现和验证，未接通的表面明确拒绝。
 
 ```xray
 // 属性签名 + 接口继承
@@ -2106,8 +2120,22 @@ fn describe(s: Shape) -> string {
 - The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
 - **Return types in interface method declarations may be omitted** (default `()`).
 - Interface methods are `abstract` by default (no body).
-- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type must provide a corresponding field.
+- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type may provide a field or accessors of the same type. A const property requires reading; an ordinary property requires reading and writing. Implementation read/write access cannot be narrower than the corresponding interface requirement.
 - Implementing types may add additional methods (the interface defines the minimum surface).
+
+#### Method Requirement Identity and Static Generic Witnesses
+
+An interface is identified by its canonical module and declaration name; an application additionally includes ordered type arguments. A member belongs to its original interface declaration; expanding inheritance creates no new identity. Type parameters bind by owning declaration and ordinal. Explicit `implements` on the nominal declaration establishes conformance, with at most one declaration per type and interface application; a same-named method alone proves no conformance.
+
+Inheritance must be acyclic, including unused declarations. The same originating member under the same substitution is deduplicated; same-named members from different origins merge for lookup only when their complete contracts are identical, retaining every implementation obligation. Contracts include member kind, receiver, parameter count/modes/types, result type and callable promises. A mismatch rejects as ambiguous, without choosing by inheritance, constraint or import order. Redeclaring an inherited member also requires an exact match. Parameter names do not affect signature equality, but each declaration's manifest binds its own parameter names.
+
+A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. No general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
+
+Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its public contract bounds effects, with undeclared effects using the unknown-callable upper bound. Implementations prove these obligations at definition time.
+
+Checked owns constraints, interface applications, requirement identities and explicit implementation maps. Monomorphization selects only proved witnesses, converts them to ordinary calls and rechecks before Lowered; it cannot guess an implementation by looking up the concrete type's member name again. Ordinary instances complete before immutable Program sealing, without runtime generic dictionaries or unresolved-witness fallback. This rule does not remove dynamic dispatch for interface values or overridable class methods.
+
+These are target contracts; the new XIR does not yet admit interface witnesses. The first admission family is ordinary read-receiver methods, explicit struct implementations and generic member calls. Properties, other receivers, generic methods, class/override and interface values still require separate implementation and verification; unimplemented surfaces reject explicitly.
 
 ```xray
 // property signatures + interface inheritance

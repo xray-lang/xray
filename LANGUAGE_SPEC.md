@@ -3608,8 +3608,22 @@ fn describe(s: Shape) -> string {
 - The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
 - **Return types in interface method declarations may be omitted** (default `()`).
 - Interface methods are `abstract` by default (no body).
-- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type must provide a corresponding field.
+- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type may provide a field or accessors of the same type. A const property requires reading; an ordinary property requires reading and writing. Implementation read/write access cannot be narrower than the corresponding interface requirement.
 - Implementing types may add additional methods (the interface defines the minimum surface).
+
+#### Method Requirement Identity and Static Generic Witnesses
+
+An interface is identified by its canonical module and declaration name; an application additionally includes ordered type arguments. A member belongs to its original interface declaration; expanding inheritance creates no new identity. Type parameters bind by owning declaration and ordinal. Explicit `implements` on the nominal declaration establishes conformance, with at most one declaration per type and interface application; a same-named method alone proves no conformance.
+
+Inheritance must be acyclic, including unused declarations. The same originating member under the same substitution is deduplicated; same-named members from different origins merge for lookup only when their complete contracts are identical, retaining every implementation obligation. Contracts include member kind, receiver, parameter count/modes/types, result type and callable promises. A mismatch rejects as ambiguous, without choosing by inheritance, constraint or import order. Redeclaring an inherited member also requires an exact match. Parameter names do not affect signature equality, but each declaration's manifest binds its own parameter names.
+
+A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. No general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
+
+Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its public contract bounds effects, with undeclared effects using the unknown-callable upper bound. Implementations prove these obligations at definition time.
+
+Checked owns constraints, interface applications, requirement identities and explicit implementation maps. Monomorphization selects only proved witnesses, converts them to ordinary calls and rechecks before Lowered; it cannot guess an implementation by looking up the concrete type's member name again. Ordinary instances complete before immutable Program sealing, without runtime generic dictionaries or unresolved-witness fallback. This rule does not remove dynamic dispatch for interface values or overridable class methods.
+
+These are target contracts; the new XIR does not yet admit interface witnesses. The first admission family is ordinary read-receiver methods, explicit struct implementations and generic member calls. Properties, other receivers, generic methods, class/override and interface values still require separate implementation and verification; unimplemented surfaces reject explicitly.
 
 ```xray
 // property signatures + interface inheritance
