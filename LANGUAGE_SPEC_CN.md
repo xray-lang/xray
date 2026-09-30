@@ -3776,7 +3776,7 @@ Color.Red.ordinal     // 0              声明顺序 tag (i64，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
-enum 值提供 `name`、`ordinal` 与 `toString()`。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
+enum 值提供 `name`、`ordinal` 与 `toString()`。name只返回活动变体的声明名，toString只返回原enum声明名和活动变体名，不附加泛型实参、不读取或格式化payload、不调用载荷回调。两者按原类型与成员权限检查，不能授予构造权限或隐式Stringable见证；描述查询也不能补足原泛型约束。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
 
 #### 5.6.5 遍历
 

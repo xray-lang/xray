@@ -3791,7 +3791,7 @@ Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
-Enum values provide `name`, `ordinal`, and `toString()`. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
+Enum values provide `name`, `ordinal`, and `toString()`. name returns the active variant declaration name; toString returns only the original enum declaration name and active variant name. Neither appends generic arguments, reads or formats payloads, or invokes payload callbacks. Original type and member permissions still apply; these operations grant no construction authority or implicit Stringable witness, and descriptive queries cannot supply missing generic premises. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
 
 #### 5.6.5 Iteration
 

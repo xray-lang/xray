@@ -24,6 +24,7 @@
 #include "xir_source_method_promises.h"
 #include "xir_source_witness_promises.h"
 #include "xir_source_requirement_value_promises.h"
+#include "xir_source_enum_identity_promises.h"
 #include "xir_source_requirement_value_ownership.h"
 #include "xir_source_generic_requirement_promises.h"
 #include "xir_source_inference_promises.h"
@@ -228,6 +229,7 @@ int main(int argc, char **argv) {
     source_interface_method_where_promises(&request, argc == 2 ? argv[1] : NULL);
     source_requirement_value_promises(&request, argc == 2 ? argv[1] : NULL);
     source_requirement_value_ownership(&request);
+    source_enum_identity_promises(&request);
     source_declared_input(&request, &result); source_promise_retained(result.checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);

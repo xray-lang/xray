@@ -396,8 +396,12 @@ static void method_promise_allocations(XrCompilerSession *session) {
 #include "xir_implementation_query_allocations.h"
 #include "xir_generic_method_query_allocations.h"
 #include "xir_source_requirement_value_allocations.h"
+#include "xir_source_enum_identity_allocations.h"
 #include "xir_source_inference_allocations.h"
+#include "xir_source_plan_budget_cases.h"
 int main(void) {
+    source_plan_context_cases();
+    source_plan_conversion_budget_cases();
     generic_method_query_allocations();
     implementation_query_allocations();
     constraint_query_allocations();
@@ -437,6 +441,7 @@ int main(void) {
     array_source_allocations(session);
     method_promise_allocations(session);
     source_requirement_value_allocations(session);
+    source_enum_identity_allocations(session);
     inference_source_allocations(session);
     xr_compiler_session_delete(session);
     printf("Source-owner allocation failures: %zu; no partial artifact or live metadata\n", count);

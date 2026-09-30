@@ -1,0 +1,5 @@
+import { Box } from "./enum_identity_decl"
+const calls=Atomic(0)
+export fn identityCount()->i64{return calls.load()}
+export fn identityTouch()->Box<string>{calls.fetchAdd(1);return Box<string>.Full{value:"payload"}}
+export fn identityCallback()->string{calls.fetchAdd(100);Coro.yield();return "must not run"}

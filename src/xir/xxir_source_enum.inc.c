@@ -35,7 +35,7 @@ static bool source_enum_fields(SourceContext *ctx) {
             count += (uint32_t)member->as.enum_member.payload_count;
         }
         XrXirNominalVariant *variants = source_alloc(ctx, (uint32_t)source->member_count, sizeof(*variants));
-        uint32_t *variant_ids = source_alloc(ctx, (uint32_t)source->member_count + 1, sizeof(*variant_ids));
+        uint32_t *variant_ids = source_alloc(ctx, (uint32_t)source->member_count + 3, sizeof(*variant_ids));
         XrXirNominalField *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
         XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
         uint32_t *members = count ? source_alloc(ctx, count, sizeof(*members)) : NULL;
@@ -70,6 +70,15 @@ static bool source_enum_fields(SourceContext *ctx) {
         if (!ordinal.name || !source_query_declare(ctx, &ordinal, XR_XIR_SOURCE_INTRINSIC, owner->declaration,
             (XrXirSourceRange) {ctx->module,0,0,0,0})) return false;
         source_query_binding_type(ctx, &ordinal); variant_ids[record->variant_count] = ordinal.declaration;
+        const char *text_names[] = {"name", "toString"};
+        for (uint32_t intrinsic = 0; intrinsic < 2; ++intrinsic) {
+            SourceName text = {0}; text.name = source_owned_text(ctx, text_names[intrinsic]); text.type = XR_XIR_STRING;
+            if (!source_work(ctx, owner->node) || !text.name ||
+                !source_query_declare(ctx, &text, XR_XIR_SOURCE_INTRINSIC, owner->declaration,
+                    (XrXirSourceRange) {ctx->module,0,0,0,0})) return false;
+            source_query_binding_type(ctx, &text);
+            variant_ids[record->variant_count + intrinsic + 1] = text.declaration;
+        }
         XrXirTypeNode *type = (XrXirTypeNode *)&ctx->types.nodes[(uint32_t)owner->type - XR_XIR_CONSTRUCTED_TYPE_BASE];
         type->nominal.fields = types; type->nominal.field_count = count;
         ctx->type_scope = (SourceTypeScope){0};

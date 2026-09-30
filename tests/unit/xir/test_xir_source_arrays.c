@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     XrXirArtifact *checked = result.checked; result.checked = NULL;
     xr_compiler_session_delete(session);
     const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
-    unsigned members = 0, nominal_members = 0, length = 0, ordinals = 0;
+    unsigned members = 0, nominal_members = 0, length = 0, ordinals = 0, names = 0, texts = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
         const XrXirSourceDeclaration *decl = &view->declarations[d];
         if (decl->kind == XR_XIR_SOURCE_MEMBER && decl->native_identity) {
@@ -45,10 +45,18 @@ int main(int argc, char **argv) {
             CHECK(decl->parameter_count == 1 && !decl->parameters[0].known); ++length;
         }
         if (decl->kind == XR_XIR_SOURCE_INTRINSIC && !decl->native_identity) {
-            CHECK(!strcmp(decl->name, "ordinal")); ++ordinals;
+            const XrXirSourceDeclaration *owner = NULL;
+            for (uint32_t parent = 0; parent < view->declaration_count; ++parent)
+                if (view->declarations[parent].id == decl->parent) owner = &view->declarations[parent];
+            CHECK(owner && owner->kind == XR_XIR_SOURCE_TYPE && !strcmp(owner->name,"ItemChoice"));
+            CHECK(decl->type.known && !decl->parameter_count);
+            if (!strcmp(decl->name,"ordinal")) { CHECK(decl->type.type == XR_XIR_I64); ++ordinals; }
+            else if (!strcmp(decl->name,"name")) { CHECK(decl->type.type == XR_XIR_STRING); ++names; }
+            else { CHECK(!strcmp(decl->name,"toString") && decl->type.type == XR_XIR_STRING); ++texts; }
         }
     }
-    CHECK(members == 3 && nominal_members == 5 && length == 1 && ordinals == 1); xr_xir_source_result_free(&result);
+    CHECK(members == 3 && nominal_members == 5 && length == 1 && ordinals == 1 && names == 1 && texts == 1);
+    xr_xir_source_result_free(&result);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
     if (argc == 3) {

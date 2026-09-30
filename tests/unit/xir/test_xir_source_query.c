@@ -777,6 +777,7 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_enum_witness_cases.h"
 #include "xir_witness_provenance_cases.h"
 #include "xir_source_generic_requirement_cases.h"
+#include "xir_source_enum_identity_cases.h"
 #include "xir_source_requirement_value_cases.h"
 #include "xir_source_result_inference_cases.h"
 #include "xir_source_contextual_lambda_cases.h"
@@ -801,6 +802,8 @@ int main(void) {
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
     source_generic_requirement_positive(&request);
     source_requirement_value_positive(&request);
+    source_enum_identity_cases(&request);
+
     source_requirement_value_negative(&request);
     source_result_inference_cases(&request);
     source_generic_requirement_rejections(&request);

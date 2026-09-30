@@ -1,0 +1,7 @@
+import { identityNumber, identityTextResult, identityLongResult, identityNameResult } from "./enum_identity_reader"
+import { identityCount } from "./enum_identity_value"
+export fn enumIdentityNumber()->i64{return identityNumber()}
+export fn enumIdentityText()->string{return identityTextResult()}
+export fn enumIdentityLong()->string{return identityLongResult()}
+export fn enumIdentityName()->string{return identityNameResult()}
+export fn enumIdentityCount()->i64{return identityCount()}

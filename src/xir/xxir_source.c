@@ -496,28 +496,8 @@ static bool emit_raw(SourceContext *ctx, XrXirInstruction op, SourceValue *resul
 #include "xxir_source_invoke.inc.c"
 static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool expression_in(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value);
-static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
-    if (!expected || value->type == expected) return true;
-    if (xr_xir_type_is_callable(&ctx->types, expected) && xr_xir_type_is_callable(&ctx->types, value->type)) {
-        XrXirStatus status = xr_xir_callable_weakening(&ctx->types, value->type, expected, &ctx->budget.work);
-        if (status != XR_XIR_OK) return source_fail(ctx, node, status, "callable conversion may only discard its top-level promise");
-        return emit(ctx, (XrXirInstruction){XR_XIR_FUNCTION_WEAKEN, expected, {value->id, 0}, {0}, 0, {0}}, value);
-    }
-    if (expected == XR_XIR_ERROR) {
-        XrXirDeclarations declarations;
-        XrXirModule module = source_module_view(ctx,&declarations);
-        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status = xr_xir_type_markers_prove(&context,value->type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
-        if (status != XR_XIR_OK) return source_fail(ctx, node, status, "Error conversion requires an enum proof");
-        return emit(ctx, (XrXirInstruction) {XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {value->id, 0}, {0}, 0, {0}}, value);
-    }
-    if (!(value->type == XR_XIR_F32 && expected == XR_XIR_F64) &&
-        (!xr_xir_type_is_integer(value->type) || !xr_xir_type_is_integer(expected) ||
-         xr_xir_integer_signed(value->type) != xr_xir_integer_signed(expected) ||
-         xr_xir_integer_bits(value->type) > xr_xir_integer_bits(expected)))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "expression cannot satisfy its declared type");
-    return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_NUMBER, expected, {value->id, 0}, {0}, 0, {0}}, value);
-}
+#include "xxir_source_conversion.inc.c"
+
 typedef struct SourceInteger { bool present, negative; uint64_t magnitude; } SourceInteger;
 static bool source_direct_integer(SourceContext *ctx, AstNode *node, SourceInteger *literal) {
     *literal = (SourceInteger) {0};
@@ -561,13 +541,6 @@ static bool source_decimal_payload(SourceContext *ctx, const SourceDecimal *lite
     if (literal->negative) *bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
     return true;
 }
-static bool source_decimal(SourceContext *ctx, const SourceDecimal *literal, XrXirType expected, SourceValue *value) {
-    XrXirType type = xr_xir_float_bits(expected) ? expected : XR_XIR_F64;
-    uint64_t bits;
-    if (!source_decimal_payload(ctx,literal,type,&bits)) return false;
-    int64_t payload; memcpy(&payload, &bits, sizeof(payload));
-    return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_FLOAT, type, {0}, {0}, payload, {0}}, value);
-}
 static bool source_integer_float_payload(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
     XrXirType type, uint64_t *bits) {
     int64_t magnitude; memcpy(&magnitude, &literal->magnitude, sizeof(magnitude));
@@ -580,13 +553,6 @@ static bool source_integer_float_payload(SourceContext *ctx, AstNode *node, cons
     if (literal->negative) *bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
     return true;
 }
-static bool source_integer_float(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
-    XrXirType type, SourceValue *value) {
-    uint64_t bits;
-    if (!source_integer_float_payload(ctx,node,literal,type,&bits)) return false;
-    int64_t payload; memcpy(&payload, &bits, sizeof(payload));
-    return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_FLOAT, type, {0}, {0}, payload, {0}}, value);
-}
 static bool source_integer_payload(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
     XrXirType type, uint64_t *bits) {
     uint32_t width = xr_xir_integer_bits(type);
@@ -598,15 +564,7 @@ static bool source_integer_payload(SourceContext *ctx, AstNode *node, const Sour
     *bits = literal->negative ? UINT64_C(0) - literal->magnitude : literal->magnitude;
     return true;
 }
-static bool source_integer(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
-    XrXirType expected, SourceValue *value) {
-    if (xr_xir_float_bits(expected)) return source_integer_float(ctx, node, literal, expected, value);
-    XrXirType type = xr_xir_type_is_integer(expected) ? expected : XR_XIR_I64;
-    uint64_t bits;
-    if (!source_integer_payload(ctx,node,literal,type,&bits)) return false;
-    int64_t payload = bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) (UINT64_MAX - bits);
-    return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, type, {0}, {0}, payload, {0}}, value);
-}
+#include "xxir_source_numeric_plan.inc.c"
 static bool emit_group(SourceContext *ctx, XrXirInstruction op, const SourceValue *args,
                        uint32_t count, SourceValue *value) {
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -708,6 +666,7 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 }
 #include "xxir_source_arguments.inc.c"
 #include "xxir_source_inference_result.inc.c"
+#include "xxir_source_call_plan.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 #include "xxir_source_array.inc.c"
@@ -716,7 +675,23 @@ static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
 #include "xxir_source_path.inc.c"
+static bool source_string_literal(SourceContext *ctx, AstNode *node, const char *bytes,
+    size_t length, SourceValue *value) {
+    if (ctx->literal_count == ctx->literal_capacity) {
+        uint32_t capacity = ctx->literal_capacity ? ctx->literal_capacity * 2 : 16;
+        if (capacity < ctx->literal_capacity) return source_fail(ctx, node, XR_XIR_BUDGET, "literal capacity overflow");
+        XrXirLiteral *literals = source_alloc(ctx, capacity, sizeof(*literals));
+        if (!literals) return false;
+        if (ctx->literal_count) memcpy(literals, ctx->literals, ctx->literal_count * sizeof(*literals));
+        ctx->literals = literals; ctx->literal_capacity = capacity;
+    }
+    if (length > UINT32_MAX) return source_fail(ctx, node, XR_XIR_BUDGET, "string literal exceeds format limit");
+    uint32_t id = ctx->literal_count++;
+    ctx->literals[id] = (XrXirLiteral) {bytes, (uint32_t) length};
+    return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_STRING, XR_XIR_STRING, {0, 0}, {0, 0}, id, {0}}, value);
+}
 #include "xxir_source_enum.inc.c"
+#include "xxir_source_enum_text.inc.c"
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_panic.inc.c"
@@ -780,6 +755,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, XrXirType result_cont
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
+            if (xr_xir_type_is_enum(&ctx->types, receiver.type) && !strcmp(member->name, "toString")) {
+                if (call->arg_count || call->type_arg_count)
+                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum toString accepts no value or type arguments");
+                return source_enum_text(ctx, callee, receiver, true, value);
+            }
             if (receiver.type == XR_XIR_PANIC_INFO)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo methods require class support");
             if ((uint32_t)receiver.type >= XR_XIR_TYPE_PARAMETER_BASE &&
@@ -870,22 +850,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, XrXirType result_cont
     return emit(ctx, op, value);
 }
 static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    if (node->type == AST_LITERAL_STRING) {
-        if (ctx->literal_count == ctx->literal_capacity) {
-            uint32_t capacity = ctx->literal_capacity ? ctx->literal_capacity * 2 : 16;
-            if (capacity < ctx->literal_capacity) return source_fail(ctx, node, XR_XIR_BUDGET, "literal capacity overflow");
-            XrXirLiteral *literals = source_alloc(ctx, capacity, sizeof(*literals));
-            if (!literals) return false;
-            if (ctx->literal_count) memcpy(literals, ctx->literals, ctx->literal_count * sizeof(*literals));
-            ctx->literals = literals; ctx->literal_capacity = capacity;
-        }
-        const char *bytes = node->as.literal.raw_value.string_val;
-        size_t length = node->as.literal.string_length;
-        if (length > UINT32_MAX) return source_fail(ctx, node, XR_XIR_BUDGET, "string literal exceeds format limit");
-        uint32_t id = ctx->literal_count++;
-        ctx->literals[id] = (XrXirLiteral) {bytes, (uint32_t) length};
-        return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_STRING, XR_XIR_STRING, {0, 0}, {0, 0}, id, {0}}, value);
-    }
+    if (node->type == AST_LITERAL_STRING)
+        return source_string_literal(ctx, node, node->as.literal.raw_value.string_val,
+            node->as.literal.string_length, value);
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0},
         node->as.literal.raw_value.bool_val, {0}}, value);
 }
