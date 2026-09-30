@@ -60,7 +60,7 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
         ctx->functions[index] = (XrXirFunction) {"$default", 8, NULL, 0, symbol->type, NULL, 0, NULL, 0, NULL, 0};
         ctx->bodies[index].node = symbol->node; ctx->bodies[index].module = symbol->module;
         ctx->bodies[index].declaration = symbol->declaration;
-        source_struct_function_scope(ctx, index, symbol);
+        if (!source_nominal_function_scope(ctx,index,symbol)) return false;
         ctx->identities[index] = (XrXirFunctionIdentity) {symbol->module, ctx->nominals.declarations[d].exported, d + 1, 0, 0, 0, XR_XIR_CONSTRUCTOR};
     }
     return true;

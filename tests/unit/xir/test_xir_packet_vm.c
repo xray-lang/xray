@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
-    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX, numeric_pause = UINT32_MAX, bound_result = UINT32_MAX, witness_result = UINT32_MAX;
+    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX, numeric_pause = UINT32_MAX, bound_result = UINT32_MAX, witness_result = UINT32_MAX, enum_witness_result = UINT32_MAX, enum_generic_witness_result = UINT32_MAX;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) result = i;
         if (module->functions[i].name_length == 9 && !memcmp(module->functions[i].name, "calculate", 9)) calculate = i;
@@ -49,17 +49,20 @@ int main(int argc, char **argv) {
         if (module->functions[i].name_length == 12 && !memcmp(module->functions[i].name, "numericPause", 12)) numeric_pause = i;
         if (module->functions[i].name_length == 11 && !memcmp(module->functions[i].name, "boundResult", 11)) bound_result = i;
         if (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "witnessResult", 13)) witness_result = i;
+        if (module->functions[i].name_length == 17 && !memcmp(module->functions[i].name, "enumWitnessResult", 17)) enum_witness_result = i;
+        if (module->functions[i].name_length == 24 && !memcmp(module->functions[i].name, "enumGenericWitnessResult", 24)) enum_generic_witness_result = i;
         if (module->functions[i].name_length == 7 && !memcmp(module->functions[i].name, "advance", 7)) advance = i;
     }
-    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX && bound_result != UINT32_MAX && witness_result != UINT32_MAX);
+    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX && bound_result != UINT32_MAX && witness_result != UINT32_MAX && enum_witness_result != UINT32_MAX && enum_generic_witness_result != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirCSource source;
     CHECK(xr_xir_emit_c(lowered, "fixture_source", 524288, &source) == XR_XIR_BUDGET);
     CHECK(!source.text && !source.length);
-    XrXirStatus emitted = xr_xir_emit_c(lowered, "fixture_source", 4194304, &source);
+    XrXirStatus emitted = xr_xir_emit_c(lowered, "fixture_source", 8388608, &source);
     if (emitted != XR_XIR_OK) fprintf(stderr, "Native source emission failed: %u, functions: %u\n", (unsigned)emitted, module->function_count);
     CHECK(emitted == XR_XIR_OK);
     CHECK(source.length > 524288);
+    printf("Native source fixture: %zu bytes for %u functions\n",source.length,module->function_count);
     if (argc >= 2) {
         file = fopen(argv[1], "wb"); CHECK(file);
         CHECK(fwrite(source.text, 1, source.length, file) == source.length);
@@ -69,14 +72,16 @@ int main(int argc, char **argv) {
         CHECK(fprintf(file, "const uint32_t fixture_source_numeric_pause = %uu;\n", numeric_pause) > 0);
         CHECK(fprintf(file, "const uint32_t fixture_source_bound_result = %uu;\n", bound_result) > 0);
         CHECK(fprintf(file, "const uint32_t fixture_source_witness_result = %uu;\n", witness_result) > 0);
+        CHECK(fprintf(file, "const uint32_t fixture_source_enum_witness_result = %uu;\n", enum_witness_result) > 0);
+        CHECK(fprintf(file, "const uint32_t fixture_source_enum_generic_witness_result = %uu;\n", enum_generic_witness_result) > 0);
         CHECK(fclose(file) == 0);
     }
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {33554432, 64000000}, &program) == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result}, results);
-    runtime_source_failures(program, entry, resume_text, numeric_pause);
+    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result, enum_witness_result, enum_generic_witness_result}, results);
+    runtime_source_failures(program, entry, resume_text, numeric_pause, enum_witness_result, enum_generic_witness_result);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Source-free Checked consumer matched independent VM expectations and emitted native C");

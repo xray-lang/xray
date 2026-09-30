@@ -156,17 +156,43 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
             method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) &&
         emit_group(ctx, op, &receiver, 1, value);
 }
-static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
+/* Builtin collisions are specific to the enum access domain. */
+static bool source_enum_method_name(SourceContext *ctx, SourceName *owner, AstNode *node) {
+    MethodDeclNode *method = &node->as.method_decl;
+    const char *name = method->name;
+    if (!source_work(ctx,node) || !name) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"enum method name is missing");
+    size_t length = strlen(name);
+    if (length > ctx->budget.work) return source_fail(ctx,node,XR_XIR_BUDGET,"enum method name budget exhausted");
+    ctx->budget.work -= length;
+    if ((!method->is_static && (!strcmp(name,"name") || !strcmp(name,"ordinal") || !strcmp(name,"toString"))) ||
+        (method->is_static && !strcmp(name,"variants")))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method conflicts with enum builtin member");
+    const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[owner->index];
+    for (uint32_t v = 0; v < declaration->variant_count; ++v) {
+        if (!source_work(ctx,node)) return false;
+        const XrXirLiteral *variant = &declaration->variants[v].name;
+        if (variant->length > ctx->budget.work) return source_fail(ctx,node,XR_XIR_BUDGET,"enum variant name budget exhausted");
+        ctx->budget.work -= variant->length;
+        if (length == variant->length && !memcmp(name,variant->bytes,variant->length))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum method conflicts with variant");
+    }
+    return true;
+}
+static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->node->type != AST_STRUCT_DECL) continue;
-        ClassDeclNode *decl = &owner->node->as.struct_decl;
+        bool enumeration = owner->node->type == AST_ENUM_DECL;
+        SourceNominalDeclaration declaration;
+        if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;
         ctx->module = owner->module;
-        for (int m = 0; m < decl->method_count; ++m) {
-            AstNode *node = decl->methods[m];
-            if (!source_work(ctx, node) || node->type != AST_METHOD_DECL) return false;
+        for (int m = 0; m < declaration.method_count; ++m) {
+            AstNode *node = declaration.methods[m];
+            if (!source_work(ctx,node)) return false;
+            if (!node || node->type != AST_METHOD_DECL)
+                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nominal method declaration is malformed");
             MethodDeclNode *method = &node->as.method_decl;
             if (method->is_constructor) {
+                if (enumeration) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum variants provide construction");
                 if (!source_constructor_declare(ctx, owner, node, next)) return false;
                 continue;
             }
@@ -176,10 +202,15 @@ static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
                 method->attr_count || method->borrow_origin_count ||
                 method->borrow_origin_syntax || !method->body || method->param_count < 0 || method->param_count >= 65536)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method declaration contract is not admitted");
-            for (int f = 0; f < decl->field_count; ++f) {
-                if (!source_work(ctx, node)) return false;
-                if (!strcmp(method->name, decl->fields[f]->as.field_decl.name))
-                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field and method names must be distinct");
+            if (enumeration) {
+                if (!source_enum_method_name(ctx,owner,node)) return false;
+            } else {
+                ClassDeclNode *decl = &owner->node->as.struct_decl;
+                for (int f = 0; f < decl->field_count; ++f) {
+                    if (!source_work(ctx,node)) return false;
+                    if (!strcmp(method->name,decl->fields[f]->as.field_decl.name))
+                        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"field and method names must be distinct");
+                }
             }
             SourceName *symbol = add_name(ctx, &ctx->nominal_methods[d], method->name, node);
             if (!symbol) return false;
@@ -188,7 +219,7 @@ static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
             uint32_t index = (*next)++; ctx->function = index;
             symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = owner->module;
             SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
-            source_struct_function_scope(ctx, index, owner);
+            if (!source_nominal_function_scope(ctx,index,owner)) return false;
             if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
                 source_query_range(ctx, node, method->name))) return false;
             body->declaration = symbol->declaration;

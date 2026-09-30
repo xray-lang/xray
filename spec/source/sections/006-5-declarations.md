@@ -895,7 +895,7 @@ fn describe(s: Shape) -> string {
 
 Checked 拥有约束、接口应用、要求身份和显式实现映射。单态化只选择已证明的见证，转换为普通调用并复验后进入 Lowered；不得重新按具体类型的成员名猜选实现。普通实例在不可变 Program 封存前完成，无运行时泛型字典或未解见证 fallback。此规则不取消接口值及可覆写 class 方法的动态分派。
 
-当前新 XIR 已接通普通 read receiver 方法、显式 struct 实现与定义处泛型成员调用：Checked 保存原要求身份及实现映射，在 Checked 上选择见证、特化并复验后进入 Lowered。泛型 struct 的实现受其名义声明前提约束，方法额外条件不得补足缺失的类型前提。该子集已有 Windows VM/native 独立预期验证，不代表完整声明族或全部安全资格完成。属性、其他 receiver、接口泛型方法、enum 方法实现、class/override 和接口值仍须分别实现和验证，未接通的表面明确拒绝；上述语言目标不因此缩减。
+当前新 XIR 已接通普通 read receiver 方法、显式 struct/enum 实现与定义处泛型成员调用：Checked 保存原要求身份及实现映射，在 Checked 上选择见证、特化并复验后进入 Lowered。泛型 struct/enum 的实现受其名义声明前提约束，方法额外条件不得补足缺失的类型前提。enum 普通 READ/static 方法复用名义方法机制，载荷先经 match 解构；方法及内建成员碰撞按 §5.6.7 在声明处拒绝。该子集已有 Windows VM/native 独立预期验证，不代表完整声明族或全部安全资格完成。属性、其他 receiver、接口泛型方法、未接通的 enum name/toString/variants 消费、class/override 和接口值仍须分别实现和验证，未接通的表面明确拒绝；上述语言目标不因此缩减。
 
 ```xray
 // 属性签名 + 接口继承
@@ -1123,6 +1123,8 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 ```
 
 #### 5.6.7 enum 方法
+
+枚举的类型访问域与值访问域分别解析成员。值访问域的内建 `name`、`ordinal` 属性及 `toString` 方法不能被用户实例方法替换；类型访问域的内建 `variants` 成员不能被变体或用户 static 方法替换。这些标识符不作全局保留：在不违反其他唯一性规则时，允许名为 `name`、`ordinal`、`toString` 的变体或 static 方法，以及名为 `variants` 的实例方法。同一枚举内，所有用户方法名唯一，static 与实例方法不能以同名构成重载；任何用户方法也不能与变体同名。碰撞在声明处拒绝，不因使用方采用属性访问、调用或方法取值而选择不同含义。内建成员名本身不建立接口实现关系，也不自动提供见证。
 
 `enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
 
@@ -2135,7 +2137,7 @@ Generic constraints conjoin markers and interface applications, with identical d
 
 Checked owns constraints, interface applications, requirement identities and explicit implementation maps. Monomorphization selects only proved witnesses, converts them to ordinary calls and rechecks before Lowered; it cannot guess an implementation by looking up the concrete type's member name again. Ordinary instances complete before immutable Program sealing, without runtime generic dictionaries or unresolved-witness fallback. This rule does not remove dynamic dispatch for interface values or overridable class methods.
 
-New XIR now admits ordinary read-receiver methods, explicit struct implementations, and generic member calls checked at definition time. Checked retains original requirement identities and implementation mappings; witness selection and specialization occur on Checked and are reverified before Lowered. Generic struct implementations depend on their nominal declaration premises; additional method conditions cannot supply missing type premises. This subset has Windows VM/native validation against independent expectations, without claiming complete declaration-family or safety qualification. Properties, other receivers, generic interface methods, enum method implementations, class/override, and interface values still require separate implementation and verification. Unimplemented surfaces reject explicitly; these language objectives remain unchanged.
+New XIR now admits ordinary read-receiver methods, explicit struct/enum implementations, and generic member calls checked at definition time. Checked retains original requirement identities and implementation mappings; witness selection and specialization occur on Checked and are reverified before Lowered. Generic struct/enum implementations depend on their nominal declaration premises; additional method conditions cannot supply missing type premises. Ordinary enum READ/static methods reuse nominal method production and require match before payload extraction; method and builtin member collisions reject at declaration time under §5.6.7. This subset has Windows VM/native validation against independent expectations, without claiming complete declaration-family or safety qualification. Properties, other receivers, generic interface methods, unimplemented enum name/toString/variants consumers, class/override, and interface values still require separate implementation and verification. Unimplemented surfaces reject explicitly; these language objectives remain unchanged.
 
 ```xray
 // property signatures + interface inheritance
@@ -2363,6 +2365,8 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 ```
 
 #### 5.6.7 Enum methods
+
+An enum resolves members separately in its type-access and value-access domains. The value-domain builtin properties `name` and `ordinal`, and builtin method `toString`, cannot be replaced by user instance methods. The type-domain builtin member `variants` cannot be replaced by a variant or a user static method. These identifiers are not globally reserved: subject to the other uniqueness rules, variants and static methods named `name`, `ordinal`, or `toString`, and instance methods named `variants`, are allowed. All user method names within one enum are unique; static and instance methods cannot form a same-name overload. No user method may share a name with a variant. Collisions reject at declaration time, rather than choosing a meaning according to whether a use reads a property, calls a method, or takes a method value. A builtin member name establishes neither interface conformance nor an automatic witness.
 
 Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
 

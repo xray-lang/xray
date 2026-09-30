@@ -1580,11 +1580,16 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_FUNCTION_DECL) ++functions;
             if (node->type == AST_INTERFACE_DECL) ++interfaces;
             if (node->type == AST_STRUCT_DECL || node->type == AST_ENUM_DECL) ++nominals;
+            if (node->type == AST_STRUCT_DECL || node->type == AST_ENUM_DECL) {
+                SourceNominalDeclaration declaration;
+                if (!source_nominal_declaration(ctx,node,&declaration)) return false;
+                if (functions > ctx->budget.functions || declaration.method_count < 0 ||
+                    (uint32_t)declaration.method_count > ctx->budget.functions - functions)
+                    return source_fail(ctx,node,XR_XIR_BUDGET,"method function budget exhausted");
+                functions += (uint32_t)declaration.method_count;
+            }
             if (node->type == AST_STRUCT_DECL) {
                 ClassDeclNode *decl = &node->as.struct_decl;
-                if (functions > ctx->budget.functions || decl->method_count < 0 || (uint32_t)decl->method_count > ctx->budget.functions - functions)
-                    return source_fail(ctx, node, XR_XIR_BUDGET, "method function budget exhausted");
-                functions += (uint32_t)decl->method_count;
                 for (int f = 0; f < decl->field_count; ++f) {
                     if (!source_work(ctx, decl->fields[f])) return false;
                     if (decl->fields[f]->type == AST_FIELD_DECL && decl->fields[f]->as.field_decl.initializer) {
@@ -1669,7 +1674,7 @@ static bool collect_declarations(SourceContext *ctx) {
             }
         }
     }
-    if (!source_struct_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || !source_argument_functions(ctx, &function) || function != ctx->first_closure)
+    if (!source_nominal_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || !source_argument_functions(ctx, &function) || function != ctx->first_closure)
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "field initializer function inventory mismatch");
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;

@@ -9,7 +9,8 @@
 static bool source_enum_declare(SourceContext *ctx, AstNode *node) {
     EnumDeclNode *d = &node->as.enum_decl;
     if (d->type_param_count < 0 || d->type_param_count > 65536 || d->member_count <= 0 ||
-        d->method_count || d->interface_count || d->attr_count)
+        d->method_count < 0 || (d->method_count && !d->methods) ||
+        d->interface_count < 0 || (d->interface_count && !d->interfaces) || d->attr_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum declaration contract is not admitted");
     return source_nominal_declare(ctx, node, d->name, d->type_params,
         (uint32_t)d->type_param_count, XR_XIR_NOMINAL_ENUM);
@@ -26,6 +27,8 @@ static bool source_enum_fields(SourceContext *ctx) {
         for (int v = 0; v < source->member_count; ++v) {
             AstNode *member = source->members[v];
             if (!source_work(ctx, member)) return false;
+            if (member->type == AST_ENUM_MEMBER && !strcmp(member->as.enum_member.name,"variants"))
+                return source_fail(ctx,member,XR_XIR_BAD_TYPE,"variant conflicts with enum type metadata member");
             if (member->type != AST_ENUM_MEMBER || member->as.enum_member.payload_count < 0 ||
                 (uint32_t)member->as.enum_member.payload_count > UINT32_MAX - count)
                 return source_fail(ctx, member, XR_XIR_BAD_TYPE, "invalid enum payload declaration");
@@ -118,7 +121,9 @@ static bool source_enum_select(SourceContext *ctx, AstNode *node, SourceEnumSele
         if (!source_nominal_apply(ctx, owner, arguments.refs, arguments.count, &selected->type)) return false;
         selected->owner = owner; selected->binding = binding; selected->path = path; selected->variant = v; return true;
     }
-    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unknown enum variant");
+    SourceName *method = find_name(ctx,ctx->nominal_methods[owner->index],node->as.member_access.name);
+    if (method && method->node->as.method_decl.is_static) return true;
+    return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown enum variant or static method");
 }
 static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumSelection *selected,
     const SourceEnumFields *provided, SourceValue *value) {

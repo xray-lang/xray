@@ -114,7 +114,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor declaration contract is not admitted");
     uint32_t index = (*next)++; ctx->function = index; ctx->nominal_constructors[owner->index] = index;
     SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
-    source_struct_function_scope(ctx, index, owner);
+    if (!source_nominal_function_scope(ctx,index,owner)) return false;
     SourceName symbol = {0}; symbol.name = "constructor"; symbol.node = node;
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
         source_query_range(ctx, node, "constructor"))) return false;

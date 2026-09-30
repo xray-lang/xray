@@ -1,3 +1,14 @@
 import { Measure } from "./measure_contract"
 export struct Meter implements Measure { value:i64; measure()->i64 { return this.value } }
 export struct MeasureBox<T:Measure> implements Measure { value:T; measure()->i64 { return this.value.measure() } }
+
+export enum Reading implements Measure {
+    Value { value:i64, label:string }, Empty
+    measure()->i64 { return match(this) { Reading.Value {value}->value, Reading.Empty->0 } }
+    static fromValue(value:i64)->Reading { return Reading.Value {value:value,label:"enum"+"-owned"} }
+}
+export enum ReadingBox<T:Measure> implements Measure {
+    Value { value:T, label:string }, Empty
+    measure()->i64 { return match(this) { ReadingBox.Value {value}->value.measure(), ReadingBox.Empty->0 } }
+    static fromValue(value:T)->ReadingBox<T> { return ReadingBox<T>.Value {value:value,label:"generic"+"-owned"} }
+}

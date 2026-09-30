@@ -27,13 +27,25 @@ static XrXirCallStatus runtime_drive(XrXirInstance *instance) {
     }
     return result.outcome.status;
 }
-static void runtime_source_attempt(XrXirProgram *program, uint32_t entry, uint32_t resume_text, uint32_t numeric_pause) {
+static void runtime_source_attempt(XrXirProgram *program, uint32_t entry, uint32_t resume_text, uint32_t numeric_pause,
+    uint32_t enum_witness, uint32_t enum_generic_witness) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     config.output = (XrXirOutputProvider) {runtime_sink, NULL};
     XrXirInstance *instance = NULL; XrXirValue result = {0}, argument = {XR_XIR_BOOL, 0, 1};
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entry, NULL, 0);
     if (status == XR_XIR_CALL_READY) status = runtime_drive(instance);
+    uint32_t enum_entries[] = {enum_witness,enum_generic_witness};
+    for (uint32_t f = 0; f < 2 && status == XR_XIR_CALL_RETURNED; ++f) {
+        status = xr_xir_instance_start(instance,enum_entries[f],NULL,0);
+        if (status == XR_XIR_CALL_READY) status = runtime_drive(instance);
+        if (status == XR_XIR_CALL_RETURNED) {
+            XrXirValue value = {0};
+            CHECK(xr_xir_instance_take_result(instance,&value) == XR_XIR_CALL_RETURNED);
+            CHECK(value.type == XR_XIR_I64 && value.payload == 41);
+            xr_xir_value_drop(&value);
+        }
+    }
     for (uint32_t i = 0; i < 2 && status == XR_XIR_CALL_RETURNED; ++i) {
         argument.payload = i;
         status = xr_xir_instance_start(instance, numeric_pause, &argument, 1);
@@ -58,11 +70,12 @@ static void runtime_source_attempt(XrXirProgram *program, uint32_t entry, uint32
         xr_xir_value_drop(&result);
     }
 }
-static void runtime_source_failures(XrXirProgram *program, uint32_t entry, uint32_t resume_text, uint32_t numeric_pause) {
+static void runtime_source_failures(XrXirProgram *program, uint32_t entry, uint32_t resume_text, uint32_t numeric_pause,
+    uint32_t enum_witness, uint32_t enum_generic_witness) {
     size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        runtime_source_attempt(program, entry, resume_text, numeric_pause);
+        runtime_source_attempt(program, entry, resume_text, numeric_pause, enum_witness, enum_generic_witness);
         if (!attempt) sites = runtime_attempts;
         CHECK(runtime_live == baseline && runtime_bytes == bytes);
     }

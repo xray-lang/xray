@@ -50,6 +50,8 @@ XR_FUNC XrXirStatus xr_xir_context_constraints_verify(const XrXirProofContext *c
 /* Catalog admission reads no initializer bodies or inferred instance slots. */
 XR_FUNC XrXirStatus xr_xir_declaration_constraints_verify(const XrXirModule *module,
     XrXirBudget *budget);
+/* Complete signature structure is a prior of the full module pass; all slots
+ * and cross-module Sendable obligations are checked even without catalogs. */
 XR_FUNC XrXirStatus xr_xir_module_constraints_verify(const XrXirModule *module,
     XrXirBudget *budget);
 /* Arguments and subject belong to context.module; identities and explicit

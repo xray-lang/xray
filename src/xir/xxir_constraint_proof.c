@@ -457,7 +457,11 @@ XrXirStatus xr_xir_declaration_constraints_verify(const XrXirModule *module, XrX
     return status;
 }
 XrXirStatus xr_xir_module_constraints_verify(const XrXirModule *module, XrXirBudget *budget) {
-    XrXirStatus status = xr_xir_declaration_constraints_verify(module,budget);
+    if (!module || !budget || (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
+    /* Complete signature structure was admitted before this module pass.
+     * A scalar pool without generics has no declaration constraint obligations. */
+    XrXirStatus status = !module->types && !module->generics ? XR_XIR_OK :
+        xr_xir_declaration_constraints_verify(module,budget);
     if (status != XR_XIR_OK) return status;
     XrXirProofContext closed = {module,{XR_XIR_CONTEXT_CLOSED,0}};
     const XrXirDeclarations *declarations = module->declarations;

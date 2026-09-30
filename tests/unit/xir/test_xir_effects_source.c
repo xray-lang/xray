@@ -22,6 +22,7 @@
 #include "xir_source_manifest_fixture.h"
 #include "xir_source_promise_cases.h"
 #include "xir_source_method_promises.h"
+#include "xir_source_witness_promises.h"
 static void source_generic_effects(const XrXirModule *module, const XrXirEffects *effects) {
     bool open=false; uint32_t found=0;
     for (uint32_t f=0;f<module->function_count;++f)
@@ -212,6 +213,7 @@ int main(int argc, char **argv) {
     CHECK(status == XR_XIR_OK); source_effects(result.checked);
     source_callable_promise_cases(&request, argc == 2 ? argv[1] : NULL);
     source_method_promise_cases(&request, argc == 2 ? argv[1] : NULL);
+    source_witness_promise_cases(&request, argc == 2 ? argv[1] : NULL);
     source_declared_input(&request, &result); source_promise_retained(result.checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);

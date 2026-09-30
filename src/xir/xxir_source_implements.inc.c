@@ -11,13 +11,13 @@ static bool source_implementation_applications(SourceContext *ctx) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
         if (!source_work(ctx,owner->node)) return false;
-        if (owner->node->type != AST_STRUCT_DECL) continue;
-        ClassDeclNode *declaration = &owner->node->as.struct_decl;
-        if (declaration->interface_count < 0 || (declaration->interface_count && !declaration->interfaces))
+        SourceNominalDeclaration declaration;
+        if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;
+        if (declaration.interface_count < 0 || (declaration.interface_count && !declaration.interfaces))
             return source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"implemented interface applications are malformed");
-        if ((uint32_t)declaration->interface_count > UINT32_MAX - count)
+        if ((uint32_t)declaration.interface_count > UINT32_MAX - count)
             return source_fail(ctx,owner->node,XR_XIR_BUDGET,"implementation count exhausted");
-        count += (uint32_t)declaration->interface_count;
+        count += (uint32_t)declaration.interface_count;
     }
     XrXirImplementation *records = count ? source_alloc(ctx,count,sizeof(*records)) : NULL;
     if (count && !records) return false;
@@ -28,15 +28,15 @@ static bool source_implementation_applications(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->node->type != AST_STRUCT_DECL) continue;
-        ClassDeclNode *declaration = &owner->node->as.struct_decl;
+        SourceNominalDeclaration declaration;
+        if (!source_nominal_declaration(ctx,owner->node,&declaration)) { ok = false; break; }
         ctx->module = owner->module;
-        ctx->type_scope = (SourceTypeScope){true,owner->node,declaration->type_params,
-            (uint32_t)declaration->type_param_count,declaration->type_param_count ? owner->declaration : 0};
+        ctx->type_scope = (SourceTypeScope){true,owner->node,declaration.parameters,
+            (uint32_t)declaration.parameter_count,declaration.parameter_count ? owner->declaration : 0};
         uint32_t first = next;
-        for (int i = 0; i < declaration->interface_count && ok; ++i) {
+        for (int i = 0; i < declaration.interface_count && ok; ++i) {
             XrXirImplementation *record = &records[next++]; record->nominal_declaration = d;
-            ok = source_interface_application(ctx,owner->node,declaration->interfaces[i],&record->interface);
+            ok = source_interface_application(ctx,owner->node,declaration.interfaces[i],&record->interface);
             for (uint32_t earlier = first; earlier + 1 < next && ok; ++earlier) {
                 bool same = false;
                 ok = source_constraint_same(ctx,owner->node,&records[earlier].interface,&record->interface,&same);

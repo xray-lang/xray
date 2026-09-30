@@ -289,10 +289,83 @@ static void constraint_proof_interface_identity_work(void) {
     CHECK(budget.work==work-COUNT && budget.scratch_bytes==scratch && !live);
     fail_at = SIZE_MAX;
 }
+static void constraint_proof_scalar_signatures(void) {
+    const XrXirType invalid[] = {(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
+        (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,(XrXirType)UINT32_MAX};
+    XrXirBlock block = {0,1,0,0};
+    XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    for (uint32_t i = 0; i < 1 + 2*sizeof(invalid)/sizeof(*invalid); ++i) {
+        XrXirType parameter = XR_XIR_I64;
+        XrXirFunction function = {"identity",8,&parameter,1,XR_XIR_I64,&block,1,&op,1,NULL,0};
+        if (i) {
+            XrXirType forged = invalid[(i-1)/2];
+            if (i%2) parameter = forged; else function.result = forged;
+        }
+        XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL};
+        XrXirArtifact *checked = NULL;
+        CHECK(xr_xir_check(&module,NULL,&checked,NULL)==(i ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK((checked!=NULL)==!i);
+        xr_xir_artifact_free(checked); CHECK(!live);
+    }
+}
+static void constraint_proof_scalar_generic_forwarding(void) {
+    XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirConstraint callee = {.markers=XR_XIR_CONSTRAINT_SENDABLE}, caller = {0};
+    XrXirGeneric generics[] = {{&callee,1,NULL,0},{&caller,1,&parameter,1}};
+    uint32_t operand = 0;
+    XrXirInstruction identity = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    XrXirInstruction forwarding[] = {
+        {XR_XIR_CALL,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,{0,1},{0},0,{0,1}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
+    XrXirBlock leaf = {0,1,0,0}, body = {0,2,0,0};
+    XrXirFunction functions[] = {
+        {"identity",8,&parameter,1,parameter,&leaf,1,&identity,1,NULL,0},
+        {"forward",7,&parameter,1,parameter,&body,1,forwarding,2,&operand,1}};
+    XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL};
+    for (uint32_t valid = 0; valid < 2; ++valid) {
+        caller.markers = valid ? XR_XIR_CONSTRAINT_SENDABLE : 0;
+        XrXirArtifact *checked = NULL;
+        CHECK(xr_xir_check(&module,NULL,&checked,NULL)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
+        CHECK((checked!=NULL)==!!valid);
+        xr_xir_artifact_free(checked); CHECK(!live);
+    }
+}
+static void constraint_proof_scalar_slot_sharing(void) {
+    XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    XrXirBlock block = {0,1,0,0}, main_block = {0,2,0,0};
+    XrXirFunction functions[] = {
+        {"provider_init",13,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
+        {"root_init",9,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
+        {"main",4,NULL,0,XR_XIR_I64,&main_block,1,entry,2,NULL,0}};
+    uint32_t dependency = 0;
+    XrXirSourceModule modules[] = {{"provider",8,NULL,0,0},{"root",4,&dependency,1,1}};
+    XrXirFunctionIdentity identities[] = {{0},{.module=1},{.module=1}};
+    XrXirSlot slot = {1,XR_XIR_ERROR,0};
+    XrXirDeclarations declarations = {modules,2,identities,&slot,1,NULL,0,1,2,NULL};
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL};
+    /* Declaration obligations precede initializer execution. Error and PanicInfo
+     * are valid owned slot types, but neither can be shared from another module. */
+    for (uint32_t type = 0; type < 3; ++type) for (uint32_t owner = 0; owner < 2; ++owner) {
+        slot.type = type == 0 ? XR_XIR_ERROR : type == 1 ? XR_XIR_PANIC_INFO : XR_XIR_STRING;
+        slot.module = owner;
+        XrXirBudget budget = xr_xir_default_budget();
+        CHECK(xr_xir_declarations_verify(&declarations,NULL,3,&budget.metadata_bytes,&budget.work)==XR_XIR_OK);
+        for (uint32_t f = 0; f < 3; ++f)
+            CHECK(xr_xir_type_expression_shape(NULL,functions[f].result,0,&budget)==XR_XIR_OK);
+        uint64_t scratch = budget.scratch_bytes;
+        CHECK(xr_xir_module_constraints_verify(&module,&budget)==
+            (owner == 1 || type == 2 ? XR_XIR_OK : XR_XIR_BAD_TYPE));
+        CHECK(budget.scratch_bytes==scratch && !live);
+    }
+}
 static void constraint_proof_cases(void) {
     constraint_proof_vectors(); constraint_proof_owners(); constraint_proof_inheritance();
     constraint_proof_conflicts_and_concrete(); constraint_proof_resources(); constraint_proof_malformed();
     constraint_proof_hidden_nominal_bounds(); constraint_proof_shared_type_walk();
     constraint_proof_interface_identity_work();
+    constraint_proof_scalar_signatures(); constraint_proof_scalar_generic_forwarding();
+    constraint_proof_scalar_slot_sharing();
 }
 #endif // XIR_CONSTRAINT_PROOF_CASES_H

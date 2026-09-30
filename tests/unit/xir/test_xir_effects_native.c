@@ -16,6 +16,14 @@ XR_DATA const uint32_t effect_source_entry;
 XR_DATA const uint32_t effect_source_captured;
 XR_DATA const XrXirProgramSpec method_source_program;
 XR_DATA const uint32_t method_source_selected_entries[3];
+XR_DATA const XrXirProgramSpec witness_direct_program;
+XR_DATA const uint32_t witness_direct_selected_entry;
+XR_DATA const XrXirProgramSpec witness_callback_program;
+XR_DATA const uint32_t witness_callback_selected_entry;
+XR_DATA const XrXirProgramSpec witness_inherited_program;
+XR_DATA const uint32_t witness_inherited_selected_entry;
+XR_DATA const XrXirProgramSpec witness_cross_program;
+XR_DATA const uint32_t witness_cross_selected_entry;
 static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expected) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     XrXirInstance *instance = NULL;
@@ -30,7 +38,29 @@ static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expect
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_value_drop(&value);
 }
+static void native_witness_promises(void) {
+    const XrXirProgramSpec *specs[] = {&witness_direct_program,&witness_callback_program,
+        &witness_inherited_program,&witness_cross_program};
+    const uint32_t entries[] = {witness_direct_selected_entry,witness_callback_selected_entry,
+        witness_inherited_selected_entry,witness_cross_selected_entry};
+    for (uint32_t i = 0; i < 4; ++i) {
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_program_seal(specs[i],(XrXirProgramBudget){33554432,64000000},
+            &program) == XR_XIR_OK);
+        size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
+        for (size_t attempt = 0; attempt <= sites; ++attempt) {
+            runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
+            native_attempt(program,entries[i],41);
+            if (!attempt) sites = runtime_attempts;
+            CHECK(runtime_live == baseline && runtime_bytes == bytes);
+        }
+        runtime_fail_at = SIZE_MAX; xr_xir_program_drop(program);
+        CHECK(!runtime_live && !runtime_bytes);
+        printf("Native witness promise %u released %zu allocation failure sites\n",i,sites);
+    }
+}
 int main(void) {
+    native_witness_promises();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&effect_source_program,
         (XrXirProgramBudget){33554432, 64000000}, &program) == XR_XIR_OK);

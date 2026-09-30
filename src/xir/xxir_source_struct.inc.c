@@ -9,6 +9,33 @@
  * KEY CONCEPT:
  *   Source names resolve to the sole XIR declaration and type pool.
  */
+typedef struct SourceNominalDeclaration {
+    XrGenericParam **parameters;
+    int parameter_count;
+    AstNode **methods;
+    int method_count;
+    XrTypeRef **interfaces;
+    int interface_count;
+} SourceNominalDeclaration;
+static bool source_nominal_declaration(SourceContext *ctx, AstNode *node, SourceNominalDeclaration *output) {
+    if (!source_work(ctx,node)) return false;
+    if (!node || !output) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nominal declaration is missing");
+    if (node->type == AST_ENUM_DECL) {
+        EnumDeclNode *d = &node->as.enum_decl;
+        *output = (SourceNominalDeclaration){d->type_params,d->type_param_count,d->methods,
+            d->method_count,d->interfaces,d->interface_count};
+    } else if (node->type == AST_STRUCT_DECL) {
+        ClassDeclNode *d = &node->as.struct_decl;
+        *output = (SourceNominalDeclaration){d->type_params,d->type_param_count,d->methods,
+            d->method_count,d->interfaces,d->interface_count};
+    } else return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"unsupported nominal declaration owner");
+    if (output->parameter_count < 0 || output->parameter_count > 65536 ||
+        (output->parameter_count && !output->parameters) || output->method_count < 0 ||
+        (output->method_count && !output->methods) || output->interface_count < 0 ||
+        (output->interface_count && !output->interfaces))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nominal declaration arrays are malformed");
+    return true;
+}
 static SourceName *source_nominal_name(SourceContext *ctx, const char *name) {
     if (!name) return NULL;
     const char *dot = strchr(name, '.');
@@ -163,15 +190,18 @@ static bool source_struct_fields(SourceContext *ctx) {
     }
     return true;
 }
-static void source_struct_function_scope(SourceContext *ctx, uint32_t index, SourceName *symbol) {
+static bool source_nominal_function_scope(SourceContext *ctx, uint32_t index, SourceName *symbol) {
     const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
     ctx->bodies[index].type_owner = symbol->node;
-    ctx->bodies[index].type_parameters = symbol->node->as.struct_decl.type_params;
+    SourceNominalDeclaration declaration;
+    if (!source_nominal_declaration(ctx,symbol->node,&declaration)) return false;
+    ctx->bodies[index].type_parameters = declaration.parameters;
     ctx->bodies[index].type_parameter_count = nominal->parameter_count;
     ctx->bodies[index].generic_owner = nominal->parameter_count ? symbol->declaration : 0;
     ctx->generics[index].parameter_count = nominal->parameter_count;
     ctx->generics[index].constraints = nominal->constraints;
     ctx->has_generics |= nominal->parameter_count != 0;
+    return true;
 }
 static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) {
     for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
@@ -191,7 +221,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                 ctx->functions[index] = (XrXirFunction) {"$field_default", 14, NULL, 0,
                     nominal->fields[f].type, NULL, 0, NULL, 0, NULL, 0};
                 ctx->bodies[index].node = node; ctx->bodies[index].module = m;
-                source_struct_function_scope(ctx, index, symbol);
+                if (!source_nominal_function_scope(ctx,index,symbol)) return false;
                 ctx->bodies[index].declaration = ctx->nominal_members[symbol->index][f];
                 bool visible = nominal->exported && !(nominal->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED));
                 ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER};
