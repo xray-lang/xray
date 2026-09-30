@@ -20,7 +20,10 @@ typedef struct XrXirNominalField {
     XrXirType type;
     uint32_t flags;
 } XrXirNominalField;
-typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM } XrXirNominalKind;
+/* CLASS FINAL is a declaration fact, not inferred from carrier kind. */
+#define XR_XIR_NOMINAL_FINAL 1u
+
+typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {
     XrXirLiteral name;
     uint32_t field_begin, field_count;
@@ -36,6 +39,7 @@ typedef struct XrXirNominalDeclaration {
     uint32_t kind;
     const XrXirNominalVariant *variants;
     uint32_t variant_count;
+    uint32_t flags;
 } XrXirNominalDeclaration;
 typedef struct XrXirNominalFieldIdentity {
     XrXirLiteral name;
@@ -49,6 +53,7 @@ typedef struct XrXirNominalIdentity {
     uint32_t kind;
     const XrXirNominalVariant *variants;
     uint32_t variant_count;
+    uint32_t flags;
 } XrXirNominalIdentity;
 typedef struct XrXirNominalTable {
     const XrXirNominalDeclaration *declarations;

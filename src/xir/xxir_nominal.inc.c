@@ -28,7 +28,7 @@ static XrXirStatus nominal_same_name(XrXirLiteral a, XrXirLiteral b,
 }
 static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *variants,
     uint32_t count, uint32_t fields, XrXirBudget *b) {
-    if (kind > XR_XIR_NOMINAL_ENUM || (count != 0) != (variants != NULL) ||
+    if (kind > XR_XIR_NOMINAL_CLASS || (count != 0) != (variants != NULL) ||
         (kind == XR_XIR_NOMINAL_ENUM) != (count != 0)) return XR_XIR_BAD_STRUCTURE;
     if (!nominal_charge(b, (uint64_t) count * sizeof(*variants), count)) return XR_XIR_BUDGET;
     uint32_t end = 0;
@@ -46,10 +46,13 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
     }
     return kind == XR_XIR_NOMINAL_ENUM && end != fields ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
+static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
+    return kind == XR_XIR_NOMINAL_CLASS ? flags == XR_XIR_NOMINAL_FINAL : flags == 0;
+}
 static XrXirStatus nominal_field_begin(uint32_t kind, const XrXirNominalVariant *variants,
     uint32_t count, uint32_t field, XrXirBudget *b, uint32_t *begin) {
     *begin = 0;
-    if (kind == XR_XIR_NOMINAL_STRUCT) return XR_XIR_OK;
+    if (kind == XR_XIR_NOMINAL_STRUCT || kind == XR_XIR_NOMINAL_CLASS) return XR_XIR_OK;
     for (uint32_t i = 0; i < count; ++i) {
         if (!nominal_charge(b, 0, 1)) return XR_XIR_BUDGET;
         if (field >= variants[i].field_begin && field - variants[i].field_begin < variants[i].field_count) {
@@ -85,6 +88,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     XrXirStatus status = nominal_name(d->module, b);
     if (status == XR_XIR_OK) status = nominal_name(d->name, b);
     if (status != XR_XIR_OK) return status;
+    if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
     status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, b);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p) {
@@ -94,6 +98,8 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
+        if (d->kind == XR_XIR_NOMINAL_CLASS && field->type != XR_XIR_BOOL &&
+            !xr_xir_type_is_number(field->type) && field->type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
         uint32_t visibility = field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED);
         if ((field->flags & ~(XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED | XR_XIR_FIELD_MUTABLE)) ||
             visibility == (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) return XR_XIR_BAD_STRUCTURE;
@@ -192,7 +198,7 @@ static bool nominal_variants_copy_work(const XrXirNominalVariant *variants, uint
 static bool nominal_copy_declaration(const XrXirNominalDeclaration *source,
                                      XrXirNominalDeclaration *d) {
     d->exported = source->exported; d->kind = source->kind;
-    d->variant_count = source->variant_count;
+    d->variant_count = source->variant_count; d->flags = source->flags;
     if (!nominal_variants_copy(source->variants, source->variant_count, &d->variants)) return false;
     if (!nominal_copy_name(source->module, &d->module) ||
         !nominal_copy_name(source->name, &d->name)) return false;

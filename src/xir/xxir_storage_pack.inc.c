@@ -70,7 +70,7 @@ static XrXirValueStatus storage_pack_walk(StoragePack *pack,
             bytes = frame->bytes ? frame->bytes + frame->layout->field_offsets[field] : NULL;
             if (value->type != (uint32_t)frame->node->nominal.fields[field]) return XR_XIR_VALUE_BAD_ARGUMENT;
         }
-        XrXirValueStatus status = xr_xir_type_is_nominal(types, (XrXirType)value->type) ?
+        XrXirValueStatus status = inline_nominal_type(types, (XrXirType)value->type) ?
             storage_pack_enter(pack, value, bytes) : storage_pack_leaf(pack, value, bytes);
         if (status != XR_XIR_VALUE_OK) return status;
     }
@@ -81,7 +81,7 @@ static XrXirValueStatus storage_pack_begin(XrXirValueAdmission *admission,
     if (!admission || !admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     *pack = (StoragePack){admission, NULL, 0, 0, 0, type};
     const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
-    if (!xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_OK;
+    if (!inline_nominal_type(types, type)) return XR_XIR_VALUE_OK;
     const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, type);
     if (!layout) return XR_XIR_VALUE_BAD_ARGUMENT;
     uint64_t scratch = (uint64_t)layout->depth * sizeof(StoragePackFrame);

@@ -84,7 +84,7 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
         XrXirType field = nominal->fields[current->next];
         const XrXirTypeNode *child = xr_xir_type_node(types, field);
         XrXirLayout physical = {0};
-        if (child && child->kind == XR_XIR_TYPE_NOMINAL) {
+        if (child && child->kind == XR_XIR_TYPE_NOMINAL && !xr_xir_type_is_class(types, field)) {
             uint32_t child_index = (uint32_t) field - XR_XIR_CONSTRUCTED_TYPE_BASE;
             if (nodes[child_index].state == 1) { status = XR_XIR_BAD_LAYOUT; break; }
             if (!nodes[child_index].state) {
@@ -125,7 +125,7 @@ XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType typ
     XrXirStatus status = xr_xir_types_structure_verify(types, &budget);
     if (status != XR_XIR_OK) return status;
     const XrXirTypeNode *root = xr_xir_type_node(types, type);
-    if (!root || root->kind != XR_XIR_TYPE_NOMINAL || root->parameter_span ||
+    if (!root || root->kind != XR_XIR_TYPE_NOMINAL || xr_xir_type_is_class(types,type) || root->parameter_span ||
         root->nominal.field_count != field_count) return XR_XIR_BAD_LAYOUT;
     uint64_t bytes = (uint64_t) types->count * (sizeof(NominalStorageNode) + sizeof(uint32_t)) +
         (uint64_t) field_count * sizeof(uint32_t);

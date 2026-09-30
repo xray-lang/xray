@@ -322,6 +322,7 @@ static XrXirStatus provenance_lowered_nominals(ProvenanceMatch *c,
     for (uint32_t d = 0; d < source->count; ++d) {
         const XrXirNominalDeclaration *a = &source->declarations[d];
         const XrXirNominalIdentity *b = &output->identities[d];
+        if (a->flags != b->flags) return XR_XIR_BAD_TYPE;
         XrXirStatus variants = provenance_variants(c, a->kind, a->variants, a->variant_count,
             b->kind, b->variants, b->variant_count);
         if (variants != XR_XIR_OK) return variants;
@@ -355,6 +356,7 @@ static XrXirStatus provenance_nominals(ProvenanceMatch *c) {
     c->remaining->work -= a->count;
     for (uint32_t d = 0; d < a->count; ++d) {
         const XrXirNominalDeclaration *from = &a->declarations[d], *to = &b->declarations[d];
+        if (from->flags != to->flags) return XR_XIR_BAD_TYPE;
         XrXirStatus variants = provenance_variants(c, from->kind, from->variants, from->variant_count,
             to->kind, to->variants, to->variant_count);
         if (variants != XR_XIR_OK) return variants;

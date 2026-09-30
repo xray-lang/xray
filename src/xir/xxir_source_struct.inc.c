@@ -24,8 +24,8 @@ static bool source_nominal_declaration(SourceContext *ctx, AstNode *node, Source
         EnumDeclNode *d = &node->as.enum_decl;
         *output = (SourceNominalDeclaration){d->type_params,d->type_param_count,d->methods,
             d->method_count,d->interfaces,d->interface_count};
-    } else if (node->type == AST_STRUCT_DECL) {
-        ClassDeclNode *d = &node->as.struct_decl;
+    } else if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL) {
+        ClassDeclNode *d = node->type == AST_CLASS_DECL ? &node->as.class_decl : &node->as.struct_decl;
         *output = (SourceNominalDeclaration){d->type_params,d->type_param_count,d->methods,
             d->method_count,d->interfaces,d->interface_count};
     } else return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"unsupported nominal declaration owner");
@@ -93,7 +93,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     XrXirNominalDeclaration *record = (XrXirNominalDeclaration *) &ctx->nominals.declarations[symbol->index];
     const char *module = ctx->graph->specs[ctx->module].canonical;
     *record = (XrXirNominalDeclaration) {{module, (uint32_t) strlen(module)},
-        {name, (uint32_t) strlen(name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0};
+        {name, (uint32_t) strlen(name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0};
     XrXirTypeNode type = {0}; type.kind = XR_XIR_TYPE_NOMINAL; type.nominal.declaration = symbol->index;
     XrXirConstraint *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;
     XrXirType *arguments = count ? source_alloc(ctx, count, sizeof(*arguments)) : NULL;
@@ -126,8 +126,9 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        XrGenericParam **parameters = owner->node->type == AST_STRUCT_DECL ?
-            owner->node->as.struct_decl.type_params : owner->node->as.enum_decl.type_params;
+        SourceNominalDeclaration syntax;
+        if (!source_nominal_declaration(ctx,owner->node,&syntax)) { ok=false; break; }
+        XrGenericParam **parameters = syntax.parameters;
         const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[d];
         uint32_t count = declaration->parameter_count;
         ctx->module = owner->module;
@@ -146,12 +147,29 @@ static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     return source_nominal_declare(ctx, node, decl->name, decl->type_params,
         (uint32_t) decl->type_param_count, XR_XIR_NOMINAL_STRUCT);
 }
+static bool source_class_declare(SourceContext *ctx, AstNode *node) {
+    ClassDeclNode *decl = &node->as.class_decl;
+    if (!decl->explicit_final || decl->super_name || decl->super_module || decl->is_packed ||
+        decl->explicit_align || decl->attr_count || decl->type_param_count < 0 ||
+        decl->type_param_count > 65536 || decl->field_count < 0)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires an explicit final root declaration");
+    uint32_t constructors=0;
+    for (int i=0;i<decl->method_count;++i) {
+        if (!source_work(ctx,decl->methods[i])) return false;
+        if (decl->methods[i]->type == AST_METHOD_DECL && decl->methods[i]->as.method_decl.is_constructor) ++constructors;
+    }
+    if (constructors!=1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires one explicit complete constructor");
+    if (!source_nominal_declare(ctx,node,decl->name,decl->type_params,
+        (uint32_t)decl->type_param_count,XR_XIR_NOMINAL_CLASS)) return false;
+    ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=XR_XIR_NOMINAL_FINAL;
+    return true;
+}
 static bool source_struct_fields(SourceContext *ctx) {
     for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
         ctx->module = m; ctx->function = m;
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
-            if (symbol->kind != SOURCE_NOMINAL || symbol->node->type != AST_STRUCT_DECL) continue;
-            ClassDeclNode *decl = &symbol->node->as.struct_decl;
+            if (symbol->kind != SOURCE_NOMINAL || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
+            ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             ctx->type_scope = (SourceTypeScope){true,symbol->node,decl->type_params,
                 (uint32_t)decl->type_param_count,decl->type_param_count ? symbol->declaration : 0,0};
             uint32_t count = (uint32_t) decl->field_count;
@@ -172,6 +190,9 @@ static bool source_struct_fields(SourceContext *ctx) {
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "stored field contract is not admitted");
                 if (!source_type(ctx, field->field_type, &types[f]) || types[f] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
+                if (symbol->node->type == AST_CLASS_DECL && (field->initializer ||
+                    (types[f] != XR_XIR_BOOL && !xr_xir_type_is_number(types[f]) && types[f] != XR_XIR_STRING)))
+                    return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit scalar or string constructor value");
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) strlen(field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
                     (field->is_const ? 0 : XR_XIR_FIELD_MUTABLE)};
@@ -233,7 +254,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
 static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType type,
     const char *name, unsigned write, uint32_t *index, XrXirType *field_type) {
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
-    if (!found || !xr_xir_type_is_struct(&ctx->types, type))
+    if (!found || (!xr_xir_type_is_struct(&ctx->types, type) && !xr_xir_type_is_class(&ctx->types, type)))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "member receiver is not a nominal value");
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[found->nominal.declaration];
     for (uint32_t f = 0; f < decl->field_count; ++f) {
@@ -314,5 +335,5 @@ static bool source_struct_literal(SourceContext *ctx, AstNode *node, SourceValue
 static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceValue receiver, SourceValue *value) {
     uint32_t index; XrXirType type;
     if (!source_struct_field(ctx, node, receiver.type, node->as.member_access.name, false, &index, &type)) return false;
-    return emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
+    return emit(ctx, (XrXirInstruction) {xr_xir_type_is_class(&ctx->types,receiver.type) ? XR_XIR_CLASS_GET : XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
 }

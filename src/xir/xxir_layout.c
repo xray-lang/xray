@@ -167,7 +167,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
             op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
-            op->op == XR_XIR_ENUM_NEW ? op->args[1] : 0;
+            op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;
     }
     uint64_t path_work = budget->work; uint32_t paths = 0;

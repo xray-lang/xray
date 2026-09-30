@@ -33,7 +33,8 @@ static XrXirValueStatus storage_cursor_init(const XrXirTypeArena *arena, Storage
     if ((capacity && !frames) || !xr_xir_type_arena_layout(arena, span.type, &physical) ||
         (physical.size && !span.bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, span.type);
-    uint32_t required = layout ? (owned_only ? layout->owned_depth : layout->depth) : 0;
+    uint32_t required = layout && inline_nominal_type(xr_xir_type_arena_types(arena), span.type)
+        ? (owned_only ? layout->owned_depth : layout->depth) : 0;
     if (capacity < required) return XR_XIR_VALUE_LIMIT;
     *cursor = (StorageCursor) {arena, frames, span, 0, capacity, true, owned_only};
     return XR_XIR_VALUE_OK;
@@ -79,7 +80,7 @@ static XrXirValueStatus storage_cursor_next(StorageCursor *cursor, uint64_t *wor
             span.type = node->nominal.fields[field];
             span.bytes = frame->span.bytes ? frame->span.bytes + layout->field_offsets[field] : NULL;
         }
-        if (xr_xir_type_is_nominal(types, span.type)) {
+        if (inline_nominal_type(types, span.type)) {
             XrXirValueStatus status = storage_cursor_enter(cursor, span);
             if (status != XR_XIR_VALUE_OK) return status;
         } else if (!cursor->owned_only || owned_carrier_type(span.type)) {

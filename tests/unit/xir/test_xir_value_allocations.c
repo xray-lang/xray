@@ -412,6 +412,7 @@ static void nominal_arena_allocation(void) {
 }
 
 #include "xir_struct_value_cases.h"
+#include "xir_class_value_cases.h"
 static void struct_allocation_failures(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = struct_value_arena(domain);
@@ -565,7 +566,7 @@ static void enum_value_ownership(void) {
     const XrXirNominalVariant variants[] = {{{"Empty", 5}, 0, 0}, {{"Pair", 4}, 0, 2}};
     const XrXirNominalFieldIdentity fields[] = {{{"left", 4}, 0}, {{"right", 5}, 0}};
     const XrXirNominalIdentity identity = {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 2,
-        XR_XIR_NOMINAL_ENUM, variants, 2};
+        XR_XIR_NOMINAL_ENUM, variants, 2, 0};
     const XrXirNominalTable table = {NULL, 1, &identity};
     XrXirType field_types[] = {XR_XIR_STRING, XR_XIR_STRING};
     const XrXirType type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
@@ -706,6 +707,7 @@ int main(void) {
     string_predicate_allocations();
     struct_allocation_failures();
     struct_value_cases(); CHECK(!live);
+    class_value_cases(); class_value_allocation_failures(); class_array_allocation_failures(); CHECK(!live);
     nominal_arena_allocation();
     fail_at = SIZE_MAX; calls = 0; fail_sequence();
     size_t count = calls;

@@ -23,7 +23,7 @@ XR_FUNC XrXirStatus xr_xir_nominal_access(const XrXirModule *module, uint32_t fu
     XrXirNominalIdentity identity;
     if (table->declarations) {
         const XrXirNominalDeclaration *d = &table->declarations[declaration];
-        identity = (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count};
+        identity = (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count, d->flags};
     } else identity = table->identities[declaration];
     uint32_t declaring_module = UINT32_MAX;
     for (uint32_t m = 0; m < scope->module_count; ++m) {

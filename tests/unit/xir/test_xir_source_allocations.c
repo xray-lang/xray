@@ -185,7 +185,7 @@ static void snapshot_enum_allocations(void) {
             XrXirNominalVariant variants[] = {{{names[0], 4}, 0, 0}, {{names[1], 4}, 0, payload}};
             XrXirNominalField field = {{"value", 5}, XR_XIR_I64, 0};
             XrXirNominalDeclaration declaration = {{"alpha", 5}, {"Choice", 6}, 1,
-                NULL, 0, payload ? &field : NULL, payload, XR_XIR_NOMINAL_ENUM, variants, 2};
+                NULL, 0, payload ? &field : NULL, payload, XR_XIR_NOMINAL_ENUM, variants, 2, 0};
             XrXirNominalTable table = {&declaration, 1, NULL};
             XrXirTypes types = {NULL, 0, &table, NULL};
             XrXirSourceView view = {0}; view.types = &types;
@@ -397,6 +397,7 @@ static void method_promise_allocations(XrCompilerSession *session) {
 #include "xir_generic_method_query_allocations.h"
 #include "xir_source_requirement_value_allocations.h"
 #include "xir_source_enum_identity_allocations.h"
+#include "xir_source_class_allocations.h"
 #include "xir_source_inference_allocations.h"
 #include "xir_source_plan_budget_cases.h"
 int main(void) {
@@ -442,6 +443,7 @@ int main(void) {
     method_promise_allocations(session);
     source_requirement_value_allocations(session);
     source_enum_identity_allocations(session);
+    source_class_allocations(session);
     inference_source_allocations(session);
     xr_compiler_session_delete(session);
     printf("Source-owner allocation failures: %zu; no partial artifact or live metadata\n", count);

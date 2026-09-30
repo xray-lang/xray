@@ -1,0 +1,4 @@
+import {Counter} from "./value"
+import {advance} from "./reader"
+export fn answer()->i64 {const first=Counter.make(40);const alias=first;const other=Counter.make(40);const result=advance(alias);if(result==41 && first.get()==41 && other.get()==40){return 41}else{return 0}}
+export fn retained()->Counter{return Counter.make(40)}

@@ -28,7 +28,7 @@ static void generic_method_packet_cases(void) {
     generic_method_owned_assert(xr_xir_artifact_module(decoded)->types->interfaces);
     xr_xir_artifact_free(decoded);
     const struct { size_t offset; uint32_t value; } attacks[] = {
-        {8,17}, {12,45},
+        {8,17}, {12,45}, {8,18}, {12,46},
         {GENERIC_METHOD_MAP_OWN,UINT32_MAX}, {GENERIC_METHOD_MAP_OWN,0},
         {GENERIC_METHOD_MAP_OWN,65536}, {GENERIC_METHOD_MAP_OWN+4,UINT32_MAX},
         {GENERIC_METHOD_MAP_OWN+8,UINT32_MAX}, {GENERIC_METHOD_MAP_OWN+12,2},

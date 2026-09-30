@@ -78,6 +78,9 @@ XR_FUNC bool xr_xir_type_is_struct(const XrXirTypes *types, XrXirType type) {
 XR_FUNC bool xr_xir_type_is_enum(const XrXirTypes *types, XrXirType type) {
     return nominal_has_kind(types, type, XR_XIR_NOMINAL_ENUM);
 }
+XR_FUNC bool xr_xir_type_is_class(const XrXirTypes *types, XrXirType type) {
+    return nominal_has_kind(types, type, XR_XIR_NOMINAL_CLASS);
+}
 bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
@@ -158,6 +161,15 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
             (node->nominal.argument_count != 0) != (node->nominal.arguments != NULL) ||
             (node->nominal.field_count != 0) != (node->nominal.fields != NULL)) return XR_XIR_BAD_STRUCTURE;
         uint32_t count = node->nominal.argument_count;
+        if (xr_xir_type_is_class(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index))) {
+            if (node->nominal.field_count > remaining->work) return XR_XIR_BUDGET;
+            remaining->work -= node->nominal.field_count;
+            for (uint32_t f=0; f<node->nominal.field_count; ++f) {
+                XrXirType field=node->nominal.fields[f];
+                if (field!=XR_XIR_BOOL && !xr_xir_type_is_number(field) && field!=XR_XIR_STRING)
+                    return XR_XIR_BAD_TYPE;
+            }
+        }
         uint64_t total = (uint64_t) count + node->nominal.field_count;
         uint64_t bytes = total * sizeof(XrXirType);
         if (count > 65536 || total > remaining->parameters || total > remaining->work ||

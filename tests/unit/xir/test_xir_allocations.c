@@ -25,41 +25,53 @@ static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_
     } \
 } while (0)
 
-static size_t calls, live, fail_at = SIZE_MAX;
-
+static size_t calls, live, class_live_bytes, fail_at = SIZE_MAX;
+typedef struct AllocationRecord { void *pointer; size_t bytes; } AllocationRecord;
+static AllocationRecord *allocation_records;
+static size_t allocation_capacity;
+/* Bookkeeping is outside the counted implementation allocation boundary. */
+static void allocation_record(void *pointer, size_t bytes) {
+    if (!pointer) return;
+    if (live == allocation_capacity) {
+        CHECK(allocation_capacity <= SIZE_MAX / 2 / sizeof(*allocation_records));
+        size_t capacity=allocation_capacity ? allocation_capacity*2 : 256;
+        AllocationRecord *grown=xr_realloc(allocation_records,capacity*sizeof(*grown));
+        CHECK(grown);allocation_records=grown;allocation_capacity=capacity;
+    }
+    CHECK(bytes<=SIZE_MAX-class_live_bytes);
+    allocation_records[live++]=(AllocationRecord){pointer,bytes};class_live_bytes+=bytes;
+}
 static void *counted_malloc(size_t size) {
-    if (calls++ == fail_at)
-        return NULL;
-    void *pointer = xr_malloc(size);
-    if (pointer)
-        ++live;
-    return pointer;
+    if (calls++ == fail_at) return NULL;
+    void *pointer=xr_malloc(size);allocation_record(pointer,size);return pointer;
 }
-
 static void *counted_calloc(size_t count, size_t size) {
-    if (calls++ == fail_at)
-        return NULL;
-    void *pointer = xr_calloc(count, size);
-    if (pointer)
-        ++live;
-    return pointer;
+    if (calls++ == fail_at) return NULL;
+    CHECK(!size || count<=SIZE_MAX/size);
+    void *pointer=xr_calloc(count,size);allocation_record(pointer,count*size);return pointer;
 }
-
 static void counted_free(void *pointer) {
     if (pointer) {
-        CHECK(live > 0);
-        --live;
+        size_t index=0;while(index<live && allocation_records[index].pointer!=pointer)++index;
+        CHECK(index<live);class_live_bytes-=allocation_records[index].bytes;
+        allocation_records[index]=allocation_records[--live];
     }
     xr_free(pointer);
+    if (!live) {xr_free(allocation_records);allocation_records=NULL;allocation_capacity=0;CHECK(!class_live_bytes);}
 }
-
 static void *counted_realloc(void *pointer, size_t size) {
-    if (calls++ == fail_at)
-        return NULL;
-    bool was_null = pointer == NULL;
-    void *replacement = xr_realloc(pointer, size);
-    if (replacement && was_null)
-        ++live;
+    if (calls++ == fail_at) return NULL;
+    size_t index=0;while(index<live && allocation_records[index].pointer!=pointer)++index;
+    CHECK(!pointer || index<live);
+    bool was_null=pointer==NULL;
+    void *replacement=xr_realloc(pointer,size);
+    if (replacement) {
+        if (!was_null) {
+            class_live_bytes-=allocation_records[index].bytes;
+            CHECK(size<=SIZE_MAX-class_live_bytes);class_live_bytes+=size;
+            allocation_records[index]=(AllocationRecord){replacement,size};
+        } else allocation_record(replacement,size);
+    }
     return replacement;
 }
 
@@ -494,7 +506,9 @@ static void nominal_pool_allocation_failures(void) {
     calls = 0; fail_at = SIZE_MAX;
 }
 
+#include "xir_class_owned_allocations.h"
 int main(void) {
+    class_owned_allocations();
     type_temporary_budget_cases();
     type_temporary_allocation_failures();
     constraint_temporary_cases();

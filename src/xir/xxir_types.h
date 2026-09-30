@@ -24,6 +24,7 @@ XR_FUNC bool xr_xir_type_is_nominal(const XrXirTypes *types, XrXirType type);
 /* Classification grants neither descriptor validity nor operation authority. */
 XR_FUNC bool xr_xir_type_is_struct(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_enum(const XrXirTypes *types, XrXirType type);
+XR_FUNC bool xr_xir_type_is_class(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_cell_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_array_element(const XrXirTypes *types, XrXirType type);

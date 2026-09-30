@@ -20,7 +20,7 @@ static XrXirArtifact *constraint_packet_fixture(uint32_t markers) {
         {{"alpha",5},{"Needs",5},1,&constraint,1,NULL,0,NULL,0}};
     XrXirInterfaceTable interface_table = {interfaces,2};
     XrXirNominalDeclaration nominal = {
-        {"alpha",5},{"Box",3},1,&constraint,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0};
+        {"alpha",5},{"Box",3},1,&constraint,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0};
     XrXirNominalTable nominal_table = {&nominal,1,NULL};
     XrXirTypes types = {NULL,0,&nominal_table,&interface_table};
     XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};

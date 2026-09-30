@@ -22,7 +22,7 @@ XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTa
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
         (type != XR_XIR_UNIT && type != XR_XIR_BOOL && !xr_xir_type_is_number(type) && !xr_xir_type_is_owned(types, type)) ||
-        (xr_xir_type_is_nominal(types, type) && context == XR_XIR_LAYOUT_STORAGE) ||
+        (xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_class(types, type) && context == XR_XIR_LAYOUT_STORAGE) ||
         (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER) || xr_xir_type_span(types, type))
         return XR_XIR_BAD_LAYOUT;
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
@@ -55,7 +55,7 @@ XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
     bool nominal = false;
     for (uint32_t i = 0; i < count; ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
-        layouts[i].depth = 0; layouts[i].owned_depth = 0; layouts[i].tag_bytes = 0;
+        layouts[i].depth = 0; layouts[i].owned_depth = 0; layouts[i].tag_bytes = 0; layouts[i].body = (XrXirLayout){0,0};
         if (node->parameter_span || layouts[i].field_count != node->nominal.field_count ||
             (layouts[i].field_count != 0) != (layouts[i].field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
         if (node->kind == XR_XIR_TYPE_NOMINAL) nominal = true;
@@ -81,6 +81,10 @@ XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
             layouts[i].depth = nodes[i].depth;
             layouts[i].owned_depth = nodes[i].owned_depth;
             layouts[i].tag_bytes = nodes[i].tag_bytes;
+            if (xr_xir_type_is_class(types, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i))) {
+                layouts[i].body = nodes[i].layout; layouts[i].value = (XrXirLayout){8,8};
+                layouts[i].depth = 0; layouts[i].owned_depth = 1;
+            }
         }
     }
     xr_free(nodes);

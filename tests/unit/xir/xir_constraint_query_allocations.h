@@ -18,7 +18,7 @@ static void constraint_query_allocations(void) {
             XrXirSourceDeclaration declaration = {0}; declaration.name = "generic";
             declaration.generic_constraints = &constraint; declaration.generic_parameter_count = 1;
             XrXirNominalDeclaration nominal = {
-                {"alpha",5},{"Box",3},1,&constraint,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0};
+                {"alpha",5},{"Box",3},1,&constraint,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0};
             XrXirNominalTable nominals = {&nominal,1,NULL};
             XrXirInterfaceDeclaration interface = {{"alpha",5},{"Needs",5},1,&constraint,1,NULL,0,NULL,0};
             XrXirInterfaceTable interfaces = {&interface,1};

@@ -14,8 +14,8 @@ static XrXirTypeArena *value_path_arena(XrXirDomain *domain) {
     const XrXirNominalFieldIdentity outer_fields[] = {
         {{"items", 5}, XR_XIR_FIELD_MUTABLE}, {{"sibling", 7}, 0}};
     const XrXirNominalIdentity identities[] = {
-        {{"test", 4}, {"Inner", 5}, 1, 0, inner_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0},
-        {{"test", 4}, {"Outer", 5}, 1, 0, outer_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0}};
+        {{"test", 4}, {"Inner", 5}, 1, 0, inner_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0},
+        {{"test", 4}, {"Outer", 5}, 1, 0, outer_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0}};
     const XrXirNominalTable table = {NULL, 2, identities};
     const XrXirType inner[] = {XR_XIR_I64, XR_XIR_STRING}, outer[] = {(XrXirType)257, XR_XIR_I64};
     const XrXirTypeNode nodes[] = {

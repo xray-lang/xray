@@ -241,6 +241,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
+               op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET &&
                op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
@@ -662,6 +663,46 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
     return XR_XIR_OK;
 }
 
+static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
+                              VerifyContext *context, uint32_t instruction) {
+    const XrXirInstruction *op = &function->instructions[instruction];
+    bool construct = op->op == XR_XIR_CLASS_NEW, write = op->op == XR_XIR_CLASS_SET;
+    XrXirType type = construct ? op->type : xr_xir_operand_type(function, op->args[0]);
+    const XrXirTypes *types = context->module->types;
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    if (!node || !xr_xir_type_is_class(types, type)) return XR_XIR_BAD_TYPE;
+    const XrXirNominalType *instance = &node->nominal;
+    const XrXirNominalTable *table = types->nominals;
+    const XrXirNominalDeclaration *declaration = table->declarations ?
+        &table->declarations[instance->declaration] : NULL;
+    uint32_t fields = declaration ? declaration->field_count : table->identities[instance->declaration].field_count;
+    if (construct ? op->args[1] != fields : op->immediate < 0 || (uint64_t) op->immediate >= fields)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = xr_xir_nominal_access(context->module, context->location.function,
+        instance->declaration, construct ? 0 : (uint32_t) op->immediate,
+        construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ, &context->remaining.work);
+    if (status != XR_XIR_OK) return status;
+    if (!construct) {
+        status = local_operand(types, function, op, op->args[0], 0);
+        if (status == XR_XIR_OK) status = value_use(function, graph, instruction, op->args[0], type);
+        if (status != XR_XIR_OK) return status;
+    }
+    uint32_t count = construct ? fields : 1;
+    if (!spend(&context->remaining.work, count)) return XR_XIR_BUDGET;
+    for (uint32_t i = 0; i < count; ++i) {
+        uint32_t field = construct ? i : (uint32_t) op->immediate;
+        uint32_t value = construct ? function->operands[op->args[0] + i] : op->args[write ? 1 : 0];
+        XrXirType actual = construct || write ? xr_xir_operand_type(function, value) : op->type;
+        if (declaration) status = xr_xir_type_substitution_matches(types, instance->arguments,
+            instance->argument_count, declaration->fields[field].type, actual, &context->remaining);
+        else status = instance->field_count == fields && instance->fields[field] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        if (status == XR_XIR_OK) status = local_operand(types, function, op, value, write ? 1 : i);
+        if (status == XR_XIR_OK) status = value_use(function, graph, instruction, value, construct || write ? actual : type);
+        if (status != XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 #include "xxir_path_verify.inc.c"
 #include "xxir_enum_verify.inc.c"
 
@@ -689,6 +730,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         }
         if (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) {
             XrXirStatus status = enum_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
+        if (op->op >= XR_XIR_CLASS_NEW && op->op <= XR_XIR_CLASS_SET) {
+            XrXirStatus status = class_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;
             continue;
         }

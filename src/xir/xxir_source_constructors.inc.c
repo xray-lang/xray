@@ -70,7 +70,7 @@ static bool source_constructor_value(SourceContext *ctx, AstNode *node, SourceVa
     if (count && !fields) return false;
     for (uint32_t f = 0; f < count; ++f)
         if (!source_constructor_read(ctx, node, f, &fields[f])) return false;
-    return emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, type, {0}, {0}, 0, {0}}, fields, count, value);
+    return emit_group(ctx, (XrXirInstruction) {xr_xir_type_is_class(&ctx->types,type) ? XR_XIR_CLASS_NEW : XR_XIR_STRUCT_NEW, type, {0}, {0}, 0, {0}}, fields, count, value);
 }
 static bool source_constructor_return(SourceContext *ctx, AstNode *node) {
     if (node && node->type == AST_RETURN_STMT && node->as.return_stmt.value_count)
@@ -143,7 +143,8 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
         }
     }
     uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
-    ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : decl->exported, owner->index + 1, access, 0, 0, XR_XIR_CONSTRUCTOR};
+    ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : decl->exported, owner->index + 1, access, 0,
+        decl->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR};
     return source_query_parameters(ctx, symbol.declaration);
 }
 static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType type,
@@ -181,6 +182,8 @@ static bool source_constructor_body(SourceContext *ctx) {
     MethodDeclNode *method = &body->node->as.method_decl;
     SourceConstructorScan scan = {ctx, 0, false, false};
     if (!source_constructor_scan(method->body, &scan)) return false;
+    if (scan.shared && xr_xir_type_is_class(&ctx->types,ctx->functions[ctx->function].result))
+        return source_fail(ctx,body->node,XR_XIR_BAD_TYPE,"class constructor cleanup cannot capture unpublished this");
     body->constructor_shared = scan.shared;
     uint32_t owner = ctx->identities[ctx->function].nominal_owner - 1;
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner];

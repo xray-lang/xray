@@ -44,7 +44,7 @@ static XrXirNominalTable *arena_nominals(ArenaNominalCursor *c,
         const XrXirNominalIdentity *input = &source->identities[i];
         XrXirNominalIdentity d = {0};
         d.exported = input->exported; d.arity = input->arity;
-        d.kind = input->kind; d.variant_count = input->variant_count;
+        d.kind = input->kind; d.variant_count = input->variant_count; d.flags = input->flags;
         XrXirNominalFieldIdentity *fields = arena_nominal_span(c, input->field_count,
             sizeof(*fields), _Alignof(XrXirNominalFieldIdentity));
         d.fields = fields; d.field_count = input->field_count;

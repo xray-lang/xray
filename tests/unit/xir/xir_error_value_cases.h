@@ -13,7 +13,7 @@ static void error_deep_value_cases(void) {
     const XrXirNominalVariant variants[] = {{{"End", 3}, 0, 0}, {{"Link", 4}, 0, 1}};
     const XrXirNominalFieldIdentity field = {{"inner", 5}, 0};
     const XrXirNominalIdentity identity = {{"alpha", 5}, {"Chain", 5}, 1, 0, &field, 1,
-        XR_XIR_NOMINAL_ENUM, variants, 2};
+        XR_XIR_NOMINAL_ENUM, variants, 2, 0};
     const XrXirNominalTable table = {NULL, 1, &identity};
     const XrXirType field_type = XR_XIR_ERROR;
     const XrXirTypeNode nodes[] = {

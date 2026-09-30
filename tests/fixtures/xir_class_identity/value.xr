@@ -1,0 +1,8 @@
+export final class Counter {
+ private value:i64
+ const label:string
+ constructor(value:i64,label:string){this.value=value;this.label=label}
+ add()->i64 {this.value+=1;return this.value}
+ get()->i64 {return this.value}
+ static make(value:i64)->Counter {return Counter(value,"counter")}
+}

@@ -26,7 +26,7 @@ static XrXirArtifact *nominal_chain_fixture(uint32_t depth, uint32_t field_count
         fields[i][0] = (XrXirNominalField) {{"left", 4}, field, 0};
         fields[i][1] = (XrXirNominalField) {{"right", 5}, field, XR_XIR_FIELD_PRIVATE};
         declarations[i] = (XrXirNominalDeclaration) {{"alpha", 5}, {names[i], (uint32_t) length},
-            0, NULL, 0, fields[i], field_count, XR_XIR_NOMINAL_STRUCT, NULL, 0};
+            0, NULL, 0, fields[i], field_count, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0};
         nodes[i] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
             {i, NULL, 0, NULL, 0}};
     }

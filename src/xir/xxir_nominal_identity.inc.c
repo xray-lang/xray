@@ -12,7 +12,7 @@
 static XrXirNominalIdentity nominal_identity_header(const XrXirNominalTable *table, uint32_t i) {
     if (table->identities) return table->identities[i];
     const XrXirNominalDeclaration *d = &table->declarations[i];
-    return (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count};
+    return (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count, d->flags};
 }
 static XrXirNominalFieldIdentity nominal_identity_field(const XrXirNominalTable *table, uint32_t i, uint32_t f) {
     if (table->identities) return table->identities[i].fields[f];
@@ -32,6 +32,7 @@ static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrX
         XrXirStatus status = nominal_name(d->module, &b);
         if (status == XR_XIR_OK) status = nominal_name(d->name, &b);
         if (status != XR_XIR_OK) return status;
+        if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
         status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, &b);
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < d->field_count; ++f) {
@@ -92,7 +93,7 @@ static XrXirStatus nominal_copy_identities(const XrXirNominalTable *table, XrXir
     for (uint32_t i = 0; i < table->count; ++i) {
         XrXirNominalIdentity from = nominal_identity_header(table, i), *to = &identities[i];
         to->exported = from.exported; to->arity = from.arity; to->kind = from.kind;
-        to->variant_count = from.variant_count;
+        to->variant_count = from.variant_count; to->flags = from.flags;
         if (!nominal_variants_copy(from.variants, from.variant_count, &to->variants)) goto fail;
         if (!nominal_copy_name(from.module, &to->module) || !nominal_copy_name(from.name, &to->name)) goto fail;
         XrXirNominalFieldIdentity *fields = from.field_count ? xr_calloc(from.field_count, sizeof(*fields)) : NULL;
@@ -118,6 +119,7 @@ XR_FUNC XrXirStatus xr_xir_nominal_project(const XrXirNominalTable *table,
         return XR_XIR_BUDGET;
     for (uint32_t i = 0; i < table->count; ++i) {
         const XrXirNominalDeclaration *d = &table->declarations[i];
+        if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus variant_status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, &b);
         if (variant_status != XR_XIR_OK) return variant_status;
         if (!nominal_variants_copy_work(d->variants, d->variant_count, &b)) return XR_XIR_BUDGET;

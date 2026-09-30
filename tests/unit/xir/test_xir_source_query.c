@@ -353,7 +353,8 @@ static void native_array_type_rejections(XrXirSourceRequest *request) {
         if (i >= 4) {
             const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
             const XrXirSourceDeclaration *bad = declaration(view, "bad", 0);
-            CHECK(i >= 6 ? !bad : (bad && !bad->type.known));
+            CHECK(!bad);
+            CHECK(!strcmp(diagnostic.message,"class execution currently requires an explicit final root declaration"));
             for (uint32_t d = 0; d < view->declaration_count; ++d)
                 CHECK(view->declarations[d].kind != XR_XIR_SOURCE_TYPE || !view->declarations[d].native_identity);
             for (uint32_t r = 0; r < view->reference_count; ++r)
@@ -789,6 +790,7 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_generic_witness_provenance_cases.h"
 #include "xir_source_requirement_value_boundaries.h"
 #include "xir_source_requirement_value_provenance.h"
+#include "xir_source_class_cases.h"
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -800,6 +802,7 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
+    source_class_definition_cases(&request);
     source_generic_requirement_positive(&request);
     source_requirement_value_positive(&request);
     source_enum_identity_cases(&request);

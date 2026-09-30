@@ -1,0 +1,2 @@
+import {Counter} from "./value"
+export fn advance(value:Counter)->i64{return value.add()}

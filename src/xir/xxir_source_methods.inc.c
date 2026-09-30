@@ -196,7 +196,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             if (enumeration) {
                 if (!source_enum_method_name(ctx,owner,node)) return false;
             } else {
-                ClassDeclNode *decl = &owner->node->as.struct_decl;
+                ClassDeclNode *decl = owner->node->type == AST_CLASS_DECL ? &owner->node->as.class_decl : &owner->node->as.struct_decl;
                 for (int f = 0; f < decl->field_count; ++f) {
                     if (!source_work(ctx,node)) return false;
                     if (!strcmp(method->name,decl->fields[f]->as.field_decl.name))

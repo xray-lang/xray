@@ -13,13 +13,22 @@ typedef struct SourceMemberPlace {
     SourceValue place;
     XrXirType type;
     uint32_t field;
-    bool constructor;
+    bool constructor, identity;
 } SourceMemberPlace;
 static bool source_member_place(SourceContext *ctx, AstNode *node, AstNode *object,
     const char *name, unsigned access, SourceMemberPlace *member) {
     if (source_constructor_receiver(ctx, object)) {
         member->constructor = true;
         return source_struct_field(ctx, node, visible_name(ctx, "this")->type, name, access, &member->field, &member->type);
+    }
+    XrXirType receiver_type;
+    if (!source_path_type(ctx,object,&receiver_type)) return false;
+    if (xr_xir_type_is_class(&ctx->types,receiver_type) || receiver_type == XR_XIR_UNIT) {
+        if (!expression(ctx,object,&member->place)) return false;
+        if (!xr_xir_type_is_class(&ctx->types,member->place.type))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"temporary member mutation requires a class identity");
+        member->identity=true;
+        return source_struct_field(ctx,node,member->place.type,name,access,&member->field,&member->type);
     }
     SourceName *root = object->type == AST_VARIABLE ? visible_name(ctx, object->as.variable.name) : NULL;
     if (root && root->type == XR_XIR_PANIC_INFO && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT))
@@ -30,10 +39,12 @@ static bool source_member_place(SourceContext *ctx, AstNode *node, AstNode *obje
 }
 static bool source_member_read(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue *value) {
     if (member->constructor) return source_constructor_read(ctx, node, member->field, value);
+    if (member->identity) return emit(ctx,(XrXirInstruction){XR_XIR_CLASS_GET,member->type,{member->place.id},{0},member->field,{0}},value);
     return emit(ctx,(XrXirInstruction){XR_XIR_PLACE_READ,member->type,{member->place.id},{0},0,{0}},value);
 }
 static bool source_member_store(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue value) {
     if (member->constructor) return source_constructor_store(ctx, node, member->field, value);
+    if (member->identity) return emit(ctx,(XrXirInstruction){XR_XIR_CLASS_SET,XR_XIR_UNIT,{member->place.id,value.id},{0},member->field,{0}},NULL);
     return emit(ctx, (XrXirInstruction){XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {member->place.id, value.id}, {0}, 0, {0}}, NULL);
 }
 static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *value) {

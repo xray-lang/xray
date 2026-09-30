@@ -96,7 +96,7 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
     for (;;) {
         if (!admission->work) { status = XR_XIR_VALUE_LIMIT; break; }
         --admission->work;
-        if (inlined && xr_xir_type_is_nominal(xr_xir_type_arena_types(admission->arena), type)) {
+        if (inlined && inline_nominal_type(xr_xir_type_arena_types(admission->arena), type)) {
             status = admission_inline(&stack, span, admission);
             if (status != XR_XIR_VALUE_OK) break;
         } else {
@@ -112,7 +112,14 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
             if (owned_carrier_type(type)) {
                 XirObject *object = object_pointer(&current);
                 size_t count = 0;
-                if (object->kind == XR_XIR_TYPE_NOMINAL) {
+                if (object->kind == XIR_OBJECT_CLASS) {
+                    const XrXirStorageLayout *body=class_body_layout(object);
+                    if (object->domain != admission->domain || !body) {
+                        status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+                    }
+                    if (body->field_count > admission->work) {status=XR_XIR_VALUE_LIMIT;break;}
+                    admission->work-=body->field_count;
+                } else if (object->kind == XR_XIR_TYPE_NOMINAL) {
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                     count = ((XirNominalValue *) object)->count;
                 } else if (object->kind == XR_XIR_TYPE_ARRAY) {

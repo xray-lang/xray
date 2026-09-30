@@ -31,9 +31,9 @@ static inline void error_fixture_init(ErrorFixture *f, bool runtime) {
     f->field_ids[0] = (XrXirNominalFieldIdentity) {{"code",4},0};
     f->field_ids[1] = (XrXirNominalFieldIdentity) {{"text",4},0};
     f->declaration = (XrXirNominalDeclaration) {{"alpha",5},{"Failure",7},1,NULL,0,
-        f->fields,2,XR_XIR_NOMINAL_ENUM,f->variants,2};
+        f->fields,2,XR_XIR_NOMINAL_ENUM,f->variants,2, 0};
     f->identity = (XrXirNominalIdentity) {{"alpha",5},{"Failure",7},1,0,
-        f->field_ids,2,XR_XIR_NOMINAL_ENUM,f->variants,2};
+        f->field_ids,2,XR_XIR_NOMINAL_ENUM,f->variants,2, 0};
     f->table = (XrXirNominalTable) {runtime ? NULL : &f->declaration,1,runtime ? &f->identity : NULL};
     f->field_types[0] = XR_XIR_I64; f->field_types[1] = XR_XIR_STRING;
     f->node.kind = XR_XIR_TYPE_NOMINAL;

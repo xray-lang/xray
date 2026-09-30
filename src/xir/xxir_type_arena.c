@@ -34,7 +34,7 @@ static XrXirStorageLayout *arena_storage(ArenaNominalCursor *c, const XrXirTypes
         uint32_t fields = types->nodes[i].nominal.field_count;
         uint32_t *offsets = arena_nominal_span(c, fields, sizeof(*offsets), _Alignof(uint32_t));
         if (layouts && c->status == XR_XIR_VALUE_OK)
-            layouts[i] = (XrXirStorageLayout) {{0, 0}, offsets, fields, 0, 0, 0};
+            layouts[i] = (XrXirStorageLayout) {{0, 0}, offsets, fields, 0, 0, 0, {0,0}};
     }
     return layouts;
 }

@@ -1110,7 +1110,10 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ)) return false;
         if (symbol->kind == SOURCE_LOCAL) {
-            if (symbol->construction) return source_constructor_value(ctx, node, value);
+            if (symbol->construction) {
+                if (xr_xir_type_is_class(&ctx->types,symbol->type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class this cannot escape before constructor completion");
+                return source_constructor_value(ctx,node,value);
+            }
             if (symbol->mutable) return emit(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type,
                 {symbol->index, 0}, {0}, 0, {0}}, value);
             *value = (SourceValue) {symbol->index, symbol->type}; return true;
@@ -1339,7 +1342,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_FOR_STMT: return source_for(ctx, node);
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_IMPORT_STMT: case AST_FUNCTION_DECL: case AST_STRUCT_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
+    case AST_IMPORT_STMT: case AST_FUNCTION_DECL: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_EXPR_STMT: {
@@ -1537,8 +1540,8 @@ static bool collect_declarations(SourceContext *ctx) {
             if (!source_work(ctx, node)) return false;
             if (node->type == AST_FUNCTION_DECL) ++functions;
             if (node->type == AST_INTERFACE_DECL) ++interfaces;
-            if (node->type == AST_STRUCT_DECL || node->type == AST_ENUM_DECL) ++nominals;
-            if (node->type == AST_STRUCT_DECL || node->type == AST_ENUM_DECL) {
+            if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL || node->type == AST_ENUM_DECL) ++nominals;
+            if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL || node->type == AST_ENUM_DECL) {
                 SourceNominalDeclaration declaration;
                 if (!source_nominal_declaration(ctx,node,&declaration)) return false;
                 if (functions > ctx->budget.functions || declaration.method_count < 0 ||
@@ -1605,6 +1608,7 @@ static bool collect_declarations(SourceContext *ctx) {
             AstNode *node = ast->as.program.statements[i];
             if (node->type == AST_INTERFACE_DECL && !source_interface_declare(ctx,node)) return false;
             if (node->type == AST_STRUCT_DECL && !source_struct_declare(ctx, node)) return false;
+            if (node->type == AST_CLASS_DECL && !source_class_declare(ctx,node)) return false;
             if (node->type == AST_ENUM_DECL && !source_enum_declare(ctx, node)) return false;
             if (node->type == AST_IMPORT_STMT && !declare_import(ctx, node)) return false;
         }
@@ -1991,6 +1995,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected
         XrXirType capture_type = p->source->type;
         if (p->source->mutable && !source_cell_type(ctx, capture_type, &capture_type)) return false;
         if (p->source->construction) {
+            if (xr_xir_type_is_class(&ctx->types,p->source->type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class this cannot be captured during construction");
             if (!source_constructor_value(ctx, node, &captures[p->index])) return false;
         } else captures[p->index] = (SourceValue) {p->source->index, capture_type};
     }

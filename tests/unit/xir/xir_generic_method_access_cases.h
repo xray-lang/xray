@@ -37,7 +37,7 @@ static void generic_method_access_cases(void) {
         XrXirFunctionIdentity identities[] = {{0},{1,0,0,0,0,0,XR_XIR_NON_MEMBER},{0}};
         XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
         XrXirNominalField field = {{"secret",6},XR_XIR_I64,XR_XIR_FIELD_PRIVATE};
-        XrXirNominalDeclaration nominal = {{"other",5},{"Payload",7},1,NULL,0,&field,1,XR_XIR_NOMINAL_STRUCT,NULL,0};
+        XrXirNominalDeclaration nominal = {{"other",5},{"Payload",7},1,NULL,0,&field,1,XR_XIR_NOMINAL_STRUCT,NULL,0, 0};
         XrXirNominalTable nominals = {&nominal,1,NULL};
         XrXirTypeNode nodes[4] = {0};
         nodes[0].kind = XR_XIR_TYPE_NOMINAL;

@@ -18,6 +18,8 @@ typedef struct XrXirStorageLayout {
     const uint32_t *field_offsets;
     uint32_t field_count;
     uint32_t depth, owned_depth, tag_bytes;
+    /* Only CLASS has a body; value remains one retained identity handle. */
+    XrXirLayout body;
 } XrXirStorageLayout;
 
 /* Requires a verified pool and exact caller-owned destinations. Construction

@@ -16,6 +16,7 @@
 #include "xxir_types.h"
 #include "xxir_array.h"
 #include "xxir_struct.h"
+#include "xxir_class.h"
 #include "xxir_enum.h"
 #include "xxir_error.h"
 #include "xxir_panic.h"
@@ -127,6 +128,7 @@ static XrXirValue storage_leaf_value(XrXirType type, const unsigned char *bytes,
     memcpy(&value.payload, &bits, sizeof(bits));
     return value;
 }
+#include "xxir_class_storage.inc.c"
 static bool value_header_valid(const XrXirValue *value) {
     if (!value || value->reserved) return false;
     XrXirType type = (XrXirType) value->type;
@@ -147,6 +149,8 @@ static bool value_header_valid(const XrXirValue *value) {
     if (arena_free_carrier(type))
         return !object->arena && !object->kind;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(object->arena), type);
+    if (object->kind == XIR_OBJECT_CLASS)
+        return node && !node->parameter_span && xr_xir_type_is_class(xr_xir_type_arena_types(object->arena),type);
     return node && !node->parameter_span && node->kind == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL);
@@ -155,6 +159,17 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (!value_header_valid(value)) return false;
     if (!owned_carrier_type((XrXirType) value->type)) return true;
     XirObject *object = object_pointer(value);
+    if (object->kind == XIR_OBJECT_CLASS) {
+        const XrXirStorageLayout *layout=class_body_layout(object);
+        const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
+        if (!layout || !node || layout->field_count != node->nominal.field_count) return false;
+        for (uint32_t i=0;i<layout->field_count;++i) {
+            if (!class_field_leaf(node->nominal.fields[i])) return false;
+            XrXirValue field=class_field_value(object,i);
+            if (!value_header_valid(&field)) return false;
+        }
+        return true;
+    }
     if (object->kind == XR_XIR_TYPE_NOMINAL) {
         const XirNominalValue *record = (const XirNominalValue *) object;
         const XrXirTypes *types = xr_xir_type_arena_types(object->arena);
@@ -359,7 +374,7 @@ static uint64_t array_header_bytes(const XrXirTypeArena *arena, XrXirType elemen
     return sizeof(XirArray) + (uint64_t)array_release_depth(arena, element) * sizeof(StorageFrame);
 }
 static bool array_owned_elements(const XirArray *array) {
-    if (xr_xir_type_is_nominal(xr_xir_type_arena_types(array->object.arena), array->element))
+    if (inline_nominal_type(xr_xir_type_arena_types(array->object.arena), array->element))
         return array_release_depth(array->object.arena, array->element) != 0;
     return owned_carrier_type(array->element);
 }
@@ -384,6 +399,13 @@ static void release_pending(XirObject *pending) {
             xr_xir_domain_deallocate(domain, function, sizeof(*function) +
                 (size_t) binding.capture_count * sizeof(XrXirValue));
             binding.release(binding.owner);
+        } else if (object->kind == XIR_OBJECT_CLASS) {
+            const XrXirStorageLayout *layout=class_body_layout(object);
+            XR_CHECK(layout, "class release requires its retained body layout");
+            for (uint32_t i=layout->field_count;i;--i) {
+                XrXirValue field=class_field_value(object,i-1);queue_release(&field,&pending);
+            }
+            xr_xir_domain_deallocate(domain,object,sizeof(XirClassObject)+(size_t)layout->body.size);
         } else if (object->kind == XR_XIR_TYPE_NOMINAL) {
             XirNominalValue *record = (XirNominalValue *) object;
             for (uint32_t i = record->count; i; --i) queue_release(&record->fields[i - 1], &pending);
@@ -943,6 +965,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
     return XR_XIR_VALUE_OK;
 }
 
+#include "xxir_class_value.inc.c"
 #include "xxir_struct_value.inc.c"
 #include "xxir_value_path.inc.c"
 #include "xxir_enum_value.inc.c"

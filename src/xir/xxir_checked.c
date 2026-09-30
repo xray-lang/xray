@@ -282,6 +282,7 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.name = checked_nominal_name(c, d.name);
         d.exported = checked_u32(c, d.exported);
         d.kind = checked_u32(c, d.kind);
+        d.flags = checked_u32(c, d.flags);
         uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;

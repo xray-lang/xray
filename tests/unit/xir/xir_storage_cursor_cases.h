@@ -12,9 +12,9 @@ static XrXirTypeArena *storage_cursor_arena(XrXirDomain *domain) {
     const XrXirNominalVariant variants[] = {{{"Empty", 5}, 0, 0}, {{"Pair", 4}, 0, 2}};
     const XrXirNominalFieldIdentity fields[] = {{{"a", 1}, 0}, {{"b", 1}, 0}};
     const XrXirNominalIdentity identities[] = {
-        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 2, XR_XIR_NOMINAL_ENUM, variants, 2},
-        {{"alpha", 5}, {"Box", 3}, 1, 0, fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0},
-        {{"alpha", 5}, {"Empty", 5}, 1, 0, NULL, 0, XR_XIR_NOMINAL_STRUCT, NULL, 0}};
+        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 2, XR_XIR_NOMINAL_ENUM, variants, 2, 0},
+        {{"alpha", 5}, {"Box", 3}, 1, 0, fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0},
+        {{"alpha", 5}, {"Empty", 5}, 1, 0, NULL, 0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0}};
     const XrXirNominalTable table = {NULL, 3, identities};
     const XrXirType strings[] = {XR_XIR_STRING, XR_XIR_STRING};
     const XrXirType choices[] = {(XrXirType)256, (XrXirType)256};

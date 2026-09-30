@@ -20,6 +20,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_instance_value.h"
 #include "xxir_struct.h"
+#include "xxir_class.h"
 #include "xxir_enum.h"
 #include "xxir_error.h"
 #include "xxir_panic.h"
@@ -193,6 +194,30 @@ static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
     }
     if (xr_xir_type_is_owned(run->module->types, op->type)) xr_xir_owned_slot_move(run->frame, destination, &output);
     else if (op->type != XR_XIR_UNIT) xr_xir_scalar_store(run->frame, destination, output.payload);
+    return XR_XIR_RUN_OK;
+}
+
+static XrXirRunStatus vm_class_step(ScalarRun *run, VmState *state,
+    const XrXirInstruction *op, uint32_t destination) {
+    XrXirValue output={0};XrXirValueStatus status;
+    XrXirValueAdmission *admission=xr_xir_call_admission(run->view);
+    if (!admission) return XR_XIR_RUN_BAD_ARTIFACT;
+    if (op->op == XR_XIR_CLASS_NEW) {
+        for(uint32_t i=0;i<op->args[1];++i)
+            state->arguments[i]=vm_value_operand(run,run->function->operands[op->args[0]+i]);
+        status=xr_xir_class_new(op->type,op->args[1]?state->arguments:NULL,op->args[1],admission,&output);
+    } else {
+        XrXirValue receiver=vm_value_operand(run,op->args[0]);
+        if(op->op == XR_XIR_CLASS_SET) {
+            XrXirValue value=vm_value_operand(run,op->args[1]);
+            return value_run_status(xr_xir_class_set(&receiver,(uint32_t)op->immediate,&value,admission));
+        }
+        status=xr_xir_value_admit(&receiver,(XrXirType)receiver.type,admission);
+        if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,(uint32_t)op->immediate,&output);
+    }
+    if(status != XR_XIR_VALUE_OK) return value_run_status(status);
+    if(xr_xir_type_is_owned(run->module->types,op->type)) xr_xir_owned_slot_move(run->frame,destination,&output);
+    else xr_xir_scalar_store(run->frame,destination,output.payload);
     return XR_XIR_RUN_OK;
 }
 
@@ -470,6 +495,10 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     if (xr_xir_op_uses_value_path(run->function, op)) {
         state->instruction = next;
         return vm_path_step(run, state, op, run->layout->offsets[result_id], action);
+    }
+    if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
+        state->instruction = next;
+        return vm_class_step(run, state, op, run->layout->offsets[result_id]);
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||

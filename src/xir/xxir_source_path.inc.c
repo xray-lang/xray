@@ -16,7 +16,8 @@ static bool source_path_nodes(SourceContext *ctx, AstNode *node, AstNode **steps
         steps[(*count)++] = node;
         node = node->type == AST_MEMBER_ACCESS ? node->as.member_access.object : node->as.index_get.array;
     }
-    if (node && node->type == AST_VARIABLE) *root = visible_name(ctx,node->as.variable.name);
+    if (node && (node->type == AST_VARIABLE || node->type == AST_THIS_EXPR))
+        *root = visible_name(ctx,node->type == AST_THIS_EXPR ? "this" : node->as.variable.name);
     return true;
 }
 /* Method selection inspects declarations without evaluating a receiver or index.
