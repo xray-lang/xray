@@ -73,8 +73,8 @@ static void interface_checked_cases(void) {
     interface_packet_attack(&packet,12,XR_XIR_CHECKED_CONTRACT - 1);
     interface_packet_attack(&packet,measure,2);
     interface_packet_attack(&packet,measure + 8,UINT32_MAX);
-    interface_packet_attack(&packet,child + 16,UINT32_MAX);
-    interface_packet_attack(&packet,child + 16,1);
+    interface_packet_attack(&packet,child + 20,UINT32_MAX);
+    interface_packet_attack(&packet,child + 20,1);
     interface_packet_attack(&packet,concrete + 20,XR_XIR_UNIT);
     interface_packet_attack(&packet,method,XR_XIR_I64);
     interface_packet_attack(&packet,method + 4,1);

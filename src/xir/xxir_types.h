@@ -33,6 +33,10 @@ XR_FUNC XrXirStatus xr_xir_type_markers(const XrXirTypes *types, XrXirType type,
 /* Expression obligations are proved independently in each declaration context. */
 XR_FUNC XrXirStatus xr_xir_type_context_verify(const XrXirTypes *types, XrXirType type,
     const XrXirConstraint *constraints, uint32_t parameter_count, XrXirBudget *remaining);
+/* Structural admission precedes interface inheritance and constraint proofs. */
+XR_FUNC XrXirStatus xr_xir_type_context_verify_shape(const XrXirTypes *types, XrXirType type,
+    const XrXirConstraint *constraints, uint32_t parameter_count, XrXirBudget *remaining);
+XR_FUNC XrXirStatus xr_xir_type_descriptors_verify(const XrXirTypes *types, XrXirBudget *remaining);
 XR_FUNC XrXirStatus xr_xir_type_substitution_matches(const XrXirTypes *types,
     const XrXirType *arguments, uint32_t count, XrXirType expected,
     XrXirType actual, XrXirBudget *remaining);

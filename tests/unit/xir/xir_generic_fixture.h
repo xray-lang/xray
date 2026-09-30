@@ -14,7 +14,7 @@
 #include "xir/xxir_generic.h"
 static XrXirArtifact *generic_fixture(void) {
     const XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
-    const XrXirConstraint sendable = {XR_XIR_CONSTRAINT_SENDABLE};
+    const XrXirConstraint sendable = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
     const uint32_t operands[] = {0, 1, 3};
     const XrXirType types[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_STRING};

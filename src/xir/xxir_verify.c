@@ -725,7 +725,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (op->op == XR_XIR_ERROR_ERASE && op->type != XR_XIR_ERROR) return XR_XIR_BAD_TYPE;
             expected = xr_xir_operand_type(function, op->args[0]);
             XrXirStatus status = xr_xir_type_constraints(context->module, context->location.function,
-                expected, (XrXirConstraint){XR_XIR_CONSTRAINT_ERROR}, &context->remaining);
+                expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_ERROR}, &context->remaining);
             if (status != XR_XIR_OK) return status;
         }
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
@@ -913,8 +913,8 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
             &context.remaining.metadata_bytes, &context.remaining.work);
     }
     if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining);
-    if (status == XR_XIR_OK) status = verify_interface_access(module, &context.remaining);
     if (status == XR_XIR_OK) status = xr_xir_generics_verify(module, &context.remaining);
+    if (status == XR_XIR_OK) status = verify_interface_access(module, &context.remaining);
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;
         const XrXirFunction *entry = &module->functions[d->entry_function];

@@ -87,8 +87,10 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     if (status != XR_XIR_OK) return status;
     status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, b);
     if (status != XR_XIR_OK) return status;
-    for (uint32_t p = 0; p < d->parameter_count; ++p)
-        if (d->constraints[p].markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+    for (uint32_t p = 0; p < d->parameter_count; ++p) {
+        status = xr_xir_constraint_structure(types, d->constraints[p], d->parameter_count, b);
+        if (status != XR_XIR_OK) return status;
+    }
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
@@ -98,7 +100,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         status = nominal_name(field->name, b);
         if (status != XR_XIR_OK) return status;
         if (!nominal_field_type(types, field->type, d->parameter_count)) return XR_XIR_BAD_TYPE;
-        status = xr_xir_type_context_verify(types, field->type, d->constraints, d->parameter_count, b);
+        status = xr_xir_type_context_verify_shape(types, field->type, d->constraints, d->parameter_count, b);
         if (status != XR_XIR_OK) return status;
         uint32_t begin = 0;
         status = nominal_field_begin(d->kind, d->variants, d->variant_count, f, b, &begin);
@@ -145,6 +147,15 @@ XR_FUNC XrXirStatus xr_xir_nominal_verify(const XrXirNominalTable *table,
     XrXirStatus status = xr_xir_types_verify(types, &remaining);
     if (status == XR_XIR_OK && (!types || table != types->nominals))
         status = nominal_table_verify(table, types, &remaining);
+    for (uint32_t d = 0; status == XR_XIR_OK && table && table->declarations &&
+        (!types || table != types->nominals) && d < table->count; ++d) {
+        const XrXirNominalDeclaration *declaration = &table->declarations[d];
+        XrXirConstraintEnvironment environment = {types, declaration->constraints, declaration->parameter_count};
+        status = xr_xir_constraint_environment_verify(&environment, &remaining);
+        for (uint32_t f = 0; status == XR_XIR_OK && f < declaration->field_count; ++f)
+            status = xr_xir_type_context_verify(types, declaration->fields[f].type,
+                declaration->constraints, declaration->parameter_count, &remaining);
+    }
     if (status == XR_XIR_OK) *budget = remaining;
     return status;
 }
@@ -154,7 +165,7 @@ XR_FUNC void xr_xir_nominal_free(XrXirNominalTable *table) {
     for (uint32_t i = 0; table->declarations && i < table->count; ++i) {
         const XrXirNominalDeclaration *d = &table->declarations[i];
         xr_free((void *) d->module.bytes); xr_free((void *) d->name.bytes);
-        xr_free((void *) d->constraints);
+        xr_xir_constraint_array_free((XrXirConstraint *)d->constraints, d->parameter_count);
         nominal_variants_free(d->variants, d->variant_count);
         for (uint32_t f = 0; d->fields && f < d->field_count; ++f)
             xr_free((void *) d->fields[f].name.bytes);
@@ -194,13 +205,10 @@ static bool nominal_copy_declaration(const XrXirNominalDeclaration *source,
     if (!nominal_variants_copy(source->variants, source->variant_count, &d->variants)) return false;
     if (!nominal_copy_name(source->module, &d->module) ||
         !nominal_copy_name(source->name, &d->name)) return false;
-    if (source->parameter_count) {
-        size_t bytes = (size_t) source->parameter_count * sizeof(*source->constraints);
-        XrXirConstraint *constraints = xr_malloc(bytes);
-        if (!constraints) return false;
-        memcpy(constraints, source->constraints, bytes);
-        d->constraints = constraints; d->parameter_count = source->parameter_count;
-    }
+    XrXirConstraint *constraints = NULL;
+    if (xr_xir_constraint_array_copy_verified(source->constraints, source->parameter_count, &constraints) != XR_XIR_OK)
+        return false;
+    d->constraints = constraints; d->parameter_count = source->parameter_count;
     if (source->field_count) {
         XrXirNominalField *fields = xr_calloc(source->field_count, sizeof(*fields));
         if (!fields) return false;

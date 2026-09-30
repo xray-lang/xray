@@ -131,7 +131,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 15 && XR_XIR_CHECKED_CONTRACT == 43 && XR_XIR_OP_COUNT == 109, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 16 && XR_XIR_CHECKED_CONTRACT == 44 && XR_XIR_OP_COUNT == 109, "packet revision");
     _Static_assert(XR_XIR_PANIC_CATCH == 97 && XR_XIR_PANIC_CODE == 98 && XR_XIR_PANIC_MESSAGE == 99 &&
         XR_XIR_PANIC_INFO == 15, "panic wire identities");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
@@ -164,8 +164,8 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0xdd, 0x88, 0x20, 0x33, 0x57, 0x00, 0x6a, 0x9d, 0xf9, 0x31, 0x69, 0x86, 0x89, 0xd5, 0x9b, 0x0f,
-        0x12, 0x80, 0x49, 0x1e, 0x62, 0x04, 0x55, 0x94, 0xe9, 0xe3, 0x8c, 0x33, 0xb3, 0xd4, 0xfc, 0xc1};
+        0x59, 0xfc, 0xb5, 0xfa, 0x8c, 0x79, 0x51, 0x3f, 0xca, 0x99, 0x42, 0xa3, 0x67, 0x53, 0xad, 0x9a,
+        0x77, 0x80, 0x02, 0x9e, 0x96, 0xf9, 0xa4, 0x9a, 0xb0, 0xce, 0xb0, 0x52, 0xc2, 0x1c, 0xf7, 0xca};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[213]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 141; offset <= 145; offset += 4) {
@@ -221,7 +221,7 @@ static void callable_contracts(void) {
     CHECK(module.functions[1].result == XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirBudget sendable_budget = xr_xir_default_budget();
     CHECK(xr_xir_type_satisfies(&module, 0, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE,
-        (XrXirConstraint){XR_XIR_CONSTRAINT_SENDABLE}, &sendable_budget) == XR_XIR_BAD_TYPE);
+        (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_SENDABLE}, &sendable_budget) == XR_XIR_BAD_TYPE);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK && lowered);
     CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
@@ -961,7 +961,9 @@ static void match_fault_shape(void) {
 #include "xir_cleanup_frontier_cases.h"
 #include "xir_path_checked_cases.h"
 #include "xir_interface_checked_cases.h"
+#include "xir_constraint_packet_cases.h"
 int main(void) {
+    constraint_packet_cases();
     interface_checked_cases();
     path_array_checked_cases(); path_field_checked_cases(); path_ancestor_checked_cases();
     cleanup_role_cases();

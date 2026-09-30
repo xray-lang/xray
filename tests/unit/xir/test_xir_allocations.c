@@ -73,6 +73,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 #define xr_realloc(pointer, size) counted_realloc(pointer, size)
 
 #include "xir/xxir_types.c"
+#include "xir/xxir_constraints.c"
+#include "xir/xxir_constraint_proof.c"
 #include "xir/xxir_interface.c"
 #include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
@@ -106,6 +108,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_instance_admission_cases.h"
 #include "xir_initialization_allocations.h"
 #include "xir_interface_packet_allocations.h"
+#include "xir_constraint_packet_allocations.h"
 static void function_allocation_failures(void) {
     for (unsigned cancel = 0; cancel < 2; ++cancel) {
         calls = 0; fail_at = SIZE_MAX;
@@ -484,6 +487,7 @@ static void nominal_pool_allocation_failures(void) {
 }
 
 int main(void) {
+    constraint_packet_allocation_failures();
     interface_packet_allocation_failures();
     nominal_pool_allocation_failures();
     nominal_allocation_failures();

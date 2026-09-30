@@ -39,6 +39,16 @@ static XrXirStatus interface_parent_access(const XrXirModule *module,
     }
     return XR_XIR_OK;
 }
+static XrXirStatus interface_constraint_access(const XrXirModule *module, uint32_t owner,
+    const XrXirConstraint *constraints, uint32_t count, XrXirBudget *remaining) {
+    for (uint32_t p = 0; p < count; ++p)
+        for (uint32_t a = 0; a < constraints[p].interface_count; ++a) {
+            if (!spend(&remaining->work, 1)) return XR_XIR_BUDGET;
+            XrXirStatus status = interface_parent_access(module, owner, &constraints[p].interfaces[a], remaining);
+            if (status != XR_XIR_OK) return status;
+        }
+    return XR_XIR_OK;
+}
 /* Descriptor and module structure must be verified before naming authority. */
 static XrXirStatus verify_interface_access(const XrXirModule *module, XrXirBudget *remaining) {
     const XrXirInterfaceTable *table = module->types ? module->types->interfaces : NULL;
@@ -49,6 +59,8 @@ static XrXirStatus verify_interface_access(const XrXirModule *module, XrXirBudge
         const XrXirInterfaceDeclaration *declaration = &table->declarations[d];
         uint32_t owner = 0;
         XrXirStatus status = interface_access_owner(scope, declaration->module, remaining, &owner);
+        if (status != XR_XIR_OK) return status;
+        status = interface_constraint_access(module, owner, declaration->constraints, declaration->parameter_count, remaining);
         if (status != XR_XIR_OK) return status;
         for (uint32_t p = 0; p < declaration->parent_count; ++p) {
             if (!spend(&remaining->work, 1)) return XR_XIR_BUDGET;
@@ -61,6 +73,21 @@ static XrXirStatus verify_interface_access(const XrXirModule *module, XrXirBudge
                 declaration->methods[m].signature, remaining);
             if (status != XR_XIR_OK) return status;
         }
+    }
+    const XrXirNominalTable *nominals = module->types->nominals;
+    for (uint32_t n = 0; nominals && nominals->declarations && n < nominals->count; ++n) {
+        const XrXirNominalDeclaration *declaration = &nominals->declarations[n];
+        uint32_t owner = 0;
+        XrXirStatus status = interface_access_owner(scope, declaration->module, remaining, &owner);
+        if (status == XR_XIR_OK) status = interface_constraint_access(module, owner,
+            declaration->constraints, declaration->parameter_count, remaining);
+        if (status != XR_XIR_OK) return status;
+    }
+    for (uint32_t f = 0; module->generics && f < module->function_count; ++f) {
+        const XrXirGeneric *generic = &module->generics[f];
+        XrXirStatus status = interface_constraint_access(module, scope->functions[f].module,
+            generic->constraints, generic->parameter_count, remaining);
+        if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }

@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Known escaping errors and uncertain suspension are separate obligations.
  */
+#include "xxir_constraints.h"
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
     XrXirBudget *remaining, XrXirDiagnostic *diagnostic) {
     if (!module->declarations) return XR_XIR_OK;
@@ -26,7 +27,9 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             if (body->parameter_count != parent->parameter_count) return XR_XIR_BAD_TYPE;
             for (uint32_t p = 0; p < body->parameter_count; ++p) {
                 if (!spend(&remaining->work, 1)) return XR_XIR_BUDGET;
-                if (body->constraints[p].markers != parent->constraints[p].markers) return XR_XIR_BAD_TYPE;
+                XrXirStatus status = xr_xir_constraint_records_match(module->types,body->constraints[p],
+                    module->types,parent->constraints[p],body->parameter_count,remaining);
+                if (status != XR_XIR_OK) return status;
             }
         }
     }

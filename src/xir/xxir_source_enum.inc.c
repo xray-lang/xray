@@ -20,9 +20,8 @@ static bool source_enum_fields(SourceContext *ctx) {
         if (owner->node->type != AST_ENUM_DECL) continue;
         EnumDeclNode *source = &owner->node->as.enum_decl;
         ctx->module = owner->module; ctx->function = owner->module;
-        ctx->nominal_type_context = true; ctx->nominal_type_parameters = source->type_params;
-        ctx->nominal_type_parameter_count = source->type_param_count;
-        ctx->nominal_generic_owner = source->type_param_count ? owner->declaration : 0;
+        ctx->type_scope = (SourceTypeScope){true,owner->node,source->type_params,
+            (uint32_t)source->type_param_count,source->type_param_count ? owner->declaration : 0};
         uint32_t count = 0;
         for (int v = 0; v < source->member_count; ++v) {
             AstNode *member = source->members[v];
@@ -70,7 +69,7 @@ static bool source_enum_fields(SourceContext *ctx) {
         source_query_binding_type(ctx, &ordinal); variant_ids[record->variant_count] = ordinal.declaration;
         XrXirTypeNode *type = (XrXirTypeNode *)&ctx->types.nodes[(uint32_t)owner->type - XR_XIR_CONSTRUCTED_TYPE_BASE];
         type->nominal.fields = types; type->nominal.field_count = count;
-        ctx->nominal_type_context = false; ctx->nominal_generic_owner = 0;
+        ctx->type_scope = (SourceTypeScope){0};
     }
     return true;
 }

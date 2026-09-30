@@ -18,14 +18,12 @@
 typedef struct MemberMemory { struct MemberMemory *next; } MemberMemory;
 typedef struct MemberApplication {
     struct MemberApplication *next;
-    uint32_t declaration, count;
+    uint32_t declaration, count, index;
     XrXirType *arguments;
 } MemberApplication;
 typedef struct MemberRequirement {
     struct MemberRequirement *next;
-    XrXirLiteral name;
-    XrXirType signature;
-    uint32_t receiver;
+    XrXirInterfaceRequirement value;
 } MemberRequirement;
 typedef struct MemberTypeValue {
     struct MemberTypeValue *next;
@@ -46,9 +44,17 @@ typedef struct MemberContext {
     MemberMemory *memory;
     MemberApplication *applications, *tail;
     MemberRequirement *requirements;
+    uint32_t application_count, requirement_count;
     XrXirBudget remaining;
     XrXirStatus status;
 } MemberContext;
+struct XrXirInterfaceClosure {
+    MemberMemory *memory;
+    XrXirTypes types;
+    XrXirInterfaceApplication *applications;
+    XrXirInterfaceRequirement *requirements;
+    uint32_t application_count, requirement_count;
+};
 
 static bool member_work(MemberContext *c, uint64_t work) {
     if (c->status != XR_XIR_OK) return false;
@@ -197,30 +203,39 @@ static void member_application(MemberContext *c, uint32_t declaration, XrXirType
     }
     MemberApplication *app = member_alloc(c, 1, sizeof(*app));
     if (!app) return;
+    if (c->application_count == UINT32_MAX) { c->status = XR_XIR_BUDGET; return; }
     app->declaration = declaration; app->count = count; app->arguments = arguments;
+    app->index = c->application_count++;
     if (c->tail) c->tail->next = app; else c->applications = app;
     c->tail = app;
 }
-static void member_requirement(MemberContext *c, const XrXirInterfaceMethod *method, XrXirType signature) {
+static void member_requirement(MemberContext *c, const MemberApplication *app,
+    uint32_t member, XrXirType signature) {
+    const XrXirInterfaceMethod *method = &c->table->declarations[app->declaration].methods[member];
     for (MemberRequirement *r = c->requirements; r; r = r->next) {
         if (!member_work(c, (uint64_t)method->name.length + 1)) return;
-        if (r->name.length != method->name.length || memcmp(r->name.bytes, method->name.bytes, r->name.length)) continue;
-        if (r->receiver != method->receiver || !member_equal(c, r->signature, signature)) {
+        if (r->value.name.length != method->name.length ||
+            memcmp(r->value.name.bytes, method->name.bytes, r->value.name.length)) continue;
+        if (r->value.receiver != method->receiver || !member_equal(c, r->value.signature, signature)) {
             if (c->status == XR_XIR_OK) c->status = XR_XIR_BAD_TYPE;
             return;
         }
     }
     MemberRequirement *requirement = member_alloc(c, 1, sizeof(*requirement));
     if (!requirement) return;
-    *requirement = (MemberRequirement){c->requirements, method->name, signature, method->receiver};
+    if (c->requirement_count == UINT32_MAX) { c->status = XR_XIR_BUDGET; return; }
+    requirement->next = c->requirements;
+    requirement->value = (XrXirInterfaceRequirement){app->index,app->declaration,member,
+        signature,method->name,method->receiver};
     c->requirements = requirement;
+    ++c->requirement_count;
 }
 static void member_expand(MemberContext *c, const MemberApplication *app) {
     const XrXirInterfaceDeclaration *d = &c->table->declarations[app->declaration];
     MemberTypeMap map = {0};
     for (uint32_t m = 0; m < d->method_count && member_work(c, 1); ++m) {
         XrXirType signature = member_resolve(c, app, &map, d->methods[m].signature);
-        if (c->status == XR_XIR_OK) member_requirement(c, &d->methods[m], signature);
+        if (c->status == XR_XIR_OK) member_requirement(c, app, m, signature);
     }
     for (uint32_t p = 0; p < d->parent_count && member_work(c, 1); ++p) {
         const XrXirInterfaceApplication *parent = &d->parents[p];
@@ -231,19 +246,87 @@ static void member_expand(MemberContext *c, const MemberApplication *app) {
         if (c->status == XR_XIR_OK) member_application(c, parent->declaration, arguments);
     }
 }
-static void member_root(MemberContext *c, uint32_t root) {
+static void member_roots(MemberContext *c, const XrXirInterfaceApplication *roots, uint32_t count) {
     if (c->source) {
         c->types = *c->source; c->types.interfaces = NULL;
         c->capacity = c->types.count;
     }
-    c->root_count = c->table->declarations[root].parameter_count;
+    for (uint32_t r = 0; r < count && member_work(c,1); ++r) {
+        const XrXirInterfaceApplication *root = &roots[r];
+        if (!c->table || root->declaration >= c->table->count ||
+            (!!root->arguments != !!root->argument_count) ||
+            root->argument_count != c->table->declarations[root->declaration].parameter_count) {
+            c->status = XR_XIR_BAD_STRUCTURE; return;
+        }
+        for (uint32_t a = 0; a < root->argument_count && member_work(c,1); ++a) {
+            uint32_t span = xr_xir_type_span(c->source,root->arguments[a]);
+            if (span > c->root_count) c->root_count = span;
+        }
+    }
     c->root_arguments = member_alloc(c, c->root_count, sizeof(*c->root_arguments));
     if (c->root_count && !c->root_arguments) return;
     for (uint32_t p = 0; p < c->root_count && member_work(c, 1); ++p)
         c->root_arguments[p] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + p);
-    if (c->status == XR_XIR_OK) member_application(c, root, c->root_arguments);
+    for (uint32_t r = 0; r < count && member_work(c,1); ++r) {
+        const XrXirInterfaceApplication *root = &roots[r];
+        XrXirType *arguments = member_alloc(c,root->argument_count,sizeof(*arguments));
+        if (root->argument_count && !arguments) return;
+        if (!member_work(c,root->argument_count)) return;
+        if (root->argument_count) memcpy(arguments,root->arguments,root->argument_count * sizeof(*arguments));
+        member_application(c,root->declaration,arguments);
+    }
     for (MemberApplication *app = c->applications; app && member_work(c, 1); app = app->next)
         member_expand(c, app);
+}
+static XrXirInterfaceClosure *member_publish(MemberContext *c) {
+    XrXirInterfaceClosure *closure = member_alloc(c,1,sizeof(*closure));
+    if (!closure) return NULL;
+    closure->types = c->types;
+    closure->applications = member_alloc(c,c->application_count,sizeof(*closure->applications));
+    closure->requirements = member_alloc(c,c->requirement_count,sizeof(*closure->requirements));
+    if (c->status != XR_XIR_OK) return NULL;
+    for (MemberApplication *app = c->applications; app && member_work(c,1); app = app->next)
+        closure->applications[app->index] = (XrXirInterfaceApplication){app->declaration,app->arguments,app->count};
+    uint32_t index = c->requirement_count;
+    for (MemberRequirement *r = c->requirements; r && member_work(c,1); r = r->next)
+        closure->requirements[--index] = r->value;
+    if (c->status != XR_XIR_OK) return NULL;
+    closure->application_count = c->application_count; closure->requirement_count = c->requirement_count;
+    closure->memory = c->memory; c->memory = NULL;
+    return closure;
+}
+XR_FUNC XrXirStatus xr_xir_interface_closure_build(const XrXirInterfaceTable *table,
+    const XrXirTypes *types, const XrXirInterfaceApplication *roots, uint32_t root_count,
+    XrXirBudget *budget, XrXirInterfaceClosure **output) {
+    if (output) *output = NULL;
+    if (!output || !budget || (!!roots != !!root_count) ||
+        (table && (!table->count || !table->declarations))) return XR_XIR_BAD_STRUCTURE;
+    MemberContext c = {0}; c.table = table; c.source = types; c.remaining = *budget;
+    member_roots(&c,roots,root_count);
+    if (c.status == XR_XIR_OK) *output = member_publish(&c);
+    if (c.status == XR_XIR_OK) *budget = c.remaining;
+    member_dispose(&c); return c.status;
+}
+XR_FUNC const XrXirTypes *xr_xir_interface_closure_types(const XrXirInterfaceClosure *closure) {
+    return closure ? &closure->types : NULL;
+}
+XR_FUNC uint32_t xr_xir_interface_closure_application_count(const XrXirInterfaceClosure *closure) {
+    return closure ? closure->application_count : 0;
+}
+XR_FUNC const XrXirInterfaceApplication *xr_xir_interface_closure_application(
+    const XrXirInterfaceClosure *closure, uint32_t index) {
+    return closure && index < closure->application_count ? &closure->applications[index] : NULL;
+}
+XR_FUNC uint32_t xr_xir_interface_closure_requirement_count(const XrXirInterfaceClosure *closure) {
+    return closure ? closure->requirement_count : 0;
+}
+XR_FUNC const XrXirInterfaceRequirement *xr_xir_interface_closure_requirement(
+    const XrXirInterfaceClosure *closure, uint32_t index) {
+    return closure && index < closure->requirement_count ? &closure->requirements[index] : NULL;
+}
+XR_FUNC void xr_xir_interface_closure_free(XrXirInterfaceClosure *closure) {
+    MemberMemory *memory = closure ? closure->memory : NULL;
+    while (memory) { MemberMemory *next = memory->next; xr_free(memory); memory = next; }
 }
 XR_FUNC XrXirStatus xr_xir_interfaces_verify_members_verified(
     const XrXirInterfaceTable *table, const XrXirTypes *types, XrXirBudget *budget) {
@@ -252,7 +335,13 @@ XR_FUNC XrXirStatus xr_xir_interfaces_verify_members_verified(
     XrXirBudget remaining = *budget;
     for (uint32_t root = 0; root < table->count; ++root) {
         MemberContext c = {0}; c.table = table; c.source = types; c.remaining = remaining;
-        member_root(&c, root); member_dispose(&c);
+        uint32_t count = table->declarations[root].parameter_count;
+        XrXirType *arguments = member_alloc(&c,count,sizeof(*arguments));
+        for (uint32_t a = 0; a < count && member_work(&c,1); ++a)
+            arguments[a] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + a);
+        XrXirInterfaceApplication application = {root,arguments,count};
+        if (c.status == XR_XIR_OK) member_roots(&c,&application,1);
+        member_dispose(&c);
         if (c.status != XR_XIR_OK) return c.status;
         remaining = c.remaining;
     }

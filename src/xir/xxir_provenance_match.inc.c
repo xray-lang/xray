@@ -10,6 +10,8 @@
  *   Independent consumers can check structural substitution without a producer arena.
  */
 #include <stdio.h>
+#include "xxir_constraints.h"
+#include "xxir_constraint_proof.h"
 typedef struct ProvenanceMatch {
     const XrXirModule *source, *destination;
     const XrXirOrigin *origins;
@@ -80,9 +82,16 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
         if (origin->function >= c->source->function_count ||
             origin->argument_count != (c->source->generics ? c->source->generics[origin->function].parameter_count : 0))
             return XR_XIR_BAD_STRUCTURE;
+        const XrXirGeneric *actual_generic = c->destination->generics ? &c->destination->generics[f] : NULL;
+        XrXirConstraintEnvironment environment = {c->destination->types,
+            actual_generic ? actual_generic->constraints : NULL, actual_generic ? actual_generic->parameter_count : 0};
         for (uint32_t a = 0; a < origin->argument_count; ++a) {
-            XrXirStatus status = xr_xir_type_constraints(c->destination, f, origin->arguments[a],
-                c->source->generics[origin->function].constraints[a], c->remaining);
+            XrXirConstraintSubstitution use = {c->source->types,
+                c->source->generics[origin->function].constraints[a],origin->arguments,
+                origin->argument_count,origin->arguments[a]};
+            XrXirStatus status = xr_xir_type_constraints(c->destination,f,origin->arguments[a],
+                (XrXirConstraint){0},c->remaining);
+            if (status == XR_XIR_OK) status = xr_xir_constraint_entails(&environment,&use,c->remaining);
             if (status != XR_XIR_OK) return status;
         }
         const XrXirFunction *from = &c->source->functions[origin->function], *to = &c->destination->functions[f];
@@ -235,11 +244,13 @@ static XrXirStatus provenance_lowered_nominals(ProvenanceMatch *c,
             return XR_XIR_BAD_STRUCTURE;
         if ((uint64_t)d->parameter_count + d->field_count > c->remaining->work) return XR_XIR_BUDGET;
         c->remaining->work -= (uint64_t)d->parameter_count + d->field_count;
-        for (uint32_t a = 0; a < d->parameter_count; ++a)
-            if (d->constraints[a].markers) {
-                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a].markers, NULL, 0, &c->remaining->work);
-                if (status != XR_XIR_OK) return status;
-            }
+        XrXirConstraintEnvironment environment = {types,NULL,0};
+        for (uint32_t a = 0; a < d->parameter_count; ++a) {
+            XrXirConstraintSubstitution use = {c->source->types,d->constraints[a],
+                node->nominal.arguments,node->nominal.argument_count,node->nominal.arguments[a]};
+            XrXirStatus status = xr_xir_constraint_entails(&environment,&use,c->remaining);
+            if (status != XR_XIR_OK) return status;
+        }
         for (uint32_t f = 0; f < d->field_count; ++f) {
             XrXirStatus status = xr_xir_type_substitution_matches_between(c->source->types, types,
                 node->nominal.arguments, node->nominal.argument_count, d->fields[f].type, node->nominal.fields[f], c->remaining);
@@ -275,8 +286,11 @@ static XrXirStatus provenance_nominals(ProvenanceMatch *c) {
         if (status != XR_XIR_OK) return status;
         status = provenance_bytes(c, from->name.bytes, from->name.length, to->name.bytes, to->name.length);
         if (status != XR_XIR_OK) return status;
-        for (uint32_t p = 0; p < from->parameter_count; ++p)
-            if (from->constraints[p].markers != to->constraints[p].markers) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t p = 0; p < from->parameter_count; ++p) {
+            status = xr_xir_constraint_records_match(c->source->types,from->constraints[p],
+                c->destination->types,to->constraints[p],from->parameter_count,c->remaining);
+            if (status != XR_XIR_OK) return status == XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
+        }
         status = provenance_nominal_fields(c, from, to);
         if (status != XR_XIR_OK) return status;
     }

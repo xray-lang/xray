@@ -30,8 +30,12 @@ static void counted_free(void *p) { if (p) { CHECK(live); --live; } xr_free(p); 
 #define xr_free(p) counted_free(p)
 #include "xir/xxir_interface.c"
 #include "xir/xxir_interface_members.c"
+#include "xir/xxir_constraints.c"
+#include "xir/xxir_constraint_proof.c"
 #include "xir_interface_member_cases.h"
 #include "xir_interface_access_cases.h"
+#include "xir_interface_closure_cases.h"
+#include "xir_constraint_proof_cases.h"
 
 typedef struct Fixture {
     char name[8], method[4];
@@ -165,7 +169,7 @@ static void checked_owner_lifetime(void) {
 }
 static void inherited_contexts(void) {
     Fixture f; fixture(&f);
-    XrXirConstraint parent_constraint = {XR_XIR_CONSTRAINT_SENDABLE};
+    XrXirConstraint parent_constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     f.declarations[0].constraints = &parent_constraint;
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&budget)==XR_XIR_BAD_TYPE);
@@ -214,6 +218,8 @@ static void interface_parameters_remain_declaration_scoped(void) {
     }
 }
 int main(void) {
+    interface_closure_cases();
+    constraint_proof_cases();
     interface_access_cases();
     interface_member_cases();
     ownership_and_oom(); rejection_and_budget(); inherited_contexts(); checked_owner_lifetime();

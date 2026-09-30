@@ -115,8 +115,11 @@ typedef struct XrXirFunction {
 #define XR_XIR_CONSTRAINT_SENDABLE 1u
 #define XR_XIR_CONSTRAINT_ERROR 2u
 #define XR_XIR_CONSTRAINT_MASK (XR_XIR_CONSTRAINT_SENDABLE | XR_XIR_CONSTRAINT_ERROR)
+typedef struct XrXirInterfaceApplication XrXirInterfaceApplication;
 typedef struct XrXirConstraint {
     uint32_t markers;
+    const XrXirInterfaceApplication *interfaces;
+    uint32_t interface_count;
 } XrXirConstraint;
 
 typedef struct XrXirGeneric {

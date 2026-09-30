@@ -26,13 +26,19 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
     if (!c->remaining->work) return XR_XIR_BUDGET;
     --c->remaining->work;
     uint32_t id = (uint32_t) expected;
+    if (!c->count && c->source_types == c->types && expected == actual) return XR_XIR_OK;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
         uint32_t index = id - XR_XIR_TYPE_PARAMETER_BASE;
-        return index < c->count && c->arguments[index] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        if (index >= c->count) return XR_XIR_BAD_TYPE;
+        if (c->arguments[index] == actual) return XR_XIR_OK;
+        /* Substituted expressions belong to the destination environment. The
+         * nested matcher has no substitution, so this branch cannot recur. */
+        return xr_xir_type_substitution_matches_between(c->types, c->types, NULL, 0,
+            c->arguments[index], actual, c->remaining);
     }
     const XrXirTypeNode *from = xr_xir_type_node(c->source_types, expected);
-    if (!from || (c->source_types == c->types && !from->parameter_span))
-        return expected == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    if (!from) return expected == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    if (c->source_types == c->types && !from->parameter_span && expected == actual) return XR_XIR_OK;
     const XrXirTypeNode *to = xr_xir_type_node(c->types, actual);
     if (!to || from->kind != to->kind || from->parameter_count != to->parameter_count || from->flags != to->flags)
         return XR_XIR_BAD_TYPE;

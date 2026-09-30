@@ -12,7 +12,7 @@
 #include "xir/xxir_generic.h"
 static XrXirArtifact *enum_generic_checked(unsigned mode) {
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
-    XrXirConstraint nominal_constraint = {XR_XIR_CONSTRAINT_SENDABLE}, function_constraint = nominal_constraint;
+    XrXirConstraint nominal_constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE}, function_constraint = nominal_constraint;
     XrXirNominalVariant variants[] = {{{"None",4},0,0},{{"Some",4},0,1}};
     XrXirNominalField field = {{"value",5},t,0};
     XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,&nominal_constraint,1,&field,1,

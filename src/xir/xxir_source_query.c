@@ -42,6 +42,27 @@ static void *query_copy(SourceQueryCopy *copy, const void *source, size_t count,
 static const char *query_string(SourceQueryCopy *copy, const char *source) {
     return source ? query_copy(copy, source, strlen(source) + 1, 1) : NULL;
 }
+static XrXirInterfaceApplication *query_applications(SourceQueryCopy *copy,
+    const XrXirInterfaceApplication *source, uint32_t count) {
+    if (copy->status != XR_XIR_OK) return NULL;
+    if (!!source != !!count) { copy->status = XR_XIR_BAD_STRUCTURE; return NULL; }
+    XrXirInterfaceApplication *applications = query_copy(copy, source, count, sizeof(*applications));
+    for (uint32_t i = 0; applications && i < count && copy->status == XR_XIR_OK; ++i) {
+        if (!!source[i].arguments != !!source[i].argument_count) { copy->status = XR_XIR_BAD_STRUCTURE; break; }
+        applications[i].arguments = query_copy(copy, source[i].arguments,
+            source[i].argument_count, sizeof(*source[i].arguments));
+    }
+    return applications;
+}
+static XrXirConstraint *query_constraints(SourceQueryCopy *copy,
+    const XrXirConstraint *source, uint32_t count) {
+    if (copy->status != XR_XIR_OK) return NULL;
+    if (!!source != !!count) { copy->status = XR_XIR_BAD_STRUCTURE; return NULL; }
+    XrXirConstraint *constraints = query_copy(copy, source, count, sizeof(*constraints));
+    for (uint32_t i = 0; constraints && i < count && copy->status == XR_XIR_OK; ++i)
+        constraints[i].interfaces = query_applications(copy, source[i].interfaces, source[i].interface_count);
+    return constraints;
+}
 static void query_modules(SourceQueryCopy *copy, const XrXirSourceView *source) {
     XrXirSourceQueryModule *modules = query_copy(copy, source->modules, source->module_count, sizeof(*modules));
     copy->snapshot->view.modules = modules;
@@ -60,8 +81,8 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
         decls[i].signature = query_string(copy, source->declarations[i].signature);
         decls[i].parameters = query_copy(copy, source->declarations[i].parameters,
             decls[i].parameter_count, sizeof(*decls[i].parameters));
-        decls[i].generic_constraints = query_copy(copy, source->declarations[i].generic_constraints,
-            decls[i].generic_parameter_count, sizeof(*decls[i].generic_constraints));
+        decls[i].generic_constraints = query_constraints(copy, source->declarations[i].generic_constraints,
+            decls[i].generic_parameter_count);
     }
 }
 static void query_literal(SourceQueryCopy *copy, XrXirLiteral *literal) {
@@ -78,7 +99,7 @@ static void query_nominals(SourceQueryCopy *copy, XrXirTypes *types) {
     if (!decls) return;
     for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i) {
         query_literal(copy, &decls[i].module); query_literal(copy, &decls[i].name);
-        decls[i].constraints = query_copy(copy, decls[i].constraints, decls[i].parameter_count, sizeof(*decls[i].constraints));
+        decls[i].constraints = query_constraints(copy, decls[i].constraints, decls[i].parameter_count);
         XrXirNominalField *fields = query_copy(copy, decls[i].fields, decls[i].field_count, sizeof(*fields));
         decls[i].fields = fields;
         for (uint32_t j = 0; fields && j < decls[i].field_count && copy->status == XR_XIR_OK; ++j)
@@ -99,11 +120,8 @@ static void query_interfaces(SourceQueryCopy *copy, XrXirTypes *types) {
     table->declarations = decls;
     for (uint32_t i = 0; decls && i < source->count && copy->status == XR_XIR_OK; ++i) {
         query_literal(copy, &decls[i].module); query_literal(copy, &decls[i].name);
-        decls[i].constraints = query_copy(copy, decls[i].constraints, decls[i].parameter_count, sizeof(*decls[i].constraints));
-        XrXirInterfaceApplication *parents = query_copy(copy, decls[i].parents, decls[i].parent_count, sizeof(*parents));
-        decls[i].parents = parents;
-        for (uint32_t p = 0; parents && p < decls[i].parent_count && copy->status == XR_XIR_OK; ++p)
-            parents[p].arguments = query_copy(copy, parents[p].arguments, parents[p].argument_count, sizeof(*parents[p].arguments));
+        decls[i].constraints = query_constraints(copy, decls[i].constraints, decls[i].parameter_count);
+        decls[i].parents = query_applications(copy, decls[i].parents, decls[i].parent_count);
         XrXirInterfaceMethod *methods = query_copy(copy, decls[i].methods, decls[i].method_count, sizeof(*methods));
         decls[i].methods = methods;
         for (uint32_t m = 0; methods && m < decls[i].method_count && copy->status == XR_XIR_OK; ++m)

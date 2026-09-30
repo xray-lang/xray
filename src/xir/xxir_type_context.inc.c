@@ -15,6 +15,7 @@ typedef struct TypeContextProof {
     uint32_t parameter_count;
     XrXirBudget *remaining;
     unsigned char *pending;
+    bool interface_proofs;
 } TypeContextProof;
 static XrXirStatus type_context_edge(TypeContextProof *c, XrXirType type, uint32_t earlier) {
     if (!c->remaining->work) return XR_XIR_BUDGET;
@@ -40,6 +41,12 @@ static XrXirStatus type_context_nominal(TypeContextProof *c, const XrXirTypeNode
     if (d && (d->parameter_count != node->nominal.argument_count ||
         (d->parameter_count && !d->constraints))) return XR_XIR_BAD_TYPE;
     if (!d && !table->identities) return XR_XIR_BAD_TYPE;
+    if (d && c->interface_proofs) {
+        XrXirConstraintEnvironment environment = {c->types, c->constraints, c->parameter_count};
+        XrXirStatus status = xr_xir_constraint_arguments(&environment, d->constraints,
+            node->nominal.arguments, node->nominal.argument_count, c->remaining);
+        if (status != XR_XIR_OK) return status;
+    }
     for (uint32_t a = 0; a < node->nominal.argument_count; ++a) {
         XrXirType argument = node->nominal.arguments[a];
         XrXirStatus status = type_context_edge(c, argument, index);
@@ -54,10 +61,13 @@ static XrXirStatus type_context_nominal(TypeContextProof *c, const XrXirTypeNode
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_type_context_verify(const XrXirTypes *types, XrXirType type,
-    const XrXirConstraint *constraints, uint32_t parameter_count, XrXirBudget *remaining) {
+static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) {
+    const XrXirTypes *types = proof->types;
+    const XrXirConstraint *constraints = proof->constraints;
+    uint32_t parameter_count = proof->parameter_count;
+    XrXirBudget *remaining = proof->remaining;
     if (!remaining || (parameter_count && !constraints)) return XR_XIR_BAD_STRUCTURE;
-    TypeContextProof c = {types, constraints, parameter_count, remaining, NULL};
+    TypeContextProof c = *proof;
     const XrXirTypeNode *root = xr_xir_type_node(types, type);
     if (!root) return type_context_edge(&c, type, 0);
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
@@ -82,4 +92,14 @@ XR_FUNC XrXirStatus xr_xir_type_context_verify(const XrXirTypes *types, XrXirTyp
         } else status = XR_XIR_BAD_TYPE;
     }
     xr_free(c.pending); return status;
+}
+XR_FUNC XrXirStatus xr_xir_type_context_verify(const XrXirTypes *types, XrXirType type,
+    const XrXirConstraint *constraints, uint32_t parameter_count, XrXirBudget *remaining) {
+    TypeContextProof proof = {types, constraints, parameter_count, remaining, NULL, true};
+    return type_context_verify(&proof, type);
+}
+XR_FUNC XrXirStatus xr_xir_type_context_verify_shape(const XrXirTypes *types, XrXirType type,
+    const XrXirConstraint *constraints, uint32_t parameter_count, XrXirBudget *remaining) {
+    TypeContextProof proof = {types, constraints, parameter_count, remaining, NULL, false};
+    return type_context_verify(&proof, type);
 }

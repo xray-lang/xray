@@ -226,7 +226,7 @@ static void error_erasure_packet(void) {
     xr_xir_artifact_free(decoded); xr_xir_checked_packet_free(&packet);
 }
 static void error_marker_definition(void) {
-    XrXirConstraint constraint = {XR_XIR_CONSTRAINT_ERROR};
+    XrXirConstraint constraint = {.markers = XR_XIR_CONSTRAINT_ERROR};
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInstruction instruction = {XR_XIR_THROW,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirBlock block = {0,1, 0, 0};
@@ -238,7 +238,7 @@ static void error_marker_definition(void) {
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(checked);
-    CHECK(packet.length==189 && packet.bytes[165]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==193 && packet.bytes[165]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(decoded); decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
@@ -303,8 +303,8 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(valid, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(valid);
-    CHECK(packet.length > 48 && packet.bytes[packet.length - 48] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 48] = 0; rehash_generic(&packet);
+    CHECK(packet.length > 56 && packet.bytes[packet.length - 56] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[packet.length - 56] = 0; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_checked_packet_free(&packet);
     xr_xir_artifact_free(checked);
@@ -386,7 +386,7 @@ static void array_definition_constraints(void) {
     constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_verify(&built,NULL,NULL) == XR_XIR_OK);
     XrXirBudget budget = xr_xir_default_budget(); budget.work = 2;
-    CHECK(xr_xir_type_satisfies(&built,0,(XrXirType)256,(XrXirConstraint){XR_XIR_CONSTRAINT_SENDABLE},&budget) == XR_XIR_BUDGET);
+    CHECK(xr_xir_type_satisfies(&built,0,(XrXirType)256,(XrXirConstraint){.markers = XR_XIR_CONSTRAINT_SENDABLE},&budget) == XR_XIR_BUDGET);
     xr_xir_artifact_free(fixture);
 }
 #include "xir_array_generic_cases.h"

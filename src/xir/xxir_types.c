@@ -11,6 +11,8 @@
  */
 #include "xxir_types.h"
 #include "xxir_interface.h"
+#include "xxir_constraints.h"
+#include "xxir_constraint_proof.h"
 #include "../base/xmalloc.h"
 
 XrXirStatus xr_xir_callable_weakening(const XrXirTypes *types,
@@ -228,7 +230,7 @@ static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index, uint64_t
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_types_verify(const XrXirTypes *types, XrXirBudget *remaining) {
+XrXirStatus xr_xir_type_descriptors_verify(const XrXirTypes *types, XrXirBudget *remaining) {
     if (!types) return XR_XIR_OK;
     if (!remaining || (types->count != 0) != (types->nodes != NULL) ||
         (!types->count && !types->nominals && !types->interfaces)) return XR_XIR_BAD_STRUCTURE;
@@ -244,7 +246,32 @@ XrXirStatus xr_xir_types_verify(const XrXirTypes *types, XrXirBudget *remaining)
     XrXirStatus status = nominal_table_verify(types->nominals, types, remaining);
     if (status == XR_XIR_OK) status = nominal_nodes_verify(types, remaining);
     if (status == XR_XIR_OK) status = nominal_layout_verify(types, remaining);
-    return status == XR_XIR_OK ? xr_xir_interfaces_verify_structure(types->interfaces, types, remaining) : status;
+    return status;
+}
+XrXirStatus xr_xir_types_verify(const XrXirTypes *types, XrXirBudget *remaining) {
+    XrXirStatus status = xr_xir_type_descriptors_verify(types, remaining);
+    if (status == XR_XIR_OK && types) status = xr_xir_interfaces_verify_structure(types->interfaces, types, remaining);
+    const XrXirNominalTable *table = types ? types->nominals : NULL;
+    for (uint32_t d = 0; status == XR_XIR_OK && table && table->declarations && d < table->count; ++d) {
+        const XrXirNominalDeclaration *declaration = &table->declarations[d];
+        XrXirConstraintEnvironment environment = {types, declaration->constraints, declaration->parameter_count};
+        status = xr_xir_constraint_environment_verify(&environment, remaining);
+        for (uint32_t f = 0; status == XR_XIR_OK && f < declaration->field_count; ++f)
+            status = xr_xir_type_context_verify(types, declaration->fields[f].type,
+                declaration->constraints, declaration->parameter_count, remaining);
+    }
+    for (uint32_t n = 0; status == XR_XIR_OK && types && n < types->count; ++n) {
+        const XrXirTypeNode *node = &types->nodes[n];
+        if (node->parameter_span || node->kind != XR_XIR_TYPE_NOMINAL || !table || !table->declarations) continue;
+        /* Every closed nominal application has its own pool node. Checking its
+         * local obligations once covers nested applications without rescanning
+         * every earlier descriptor for each independent callable or array. */
+        const XrXirNominalDeclaration *declaration = &table->declarations[node->nominal.declaration];
+        XrXirConstraintEnvironment environment = {types, NULL, 0};
+        status = xr_xir_constraint_arguments(&environment, declaration->constraints,
+            node->nominal.arguments, node->nominal.argument_count, remaining);
+    }
+    return status;
 }
 void xr_xir_types_free(XrXirTypes *types) {
     if (!types) return;

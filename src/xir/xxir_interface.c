@@ -12,6 +12,8 @@
 #include "xxir_interface.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
+#include "xxir_constraints.h"
+#include "xxir_constraint_proof.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
@@ -43,14 +45,16 @@ static XrXirStatus interface_declaration(const XrXirInterfaceDeclaration *d,
     XrXirStatus status = interface_name(d->module, b);
     if (status == XR_XIR_OK) status = interface_name(d->name, b);
     if (status != XR_XIR_OK) return status;
-    for (uint32_t p = 0; p < d->parameter_count; ++p)
-        if (d->constraints[p].markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+    for (uint32_t p = 0; p < d->parameter_count; ++p) {
+        status = xr_xir_constraint_structure(types, d->constraints[p], d->parameter_count, b);
+        if (status != XR_XIR_OK) return status;
+    }
     for (uint32_t m = 0; m < d->method_count; ++m) {
         const XrXirInterfaceMethod *method = &d->methods[m];
         status = interface_name(method->name, b);
         if (status != XR_XIR_OK) return status;
         if (method->receiver || !xr_xir_callable_signature(types, method->signature)) return XR_XIR_BAD_TYPE;
-        status = xr_xir_type_context_verify(types, method->signature, d->constraints, d->parameter_count, b);
+        status = xr_xir_type_context_verify_shape(types, method->signature, d->constraints, d->parameter_count, b);
         if (status != XR_XIR_OK) return status;
         for (uint32_t earlier = 0; earlier < m; ++earlier) {
             bool same;
@@ -78,7 +82,7 @@ static XrXirStatus interface_parents(const XrXirInterfaceTable *table,
         for (uint32_t a = 0; a < app->argument_count; ++a) {
             XrXirType type = app->arguments[a];
             if (type == XR_XIR_UNIT || xr_xir_type_is_cell(types, type)) return XR_XIR_BAD_TYPE;
-            XrXirStatus status = xr_xir_type_context_verify(types, type, d->constraints, d->parameter_count, b);
+            XrXirStatus status = xr_xir_type_context_verify_shape(types, type, d->constraints, d->parameter_count, b);
             if (status == XR_XIR_OK) status = xr_xir_type_markers(types, type, parent->constraints[a].markers,
                 d->constraints, d->parameter_count, &b->work);
             if (status != XR_XIR_OK) return status;
@@ -119,12 +123,12 @@ static XrXirStatus interface_structure(const XrXirInterfaceTable *table,
     if (!interface_charge(b, sizeof(*table) + (uint64_t)table->count * sizeof(*table->declarations), table->count))
         return XR_XIR_BUDGET;
     XrXirTypes descriptors = types ? *types : (XrXirTypes){0};
-    descriptors.interfaces = NULL;
-    XrXirStatus status = xr_xir_types_verify(types && (types->count || types->nominals) ? &descriptors : NULL, b);
+    descriptors.interfaces = table;
+    XrXirStatus status = xr_xir_type_descriptors_verify(&descriptors, b);
     if (status != XR_XIR_OK) return status;
     for (uint32_t i = 0; i < table->count; ++i) {
         const XrXirInterfaceDeclaration *d = &table->declarations[i];
-        status = interface_declaration(d, types, b);
+        status = interface_declaration(d, &descriptors, b);
         if (status != XR_XIR_OK) return status;
         for (uint32_t j = 0; j < i; ++j) {
             bool module = false, name = false;
@@ -135,11 +139,28 @@ static XrXirStatus interface_structure(const XrXirInterfaceTable *table,
         }
     }
     for (uint32_t i = 0; i < table->count; ++i) {
-        status = interface_parents(table, &table->declarations[i], types, b);
+        status = interface_parents(table, &table->declarations[i], &descriptors, b);
         if (status != XR_XIR_OK) return status;
     }
     status = interface_acyclic(table, b);
-    return status == XR_XIR_OK ? xr_xir_interfaces_verify_members_verified(table, types, b) : status;
+    if (status == XR_XIR_OK) status = xr_xir_interfaces_verify_members_verified(table, &descriptors, b);
+    for (uint32_t d = 0; status == XR_XIR_OK && d < table->count; ++d) {
+        const XrXirInterfaceDeclaration *declaration = &table->declarations[d];
+        XrXirConstraintEnvironment environment = {&descriptors, declaration->constraints, declaration->parameter_count};
+        status = xr_xir_constraint_environment_verify(&environment, b);
+        for (uint32_t p = 0; status == XR_XIR_OK && p < declaration->parent_count; ++p) {
+            const XrXirInterfaceApplication *app = &declaration->parents[p];
+            for (uint32_t a = 0; status == XR_XIR_OK && a < app->argument_count; ++a)
+                status = xr_xir_type_context_verify(&descriptors, app->arguments[a],
+                    declaration->constraints, declaration->parameter_count, b);
+            if (status == XR_XIR_OK) status = xr_xir_constraint_arguments(&environment,
+                table->declarations[app->declaration].constraints, app->arguments, app->argument_count, b);
+        }
+        for (uint32_t m = 0; status == XR_XIR_OK && m < declaration->method_count; ++m)
+            status = xr_xir_type_context_verify(&descriptors, declaration->methods[m].signature,
+                declaration->constraints, declaration->parameter_count, b);
+    }
+    return status;
 }
 XrXirStatus xr_xir_interfaces_verify_structure(const XrXirInterfaceTable *table,
     const XrXirTypes *types, XrXirBudget *budget) {
@@ -153,18 +174,13 @@ void xr_xir_interfaces_free(XrXirInterfaceTable *table) {
     if (!table) return;
     for (uint32_t i = 0; table->declarations && i < table->count; ++i) {
         const XrXirInterfaceDeclaration *d = &table->declarations[i];
-        xr_free((void *)d->module.bytes); xr_free((void *)d->name.bytes); xr_free((void *)d->constraints);
-        for (uint32_t p = 0; d->parents && p < d->parent_count; ++p) xr_free((void *)d->parents[p].arguments);
+        xr_free((void *)d->module.bytes); xr_free((void *)d->name.bytes);
+        xr_xir_constraint_array_free((XrXirConstraint *)d->constraints, d->parameter_count);
+        xr_xir_interface_applications_free((XrXirInterfaceApplication *)d->parents, d->parent_count);
         for (uint32_t m = 0; d->methods && m < d->method_count; ++m) xr_free((void *)d->methods[m].name.bytes);
-        xr_free((void *)d->parents); xr_free((void *)d->methods);
+        xr_free((void *)d->methods);
     }
     xr_free((void *)table->declarations); xr_free(table);
-}
-static void *interface_copy_array(const void *source, uint32_t count, size_t size) {
-    if (!count) return NULL;
-    void *copy = xr_calloc(count, size);
-    if (copy) memcpy(copy, source, count * size);
-    return copy;
 }
 static bool interface_copy_name(XrXirLiteral source, XrXirLiteral *target) {
     char *bytes = xr_malloc((size_t)source.length + 1);
@@ -175,19 +191,15 @@ static bool interface_copy_name(XrXirLiteral source, XrXirLiteral *target) {
 static bool interface_copy_declaration(const XrXirInterfaceDeclaration *source, XrXirInterfaceDeclaration *d) {
     d->exported = source->exported;
     if (!interface_copy_name(source->module, &d->module) || !interface_copy_name(source->name, &d->name)) return false;
-    d->constraints = interface_copy_array(source->constraints, source->parameter_count, sizeof(*d->constraints));
-    if (source->parameter_count && !d->constraints) return false;
+    XrXirConstraint *constraints = NULL;
+    if (xr_xir_constraint_array_copy_verified(source->constraints, source->parameter_count, &constraints) != XR_XIR_OK)
+        return false;
+    d->constraints = constraints;
     d->parameter_count = source->parameter_count;
-    XrXirInterfaceApplication *parents = source->parent_count ? xr_calloc(source->parent_count, sizeof(*parents)) : NULL;
-    if (source->parent_count && !parents) return false;
+    XrXirInterfaceApplication *parents = NULL;
+    if (xr_xir_interface_applications_copy_verified(source->parents, source->parent_count, &parents) != XR_XIR_OK)
+        return false;
     d->parents = parents; d->parent_count = source->parent_count;
-    for (uint32_t p = 0; p < d->parent_count; ++p) {
-        parents[p].declaration = source->parents[p].declaration;
-        parents[p].arguments = interface_copy_array(source->parents[p].arguments, source->parents[p].argument_count,
-            sizeof(*parents[p].arguments));
-        if (source->parents[p].argument_count && !parents[p].arguments) return false;
-        parents[p].argument_count = source->parents[p].argument_count;
-    }
     XrXirInterfaceMethod *methods = source->method_count ? xr_calloc(source->method_count, sizeof(*methods)) : NULL;
     if (source->method_count && !methods) return false;
     d->methods = methods; d->method_count = source->method_count;

@@ -199,7 +199,7 @@ static XrXirStatus source_catch_type_proof(SourceContext *ctx, XrXirType type) {
     declarations.modules = ctx->modules; declarations.module_count = (uint32_t)ctx->graph->spec_count;
     declarations.functions = ctx->identities;
     XrXirModule view = {XR_XIR_BUILT,ctx->functions,ctx->function_count,&declarations,ctx->generics,&ctx->types,NULL};
-    return xr_xir_type_satisfies(&view,ctx->function,type,(XrXirConstraint){XR_XIR_CONSTRAINT_ERROR},&ctx->budget);
+    return xr_xir_type_satisfies(&view,ctx->function,type,(XrXirConstraint){.markers = XR_XIR_CONSTRAINT_ERROR},&ctx->budget);
 }
 static bool source_try(SourceContext *ctx, AstNode *node) {
     TryCatchNode *attempt = &node->as.try_catch;

@@ -115,7 +115,7 @@ static XrXirArtifact *constructed_fixture(void) {
     XrXirType parameters[] = {(XrXirType)261,(XrXirType)262,(XrXirType)265,(XrXirType)266,
         (XrXirType)257,(XrXirType)258};
     XrXirType arguments[] = {XR_XIR_I64,XR_XIR_STRING};
-    XrXirConstraint constraint = {XR_XIR_CONSTRAINT_SENDABLE};
+    XrXirConstraint constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     uint32_t operands[] = {0,1,2,3};
     XrXirGeneric generics[] = {{NULL,0,arguments,2}, {&constraint,1,NULL,0}, {&constraint,1,NULL,0}};
     XrXirInstruction caller[] = {{XR_XIR_CALL,(XrXirType)261,{0,2},{0},1, {0,1}},

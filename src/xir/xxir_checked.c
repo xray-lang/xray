@@ -173,6 +173,36 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         if (c->reading) literals[i] = literal;
     }
 }
+static XrXirInterfaceApplication *checked_applications(CheckedCursor *c,
+    const XrXirInterfaceApplication *source, uint32_t *count) {
+    uint32_t size = checked_u32(c, *count);
+    XrXirInterfaceApplication *applications = checked_array(c, source, size, sizeof(*applications), 8);
+    *count = applications ? size : 0;
+    for (uint32_t i = 0; i < *count && c->status == XR_XIR_OK; ++i) {
+        XrXirInterfaceApplication app = applications[i];
+        app.declaration = checked_u32(c, app.declaration);
+        uint32_t arguments = checked_u32(c, app.argument_count);
+        XrXirType *types = checked_array(c, app.arguments, arguments, sizeof(*types), 4);
+        app.arguments = types; app.argument_count = types ? arguments : 0;
+        for (uint32_t a = 0; a < app.argument_count && c->status == XR_XIR_OK; ++a) {
+            XrXirType type = (XrXirType) checked_u32(c, (uint32_t) types[a]);
+            if (c->reading) types[a] = type;
+        }
+        if (c->reading) applications[i] = app;
+    }
+    return applications;
+}
+static XrXirConstraint *checked_constraints(CheckedCursor *c,
+    const XrXirConstraint *source, uint32_t count) {
+    XrXirConstraint *constraints = checked_array(c, source, count, sizeof(*constraints), 8);
+    for (uint32_t p = 0; constraints && p < count && c->status == XR_XIR_OK; ++p) {
+        XrXirConstraint constraint = constraints[p];
+        constraint.markers = checked_u32(c, constraint.markers);
+        constraint.interfaces = checked_applications(c, constraint.interfaces, &constraint.interface_count);
+        if (c->reading) constraints[p] = constraint;
+    }
+    return constraints;
+}
 static void checked_generics(CheckedCursor *c, XrXirModule *m) {
     uint32_t present = checked_u32(c, m->generics ? 1u : 0u);
     if (c->status == XR_XIR_OK && present > 1) c->status = XR_XIR_BAD_STRUCTURE;
@@ -182,12 +212,7 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
     for (uint32_t f = 0; f < m->function_count && c->status == XR_XIR_OK; ++f) {
         XrXirGeneric g = generics[f];
         g.parameter_count = checked_count(c, g.parameter_count, &c->remaining.parameters);
-        XrXirConstraint *constraints = checked_array(c, g.constraints, g.parameter_count, sizeof(*constraints), 4);
-        g.constraints = constraints;
-        for (uint32_t p = 0; p < g.parameter_count && c->status == XR_XIR_OK; ++p) {
-            uint32_t value = checked_u32(c, constraints[p].markers);
-            if (c->reading) constraints[p].markers = value;
-        }
+        g.constraints = checked_constraints(c, g.constraints, g.parameter_count);
         g.argument_count = checked_u32(c, g.argument_count);
         XrXirType *arguments = checked_array(c, g.arguments, g.argument_count, sizeof(*arguments), 4);
         g.arguments = arguments;
@@ -226,12 +251,8 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.exported = checked_u32(c, d.exported);
         d.kind = checked_u32(c, d.kind);
         uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
-        XrXirConstraint *constraints = checked_array(c, d.constraints, parameters, sizeof(*constraints), 4);
+        XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
-        for (uint32_t j = 0; j < d.parameter_count && c->status == XR_XIR_OK; ++j) {
-            uint32_t value = checked_u32(c, constraints[j].markers);
-            if (c->reading) constraints[j].markers = value;
-        }
         uint32_t fields = checked_u32(c, d.field_count);
         XrXirNominalField *members = checked_array(c, d.fields, fields, sizeof(*members), 12);
         d.fields = members; d.field_count = members ? fields : 0;
@@ -256,21 +277,7 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
     }
 }
 static void checked_interface_parents(CheckedCursor *c, XrXirInterfaceDeclaration *d) {
-    uint32_t count = checked_u32(c, d->parent_count);
-    XrXirInterfaceApplication *parents = checked_array(c, d->parents, count, sizeof(*parents), 8);
-    d->parents = parents; d->parent_count = parents ? count : 0;
-    for (uint32_t i = 0; i < d->parent_count && c->status == XR_XIR_OK; ++i) {
-        XrXirInterfaceApplication app = parents[i];
-        app.declaration = checked_u32(c, app.declaration);
-        uint32_t arguments = checked_u32(c, app.argument_count);
-        XrXirType *types = checked_array(c, app.arguments, arguments, sizeof(*types), 4);
-        app.arguments = types; app.argument_count = types ? arguments : 0;
-        for (uint32_t a = 0; a < app.argument_count && c->status == XR_XIR_OK; ++a) {
-            XrXirType type = (XrXirType) checked_u32(c, (uint32_t) types[a]);
-            if (c->reading) types[a] = type;
-        }
-        if (c->reading) parents[i] = app;
-    }
+    d->parents = checked_applications(c, d->parents, &d->parent_count);
 }
 static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t count) {
     if (!count || c->status != XR_XIR_OK) return;
@@ -286,12 +293,8 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
         d.name = checked_nominal_name(c, d.name);
         d.exported = checked_u32(c, d.exported);
         uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
-        XrXirConstraint *constraints = checked_array(c, d.constraints, parameters, sizeof(*constraints), 4);
+        XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
-        for (uint32_t p = 0; p < d.parameter_count && c->status == XR_XIR_OK; ++p) {
-            uint32_t markers = checked_u32(c, constraints[p].markers);
-            if (c->reading) constraints[p].markers = markers;
-        }
         checked_interface_parents(c, &d);
         uint32_t count_methods = checked_u32(c, d.method_count);
         XrXirInterfaceMethod *methods = checked_array(c, d.methods, count_methods, sizeof(*methods), 12);

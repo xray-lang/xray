@@ -31,10 +31,7 @@ static bool source_static_select(SourceContext *ctx, AstNode *node, SourceStatic
     const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires its declaration owner");
-    XrXirGeneric enclosing = {0};
-    enclosing.parameter_count = ctx->nominals.declarations[owner->index].parameter_count;
-    enclosing.constraints = enclosing.parameter_count ? ctx->generics[method->index].constraints : NULL;
-    if (!source_instantiation(ctx, node, &enclosing, &arguments) ||
+    if (!source_instantiation(ctx, node, (XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,owner->index}, &arguments) ||
         !source_query_reference(ctx, path, binding, owner, XR_XIR_SOURCE_TYPE_USE)) return false;
     selected->method = method; selected->substitution = arguments.substitution;
     return true;

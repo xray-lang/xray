@@ -11,6 +11,8 @@
  */
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_constraints.h"
+#include "xxir_constraint_proof.h"
 #include "../base/xmalloc.h"
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
@@ -28,7 +30,8 @@ XrXirStatus xr_xir_type_constraints(const XrXirModule *module, uint32_t function
     XrXirType type, XrXirConstraint constraints, XrXirBudget *remaining) {
     if (!remaining || !remaining->work) return XR_XIR_BUDGET;
     --remaining->work;
-    if (!module || constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
+    if (!module || constraints.interface_count || constraints.interfaces ||
+        constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
     const XrXirGeneric *generic = module->generics ? &module->generics[function] : NULL;
     XrXirStatus context = xr_xir_type_context_verify(module->types, type,
@@ -61,10 +64,15 @@ XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remai
         if ((g->parameter_count != 0) != (g->constraints != NULL) ||
             (g->argument_count != 0) != (g->arguments != NULL)) return XR_XIR_BAD_STRUCTURE;
         templates |= g->parameter_count != 0;
-        for (uint32_t p = 0; p < g->parameter_count; ++p)
-            if (g->constraints[p].markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+        for (uint32_t p = 0; p < g->parameter_count; ++p) {
+            XrXirStatus status = xr_xir_constraint_structure(module->types, g->constraints[p], g->parameter_count, remaining);
+            if (status != XR_XIR_OK) return status;
+        }
+        XrXirConstraintEnvironment environment = {module->types, g->constraints, g->parameter_count};
+        XrXirStatus status = xr_xir_constraint_environment_verify(&environment, remaining);
+        if (status != XR_XIR_OK) return status;
         for (uint32_t a = 0; a < g->argument_count; ++a) {
-            XrXirStatus status = xr_xir_type_satisfies(module, f, g->arguments[a], (XrXirConstraint){0}, remaining);
+            status = xr_xir_type_satisfies(module, f, g->arguments[a], (XrXirConstraint){0}, remaining);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -73,7 +81,8 @@ XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remai
 void xr_xir_generics_free(XrXirGeneric *generics, uint32_t functions) {
     if (!generics) return;
     for (uint32_t f = 0; f < functions; ++f) {
-        xr_free((void *) generics[f].constraints); xr_free((void *) generics[f].arguments);
+        xr_xir_constraint_array_free((XrXirConstraint *)generics[f].constraints, generics[f].parameter_count);
+        xr_free((void *) generics[f].arguments);
     }
     xr_free(generics);
 }
@@ -85,13 +94,14 @@ XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **outp
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirGeneric *from = &module->generics[f];
         copy[f].parameter_count = from->parameter_count; copy[f].argument_count = from->argument_count;
-        XrXirConstraint *constraints = from->parameter_count ? xr_malloc((size_t) from->parameter_count * sizeof(*constraints)) : NULL;
+        XrXirConstraint *constraints = NULL;
+        XrXirStatus status = xr_xir_constraint_array_copy_verified(from->constraints, from->parameter_count, &constraints);
         XrXirType *arguments = from->argument_count ? xr_malloc((size_t) from->argument_count * sizeof(*arguments)) : NULL;
         copy[f].constraints = constraints; copy[f].arguments = arguments;
-        if ((from->parameter_count && !constraints) || (from->argument_count && !arguments)) {
-            xr_xir_generics_free(copy, module->function_count); return XR_XIR_OUT_OF_MEMORY;
+        if (status != XR_XIR_OK || (from->argument_count && !arguments)) {
+            xr_xir_generics_free(copy, module->function_count);
+            return status != XR_XIR_OK ? status : XR_XIR_OUT_OF_MEMORY;
         }
-        if (from->parameter_count) memcpy(constraints, from->constraints, (size_t) from->parameter_count * sizeof(*constraints));
         if (from->argument_count) memcpy(arguments, from->arguments, (size_t) from->argument_count * sizeof(*arguments));
     }
     *output = copy; return XR_XIR_OK;
@@ -104,7 +114,12 @@ XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
     if (count != to->parameter_count || first > from->argument_count ||
         count > from->argument_count - first || (!count && first)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t a = 0; a < count; ++a) {
-        XrXirStatus status = xr_xir_type_satisfies(module, caller, from->arguments[first + a], to->constraints[a], remaining);
+        XrXirStatus status = xr_xir_type_satisfies(module, caller, from->arguments[first + a], (XrXirConstraint){0}, remaining);
+        if (status != XR_XIR_OK) return status;
+        XrXirProofContext context = {module, {XR_XIR_CONTEXT_FUNCTION, caller}};
+        XrXirConstraintUse use = {{XR_XIR_CONTEXT_FUNCTION, (uint32_t)call->immediate}, a,
+            from->arguments + first, count};
+        status = xr_xir_constraints_prove(&context, &use, remaining);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;

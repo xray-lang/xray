@@ -746,6 +746,7 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
     }
     CHECK(facts==1); xr_xir_source_result_free(&result);
 }
+#include "xir_source_interface_cases.h"
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -757,6 +758,7 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
+    source_interface_facts(&request);
     source_struct_facts(&request);
     source_enum_facts(&request);
     nested_pattern_facts(&request);

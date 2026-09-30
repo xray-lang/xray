@@ -389,7 +389,9 @@ static void method_promise_allocations(XrCompilerSession *session) {
     CHECK(xr_test_unlink(manifest_path) == 0 && xr_test_unlink(path) == 0 && xr_test_rmdir(directory) == 0);
     printf("Method promise source ownership: %zu OOM sites; no partial publication\n", sites);
 }
+#include "xir_constraint_query_allocations.h"
 int main(void) {
+    constraint_query_allocations();
     snapshot_interface_allocations();
     snapshot_enum_allocations();
     source_nominal_substitution_failures();

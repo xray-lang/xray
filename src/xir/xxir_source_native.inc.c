@@ -52,6 +52,8 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
     record->native_identity = native->id; record->exported = true;
     record->generic_parameter_count = 1;
+    record->generic_constraints = source_alloc(ctx, 1, sizeof(*record->generic_constraints));
+    if (!record->generic_constraints) return false;
     symbol = (SourceName) {0}; symbol.name = source_owned_text(ctx, native->parameter_name);
     if (!symbol.name) return false;
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE_PARAMETER, ctx->array_declaration,
@@ -65,7 +67,23 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
     declarations.modules = ctx->modules; declarations.module_count = (uint32_t)ctx->graph->spec_count;
     declarations.functions = ctx->identities;
     XrXirModule module = {XR_XIR_BUILT, ctx->functions, ctx->function_count, &declarations, ctx->generics, &ctx->types, NULL};
-    XrXirStatus status = xr_xir_type_satisfies(&module, ctx->function, element, (XrXirConstraint){0}, &ctx->budget);
+    XrXirStatus status;
+    if (ctx->type_scope.active) {
+        AstNode *node = ctx->type_scope.node;
+        const char *name = node->type == AST_INTERFACE_DECL ? node->as.interface_decl.name :
+            node->type == AST_STRUCT_DECL ? node->as.struct_decl.name :
+            node->type == AST_ENUM_DECL ? node->as.enum_decl.name : NULL;
+        SourceName *owner = name ? find_name(ctx, ctx->names[ctx->module], name) : NULL;
+        if (!owner || owner->node != node || (owner->kind != SOURCE_INTERFACE && owner->kind != SOURCE_NOMINAL))
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope has no authentic declaration owner");
+        const XrXirConstraint *constraints = owner->kind == SOURCE_INTERFACE ?
+            ctx->interfaces.declarations[owner->index].constraints : ctx->nominals.declarations[owner->index].constraints;
+        uint32_t count = owner->kind == SOURCE_INTERFACE ? ctx->interfaces.declarations[owner->index].parameter_count :
+            ctx->nominals.declarations[owner->index].parameter_count;
+        status = xr_xir_type_context_verify(&ctx->types,element,constraints,count,&ctx->budget);
+        /* Module declarations are completed after type signatures. Their checked
+         * admission verifies naming authority for every field and requirement. */
+    } else status = xr_xir_type_satisfies(&module, ctx->function, element, (XrXirConstraint){0}, &ctx->budget);
     if (status != XR_XIR_OK)
         return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);

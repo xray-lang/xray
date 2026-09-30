@@ -57,6 +57,8 @@ static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTyp
 }
 static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char *name,
     XrGenericParam **parameters, uint32_t count, uint32_t kind) {
+    if (count && !parameters)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nominal type parameters are missing");
     SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], name, node);
     if (!symbol) return false;
     symbol->kind = SOURCE_NOMINAL; symbol->index = ctx->nominals.count++;
@@ -72,7 +74,8 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     for (uint32_t i = 0; i < count; ++i) {
         XrGenericParam *parameter = parameters[i];
         if (!source_work(ctx, node)) return false;
-        if (!source_parameter_markers(ctx, node, parameter, &constraints[i].markers)) return false;
+        if (!parameter || !parameter->name || !*parameter->name)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"nominal type parameter is malformed");
         for (uint32_t j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (!strcmp(parameter->name, parameters[j]->name))
@@ -86,8 +89,27 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
         !source_query_declare(ctx, symbol, XR_XIR_SOURCE_TYPE, 0, source_query_range(ctx, node, name))) return false;
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_parameter_count = count;
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_constraints = constraints;
-    ctx->nominal_generic_owner = count ? symbol->declaration : 0;
-    source_query_binding_type(ctx, symbol); ctx->nominal_generic_owner = 0; return true;
+    SourceTypeScope saved = ctx->type_scope;
+    ctx->type_scope = (SourceTypeScope){true,node,parameters,count,count ? symbol->declaration : 0};
+    source_query_binding_type(ctx, symbol); ctx->type_scope = saved; return true;
+}
+static bool source_nominal_constraints(SourceContext *ctx) {
+    SourceTypeScope saved = ctx->type_scope;
+    uint32_t module = ctx->module;
+    bool ok = true;
+    for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
+        SourceName *owner = ctx->nominal_sources[d];
+        XrGenericParam **parameters = owner->node->type == AST_STRUCT_DECL ?
+            owner->node->as.struct_decl.type_params : owner->node->as.enum_decl.type_params;
+        const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[d];
+        uint32_t count = declaration->parameter_count;
+        ctx->module = owner->module;
+        ctx->type_scope = (SourceTypeScope){true,owner->node,parameters,count,count ? owner->declaration : 0};
+        XrXirConstraint *constraints = (XrXirConstraint *)declaration->constraints;
+        for (uint32_t p = 0; p < count && ok; ++p)
+            ok = source_parameter_constraints(ctx,owner->node,parameters[p],&constraints[p]);
+    }
+    ctx->type_scope = saved; ctx->module = module; return ok;
 }
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
@@ -103,9 +125,8 @@ static bool source_struct_fields(SourceContext *ctx) {
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
             if (symbol->kind != SOURCE_NOMINAL || symbol->node->type != AST_STRUCT_DECL) continue;
             ClassDeclNode *decl = &symbol->node->as.struct_decl;
-            ctx->nominal_type_context = true; ctx->nominal_type_parameters = decl->type_params;
-            ctx->nominal_type_parameter_count = decl->type_param_count;
-            ctx->nominal_generic_owner = decl->type_param_count ? symbol->declaration : 0;
+            ctx->type_scope = (SourceTypeScope){true,symbol->node,decl->type_params,
+                (uint32_t)decl->type_param_count,decl->type_param_count ? symbol->declaration : 0};
             uint32_t count = (uint32_t) decl->field_count;
             XrXirNominalField *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
             XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
@@ -137,8 +158,7 @@ static bool source_struct_fields(SourceContext *ctx) {
             }
             XrXirTypeNode *type = (XrXirTypeNode *) &ctx->types.nodes[(uint32_t) symbol->type - XR_XIR_CONSTRUCTED_TYPE_BASE];
             type->nominal.fields = types; type->nominal.field_count = count;
-            ctx->nominal_type_context = false;
-            ctx->nominal_generic_owner = 0;
+            ctx->type_scope = (SourceTypeScope){0};
         }
     }
     return true;

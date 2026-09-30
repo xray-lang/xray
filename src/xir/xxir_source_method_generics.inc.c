@@ -17,15 +17,16 @@ static bool source_method_conditions(SourceContext *ctx, SourceFunction *body,
         return source_fail(ctx, body->node, XR_XIR_BAD_STRUCTURE, "method conditions are malformed");
     for (int i = 0; i < method->condition_count; ++i) {
         const XrGenericParam *condition = method->conditions[i];
-        uint32_t markers = 0, selected = UINT32_MAX;
-        if (!source_parameter_markers(ctx, body->node, condition, &markers)) return false;
+        uint32_t selected = UINT32_MAX;
+        XrXirConstraint requirement = {0};
+        if (!source_parameter_constraints(ctx,body->node,condition,&requirement)) return false;
         for (uint32_t p = 0; p < count; ++p) {
             if (!source_work(ctx, body->node)) return false;
             if (!strcmp(condition->name, parameters[p]->name)) { selected = p; break; }
         }
         if (selected == UINT32_MAX)
             return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method condition subject is not a type parameter");
-        constraints[selected].markers |= markers;
+        if (!source_constraint_conjunction(ctx,body->node,constraints[selected],requirement,&constraints[selected])) return false;
     }
     return true;
 }
@@ -47,8 +48,9 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
             parameters[p] = body->type_parameters[p]; constraints[p] = ctx->generics[index].constraints[p];
             continue;
         }
-        XrGenericParam *parameter = method->type_params[p - prefix];
-        if (!source_parameter_markers(ctx, body->node, parameter, &constraints[p].markers)) return false;
+        XrGenericParam *parameter = method->type_params ? method->type_params[p - prefix] : NULL;
+        if (!parameter || !parameter->name || !*parameter->name)
+            return source_fail(ctx,body->node,XR_XIR_BAD_TYPE,"method type parameter is malformed");
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
             if (!source_work(ctx, body->node)) return false;
             if (!strcmp(parameter->name, parameters[earlier]->name))
@@ -56,8 +58,10 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
         }
         parameters[p] = parameter;
     }
-    if (!source_method_conditions(ctx, body, parameters, constraints, count)) return false;
     body->type_parameters = parameters; body->type_parameter_count = count;
+    for (uint32_t p = prefix; p < count; ++p)
+        if (!source_parameter_constraints(ctx,body->node,parameters[p],&constraints[p])) return false;
+    if (!source_method_conditions(ctx, body, parameters, constraints, count)) return false;
     body->generic_owner = body->declaration;
     ctx->generics[index].parameter_count = count; ctx->generics[index].constraints = constraints;
     ctx->has_generics = true;
@@ -74,14 +78,15 @@ static bool source_method_instantiation(SourceContext *ctx, AstNode *node, uint3
     uint32_t prefix = ctx->nominals.declarations[owner - 1].parameter_count;
     if (enclosing.count != prefix || generic->parameter_count < prefix)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "method enclosing parameter identity mismatch");
-    XrXirGeneric own = {0}; own.parameter_count = generic->parameter_count - prefix;
-    own.constraints = own.parameter_count ? generic->constraints + prefix : NULL;
-    if (!source_instantiation(ctx, node, &own, arguments)) return false;
-    if (!prefix) return true;
-    XrXirType *types = source_alloc(ctx, generic->parameter_count, sizeof(*types));
-    if (!types) return false;
-    memcpy(types, enclosing.types, prefix * sizeof(*types));
-    if (own.parameter_count) memcpy(types + prefix, arguments->substitution.types, own.parameter_count * sizeof(*types));
-    arguments->substitution = (SourceSubstitution) {types, generic->parameter_count};
-    return true;
+    uint32_t own = generic->parameter_count - prefix;
+    if (arguments->count != own || (own && !arguments->refs))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method requires its exact explicit type arguments");
+    XrXirType *types = generic->parameter_count ? source_alloc(ctx,generic->parameter_count,sizeof(*types)) : NULL;
+    if (generic->parameter_count && !types) return false;
+    if (prefix) memcpy(types,enclosing.types,prefix * sizeof(*types));
+    for (uint32_t p = 0; p < own; ++p)
+        if (!source_work(ctx,node) || !source_type(ctx,arguments->refs[p],&types[prefix + p])) return false;
+    SourceSubstitution substitution = {types,generic->parameter_count};
+    if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index},substitution)) return false;
+    arguments->substitution = substitution; return true;
 }
