@@ -21,6 +21,49 @@ static bool declaration_spend(uint64_t *budget, uint64_t amount) {
     *budget -= amount;
     return true;
 }
+/* Types, identity metadata and signature structure precede this pass.  A
+ * derived receiver is concrete; its prefix correspondence is checked against
+ * the independently verified original declaration by provenance admission. */
+XrXirStatus xr_xir_method_signature_verify(const XrXirModule *module, uint32_t index,
+    XrXirBudget *budget) {
+    if (!module || !budget || index >= module->function_count || !module->functions)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!module->declarations) return XR_XIR_OK;
+    if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
+    if (!declaration_spend(&budget->work,1)) return XR_XIR_BUDGET;
+    if (identity->method_kind > XR_XIR_MEMBER_HELPER ||
+        (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!identity->nominal_owner) return XR_XIR_OK;
+    const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
+    uint32_t owner = identity->nominal_owner-1;
+    if (!table || owner >= table->count || (!table->declarations && !table->identities))
+        return XR_XIR_BAD_STRUCTURE;
+    if (identity->method_kind == XR_XIR_MEMBER_HELPER) return XR_XIR_OK;
+    uint32_t count = table->declarations ? table->declarations[owner].parameter_count : table->identities[owner].arity;
+    if (!module->provenance && count > (module->generics ? module->generics[index].parameter_count : 0))
+        return XR_XIR_BAD_TYPE;
+    const XrXirFunction *function = &module->functions[index];
+    XrXirType subject;
+    if (identity->method_kind == XR_XIR_READ_METHOD) {
+        if (!function->parameter_count || !function->parameters) return XR_XIR_BAD_TYPE;
+        subject = function->parameters[0];
+    } else if (identity->method_kind == XR_XIR_CONSTRUCTOR) {
+        subject = function->result;
+    } else return XR_XIR_OK;
+    const XrXirTypeNode *receiver = xr_xir_type_node(module->types,subject);
+    if (!receiver || receiver->kind != XR_XIR_TYPE_NOMINAL ||
+        receiver->nominal.declaration != owner || receiver->nominal.argument_count != count ||
+        (count && !receiver->nominal.arguments)) return XR_XIR_BAD_TYPE;
+    if (!module->provenance) {
+        if (!declaration_spend(&budget->work,count)) return XR_XIR_BUDGET;
+        for (uint32_t a = 0; a < count; ++a)
+            if (receiver->nominal.arguments[a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a))
+                return XR_XIR_BAD_TYPE;
+    }
+    return XR_XIR_OK;
+}
 static int module_name_compare(const XrXirSourceModule *a, const XrXirSourceModule *b) {
     uint32_t count = a->name_length < b->name_length ? a->name_length : b->name_length;
     int order = memcmp(a->name, b->name, count);
@@ -108,6 +151,7 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
             d->functions[i].method_kind > XR_XIR_MEMBER_HELPER ||
+            (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
             (d->functions[i].promises & ~XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_BAD_STRUCTURE;
     if (d->functions[d->entry_function].module != d->root_module ||
         d->functions[d->entry_function].nominal_owner) return XR_XIR_BAD_STRUCTURE;

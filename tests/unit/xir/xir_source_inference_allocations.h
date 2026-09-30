@@ -50,6 +50,7 @@ static void inference_source_allocation_fixture(XrCompilerSession *session,
     printf("%s: %zu source/query/inference OOM sites; no partial result\n",label,sites);
 }
 static void inference_source_allocations(XrCompilerSession *session) {
+    inference_source_allocation_fixture(session,"Dead catch initialization region","enum E { Bad {text:string} }\nfn accept(text:string)->string{return text}\nstruct C { const value:string\n constructor(){try{}catch(E.Bad{text}){this.value=accept(text)};this.value=\"normal\"}}\nconst c=C()\n");
     inference_source_allocation_fixture(session,"Interface inference producer",
         "interface I<A>{map<U:Sendable>(seed:A,value:U)->U}\n"
         "fn forward<A,T:I<A>>(r:T,seed:A)->i64{return r.map(seed,41)}\n");

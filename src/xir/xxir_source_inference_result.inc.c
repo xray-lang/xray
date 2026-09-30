@@ -12,9 +12,10 @@
  */
 #include "xxir_type_inference.h"
 static bool source_inference_result(SourceContext *ctx, AstNode *site,
-    XrXirInferenceState *state, XrXirType formal, XrXirType expected) {
-    /* UNIT is also source's no-context sentinel, never type evidence. */
-    if (expected == XR_XIR_UNIT) return true;
+    XrXirInferenceState *state, XrXirType formal, SourceExpectedType context) {
+    /* Presence is independent of the expected type, including Unit. */
+    if (!context.present) return true;
+    XrXirType expected = context.type;
     XrXirInferenceKnown known = {0};
     XrXirStatus status = xr_xir_inference_expected_known(state,&ctx->types,formal,&known);
     if (status != XR_XIR_OK) return source_fail(ctx,site,status,"inferred result context is invalid");

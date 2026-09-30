@@ -501,11 +501,46 @@ static XrXirStatus proof_interface_declaration(const XrXirModule *module, uint32
     }
     return status;
 }
+/* Static methods carry nominal binders without an implicit receiver type.
+ * Prove the inherited requirements in the actual function environment; neither
+ * the nominal declaration nor a matching binder index grants those facts. */
+static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirBudget *budget) {
+    const XrXirModule *module = context->module;
+    if (!module->declarations || module->provenance) return XR_XIR_OK;
+    const XrXirFunctionIdentity *identity = &module->declarations->functions[context->owner.declaration];
+    if (identity->method_kind != XR_XIR_STATIC_METHOD) return XR_XIR_OK;
+    if (!module->types->nominals->declarations) return XR_XIR_OK;
+    const XrXirNominalDeclaration *owner = &module->types->nominals->declarations[identity->nominal_owner-1];
+    uint32_t count = owner->parameter_count;
+    if (!count) return XR_XIR_OK;
+    if (count > budget->work) return XR_XIR_BUDGET;
+    budget->work -= count;
+    bool required = false;
+    for (uint32_t a = 0; a < count; ++a)
+        required |= owner->constraints[a].markers != 0 || owner->constraints[a].interface_count != 0;
+    if (!required) return XR_XIR_OK;
+    uint64_t bytes = (uint64_t)count*sizeof(XrXirType);
+    uint64_t work = (uint64_t)count*2; /* Fill plus complete obligation scan. */
+    if (bytes > SIZE_MAX || bytes > budget->scratch_bytes || work > budget->work) return XR_XIR_BUDGET;
+    budget->scratch_bytes -= bytes; budget->work -= work;
+    XrXirType *arguments = xr_malloc((size_t)bytes);
+    if (!arguments) { budget->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
+    for (uint32_t a = 0; a < count; ++a) arguments[a] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
+    XrXirStatus status = XR_XIR_OK;
+    for (uint32_t a = 0; status == XR_XIR_OK && a < count; ++a) {
+        if (!owner->constraints[a].markers && !owner->constraints[a].interface_count) continue;
+        XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_NOMINAL,identity->nominal_owner-1,0},a,arguments,count};
+        status = xr_xir_constraints_prove(context,&use,budget);
+    }
+    xr_free(arguments); budget->scratch_bytes += bytes; return status;
+}
 static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_t index, XrXirBudget *budget) {
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,index,0}};
     const XrXirFunction *function = &module->functions[index];
     if (function->parameter_count && !function->parameters) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = xr_xir_context_constraints_verify(&context,budget);
+    XrXirStatus status = xr_xir_method_signature_verify(module,index,budget);
+    if (status == XR_XIR_OK) status = xr_xir_context_constraints_verify(&context,budget);
+    if (status == XR_XIR_OK) status = proof_static_owner(&context,budget);
     for (uint32_t p = 0; status == XR_XIR_OK && p < function->parameter_count; ++p)
         status = xr_xir_type_use_verify(&context,function->parameters[p],budget);
     if (status == XR_XIR_OK) status = xr_xir_type_use_verify(&context,function->result,budget);

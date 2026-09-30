@@ -1,0 +1,3 @@
+const calls=Atomic(0)
+export fn count()->i64{return calls.load()}
+export fn values()->Array<i64>{calls.fetchAdd(1);return [10,11,20]}

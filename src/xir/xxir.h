@@ -223,6 +223,9 @@ XR_FUNC XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact,
 XR_FUNC void xr_xir_artifact_free(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *declarations,
     const XrXirTypes *types, uint32_t functions, XrXirBudget *budget);
+/* Module-owned signatures follow descriptor/identity structure admission. */
+XR_FUNC XrXirStatus xr_xir_method_signature_verify(const XrXirModule *module,
+    uint32_t function, XrXirBudget *budget);
 /* Internal snapshot helpers require successful declaration verification first. */
 XR_FUNC XrXirStatus xr_xir_declarations_order(const XrXirDeclarations *declarations,
     uint32_t *order, uint64_t *work);

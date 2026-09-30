@@ -39,8 +39,8 @@ static bool source_requirement_helper_body(SourceContext *ctx, AstNode *site,
     SourceValue result;
     if (!source_type_arguments(ctx,site,request->substitution.types,
             request->substitution.count,&call) ||
-        !emit_group(ctx,call,arguments,count,&result) ||
-        !emit(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,
+        !source_recipe_group(ctx,call,arguments,count,&result) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,
             {function->result == XR_XIR_UNIT ? 0 : result.id,0},{0},0,{0}},NULL)) return false;
     ctx->returned = true;
     return finish_body(ctx);
@@ -135,5 +135,5 @@ static bool source_requirement_value(SourceContext *ctx, AstNode *node,
     return source_type_arguments(ctx,node,arguments,ambient,&op) &&
         source_query_target_reference(ctx,source_query_range(ctx,node,NULL),
             ctx->interface_member_declarations[application.declaration][helper.selected.member],XR_XIR_SOURCE_FUNCTION_VALUE) &&
-        emit_group(ctx,op,&request->receiver,1,value);
+        source_recipe_group(ctx,op,&request->receiver,1,value);
 }

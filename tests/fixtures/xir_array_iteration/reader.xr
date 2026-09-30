@@ -1,0 +1,10 @@
+export fn sum(xs:Array<i64>)->i64{var result=0;for(x in xs){result=result+x};return result}
+export fn snapshot()->i64{var xs=[10,11,20];var result=0;for(i,x in xs){result+=x;xs.push(99);xs[0]=100};return result}
+export fn control()->i64{var trace=0;var result=0;for(i,x in [10,99,31,5]){defer{trace+=1};if(i==1){continue};if(i==3){break};result+=x};if(trace==4){return result}else{return 0}}
+export fn captures()->i64{var first:fn()->i64=fn()->i64{return 0};var second:fn()->i64=fn()->i64{return 0};for(i,x in [10,31]){if(i==0){first=fn()->i64{return x}}else{second=fn()->i64{return x}}};return first()+second()}
+export fn ignored()->i64{var n=0;for(_, _ in [10,11,20]){n+=1};const empty:Array<i64>=[];for(x in empty){n+=100};return n+38}
+enum Failure{Bad}
+const cleaned=Atomic(0)
+fn early()->string{for(x in ["mapped"]){defer{cleaned.fetchAdd(1)};return x};return ""}
+export fn exits()->i64{const value=early();try{for(x in [1]){defer{cleaned.fetchAdd(1)};throw Failure.Bad}}catch(e){};if(value=="mapped" && cleaned.load()==2){return 41}else{return 0}}
+export fn head<T:Sendable>(xs:Array<T>)->T{for(x in xs){return x};return xs[0]}

@@ -9,7 +9,38 @@
  * KEY CONCEPT:
  *   Context and conversion planning cannot publish instructions before success.
  */
+static void source_region_snapshot_identity_cases(void) {
+    SourceContext ctx={0}; ctx.budget=xr_xir_default_budget();
+    XrXirFunction function={0}; function.parameter_count=1;
+    SourceFunction body={0}; ctx.bodies=&body; ctx.functions=&function;
+    attempts=0; fail_at=SIZE_MAX;
+    CHECK(source_recipe_record(&ctx,(XrXirInstruction){XR_XIR_LOCAL_WRITE,XR_XIR_UNIT,
+        {0,UINT32_MAX},{0},0,{0}},NULL));
+    SourceValue placeholder={UINT32_MAX,XR_XIR_STRING};
+    CHECK(source_recipe_group(&ctx,(XrXirInstruction){XR_XIR_CALL,XR_XIR_STRING,
+        {0},{0},0,{0}},&placeholder,1,NULL));
+    XrXirFunction snapshot=function;
+    uint64_t scratch=ctx.budget.scratch_bytes;
+    CHECK(source_region_emit(&ctx,&snapshot,false));
+    CHECK(snapshot.instructions[0].args[1]==UINT32_MAX && snapshot.operands[0]==UINT32_MAX);
+    CHECK(!body.region_sealed && ctx.budget.scratch_bytes==scratch);
+    XrXirFunction output=function;
+    CHECK(!source_region_emit(&ctx,&output,true));
+    CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !output.instructions && !output.blocks && !output.operands);
+    CHECK(!body.region_sealed && ctx.budget.scratch_bytes==scratch);
+    ctx.diagnostic.status=XR_XIR_OK;
+    body.recipes[0].instruction.args[1]=UINT32_MAX-1;
+    CHECK(!source_region_emit(&ctx,&output,false));
+    CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !output.instructions && ctx.budget.scratch_bytes==scratch);
+    body.recipes[0].instruction.args[1]=UINT32_MAX;body.recipes[0].owner=1;
+    ctx.diagnostic.status=XR_XIR_OK;
+    CHECK(!source_region_emit(&ctx,&output,false));
+    CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !output.instructions && ctx.budget.scratch_bytes==scratch);
+    while(ctx.memory){SourceMemory *next=ctx.memory->next;xr_free(ctx.memory);ctx.memory=next;}
+    CHECK(!live);attempts=0;fail_at=SIZE_MAX;
+}
 static void source_plan_context_cases(void) {
+    source_region_snapshot_identity_cases();
     SourceContext ctx = {0}; ctx.budget = xr_xir_default_budget();
     SourceConversionRecipe recipe = {0};
     CHECK(source_conversion_plan(&ctx,NULL,XR_XIR_I8,(SourceExpectedType){false,XR_XIR_UNIT},&recipe));
@@ -57,16 +88,22 @@ static void source_plan_conversion_budget_cases(void) {
     ctx.diagnostic.status = XR_XIR_OK; ctx.budget.work = 1; ctx.budget.scratch_bytes = scratch;
     CHECK(!source_call_conversions(&ctx,NULL,&request));
     CHECK(ctx.diagnostic.status == XR_XIR_BUDGET && !attempts && ctx.budget.work == 1);
-    XrXirInstruction ops[2] = {0}; XrXirBlock blocks[1] = {0};
     XrXirFunction function = {0}; function.parameter_count = 2;
-    SourceFunction body = {0}; body.ops = ops; body.capacity = 2;
-    body.blocks = blocks; body.block_count = 1;
+    SourceFunction body = {0};
+    ctx.budget.metadata_bytes = xr_xir_default_budget().metadata_bytes;
+    ctx.budget.blocks = 1;
     ctx.bodies = &body; ctx.functions = &function; ctx.budget.instructions = 1;
     ctx.budget.work = 20; ctx.diagnostic.status = XR_XIR_OK;
     CHECK(source_call_conversions(&ctx,NULL,&request));
-    CHECK(body.count == 1 && ops[0].op == XR_XIR_CONVERT_NUMBER);
-    CHECK(values[1].type == XR_XIR_I64 && values[1].id == 2 && ctx.budget.scratch_bytes == scratch && !live);
-    ctx.diagnostic.status = XR_XIR_OK; ctx.budget.work = 20; body.count = 0;
+    CHECK(body.count == 1 && body.recipes[0].instruction.op == XR_XIR_CONVERT_NUMBER);
+    CHECK(body.recipes[0].owner == ctx.function && body.recipes[0].value == 2);
+    CHECK(body.recipe_storage && body.block_count == 1 && !body.region_sealed);
+    CHECK(values[1].type == XR_XIR_I64 && values[1].id == 2 && ctx.budget.scratch_bytes == scratch && live == 2);
+    while (ctx.memory) {
+        SourceMemory *next = ctx.memory->next; xr_free(ctx.memory); ctx.memory = next;
+    }
+    CHECK(!live); body = (SourceFunction){0};
+    ctx.diagnostic.status = XR_XIR_OK; ctx.budget.work = 20;
     values[0] = (SourceValue){0,XR_XIR_I8}; values[1] = (SourceValue){1,XR_XIR_I64};
     parameters[1].type = XR_XIR_I8; ctx.budget.scratch_bytes = scratch*2;
     CHECK(!source_call_conversions(&ctx,NULL,&request));

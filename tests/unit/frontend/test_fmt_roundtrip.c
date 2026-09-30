@@ -452,6 +452,44 @@ static int check_ast_preserved(const char *path) {
     return result;
 }
 
+TEST(tuple_iteration_surface_and_identity_roundtrip) {
+    setup();
+    const char *src = "fn pairs() {\nfor ((i, e) in xs.entries()) {print(i)}; "
+                      "for ((j, v) in ys.entries()) {print(v)};\n}\n";
+    AstNode *before = xr_parse_with_trivia(g_session, src, "tuple_heads.xr");
+    ASSERT_NOT_NULL(before);
+    char *digest_before = ast_digest(before);
+    char *formatted = xfmt_format_ast(before, NULL, g_iso);
+    ASSERT_NOT_NULL(digest_before);
+    ASSERT_NOT_NULL(formatted);
+    ASSERT_TRUE(contains(formatted, "for ((i, e) in xs.entries())"));
+    ASSERT_TRUE(contains(formatted, "for ((j, v) in ys.entries())"));
+    ASSERT_FALSE(contains(formatted, "__for_in_tuple_"));
+    xr_program_destroy(before);
+    AstNode *after = xr_parse_with_trivia(g_session, formatted, "tuple_heads_formatted.xr");
+    ASSERT_NOT_NULL(after);
+    char *digest_after = ast_digest(after);
+    ASSERT_NOT_NULL(digest_after);
+    ASSERT_STR_EQ(digest_before, digest_after);
+    char *again = xfmt_format_ast(after, NULL, g_iso);
+    ASSERT_NOT_NULL(again);
+    ASSERT_STR_EQ(formatted, again);
+    xr_program_destroy(after);
+    xr_free(digest_before);
+    xr_free(digest_after);
+    xr_free(formatted);
+    xr_free(again);
+    teardown();
+}
+
+TEST(tuple_iteration_binding_annotations_rejected) {
+    setup();
+    AstNode *node = xr_parse_with_trivia(g_session,
+        "fn bad() { for ((i: i64, value) in xs) {} }", "tuple_annotation.xr");
+    ASSERT_NULL(node);
+    teardown();
+}
+
 TEST(ast_preserved_over_corpora) {
     setup();
 
@@ -1323,6 +1361,8 @@ RUN_TEST_SUITE("Formatter roundtrip (E6)");
 
 RUN_TEST(idempotency_regression_corpus);
 RUN_TEST(ast_preserved_over_corpora);
+RUN_TEST(tuple_iteration_surface_and_identity_roundtrip);
+RUN_TEST(tuple_iteration_binding_annotations_rejected);
 
 RUN_TEST(doc_comment_before_function);
 RUN_TEST(block_comment_before_statement);

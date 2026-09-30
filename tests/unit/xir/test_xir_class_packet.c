@@ -20,6 +20,8 @@
 #define C(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
 #define CHECK(x) C(x)
 #include "xir_runtime_allocations.h"
+#include "xir_class_deep_cases.h"
+#include "xir_class_enum_deep_cases.h"
 static void class_runtime_faults(XrXirProgram *program) {
  size_t base=runtime_live,bytes=runtime_bytes,sites=0;
  for(size_t pass=0;pass<=sites;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
@@ -37,6 +39,7 @@ static void class_runtime_faults(XrXirProgram *program) {
  runtime_fail_at=SIZE_MAX;printf("class runtime OOM sites %zu physical baseline restored\n",sites);
 }
 int main(int argc,char **argv){
+ class_deep_cases();class_cross_arena_cases();class_exit_cases();class_program_retained_case();class_enum_deep_cases();
  C(argc==1 || argc==2);FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");C(file);
  C(!fseek(file,0,SEEK_END));long size=ftell(file);C(size>=64 && size<=262144);C(!fseek(file,0,SEEK_SET));
  uint8_t *bytes=malloc((size_t)size);C(bytes);C(fread(bytes,1,(size_t)size,file)==(size_t)size);C(!fclose(file));

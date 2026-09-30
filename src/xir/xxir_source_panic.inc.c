@@ -16,8 +16,8 @@ static bool source_panic_member(SourceContext *ctx, AstNode *node, const SourceT
     const char *name = node->as.member_access.name;
     if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo members have no type parameters");
     if (name && !strcmp(name, "code"))
-        return emit(ctx, (XrXirInstruction) {XR_XIR_PANIC_CODE, XR_XIR_I64, {receiver.id, 0}, {0}, 0, {0}}, value);
+        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PANIC_CODE, XR_XIR_I64, {receiver.id, 0}, {0}, 0, {0}}, value);
     if (name && !strcmp(name, "message"))
-        return emit(ctx, (XrXirInstruction) {XR_XIR_PANIC_MESSAGE, XR_XIR_STRING, {receiver.id, 0}, {0}, 0, {0}}, value);
+        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PANIC_MESSAGE, XR_XIR_STRING, {receiver.id, 0}, {0}, 0, {0}}, value);
     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo exposes only message and code without class support");
 }

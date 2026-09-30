@@ -15,7 +15,7 @@ typedef struct SourceDirectRequest {
     uint32_t function;
     SourceSubstitution prefix;
     const SourceValue *receiver;
-    XrXirType expected_result;
+    SourceExpectedType expected_result;
 } SourceDirectRequest;
 typedef struct SourceDirectArguments {
     SourceSubstitution substitution;
@@ -42,9 +42,10 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     if (!source_argument_arity(ctx,node,index,supplied)) return false;
     if (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call requires its exact explicit type arguments or an omitted list");
-    XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
-    SourceValue *values = function.parameter_count ? source_alloc(ctx,function.parameter_count,sizeof(*values)) : NULL;
-    if ((count && !types) || (function.parameter_count && !values)) return false;
+    SourceCallStorage storage={0};
+    if (!source_call_storage(ctx,count,function.parameter_count,&storage)) return false;
+    XrXirType *types=storage.types;
+    SourceValue *values=storage.values;
     for (uint32_t p=0;p<prefix;++p) {
         if (!source_work(ctx,node)) return false;
         types[p]=request->prefix.types[p];

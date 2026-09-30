@@ -96,7 +96,11 @@ static void source_catch_cases(XrXirSourceRequest *request, const char *path, co
         {"import \"./lib\" as lib\nfn run()->string {try {lib.raise(\"x\")} catch(lib.Shared<string>.Failed{message}){return message}; return \"none\"}\nrun()\n",true,NULL},
         {"import { Shared } from \"./lib\"\nfn run()->i64 {try {throw Shared<i64>.Empty} catch(Shared<i64>.Empty){return 1}}\nrun()\n",true,NULL},
         {"import \"./lib\" as lib\nfn run(){try {} catch(lib.Hidden.Bad){}}\nrun()\n",false,"import requires an exported declaration"},
-        {"import \"./lib\" as lib\nfn run(){try {} catch(lib.Shared.Empty){}}\nrun()\n",false,"must state the enum's type arguments"}
+        {"import \"./lib\" as lib\nfn run(){try {} catch(lib.Shared.Empty){}}\nrun()\n",false,"must state the enum's type arguments"},
+        {"enum E { Bad {text:string} }\nfn accept(text:string)->string{return text}\nstruct C { const value:string\n constructor(){try{}catch(E.Bad{text}){this.value=accept(text)};this.value=\"normal\"}}\nconst c=C()\n",true,NULL},
+        {"enum E { Bad {text:string} }\nstruct C { const value:string\n constructor(){try{}catch(E.Bad{text}){if(true){this.value=text}else{this.value=\"other\"};const good=this.value};this.value=\"normal\"}}\nconst c=C()\n",true,NULL},
+        {"enum E { Bad {text:string} }\nstruct C { const value:string\n constructor(){try{}catch(E.Bad{text}){const bad=this.value;this.value=text};this.value=\"normal\"}}\nconst c=C()\n",false,"read requires storage initialized on every incoming path"},
+        {"enum E { Bad {text:string} }\nstruct C { const value:string=\"before\"\n constructor(){try{}catch(E.Bad{text}){this.value=text}}}\nconst c=C()\n",false,"write may overwrite already initialized const storage"},
     };
     uint32_t failures = 0;
     for (uint32_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {

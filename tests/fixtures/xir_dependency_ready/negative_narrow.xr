@@ -1,0 +1,2 @@
+fn pair<T>(a:T,b:T)->T{return b}
+fn bad()->i64{const a:i8=1;const b:i64=41;return pair(a,b)}

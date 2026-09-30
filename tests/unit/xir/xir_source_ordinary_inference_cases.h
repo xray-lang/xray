@@ -39,7 +39,7 @@ static void source_ordinary_inference_cases(XrXirSourceRequest *request) {
         "fn pair<T>(a:T,b:T)->T{return a}\nfn bad()->i64{return pair(41,\"wrong\")}\n",
         "struct S<X>{map<U>(seed:X,value:U)->U{return value}}\nfn bad()->i64{return S<string>{}.map(0,41)}\n",
         "struct S<X>{static choose<U,V>(seed:X,value:U)->U{return value}}\nfn bad()->i64{return S<string>.choose(\"tag\",41)}\n",
-        "fn choose<T>(body:fn(T)->T,value:T)->T{return body(value)}\nfn bad()->i64{return choose(fn(v){return v},41)}\n"
+        "fn consume<T>(body:fn(T)->T)->i64{return 41}\nfn bad()->i64{return consume(fn(v){return v})}\n"
     };
     const char *expected_messages[]={
         "type argument does not prove the declared constraint", /* missing caller Sendable proof */
@@ -48,7 +48,7 @@ static void source_ordinary_inference_cases(XrXirSourceRequest *request) {
         "expression cannot satisfy its declared type", /* second value fails known i64 context */
         "expression cannot satisfy its declared type", /* nominal string prefix cannot change */
         "cannot infer all declaration type arguments; supply an explicit list", /* static phantom V remains unresolved */
-        "closure parameter requires an annotation or complete callable context", /* first lambda has no prior evidence */
+        "closure parameter requires an annotation or complete callable context", /* lambda own type has no argument or result evidence */
     };
     _Static_assert(sizeof(expected_messages)/sizeof(*expected_messages)==sizeof(rejected)/sizeof(*rejected), "Every rejection needs an exact diagnostic");
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {

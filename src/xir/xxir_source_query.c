@@ -96,17 +96,80 @@ static void query_modules(SourceQueryCopy *copy, const XrXirSourceView *source) 
         modules[i].path = query_string(copy, source->modules[i].path);
     }
 }
+typedef struct SourceQueryDeclarationLayout {
+    size_t bytes;
+    uint64_t work;
+} SourceQueryDeclarationLayout;
+_Static_assert(_Alignof(SourceQueryMemory) >= _Alignof(XrXirSourceDeclaration) &&
+    sizeof(SourceQueryMemory) % _Alignof(XrXirSourceDeclaration) == 0 &&
+    _Alignof(SourceQueryMemory) >= _Alignof(XrXirSourceType), "query table alignment");
+static bool query_declaration_extent(const XrXirSourceDeclaration *source,
+    SourceQueryDeclarationLayout *layout) {
+    size_t alignment = _Alignof(XrXirSourceType);
+    size_t padding = source->parameter_count ? (alignment - layout->bytes % alignment) % alignment : 0;
+    if (padding > SIZE_MAX - layout->bytes) return false;
+    size_t bytes = layout->bytes + padding;
+    if (source->parameter_count > (SIZE_MAX - bytes) / sizeof(XrXirSourceType)) return false;
+    bytes += (size_t)source->parameter_count * sizeof(XrXirSourceType);
+    size_t names = source->name ? strlen(source->name) + 1 : 0;
+    size_t signatures = source->signature ? strlen(source->signature) + 1 : 0;
+    if (names > SIZE_MAX - bytes || signatures > SIZE_MAX - bytes - names) return false;
+    if (names > UINT64_MAX - layout->work || signatures > UINT64_MAX - layout->work - names ||
+        source->parameter_count > UINT64_MAX - layout->work - names - signatures) return false;
+    layout->bytes = bytes + names + signatures;
+    layout->work += names + signatures + source->parameter_count;
+    return layout->bytes <= SIZE_MAX - sizeof(SourceQueryMemory);
+}
+static void query_declaration_place(unsigned char *storage, size_t *offset,
+    const XrXirSourceDeclaration *source, XrXirSourceDeclaration *output) {
+    size_t alignment = _Alignof(XrXirSourceType);
+    if (source->parameter_count) *offset += (alignment - *offset % alignment) % alignment;
+    size_t bytes = (size_t)source->parameter_count * sizeof(XrXirSourceType);
+    output->parameters = source->parameter_count ? (const XrXirSourceType *)(storage + *offset) : NULL;
+    if (bytes && source->parameters) memcpy(storage + *offset, source->parameters, bytes);
+    *offset += bytes;
+    size_t names = source->name ? strlen(source->name) + 1 : 0;
+    output->name = names ? (const char *)(storage + *offset) : NULL;
+    if (names) memcpy(storage + *offset, source->name, names);
+    *offset += names;
+    size_t signatures = source->signature ? strlen(source->signature) + 1 : 0;
+    output->signature = signatures ? (const char *)(storage + *offset) : NULL;
+    if (signatures) memcpy(storage + *offset, source->signature, signatures);
+    *offset += signatures;
+}
 static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *source) {
-    XrXirSourceDeclaration *decls = query_copy(copy, source->declarations, source->declaration_count, sizeof(*decls));
-    copy->snapshot->view.declarations = decls;
-    if (!decls) return;
-    for (uint32_t i = 0; i < source->declaration_count && copy->status == XR_XIR_OK; ++i) {
-        decls[i].name = query_string(copy, source->declarations[i].name);
-        decls[i].signature = query_string(copy, source->declarations[i].signature);
-        decls[i].parameters = query_copy(copy, source->declarations[i].parameters,
-            decls[i].parameter_count, sizeof(*decls[i].parameters));
-        decls[i].generic_constraints = query_constraints(copy, source->declarations[i].generic_constraints,
-            decls[i].generic_parameter_count);
+    copy->snapshot->view.declarations = NULL;
+    if (copy->status != XR_XIR_OK || !source->declaration_count) return;
+    size_t count = source->declaration_count;
+    if (count > (SIZE_MAX - sizeof(SourceQueryMemory)) / sizeof(XrXirSourceDeclaration) ||
+        count > copy->remaining->work) { copy->status = XR_XIR_BUDGET; return; }
+    size_t table_bytes = count * sizeof(XrXirSourceDeclaration);
+    if (sizeof(SourceQueryMemory) + table_bytes > copy->remaining->metadata_bytes ||
+        count == copy->remaining->work) { copy->status = XR_XIR_BUDGET; return; }
+    SourceQueryDeclarationLayout layout = {table_bytes, count};
+    for (size_t i = 0; i < count; ++i) {
+        if (layout.work >= copy->remaining->work) { copy->status = XR_XIR_BUDGET; return; }
+        --copy->remaining->work; /* Charge the row actually inspected, even on failure. */
+        if (!query_declaration_extent(&source->declarations[i], &layout) ||
+            layout.work > copy->remaining->work ||
+            sizeof(SourceQueryMemory) + layout.bytes > copy->remaining->metadata_bytes) {
+            copy->status = XR_XIR_BUDGET; return;
+        }
+    }
+    SourceQueryMemory *memory = xr_calloc(1, sizeof(*memory) + layout.bytes);
+    if (!memory) { copy->status = XR_XIR_OUT_OF_MEMORY; return; }
+    copy->remaining->metadata_bytes -= sizeof(*memory) + layout.bytes;
+    copy->remaining->work -= layout.work;
+    memory->next = copy->snapshot->memory; copy->snapshot->memory = memory;
+    unsigned char *storage = (unsigned char *)(memory + 1);
+    XrXirSourceDeclaration *declarations = (XrXirSourceDeclaration *)storage;
+    memcpy(declarations, source->declarations, table_bytes);
+    copy->snapshot->view.declarations = declarations;
+    size_t offset = table_bytes;
+    for (size_t i = 0; i < count && copy->status == XR_XIR_OK; ++i) {
+        query_declaration_place(storage, &offset, &source->declarations[i], &declarations[i]);
+        declarations[i].generic_constraints = query_constraints(copy,
+            source->declarations[i].generic_constraints, declarations[i].generic_parameter_count);
     }
 }
 static void query_literal(SourceQueryCopy *copy, XrXirLiteral *literal) {

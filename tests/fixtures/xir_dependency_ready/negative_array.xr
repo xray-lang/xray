@@ -1,0 +1,2 @@
+fn pair<T>(a:T,b:T)->T{return b}
+fn bad(){const a:Array<i64>=[1];const b:Array<i8>=[2];const c=pair(a,b)}

@@ -1,0 +1,4 @@
+export fn choose<T>(f:fn(T)->T,seed:T)->T {return f(seed)}
+export fn pair<T>(a:T,b:T)->T {return b}
+export fn id<T>(v:T)->T {return v}
+export fn empty<T>()->Array<T> {return []}

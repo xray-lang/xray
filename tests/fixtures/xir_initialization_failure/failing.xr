@@ -1,0 +1,9 @@
+import "./base" as base
+const published=base.message()
+print("B")
+fn stop()->i64 {
+    Coro.yield()
+    throw base.InitFailure<string>.Stopped{message:published,count:41+base.next()}
+}
+const unreachable=stop()
+print("NEVER")

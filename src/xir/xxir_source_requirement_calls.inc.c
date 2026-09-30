@@ -115,7 +115,7 @@ done:
     ctx->budget.scratch_bytes += scratch; return ok;
 }
 static bool source_requirement_call(SourceContext *ctx, AstNode *node,
-    SourceValue receiver, XrXirType result_context, SourceValue *value) {
+    SourceValue receiver, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || (call->arg_count && !call->arguments))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method arguments are malformed");
@@ -136,15 +136,15 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument arity mismatch"); goto done;
     }
     uint32_t count = parent+own;
-    XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
-    if (count && !types) goto done;
+    SourceCallStorage storage={0};
+    if (!source_call_storage(ctx,count,(uint64_t)formal.parameter_count+1,&storage)) goto done;
+    XrXirType *types=storage.types;
     for (uint32_t p = 0; p < parent; ++p) {
         if (!source_work(ctx,node)) goto done;
         types[p] = application.arguments[p];
     }
     SourceSubstitution substitution = {types,count};
-    SourceValue *arguments = source_alloc(ctx,(uint64_t)formal.parameter_count+1,sizeof(*arguments));
-    if (!arguments) goto done;
+    SourceValue *arguments=storage.values;
     arguments[0] = receiver;
     SourceCallPlan plan = {SOURCE_CALL_REQUIREMENT,{application.arguments,parent},substitution,NULL,
         formal.parameters,formal.result,result_context,arguments,0,1};
@@ -159,7 +159,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     ok = source_type_arguments(ctx,node,substitution.types,substitution.count,&op) &&
         source_query_target_reference(ctx,source_query_range(ctx,call->callee,NULL),
             ctx->interface_member_declarations[application.declaration][selected.member],XR_XIR_SOURCE_CALL) &&
-        emit_group(ctx,op,arguments,callable.parameter_count + 1,value);
+        source_recipe_group(ctx,op,arguments,callable.parameter_count + 1,value);
 done:
     return ok;
 }

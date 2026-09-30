@@ -10,12 +10,6 @@
  *   Planning proves the original conversion once; emission only consumes the
  *   resulting private recipe and never repeats inference or permissions.
  */
-typedef struct SourceExpectedType { bool present; XrXirType type; } SourceExpectedType;
-typedef struct SourceConversionRecipe {
-    bool needed;
-    XrXirOp operation;
-    XrXirType source, target;
-} SourceConversionRecipe;
 static bool source_conversion_plan(SourceContext *ctx, AstNode *node, XrXirType actual,
     SourceExpectedType expected, SourceConversionRecipe *output) {
     SourceConversionRecipe recipe = {false,(XrXirOp)0,actual,actual};
@@ -47,11 +41,6 @@ static bool source_conversion_emit(SourceContext *ctx, const SourceConversionRec
     /* This checks recipe/value plumbing, not a second conversion relation. */
     if (value->type != recipe->source)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"conversion recipe source changed");
-    return !recipe->needed || emit(ctx,(XrXirInstruction){recipe->operation,recipe->target,
+    return !recipe->needed || source_recipe_record(ctx,(XrXirInstruction){recipe->operation,recipe->target,
         {value->id,0},{0},0,{0}},value);
-}
-static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
-    SourceConversionRecipe recipe;
-    return source_conversion_plan(ctx,node,value->type,(SourceExpectedType){expected != XR_XIR_UNIT,expected},&recipe) &&
-        source_conversion_emit(ctx,&recipe,value);
 }

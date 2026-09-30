@@ -279,9 +279,12 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         if (!tuple_pattern)
             return NULL;
         char buf[32];
-        /* Line-derived suffix keeps the synthesised name stable across
-         * re-parses while still being unique within a single function. */
-        snprintf(buf, sizeof(buf), "__for_in_tuple_%d", line);
+        if (parser->tuple_head_sequence == UINT32_MAX) {
+            xr_parser_error_at_current(parser, "too many tuple iteration heads");
+            return NULL;
+        }
+        /* Parse order survives formatting; line numbers do not. */
+        snprintf(buf, sizeof(buf), "__for_in_tuple_%u", parser->tuple_head_sequence++);
         tuple_tmp_name = (char *) ast_alloc(parser->compiler_session, strlen(buf) + 1);
         memcpy(tuple_tmp_name, buf, strlen(buf) + 1);
     }
@@ -322,12 +325,10 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         second_name[parser->previous.length] = '\0';
     }
 
-    // Optional type annotation (not supported yet)
     XrTypeRef *item_type = NULL;
     if (xr_parser_match(parser, TK_COLON)) {
-        while (!xr_parser_check(parser, TK_IN) && !xr_parser_check(parser, TK_EOF)) {
-            xr_parser_advance(parser);
-        }
+        xr_parser_error_at_current(parser, "for-in bindings do not accept type annotations");
+        return NULL;
     }
 
     xr_parser_consume(parser, TK_IN, "expected 'in' after loop variable");
@@ -370,6 +371,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
                                                   NULL, item_type, collection, body, line)
                     : xr_ast_for_in_stmt(parser->compiler_session, NULL, first_name, item_type,
                                          collection, body, line);
+    if (stmt) stmt->as.for_in_stmt.is_tuple_head = tuple_pattern != NULL;
     inherit_block_end(stmt, body);
     return stmt;
 }

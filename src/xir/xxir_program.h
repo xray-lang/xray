@@ -77,6 +77,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t 
     const XrXirValue *arguments, uint32_t count);
 XR_FUNC XrXirInstanceResult xr_xir_instance_poll(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, uint64_t wake);
+/* Transfers ordinary entry outcomes. Initialization failure stays instance-owned:
+ * take_result returns BAD_STATE without changing output; use copy_failure. */
 XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);

@@ -389,7 +389,6 @@ static const char *const rejected[] = {
     "fn unused<T>(x:T)->i64 { return x }\n",
     "const narrow:i8=1; const wide:i64 = narrow + 128\n",
     "const narrow:i8=1; const wide:i64 = 128 + narrow\n",
-    "const x:i8 = (1 + 2) + 3\n",
     "const x:u8 = true ? 1 : -1\n",
     "const x:i8 = false ? 128 : 1\n",
     "fn unused() { var x:u8=0; x += -1 }\n",
@@ -656,6 +655,14 @@ int main(void) {
     source_decimal_contexts(&request, root);
     enum_admission(&request, root);
     nested_pattern_budgets(&request, root);
+    write_source(root,"const x:i8 = (1 + 2) + 3\n");
+    XrXirSourceResult recursive_literal = {0};
+    CHECK(xr_xir_source_check(&request,&recursive_literal,NULL) == XR_XIR_OK);
+    CHECK(recursive_literal.checked != NULL);
+    const XrXirModule *literal_module = xr_xir_artifact_module(recursive_literal.checked);
+    CHECK(literal_module && literal_module->declarations->slot_count == 1);
+    CHECK(literal_module->declarations->slots[0].type == XR_XIR_I8);
+    xr_xir_source_result_free(&recursive_literal);
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_source(root, rejected[i]);
         XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;

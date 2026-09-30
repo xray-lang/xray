@@ -25,7 +25,7 @@ static bool source_argument_default(SourceContext *ctx, AstNode *node, uint32_t 
     XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, helper, {0}};
     return source_work(ctx, node) &&
         source_substitute(ctx, substitution, ctx->functions[helper].result, 0, &op.type) &&
-        source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && emit(ctx, op, value);
+        source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && source_recipe_record(ctx, op, value);
 }
 static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
     uint32_t end = *next;

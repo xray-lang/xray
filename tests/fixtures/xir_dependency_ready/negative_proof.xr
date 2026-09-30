@@ -1,0 +1,2 @@
+fn id<T:Sendable>(x:T)->T{return x}
+fn bad<A>(x:A)->A{return id(x)}

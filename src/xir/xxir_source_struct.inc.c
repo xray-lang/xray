@@ -299,7 +299,7 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         if (!source_struct_field(ctx, node, instance_type, names[f], false, &index, &type)) return false;
         if (seen[index]) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate struct literal field");
         seen[index] = true;
-        if (!expression_in(ctx, values[f], type, &fields[index])) return false;
+        if (!source_plan_expression(ctx, values[f], (SourceExpectedType){type != XR_XIR_UNIT,type}, &fields[index])) return false;
         if (fields[index].type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct field type mismatch");
     }
     for (uint32_t f = 0; f < count; ++f) {
@@ -315,12 +315,12 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         if (!source_substitute(ctx, &substitution, decl->fields[f].type, 0, &field_type)) return false;
         XrXirInstruction op = {XR_XIR_CALL, field_type, {0}, {0}, function, {0}};
         if (!source_type_arguments(ctx, node, substitution.types, substitution.count, &op) ||
-            !emit(ctx, op, &fields[f])) return false;
+            !source_recipe_record(ctx, op, &fields[f])) return false;
         if (!source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
             ctx->nominal_members[symbol->index][f], XR_XIR_SOURCE_READ)) return false;
     }
     return source_query_reference(ctx, path, binding, symbol, XR_XIR_SOURCE_TYPE_USE) &&
-        emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, instance_type, {0}, {0}, 0, {0}}, fields, count, value);
+        source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, instance_type, {0}, {0}, 0, {0}}, fields, count, value);
 }
 static bool source_struct_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
     if (node->type == AST_STRUCT_LITERAL) {
@@ -335,5 +335,5 @@ static bool source_struct_literal(SourceContext *ctx, AstNode *node, SourceValue
 static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceValue receiver, SourceValue *value) {
     uint32_t index; XrXirType type;
     if (!source_struct_field(ctx, node, receiver.type, node->as.member_access.name, false, &index, &type)) return false;
-    return emit(ctx, (XrXirInstruction) {xr_xir_type_is_class(&ctx->types,receiver.type) ? XR_XIR_CLASS_GET : XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
+    return source_recipe_record(ctx, (XrXirInstruction) {xr_xir_type_is_class(&ctx->types,receiver.type) ? XR_XIR_CLASS_GET : XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
 }

@@ -1,0 +1,19 @@
+import {Choice,first,second,order,item,receiver,argument,receiverOrder} from "./value"
+import {choose,pair,id,empty} from "./reader"
+export fn answer()->i64 {
+ const n:i8=40
+ const a=choose(fn(v){return v+1},n)
+ const b=choose(fn(v){return v},(n+1))
+ const c=choose(fn(v){return v+1},true?n:n)
+ const source=item()
+ const value:i64=999
+ const d=choose(fn(v){return v+1},match(source){Choice.Left{value}->value,Choice.Right{value}->value})
+ const e=pair(first(),second())
+ const r=receiver().choose(argument())
+ const narrow:i8=d
+ const present:Array<i64>=empty()
+ if(a==41&&b==41&&c==41&&narrow==41&&e==41&&order()==12&&r==41&&receiverOrder()==12){return 41}
+ return 0
+}
+export fn retained()->string {return "ready"+"-owned"}
+export fn values()->Array<string> {return ["ready"+"-owned","second"+"-owned"]}

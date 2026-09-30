@@ -50,7 +50,7 @@ static void source_requirement_inference_negative(XrXirSourceRequest *request) {
         "interface I{map<U:Sendable>(value:U)->U}\nfn bad<T:I,A>(r:T,a:A)->A{return r.map(a)}\n",
         "interface I{map<U>(a:U,b:U)->U}\nfn bad<T:I>(r:T)->i64{return r.map(41,\"wrong\")}\n",
         "interface I<A>{map<U>(seed:A,value:U)->U}\nfn bad<T:I<string>>(r:T)->i64{return r.map(0,41)}\n",
-        "interface I{map<U>(f:fn(U)->U,value:U)->U}\nfn bad<T:I>(r:T)->i64{return r.map(fn(x){return x},41)}\n",
+        "interface I{map<U>(f:fn(U)->U)->i64}\nfn bad<T:I>(r:T)->i64{return r.map(fn(x){return x})}\n",
         "interface I{map<U,V>(value:U,tag:V)->U}\nfn bad<T:I>(r:T)->i64{return r.map<i64>(41,\"tag\")}\n",
         "interface Evidence{}\ninterface I{map<U:Evidence>(value:U)->U}\nfn bad<T:I>(r:T)->i64{return r.map(41)}\n"
     };
@@ -59,7 +59,7 @@ static void source_requirement_inference_negative(XrXirSourceRequest *request) {
         "method type argument does not prove the declared constraint", /* original method Sendable obligation */
         "expression cannot satisfy its declared type", /* second value fails known i64 context */
         "expression cannot satisfy its declared type", /* original interface string prefix fixed */
-        "closure parameter requires an annotation or complete callable context", /* first lambda has no prior evidence */
+        "closure parameter requires an annotation or complete callable context", /* lambda own type has no argument or result evidence */
         "interface method requires its exact explicit type arguments or an omitted list", /* partial explicit tuple rejected */
         "method type argument does not prove the declared constraint", /* scalar lacks explicit interface proof */
     };

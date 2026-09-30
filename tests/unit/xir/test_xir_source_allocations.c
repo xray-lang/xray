@@ -10,6 +10,7 @@
  *   Parsed graph allocation is separate from the counted XIR producer boundary.
  */
 #include "base/xmalloc.h"
+#include "base/xhash.h"
 #include "toolchain/xcompiler_session.h"
 #include "module/xmodule_resolver.h"
 #include "../test_win_compat.h"
@@ -21,24 +22,42 @@ static size_t attempts, fail_at = SIZE_MAX, live;
 static unsigned resolver_fault;
 static void **owned;
 static size_t owned_capacity;
-static void *source_counted_calloc(size_t count, size_t size) {
-    if (attempts++ == fail_at) return NULL;
-    void *pointer = xr_calloc(count, size);
-    if (pointer) {
-        if (live == owned_capacity) {
-            CHECK(owned_capacity <= SIZE_MAX / 2 / sizeof(*owned));
-            size_t capacity = owned_capacity ? owned_capacity * 2 : 256;
-            void **grown = xr_realloc(owned, capacity * sizeof(*owned));
-            CHECK(grown); owned = grown; owned_capacity = capacity;
+/* The pointer index is test bookkeeping, outside production fault injection. */
+static size_t source_owned_index(void *pointer,size_t capacity) {
+    return (size_t)xr_hash_int((int64_t)(uintptr_t)pointer) & (capacity - 1);
+}
+static void source_owned_insert(void **table,size_t capacity,void *pointer) {
+    size_t index=source_owned_index(pointer,capacity);
+    while(table[index]) {index=(index+1)&(capacity-1);}
+    table[index]=pointer;
+}
+static void *source_counted_calloc(size_t count,size_t size) {
+    if(attempts++==fail_at)return NULL;
+    void *pointer=xr_calloc(count,size);
+    if(pointer){
+        if(live>=owned_capacity/2){
+            CHECK(owned_capacity<=SIZE_MAX/2/sizeof(*owned));
+            size_t capacity=owned_capacity?owned_capacity*2:256;
+            void **grown=xr_calloc(capacity,sizeof(*grown));CHECK(grown);
+            for(size_t i=0;i<owned_capacity;++i)if(owned[i])source_owned_insert(grown,capacity,owned[i]);
+            xr_free(owned);owned=grown;owned_capacity=capacity;
         }
-        owned[live++] = pointer;
+        source_owned_insert(owned,owned_capacity,pointer);++live;
     }
     return pointer;
 }
 static void source_counted_free(void *pointer) {
-    if (live && owned[live - 1] == pointer) --live;
-    else for (size_t i = 0; i < live; ++i) if (owned[i] == pointer) {
-        owned[i] = owned[--live]; break;
+    if(pointer && live){
+        size_t mask=owned_capacity-1,index=source_owned_index(pointer,owned_capacity);
+        while(owned[index] && owned[index]!=pointer)index=(index+1)&mask;
+        if(owned[index]){
+            owned[index]=NULL;--live;
+            /* Reinsert the following cluster, leaving no tombstones between runs. */
+            for(size_t next=(index+1)&mask;owned[next];next=(next+1)&mask){
+                void *displaced=owned[next];owned[next]=NULL;
+                source_owned_insert(owned,owned_capacity,displaced);
+            }
+        }
     }
     xr_free(pointer);
 }
@@ -398,9 +417,17 @@ static void method_promise_allocations(XrCompilerSession *session) {
 #include "xir_source_requirement_value_allocations.h"
 #include "xir_source_enum_identity_allocations.h"
 #include "xir_source_class_allocations.h"
+#include "xir_source_iteration_allocations.h"
 #include "xir_source_inference_allocations.h"
 #include "xir_source_plan_budget_cases.h"
+#include "xir_source_region_output_cases.h"
+#include "xir_query_coalloc_cases.h"
+#include "xir_call_storage_cases.h"
 int main(void) {
+    query_coalloc_boundaries();
+    query_coalloc_early_boundaries();
+    source_call_storage_cases();
+    source_region_output_cases();
     source_plan_context_cases();
     source_plan_conversion_budget_cases();
     generic_method_query_allocations();
@@ -444,7 +471,10 @@ int main(void) {
     source_requirement_value_allocations(session);
     source_enum_identity_allocations(session);
     source_class_allocations(session);
+    source_iteration_allocations(session);
     inference_source_allocations(session);
+    inference_source_allocation_fixture(session,"Unit result context producer",
+        "var calls=0\nfn nop(){calls+=1}\nfn forwarded(){return nop()}\nexport fn answer()->i64{forwarded();return calls+40}\n");
     xr_compiler_session_delete(session);
     printf("Source-owner allocation failures: %zu; no partial artifact or live metadata\n", count);
     CHECK(!live); xr_free(owned); owned = NULL; owned_capacity = 0;

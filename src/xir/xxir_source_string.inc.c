@@ -92,16 +92,16 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
         if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation arguments require ordinary READ values");
     SourceValue args[3] = {receiver, {0}, {0}};
-    if (!expression_in(ctx, call->arguments[0], XR_XIR_STRING, &args[1])) return false;
+    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){XR_XIR_STRING != XR_XIR_UNIT,XR_XIR_STRING}, &args[1])) return false;
     if (args[1].type != XR_XIR_STRING)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation pattern type mismatch");
     if (indexed) {
         if (call->arg_count == 2) {
-            if (!expression_in(ctx, call->arguments[1], XR_XIR_I64, &args[2])) return false;
+            if (!source_plan_expression(ctx, call->arguments[1], (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64}, &args[2])) return false;
             if (args[2].type != XR_XIR_I64)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string search start requires i64");
-        } else if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &args[2])) return false;
-        if (!emit_group(ctx, (XrXirInstruction) {operation, result, {0}, {0}, 0, {0}}, args, 3, value)) return false;
-    } else if (!emit(ctx, (XrXirInstruction) {operation, result, {args[0].id, args[1].id}, {0}, 0, {0}}, value)) return false;
+        } else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &args[2])) return false;
+        if (!source_recipe_group(ctx, (XrXirInstruction) {operation, result, {0}, {0}, 0, {0}}, args, 3, value)) return false;
+    } else if (!source_recipe_record(ctx, (XrXirInstruction) {operation, result, {args[0].id, args[1].id}, {0}, 0, {0}}, value)) return false;
     return source_string_member_reference(ctx, call->callee, member);
 }

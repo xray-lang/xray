@@ -16,12 +16,6 @@ typedef struct SourceNumericRequest {
     SourceExpectedType expected;
     bool permit_default;
 } SourceNumericRequest;
-typedef struct SourceNumericRecipe {
-    bool ready;
-    XrXirOp operation;
-    XrXirType type;
-    int64_t payload;
-} SourceNumericRecipe;
 static bool source_numeric_plan(SourceContext *ctx, AstNode *site,
     const SourceNumericRequest *request, SourceNumericRecipe *output) {
     if ((!request->integer) == (!request->decimal))
@@ -50,7 +44,7 @@ static bool source_numeric_plan(SourceContext *ctx, AstNode *site,
 }
 static bool source_numeric_emit(SourceContext *ctx, const SourceNumericRecipe *recipe, SourceValue *value) {
     if (!recipe->ready) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"unresolved numeric recipe cannot be emitted");
-    return emit(ctx,(XrXirInstruction){recipe->operation,recipe->type,{0},{0},recipe->payload,{0}},value);
+    return source_recipe_record(ctx,(XrXirInstruction){recipe->operation,recipe->type,{0},{0},recipe->payload,{0}},value);
 }
 static bool source_decimal(SourceContext *ctx, const SourceDecimal *literal, XrXirType expected, SourceValue *value) {
     SourceNumericRequest request = {NULL,literal,{expected != XR_XIR_UNIT,expected},true};

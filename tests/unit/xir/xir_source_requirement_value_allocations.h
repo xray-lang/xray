@@ -47,7 +47,8 @@ static void source_requirement_value_allocations(XrCompilerSession *session) {
                 CHECK(status==XR_XIR_OUT_OF_MEMORY && diagnostic.status==XR_XIR_OUT_OF_MEMORY);
                 CHECK(!result.checked && !result.snapshot);
                 CHECK(!strcmp(diagnostic.message,"source allocation failed") ||
-                    !strcmp(diagnostic.message,"source query snapshot publication failed"));
+                    !strcmp(diagnostic.message,"source query snapshot publication failed") ||
+                    !strcmp(diagnostic.message,"source region identity allocation failed"));
             }
             xr_xir_source_result_free(&result); CHECK(!live);
         }

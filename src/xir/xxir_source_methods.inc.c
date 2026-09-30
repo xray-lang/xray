@@ -51,10 +51,10 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
         source_reference_promise(ctx, node, selected->method->index, expected, &op.type) &&
         source_type_arguments(ctx, node, selected->substitution.types, selected->substitution.count, &op) &&
         source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
-            selected->method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) && emit(ctx, op, value);
+            selected->method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) && source_recipe_record(ctx, op, value);
 }
 static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue receiver,
-    SourceName *method, XrXirType result_context, SourceValue *value) {
+    SourceName *method, SourceExpectedType result_context, SourceValue *value) {
     if (method->node->as.method_decl.is_static)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires type-qualified access");
     CallExprNode *call = &node->as.call_expr;
@@ -70,7 +70,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&op) &&
         source_query_target_reference(ctx,source_query_range(ctx,call->callee,NULL),
             method->declaration,XR_XIR_SOURCE_CALL) &&
-        emit_group(ctx,op,prepared.values,prepared.count,value);
+        source_recipe_group(ctx,op,prepared.values,prepared.count,value);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
     XrXirType expected, SourceValue *value) {
@@ -115,7 +115,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         uint32_t declaration = xr_xir_type_node(&ctx->types, receiver.type)->nominal.declaration;
         uint32_t member = ctx->nominal_variants[declaration][ctx->nominals.declarations[declaration].variant_count];
         return source_query_target_reference(ctx, source_query_range(ctx, node, NULL), member, XR_XIR_SOURCE_READ) &&
-            emit(ctx, (XrXirInstruction) {XR_XIR_ENUM_TAG, XR_XIR_I64, {receiver.id,0}, {0}, 0, {0}}, value);
+            source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ENUM_TAG, XR_XIR_I64, {receiver.id,0}, {0}, 0, {0}}, value);
     }
     SourceName *method = source_method_find(ctx, receiver.type, node->as.member_access.name);
     if (!method) {
@@ -145,7 +145,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
         source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
             method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) &&
-        emit_group(ctx, op, &receiver, 1, value);
+        source_recipe_group(ctx, op, &receiver, 1, value);
 }
 /* Builtin collisions are specific to the enum access domain. */
 static bool source_enum_method_name(SourceContext *ctx, SourceName *owner, AstNode *node) {

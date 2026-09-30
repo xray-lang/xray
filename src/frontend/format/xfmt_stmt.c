@@ -16,6 +16,7 @@
  */
 
 #include "xfmt_internal.h"
+#include "../../base/xchecks.h"
 #include "xfmt_literal.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
@@ -101,7 +102,22 @@ static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_str(ctx, "for (");
 
     ForInStmtNode *f = &node->as.for_in_stmt;
-    if (f->is_keyvalue) {
+    AstNode body_view;
+    AstNode *body = f->body;
+    if (f->is_tuple_head) {
+        XR_CHECK(body && body->type == AST_BLOCK && body->as.block.count > 0,
+                 "tuple iteration head requires its synthesized binding");
+        AstNode *binding = body->as.block.statements[0];
+        XR_CHECK(binding && binding->type == AST_DESTRUCTURE_DECL,
+                 "tuple iteration head requires a destructuring binding");
+        xfmt_emit_pattern(ctx, binding->as.destructure_decl.pattern);
+        /* Borrow a block view; never mutate the producer's AST. */
+        body_view = *body;
+        body_view.as.block.statements++;
+        body_view.as.block.count--;
+        body_view.as.block.capacity = body_view.as.block.count;
+        body = &body_view;
+    } else if (f->is_keyvalue) {
         xfmt_write_str(ctx, f->item_name);
         xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, f->value_name);
@@ -112,7 +128,7 @@ static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_str(ctx, " in ");
     xfmt_emit_expression(ctx, f->collection);
     xfmt_write_str(ctx, ") ");
-    xfmt_emit_block(ctx, f->body);
+    xfmt_emit_block(ctx, body);
     xfmt_write_newline(ctx);
 }
 

@@ -12,7 +12,7 @@
 #include "xir/xxir_emit_c.h"
 #include <stdio.h>
 #include <stdlib.h>
-#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 #include "xir_program_fixture.h"
 #include "xir_module_forest_fixture.h"
 #include "xir_capture_fixture.h"

@@ -2472,6 +2472,8 @@ ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 
 The `for-in` iteration variable is a fresh immutable binding for each iteration; a closure captures the value of that iteration's binding when the closure is created.
 
+The collection expression of a built-in `Array<T>` is evaluated once and iteration owns a snapshot of that logical value. Mutating or rebinding the original array in the loop does not change the sequence being traversed. A pair binding uses a zero-based `i64` index; `_` creates no referenceable binding. Class elements preserve object identity rather than deeply copying objects (§14.7). Binding type annotations are not accepted.
+
 ```xray
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // range iteration (half-open)
@@ -3367,7 +3369,7 @@ Rules:
 - `for-in` guarantees only that it pulls through `hasNext()` / `next()`; nothing beyond the number and ordering of those calls is guaranteed.
 - `next()` returns `T`, not `T?`: **exhaustion is not encoded in the return value**. The protocol is two-step — every `next()` / `nth()` must be preceded by a `hasNext()` that returned `true`. Calling `next()` after `hasNext()` is `false` violates the contract: the runtime reports it as an `E0432` panic rather than returning a zero value or a `null` that `T` forbids (§18.3).
 - `Iterator<T>` is **single-use**: once exhausted, `hasNext()` stays `false` and it cannot be reset. Call `iterator()` again, or call the generator function again, to traverse again.
-- Mutating the underlying collection during iteration is defined by that collection; the built-in collections invalidate their iterators (§14).
+- Mutation during iteration follows the collection contract. Built-in `Array<T>` for-in owns a logical value snapshot; mutation or rebinding of the source array does not invalidate that snapshot (§14.7). Other collections and identity iterators define their own invalidation rules.
 - `Iterator<T>` has **no** `close()`: abandoning an iterator early runs no cleanup (§3.16.3), which is why `defer` is rejected inside a generator body.
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
@@ -6306,7 +6308,9 @@ The table retains the complete method denominator; the first XIR subset does not
 | `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
 | `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |
 | `toString()` | read-only receiver; container representation |
-| `iterator()` / `entriesIterator()` / `entries()` | read-only receiver; result ownership and iteration contracts must be frozen before admission |
+| `iterator()` / `entriesIterator()` / `entries()` | read-only receiver; result types and ownership of these methods must be frozen before method admission, separately from the frozen Array for-in snapshot |
+
+Array for-in evaluates its collection expression once and owns a logical value snapshot. Element replacement, append, or rebinding of the source does not change that sequence; element access produces an owned value copy. Copying stops at class identity, so changes to a referenced object remain observable through references to the same identity. Each iteration binding is immutable, an empty array runs the body zero times, and continue cleans up the iteration before advancing once. Suspension retains the snapshot and index; cancellation releases their ownership. A generic `Array<T>` can be traversed using its shape known at the definition; arbitrary `T` does not gain iteration authority because one instance happens to be an Array. Iterator methods, other collections, and borrowed views require their own admission checks.
 
 Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
 

@@ -2450,6 +2450,8 @@ ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 
 `for-in` 迭代变量是每次迭代新建的不可变绑定；闭包捕获的是创建闭包时该轮绑定的值。
 
+内建 `Array<T>` 的集合表达式求值一次，遍历拥有该次逻辑值的快照；循环内修改或重绑原数组不改变当前序列。双变量索引是从零开始的 `i64`，`_` 不建立可引用绑定。元素为 class 时保留对象身份，不作对象深复制（§14.7）。绑定不接受类型注解。
+
 ```xray
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
@@ -3352,7 +3354,7 @@ interface Iterable<T> {
 - `for-in` 只保证按 `hasNext()` / `next()` 拉取，**不保证**调用次数与调用时机之外的任何行为。
 - `next()` 返回 `T` 而非 `T?`：**耗尽不由返回值表示**。协议是两步的——每次 `next()` / `nth()` 之前必须先由 `hasNext()` 返回 `true`。在 `hasNext()` 为 `false` 后调用 `next()` 属于契约违规：运行时以 `E0432` panic 报告，不返回零值，也不返回 `T` 所禁止的 `null`（§18.3）。
 - `Iterator<T>` 是**一次性**的：耗尽后 `hasNext()` 恒为 `false`，不可重置。需要再次遍历时重新调用 `iterator()` 或重新调用生成器函数。
-- 迭代期间修改底层集合的行为由该集合定义；内建集合会使迭代器失效（§14）。
+- 迭代期间修改集合的行为由该集合定义。内建 `Array<T>` 的 for-in 持有拥有式逻辑值快照，修改或重绑源数组不使该快照失效（§14.7）；其它集合与身份 iterator 的失效规则由各自合同定义。
 - `Iterator<T>` **没有** `close()`：提前放弃一个迭代器不执行任何清理（§3.16.3），这也是生成器体内禁止 `defer` 的原因。
 
 生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
@@ -6267,7 +6269,9 @@ print(a[0], a[1])           // head head
 | `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
 | `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
 | `toString()` | 只读 receiver，容器字符串表示 |
-| `iterator()` / `entriesIterator()` / `entries()` | 只读 receiver；结果所有权和迭代合同须在准入前另冻 |
+| `iterator()` / `entriesIterator()` / `entries()` | 只读 receiver；这些方法的结果类型与所有权须在方法准入前另冻，不与已冻结的 Array for-in 快照混同 |
+
+Array for-in 的集合表达式求值一次并持有拥有式逻辑值快照。源绑定的元素替换、追加或重绑不改变本次序列；获取元素形成拥有式值副本。复制在 class 身份处停止，修改被引用对象仍可被其它同身份引用观察。每轮绑定不可变，空数组执行零次 body，continue 先清理本轮再前进一次；挂起保留快照与索引，取消释放所有拥有关系。普通泛型的 `Array<T>` 可按定义处已知形状遍历，任意 `T` 不因某实例恰为 Array 获得迭代权限。iterator 方法族、其它集合和借用视图的准入分别验证，不能以快照遍历替代它们。
 
 Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
 

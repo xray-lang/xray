@@ -47,7 +47,7 @@ static void source_result_inference_cases(XrXirSourceRequest *request) {
         ("fn identity<T>(value:T)->T{return value}\n"
         "export fn genericMethodNumber()->i64{const n:i8=41;return identity(n)}\n"
         "export fn genericMethodText()->string{return identity(\"mapped\")}\n"),
-        /* Supplied expression runs once before result evidence and default body. */
+        /* Supplied expression runs once in original runtime order before the default body. */
         ("var trace=0\n"
         "fn first()->i64{trace=trace*10+1;return 0}\n"
         "fn last()->i64{trace=trace*10+2;return 0}\n"
@@ -64,15 +64,15 @@ static void source_result_inference_cases(XrXirSourceRequest *request) {
         "struct Pair<A,B>{first:A;rest:Array<B>}\nfn make<T,U>(v:T)->Pair<T,U>{return Pair<T,U>{first:v,rest:[]}}\nfn bad()->Pair<string,i64>{return make(41)}\n",
         "interface Evidence{}\nfn empty<T:Evidence>()->Array<T>{return []}\nfn bad()->Array<i64>{return empty()}\n",
         "fn empty<T:Sendable>()->Array<T>{return []}\nfn bad<A>()->Array<A>{return empty()}\n",
-        "fn choose<T>(f:fn(T)->T)->Array<T>{return []}\nfn bad()->Array<i64>{return choose(fn(v){return v})}\n",
-        "fn identity<T>(value:T)->T{return value}\nfn bad()->i8{return identity(41)}\n",
+        "fn consume<T>(f:fn(T)->T)->i64{return 41}\nfn bad()->i64{return consume(fn(v){return v})}\n",
+        "fn identity<T>(value:T)->T{return value}\nfn bad()->i8{const value:i64=41;return identity(value)}\n",
         "struct S<X>{make<U>(seed:X)->Array<U>{return []}}\nfn bad()->Array<i64>{return S<string>{}.make(0)}\n"
     };
     const char *reasons[]={
         "cannot infer all declaration type arguments; supply an explicit list",
         "cannot infer all declaration type arguments; supply an explicit list",
         "expression cannot satisfy its declared type",
-        "argument and result type evidence conflict",
+        "expression cannot satisfy its declared type",
         "type argument does not prove the declared constraint",
         "type argument does not prove the declared constraint",
         "closure parameter requires an annotation or complete callable context",

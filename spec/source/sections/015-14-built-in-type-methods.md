@@ -157,7 +157,9 @@ print(a[0], a[1])           // head head
 | `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
 | `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
 | `toString()` | 只读 receiver，容器字符串表示 |
-| `iterator()` / `entriesIterator()` / `entries()` | 只读 receiver；结果所有权和迭代合同须在准入前另冻 |
+| `iterator()` / `entriesIterator()` / `entries()` | 只读 receiver；这些方法的结果类型与所有权须在方法准入前另冻，不与已冻结的 Array for-in 快照混同 |
+
+Array for-in 的集合表达式求值一次并持有拥有式逻辑值快照。源绑定的元素替换、追加或重绑不改变本次序列；获取元素形成拥有式值副本。复制在 class 身份处停止，修改被引用对象仍可被其它同身份引用观察。每轮绑定不可变，空数组执行零次 body，continue 先清理本轮再前进一次；挂起保留快照与索引，取消释放所有拥有关系。普通泛型的 `Array<T>` 可按定义处已知形状遍历，任意 `T` 不因某实例恰为 Array 获得迭代权限。iterator 方法族、其它集合和借用视图的准入分别验证，不能以快照遍历替代它们。
 
 Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
 
@@ -490,7 +492,9 @@ The table retains the complete method denominator; the first XIR subset does not
 | `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
 | `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |
 | `toString()` | read-only receiver; container representation |
-| `iterator()` / `entriesIterator()` / `entries()` | read-only receiver; result ownership and iteration contracts must be frozen before admission |
+| `iterator()` / `entriesIterator()` / `entries()` | read-only receiver; result types and ownership of these methods must be frozen before method admission, separately from the frozen Array for-in snapshot |
+
+Array for-in evaluates its collection expression once and owns a logical value snapshot. Element replacement, append, or rebinding of the source does not change that sequence; element access produces an owned value copy. Copying stops at class identity, so changes to a referenced object remain observable through references to the same identity. Each iteration binding is immutable, an empty array runs the body zero times, and continue cleans up the iteration before advancing once. Suspension retains the snapshot and index; cancellation releases their ownership. A generic `Array<T>` can be traversed using its shape known at the definition; arbitrary `T` does not gain iteration authority because one instance happens to be an Array. Iterator methods, other collections, and borrowed views require their own admission checks.
 
 Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
 

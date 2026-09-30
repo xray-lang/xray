@@ -106,6 +106,8 @@ ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 
 `for-in` 迭代变量是每次迭代新建的不可变绑定；闭包捕获的是创建闭包时该轮绑定的值。
 
+内建 `Array<T>` 的集合表达式求值一次，遍历拥有该次逻辑值的快照；循环内修改或重绑原数组不改变当前序列。双变量索引是从零开始的 `i64`，`_` 不建立可引用绑定。元素为 class 时保留对象身份，不作对象深复制（§14.7）。绑定不接受类型注解。
+
 ```xray @id=stmt-for-in
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
@@ -477,6 +479,8 @@ ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
 
 The `for-in` iteration variable is a fresh immutable binding for each iteration; a closure captures the value of that iteration's binding when the closure is created.
+
+The collection expression of a built-in `Array<T>` is evaluated once and iteration owns a snapshot of that logical value. Mutating or rebinding the original array in the loop does not change the sequence being traversed. A pair binding uses a zero-based `i64` index; `_` creates no referenceable binding. Class elements preserve object identity rather than deeply copying objects (§14.7). Binding type annotations are not accepted.
 
 ```xray @id=stmt-for-in
 for (item in [1, 2, 3]) { print(item) }

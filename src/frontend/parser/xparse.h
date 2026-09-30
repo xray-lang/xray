@@ -133,6 +133,9 @@ struct Parser {
     // Record braces after a qualified path belong to the enclosing pattern
     // parser while this flag is set; expression parsing must leave them unread.
     bool parsing_pattern;
+
+    // Stable across formatting and restored with parser lookahead checkpoints.
+    uint32_t tuple_head_sequence;
 };
 
 // Logical nesting budget for expressions, types and match patterns. Recursive

@@ -31,7 +31,7 @@ static void source_contextual_lambda_cases(XrXirSourceRequest *request) {
         "fn bad(){const f:fn(i64)->i64=fn(v:string){return 41}}\n",
         "fn bad(){const f:fn(i64)->i64=fn(v)->string{return \"wrong\"}}\n",
         "fn bad(){const f:fn(i64)->i64=fn(v){return \"wrong\"}}\n",
-        "fn choose<T>(f:fn(T)->T,seed:T)->T{return f(seed)}\nfn bad()->i64{return choose(fn(v){return v},41)}\n"
+        "fn consume<T>(f:fn(T)->T)->i64{return 41}\nfn bad()->i64{return consume(fn(v){return v})}\n"
     };
     const char *expected_messages[]={
         "closure parameter requires an annotation or complete callable context", /* no callable context or annotation */
@@ -39,7 +39,7 @@ static void source_contextual_lambda_cases(XrXirSourceRequest *request) {
         "callable conversion may only discard its top-level promise", /* explicit parameter signature mismatch */
         "callable conversion may only discard its top-level promise", /* explicit return signature mismatch */
         "expression cannot satisfy its declared type", /* body return fails contextual i64 */
-        "closure parameter requires an annotation or complete callable context", /* first lambda before value evidence */
+        "closure parameter requires an annotation or complete callable context", /* lambda own type has no argument or result evidence */
     };
     _Static_assert(sizeof(expected_messages)/sizeof(*expected_messages)==sizeof(rejected)/sizeof(*rejected), "Every rejection needs an exact diagnostic");
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {

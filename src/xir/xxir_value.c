@@ -366,6 +366,7 @@ static void queue_release(const XrXirValue *value, XirObject **pending) {
 }
 #include "xxir_storage_cursor.inc.c"
 static uint32_t array_release_depth(const XrXirTypeArena *arena, XrXirType element) {
+    if (!inline_nominal_type(xr_xir_type_arena_types(arena), element)) return 0;
     const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, element);
     return layout ? layout->owned_depth : 0;
 }

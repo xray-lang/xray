@@ -1,0 +1,5 @@
+import {count,values} from "./value"
+import {sum,snapshot,control,captures,ignored,exits,head} from "./reader"
+export fn answer()->i64{var result=0;for(x in values()){result+=x};if(count()==1 && head<i64>([41])==41 && sum([10,11,20])==41 && snapshot()==41 && control()==41 && captures()==41 && ignored()==41 && exits()==41){return result}else{return 0}}
+export fn retained()->string{var result="";for(x in ["map","ped"]){result=result+x};return head<string>([result])}
+export fn suspended()->i64{var n=0;for(x in [10,11,20]){defer{print(x)};Coro.yield();n+=x};return n}

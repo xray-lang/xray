@@ -1,0 +1,11 @@
+const trace=Atomic(0)
+export enum Choice { Left {value:i8}, Right {value:i8} }
+export fn first()->i64 {trace.fetchAdd(trace.load()*9+1);return 0}
+export fn second()->i8 {trace.fetchAdd(trace.load()*9+2);return 41}
+export fn order()->i64 {return trace.load()}
+export fn item()->Choice {return Choice.Right {value:40}}
+const receiverTrace=Atomic(0)
+export struct Receiver { choose(value:i64)->i64 {return value} }
+export fn receiver()->Receiver {receiverTrace.fetchAdd(receiverTrace.load()*9+1);return Receiver{}}
+export fn argument()->i64 {receiverTrace.fetchAdd(receiverTrace.load()*9+2);return 41}
+export fn receiverOrder()->i64 {return receiverTrace.load()}

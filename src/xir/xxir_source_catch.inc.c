@@ -88,17 +88,8 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
 }
 static bool source_catch_snapshot(SourceContext *ctx, XrXirInitializationRegion *region) {
     SourceFunction *body=&ctx->bodies[ctx->function];
-    XrXirInstruction *ops=source_alloc(ctx,body->count,sizeof(*ops));
-    XrXirBlock *blocks=source_alloc(ctx,body->block_count,sizeof(*blocks));
-    uint32_t *operands=body->operand_count ? source_alloc(ctx,body->operand_count,sizeof(*operands)) : NULL;
-    if (!ops || !blocks || (body->operand_count && !operands)) return false;
-    memcpy(ops,body->ops,body->count*sizeof(*ops));
-    memcpy(blocks,body->blocks,body->block_count*sizeof(*blocks));
-    if (body->operand_count) memcpy(operands,body->operands,body->operand_count*sizeof(*operands));
     region->function=ctx->functions[ctx->function];
-    region->function.instructions=ops; region->function.instruction_count=body->count;
-    region->function.blocks=blocks; region->function.block_count=body->block_count;
-    region->function.operands=operands; region->function.operand_count=body->operand_count;
+    if (!source_region_emit(ctx,&region->function,false)) return false;
     region->next=body->initialization_regions; body->initialization_regions=region;
     return true;
 }
@@ -128,13 +119,16 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
     for (SourceLoop *loop = ctx->loop; loop; loop = loop->parent) *loop = loops[i++];
     saved.saw_return = body->saw_return;
     saved.initialization_regions=body->initialization_regions;
+    if (ok) ok=source_plan_discard(ctx,saved.expression_count);
+    saved.recipe_storage=body->recipe_storage;
+    saved.expressions=body->expressions;saved.expression_count=body->expression_count;
     *body = saved; ctx->generics[ctx->function] = generic; ctx->returned = returned;
     return ok;
 }
 static bool source_catch_join(SourceContext *ctx, uint32_t *joins, uint32_t *count) {
     if (ctx->returned) return true;
     joins[(*count)++] = ctx->bodies[ctx->function].count;
-    return emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
 }
 static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, const XrXirType *types,
     SourceMatchArm *patterns, SourceValue error, uint32_t checkpoint, uint32_t *joins, uint32_t *count) {
@@ -153,20 +147,20 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
         uint32_t branch = UINT32_MAX;
         if (types[i] != XR_XIR_ERROR) {
             SourceValue test;
-            if (!emit(ctx,(XrXirInstruction){XR_XIR_ERROR_IS,XR_XIR_BOOL,{error.id},{0},types[i],{0}},&test)) return false;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ERROR_IS,XR_XIR_BOOL,{error.id},{0},types[i],{0}},&test)) return false;
             branch = body->count;
-            if (!emit(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{test.id},{0},0,{0}},NULL)) return false;
-            body->ops[branch].targets[0] = body->block_count;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{test.id},{0},0,{0}},NULL)) return false;
+            body->recipes[branch].instruction.targets[0] = body->block_count;
             if (!begin_block(ctx) ||
-                !emit(ctx,(XrXirInstruction){XR_XIR_ERROR_NARROW,types[i],{error.id},{0},0,{0}},&bound)) return false;
+                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ERROR_NARROW,types[i],{error.id},{0},0,{0}},&bound)) return false;
         } else consumed = true;
         if (!source_catch_body(ctx,clause,&patterns[i],bound,&failures) || !source_catch_join(ctx,joins,count)) return false;
         if (branch != UINT32_MAX) {
             uint32_t next = body->block_count;
-            body->ops[branch].targets[1] = next;
+            body->recipes[branch].instruction.targets[1] = next;
             for (SourceMatchFailure *failure = failures; failure; failure = failure->next) {
                 if (!source_work(ctx,clause->body)) return false;
-                body->ops[failure->instruction].targets[failure->target] = next;
+                body->recipes[failure->instruction].instruction.targets[failure->target] = next;
             }
             if (!begin_block(ctx)) return false;
         }
@@ -174,7 +168,7 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
     if (!consumed) {
         if (body->error_context) {
             if (!source_error_edge(ctx,error)) return false;
-        } else if (!emit(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{error.id},{0},0,{0}},NULL)) return false;
+        } else if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{error.id},{0},0,{0}},NULL)) return false;
     }
     return true;
 }
@@ -185,12 +179,12 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
     SourceFunction *body = &ctx->bodies[ctx->function];
     uint32_t handler = body->block_count;
     SourceValue caught = {0, XR_XIR_UNIT};
-    if (!begin_block(ctx) || !emit(ctx,(XrXirInstruction){XR_XIR_PANIC_CATCH,
+    if (!begin_block(ctx) || !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PANIC_CATCH,
             clause->var_name ? XR_XIR_PANIC_INFO : XR_XIR_UNIT,{0},{0},0,{0}},&caught) ||
         !source_catch_body(ctx,clause,NULL,caught,NULL) || !source_catch_join(ctx,joins,count)) return false;
     for (uint32_t b = first; b < end; ++b) {
         if (!source_work(ctx,clause->body)) return false;
-        if (!body->blocks[b].panic) body->blocks[b].panic = handler;
+        if (!body->blocks[b].block.panic) body->blocks[b].block.panic = handler;
     }
     return true;
 }
@@ -240,7 +234,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
     if (panic) {
         if (!body->block_count && !begin_block(ctx)) return false;
         first = body->block_count;
-        if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{first,0},0,{0}},NULL) || !begin_block(ctx)) return false;
+        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{first,0},0,{0}},NULL) || !begin_block(ctx)) return false;
     }
     SourceErrorContext handler = {0}, *outer = body->error_context;
     handler.frontier = body->frontier;
@@ -263,11 +257,11 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         uint32_t at = handler.count;
         for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {
             if (!source_work(ctx,node)) return false;
-            body->ops[edge->jump].targets[0] = target;
+            body->recipes[edge->jump].instruction.targets[0] = target;
             --at; inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
         }
         SourceValue error;
-        if (!emit_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error) ||
+        if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error) ||
             !source_catch_dispatch(ctx,attempt,types,patterns,error,checkpoint,joins,&count)) return false;
     } else for (int i = 0; i < attempt->catch_count; ++i)
         if (!attempt->catch_clauses[i]->is_panic &&
@@ -277,6 +271,6 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
     if (!count) return true;
     uint32_t target = body->block_count;
     if (!begin_block(ctx)) return false;
-    for (uint32_t i = 0; i < count; ++i) body->ops[joins[i]].targets[0] = target;
+    for (uint32_t i = 0; i < count; ++i) body->recipes[joins[i]].instruction.targets[0] = target;
     return true;
 }

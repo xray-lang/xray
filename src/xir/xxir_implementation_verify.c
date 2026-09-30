@@ -72,12 +72,8 @@ static XrXirStatus implementation_function(const XrXirModule *module, const XrXi
     if (!signature || f->parameter_count != signature->parameter_count+1 || !f->parameters) return XR_XIR_BAD_TYPE;
     if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) && !(identity->promises & XR_XIR_FUNCTION_NO_SUSPEND))
         return XR_XIR_BAD_TYPE;
-    const XrXirTypeNode *receiver = xr_xir_type_node(module->types,f->parameters[0]);
-    if (!receiver || receiver->kind != XR_XIR_TYPE_NOMINAL ||
-        receiver->nominal.declaration != record->nominal_declaration ||
-        receiver->nominal.argument_count != owner->parameter_count) return XR_XIR_BAD_TYPE;
-    for (uint32_t a = 0; a < owner->parameter_count; ++a)
-        if (receiver->nominal.arguments[a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a)) return XR_XIR_BAD_TYPE;
+    XrXirStatus receiver_status = xr_xir_method_signature_verify(module,function,budget);
+    if (receiver_status != XR_XIR_OK) return receiver_status;
     XrXirType *arguments = NULL;
     XrXirStatus status = implementation_identity_arguments(full_count,budget,&arguments);
     for (uint32_t a = 0; status == XR_XIR_OK && a < signature->parameter_count; ++a) {

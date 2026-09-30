@@ -78,6 +78,7 @@ typedef struct ForInStmtNode {
     char *item_name;
     char *value_name;
     bool is_keyvalue;
+    bool is_tuple_head; /* Preserve source syntax; not a mutable binding rewrite. */
     XrTypeRef *item_type;
     AstNode *collection;
     AstNode *body;

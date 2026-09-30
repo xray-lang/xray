@@ -73,7 +73,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
     if (count && !types) return false;
     for (uint32_t i = 0; i < count; ++i) types[i] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + i);
-    if (!source_type_arguments(ctx, node, types, count, &op) || !emit_group(ctx, op, captures, scan.count, NULL)) return false;
+    if (!source_type_arguments(ctx, node, types, count, &op) || !source_recipe_group(ctx, op, captures, scan.count, NULL)) return false;
     owner->frontier = owner->count;
     return begin_block(ctx);
 }

@@ -752,6 +752,7 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_name(s, "item", n->as.for_in_stmt.item_name);
             sig_name(s, "value", n->as.for_in_stmt.value_name);
             sig_add(s, " kv=%d", n->as.for_in_stmt.is_keyvalue ? 1 : 0);
+            sig_add(s, " tuple=%d", n->as.for_in_stmt.is_tuple_head ? 1 : 0);
             return true;
         case AST_BREAK_STMT:
             sig_name(s, "label", n->as.break_stmt.label);

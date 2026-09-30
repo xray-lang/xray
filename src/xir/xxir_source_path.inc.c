@@ -61,7 +61,7 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
     AstNode *base = count ? steps[count - 1] : node;
     if (count) base = base->type == AST_MEMBER_ACCESS ? base->as.member_access.object : base->as.index_get.array;
     if (!source_query_reference(ctx,base,root,root,XR_XIR_SOURCE_READ_WRITE) ||
-        !emit(ctx,(XrXirInstruction){saved.kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
+        !source_recipe_record(ctx,(XrXirInstruction){saved.kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
             saved.type,{saved.kind == SOURCE_SLOT ? 0 : saved.index,0},{0},
             saved.kind == SOURCE_SLOT ? saved.index : 0,{0}},place)) return false;
     while (count) {
@@ -69,13 +69,13 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
         if (step->type == AST_MEMBER_ACCESS) {
             uint32_t field; XrXirType type;
             if (!source_struct_field(ctx,step,place->type,step->as.member_access.name,3,&field,&type) ||
-                !emit(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,type,{place->id},{0},field,{0}},place)) return false;
+                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,type,{place->id},{0},field,{0}},place)) return false;
         } else {
             if (!xr_xir_type_is_array(&ctx->types,place->type))
                 return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed place is not an Array");
             XrXirType element = xr_xir_array_element(&ctx->types,place->type); SourceValue index;
-            if (!expression_in(ctx,step->as.index_get.index,XR_XIR_I64,&index) ||
-                !emit(ctx,(XrXirInstruction){XR_XIR_INDEX_PLACE,element,{place->id,index.id},{0},0,{0}},place)) return false;
+            if (!source_plan_expression(ctx, step->as.index_get.index, (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64}, &index) ||
+                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_INDEX_PLACE,element,{place->id,index.id},{0},0,{0}},place)) return false;
         }
         if (!source_query_expression(ctx,step,place->type)) return false;
     }
