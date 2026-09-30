@@ -65,7 +65,7 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
     declarations.modules = ctx->modules; declarations.module_count = (uint32_t)ctx->graph->spec_count;
     declarations.functions = ctx->identities;
     XrXirModule module = {XR_XIR_BUILT, ctx->functions, ctx->function_count, &declarations, ctx->generics, &ctx->types, NULL};
-    XrXirStatus status = xr_xir_type_satisfies(&module, ctx->function, element, 0, &ctx->budget);
+    XrXirStatus status = xr_xir_type_satisfies(&module, ctx->function, element, (XrXirConstraint){0}, &ctx->budget);
     if (status != XR_XIR_OK)
         return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);

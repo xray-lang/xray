@@ -88,7 +88,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, b);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p)
-        if (d->constraints[p] & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+        if (d->constraints[p].markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
@@ -196,7 +196,7 @@ static bool nominal_copy_declaration(const XrXirNominalDeclaration *source,
         !nominal_copy_name(source->name, &d->name)) return false;
     if (source->parameter_count) {
         size_t bytes = (size_t) source->parameter_count * sizeof(*source->constraints);
-        uint32_t *constraints = xr_malloc(bytes);
+        XrXirConstraint *constraints = xr_malloc(bytes);
         if (!constraints) return false;
         memcpy(constraints, source->constraints, bytes);
         d->constraints = constraints; d->parameter_count = source->parameter_count;
@@ -287,8 +287,8 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirBudget *bu
         for (uint32_t a = 0; a < d->parameter_count; ++a) {
             if (!nominal_charge(budget, 0, 1)) return XR_XIR_BUDGET;
             if (!xr_xir_type_span(types, node->nominal.arguments[a]) &&
-                d->constraints[a]) {
-                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a], NULL, 0, &budget->work);
+                d->constraints[a].markers) {
+                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a].markers, NULL, 0, &budget->work);
                 if (status != XR_XIR_OK) return status;
             }
         }

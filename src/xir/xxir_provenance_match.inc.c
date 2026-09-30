@@ -236,8 +236,8 @@ static XrXirStatus provenance_lowered_nominals(ProvenanceMatch *c,
         if ((uint64_t)d->parameter_count + d->field_count > c->remaining->work) return XR_XIR_BUDGET;
         c->remaining->work -= (uint64_t)d->parameter_count + d->field_count;
         for (uint32_t a = 0; a < d->parameter_count; ++a)
-            if (d->constraints[a]) {
-                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a], NULL, 0, &c->remaining->work);
+            if (d->constraints[a].markers) {
+                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a].markers, NULL, 0, &c->remaining->work);
                 if (status != XR_XIR_OK) return status;
             }
         for (uint32_t f = 0; f < d->field_count; ++f) {
@@ -276,7 +276,7 @@ static XrXirStatus provenance_nominals(ProvenanceMatch *c) {
         status = provenance_bytes(c, from->name.bytes, from->name.length, to->name.bytes, to->name.length);
         if (status != XR_XIR_OK) return status;
         for (uint32_t p = 0; p < from->parameter_count; ++p)
-            if (from->constraints[p] != to->constraints[p]) return XR_XIR_BAD_STRUCTURE;
+            if (from->constraints[p].markers != to->constraints[p].markers) return XR_XIR_BAD_STRUCTURE;
         status = provenance_nominal_fields(c, from, to);
         if (status != XR_XIR_OK) return status;
     }

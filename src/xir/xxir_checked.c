@@ -181,11 +181,11 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
     for (uint32_t f = 0; f < m->function_count && c->status == XR_XIR_OK; ++f) {
         XrXirGeneric g = generics[f];
         g.parameter_count = checked_count(c, g.parameter_count, &c->remaining.parameters);
-        uint32_t *constraints = checked_array(c, g.constraints, g.parameter_count, sizeof(*constraints), 4);
+        XrXirConstraint *constraints = checked_array(c, g.constraints, g.parameter_count, sizeof(*constraints), 4);
         g.constraints = constraints;
         for (uint32_t p = 0; p < g.parameter_count && c->status == XR_XIR_OK; ++p) {
-            uint32_t value = checked_u32(c, constraints[p]);
-            if (c->reading) constraints[p] = value;
+            uint32_t value = checked_u32(c, constraints[p].markers);
+            if (c->reading) constraints[p].markers = value;
         }
         g.argument_count = checked_u32(c, g.argument_count);
         XrXirType *arguments = checked_array(c, g.arguments, g.argument_count, sizeof(*arguments), 4);
@@ -225,11 +225,11 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.exported = checked_u32(c, d.exported);
         d.kind = checked_u32(c, d.kind);
         uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
-        uint32_t *constraints = checked_array(c, d.constraints, parameters, sizeof(*constraints), 4);
+        XrXirConstraint *constraints = checked_array(c, d.constraints, parameters, sizeof(*constraints), 4);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         for (uint32_t j = 0; j < d.parameter_count && c->status == XR_XIR_OK; ++j) {
-            uint32_t value = checked_u32(c, constraints[j]);
-            if (c->reading) constraints[j] = value;
+            uint32_t value = checked_u32(c, constraints[j].markers);
+            if (c->reading) constraints[j].markers = value;
         }
         uint32_t fields = checked_u32(c, d.field_count);
         XrXirNominalField *members = checked_array(c, d.fields, fields, sizeof(*members), 12);

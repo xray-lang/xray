@@ -10,7 +10,7 @@
  *   A declaration keeps its parameter owners while XIR uses one ordered scope.
  */
 static bool source_method_conditions(SourceContext *ctx, SourceFunction *body,
-    XrGenericParam **parameters, uint32_t *constraints, uint32_t count) {
+    XrGenericParam **parameters, XrXirConstraint *constraints, uint32_t count) {
     MethodDeclNode *method = &body->node->as.method_decl;
     if (method->condition_count < 0 || method->condition_count > 65536 ||
         (method->condition_count && !method->conditions))
@@ -25,7 +25,7 @@ static bool source_method_conditions(SourceContext *ctx, SourceFunction *body,
         }
         if (selected == UINT32_MAX)
             return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method condition subject is not a type parameter");
-        constraints[selected] |= markers;
+        constraints[selected].markers |= markers;
     }
     return true;
 }
@@ -39,7 +39,7 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
     if (!own && !method->condition_count) return true;
     if (!count) return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method condition subject is not a type parameter");
     XrGenericParam **parameters = source_alloc(ctx, count, sizeof(*parameters));
-    uint32_t *constraints = source_alloc(ctx, count, sizeof(*constraints));
+    XrXirConstraint *constraints = source_alloc(ctx, count, sizeof(*constraints));
     if (!parameters || !constraints) return false;
     for (uint32_t p = 0; p < count; ++p) {
         if (!source_work(ctx, body->node)) return false;
@@ -48,7 +48,7 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
             continue;
         }
         XrGenericParam *parameter = method->type_params[p - prefix];
-        if (!source_parameter_markers(ctx, body->node, parameter, &constraints[p])) return false;
+        if (!source_parameter_markers(ctx, body->node, parameter, &constraints[p].markers)) return false;
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
             if (!source_work(ctx, body->node)) return false;
             if (!strcmp(parameter->name, parameters[earlier]->name))

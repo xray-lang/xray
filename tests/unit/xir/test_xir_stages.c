@@ -401,7 +401,7 @@ static void constructed_metadata(void) {
     generic.parameter_count = 65535;
     CHECK(!xr_xir_type_in_context(&context,0,(XrXirType)260));
     budget = xr_xir_default_budget();
-    CHECK(xr_xir_type_satisfies(&context,0,(XrXirType)257,0,&budget) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_type_satisfies(&context,0,(XrXirType)257,(XrXirConstraint){0},&budget) == XR_XIR_BAD_TYPE);
     budget = xr_xir_default_budget(); budget.metadata_bytes = 1;
     CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_BUDGET);
     budget = xr_xir_default_budget(); budget.work = types.count;
@@ -431,7 +431,7 @@ static void nominal_metadata_cases(void) {
     nominal_fixture(&f); f.declarations[0].parameter_count = 0; f.declarations[0].constraints = NULL;
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
-    nominal_fixture(&f); f.constraint = 4;
+    nominal_fixture(&f); f.constraint.markers = 4;
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.fields[0].flags = XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED;
@@ -465,7 +465,7 @@ static void nominal_metadata_cases(void) {
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_verify(copy, NULL, &b) == XR_XIR_OK);
     CHECK(copy->count == 2 && memcmp(copy->declarations[0].module.bytes, "alpha", 5) == 0);
-    CHECK(copy->declarations[0].constraints[0] == XR_XIR_CONSTRAINT_SENDABLE);
+    CHECK(copy->declarations[0].constraints[0].markers == XR_XIR_CONSTRAINT_SENDABLE);
     CHECK(memcmp(copy->declarations[0].fields[0].name.bytes, "value", 5) == 0);
     xr_xir_nominal_free(copy);
 }
@@ -533,7 +533,7 @@ static void nominal_instance_metadata(void) {
 
 static void nominal_argument_identity(void) {
     NominalFixture f; nominal_fixture(&f);
-    uint32_t constraints[] = {0, 0};
+    XrXirConstraint constraints[] = {{0}, {0}};
     for (uint32_t i = 0; i < 2; ++i) {
         f.declarations[i].parameter_count = 2; f.declarations[i].constraints = constraints;
     }
@@ -564,7 +564,7 @@ static void nominal_context_proofs(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 2, {0, &argument, 1, NULL, 0}}};
     XrXirTypes types = {nodes, 2, &f.table};
     const XrXirType nominal = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
-    uint32_t allowed[] = {0, XR_XIR_CONSTRAINT_SENDABLE}, denied[] = {XR_XIR_CONSTRAINT_SENDABLE, 0};
+    XrXirConstraint allowed[] = {{0}, {XR_XIR_CONSTRAINT_SENDABLE}}, denied[] = {{XR_XIR_CONSTRAINT_SENDABLE}, {0}};
     XrXirBudget initial = xr_xir_default_budget(), budget = initial;
     CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
     uint64_t bytes = initial.metadata_bytes - budget.metadata_bytes, work = initial.work - budget.work;
@@ -649,7 +649,7 @@ static void enum_metadata_cases(void) {
     }
     enum_metadata_fixture(&f); f.fields[0].type = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     b = xr_xir_default_budget(); CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
-    uint32_t constraint = XR_XIR_CONSTRAINT_SENDABLE;
+    XrXirConstraint constraint = {XR_XIR_CONSTRAINT_SENDABLE};
     f.declaration.parameter_count = 1; f.declaration.constraints = &constraint;
     b = xr_xir_default_budget(); CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
     enum_metadata_fixture(&f); XrXirNominalTable *copy = NULL, *projected = NULL, *second = NULL;

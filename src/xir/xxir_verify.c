@@ -599,8 +599,8 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
         return role_operand(function, graph, context, instruction, 0, cell);
     XrXirType element = xr_xir_array_element(types, array);
     XrXirStatus status = context->module->provenance ?
-        xr_xir_type_constraints(context->module, context->location.function, element, 0, &context->remaining) :
-        xr_xir_type_satisfies(context->module, context->location.function, element, 0, &context->remaining);
+        xr_xir_type_constraints(context->module, context->location.function, element, (XrXirConstraint){0}, &context->remaining) :
+        xr_xir_type_satisfies(context->module, context->location.function, element, (XrXirConstraint){0}, &context->remaining);
     if (status != XR_XIR_OK) return status;
     if (op->op == XR_XIR_ARRAY_GET && op->type != element) return XR_XIR_BAD_TYPE;
     uint32_t count = operand_count(function, op, context->module);
@@ -725,7 +725,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (op->op == XR_XIR_ERROR_ERASE && op->type != XR_XIR_ERROR) return XR_XIR_BAD_TYPE;
             expected = xr_xir_operand_type(function, op->args[0]);
             XrXirStatus status = xr_xir_type_constraints(context->module, context->location.function,
-                expected, XR_XIR_CONSTRAINT_ERROR, &context->remaining);
+                expected, (XrXirConstraint){XR_XIR_CONSTRAINT_ERROR}, &context->remaining);
             if (status != XR_XIR_OK) return status;
         }
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)

@@ -26,7 +26,8 @@ static XrXirArtifact *callable_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
     XrXirInstruction generic_ops[] = {{XR_XIR_COPY, generic, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
-    XrXirBlock block = {0, 2, 0, 0}; uint32_t operand = 0, constraint = 0;
+    XrXirBlock block = {0, 2, 0, 0}; uint32_t operand = 0;
+    XrXirConstraint constraint = {0};
     XrXirFunction functions[] = {
         {"forward", 7, &fn1, 1, fn1, &block, 1, caller_ops, 2, &operand, 1},
         {"identity", 8, &generic, 1, generic, &block, 1, generic_ops, 2, NULL, 0}
@@ -40,7 +41,7 @@ static XrXirArtifact *callable_fixture(void) {
 }
 static XrXirArtifact *function_ir_fixture(void) {
     XrXirType parameter = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
-    uint32_t constraint = 0;
+    XrXirConstraint constraint = {0};
     XrXirGeneric generics[] = {{0}, {NULL,0,&concrete,1}, {&constraint,1,NULL,0}};
     XrXirCallableParameter input = {XR_XIR_I64, 0};
     XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input, 1, XR_XIR_I64, 0, 0, {0}};
@@ -74,7 +75,8 @@ static XrXirArtifact *generic_callable_fixture(void) {
         {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components+1,1,XR_XIR_STRING,0,0, {0}}};
     XrXirTypes table = {signatures,2, NULL};
     XrXirType parameters[] = {(XrXirType)257,XR_XIR_STRING,(XrXirType)256,t}, argument = XR_XIR_STRING;
-    uint32_t constraint = 0, arguments[] = {0,1}, indirect = 1;
+    XrXirConstraint constraint = {0};
+    uint32_t arguments[] = {0,1}, indirect = 1;
     XrXirGeneric generics[] = {{NULL,0,&argument,1}, {&constraint,1,NULL,0}};
     XrXirInstruction caller[] = {{XR_XIR_CALL,XR_XIR_STRING,{0,2},{0},1, {0,1}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
@@ -113,7 +115,8 @@ static XrXirArtifact *constructed_fixture(void) {
     XrXirType parameters[] = {(XrXirType)261,(XrXirType)262,(XrXirType)265,(XrXirType)266,
         (XrXirType)257,(XrXirType)258};
     XrXirType arguments[] = {XR_XIR_I64,XR_XIR_STRING};
-    uint32_t constraint = XR_XIR_CONSTRAINT_SENDABLE, operands[] = {0,1,2,3};
+    XrXirConstraint constraint = {XR_XIR_CONSTRAINT_SENDABLE};
+    uint32_t operands[] = {0,1,2,3};
     XrXirGeneric generics[] = {{NULL,0,arguments,2}, {&constraint,1,NULL,0}, {&constraint,1,NULL,0}};
     XrXirInstruction caller[] = {{XR_XIR_CALL,(XrXirType)261,{0,2},{0},1, {0,1}},
         {XR_XIR_CALL,(XrXirType)265,{2,2},{0},2, {1,1}}, {XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0, {0}}};

@@ -13,7 +13,7 @@
 static XrXirArtifact *nominal_expression_fixture(void) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirType box = (XrXirType)256, outer = (XrXirType)257;
-    uint32_t constraint = 0;
+    XrXirConstraint constraint = {0};
     XrXirNominalField fields[] = {{{"value", 5}, t, 0}, {{"inner", 5}, box, 0}};
     XrXirNominalDeclaration definitions[] = {
         {{"alpha", 5}, {"Box", 3}, 1, &constraint, 1, fields, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0},
@@ -70,7 +70,8 @@ static inline XrXirArtifact *nominal_forwarding_checked(void) {
     memcpy(identities, built.declarations->functions, 4 * sizeof(*identities));
     XrXirDeclarations declarations = *built.declarations; declarations.functions = identities;
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, outer = (XrXirType)257;
-    uint32_t constraint = 0, operands[] = {0,1,2};
+    XrXirConstraint constraint = {0};
+    uint32_t operands[] = {0,1,2};
     XrXirInstruction body[6]; memcpy(body, functions[1].instructions, 2 * sizeof(*body));
     body[2] = (XrXirInstruction) {XR_XIR_CALL, outer, {2,1}, {0}, 4, {0,1}};
     body[3] = (XrXirInstruction) {XR_XIR_STRUCT_GET, (XrXirType)256, {3}, {0}, 0, {0}};

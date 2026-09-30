@@ -48,7 +48,8 @@ static XrXirArtifact *capture_checked(bool throwing) {
         {XR_XIR_THROW,XR_XIR_UNIT,{4},{0},0,{0}}};
     uint32_t error_argument = 3;
     XrXirType parameters[] = {fn,XR_XIR_STRING,t,XR_XIR_STRING}, concrete = XR_XIR_STRING;
-    uint32_t captures[] = {0,1}, argument = 1, constraint = 0;
+    uint32_t captures[] = {0,1}, argument = 1;
+    XrXirConstraint constraint = {0};
     XrXirBlock blocks[] = {{0,1, 0, 0},{0,2, 0, 0},{0,4, 0, 0}};
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,init,1,NULL,0},

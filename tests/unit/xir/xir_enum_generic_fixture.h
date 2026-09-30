@@ -12,7 +12,7 @@
 #include "xir/xxir_generic.h"
 static XrXirArtifact *enum_generic_checked(unsigned mode) {
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
-    uint32_t nominal_constraint = XR_XIR_CONSTRAINT_SENDABLE, function_constraint = nominal_constraint;
+    XrXirConstraint nominal_constraint = {XR_XIR_CONSTRAINT_SENDABLE}, function_constraint = nominal_constraint;
     XrXirNominalVariant variants[] = {{{"None",4},0,0},{{"Some",4},0,1}};
     XrXirNominalField field = {{"value",5},t,0};
     XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,&nominal_constraint,1,&field,1,
@@ -42,7 +42,7 @@ static XrXirArtifact *enum_generic_checked(unsigned mode) {
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1};
     XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1},{&function_constraint,1,NULL,0},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL};
-    if (mode == 1 || mode == 5) function_constraint = 0;
+    if (mode == 1 || mode == 5) function_constraint.markers = 0;
     if (mode == 2) declaration.exported = 0;
     if (mode == 3) { modules[1].dependencies = NULL; modules[1].dependency_count = 0; }
     if (mode == 4) parameter = XR_XIR_STRING;

@@ -484,16 +484,17 @@ static void provenance_nominal_attacks(void) {
     char *module = (char *)d->module.bytes, *name = (char *)d->name.bytes;
     char *field_name = (char *)field->name.bytes;
     char *function_name = (char *)closed->module.functions[3].name;
-    uint32_t *constraint = (uint32_t *)d->constraints;
+    XrXirConstraint *constraint = (XrXirConstraint *)d->constraints;
     size_t baseline = live;
     for (unsigned attack = 0; attack < 10; ++attack) {
         XrXirNominalDeclaration saved = *d; XrXirNominalField saved_field = *field;
         char old_module = *module, old_name = *name, old_field = *field_name, old_function = *function_name;
-        uint32_t old_constraint = *constraint, old_count = table->count;
+        XrXirConstraint old_constraint = *constraint;
+        uint32_t old_count = table->count;
         if (attack == 1) *module ^= 1;
         if (attack == 2) *name ^= 1;
         if (attack == 3) d->exported ^= 1;
-        if (attack == 4) *constraint ^= XR_XIR_CONSTRAINT_SENDABLE;
+        if (attack == 4) constraint->markers ^= XR_XIR_CONSTRAINT_SENDABLE;
         if (attack == 5) *field_name ^= 1;
         if (attack == 6) field->flags ^= XR_XIR_FIELD_PRIVATE;
         if (attack == 7) field->type = XR_XIR_I64;

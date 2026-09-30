@@ -66,13 +66,13 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     *record = (XrXirNominalDeclaration) {{module, (uint32_t) strlen(module)},
         {name, (uint32_t) strlen(name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0};
     XrXirTypeNode type = {0}; type.kind = XR_XIR_TYPE_NOMINAL; type.nominal.declaration = symbol->index;
-    uint32_t *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;
+    XrXirConstraint *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;
     XrXirType *arguments = count ? source_alloc(ctx, count, sizeof(*arguments)) : NULL;
     if (count && (!constraints || !arguments)) return false;
     for (uint32_t i = 0; i < count; ++i) {
         XrGenericParam *parameter = parameters[i];
         if (!source_work(ctx, node)) return false;
-        if (!source_parameter_markers(ctx, node, parameter, &constraints[i])) return false;
+        if (!source_parameter_markers(ctx, node, parameter, &constraints[i].markers)) return false;
         for (uint32_t j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (!strcmp(parameter->name, parameters[j]->name))

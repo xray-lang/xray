@@ -20,7 +20,7 @@ static void integer_ir_rejections(void) {
         XrXirBlock block = {0, 2, 0, 0};
         XrXirFunction function = {"integer", 7, parameters, 2, XR_XIR_I8, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
-        uint32_t constraints = 0;
+        XrXirConstraint constraints = {0};
         XrXirGeneric generic = {&constraints, 1, NULL, 0};
         switch (test) {
         case 0: parameters[1] = XR_XIR_U8; break;

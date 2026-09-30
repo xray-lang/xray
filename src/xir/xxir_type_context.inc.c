@@ -11,7 +11,7 @@
  */
 typedef struct TypeContextProof {
     const XrXirTypes *types;
-    const uint32_t *constraints;
+    const XrXirConstraint *constraints;
     uint32_t parameter_count;
     XrXirBudget *remaining;
     unsigned char *pending;
@@ -45,9 +45,9 @@ static XrXirStatus type_context_nominal(TypeContextProof *c, const XrXirTypeNode
         XrXirStatus status = type_context_edge(c, argument, index);
         if (status != XR_XIR_OK) return status;
         if (!d) continue;
-        if (d->constraints[a] & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
-        if (d->constraints[a]) {
-            status = xr_xir_type_markers(c->types, argument, d->constraints[a], c->constraints,
+        if (d->constraints[a].markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+        if (d->constraints[a].markers) {
+            status = xr_xir_type_markers(c->types, argument, d->constraints[a].markers, c->constraints,
                 c->parameter_count, &c->remaining->work);
             if (status != XR_XIR_OK) return status;
         }
@@ -55,7 +55,7 @@ static XrXirStatus type_context_nominal(TypeContextProof *c, const XrXirTypeNode
     return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_type_context_verify(const XrXirTypes *types, XrXirType type,
-    const uint32_t *constraints, uint32_t parameter_count, XrXirBudget *remaining) {
+    const XrXirConstraint *constraints, uint32_t parameter_count, XrXirBudget *remaining) {
     if (!remaining || (parameter_count && !constraints)) return XR_XIR_BAD_STRUCTURE;
     TypeContextProof c = {types, constraints, parameter_count, remaining, NULL};
     const XrXirTypeNode *root = xr_xir_type_node(types, type);

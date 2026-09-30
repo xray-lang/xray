@@ -10,8 +10,9 @@ static void invoke_generic_cases(void) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         const XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
         XrXirType parameter = mode ? t : XR_XIR_I64;
-        uint32_t caller_constraint = mode == 2 ? XR_XIR_CONSTRAINT_SENDABLE : 0;
-        uint32_t callee_constraint = XR_XIR_CONSTRAINT_SENDABLE, argument = 0;
+        XrXirConstraint caller_constraint = {mode == 2 ? XR_XIR_CONSTRAINT_SENDABLE : 0};
+        XrXirConstraint callee_constraint = {XR_XIR_CONSTRAINT_SENDABLE};
+        uint32_t argument = 0;
         XrXirInstruction ops[] = {
             {XR_XIR_INVOKE,parameter,{0,1},{1,2},1,{0,1}},
             {XR_XIR_INVOKE_RESULT,parameter,{0},{0},0,{0}},

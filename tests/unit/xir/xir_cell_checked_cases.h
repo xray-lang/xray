@@ -13,7 +13,7 @@
 #define XR_XIR_CELL_CHECKED_CASES_H
 static void cell_generic_nominal_cases(void) {
     for (unsigned mode = 0; mode < 8; ++mode) {
-        NominalFixture nominal; nominal_fixture(&nominal); nominal.constraint = 0;
+        NominalFixture nominal; nominal_fixture(&nominal); nominal.constraint.markers = 0;
         NominalIdentityFixture identity; nominal_identity_fixture(&identity);
         XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, closed = XR_XIR_I64;
         XrXirTypeNode nodes[] = {

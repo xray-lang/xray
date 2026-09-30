@@ -14,7 +14,7 @@
 #include "xir/xxir_nominal.h"
 typedef struct NominalFixture {
     char module[5], name[4], field[5];
-    uint32_t constraint;
+    XrXirConstraint constraint;
     XrXirNominalField fields[2];
     XrXirNominalDeclaration declarations[2];
     XrXirNominalTable table;
@@ -22,7 +22,7 @@ typedef struct NominalFixture {
 static inline void nominal_fixture(NominalFixture *f) {
     memset(f, 0, sizeof(*f));
     memcpy(f->module, "alpha", 5); memcpy(f->name, "Pair", 4); memcpy(f->field, "value", 5);
-    f->constraint = XR_XIR_CONSTRAINT_SENDABLE;
+    f->constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
     f->fields[0] = (XrXirNominalField) {{f->field, 5}, (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, XR_XIR_FIELD_MUTABLE};
     f->fields[1] = (XrXirNominalField) {{"label", 5}, XR_XIR_STRING, XR_XIR_FIELD_PRIVATE};
     f->declarations[0] = (XrXirNominalDeclaration) {{f->module, 5}, {f->name, 4}, 1,

@@ -1442,14 +1442,14 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     body->declaration = symbol->declaration;
     body->generic_owner = decl->type_param_count ? symbol->declaration : 0;
     body->type_parameters = decl->type_params; body->type_parameter_count = (uint32_t)decl->type_param_count;
-    uint32_t *constraints = decl->type_param_count ? source_alloc(ctx, (size_t) decl->type_param_count, sizeof(*constraints)) : NULL;
+    XrXirConstraint *constraints = decl->type_param_count ? source_alloc(ctx, (size_t) decl->type_param_count, sizeof(*constraints)) : NULL;
     if (decl->type_param_count && !constraints) return false;
     ctx->generics[index].constraints = constraints;
     ctx->generics[index].parameter_count = (uint32_t) decl->type_param_count;
     ctx->has_generics |= decl->type_param_count != 0;
     for (int i = 0; i < decl->type_param_count; ++i) {
         XrGenericParam *parameter = decl->type_params[i];
-        if (!source_parameter_markers(ctx, node, parameter, &constraints[i])) return false;
+        if (!source_parameter_markers(ctx, node, parameter, &constraints[i].markers)) return false;
         for (int j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (!strcmp(parameter->name, decl->type_params[j]->name))

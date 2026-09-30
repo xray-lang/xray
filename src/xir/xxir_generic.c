@@ -25,20 +25,20 @@ bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirT
         (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < count;
 }
 XrXirStatus xr_xir_type_constraints(const XrXirModule *module, uint32_t function,
-    XrXirType type, uint32_t constraints, XrXirBudget *remaining) {
+    XrXirType type, XrXirConstraint constraints, XrXirBudget *remaining) {
     if (!remaining || !remaining->work) return XR_XIR_BUDGET;
     --remaining->work;
-    if (!module || constraints & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
+    if (!module || constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
     const XrXirGeneric *generic = module->generics ? &module->generics[function] : NULL;
     XrXirStatus context = xr_xir_type_context_verify(module->types, type,
         generic ? generic->constraints : NULL, generic ? generic->parameter_count : 0, remaining);
-    if (context != XR_XIR_OK || !constraints) return context;
-    return xr_xir_type_markers(module->types, type, constraints, generic ? generic->constraints : NULL,
+    if (context != XR_XIR_OK || !constraints.markers) return context;
+    return xr_xir_type_markers(module->types, type, constraints.markers, generic ? generic->constraints : NULL,
         generic ? generic->parameter_count : 0, &remaining->work);
 }
 XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
-    XrXirType type, uint32_t constraints, XrXirBudget *remaining) {
+    XrXirType type, XrXirConstraint constraints, XrXirBudget *remaining) {
     XrXirStatus status = xr_xir_type_constraints(module, function, type, constraints, remaining);
     return status == XR_XIR_OK ? xr_xir_type_access(module, function, type, remaining) : status;
 }
@@ -62,9 +62,9 @@ XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remai
             (g->argument_count != 0) != (g->arguments != NULL)) return XR_XIR_BAD_STRUCTURE;
         templates |= g->parameter_count != 0;
         for (uint32_t p = 0; p < g->parameter_count; ++p)
-            if (g->constraints[p] & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+            if (g->constraints[p].markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
         for (uint32_t a = 0; a < g->argument_count; ++a) {
-            XrXirStatus status = xr_xir_type_satisfies(module, f, g->arguments[a], 0, remaining);
+            XrXirStatus status = xr_xir_type_satisfies(module, f, g->arguments[a], (XrXirConstraint){0}, remaining);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -85,7 +85,7 @@ XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **outp
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirGeneric *from = &module->generics[f];
         copy[f].parameter_count = from->parameter_count; copy[f].argument_count = from->argument_count;
-        uint32_t *constraints = from->parameter_count ? xr_malloc((size_t) from->parameter_count * sizeof(*constraints)) : NULL;
+        XrXirConstraint *constraints = from->parameter_count ? xr_malloc((size_t) from->parameter_count * sizeof(*constraints)) : NULL;
         XrXirType *arguments = from->argument_count ? xr_malloc((size_t) from->argument_count * sizeof(*arguments)) : NULL;
         copy[f].constraints = constraints; copy[f].arguments = arguments;
         if ((from->parameter_count && !constraints) || (from->argument_count && !arguments)) {

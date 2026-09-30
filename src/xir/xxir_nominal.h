@@ -29,7 +29,7 @@ typedef struct XrXirNominalVariant {
 typedef struct XrXirNominalDeclaration {
     XrXirLiteral module, name;
     uint32_t exported;
-    const uint32_t *constraints;
+    const XrXirConstraint *constraints;
     uint32_t parameter_count;
     const XrXirNominalField *fields;
     uint32_t field_count;

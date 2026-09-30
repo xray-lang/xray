@@ -33,9 +33,9 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     *argument = XR_XIR_I64;
     CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_TYPE);
     *argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
-    uint32_t *constraint = (uint32_t *)generics[3].constraints;
-    *constraint = XR_XIR_CONSTRAINT_SENDABLE;
-    CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_TYPE); *constraint = 0;
+    XrXirConstraint *constraint = (XrXirConstraint *)generics[3].constraints;
+    constraint->markers = XR_XIR_CONSTRAINT_SENDABLE;
+    CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_TYPE); constraint->markers = 0;
     XrXirFunction *body = (XrXirFunction *)&module->functions[3], saved = *body;
     XrXirInstruction suspend[] = {{XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};

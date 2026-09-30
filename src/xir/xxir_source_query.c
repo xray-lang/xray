@@ -80,9 +80,12 @@ static void query_nominals(SourceQueryCopy *copy, XrXirTypes *types) {
         decls[i].constraints = query_copy(copy, decls[i].constraints, decls[i].parameter_count, sizeof(*decls[i].constraints));
         XrXirNominalField *fields = query_copy(copy, decls[i].fields, decls[i].field_count, sizeof(*fields));
         decls[i].fields = fields;
-        if (!fields) continue;
-        for (uint32_t j = 0; j < decls[i].field_count && copy->status == XR_XIR_OK; ++j)
+        for (uint32_t j = 0; fields && j < decls[i].field_count && copy->status == XR_XIR_OK; ++j)
             query_literal(copy, &fields[j].name);
+        XrXirNominalVariant *variants = query_copy(copy, decls[i].variants, decls[i].variant_count, sizeof(*variants));
+        decls[i].variants = variants;
+        for (uint32_t j = 0; variants && j < decls[i].variant_count && copy->status == XR_XIR_OK; ++j)
+            query_literal(copy, &variants[j].name);
     }
 }
 static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {

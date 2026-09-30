@@ -13,6 +13,7 @@
 #include "xir/xxir_source_query_internal.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_nominal.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
 #include <stdio.h>
@@ -634,6 +635,17 @@ static void source_enum_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,"print(0)\n");
     const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
     const XrXirSourceDeclaration *owner=declaration(view,"Choice",0); CHECK(owner);
+    CHECK(view->types && view->types->nominals && view->types->nominals->count == 1);
+    const XrXirNominalDeclaration *nominal = view->types->nominals->declarations;
+    CHECK(nominal->kind == XR_XIR_NOMINAL_ENUM && nominal->variant_count == 3);
+    const char *variant_names[] = {"Empty", "Some", "Other"};
+    for (uint32_t i = 0; i < 3; ++i) {
+        CHECK(nominal->variants[i].name.length == strlen(variant_names[i]));
+        CHECK(!memcmp(nominal->variants[i].name.bytes, variant_names[i], strlen(variant_names[i])));
+        CHECK(nominal->variants[i].field_count == (i ? 1u : 0u));
+    }
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(view->types, &budget) == XR_XIR_OK);
     const XrXirSourceDeclaration *some=declaration(view,"Some",owner->id);
     const XrXirSourceDeclaration *other=declaration(view,"Other",owner->id);
     const XrXirSourceDeclaration *ordinal=declaration(view,"ordinal",owner->id);

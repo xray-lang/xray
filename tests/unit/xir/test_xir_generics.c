@@ -25,7 +25,7 @@
 #include "xir_nominal_field_closure_fixture.h"
 static void nominal_ordered_matching(void) {
     NominalFixture f; nominal_fixture(&f);
-    uint32_t constraints[2] = {0};
+    XrXirConstraint constraints[2] = {{0}};
     for (unsigned i = 0; i < 2; ++i) {
         f.declarations[i].parameter_count = 2; f.declarations[i].constraints = constraints;
     }
@@ -80,11 +80,11 @@ static void nominal_definition_constraints(void) {
     XrXirArtifact *checked = nominal_expression_fixture();
     const XrXirModule *module = xr_xir_artifact_module(checked);
     const XrXirNominalDeclaration *declarations = module->types->nominals->declarations;
-    ((uint32_t *) declarations[0].constraints)[0] = XR_XIR_CONSTRAINT_SENDABLE;
+    ((XrXirConstraint *) declarations[0].constraints)[0].markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_BAD_TYPE);
-    ((uint32_t *) declarations[1].constraints)[0] = XR_XIR_CONSTRAINT_SENDABLE;
+    ((XrXirConstraint *) declarations[1].constraints)[0].markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_BAD_TYPE);
-    ((uint32_t *) module->generics[1].constraints)[0] = XR_XIR_CONSTRAINT_SENDABLE;
+    ((XrXirConstraint *) module->generics[1].constraints)[0].markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_OK);
     XrXirArtifact *closed = NULL;
     CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
@@ -113,7 +113,7 @@ static void nominal_argument_visibility(void) {
     XrXirType argument = (XrXirType)258;
     nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
         {0, &argument, 1, NULL, 0}};
-    ((uint32_t *) module.types->nominals->declarations[0].constraints)[0] = 0;
+    ((XrXirConstraint *) module.types->nominals->declarations[0].constraints)[0].markers = 0;
     XrXirTypes types = {nodes, 4, module.types->nominals}; module.types = &types;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     XrXirBudget budget = xr_xir_default_budget();
@@ -226,7 +226,7 @@ static void error_erasure_packet(void) {
     xr_xir_artifact_free(decoded); xr_xir_checked_packet_free(&packet);
 }
 static void error_marker_definition(void) {
-    uint32_t constraint = XR_XIR_CONSTRAINT_ERROR;
+    XrXirConstraint constraint = {XR_XIR_CONSTRAINT_ERROR};
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInstruction instruction = {XR_XIR_THROW,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirBlock block = {0,1, 0, 0};
@@ -251,7 +251,7 @@ static void error_marker_definition(void) {
     CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_ERROR,&constraint,1,&budget.work)==XR_XIR_BUDGET);
     budget=xr_xir_default_budget();
     CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_MASK,&constraint,1,&budget.work)==XR_XIR_BAD_TYPE);
-    constraint=XR_XIR_CONSTRAINT_MASK;
+    constraint.markers = XR_XIR_CONSTRAINT_MASK;
     CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_MASK,&constraint,1,&budget.work)==XR_XIR_OK);
 }
 static void rejected_templates(void) {
@@ -261,7 +261,7 @@ static void rejected_templates(void) {
         XrXirGeneric *generics = (XrXirGeneric *) checked->module.generics;
         XrXirInstruction *caller = (XrXirInstruction *) functions[0].instructions;
         XrXirInstruction *body = (XrXirInstruction *) functions[1].instructions;
-        if (mode == 0) ((uint32_t *) generics[1].constraints)[0] = 4;
+        if (mode == 0) ((XrXirConstraint *) generics[1].constraints)[0].markers = 4;
         if (mode == 1) caller[1].type_arguments[0] = 0;
         if (mode == 2) caller[1].type_arguments[1] = 0;
         if (mode == 3) ((XrXirType *) generics[0].arguments)[0] = XR_XIR_UNIT;
@@ -284,7 +284,7 @@ static void forwarding(void) {
     XrXirArtifact *checked = generic_fixture();
     XrXirFunction *functions = (XrXirFunction *) checked->module.functions;
     XrXirGeneric generics[2] = {checked->module.generics[0], checked->module.generics[1]};
-    uint32_t constraint = 0;
+    XrXirConstraint constraint = {0};
     const XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirType parameters[] = {t, t}, types[] = {t, t, t};
     generics[0].parameter_count = 1; generics[0].constraints = &constraint; generics[0].arguments = types;
@@ -296,7 +296,7 @@ static void forwarding(void) {
     XrXirFunction views[] = {caller, functions[1]};
     XrXirModule module = {XR_XIR_BUILT, views, 2, NULL, generics, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
-    constraint = XR_XIR_CONSTRAINT_SENDABLE;
+    constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     XrXirArtifact *valid = NULL, *forged = NULL;
     CHECK(xr_xir_check(&module, NULL, &valid, NULL) == XR_XIR_OK);
@@ -377,16 +377,16 @@ static void array_definition_constraints(void) {
     xr_xir_artifact_free(closed); xr_xir_artifact_free(checked);
     parameters[1] = arguments[1] = arguments[2] = functions[0].result = ops[1].type = ops[2].type = (XrXirType)259;
     CHECK(xr_xir_verify(&built,NULL,NULL) == XR_XIR_BAD_TYPE);
-    uint32_t constraint = 0;
+    XrXirConstraint constraint = {0};
     generics[0].parameter_count = 1; generics[0].constraints = &constraint;
     nodes[0].element = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[0].parameter_span = 1;
     parameters[1] = functions[0].result = (XrXirType)256;
     for (unsigned i = 0; i < 3; ++i) arguments[i] = ops[i].type = (XrXirType)256;
     CHECK(xr_xir_verify(&built,NULL,NULL) == XR_XIR_BAD_TYPE);
-    constraint = XR_XIR_CONSTRAINT_SENDABLE;
+    constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_verify(&built,NULL,NULL) == XR_XIR_OK);
     XrXirBudget budget = xr_xir_default_budget(); budget.work = 2;
-    CHECK(xr_xir_type_satisfies(&built,0,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_BUDGET);
+    CHECK(xr_xir_type_satisfies(&built,0,(XrXirType)256,(XrXirConstraint){XR_XIR_CONSTRAINT_SENDABLE},&budget) == XR_XIR_BUDGET);
     xr_xir_artifact_free(fixture);
 }
 #include "xir_array_generic_cases.h"

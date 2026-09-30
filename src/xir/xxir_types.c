@@ -103,7 +103,7 @@ uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type) {
     return node ? node->parameter_span : 0;
 }
 XrXirStatus xr_xir_type_markers(const XrXirTypes *types, XrXirType type, uint32_t required,
-    const uint32_t *constraints, uint32_t parameter_count, uint64_t *work) {
+    const XrXirConstraint *constraints, uint32_t parameter_count, uint64_t *work) {
     if (required & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
     if (required & XR_XIR_CONSTRAINT_ERROR) {
         if (!work || !*work) return XR_XIR_BUDGET;
@@ -111,7 +111,7 @@ XrXirStatus xr_xir_type_markers(const XrXirTypes *types, XrXirType type, uint32_
         uint32_t id = (uint32_t) type;
         bool parameter = id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT;
         if (parameter ? (!constraints || id - XR_XIR_TYPE_PARAMETER_BASE >= parameter_count ||
-            !(constraints[id - XR_XIR_TYPE_PARAMETER_BASE] & XR_XIR_CONSTRAINT_ERROR)) :
+            !(constraints[id - XR_XIR_TYPE_PARAMETER_BASE].markers & XR_XIR_CONSTRAINT_ERROR)) :
             (type != XR_XIR_ERROR && !xr_xir_type_is_enum(types, type))) return XR_XIR_BAD_TYPE;
     }
     if (!(required & XR_XIR_CONSTRAINT_SENDABLE)) return XR_XIR_OK;
@@ -123,7 +123,7 @@ XrXirStatus xr_xir_type_markers(const XrXirTypes *types, XrXirType type, uint32_
             type == XR_XIR_ATOMIC_I64) return XR_XIR_OK;
         if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
             return constraints && id - XR_XIR_TYPE_PARAMETER_BASE < parameter_count &&
-                (constraints[id - XR_XIR_TYPE_PARAMETER_BASE] & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+                (constraints[id - XR_XIR_TYPE_PARAMETER_BASE].markers & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node || node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_BAD_TYPE;
         if ((uint32_t) node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&

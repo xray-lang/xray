@@ -14,7 +14,7 @@ static XrXirArtifact *nominal_field_closure_fixture(unsigned mode) {
     XrXirArtifact *base = checked_fixture(), *checked = NULL;
     XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, i64 = XR_XIR_I64;
-    uint32_t constraint = 0;
+    XrXirConstraint constraint = {0};
     XrXirNominalField fields[] = {{{"value",5},t,0}, {{"inner",5},(XrXirType)256,0}};
     XrXirNominalDeclaration definitions[] = {
         {{"alpha",5},{"Box",3},1,&constraint,1,fields,1, XR_XIR_NOMINAL_STRUCT, NULL, 0},

@@ -79,15 +79,15 @@ static void source_conditional_cases(XrXirSourceRequest *request, const char *pa
                     const XrXirSourceDeclaration *decl = &view->declarations[d];
                     if (!strcmp(decl->name, "checked")) {
                         CHECK(decl->generic_parameter_count == 1 && decl->generic_parent_count == 1);
-                        CHECK(decl->generic_constraints && decl->generic_constraints[0] == XR_XIR_CONSTRAINT_SENDABLE);
+                        CHECK(decl->generic_constraints && decl->generic_constraints[0].markers == XR_XIR_CONSTRAINT_SENDABLE);
                         found = true;
                     }
                     if (!strcmp(decl->name, "Box")) {
                         CHECK(decl->generic_parameter_count == 1);
-                        CHECK(decl->generic_constraints && decl->generic_constraints[0] == 0);
+                        CHECK(decl->generic_constraints && decl->generic_constraints[0].markers == 0);
                     }
                     if (!strncmp(decl->name, "$cleanup", 8))
-                        CHECK(decl->generic_constraints && decl->generic_constraints[0] == XR_XIR_CONSTRAINT_SENDABLE);
+                        CHECK(decl->generic_constraints && decl->generic_constraints[0].markers == XR_XIR_CONSTRAINT_SENDABLE);
                 }
                 CHECK(found);
             }

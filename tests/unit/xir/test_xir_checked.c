@@ -221,7 +221,7 @@ static void callable_contracts(void) {
     CHECK(module.functions[1].result == XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirBudget sendable_budget = xr_xir_default_budget();
     CHECK(xr_xir_type_satisfies(&module, 0, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE,
-        XR_XIR_CONSTRAINT_SENDABLE, &sendable_budget) == XR_XIR_BAD_TYPE);
+        (XrXirConstraint){XR_XIR_CONSTRAINT_SENDABLE}, &sendable_budget) == XR_XIR_BAD_TYPE);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK && lowered);
     CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);

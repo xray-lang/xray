@@ -105,7 +105,7 @@ static void snapshot_nominal_allocations(void) {
                 const XrXirNominalDeclaration *decl = table->declarations;
                 CHECK(decl[0].module.length == 5 && !memcmp(decl[0].module.bytes, "alpha", 5));
                 CHECK(decl[0].name.length == 4 && !memcmp(decl[0].name.bytes, "Pair", 4));
-                CHECK(decl[0].constraints[0] == XR_XIR_CONSTRAINT_SENDABLE);
+                CHECK(decl[0].constraints[0].markers == XR_XIR_CONSTRAINT_SENDABLE);
                 CHECK(decl[0].fields[0].type == XR_XIR_TYPE_PARAMETER_BASE);
                 CHECK(decl[0].fields[0].flags == XR_XIR_FIELD_MUTABLE);
                 CHECK(!memcmp(decl[0].fields[0].name.bytes, "value", 5));
@@ -120,6 +120,55 @@ static void snapshot_nominal_allocations(void) {
         }
         fail_at = SIZE_MAX;
         printf("Nominal query snapshot (%u): %zu allocation failure sites\n", declaration_only, sites);
+    }
+}
+static void snapshot_enum_allocations(void) {
+    for (unsigned payload = 0; payload < 2; ++payload) {
+        size_t sites = 0;
+        for (size_t site = 0; site <= sites; ++site) {
+            char names[][5] = {"None", "Some"};
+            XrXirNominalVariant variants[] = {{{names[0], 4}, 0, 0}, {{names[1], 4}, 0, payload}};
+            XrXirNominalField field = {{"value", 5}, XR_XIR_I64, 0};
+            XrXirNominalDeclaration declaration = {{"alpha", 5}, {"Choice", 6}, 1,
+                NULL, 0, payload ? &field : NULL, payload, XR_XIR_NOMINAL_ENUM, variants, 2};
+            XrXirNominalTable table = {&declaration, 1, NULL};
+            XrXirTypes types = {NULL, 0, &table};
+            XrXirSourceView view = {0}; view.types = &types;
+            XrXirBudget budget = xr_xir_default_budget();
+            attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
+            XrXirSourceSnapshot *snapshot = NULL;
+            XrXirStatus status = xr_xir_source_snapshot_copy(&view, &budget, &snapshot);
+            if (!site) {
+                CHECK(status == XR_XIR_OK && snapshot); sites = attempts;
+                const XrXirTypes *copy = xr_xir_source_snapshot_view(snapshot)->types;
+                const XrXirNominalDeclaration *owned_decl = copy->nominals->declarations;
+                CHECK(owned_decl->variants != variants);
+                CHECK(owned_decl->variants[0].name.bytes != names[0]);
+                CHECK(owned_decl->variants[1].name.bytes != names[1]);
+                XrXirBudget required = xr_xir_default_budget();
+                required.work -= budget.work; required.metadata_bytes -= budget.metadata_bytes;
+                for (unsigned kind = 0; kind < 3; ++kind) {
+                    XrXirBudget limit = required;
+                    if (kind == 0) --limit.work;
+                    if (kind == 1) --limit.metadata_bytes;
+                    XrXirSourceSnapshot *bounded = NULL;
+                    CHECK(xr_xir_source_snapshot_copy(&view, &limit, &bounded) ==
+                        (kind == 2 ? XR_XIR_OK : XR_XIR_BUDGET));
+                    CHECK((bounded != NULL) == (kind == 2));
+                    xr_xir_source_snapshot_free(bounded);
+                }
+                memset(names, 0xcc, sizeof(names)); memset(variants, 0xcc, sizeof(variants));
+                memset(&declaration, 0xcc, sizeof(declaration)); memset(&field, 0xcc, sizeof(field));
+                CHECK(owned_decl->variant_count == 2 && owned_decl->kind == XR_XIR_NOMINAL_ENUM);
+                CHECK(owned_decl->variants[0].field_count == 0 && owned_decl->variants[1].field_count == payload);
+                CHECK(!memcmp(owned_decl->variants[0].name.bytes, "None", 4));
+                CHECK(!memcmp(owned_decl->variants[1].name.bytes, "Some", 4));
+                budget = xr_xir_default_budget(); CHECK(xr_xir_types_verify(copy, &budget) == XR_XIR_OK);
+            } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
+            xr_xir_source_snapshot_free(snapshot); CHECK(!live);
+        }
+        fail_at = SIZE_MAX;
+        printf("Enum query snapshot (%u): %zu allocation failure sites\n", payload, sites);
     }
 }
 static void snapshot_type_allocations(void) {
@@ -288,6 +337,7 @@ static void method_promise_allocations(XrCompilerSession *session) {
     printf("Method promise source ownership: %zu OOM sites; no partial publication\n", sites);
 }
 int main(void) {
+    snapshot_enum_allocations();
     source_nominal_substitution_failures();
     snapshot_nominal_allocations();
     snapshot_type_allocations();
