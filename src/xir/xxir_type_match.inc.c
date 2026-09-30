@@ -58,10 +58,10 @@ XR_FUNC XrXirStatus xr_xir_type_substitution_matches_between(const XrXirTypes *s
     XrXirStatus status = type_match_pair(&c, expected, actual, &root);
     if (status != XR_XIR_OK || !root.from) return status;
     uint64_t bytes = (uint64_t) source_types->count * sizeof(TypeMatchFrame);
-    if (bytes > SIZE_MAX || bytes > remaining->metadata_bytes) return XR_XIR_BUDGET;
-    remaining->metadata_bytes -= bytes;
+    if (bytes > SIZE_MAX || bytes > remaining->scratch_bytes) return XR_XIR_BUDGET;
+    remaining->scratch_bytes -= bytes;
     TypeMatchFrame *stack = xr_malloc((size_t) bytes);
-    if (!stack) return XR_XIR_OUT_OF_MEMORY;
+    if (!stack) { remaining->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
     uint32_t depth = 1; stack[0] = root;
     while (depth && status == XR_XIR_OK) {
         TypeMatchFrame *frame = &stack[depth - 1];
@@ -86,7 +86,7 @@ XR_FUNC XrXirStatus xr_xir_type_substitution_matches_between(const XrXirTypes *s
         if (child.from >= from || depth >= source_types->count) { status = XR_XIR_BAD_TYPE; break; }
         stack[depth++] = child;
     }
-    xr_free(stack); return status;
+    xr_free(stack); remaining->scratch_bytes += bytes; return status;
 }
 XR_FUNC XrXirStatus xr_xir_type_substitution_matches(const XrXirTypes *types,
     const XrXirType *arguments, uint32_t count, XrXirType expected,

@@ -54,7 +54,7 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
             selected->method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) && emit(ctx, op, value);
 }
 static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue receiver,
-    SourceName *method, SourceValue *value) {
+    SourceName *method, XrXirType result_context, SourceValue *value) {
     if (method->node->as.method_decl.is_static)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires type-qualified access");
     CallExprNode *call = &node->as.call_expr;
@@ -63,7 +63,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its declaration owner");
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types,receiver.type);
     SourceDirectRequest direct = {method->index,
-        {type->nominal.arguments,type->nominal.argument_count},&receiver};
+        {type->nominal.arguments,type->nominal.argument_count},&receiver,result_context};
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirInstruction op = {XR_XIR_CALL,prepared.result,{0},{0},method->index,{0}};
@@ -100,6 +100,11 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     }
     SourceValue receiver;
     if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
+    if ((uint32_t)receiver.type >= XR_XIR_TYPE_PARAMETER_BASE &&
+        (uint32_t)receiver.type < XR_XIR_TYPE_PARAMETER_LIMIT) {
+        SourceRequirementValueRequest request = {receiver,type_arguments,expected};
+        return source_requirement_value(ctx,node,&request,value);
+    }
     if (receiver.type == XR_XIR_PANIC_INFO) return source_panic_member(ctx, node, type_arguments, receiver, value);
     if (xr_xir_type_is_enum(&ctx->types, receiver.type) && !strcmp(node->as.member_access.name, "ordinal")) {
         if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum ordinal is not generic");

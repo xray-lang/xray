@@ -1,0 +1,11 @@
+import { BoundMapper } from "./method_value_contract"
+const boundCalls=Atomic(0)
+export fn boundCallsCount()->i64{return boundCalls.load()}
+export struct BoundAdapter<Label,Seed> implements BoundMapper<Seed> {
+    label:Label
+    seed:Seed
+    value:i64
+    read()->i64{boundCalls.fetchAdd(1);return this.value}
+    map<V:Sendable>(seed:Seed,value:V)->V{boundCalls.fetchAdd(1);return value}
+    copy<V:Sendable>(value:Array<V>)->Array<V>{boundCalls.fetchAdd(1);return value}
+}

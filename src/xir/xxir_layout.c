@@ -66,10 +66,10 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
     signature_budget.metadata_bytes = bytes; signature_budget.work = work;
     XrXirStatus signature_status = xr_xir_types_structure_verify(module->types, &signature_budget);
     if (signature_status != XR_XIR_OK) return signature_status;
-    bytes = signature_budget.metadata_bytes; work = signature_budget.work;
     XrXirStatus declaration_status = xr_xir_declarations_verify(module->declarations, module->types,
-        module->function_count, &bytes, &work);
+        module->function_count, &signature_budget);
     if (declaration_status != XR_XIR_OK) return declaration_status;
+    bytes = signature_budget.metadata_bytes; work = signature_budget.work;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         uint32_t paths = 0;

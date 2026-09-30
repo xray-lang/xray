@@ -19,10 +19,16 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
+#include "xir_source_method_value_execution.h"
+#include "xir_source_late_result_execution.h"
 #include "xir_source_inference_execution.h"
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
+XR_DATA const uint32_t fixture_source_method_value_values[6];
+XR_DATA const uint32_t fixture_source_method_value_count;
+XR_DATA const uint32_t fixture_source_late_result_values[3];
+XR_DATA const uint32_t fixture_source_late_result_count;
 XR_DATA const uint32_t fixture_source_inference_values[6];
 XR_DATA const uint32_t fixture_source_inference_count;
 XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result, fixture_source_witness_result, fixture_source_enum_witness_result, fixture_source_enum_generic_witness_result, fixture_source_generic_method_number, fixture_source_generic_method_text, fixture_source_generic_method_array;
@@ -37,6 +43,10 @@ static void mixed_release(void *pointer) {
     xr_xir_artifact_free(owner->artifact); xr_free(owner->entries); xr_free(owner->bindings); xr_free(owner); ++released;
 }
 int main(void) {
+    SourceLateResultEntries late_result_entries = {{fixture_source_late_result_values[0],fixture_source_late_result_values[1],fixture_source_late_result_values[2]},fixture_source_late_result_count};
+    SourceMethodValueEntries method_value_entries = {{fixture_source_method_value_values[0],fixture_source_method_value_values[1],
+        fixture_source_method_value_values[2],fixture_source_method_value_values[3],fixture_source_method_value_values[4],
+        fixture_source_method_value_values[5]},fixture_source_method_value_count};
     SourceInferenceEntries inference_entries = {{fixture_source_inference_values[0],fixture_source_inference_values[1],
         fixture_source_inference_values[2],fixture_source_inference_values[3],fixture_source_inference_values[4],
         fixture_source_inference_values[5]},fixture_source_inference_count};
@@ -75,7 +85,9 @@ int main(void) {
             (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)) ||
             i == fixture_source_numeric_pause || i == fixture_source_calculate ||
             i == fixture_source_generic_method_number ||
-            i == fixture_source_inference_values[0] || i == fixture_source_inference_values[4])
+            i == fixture_source_inference_values[0] || i == fixture_source_inference_values[4] ||
+            i == fixture_source_method_value_values[0] || i == fixture_source_method_value_values[4] ||
+            i == fixture_source_late_result_values[0])
             owner->entries[i] = fixture_source_program.entries[i];
         if (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)) {
             CHECK(owner->entries[i].resume == fixture_source_program.entries[i].resume); ++native_resumes;
@@ -90,6 +102,13 @@ int main(void) {
         }
     }
     CHECK(native_resumes == 1 && vm_pauses == 5 && pause_types == 31);
+    CHECK(owner->entries[fixture_source_late_result_values[0]].resume == fixture_source_program.entries[fixture_source_late_result_values[0]].resume);
+    CHECK(owner->entries[fixture_source_late_result_values[1]].resume != fixture_source_program.entries[fixture_source_late_result_values[1]].resume);
+    CHECK(owner->entries[fixture_source_late_result_values[2]].resume != fixture_source_program.entries[fixture_source_late_result_values[2]].resume);
+    CHECK(owner->entries[fixture_source_method_value_values[0]].resume == fixture_source_program.entries[fixture_source_method_value_values[0]].resume);
+    CHECK(owner->entries[fixture_source_method_value_values[4]].resume == fixture_source_program.entries[fixture_source_method_value_values[4]].resume);
+    CHECK(owner->entries[fixture_source_method_value_values[1]].resume != fixture_source_program.entries[fixture_source_method_value_values[1]].resume);
+    CHECK(owner->entries[fixture_source_method_value_values[3]].resume != fixture_source_program.entries[fixture_source_method_value_values[3]].resume);
     CHECK(owner->entries[fixture_source_inference_values[0]].resume == fixture_source_program.entries[fixture_source_inference_values[0]].resume);
     CHECK(owner->entries[fixture_source_inference_values[4]].resume == fixture_source_program.entries[fixture_source_inference_values[4]].resume);
     CHECK(owner->entries[fixture_source_inference_values[1]].resume != fixture_source_program.entries[fixture_source_inference_values[1]].resume);
@@ -109,8 +128,16 @@ int main(void) {
     XrXirValue inference_retained[2][6] = {{{0}}};
     source_inference_pair(program,inference_entries,inference_retained);
     source_inference_runtime_failures(program,inference_entries);
+    XrXirValue method_value_retained[2][6] = {{{0}}};
+    source_method_value_pair(program,method_value_entries,method_value_retained);
+    source_method_value_runtime_failures(program,method_value_entries);
+    XrXirValue late_result_retained[2][3] = {{{0}}};
+    source_late_result_pair(program,late_result_entries,late_result_retained);
+    source_late_result_runtime_failures(program,late_result_entries);
     CHECK(!released);
     xr_xir_program_drop(program); CHECK(released == 1);
+    source_late_result_retained_drop(late_result_retained);
+    source_method_value_retained_drop(method_value_retained);
     source_inference_retained_drop(inference_retained);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("VM to native and native to VM source calls shared instance state and ownership");

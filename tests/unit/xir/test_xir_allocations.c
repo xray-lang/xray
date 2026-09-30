@@ -108,6 +108,9 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_segment_cases.h"
 #include "xir_function_cases.h"
 #include "xir_instance_admission_cases.h"
+#include "xir_type_temporary_core_budget_cases.h"
+#include "xir_constraint_temporary_core_cases.h"
+#include "xir_access_temporary_cases.h"
 #include "xir_initialization_allocations.h"
 #include "xir_interface_packet_allocations.h"
 #include "xir_constraint_packet_allocations.h"
@@ -492,6 +495,10 @@ static void nominal_pool_allocation_failures(void) {
 }
 
 int main(void) {
+    type_temporary_budget_cases();
+    type_temporary_allocation_failures();
+    constraint_temporary_cases();
+    access_temporary_cases();
     generic_method_clone_allocations();
     generic_method_packet_allocations();
     implementation_copy_allocations();

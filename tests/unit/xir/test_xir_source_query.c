@@ -777,6 +777,8 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_enum_witness_cases.h"
 #include "xir_witness_provenance_cases.h"
 #include "xir_source_generic_requirement_cases.h"
+#include "xir_source_requirement_value_cases.h"
+#include "xir_source_result_inference_cases.h"
 #include "xir_source_contextual_lambda_cases.h"
 #include "xir_source_requirement_inference_cases.h"
 #include "xir_source_ordinary_inference_cases.h"
@@ -784,6 +786,8 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_inference_equivalence_cases.h"
 #include "xir_source_method_where_cases.h"
 #include "xir_generic_witness_provenance_cases.h"
+#include "xir_source_requirement_value_boundaries.h"
+#include "xir_source_requirement_value_provenance.h"
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -796,6 +800,9 @@ int main(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
     source_generic_requirement_positive(&request);
+    source_requirement_value_positive(&request);
+    source_requirement_value_negative(&request);
+    source_result_inference_cases(&request);
     source_generic_requirement_rejections(&request);
     source_requirement_inference_cases(&request);
     source_ordinary_inference_cases(&request);
@@ -807,6 +814,8 @@ int main(void) {
     source_interface_method_where_positive(&request);
     source_interface_method_where_rejections(&request);
     generic_witness_provenance_cases(&request);
+    source_requirement_value_boundaries(&request);
+    source_requirement_value_provenance(&request);
     source_witness_cases(&request);
     source_witness_inheritance_cases(&request);
     source_enum_witness_cases(&request);

@@ -222,7 +222,7 @@ XR_FUNC XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact,
                                         const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_artifact_free(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *declarations,
-    const XrXirTypes *types, uint32_t functions, uint64_t *bytes, uint64_t *work);
+    const XrXirTypes *types, uint32_t functions, XrXirBudget *budget);
 /* Internal snapshot helpers require successful declaration verification first. */
 XR_FUNC XrXirStatus xr_xir_declarations_order(const XrXirDeclarations *declarations,
     uint32_t *order, uint64_t *work);

@@ -193,10 +193,129 @@ static void type_inference_partial_cases(void) {
     }
     fail_at = SIZE_MAX;
 }
+static void type_inference_empty_prefix_cases(void) {
+    XrXirBudget budget = xr_xir_default_budget(); uint64_t scratch = budget.scratch_bytes;
+    XrXirInferenceRequest empty = {NULL,NULL,0,0,0};
+    XrXirInferenceState *state = NULL;
+    CHECK(xr_xir_inference_begin(&empty,&budget,&state)==XR_XIR_OK);
+    CHECK(xr_xir_inference_finalize(state,NULL,NULL,0)==XR_XIR_OK);
+    CHECK(xr_xir_inference_finalize(state,NULL,NULL,0)==XR_XIR_BAD_STRUCTURE);
+    xr_xir_inference_dispose(state); CHECK(!live && budget.scratch_bytes==scratch);
+    XrXirType prefix = XR_XIR_STRING;
+    XrXirInferencePair pair = {(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_STRING};
+    InferenceTestBatch fixed = {NULL,&prefix,1,0,0,&pair,1};
+    for (uint32_t conflict = 0; conflict < 2; ++conflict) {
+        pair.actual = conflict ? XR_XIR_I64 : XR_XIR_STRING;
+        XrXirType output = XR_XIR_BOOL; budget = xr_xir_default_budget();
+        CHECK(inference_test_run(&fixed,&budget,&output,1)==(conflict ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK(output==(conflict ? XR_XIR_BOOL : XR_XIR_STRING));
+        CHECK(!live && budget.scratch_bytes==scratch);
+    }
+    fixed.pair_count = 0; XrXirType output = XR_XIR_BOOL; budget = xr_xir_default_budget();
+    CHECK(inference_test_run(&fixed,&budget,&output,1)==XR_XIR_OK && output==prefix);
+    CHECK(!live && budget.scratch_bytes==scratch);
+}
+static void type_inference_failed_finalize_cases(void) {
+    XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirInferenceRequest request = {NULL,NULL,0,1,0};
+    for (uint32_t mode = 0; mode < 3; ++mode) {
+        XrXirBudget budget = xr_xir_default_budget(); uint64_t scratch = budget.scratch_bytes;
+        XrXirInferenceState *state = NULL;
+        CHECK(xr_xir_inference_begin(&request,&budget,&state)==XR_XIR_OK);
+        CHECK(xr_xir_inference_observe(state,NULL,(XrXirInferencePair){p0,XR_XIR_I64})==XR_XIR_OK);
+        if (mode==1) budget.work = 0;
+        if (mode==2) fail_at = attempts; /* First allocation in this observation. */
+        XrXirStatus expected = mode==0 ? XR_XIR_BAD_TYPE : mode==1 ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        CHECK(xr_xir_inference_observe(state,NULL,(XrXirInferencePair){p0,XR_XIR_STRING})==expected);
+        fail_at = SIZE_MAX;
+        XrXirType output = XR_XIR_BOOL;
+        CHECK(xr_xir_inference_finalize(state,NULL,&output,1)==expected && output==XR_XIR_BOOL);
+        xr_xir_inference_dispose(state); CHECK(!live && budget.scratch_bytes==scratch);
+    }
+}
+/* Fixed small shape, capped search: no private allocation sizes or post-return
+ * scratch deltas are used to infer peak storage. */
+static XrXirStatus inference_boundary_probe(const InferenceTestBatch *batch,
+    uint32_t dimension, uint64_t cap) {
+    XrXirBudget budget = xr_xir_default_budget();
+    if (!dimension) budget.scratch_bytes = cap; else budget.frame_bytes = cap;
+    uint64_t scratch = budget.scratch_bytes;
+    XrXirType output = XR_XIR_BOOL;
+    XrXirStatus status = inference_test_run(batch,&budget,&output,1);
+    CHECK(status==XR_XIR_OK || status==XR_XIR_BUDGET);
+    CHECK(output==(status==XR_XIR_OK ? XR_XIR_STRING : XR_XIR_BOOL));
+    CHECK(!live && budget.scratch_bytes==scratch); return status;
+}
+static void type_inference_exact_capacity_cases(void) {
+    XrXirTypeNode nodes[4] = {0};
+    for (uint32_t n = 0; n < 4; ++n) nodes[n].kind = XR_XIR_TYPE_ARRAY;
+    nodes[0].element = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[0].parameter_span = 1;
+    nodes[1].element = member_case_type(0); nodes[1].parameter_span = 1;
+    nodes[2].element = XR_XIR_STRING; nodes[3].element = member_case_type(2);
+    XrXirTypes types = {nodes,4,NULL,NULL};
+    XrXirInferencePair pair = {member_case_type(1),member_case_type(3)};
+    InferenceTestBatch batch = {&types,NULL,0,1,0,&pair,1};
+    for (uint32_t dimension = 0; dimension < 2; ++dimension) {
+        uint64_t low = 0, high = 4096;
+        CHECK(inference_boundary_probe(&batch,dimension,low)==XR_XIR_BUDGET);
+        CHECK(inference_boundary_probe(&batch,dimension,high)==XR_XIR_OK);
+        for (uint32_t step = 0; step < 12 && high-low > 1; ++step) {
+            uint64_t middle = low+(high-low)/2;
+            if (inference_boundary_probe(&batch,dimension,middle)==XR_XIR_OK) high = middle;
+            else low = middle;
+        }
+        CHECK(high==low+1 && high>0);
+        CHECK(inference_boundary_probe(&batch,dimension,high)==XR_XIR_OK);
+        CHECK(inference_boundary_probe(&batch,dimension,high-1)==XR_XIR_BUDGET);
+    }
+}
+static void type_inference_relocated_ids_case(void) {
+    XrXirTypeNode original = {0}; original.kind = XR_XIR_TYPE_ARRAY; original.element = XR_XIR_I64;
+    XrXirTypes initial = {&original,1,NULL,NULL};
+    XrXirInferenceRequest request = {&initial,NULL,0,1,0};
+    XrXirBudget budget = xr_xir_default_budget(); uint64_t scratch = budget.scratch_bytes;
+    XrXirInferenceState *state = NULL;
+    CHECK(xr_xir_inference_begin(&request,&budget,&state)==XR_XIR_OK);
+    CHECK(xr_xir_inference_observe(state,&initial,(XrXirInferencePair){
+        (XrXirType)XR_XIR_TYPE_PARAMETER_BASE,member_case_type(0)})==XR_XIR_OK);
+    XrXirTypeNode relocated[2] = {original,original};
+    relocated[1].element = member_case_type(0);
+    XrXirTypes current = {relocated,2,NULL,NULL};
+    /* Only the new backing is authoritative after relocation. Poison the retired
+     * buffer to expose retained node pointers without invalidating current IDs. */
+    memset(&original,0,sizeof(original));
+    XrXirType output = XR_XIR_BOOL;
+    CHECK(xr_xir_inference_finalize(state,&current,&output,1)==XR_XIR_OK);
+    CHECK(output==member_case_type(0));
+    xr_xir_inference_dispose(state); CHECK(!live && budget.scratch_bytes==scratch);
+}
+static void type_inference_callable_mode_admission_case(void) {
+    XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirCallableParameter formal = {p0,0}, actual = {XR_XIR_I64,0};
+    XrXirTypeNode nodes[2] = {0};
+    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].parameter_count = 1; }
+    nodes[0].parameters = &formal; nodes[0].result = p0; nodes[0].parameter_span = 1;
+    nodes[1].parameters = &actual; nodes[1].result = XR_XIR_I64;
+    XrXirTypes types = {nodes,2,NULL,NULL}; XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_structure_verify(&types,&budget)==XR_XIR_OK);
+    XrXirInferencePair pair = {member_case_type(0),member_case_type(1)};
+    InferenceTestBatch batch = {&types,NULL,0,1,0,&pair,1};
+    XrXirType output = XR_XIR_BOOL; budget = xr_xir_default_budget();
+    CHECK(inference_test_run(&batch,&budget,&output,1)==XR_XIR_OK && output==XR_XIR_I64);
+    /* Current callable descriptors admit READ (0) only. A different mode fails
+     * before inference; bypassing admission would violate this internal API. */
+    actual.mode = 1; budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_structure_verify(&types,&budget)==XR_XIR_BAD_TYPE);
+    CHECK(!live);
+}
+
 static void type_inference_cases(void) {
     type_inference_scalar_cases(); type_inference_nested_cases();
     type_inference_callable_cases(); type_inference_nominal_cases();
     type_inference_symbol_and_work_cases(); type_inference_maximum_parameter_cases();
     type_inference_partial_cases();
+    type_inference_empty_prefix_cases(); type_inference_failed_finalize_cases();
+    type_inference_exact_capacity_cases(); type_inference_relocated_ids_case();
+    type_inference_callable_mode_admission_case();
 }
 #endif // XIR_TYPE_INFERENCE_CASES_H

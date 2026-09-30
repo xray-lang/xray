@@ -936,7 +936,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
     }
     if (status == XR_XIR_OK) {
         status = xr_xir_declarations_verify(module->declarations, module->types, module->function_count,
-            &context.remaining.metadata_bytes, &context.remaining.work);
+            &context.remaining);
     }
     if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining);
     if (status == XR_XIR_OK) status = xr_xir_generics_structure_verify(module, &context.remaining);

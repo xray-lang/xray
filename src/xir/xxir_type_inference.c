@@ -68,7 +68,7 @@ static void inference_walk_dispose(InferenceWalk *w) {
 }
 static XrXirStatus inference_match(XrXirInferenceState *s, const XrXirTypes *types,
     const XrXirType *arguments, uint32_t count, XrXirInferencePair pair) {
-    XrXirBudget match = *s->budget; match.metadata_bytes = match.scratch_bytes;
+    XrXirBudget match = *s->budget;
     XrXirStatus status = xr_xir_type_substitution_matches_between(types,types,
         arguments,count,pair.formal,pair.actual,&match);
     s->budget->work = match.work; return status;

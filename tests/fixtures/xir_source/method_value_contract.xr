@@ -1,0 +1,5 @@
+export interface BoundMapper<A> {
+    read()->i64
+    map<U:Sendable>(seed:A,value:U)->U
+    copy<U:Sendable>(value:Array<U>)->Array<U>
+}

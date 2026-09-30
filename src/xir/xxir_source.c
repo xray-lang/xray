@@ -116,7 +116,7 @@ typedef struct SourceContext {
     XrXirLiteral *literals;
     SourceName **names, *locals, *scope;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
-    uint32_t first_closure, next_closure;
+    uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
     SourceLoop *loop;
     bool returned, has_generics, query_ready;
@@ -707,6 +707,7 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
     arguments->substitution = substitution; return true;
 }
 #include "xxir_source_arguments.inc.c"
+#include "xxir_source_inference_result.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 #include "xxir_source_array.inc.c"
@@ -719,9 +720,11 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_panic.inc.c"
-#include "xxir_source_methods.inc.c"
+static bool finish_body(SourceContext *ctx);
 #include "xxir_source_requirement_calls.inc.c"
-static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
+#include "xxir_source_requirement_values.inc.c"
+#include "xxir_source_methods.inc.c"
+static bool source_call(SourceContext *ctx, AstNode *node, XrXirType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
         call->type_arg_count > 65536 || call->default_arg_count)
@@ -781,10 +784,10 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo methods require class support");
             if ((uint32_t)receiver.type >= XR_XIR_TYPE_PARAMETER_BASE &&
                 (uint32_t)receiver.type < XR_XIR_TYPE_PARAMETER_LIMIT)
-                return source_requirement_call(ctx,node,receiver,value);
+                return source_requirement_call(ctx,node,receiver,result_context,value);
             if (xr_xir_type_is_nominal(&ctx->types, receiver.type)) {
                 SourceName *member_method = source_method_find(ctx, receiver.type, member->name);
-                if (member_method) return source_method_call(ctx, node, receiver, member_method, value);
+                if (member_method) return source_method_call(ctx, node, receiver, member_method, result_context, value);
                 if (!source_struct_get_value(ctx, callee, receiver, &indirect) ||
                     !source_query_expression(ctx, callee, indirect.type)) return false;
                 indirect_ready = true;
@@ -804,7 +807,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             source_constructor_call(ctx, node, type, binding, target, value);
     }
     if (target && target->kind == SOURCE_FUNCTION) {
-        SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL};
+        SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL,result_context};
         SourceDirectArguments prepared = {0};
         if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
         XrXirInstruction call_op = {XR_XIR_CALL,prepared.result,{0},{0},target->index,{0}};
@@ -1118,7 +1121,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
     case AST_TERNARY: return source_conditional(ctx, node, expected, value);
     case AST_MATCH_EXPR: return source_match(ctx, node, expected, true, value);
     case AST_GROUPING: return expression_in(ctx, node->as.grouping, expected, value);
-    case AST_CALL_EXPR: return source_call(ctx, node, value);
+    case AST_CALL_EXPR: return source_call(ctx, node, expected, value);
     case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, expected, value);
     case AST_FUNCTION_EXPR: return source_closure(ctx, node, expected, value);
     case AST_STRUCT_LITERAL: return source_struct_literal(ctx, node, value);
@@ -1524,7 +1527,7 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
     }
     return true;
 }
-typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults; } SourceClosureCount;
+typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, members; } SourceClosureCount;
 static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
@@ -1532,6 +1535,11 @@ static bool count_closures(AstNode *node, void *pointer) {
     if (scan->depth == 128 || ((node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT) && scan->count == scan->ctx->budget.functions))
         return source_fail(scan->ctx,node,XR_XIR_BUDGET,"closure declaration budget exhausted");
     if (node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT) ++scan->count;
+    if (node->type == AST_MEMBER_ACCESS) {
+        if (scan->members == UINT32_MAX)
+            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"member helper capacity exhausted");
+        ++scan->members;
+    }
     XrParamNode **parameters = node->type == AST_FUNCTION_DECL ? node->as.function_decl.params :
         node->type == AST_METHOD_DECL ? node->as.method_decl.params : NULL;
     int count = node->type == AST_FUNCTION_DECL ? node->as.function_decl.param_count :
@@ -1551,7 +1559,7 @@ static bool count_closures(AstNode *node, void *pointer) {
 }
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + 1, slots = 0, nominals = 0, interfaces = 0;
-    SourceClosureCount closures = {ctx,0,0,0};
+    SourceClosureCount closures = {ctx,0,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
@@ -1596,6 +1604,11 @@ static bool collect_declarations(SourceContext *ctx) {
     if (nominals > UINT32_MAX - functions)
         return source_fail(ctx, NULL, XR_XIR_BUDGET, "default constructor capacity exhausted");
     uint32_t capacity = functions + nominals;
+    if (closures.members > UINT32_MAX - capacity)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"member helper capacity exhausted");
+    capacity += closures.members;
+    if (capacity > ctx->budget.functions) capacity = ctx->budget.functions;
+    ctx->function_capacity = capacity;
     ctx->functions = source_alloc(ctx, capacity, sizeof(*ctx->functions));
     ctx->bodies = source_alloc(ctx, capacity, sizeof(*ctx->bodies));
     ctx->identities = source_alloc(ctx, capacity, sizeof(*ctx->identities));
@@ -1659,6 +1672,7 @@ static bool collect_declarations(SourceContext *ctx) {
     }
     if (!source_nominal_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || !source_argument_functions(ctx, &function) || function != ctx->first_closure)
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "field initializer function inventory mismatch");
+    ctx->closure_limit = ctx->function_count - 1;
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         for (SourceName *p = ctx->names[m]; p; p = p->next)
@@ -1944,7 +1958,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected
     }
     SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0};
     if (!capture_scan(node, &scan)) return false;
-    if (scan.count > 65536 - (uint32_t) decl->param_count || ctx->next_closure >= ctx->function_count - 1)
+    if (scan.count > 65536 - (uint32_t) decl->param_count || ctx->next_closure >= ctx->closure_limit)
         return source_fail(ctx, node, XR_XIR_BUDGET, "closure parameter or declaration budget exhausted");
     uint32_t outer = ctx->function, index = ctx->next_closure++;
     SourceFunction *body = &ctx->bodies[index];
@@ -2063,7 +2077,7 @@ static bool build_bodies(SourceContext *ctx) {
         }
         if (!statement(ctx, decl->body, false) || !finish_body(ctx)) return false;
     }
-    if (ctx->next_closure != ctx->function_count - 1)
+    if (ctx->next_closure != ctx->closure_limit)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"closure declaration was not checked");
     ctx->function = ctx->function_count - 1; ctx->module = (uint32_t) ctx->graph->entry_index;
     ctx->bodies[ctx->function].module = ctx->module;

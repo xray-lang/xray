@@ -959,3 +959,59 @@ export fn inferenceExplicitArray()->Array<i64> {
     const mapper=InferenceAdapter<string,i64>{label:"adapter",seed:0}
     return explicitCopy<i64,InferenceAdapter<string,i64>,bool,i64>(mapper,true,[41])
 }
+
+import { bindRequirementRead, bindMap, bindCopy, boundCapturesCount } from "./method_value_reader"
+import { BoundAdapter, boundCallsCount } from "./method_value_value"
+export fn methodValueCount()->i64 {
+    if (boundCallsCount()==2*boundCapturesCount()){return boundCapturesCount()}
+    return -1
+}
+export fn methodValueReadNumber()->i64 {
+    const saved=bindRequirementRead<i64,BoundAdapter<string,i64>,bool>(BoundAdapter<string,i64>{label:"adapter",seed:0,value:41},true)
+    if (saved()!=41){return 0}
+    return saved()
+}
+export fn methodValueMapText()->string {
+    const saved=bindMap<i64,BoundAdapter<string,i64>,bool,string>(BoundAdapter<string,i64>{label:"adapter",seed:0,value:41},true)
+    const ignored=saved(0,"first")
+    return saved(0,"map"+"ped")
+}
+export fn methodValueCopyArray()->Array<i64> {
+    const saved=bindCopy<i64,BoundAdapter<string,i64>,bool,i64>(BoundAdapter<string,i64>{label:"adapter",seed:0,value:41},true)
+    const ignored=saved([0])
+    return saved([41])
+}
+export fn methodValueSnapshotNumber()->i64 {
+    var mapper=BoundAdapter<string,i64>{label:"adapter",seed:0,value:41}
+    const saved=bindRequirementRead<i64,BoundAdapter<string,i64>,bool>(mapper,true)
+    mapper=BoundAdapter<string,i64>{label:"changed",seed:0,value:99}
+    if (saved()!=41){return 0}
+    return saved()
+}
+export fn methodValueSnapshotText()->string {
+    var mapper=BoundAdapter<string,i64>{label:"adapter",seed:0,value:41}
+    const saved=bindMap<i64,BoundAdapter<string,i64>,bool,string>(mapper,true)
+    mapper=BoundAdapter<string,i64>{label:"changed",seed:0,value:99}
+    const ignored=saved(0,"first")
+    return saved(0,"mapped")
+}
+export fn methodValueSnapshotArray()->Array<i64> {
+    var mapper=BoundAdapter<string,i64>{label:"adapter",seed:0,value:41}
+    const saved=bindCopy<i64,BoundAdapter<string,i64>,bool,i64>(mapper,true)
+    mapper=BoundAdapter<string,i64>{label:"changed",seed:0,value:99}
+    const ignored=saved([0])
+    return saved([41])
+}
+
+import { lateForward, lateReadText } from "./late_result_reader"
+import { LateAdapter, lateMake, lateCallsCount } from "./late_result_value"
+export fn lateResultCount()->i64{return lateCallsCount()}
+export fn lateResultNumber()->i64{
+    const empty:Array<i64>=lateForward<i64,LateAdapter<string,i64>,bool>(LateAdapter<string,i64>{label:"late",seed:0},true)
+    return 41+len(empty)
+}
+export fn lateResultText()->string{return lateReadText()}
+export fn lateResultArray()->Array<string>{
+    const empty:Array<string>=lateMake(41)
+    return empty
+}

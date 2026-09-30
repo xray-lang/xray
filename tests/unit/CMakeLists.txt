@@ -375,6 +375,12 @@ add_custom_command(OUTPUT ${XIR_CHECKED_GENERATED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/inference_contract.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/inference_reader.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/inference_value.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_value_contract.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_value_reader.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/method_value_value.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/late_result_contract.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/late_result_value.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/late_result_reader.xr
         ${CMAKE_SOURCE_DIR}/stdlib/io/output.xr
     VERBATIM)
 add_executable(test_xir_packet_vm xir/test_xir_packet_vm.c ${XIR_CHECKED_GENERATED})

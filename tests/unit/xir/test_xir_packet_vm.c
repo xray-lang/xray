@@ -19,6 +19,10 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
+#include "xir_source_method_value_execution.h"
+#include "xir_source_late_result_execution.h"
+#include "xir_source_method_value_selection.h"
+#include "xir_source_late_result_selection.h"
 #include "xir_source_inference_execution.h"
 #include "xir_source_inference_selection.h"
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
@@ -41,6 +45,8 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
+    SourceMethodValueEntries method_value_entries = source_method_value_select(module);
+    SourceLateResultEntries late_result_entries = source_late_result_select(module);
     SourceInferenceEntries inference_entries = source_inference_select(module);
     uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX, numeric_pause = UINT32_MAX, bound_result = UINT32_MAX, witness_result = UINT32_MAX, enum_witness_result = UINT32_MAX, enum_generic_witness_result = UINT32_MAX, generic_method_number = UINT32_MAX, generic_method_text = UINT32_MAX, generic_method_array = UINT32_MAX;
     for (uint32_t i = 0; i < module->function_count; ++i) {
@@ -89,6 +95,16 @@ int main(int argc, char **argv) {
             inference_entries.values[0],inference_entries.values[1],inference_entries.values[2],
             inference_entries.values[3],inference_entries.values[4],inference_entries.values[5],
             inference_entries.count) > 0);
+        CHECK(fprintf(file,
+            "\nconst uint32_t fixture_source_method_value_values[6] = {%uu,%uu,%uu,%uu,%uu,%uu};\n"
+            "const uint32_t fixture_source_method_value_count = %uu;\n",
+            method_value_entries.values[0],method_value_entries.values[1],method_value_entries.values[2],
+            method_value_entries.values[3],method_value_entries.values[4],method_value_entries.values[5],
+            method_value_entries.count) > 0);
+        CHECK(fprintf(file,
+            "\nconst uint32_t fixture_source_late_result_values[3] = {%uu,%uu,%uu};\n"
+            "const uint32_t fixture_source_late_result_count = %uu;\n",
+            late_result_entries.values[0],late_result_entries.values[1],late_result_entries.values[2],late_result_entries.count) > 0);
         CHECK(fclose(file) == 0);
     }
     xr_xir_c_source_free(&source);
@@ -100,7 +116,15 @@ int main(int argc, char **argv) {
     XrXirValue inference_retained[2][6] = {{{0}}};
     source_inference_pair(program,inference_entries,inference_retained);
     source_inference_runtime_failures(program,inference_entries);
+    XrXirValue method_value_retained[2][6] = {{{0}}};
+    source_method_value_pair(program,method_value_entries,method_value_retained);
+    source_method_value_runtime_failures(program,method_value_entries);
+    XrXirValue late_result_retained[2][3] = {{{0}}};
+    source_late_result_pair(program,late_result_entries,late_result_retained);
+    source_late_result_runtime_failures(program,late_result_entries);
     xr_xir_program_drop(program);
+    source_late_result_retained_drop(late_result_retained);
+    source_method_value_retained_drop(method_value_retained);
     source_inference_retained_drop(inference_retained);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Source-free Checked consumer matched independent VM expectations and emitted native C");

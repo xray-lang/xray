@@ -1,0 +1,7 @@
+import { LateFactory } from "./late_result_contract"
+import { lateIdentity } from "./late_result_value"
+export fn lateForward<A,T:LateFactory<A>,K>(receiver:T,unused:K)->Array<A>{return receiver.empty()}
+export fn lateReadText()->string{
+    const saved:fn(string)->string=lateIdentity()
+    return saved("map"+"ped")
+}

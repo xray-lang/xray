@@ -351,7 +351,7 @@ static void constraint_proof_scalar_slot_sharing(void) {
         slot.type = type == 0 ? XR_XIR_ERROR : type == 1 ? XR_XIR_PANIC_INFO : XR_XIR_STRING;
         slot.module = owner;
         XrXirBudget budget = xr_xir_default_budget();
-        CHECK(xr_xir_declarations_verify(&declarations,NULL,3,&budget.metadata_bytes,&budget.work)==XR_XIR_OK);
+        CHECK(xr_xir_declarations_verify(&declarations,NULL,3,&budget)==XR_XIR_OK);
         for (uint32_t f = 0; f < 3; ++f)
             CHECK(xr_xir_type_expression_shape(NULL,functions[f].result,0,&budget)==XR_XIR_OK);
         uint64_t scratch = budget.scratch_bytes;

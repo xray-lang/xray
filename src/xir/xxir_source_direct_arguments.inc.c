@@ -15,6 +15,7 @@ typedef struct SourceDirectRequest {
     uint32_t function;
     SourceSubstitution prefix;
     const SourceValue *receiver;
+    XrXirType expected_result;
 } SourceDirectRequest;
 typedef struct SourceDirectArguments {
     SourceSubstitution substitution;
@@ -91,6 +92,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
         }
     }
     if (inferred) {
+        if (!source_inference_result(ctx,node,state,function.result,request->expected_result)) goto done;
         XrXirStatus status=xr_xir_inference_finalize(state,&ctx->types,types,count);
         if (status != XR_XIR_OK) { source_fail(ctx,node,status,"cannot infer all declaration type arguments; supply an explicit list"); goto done; }
         xr_xir_inference_dispose(state); state=NULL;

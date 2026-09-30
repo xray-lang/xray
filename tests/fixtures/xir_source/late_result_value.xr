@@ -1,0 +1,10 @@
+import { LateFactory } from "./late_result_contract"
+const lateCalls=Atomic(0)
+export fn lateCallsCount()->i64{return lateCalls.load()}
+export struct LateAdapter<Label,Seed> implements LateFactory<Seed>{
+    label:Label
+    seed:Seed
+    empty<V>()->Array<V>{lateCalls.fetchAdd(1);return []}
+}
+export fn lateMake<T,U>(seed:T)->Array<U>{lateCalls.fetchAdd(1);return []}
+export fn lateIdentity<T>()->fn(T)->T{lateCalls.fetchAdd(1);return fn(value:T)->T{return value}}

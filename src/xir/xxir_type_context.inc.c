@@ -55,10 +55,10 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) 
     const XrXirTypeNode *root = xr_xir_type_node(types, type);
     if (!root) return type_context_edge(&c, type, 0);
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
-    if (count > remaining->metadata_bytes || count > remaining->work) return XR_XIR_BUDGET;
-    remaining->metadata_bytes -= count; remaining->work -= count;
+    if (count > remaining->scratch_bytes || count > remaining->work) return XR_XIR_BUDGET;
+    remaining->scratch_bytes -= count; remaining->work -= count;
     c.pending = xr_calloc(count, 1);
-    if (!c.pending) return XR_XIR_OUT_OF_MEMORY;
+    if (!c.pending) { remaining->scratch_bytes += count; return XR_XIR_OUT_OF_MEMORY; }
     XrXirStatus status = type_context_edge(&c, type, count);
     /* Descending expression IDs visit each reachable node once without recursion. */
     for (uint32_t at = count; at && status == XR_XIR_OK; --at) {
@@ -75,7 +75,7 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) 
                 status = type_context_edge(&c, node->parameters[p].type, i);
         } else status = XR_XIR_BAD_TYPE;
     }
-    xr_free(c.pending); return status;
+    xr_free(c.pending); remaining->scratch_bytes += count; return status;
 }
 XR_FUNC XrXirStatus xr_xir_type_expression_shape(const XrXirTypes *types, XrXirType type,
     uint32_t parameter_count, XrXirBudget *remaining) {

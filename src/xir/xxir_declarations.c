@@ -92,12 +92,14 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
     return XR_XIR_OK;
 }
 XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTypes *types, uint32_t functions,
-                                      uint64_t *bytes, uint64_t *work) {
+                                      XrXirBudget *budget) {
     if (!d) return XR_XIR_OK;
+    if (!budget) return XR_XIR_BAD_STRUCTURE;
+    uint64_t *bytes = &budget->metadata_bytes, *work = &budget->work;
     uint64_t fixed = sizeof(*d) + (uint64_t) d->module_count * sizeof(*d->modules) +
         (uint64_t) functions * sizeof(*d->functions) + (uint64_t) d->slot_count * sizeof(*d->slots) +
         (uint64_t) d->literal_count * sizeof(*d->literals);
-    if (!bytes || !work || fixed > SIZE_MAX || !declaration_spend(bytes, fixed) ||
+    if (fixed > SIZE_MAX || !declaration_spend(bytes, fixed) ||
         !declaration_spend(work, (uint64_t) d->module_count + functions + d->slot_count + d->literal_count))
         return XR_XIR_BUDGET;
     if (!d->module_count || d->module_count > functions || !d->modules || !d->functions ||
@@ -146,9 +148,7 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
             return XR_XIR_BAD_TYPE;
         if (xr_xir_type_span(types, slot->type)) return XR_XIR_BAD_TYPE;
         XrXirModule scope = {XR_XIR_BUILT, NULL, functions, d, NULL, types, NULL};
-        XrXirBudget access_budget = {0}; access_budget.metadata_bytes = *bytes; access_budget.work = *work;
-        status = xr_xir_type_access(&scope, d->modules[slot->module].initializer, slot->type, &access_budget);
-        *bytes = access_budget.metadata_bytes; *work = access_budget.work;
+        status = xr_xir_type_access(&scope, d->modules[slot->module].initializer, slot->type, budget);
         if (status != XR_XIR_OK) return status;
         if (slot->mutable && slot->type == XR_XIR_ATOMIC_I64) return XR_XIR_BAD_STRUCTURE;
     }
@@ -160,11 +160,14 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
             xr_utf8_core_scan_strict((const uint8_t *) literal->bytes, literal->length).error != XR_UTF8_OK)
             return XR_XIR_BAD_STRUCTURE;
     }
-    if (!declaration_spend(bytes, (uint64_t) d->module_count * 5)) return XR_XIR_BUDGET;
+    /* The temporary order and the traversal's done bitmap overlap. */
+    uint64_t scratch = (uint64_t)d->module_count * (sizeof(uint32_t) + 1);
+    if (scratch > SIZE_MAX || scratch > budget->scratch_bytes) return XR_XIR_BUDGET;
+    budget->scratch_bytes -= scratch;
     uint32_t *order = xr_calloc(d->module_count, sizeof(*order));
-    if (!order) return XR_XIR_OUT_OF_MEMORY;
+    if (!order) { budget->scratch_bytes += scratch; return XR_XIR_OUT_OF_MEMORY; }
     status = xr_xir_declarations_order(d, order, work);
-    xr_free(order);
+    xr_free(order); budget->scratch_bytes += scratch;
     return status;
 }
 static void *declaration_copy(const void *input, size_t bytes) {

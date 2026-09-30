@@ -43,9 +43,10 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
         identities[1].exported = 0;
         CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == (mode ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !program);
         if (!mode) {
-            uint64_t bytes = 65536, work = 100000;
+            XrXirBudget budget = xr_xir_default_budget();
+            budget.metadata_bytes = 65536; budget.work = 100000;
             CHECK(xr_xir_declarations_verify(&declarations, &types, 9,
-                &bytes, &work) == XR_XIR_BAD_TYPE);
+                &budget) == XR_XIR_BAD_TYPE);
         }
         identities[1].exported = 1;
     }

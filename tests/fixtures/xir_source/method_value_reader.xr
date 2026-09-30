@@ -1,0 +1,13 @@
+import { BoundMapper } from "./method_value_contract"
+const boundCaptures=Atomic(0)
+fn stamp<T>(value:T)->T{boundCaptures.fetchAdd(1);return value}
+export fn boundCapturesCount()->i64{return boundCaptures.load()}
+export fn bindRequirementRead<A,T:BoundMapper<A>,K>(mapper:T,unused:K)->fn()->i64 {
+    return stamp<T>(mapper).read
+}
+export fn bindMap<A,T:BoundMapper<A>,K,U:Sendable>(mapper:T,unused:K)->fn(A,U)->U {
+    return stamp<T>(mapper).map<U>
+}
+export fn bindCopy<A,T:BoundMapper<A>,K,U:Sendable>(mapper:T,unused:K)->fn(Array<U>)->Array<U> {
+    return stamp<T>(mapper).copy<U>
+}

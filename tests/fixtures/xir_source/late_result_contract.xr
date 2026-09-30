@@ -1,0 +1,1 @@
+export interface LateFactory<A>{empty<U>()->Array<U>}

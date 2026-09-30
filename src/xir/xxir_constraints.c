@@ -100,7 +100,7 @@ XrXirStatus xr_xir_constraint_records_match(const XrXirTypes *from_types,
     if (bytes > SIZE_MAX || bytes > budget->scratch_bytes || parameter_count > budget->work) return XR_XIR_BUDGET;
     budget->scratch_bytes -= bytes; budget->work -= parameter_count;
     XrXirType *parameters = parameter_count ? xr_malloc((size_t)bytes) : NULL;
-    if (parameter_count && !parameters) return XR_XIR_OUT_OF_MEMORY;
+    if (parameter_count && !parameters) { budget->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
     for (uint32_t p = 0; p < parameter_count; ++p) parameters[p] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + p);
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t i = 0; i < from.interface_count && status == XR_XIR_OK; ++i) {
@@ -112,5 +112,5 @@ XrXirStatus xr_xir_constraint_records_match(const XrXirTypes *from_types,
             status = xr_xir_type_substitution_matches_between(from_types,to_types,parameters,
                 parameter_count,a->arguments[p],b->arguments[p],budget);
     }
-    xr_free(parameters); return status;
+    xr_free(parameters); budget->scratch_bytes += bytes; return status;
 }

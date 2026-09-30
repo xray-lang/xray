@@ -19,7 +19,8 @@ static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
     if (xr_xir_type_is_cell(spec->types, type)) type = xr_xir_cell_element(spec->types, type);
     return type == XR_XIR_BOOL || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
 }
-static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, uint64_t *work) {
+static XrXirStatus program_shape(const XrXirProgramSpec *spec, const XrXirBudget *phase,
+    uint64_t *bytes, uint64_t *work) {
     if (!spec || !spec->entries || !spec->entry_count || spec->entry_count > 65535 ||
         !spec->declarations || (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
     if (spec->abi_version != XR_XIR_PROGRAM_ABI_VERSION ||
@@ -31,7 +32,7 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
         (uint64_t) spec->declarations->module_count * (sizeof(uint32_t) * 2 + 1);
     if (fixed > *bytes || fixed > SIZE_MAX) return XR_XIR_BUDGET;
     *bytes -= fixed;
-    XrXirBudget signature_budget = {0};
+    XrXirBudget signature_budget = *phase;
     signature_budget.metadata_bytes = *bytes; signature_budget.work = *work;
     signature_budget.parameters = 65536;
     XrXirStatus status = xr_xir_types_structure_verify(spec->types, &signature_budget);
@@ -41,7 +42,9 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
     /* The runtime arena charges its actual header and owned descriptors against
      * the remaining metadata budget after the other program allocations. */
     *work = signature_budget.work;
-    status = xr_xir_declarations_verify(spec->declarations, spec->types, spec->entry_count, bytes, work);
+    signature_budget.metadata_bytes = *bytes; signature_budget.work = *work;
+    status = xr_xir_declarations_verify(spec->declarations, spec->types, spec->entry_count, &signature_budget);
+    *bytes = signature_budget.metadata_bytes; *work = signature_budget.work;
     if (status != XR_XIR_OK) return status;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
         const XrXirSlot *slot = &spec->declarations->slots[s];
@@ -116,11 +119,11 @@ XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget
     *output = NULL;
     uint64_t byte_limit = limits.metadata_bytes, proof_limit = byte_limit;
     uint64_t work = limits.work;
-    XrXirStatus status = program_shape(spec, &byte_limit, &work);
-    if (status != XR_XIR_OK) return status;
     XrXirBudget phase = xr_xir_default_budget();
     phase.metadata_bytes = proof_limit / 7;
     phase.scratch_bytes = phase.metadata_bytes;
+    XrXirStatus status = program_shape(spec, &phase, &byte_limit, &work);
+    if (status != XR_XIR_OK) return status;
     phase.work = work / 16;
     work -= phase.work * 15;
     status = xr_xir_program_proof_verify(spec, &spec->proof, &phase, &phase, proof_limit, &work);

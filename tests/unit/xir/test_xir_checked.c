@@ -308,8 +308,13 @@ static void generic_callable_depth(void) {
     signatures[129].result = XR_XIR_I64;
     CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)384,(XrXirType)513,&budget) == XR_XIR_BAD_TYPE);
     signatures[129].result = XR_XIR_STRING;
+    uint64_t scratch = budget.scratch_bytes;
     budget.metadata_bytes = 1;
+    CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)384,(XrXirType)513,&budget) == XR_XIR_OK);
+    CHECK(budget.metadata_bytes == 1 && budget.scratch_bytes == scratch);
+    budget.scratch_bytes = 1;
     CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)384,(XrXirType)513,&budget) == XR_XIR_BUDGET);
+    CHECK(budget.metadata_bytes == 1 && budget.scratch_bytes == 1);
     budget = xr_xir_default_budget();
     budget.work = 1;
     CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)256,(XrXirType)385,&budget) == XR_XIR_BUDGET);

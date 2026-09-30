@@ -23,7 +23,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
         scan.count = scan.count - 1 + fields;
         break;
     }
-    if (scan.count > 65536 || ctx->next_closure >= ctx->function_count - 1)
+    if (scan.count > 65536 || ctx->next_closure >= ctx->closure_limit)
         return source_fail(ctx, node, XR_XIR_BUDGET, "cleanup parameter or declaration budget exhausted");
     uint32_t index = ctx->next_closure++;
     SourceFunction *body = &ctx->bodies[index];

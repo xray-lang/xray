@@ -93,10 +93,9 @@ static bool member_equal(MemberContext *c, XrXirType a, XrXirType b) {
     if (a == b) return true;
     XrXirTypes from = c->types;
     XrXirBudget match = c->remaining;
-    match.metadata_bytes = match.scratch_bytes;
     XrXirStatus status = xr_xir_type_substitution_matches_between(&from, &c->types,
         c->root_arguments, c->root_count, a, b, &match);
-    c->remaining.work = match.work; c->remaining.scratch_bytes = match.metadata_bytes;
+    c->remaining.work = match.work;
     if (status != XR_XIR_OK && status != XR_XIR_BAD_TYPE) c->status = status;
     return status == XR_XIR_OK;
 }
@@ -233,10 +232,10 @@ static bool member_condition_contains(MemberContext *c, XrXirConstraint facts, X
             if (a->declaration != wanted->declaration || a->count != wanted->argument_count) continue;
             bool same = true;
             for (uint32_t p = 0; same && p < a->count; ++p) {
-                XrXirBudget match = parents.remaining; match.metadata_bytes = match.scratch_bytes;
+                XrXirBudget match = parents.remaining;
                 XrXirStatus status = xr_xir_type_substitution_matches_between(&parents.types,&c->types,
                     c->root_arguments,c->root_count,a->arguments[p],wanted->arguments[p],&match);
-                parents.remaining.work = match.work; parents.remaining.scratch_bytes = match.metadata_bytes;
+                parents.remaining.work = match.work;
                 if (status != XR_XIR_OK && status != XR_XIR_BAD_TYPE) parents.status = status;
                 same = status == XR_XIR_OK;
             }
