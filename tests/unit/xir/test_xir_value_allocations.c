@@ -415,6 +415,7 @@ static void nominal_arena_allocation(void) {
 #include "xir_struct_value_cases.h"
 #include "xir_class_value_cases.h"
 #include "xir_class_array_value_cases.h"
+#include "xir_class_inline_value_cases.h"
 static void struct_allocation_failures(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = struct_value_arena(domain);
@@ -710,6 +711,7 @@ int main(void) {
     struct_allocation_failures();
     struct_value_cases(); CHECK(!live);
     class_array_field_value_cases();
+    class_inline_value_cases();
     class_value_cases(); class_value_allocation_failures(); class_array_allocation_failures(); CHECK(!live);
     nominal_arena_allocation();
     fail_at = SIZE_MAX; calls = 0; fail_sequence();

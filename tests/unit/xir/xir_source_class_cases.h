@@ -15,13 +15,18 @@
 #include "xir/xxir_class.h"
 static void source_class_definition_cases(XrXirSourceRequest *request) {
     static const struct { const char *source; unsigned status; const char *message; } cases[]={
+    {"struct R{n:i64;text:string}\nfinal class Container<T>{items:Array<T> constructor(v:Array<T>){this.items=v}}\nfn unused(c:Container<R>){}",3,"class field carrier is not implemented"},
+    {"struct R{n:i64;text:string;tail:i64}\nfinal class C{value:R constructor(value:R){this.value=value} get()->R{return this.value}}",0,""},
+    {"enum E{None,Full{value:i64,text:string}}\nfinal class C{value:E constructor(value:E){this.value=value} get()->E{return this.value}}",0,""},
+    {"struct R{callback:fn()->i64}\nfinal class C{value:R constructor(value:R){this.value=value}}",3,"class field carrier is not implemented"},
+    {"final class Inner{constructor(){}}\nstruct R{value:Inner}\nfinal class C{value:R constructor(value:R){this.value=value}}",3,"class field carrier is not implemented"},
     {"final class Box<T>{value:T constructor(v:T){this.value=v} get()->T{return this.value}}",0,""},
     {"final class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused<T>(v:T)->Box<T>{return Box<T>(v)}",0,""},
     {"final class Container<T>{items:Array<T> constructor(v:Array<T>){this.items=v} get()->Array<T>{return this.items}}",0,""},
     {"final class Box<T>{value:T constructor(v:T){this.value=v} bad()->i64{return this.value.missing()}}",3,"receiver has no declared interface requirements"},
     {"final class Box<T>{private value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<i64>)->i64{return b.value}",3,"field access is not permitted"},
     {"final class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<Array<bool>>){}",3,"class field carrier is not implemented"},
-    {"struct Pair{value:i64}\nfinal class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<Pair>){}",3,"class field carrier is not implemented"},
+    {"struct Pair{value:i64}\nfinal class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<Pair>){}",0,""},
     {"final class Box<T>{const value:T constructor(v:T){this.value=v;this.value=v}}",4,"write may overwrite already initialized const storage"},
     {"final class Box<T>{value:T constructor(v:T){}}",4,"read requires storage initialized on every incoming path"},
     {"final class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<Slice<u8>>){}",3,"nominal type requires its exact explicit arguments"},

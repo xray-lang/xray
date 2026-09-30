@@ -163,11 +163,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         const XrXirStorageLayout *layout=class_body_layout(object);
         const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
         if (!layout || !node || layout->field_count != node->nominal.field_count) return false;
-        for (uint32_t i=0;i<layout->field_count;++i) {
-            if (!xr_xir_type_is_class_field(xr_xir_type_arena_types(object->arena), node->nominal.fields[i])) return false;
-            XrXirValue field=class_field_value(object,i);
-            if (!value_header_valid(&field)) return false;
-        }
+        if (!class_allocation_valid(object)) return false;
         return true;
     }
     if (object->kind == XR_XIR_TYPE_NOMINAL) {
@@ -379,6 +375,57 @@ static bool array_owned_elements(const XirArray *array) {
         return array_release_depth(array->object.arena, array->element) != 0;
     return owned_carrier_type(array->element);
 }
+typedef struct ClassAllocation {
+    size_t bytes, release_offset;
+    uint32_t release_capacity;
+} ClassAllocation;
+static XrXirValueStatus class_allocation_layout(XrXirValueAdmission *admission,
+    XrXirType type, ClassAllocation *output) {
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(admission->arena),type);
+    const XrXirStorageLayout *layout=xr_xir_type_arena_storage(admission->arena,type);
+    if (!node || !layout || node->nominal.field_count > admission->work) return XR_XIR_VALUE_LIMIT;
+    admission->work-=node->nominal.field_count;
+    uint32_t depth=0;
+    for (uint32_t f=0;f<node->nominal.field_count;++f) {
+        uint32_t current=array_release_depth(admission->arena,node->nominal.fields[f]);
+        if (current>depth) depth=current;
+    }
+    uint64_t offset=sizeof(XirClassObject)+(uint64_t)layout->body.size;
+    if (depth) {
+        uint64_t alignment=_Alignof(StorageFrame);
+        offset+=(alignment-offset%alignment)%alignment;
+    }
+    uint64_t bytes=offset+(uint64_t)depth*sizeof(StorageFrame);
+    if (bytes>SIZE_MAX) return XR_XIR_VALUE_LIMIT;
+    *output=(ClassAllocation){(size_t)bytes,(size_t)offset,depth};
+    return XR_XIR_VALUE_OK;
+}
+static bool class_allocation_valid(const XirObject *object) {
+    const XirClassObject *instance=(const XirClassObject *)object;
+    const XrXirStorageLayout *layout=class_body_layout(object);
+    uint64_t body_end=sizeof(*instance)+(uint64_t)layout->body.size;
+    uint64_t frames=(uint64_t)instance->release_capacity*sizeof(StorageFrame);
+    return body_end<=instance->allocation_bytes && instance->release_offset>=body_end &&
+        instance->release_offset<=instance->allocation_bytes &&
+        frames<=instance->allocation_bytes-instance->release_offset &&
+        (!frames || !(instance->release_offset%_Alignof(StorageFrame)));
+}
+static void class_release_fields(XirObject *object, uint32_t count, XirObject **pending) {
+    XirClassObject *instance=(XirClassObject *)object;
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
+    const XrXirStorageLayout *layout=class_body_layout(object);
+    StorageFrame *frames=instance->release_capacity ?
+        (StorageFrame *)((unsigned char *)object+instance->release_offset) : NULL;
+    const unsigned char *body=(const unsigned char *)(instance+1);
+    XR_CHECK(layout && count<=node->nominal.field_count,"class release retains exact initialized fields");
+    while(count) {
+        uint32_t f=--count;StorageCursor cursor={0};
+        StorageSpan span={node->nominal.fields[f],body+layout->field_offsets[f]};
+        XR_CHECK(storage_cursor_init(object->arena,span,frames,instance->release_capacity,true,&cursor)==XR_XIR_VALUE_OK,
+            "class destruction uses its retained release workspace");
+        storage_queue_release(&cursor,UINT64_MAX,pending);
+    }
+}
 static void release_pending(XirObject *pending) {
     while (pending) {
         XirObject *object = pending; pending = object->release_next;
@@ -403,10 +450,8 @@ static void release_pending(XirObject *pending) {
         } else if (object->kind == XIR_OBJECT_CLASS) {
             const XrXirStorageLayout *layout=class_body_layout(object);
             XR_CHECK(layout, "class release requires its retained body layout");
-            for (uint32_t i=layout->field_count;i;--i) {
-                XrXirValue field=class_field_value(object,i-1);queue_release(&field,&pending);
-            }
-            xr_xir_domain_deallocate(domain,object,sizeof(XirClassObject)+(size_t)layout->body.size);
+            class_release_fields(object,layout->field_count,&pending);
+            xr_xir_domain_deallocate(domain,object,((XirClassObject *)object)->allocation_bytes);
         } else if (object->kind == XR_XIR_TYPE_NOMINAL) {
             XirNominalValue *record = (XirNominalValue *) object;
             for (uint32_t i = record->count; i; --i) queue_release(&record->fields[i - 1], &pending);
@@ -738,6 +783,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_write(const XrXirValue *cell, const XrXirVa
 
 #include "xxir_storage_pack.inc.c"
 #include "xxir_storage_unpack.inc.c"
+#include "xxir_storage_prepare.inc.c"
 #include "xxir_array_prepare.inc.c"
 static XrXirValue array_value(XirArray *array) {
     XrXirValue value = {(uint32_t) array->object.type, 0, 0};
@@ -886,20 +932,20 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
     if (append && array->length == (uint64_t) INT64_MAX) return XR_XIR_VALUE_LIMIT;
     size_t length = array->length + (append ? 1u : 0u), capacity = 0;
     if (!array_capacity(length, array->stride, &capacity)) return XR_XIR_VALUE_LIMIT;
-    ArrayPrepared prepared = {0};
-    status = array_prepared_begin(&prepared, element, array->stride, admission);
+    StoragePrepared prepared = {0};
+    status = storage_prepared_begin(&prepared, element, array->stride, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     bool unique = atomic_load_explicit(&array->object.references, memory_order_acquire) == 1;
     bool grow = length > array->capacity;
     if (!unique || grow) {
         if (admission->work < array->length) {
-            array_prepared_end(&prepared); return XR_XIR_VALUE_LIMIT;
+            storage_prepared_end(&prepared); return XR_XIR_VALUE_LIMIT;
         }
         admission->work -= array->length;
     }
     if (unique && (!grow || array->object.domain == admission->domain)) {
         if (grow) status = array_grow(array, capacity);
-        if (status != XR_XIR_VALUE_OK) { array_prepared_end(&prepared); return status; }
+        if (status != XR_XIR_VALUE_OK) { storage_prepared_end(&prepared); return status; }
         size_t offset = append ? array->length : (size_t) index;
         XirObject *pending = NULL;
         if (!append) {
@@ -910,12 +956,12 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
             storage_queue_release(&cursor, UINT64_MAX, &pending);
         }
         array_prepared_transfer(&prepared, array, offset); array->length = length;
-        release_pending(pending); array_prepared_end(&prepared);
+        release_pending(pending); storage_prepared_end(&prepared);
         return XR_XIR_VALUE_OK;
     }
     XirArray *replacement = NULL;
     status = array_allocate(place->type, capacity, admission, &replacement);
-    if (status != XR_XIR_VALUE_OK) { array_prepared_end(&prepared); return status; }
+    if (status != XR_XIR_VALUE_OK) { storage_prepared_end(&prepared); return status; }
     XrXirValue result = array_value(replacement);
     if (unique) {
         if (array->length && array->stride) memcpy(replacement->data, array->data, array->length * array->stride);
@@ -926,7 +972,7 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
             else {
                 status = storage_pack_copy(&prepared.pack, array_slot(array, i), array_slot(replacement, i));
                 if (status != XR_XIR_VALUE_OK) {
-                    xr_xir_value_drop(&result); array_prepared_end(&prepared); return status;
+                    xr_xir_value_drop(&result); storage_prepared_end(&prepared); return status;
                 }
             }
             ++replacement->length;
@@ -938,7 +984,7 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
     memcpy(place->payload, &result.payload, sizeof(result.payload));
     if (unique) array->length = 0;
     xr_xir_value_drop(&current);
-    array_prepared_end(&prepared);
+    storage_prepared_end(&prepared);
     return XR_XIR_VALUE_OK;
 }
 

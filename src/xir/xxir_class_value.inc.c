@@ -34,39 +34,49 @@ XR_FUNC XrXirValueStatus xr_xir_class_new(XrXirType type, const XrXirValue *fiel
     if (count > admission->work) return XR_XIR_VALUE_LIMIT;
     admission->work-=count;
     for (uint32_t i=0;i<count;++i) {
-        if (!xr_xir_type_is_class_field(types, node->nominal.fields[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirValueStatus status=xr_xir_value_admit(&fields[i],node->nominal.fields[i],admission);
         if (status != XR_XIR_VALUE_OK) return status;
     }
-    uint64_t bytes=sizeof(XirClassObject)+(uint64_t)layout->body.size;
-    if (bytes > SIZE_MAX) return XR_XIR_VALUE_LIMIT;
-    XrXirValueStatus status=XR_XIR_VALUE_OK;
+    ClassAllocation allocation={0};
+    XrXirValueStatus status=class_allocation_layout(admission,type,&allocation);
+    if (status != XR_XIR_VALUE_OK) return status;
     XirObject *object=constructed_allocate(admission->domain,(XrXirTypeArena *)admission->arena,
-        type,(size_t)bytes,&status);
+        type,allocation.bytes,&status);
     if (!object) return status;
     object->kind=XIR_OBJECT_CLASS;
-    memset((XirClassObject *)object+1,0,layout->body.size);
+    XirClassObject *instance=(XirClassObject *)object;
+    instance->allocation_bytes=allocation.bytes;instance->release_offset=allocation.release_offset;
+    instance->release_capacity=allocation.release_capacity;
+    unsigned char *body=(unsigned char *)(instance+1);
+    memset(body,0,layout->body.size);
     for (uint32_t i=0;i<count;++i) {
-        XrXirValue owned={0};status=xr_xir_value_copy(&fields[i],&owned);
+        StoragePack pack={0};
+        status=storage_pack_begin(admission,node->nominal.fields[i],&pack);
+        if (status == XR_XIR_VALUE_OK)
+            status=storage_pack_value(&pack,&fields[i],body+layout->field_offsets[i]);
+        storage_pack_end(&pack);
         if (status != XR_XIR_VALUE_OK) {
-            XirObject *pending=NULL;
-            while(i){XrXirValue previous=class_field_value(object,--i);queue_release(&previous,&pending);}
-            constructed_discard(object,(size_t)bytes);release_pending(pending);return status;
+            XirObject *pending=NULL;class_release_fields(object,i,&pending);
+            constructed_discard(object,allocation.bytes);release_pending(pending);return status;
         }
-        class_field_publish(object,i,&owned);
     }
     *output=(XrXirValue){(uint32_t)type,0,0};memcpy(&output->payload,&object,sizeof(object));
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_class_get(const XrXirValue *receiver, uint32_t field,
-    XrXirValue *output) {
-    if (!unit_value(output) || !xr_xir_value_valid(receiver) ||
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission || !unit_value(output) || !xr_xir_value_valid(receiver) ||
         !owned_carrier_type((XrXirType)receiver->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirObject *object=object_pointer(receiver);
     const XrXirStorageLayout *layout=class_body_layout(object);
-    if (!layout || field >= layout->field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValue value=class_field_value(object,field);
-    return xr_xir_value_copy(&value,output);
+    if (!layout || field >= layout->field_count || admission->arena != object->arena)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!admission->work) return XR_XIR_VALUE_LIMIT;
+    --admission->work;
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
+    const unsigned char *body=(const unsigned char *)((const XirClassObject *)object+1);
+    StorageSpan span={node->nominal.fields[field],body+layout->field_offsets[field]};
+    return storage_unpack(span,admission,output);
 }
 XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t field,
     const XrXirValue *replacement, XrXirValueAdmission *admission) {
@@ -80,9 +90,17 @@ XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t f
         return XR_XIR_VALUE_BAD_ARGUMENT;
     status=xr_xir_value_admit(replacement,node->nominal.fields[field],admission);
     if (status != XR_XIR_VALUE_OK) return status;
-    XrXirValue owned={0};status=xr_xir_value_copy(replacement,&owned);
+    XrXirLayout physical={0};
+    if (!xr_xir_type_arena_layout(object->arena,node->nominal.fields[field],&physical))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    StoragePrepared prepared={0};
+    status=storage_prepared_begin(&prepared,replacement,physical.size,admission);
     if (status != XR_XIR_VALUE_OK) return status;
-    XrXirValue previous=class_field_value(object,field);
-    class_field_publish(object,field,&owned);
-    xr_xir_value_drop(&previous);return XR_XIR_VALUE_OK;
+    const XrXirStorageLayout *layout=class_body_layout(object);
+    unsigned char *bytes=(unsigned char *)((XirClassObject *)object+1)+layout->field_offsets[field];
+    /* No fallible operation remains. Prepared bytes own the replacement before
+     * any old owner is released, including a source alias of this field. */
+    storage_pack_release(&prepared.pack,bytes,UINT64_MAX);
+    if (physical.size) memcpy(bytes,prepared.bytes,physical.size);
+    prepared.owns=false;storage_prepared_end(&prepared);return XR_XIR_VALUE_OK;
 }

@@ -77,6 +77,7 @@ static void unit_slot_wire_cases(const uint8_t *bytes,size_t size){
   }
  }
  CHECK(unit_writes>=2&&unit_reads&&attacks>=10);
+ unit_wire_attack(bytes,size,copy,12,4,49,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,12,4,48,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,8,4,18,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,20,4,1,XR_XIR_BAD_STRUCTURE,false);

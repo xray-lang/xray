@@ -36,7 +36,7 @@ static void class_array_suspend_cases(XrXirProgram *program) {
 }
 static void class_array_retained(XrXirValue *receiver) {
     XrXirValue array={0},copy={0},text={0};
-    C(xr_xir_class_get(receiver,0,&array)==XR_XIR_VALUE_OK);
+    C(xr_xir_class_get(receiver,0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(receiver),.work=10000},&array)==XR_XIR_VALUE_OK);
     C(xr_xir_value_copy(&array,&copy)==XR_XIR_VALUE_OK);
     xr_xir_value_drop(receiver);xr_xir_value_drop(&array);
     XrXirValueAdmission admission={xr_xir_value_arena(&copy),NULL,NULL,NULL,64,0};

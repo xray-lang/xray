@@ -1,0 +1,6 @@
+import {Record,Owner} from "./value"
+export fn advance(owner:Owner)->i64{const before=owner.get();owner.replace(Record{n:41,text:"mapped",tail:42});owner.clear();if(before.n==40){return owner.get().n}else{return 0}}
+
+import {Box,Container} from "./value"
+export fn readBox<T>(box:Box<T>)->T{return box.get()}
+export fn readItems<T>(box:Container<T>)->Array<T>{return box.get()}

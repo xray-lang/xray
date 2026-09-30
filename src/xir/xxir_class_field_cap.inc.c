@@ -1,0 +1,75 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_class_field_cap.inc.c - Bounded closed class-field storage capability
+ *
+ * KEY CONCEPT:
+ *   Identity handles pin their field storage, type arena and physical accounting domain.
+ */
+typedef struct ClassFieldFrame { uint32_t index, next, count; bool declaration; } ClassFieldFrame;
+static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, bool *leaf) {
+    *leaf=true;
+    if (type==XR_XIR_BOOL || xr_xir_type_is_number(type) || type==XR_XIR_STRING) return XR_XIR_OK;
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
+    if (node->kind==XR_XIR_TYPE_ARRAY)
+        return node->element==XR_XIR_I64 || node->element==XR_XIR_STRING ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    if (node->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals ||
+        (types->nominals->declarations!=NULL)==(types->nominals->identities!=NULL) ||
+        node->nominal.declaration>=types->nominals->count) return XR_XIR_BAD_TYPE;
+    uint32_t kind=types->nominals->declarations ? types->nominals->declarations[node->nominal.declaration].kind :
+        types->nominals->identities[node->nominal.declaration].kind;
+    if (kind!=XR_XIR_NOMINAL_STRUCT && kind!=XR_XIR_NOMINAL_ENUM) return XR_XIR_BAD_TYPE;
+    *leaf=false;return XR_XIR_OK;
+}
+static XrXirStatus class_field_frame(const XrXirTypes *types, uint32_t index, ClassFieldFrame *frame) {
+    const XrXirTypeNode *node=&types->nodes[index];
+    uint32_t count=types->nominals->declarations ?
+        types->nominals->declarations[node->nominal.declaration].field_count :
+        types->nominals->identities[node->nominal.declaration].field_count;
+    bool declaration=false;
+    if (node->nominal.field_count!=count) {
+        if (node->nominal.field_count || !types->nominals->declarations ||
+            types->nominals->declarations[node->nominal.declaration].parameter_count) return XR_XIR_BAD_TYPE;
+        declaration=true;
+    }
+    if (count && (declaration ? !types->nominals->declarations[node->nominal.declaration].fields :
+        !node->nominal.fields)) return XR_XIR_BAD_STRUCTURE;
+    *frame=(ClassFieldFrame){index,0,count,declaration};return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_class_field_verify(const XrXirTypes *types, XrXirType type,
+    XrXirBudget *budget) {
+    if (!budget) return XR_XIR_BAD_STRUCTURE;
+    if (!budget->work) return XR_XIR_BUDGET;
+    --budget->work;bool leaf=false;XrXirStatus status=class_field_leaf(types,type,&leaf);
+    if (status!=XR_XIR_OK || leaf) return status;
+    uint32_t count=types->count;
+    uint64_t bytes=(uint64_t)count*(sizeof(ClassFieldFrame)+sizeof(unsigned char));
+    if (bytes>SIZE_MAX || bytes>budget->scratch_bytes) return XR_XIR_BUDGET;
+    budget->scratch_bytes-=bytes;
+    ClassFieldFrame *frames=xr_calloc(1,(size_t)bytes);
+    if (!frames) {budget->scratch_bytes+=bytes;return XR_XIR_OUT_OF_MEMORY;}
+    unsigned char *states=(unsigned char *)(frames+count);uint32_t depth=1;
+    uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
+    status=class_field_frame(types,index,&frames[0]);states[index]=1;
+    while(status==XR_XIR_OK && depth) {
+        if (!budget->work) {status=XR_XIR_BUDGET;break;}--budget->work;
+        ClassFieldFrame *frame=&frames[depth-1];
+        if (frame->next==frame->count) {states[frame->index]=2;--depth;continue;}
+        const XrXirTypeNode *node=&types->nodes[frame->index];uint32_t field=frame->next++;
+        XrXirType child=frame->declaration ?
+            types->nominals->declarations[node->nominal.declaration].fields[field].type : node->nominal.fields[field];
+        status=class_field_leaf(types,child,&leaf);
+        if (status!=XR_XIR_OK || leaf) continue;
+        index=(uint32_t)child-XR_XIR_CONSTRUCTED_TYPE_BASE;
+        if (states[index]==1) {status=XR_XIR_BAD_TYPE;break;}
+        if (states[index]==2) continue;
+        if (depth==count) {status=XR_XIR_BAD_TYPE;break;}
+        status=class_field_frame(types,index,&frames[depth]);
+        if (status==XR_XIR_OK) {states[index]=1;++depth;}
+    }
+    xr_free(frames);budget->scratch_bytes+=bytes;return status;
+}

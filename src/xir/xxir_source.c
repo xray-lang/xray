@@ -1883,7 +1883,8 @@ static bool collect_declarations(SourceContext *ctx) {
         }
     }
     if (!source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
-        !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx)) return false;
+        !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx) ||
+        !source_class_field_capabilities(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;
     uint32_t function = count, slot = 0;
     for (uint32_t m = 0; m < count; ++m) {

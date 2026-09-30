@@ -193,9 +193,6 @@ static bool source_struct_fields(SourceContext *ctx) {
                 if (symbol->node->type == AST_CLASS_DECL) {
                     if (field->initializer)
                         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit admitted constructor value");
-                    if (!xr_xir_type_span(&ctx->types,types[f]) &&
-                        !xr_xir_type_is_class_field(&ctx->types,types[f]))
-                        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field carrier is not implemented");
                 }
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) strlen(field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
@@ -358,10 +355,30 @@ static bool source_class_carriers(SourceContext *ctx) {
         for (uint32_t f=0;f<decl->field_count;++f) {
             XrXirType field;
             if (!source_substitute(ctx,&substitution,decl->fields[f].type,0,&field)) return false;
-            if (!xr_xir_type_span(&ctx->types,field) && !xr_xir_type_is_class_field(&ctx->types,field)) {
-                ctx->module=symbol->module;
-                return source_fail(ctx,symbol->node,XR_XIR_BAD_TYPE,"class field carrier is not implemented");
+            if (!xr_xir_type_span(&ctx->types,field)) {
+                XrXirStatus status=xr_xir_class_field_verify(&ctx->types,field,&ctx->budget);
+                if (status!=XR_XIR_OK) {
+                    ctx->module=symbol->module;
+                    return source_fail(ctx,symbol->node,status,status==XR_XIR_BAD_TYPE ?
+                        "class field carrier is not implemented" : "class field capability budget or allocation failed");
+                }
             }
+        }
+    }
+    return true;
+}
+
+static bool source_class_field_capabilities(SourceContext *ctx) {
+    for (uint32_t d=0;d<ctx->nominals.count;++d) {
+        if (!source_work(ctx,NULL)) return false;
+        const XrXirNominalDeclaration *decl=&ctx->nominals.declarations[d];
+        if (decl->kind!=XR_XIR_NOMINAL_CLASS) continue;
+        SourceName *owner=ctx->nominal_sources[d];ctx->module=owner->module;
+        for (uint32_t f=0;f<decl->field_count;++f) {
+            if (xr_xir_type_span(&ctx->types,decl->fields[f].type)) continue;
+            XrXirStatus status=xr_xir_class_field_verify(&ctx->types,decl->fields[f].type,&ctx->budget);
+            if (status!=XR_XIR_OK) return source_fail(ctx,owner->node,status,
+                status==XR_XIR_BAD_TYPE ? "class field carrier is not implemented" : "class field capability budget or allocation failed");
         }
     }
     return true;

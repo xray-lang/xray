@@ -137,8 +137,8 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
     }
     XrXirLayout layout = {0};
     if (!xr_xir_type_arena_layout(admission->arena, slot.type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    ArrayPrepared prepared = {0};
-    status = array_prepared_begin(&prepared, value, layout.size, admission);
+    StoragePrepared prepared = {0};
+    status = storage_prepared_begin(&prepared, value, layout.size, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     StorageCursor cursor = {0}; XirObject *pending = NULL;
     XR_CHECK(storage_cursor_init(admission->arena, (StorageSpan){slot.type, slot.bytes},
@@ -146,7 +146,7 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
         "inline overwrite reserves release traversal before publication");
     storage_queue_release(&cursor, UINT64_MAX, &pending);
     if (layout.size) memcpy(slot.bytes, prepared.bytes, layout.size);
-    prepared.owns = false; release_pending(pending); array_prepared_end(&prepared);
+    prepared.owns = false; release_pending(pending); storage_prepared_end(&prepared);
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,

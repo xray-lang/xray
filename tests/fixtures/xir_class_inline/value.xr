@@ -1,0 +1,14 @@
+export struct Record { n:i64 text:string tail:i64 }
+export enum Choice { None, Full{value:Record} }
+export struct Empty {}
+export final class Owner {
+ private value:Record private selection:Choice private empty:Empty
+ constructor(value:Record,selection:Choice,empty:Empty){this.value=value;this.selection=selection;this.empty=empty}
+ get()->Record{return this.value}
+ replace(value:Record){this.value=value}
+ clear(){this.selection=Choice.None}
+ choice()->Choice{return this.selection}
+}
+
+export final class Box<T> { private value:T constructor(value:T){this.value=value} get()->T{return this.value} }
+export final class Container<T> { private items:Array<T> constructor(items:Array<T>){this.items=items} get()->Array<T>{return this.items} }

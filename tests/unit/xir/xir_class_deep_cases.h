@@ -45,12 +45,12 @@ static XrXirValueStatus deep_sequence(XrXirTypeArena *arena,XrXirDomain *domain,
  STEP(xr_xir_array_get(&v[4],1,&a,&v[5],&fault));CHECK(v[5].payload==v[0].payload);
  XrXirValue forty_one={XR_XIR_I64,0,41};size_t setter_calls=runtime_attempts;
  STEP(xr_xir_class_set(&v[5],0,&forty_one,&a));CHECK(runtime_attempts==setter_calls);
- XrXirValue result={0};STEP(xr_xir_class_get(&v[0],0,&result));CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
+ XrXirValue result={0};STEP(xr_xir_class_get(&v[0],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[0]),.work=10000},&result));CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
  XrXirValue holder_fields[]={v[0],text};STEP(xr_xir_struct_new((XrXirType)259,holder_fields,2,&a,&v[6]));
  STEP(xr_xir_array_new((XrXirType)260,&v[6],1,&a,&v[7]));STEP(xr_xir_value_copy(&v[7],&v[8]));
  XrXirValuePlace holders={(XrXirType)260,&v[7].payload};STEP(xr_xir_array_push(&holders,&v[6],&a));CHECK(v[7].payload!=v[8].payload);
  STEP(xr_xir_array_get(&v[8],0,&a,&v[9],&fault));STEP(xr_xir_struct_get(&v[9],0,&a,&v[10]));CHECK(v[10].payload==v[0].payload);
- STEP(xr_xir_class_get(&v[10],0,&result));CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
+ STEP(xr_xir_class_get(&v[10],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[10]),.work=10000},&result));CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
  done:;
  size_t before=runtime_attempts;for(uint32_t i=11;i;--i)xr_xir_value_drop(&v[i-1]);CHECK(runtime_attempts==before);
 #undef STEP
@@ -81,10 +81,10 @@ static void class_cross_arena_cases(void) {
  CHECK(xr_xir_value_admit(&object,(XrXirType)256,&bad)==XR_XIR_VALUE_BAD_ARGUMENT);
  bad=a;bad.domain=other;CHECK(xr_xir_class_set(&object,0,&fields[0],&bad)==XR_XIR_VALUE_BAD_ARGUMENT);
  bad=a;bad.domain=NULL;CHECK(xr_xir_class_set(&object,0,&fields[0],&bad)==XR_XIR_VALUE_BAD_ARGUMENT);
- CHECK(xr_xir_class_get(&object,2,&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);
+ CHECK(xr_xir_class_get(&object,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);
  size_t before=runtime_attempts;CHECK(xr_xir_class_set(&object,1,&text,&a)==XR_XIR_VALUE_OK);CHECK(runtime_attempts==before);
  xr_xir_value_drop(&text);xr_xir_type_arena_drop(same_name);xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(other);
- CHECK(xr_xir_class_get(&object,1,&out)==XR_XIR_VALUE_OK);xr_xir_value_drop(&object);
+ CHECK(xr_xir_class_get(&object,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&out)==XR_XIR_VALUE_OK);xr_xir_value_drop(&object);
  const char *bytes=NULL;size_t size=0;CHECK(xr_xir_string_view(&out,&bytes,&size)&&size==3&&!memcmp(bytes,"old",3));
  xr_xir_value_drop(&out);CHECK(!runtime_live&&!runtime_bytes);
 }
@@ -120,7 +120,7 @@ static void class_exit_cases(void) {
  else {status=xr_xir_instance_resume(instance,result.epoch,result.outcome.wake);if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;}}}
  if(!pass){CHECK(status==(mode==0?XR_XIR_CALL_READY:mode==1?XR_XIR_CALL_DIVIDE_BY_ZERO:XR_XIR_CALL_RETURNED));sites=runtime_attempts;CHECK(sites>0);}
  else CHECK(status==XR_XIR_CALL_OOM);
- if(status==XR_XIR_CALL_RETURNED){CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);XrXirValue count={0};CHECK(xr_xir_class_get(&value,0,&count)==XR_XIR_VALUE_OK&&count.payload==40);xr_xir_value_drop(&count);}
+ if(status==XR_XIR_CALL_RETURNED){CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);XrXirValue count={0};CHECK(xr_xir_class_get(&value,0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&value),.work=10000},&count)==XR_XIR_VALUE_OK&&count.payload==40);xr_xir_value_drop(&count);}
  if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&value);CHECK(runtime_live==base&&runtime_bytes==bytes);
  }
  runtime_fail_at=SIZE_MAX;printf("class exit mode%u OOM %zu sites\n",mode,sites);xr_xir_program_drop(program);CHECK(!runtime_live&&!runtime_bytes);}
@@ -135,8 +135,8 @@ static void class_program_retained_case(void) {
  CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
  XrXirValue object={0},count={0},text={0};CHECK(xr_xir_instance_take_result(instance,&object)==XR_XIR_CALL_RETURNED);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
- CHECK(xr_xir_class_get(&object,0,&count)==XR_XIR_VALUE_OK&&count.type==XR_XIR_I64&&count.payload==40);
- CHECK(xr_xir_class_get(&object,1,&text)==XR_XIR_VALUE_OK);xr_xir_value_drop(&object);xr_xir_value_drop(&count);
+ CHECK(xr_xir_class_get(&object,0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&count)==XR_XIR_VALUE_OK&&count.type==XR_XIR_I64&&count.payload==40);
+ CHECK(xr_xir_class_get(&object,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&text)==XR_XIR_VALUE_OK);xr_xir_value_drop(&object);xr_xir_value_drop(&count);
  const char *bytes=NULL;size_t size=0;CHECK(xr_xir_string_view(&text,&bytes,&size)&&size==7&&!memcmp(bytes,"counter",7));
  size_t before=runtime_attempts;xr_xir_value_drop(&text);CHECK(runtime_attempts==before);CHECK(!runtime_live&&!runtime_bytes);
 }

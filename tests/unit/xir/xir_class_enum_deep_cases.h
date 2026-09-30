@@ -52,7 +52,7 @@ static XrXirValueStatus class_enum_sequence(XrXirTypeArena *arena,XrXirDomain *d
  if(variant==2){const char *bytes=NULL;size_t size=0;CHECK(xr_xir_string_view(&v[9],&bytes,&size)&&size==4&&!memcmp(bytes,"enum",4));}
  if(variant==3){XrXirValue object={0};ESTEP(xr_xir_struct_get(&v[9],0,&a,&object));CHECK(object.payload==v[0].payload);xr_xir_value_drop(&object);}
  }xr_xir_value_drop(&v[9]);xr_xir_value_drop(&v[8]);}
- XrXirValue n={0};ESTEP(xr_xir_class_get(&v[0],0,&n));CHECK(n.payload==41);xr_xir_value_drop(&n);
+ XrXirValue n={0};ESTEP(xr_xir_class_get(&v[0],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[0]),.work=10000},&n));CHECK(n.payload==41);xr_xir_value_drop(&n);
  done:;
  size_t calls=runtime_attempts;for(uint32_t i=10;i;--i)xr_xir_value_drop(&v[i-1]);CHECK(runtime_attempts==calls);
 #undef ESTEP

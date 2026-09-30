@@ -27,7 +27,7 @@ static XrXirTypeArena *class_value_arena(XrXirDomain *domain) {
     return arena;
 }
 static void class_value_count(const XrXirValue *value,int64_t expected) {
-    XrXirValue result={0};CHECK(xr_xir_class_get(value,0,&result)==XR_XIR_VALUE_OK);
+    XrXirValue result={0};CHECK(xr_xir_class_get(value,0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(value),.work=10000},&result)==XR_XIR_VALUE_OK);
     CHECK(result.type==XR_XIR_I64 && result.payload==expected);xr_xir_value_drop(&result);
 }
 static void class_value_cases(void) {
@@ -76,15 +76,15 @@ static void class_value_cases(void) {
     CHECK(xr_xir_class_new((XrXirType)256,fields,3,&admission,&invalid)==XR_XIR_VALUE_REFCOUNT_LIMIT);
     atomic_store(&late_string->references,refs);
     CHECK(!invalid.type && !invalid.payload && live==rollback_live && xr_xir_domain_stats(domain).live_bytes==rollback_bytes);
-    XrXirValue observed={0};CHECK(xr_xir_class_get(&first,2,&observed)==XR_XIR_VALUE_OK);
+    XrXirValue observed={0};CHECK(xr_xir_class_get(&first,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK);
     CHECK(observed.payload==text.payload);xr_xir_value_drop(&observed);
     size_t setter_calls=calls;
     CHECK(xr_xir_class_set(&first,2,&label,&admission)==XR_XIR_VALUE_OK && calls==setter_calls);
-    CHECK(xr_xir_class_get(&first,2,&observed)==XR_XIR_VALUE_OK && observed.payload==label.payload);
+    CHECK(xr_xir_class_get(&first,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK && observed.payload==label.payload);
     xr_xir_value_drop(&observed);
     xr_xir_value_drop(&label);xr_xir_value_drop(&text);xr_xir_value_drop(&alias);xr_xir_value_drop(&separate);
     xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
-    CHECK(xr_xir_class_get(&first,1,&observed)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_class_get(&first,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK);
     size_t before=calls;xr_xir_value_drop(&first);CHECK(calls==before);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&observed,&bytes,&length));
     CHECK(length==8 && !memcmp(bytes,"retained",8));xr_xir_value_drop(&observed);CHECK(live==initial);

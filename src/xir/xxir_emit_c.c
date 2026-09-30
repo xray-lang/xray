@@ -599,7 +599,7 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
             append(buffer,"        value = ");emit_value(buffer,function,layout,op->args[1]);append(buffer,";\n");
             append(buffer,"        status=xr_xir_class_set(&receiver,%uu,&value,xr_xir_call_admission(view));\n",(uint32_t)op->immediate);
         } else append(buffer,"        status=xr_xir_value_admit(&receiver,(XrXirType)receiver.type,xr_xir_call_admission(view));\n"
-            "        if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,&value);\n",(uint32_t)op->immediate);
+            "        if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",(uint32_t)op->immediate);
     }
     append(buffer,"        if(status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"

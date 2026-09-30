@@ -7395,6 +7395,20 @@ PRINT/OUTPUT admit canonical f32/f64 bits. Finite nonzero text uses the fewest s
 
 All arguments still evaluate before complete-group budgeting/rendering and one publication. Failures publish no partial group and retain existing OUTPUT_ERROR/cleanup rules. These contracts do not establish complete source, default product, safety or cross-platform qualification: rebuilt independent VM/native/packet/mixed programs, ownership/physical release, fault injection and batch gates must prove those separately.
 
+### 17.28 Class field definition proofs and Unit module slots
+
+Ordinary class T fields are checked at their authentic declaration owner using the existing copy/save premise, without new Scalar, Copyable or Sendable constraints. Inline bounds and where clauses share one condition representation. Symbolic fields remain in Checked; instances substitute complete ordered arguments and reverify provenance before Lowered. Closed carrier capability is separate from generic proof, and unsupported carriers never masquerade as missing constraints. Explicit final root classes retain construction, private/const, must/may and no_suspend rules. Class identity is the copy boundary; field GET creates an owned logical snapshot and whole SET is visible to all references of that identity.
+
+Unit module declarations retain authentic owners, slot ordinals, known types, mutability and publication bits. Unit INIT/STORE have one encoding: zero value operands and both args zero. LOAD still checks publication and authority without payload SSA/frame storage. RHS effects, yield, throw and cleanup execute once, and publication follows success. Const initializer, mutable-root, sticky failure and reverse cleanup rules remain. This family admits inferred const x = Coro.yield(), explicit const x:() and default var x:(), while const x:i64 = Coro.yield() rejects. A Unit Sendable marker proof does not admit ordinary parameters or generic storage.
+
+### 17.29 Finite inline class fields and physical ownership
+
+This family admits only acyclic inline struct/enum field graphs with existing numeric/bool/string and Array<i64>/Array<string> leaves. One bounded capability traversal checks closed graphs after complete Source field collection; real temporary scratch is refunded and work consumed cumulatively. Ordinary T's legal language domain is unchanged. Unreified generic inline fields, nested Arrays, callable/Cell/Error, class-reference graphs, resources and views remain explicit implementation boundaries.
+
+The sole four-argument GET runtime interface receives the actual arena, work/scratch and optional allocation domain. Scalar/string/Array-handle reads allocate nothing and use retained metadata after Program/Instance destruction. Inline snapshot materialization requires the caller's live domain; new bytes belong to that domain while existing leaves refund their original backing owners, without execution authority. SET uses one owned-storage transaction helper, completing all fallible work before a commit region releases old storage and publishes the replacement without an observable intermediate state. Failure preserves the field, aliases and prior snapshots. NEW never publishes partial this. Creation reserves release frames; drop iterates actual active enum payloads without allocation and refunds actual owners. This acyclic subset does not establish complete L0/weak/L2 residual-graph disposal.
+
+The sole current protocols follow implementation constants in §17.6. Real seal/read consumers reject old value targets, valid-digest old Checked packets and old embedded proofs in the same Program ABI, without an old GET alias or second reader. Independent VM/native/packet/mixed expectations, authentic old caches, each OOM point, owned-result lifetimes, physical release and full applicable safety are separate verification obligations. This section does not claim complete language, same-source stdlib pair publication, default product or cross-platform qualification.
+
 ---
 
 ## 18. Error Codes

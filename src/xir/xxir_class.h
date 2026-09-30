@@ -13,11 +13,14 @@
 #define XXIR_CLASS_H
 #include "xxir_value.h"
 /* Trusted callers already hold checked construction/member permission.
- * GET reads retained data only and never recovers executable authority. */
+ * GET reads retained data only and never recovers executable authority.
+ * It requires the exact receiver arena and bounded work/scratch. Leaf copies
+ * need no allocation domain; inline snapshots require an explicit live domain,
+ * which owns new materialized storage but never takes over existing leaves. */
 XR_FUNC XrXirValueStatus xr_xir_class_new(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_class_get(const XrXirValue *receiver, uint32_t field,
-    XrXirValue *output);
+    XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t field,
     const XrXirValue *replacement, XrXirValueAdmission *admission);
 #endif // XXIR_CLASS_H

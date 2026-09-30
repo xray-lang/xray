@@ -386,6 +386,20 @@ PRINT/OUTPUT接受规范f32/f64位型。有限非零数使用原精度最少有�
 
 输出仍先完成所有参数求值，再验证预算、渲染整组并一次发布；失败不发布半组，沿用OUTPUT_ERROR和清理责任。上述合同不代表完整源码、默认产品、安全或跨平台资格已通过；这些必须由重建后的独立VM/native/包消费者/混合程序、所有权与物理释放、失败注入和批次门逐项证明。
 
+### 17.28 Class 字段定义证明与 Unit 模块槽
+
+普通 class 的 T 字段在真实声明 owner 下按既有可复制/保存前提检查，不增加 Scalar、Copyable 或 Sendable 条件。内联与 where 条件保留为同一条件表示；定义处符号字段留在 Checked，实例替换完整有序实参、复验来源后再 Lowered。闭合载体能力与泛型证明分开，未实现载体不伪装成约束失败。显式 final 根 class 的构造、private/const、must/may 和 no_suspend 规则继续适用。class 是身份复制边界，字段 GET 产生拥有式逻辑快照，整体 SET 为所有相同身份的引用可见。
+
+Unit 模块声明有真实 owner、slot ordinal、known 类型、mutability 和发布位。Unit INIT/STORE 的唯一编码有零 value operand，两 args 都为零；LOAD 仍执行发布与权限检查，不产生 payload SSA/frame。RHS 效应、yield、throw 与清理执行一次，成功才发布；const initializer 一次规则、mutable root 规则、失败粘滞和逆序回收不变。推断的 `const x = Coro.yield()`、显式 `const x:()` 和默认 `var x:()`在本族准入，`const x:i64 = Coro.yield()`拒绝。Unit marker 的 Sendable 证明不顺带开放普通参数或泛型保存。
+
+### 17.29 有限内联 class 字段与物理所有权
+
+本族仅准入无循环的 inline struct/enum 字段图，叶子为现有数值/bool/string 和 Array<i64>/Array<string>。闭合字段图通过同一有界能力遍历；Source 完整收集字段后检查，真实临时 scratch 退款，work 累计扣减。普通 T 的合法语言域不缩减；未 reify 的泛型 inline 字段、nested Array、callable/Cell/Error、class 引用图、资源和视图仍是明确的未实现边界。
+
+GET 的唯一四参数 runtime 接口显式接收实际 arena、work/scratch 和可选分配域。scalar/string/Array handle 纯读不分配，保留的 metadata 可在 Program/Instance 销毁后使用；inline 快照物化需要调用方 live domain，新字节记在该域，已有叶子仍向原 backing owner 退款，不授执行权限。SET 使用同一拥有式事务准备机制，完成所有可失败步骤后，在无可观察中间态的提交区释放旧字节并发布新值；失败保留字段、别名和旧快照。NEW 不发布部分 this。对象创建时预留释放帧，drop 对实际活动 enum payload 迭代释放、零新分配，退款至真实 owner。该无环子集不证明完整 L0/weak/L2 残余图回收。
+
+唯一当前协议由§17.6实现常量定义；旧 value target、旧有效摘要 Checked 包及同 Program 的旧 embedded proof 必须由实际 seal/read 拒绝，不保留旧 GET、别名或第二 reader。独立 VM/native/packet/mixed 预期、真实旧缓存、逐 OOM、拥有结果寿命、物理释放和完整适用安全须分别验证；本节不声明完整语言、stdlib 同源配对发布、默认产品或跨平台资格通过。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -875,5 +889,19 @@ Each operation rounds at its original width, nearest with ties to even, without 
 PRINT/OUTPUT admit canonical f32/f64 bits. Finite nonzero text uses the fewest significant decimal digits that round back at the original precision. Equal-length candidates choose the nearest exact decimal; an exact midpoint chooses an even last digit. Binary32 is not widened before formatting. The shortest coefficient has no trailing zeros. Decimal exponent k in [-4,16) uses ordinary notation, adding `.0` to integral results; other values use one leading digit, lowercase `e`, an explicit exponent sign and no redundant exponent zeros. Specials are exactly `nan`, `inf`, `-inf`, `0.0`, `-0.0`. Formatting uses ASCII and fixed integer workspace without heap allocation; 32 bytes suffice including termination. Locale, host rounding mode and exception flags do not affect results.
 
 All arguments still evaluate before complete-group budgeting/rendering and one publication. Failures publish no partial group and retain existing OUTPUT_ERROR/cleanup rules. These contracts do not establish complete source, default product, safety or cross-platform qualification: rebuilt independent VM/native/packet/mixed programs, ownership/physical release, fault injection and batch gates must prove those separately.
+
+### 17.28 Class field definition proofs and Unit module slots
+
+Ordinary class T fields are checked at their authentic declaration owner using the existing copy/save premise, without new Scalar, Copyable or Sendable constraints. Inline bounds and where clauses share one condition representation. Symbolic fields remain in Checked; instances substitute complete ordered arguments and reverify provenance before Lowered. Closed carrier capability is separate from generic proof, and unsupported carriers never masquerade as missing constraints. Explicit final root classes retain construction, private/const, must/may and no_suspend rules. Class identity is the copy boundary; field GET creates an owned logical snapshot and whole SET is visible to all references of that identity.
+
+Unit module declarations retain authentic owners, slot ordinals, known types, mutability and publication bits. Unit INIT/STORE have one encoding: zero value operands and both args zero. LOAD still checks publication and authority without payload SSA/frame storage. RHS effects, yield, throw and cleanup execute once, and publication follows success. Const initializer, mutable-root, sticky failure and reverse cleanup rules remain. This family admits inferred const x = Coro.yield(), explicit const x:() and default var x:(), while const x:i64 = Coro.yield() rejects. A Unit Sendable marker proof does not admit ordinary parameters or generic storage.
+
+### 17.29 Finite inline class fields and physical ownership
+
+This family admits only acyclic inline struct/enum field graphs with existing numeric/bool/string and Array<i64>/Array<string> leaves. One bounded capability traversal checks closed graphs after complete Source field collection; real temporary scratch is refunded and work consumed cumulatively. Ordinary T's legal language domain is unchanged. Unreified generic inline fields, nested Arrays, callable/Cell/Error, class-reference graphs, resources and views remain explicit implementation boundaries.
+
+The sole four-argument GET runtime interface receives the actual arena, work/scratch and optional allocation domain. Scalar/string/Array-handle reads allocate nothing and use retained metadata after Program/Instance destruction. Inline snapshot materialization requires the caller's live domain; new bytes belong to that domain while existing leaves refund their original backing owners, without execution authority. SET uses one owned-storage transaction helper, completing all fallible work before a commit region releases old storage and publishes the replacement without an observable intermediate state. Failure preserves the field, aliases and prior snapshots. NEW never publishes partial this. Creation reserves release frames; drop iterates actual active enum payloads without allocation and refunds actual owners. This acyclic subset does not establish complete L0/weak/L2 residual-graph disposal.
+
+The sole current protocols follow implementation constants in §17.6. Real seal/read consumers reject old value targets, valid-digest old Checked packets and old embedded proofs in the same Program ABI, without an old GET alias or second reader. Independent VM/native/packet/mixed expectations, authentic old caches, each OOM point, owned-result lifetimes, physical release and full applicable safety are separate verification obligations. This section does not claim complete language, same-source stdlib pair publication, default product or cross-platform qualification.
 
 <!-- /xr-spec:en -->

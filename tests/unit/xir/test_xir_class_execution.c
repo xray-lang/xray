@@ -64,8 +64,8 @@ int main(void){
  C(xr_xir_instance_start(instance,4,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
  C(xr_xir_instance_take_result(instance,&saved[i])==XR_XIR_CALL_RETURNED);C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
  xr_xir_program_drop(program);xr_xir_artifact_free(lowered);
- for(unsigned i=0;i<2;++i){XrXirValue value={0};C(xr_xir_class_get(&saved[i],0,&value)==XR_XIR_VALUE_OK && value.type==XR_XIR_I64 && value.payload==40);xr_xir_value_drop(&value);
- C(xr_xir_class_get(&saved[i],1,&value)==XR_XIR_VALUE_OK);const char *text=NULL;size_t n=0;C(xr_xir_string_view(&value,&text,&n)&&n==7&&!memcmp(text,"counter",7));xr_xir_value_drop(&saved[i]);C(xr_xir_string_view(&value,&text,&n)&&n==7);xr_xir_value_drop(&value);}
+ for(unsigned i=0;i<2;++i){XrXirValue value={0};C(xr_xir_class_get(&saved[i],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&saved[i]),.work=10000},&value)==XR_XIR_VALUE_OK && value.type==XR_XIR_I64 && value.payload==40);xr_xir_value_drop(&value);
+ C(xr_xir_class_get(&saved[i],1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&saved[i]),.work=10000},&value)==XR_XIR_VALUE_OK);const char *text=NULL;size_t n=0;C(xr_xir_string_view(&value,&text,&n)&&n==7&&!memcmp(text,"counter",7));xr_xir_value_drop(&saved[i]);C(xr_xir_string_view(&value,&text,&n)&&n==7);xr_xir_value_drop(&value);}
  C(!runtime_live && !runtime_bytes);
  puts(argc>1?"class source mixed41 retained40/string oldABI PASS":"class source native41 retained40/string oldABI PASS");return 0;
 }

@@ -19,8 +19,7 @@ static XrXirTypeArena *class_array_field_arena(XrXirDomain *domain) {
         {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0,{0}},
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,{0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,field_types,3}}};
-    XrXirTypes types={nodes,3,&table,NULL};
-    XrXirBudget budget={.parameters=100,.metadata_bytes=65536,.scratch_bytes=65536,.work=10000};
+    XrXirTypes types={nodes,3,&table,NULL};XrXirBudget budget={.parameters=100,.metadata_bytes=65536,.scratch_bytes=65536,.work=10000};
     XrXirTypeArena *arena=NULL;CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena)==XR_XIR_VALUE_OK);
     return arena;
 }
@@ -41,7 +40,7 @@ static void class_array_field_value_cases(void) {
     XrXirValue fields[]={{XR_XIR_BOOL,0,1},number,texts},object={0},alias={0},invalid={0},old={0};
     CHECK(xr_xir_class_new((XrXirType)258,fields,3,&admission,&object)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&object,&alias)==XR_XIR_VALUE_OK && alias.payload==object.payload);
-    CHECK(xr_xir_class_get(&object,1,&old)==XR_XIR_VALUE_OK && old.payload==number.payload);
+    CHECK(xr_xir_class_get(&object,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&old)==XR_XIR_VALUE_OK && old.payload==number.payload);
     CHECK(xr_xir_class_set(&object,1,&number,&admission)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_class_set(&object,0,&fields[0],&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_class_set(&object,1,&texts,&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
@@ -56,7 +55,7 @@ static void class_array_field_value_cases(void) {
     CHECK(!invalid.type && live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);
     CHECK(xr_xir_class_set(&object,2,&texts,&admission)==XR_XIR_VALUE_REFCOUNT_LIMIT);
     atomic_store(&last->references,refs);
-    XrXirValue observed={0};CHECK(xr_xir_class_get(&object,1,&observed)==XR_XIR_VALUE_OK && observed.payload==old.payload);xr_xir_value_drop(&observed);
+    XrXirValue observed={0};CHECK(xr_xir_class_get(&object,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&observed)==XR_XIR_VALUE_OK && observed.payload==old.payload);xr_xir_value_drop(&observed);
     size_t sites=0;
     for(size_t pass=0;pass<=sites;++pass){calls=0;fail_at=pass?pass-1:SIZE_MAX;
         XrXirValue value={0};XrXirValueStatus status=xr_xir_class_new((XrXirType)258,fields,3,&admission,&value);
@@ -65,7 +64,7 @@ static void class_array_field_value_cases(void) {
     }
     fail_at=SIZE_MAX;
     xr_xir_value_drop(&old);xr_xir_value_drop(&alias);xr_xir_value_drop(&number);xr_xir_value_drop(&texts);xr_xir_value_drop(&text);
-    CHECK(xr_xir_class_get(&object,2,&observed)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_class_get(&object,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&observed)==XR_XIR_VALUE_OK);
     xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
     size_t before=calls;fail_at=calls;xr_xir_value_drop(&object);CHECK(calls==before);
     XrXirValueAdmission retained={xr_xir_value_arena(&observed),NULL,NULL,NULL,64,0};XrXirFaultDetail fault={0};

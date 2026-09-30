@@ -7249,6 +7249,20 @@ PRINT/OUTPUT接受规范f32/f64位型。有限非零数使用原精度最少有�
 
 输出仍先完成所有参数求值，再验证预算、渲染整组并一次发布；失败不发布半组，沿用OUTPUT_ERROR和清理责任。上述合同不代表完整源码、默认产品、安全或跨平台资格已通过；这些必须由重建后的独立VM/native/包消费者/混合程序、所有权与物理释放、失败注入和批次门逐项证明。
 
+### 17.28 Class 字段定义证明与 Unit 模块槽
+
+普通 class 的 T 字段在真实声明 owner 下按既有可复制/保存前提检查，不增加 Scalar、Copyable 或 Sendable 条件。内联与 where 条件保留为同一条件表示；定义处符号字段留在 Checked，实例替换完整有序实参、复验来源后再 Lowered。闭合载体能力与泛型证明分开，未实现载体不伪装成约束失败。显式 final 根 class 的构造、private/const、must/may 和 no_suspend 规则继续适用。class 是身份复制边界，字段 GET 产生拥有式逻辑快照，整体 SET 为所有相同身份的引用可见。
+
+Unit 模块声明有真实 owner、slot ordinal、known 类型、mutability 和发布位。Unit INIT/STORE 的唯一编码有零 value operand，两 args 都为零；LOAD 仍执行发布与权限检查，不产生 payload SSA/frame。RHS 效应、yield、throw 与清理执行一次，成功才发布；const initializer 一次规则、mutable root 规则、失败粘滞和逆序回收不变。推断的 `const x = Coro.yield()`、显式 `const x:()` 和默认 `var x:()`在本族准入，`const x:i64 = Coro.yield()`拒绝。Unit marker 的 Sendable 证明不顺带开放普通参数或泛型保存。
+
+### 17.29 有限内联 class 字段与物理所有权
+
+本族仅准入无循环的 inline struct/enum 字段图，叶子为现有数值/bool/string 和 Array<i64>/Array<string>。闭合字段图通过同一有界能力遍历；Source 完整收集字段后检查，真实临时 scratch 退款，work 累计扣减。普通 T 的合法语言域不缩减；未 reify 的泛型 inline 字段、nested Array、callable/Cell/Error、class 引用图、资源和视图仍是明确的未实现边界。
+
+GET 的唯一四参数 runtime 接口显式接收实际 arena、work/scratch 和可选分配域。scalar/string/Array handle 纯读不分配，保留的 metadata 可在 Program/Instance 销毁后使用；inline 快照物化需要调用方 live domain，新字节记在该域，已有叶子仍向原 backing owner 退款，不授执行权限。SET 使用同一拥有式事务准备机制，完成所有可失败步骤后，在无可观察中间态的提交区释放旧字节并发布新值；失败保留字段、别名和旧快照。NEW 不发布部分 this。对象创建时预留释放帧，drop 对实际活动 enum payload 迭代释放、零新分配，退款至真实 owner。该无环子集不证明完整 L0/weak/L2 残余图回收。
+
+唯一当前协议由§17.6实现常量定义；旧 value target、旧有效摘要 Checked 包及同 Program 的旧 embedded proof 必须由实际 seal/read 拒绝，不保留旧 GET、别名或第二 reader。独立 VM/native/packet/mixed 预期、真实旧缓存、逐 OOM、拥有结果寿命、物理释放和完整适用安全须分别验证；本节不声明完整语言、stdlib 同源配对发布、默认产品或跨平台资格通过。
+
 ---
 
 ## 18. 错误码 (Error Codes)
