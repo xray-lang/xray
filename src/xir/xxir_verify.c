@@ -242,7 +242,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             return XR_XIR_BAD_STRUCTURE;
     if (!xr_xir_op_uses_type_arguments(op->op) &&
         (op->type_arguments[0] || op->type_arguments[1])) return XR_XIR_BAD_STRUCTURE;
-    if (op->op == XR_XIR_CONST_BOOL || op->op == XR_XIR_LOCAL_UNINIT) {
+    if (op->op == XR_XIR_CONST_BOOL || op->op == XR_XIR_LOCAL_UNINIT || op->op == XR_XIR_EQUAL) {
         if (op->immediate != 0 && op->immediate != 1)
             return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_CONST_INT) {
@@ -776,6 +776,12 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             continue;
         }
         XrXirType expected = op->type;
+        if (op->op == XR_XIR_EQUAL) {
+            expected = xr_xir_operand_type(function,op->args[0]);
+            XrXirStatus status = xr_xir_type_constraints(context->module,context->location.function,
+                expected,(XrXirConstraint){.markers = XR_XIR_CONSTRAINT_EQUAL},&context->remaining);
+            if (status != XR_XIR_OK) return status;
+        }
         if (op->op == XR_XIR_FUNCTION_WEAKEN) {
             expected = xr_xir_operand_type(function, op->args[0]);
             XrXirStatus status = xr_xir_callable_weakening(context->module->types,

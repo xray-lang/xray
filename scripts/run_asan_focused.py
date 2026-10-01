@@ -132,6 +132,9 @@ XIR_TESTS = (
     "test_xir_assert_condition_native",
     "test_xir_assert_panics",
     "test_xir_assert_panics_native",
+    "test_xir_equal_values",
+    "test_xir_assert_equal",
+    "test_xir_assert_equal_native",
 )
 
 XIR_CTESTS = XIR_TESTS + (
@@ -141,6 +144,11 @@ XIR_CTESTS = XIR_TESTS + (
     "test_xir_assert_panics_allocations",
     "test_xir_assert_panics_wire_vector",
     "test_xir_binder_wire_vectors",
+    "test_xir_assert_equal_allocations",
+    "test_xir_assert_equal_existing_fixture",
+    "test_xir_equal_builtin_probe",
+    "test_xir_assert_equal_wire_vector",
+    "test_xir_equal_wire_migration",
 )
 
 EXACT_PROFILES = {

@@ -434,7 +434,7 @@ static void nominal_metadata_cases(void) {
     nominal_fixture(&f); f.declarations[0].parameter_count = 0; f.declarations[0].constraints = NULL;
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
-    nominal_fixture(&f); f.constraint.markers = 4;
+    nominal_fixture(&f); f.constraint.markers = 8;
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.fields[0].flags = XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED;

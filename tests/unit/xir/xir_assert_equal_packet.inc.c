@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_assert_panics_packet.inc.c - Independent core framing and hostile result roles
+ * xir_assert_equal_packet.inc.c - Independent equality facts and rehashed hostile proofs
  */
 #include "base/xsha256.h"
-#include "xir_assert_panics_golden.h"
+#include "xir_assert_equal_golden.h"
 static void panics_word(uint8_t *bytes,uint32_t value) {
     for (uint32_t i=0;i<4;++i) bytes[i]=(uint8_t)(value>>(i*8));
 }
@@ -66,35 +66,45 @@ static void panics_packet_oom(const XrXirArtifact *checked) {
     }
     xr_xir_checked_packet_free(&kept);CHECK(runtime_live==live && runtime_bytes==bytes);
 }
-static void panics_packet_gates(void) {
+static void equal_packet_gates(void) {
     XrXirArtifact *checked=panics_core_checked();XrXirCheckedPacket packet={0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
-    if (packet.length!=sizeof(assert_panics_golden) || memcmp(packet.bytes,assert_panics_golden,packet.length)) {
-        size_t at=0;while (at<packet.length && at<sizeof(assert_panics_golden) && packet.bytes[at]==assert_panics_golden[at]) ++at;
-        fprintf(stderr,"independent Core KAT mismatch length=%zu expected=%zu first=%zu\n",packet.length,sizeof(assert_panics_golden),at);
+    if (packet.length!=sizeof(assert_equal_golden) || memcmp(packet.bytes,assert_equal_golden,packet.length)) {
+        size_t at=0;
+        while (at<packet.length && at<sizeof(assert_equal_golden) && packet.bytes[at]==assert_equal_golden[at]) ++at;
+        fprintf(stderr,"independent Equal Core KAT length=%zu expected=%zu first=%zu\n",packet.length,sizeof(assert_equal_golden),at);
     }
-    CHECK(packet.length==sizeof(assert_panics_golden) && !memcmp(packet.bytes,assert_panics_golden,packet.length));
+    CHECK(packet.length==sizeof(assert_equal_golden) && !memcmp(packet.bytes,assert_equal_golden,packet.length));
     panics_packet_oom(checked);
-    size_t op=panics_instruction_offset(&packet,2),live=runtime_live,bytes=runtime_bytes;
+    size_t op=panics_instruction_offset(&packet,3),live=runtime_live,bytes=runtime_bytes;
+    CHECK(op==XR_EQUAL_VECTOR_OP3);
     const struct {size_t offset;uint32_t value;XrXirStatus expected;} attacks[]={
-        {1735,2,XR_XIR_BAD_STRUCTURE},{1739,2,XR_XIR_BAD_STRUCTURE},{1739,0,XR_XIR_BAD_STRUCTURE},
-        {1743,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},{1795,0,XR_XIR_BAD_STRUCTURE},
-        {1867,1,XR_XIR_BAD_STRUCTURE},{1891,0,XR_XIR_BAD_STRUCTURE},{1895,3,XR_XIR_BAD_STRUCTURE},
-        {op+2*40+24,0,XR_XIR_BAD_TYPE},{op+2*40+4,XR_XIR_I64,XR_XIR_BAD_TYPE},
-        {op+4*40+12,0,XR_XIR_BAD_TYPE},{op+8*40+4,XR_XIR_PANIC_INFO,XR_XIR_BAD_TYPE}
+        {XR_EQUAL_VECTOR_GENERIC3+8,8,XR_XIR_BAD_TYPE},
+        {XR_EQUAL_VECTOR_GENERIC3+8,0,XR_XIR_BAD_TYPE},
+        {XR_EQUAL_VECTOR_GENERIC3+8,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},
+        {XR_EQUAL_VECTOR_GENERIC6+8,0,XR_XIR_BAD_TYPE},
+        {op+24,2,XR_XIR_BAD_TYPE},
+        {op+4,XR_XIR_I64,XR_XIR_BAD_TYPE},
+        {op+12,2,XR_XIR_BAD_TYPE},
+        {op+16,1,XR_XIR_BAD_STRUCTURE},
+        {XR_EQUAL_VECTOR_DEFAULTS+40,2,XR_XIR_BAD_STRUCTURE},
+        {XR_EQUAL_VECTOR_DEFAULTS+48,5,XR_XIR_BAD_STRUCTURE},
+        {XR_EQUAL_VECTOR_IDENTITY6+4,1,XR_XIR_BAD_STRUCTURE}
     };
-    for (uint32_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
-        memcpy(packet.bytes,assert_panics_golden,packet.length);panics_word(packet.bytes+attacks[i].offset,attacks[i].value);panics_hash(&packet);
+    for (uint32_t i=0;i<sizeof(attacks)/sizeof(*attacks);++i) {
+        memcpy(packet.bytes,assert_equal_golden,packet.length);
+        panics_word(packet.bytes+attacks[i].offset,attacks[i].value);panics_hash(&packet);
         XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL);
-        if (status!=attacks[i].expected) fprintf(stderr,"panics packet attack=%u status=%u expected=%u\n",i,status,attacks[i].expected);
+        if (status!=attacks[i].expected) fprintf(stderr,"Equal attack %u status=%u expected=%u\n",i,status,attacks[i].expected);
         CHECK(status==attacks[i].expected && !read && runtime_live==live && runtime_bytes==bytes);
     }
     for (uint32_t group=0;group<2;++group) {
-        memcpy(packet.bytes,assert_panics_golden,packet.length);panics_word(packet.bytes+(group ? 12 : 8),group ? 56 : 21);
-        panics_hash(&packet);runtime_attempts=0;XrXirArtifact *read=NULL;
+        memcpy(packet.bytes,assert_equal_golden,packet.length);
+        panics_word(packet.bytes+(group ? 12 : 8),group ? 56 : 21);panics_hash(&packet);
+        runtime_attempts=0;XrXirArtifact *read=NULL;
         CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && !runtime_attempts);
     }
     xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(checked);
     CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
-    puts("Complete independent Core1919 KAT; rehashed role/recipe/helper attacks; old wire/semantic early refusal PASS");
+    puts("Independent Core1919 KAT, valid-rehash Equal/proof/default attacks and old56 early refusal PASS");
 }

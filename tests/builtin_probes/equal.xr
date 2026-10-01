@@ -1,0 +1,3 @@
+fn same<T: Equal>(a: T, b: T) -> bool { return a == b }
+assert(same([1, 2], [1, 2]))
+assertEqual("a中b", "a中b")

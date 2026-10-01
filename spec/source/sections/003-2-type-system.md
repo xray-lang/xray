@@ -122,6 +122,12 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Lengthable` |
 | `Stringable` |
 
+**内置约束谓词**
+
+| 符号 |
+|--|
+| `Equal` |
+
 **故意不提供的名字**
 
 | 符号 | 诊断提示（编译器原文） |
@@ -1168,6 +1174,12 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Iterable<T>` |
 | `Lengthable` |
 | `Stringable` |
+
+**Built-in constraint predicates**
+
+| Symbol |
+|--|
+| `Equal` |
 
 **Deliberately absent names**
 

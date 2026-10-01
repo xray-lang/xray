@@ -186,7 +186,7 @@ typedef struct SourceContext {
     uint32_t function_count, slot_count, literal_count, literal_capacity;
     uint32_t module_count, entry_function;
     bool core_factory;
-    SourceName *assertion, *assert_panics;
+    SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
     SourceExpressionPlan *active_expression;
@@ -849,7 +849,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         binding = target;
         if (!target) {
             const XrCoreIntrinsicDesc *intrinsic = xr_core_intrinsic_by_source_name(name, strlen(name));
-            if (intrinsic && (intrinsic->id == XR_CORE_BUILTIN_ASSERT || intrinsic->id == XR_CORE_BUILTIN_ASSERT_PANICS)) {
+            if (intrinsic && (intrinsic->id == XR_CORE_BUILTIN_ASSERT || intrinsic->id == XR_CORE_BUILTIN_ASSERT_PANICS || intrinsic->id == XR_CORE_BUILTIN_ASSERT_EQUAL)) {
                 target = binding = source_core_assertion(ctx, node, intrinsic->id);
                 if (!target) return false;
             }
@@ -1915,7 +1915,7 @@ static bool collect_declarations(SourceContext *ctx) {
     if (closures.members > UINT32_MAX - capacity)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"member helper capacity exhausted");
     capacity += closures.members;
-    if (!ctx->core_factory && capacity <= UINT32_MAX - 5) capacity += 5;
+    if (!ctx->core_factory && capacity <= UINT32_MAX - 7) capacity += 7;
     if (capacity > ctx->budget.functions) capacity = ctx->budget.functions;
     ctx->function_capacity = capacity;
     ctx->functions = source_alloc(ctx, capacity, sizeof(*ctx->functions));
@@ -2414,6 +2414,11 @@ static bool build_bodies(SourceContext *ctx) {
                     XR_XIR_UNIT,{0,1},{0},0,{0}}, NULL) || !finish_body(ctx)) return false;
         } else if (ctx->core_factory && f == 2) {
             if (!source_core_panics_body(ctx) || !finish_body(ctx)) return false;
+        } else if (ctx->core_factory && f == 3) {
+            SourceValue condition;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_EQUAL,XR_XIR_BOOL,{0,1},{0},0,{0}},&condition) ||
+                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ASSERT_CONDITION,XR_XIR_UNIT,{condition.id,2},{0},0,{0}},NULL) ||
+                !finish_body(ctx)) return false;
         } else if (!statement(ctx, decl->body, false) || !finish_body(ctx)) return false;
     }
     if (ctx->next_closure != ctx->closure_limit)

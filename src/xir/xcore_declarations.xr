@@ -2,3 +2,5 @@
 // Executable bodies are supplied by bound typed intrinsic definitions.
 export fn assert(cond: bool, msg: string = "") {}
 export fn assertPanics(action: fn() -> R, msg: string = "") {}
+
+export fn assertEqual<T: Equal>(a: T, b: T, msg: string = "") {}

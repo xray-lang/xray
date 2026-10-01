@@ -263,7 +263,7 @@ static void rejected_templates(void) {
         XrXirGeneric *generics = (XrXirGeneric *) checked->module.generics;
         XrXirInstruction *caller = (XrXirInstruction *) functions[0].instructions;
         XrXirInstruction *body = (XrXirInstruction *) functions[1].instructions;
-        if (mode == 0) ((XrXirConstraint *) generics[1].constraints)[0].markers = 4;
+        if (mode == 0) ((XrXirConstraint *) generics[1].constraints)[0].markers = 8;
         if (mode == 1) caller[1].type_arguments[0] = 0;
         if (mode == 2) caller[1].type_arguments[1] = 0;
         if (mode == 3) ((XrXirType *) generics[0].arguments)[0] = XR_XIR_UNIT;

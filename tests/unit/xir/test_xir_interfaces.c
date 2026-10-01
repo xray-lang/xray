@@ -103,7 +103,7 @@ static void rejection_and_budget(void) {
         if (attack == 2) f.member.receiver = 1;
         if (attack == 3) f.member.signature = XR_XIR_I64;
         if (attack == 4) f.parents[0].argument_count = 0;
-        if (attack == 5) f.constraint.markers = 4;
+        if (attack == 5) f.constraint.markers = 8;
         if (attack == 6) f.declarations[0].exported = 0;
         if (attack == 7) f.declarations[1].name = f.declarations[0].name;
         if (attack == 8) f.parameter = XR_XIR_UNIT;

@@ -20,6 +20,8 @@
 #include "xxir_enum.h"
 #include "xxir_error.h"
 #include "xxir_panic.h"
+#include "xxir_equal.h"
+#include "xxir_float.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -1020,3 +1022,4 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_enum_value.inc.c"
 #include "xxir_error_value.inc.c"
 #include "xxir_panic_value.inc.c"
+#include "xxir_value_equal.inc.c"

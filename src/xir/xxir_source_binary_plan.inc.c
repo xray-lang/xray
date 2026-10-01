@@ -14,15 +14,21 @@ typedef struct SourceBinaryRecipe {
     SourceConversionRecipe left, right;
     XrXirOp operation;
     XrXirType result;
+    int64_t immediate;
 } SourceBinaryRecipe;
 static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType operation,
     XrXirType left,XrXirType right,SourceBinaryRecipe *output) {
     SourceBinaryRecipe recipe={0};XrXirType target=left;
-    if (left==XR_XIR_STRING && right==XR_XIR_STRING &&
-        (operation==AST_BINARY_ADD || operation==AST_BINARY_EQ || operation==AST_BINARY_NE)) {
-        recipe.operation=operation==AST_BINARY_ADD ? XR_XIR_CONCAT_STRING :
-            operation==AST_BINARY_EQ ? XR_XIR_EQ_STRING : XR_XIR_NE_STRING;
-        recipe.result=operation==AST_BINARY_ADD ? XR_XIR_STRING : XR_XIR_BOOL;
+    if (operation==AST_BINARY_EQ || operation==AST_BINARY_NE) {
+        if (left!=right) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"equality requires the same declared operand type");
+        XrXirDeclarations declarations;
+        XrXirModule module=source_module_view(ctx,&declarations);
+        XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
+        XrXirStatus status=xr_xir_type_markers_prove(&proof,left,XR_XIR_CONSTRAINT_EQUAL,&ctx->budget);
+        if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"equality requires its declaration predicate");
+        recipe.operation=XR_XIR_EQUAL; recipe.result=XR_XIR_BOOL; recipe.immediate=operation==AST_BINARY_NE;
+    } else if (left==XR_XIR_STRING && right==XR_XIR_STRING && operation==AST_BINARY_ADD) {
+        recipe.operation=XR_XIR_CONCAT_STRING;recipe.result=XR_XIR_STRING;
     } else if (xr_xir_float_bits(left) && xr_xir_float_bits(right)) {
         target=left==XR_XIR_F64 || right==XR_XIR_F64 ? XR_XIR_F64 : XR_XIR_F32;
         switch(operation) {
@@ -30,8 +36,6 @@ static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType oper
         case AST_BINARY_SUB:recipe.operation=XR_XIR_SUB_FLOAT;break;
         case AST_BINARY_MUL:recipe.operation=XR_XIR_MUL_FLOAT;break;
         case AST_BINARY_DIV:recipe.operation=XR_XIR_DIV_FLOAT;break;
-        case AST_BINARY_EQ:recipe.operation=XR_XIR_EQ_FLOAT;break;
-        case AST_BINARY_NE:recipe.operation=XR_XIR_NE_FLOAT;break;
         case AST_BINARY_LT:recipe.operation=XR_XIR_LT_FLOAT;break;
         case AST_BINARY_LE:recipe.operation=XR_XIR_LE_FLOAT;break;
         case AST_BINARY_GT:recipe.operation=XR_XIR_GT_FLOAT;break;
@@ -59,8 +63,6 @@ static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType oper
         case AST_UNARY_BNOT:case AST_BINARY_BXOR:recipe.operation=XR_XIR_XOR_INT;break;
         case AST_BINARY_LSHIFT:recipe.operation=XR_XIR_SHL_INT;break;
         case AST_BINARY_RSHIFT:recipe.operation=XR_XIR_SHR_INT;break;
-        case AST_BINARY_EQ:recipe.operation=XR_XIR_EQ_INT;break;
-        case AST_BINARY_NE:recipe.operation=XR_XIR_NE_INT;break;
         case AST_BINARY_LT:recipe.operation=XR_XIR_LT_INT;break;
         case AST_BINARY_LE:recipe.operation=XR_XIR_LE_INT;break;
         case AST_BINARY_GT:recipe.operation=XR_XIR_GT_INT;break;
@@ -77,7 +79,7 @@ static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType oper
 static bool source_binary_emit(SourceContext *ctx,const SourceBinaryRecipe *recipe,
     SourceValue left,SourceValue right,SourceValue *value) {
     return source_conversion_emit(ctx,&recipe->left,&left) && source_conversion_emit(ctx,&recipe->right,&right) &&
-        source_recipe_record(ctx,(XrXirInstruction){recipe->operation,recipe->result,{left.id,right.id},{0},0,{0}},value);
+        source_recipe_record(ctx,(XrXirInstruction){recipe->operation,recipe->result,{left.id,right.id},{0},recipe->immediate,{0}},value);
 }
 static bool source_binary_apply(SourceContext *ctx,AstNode *node,AstNodeType operation,
     SourceValue left,SourceValue right,SourceValue *value) {

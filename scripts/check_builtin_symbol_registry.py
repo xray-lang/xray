@@ -51,6 +51,7 @@ HEADINGS = {
         "types": "**内置类型**",
         "enums": "**内置 enum**",
         "ifaces": "**内置约束接口**",
+        "predicates": "**内置约束谓词**",
         "hints": "**故意不提供的名字**",
         "col_symbol": "符号",
         "col_kind": "构造",
@@ -70,6 +71,7 @@ HEADINGS = {
         "types": "**Built-in types**",
         "enums": "**Built-in enums**",
         "ifaces": "**Built-in constraint interfaces**",
+        "predicates": "**Built-in constraint predicates**",
         "hints": "**Deliberately absent names**",
         "col_symbol": "Symbol",
         "col_kind": "Construction",
@@ -121,6 +123,12 @@ def render_registry(registry: builtin_symbols.Registry, lang: str) -> str:
     lines.append(f'| {t["col_symbol"]} |')
     lines.append("|--|")
     for symbol in sorted(registry.by_category("interface"), key=lambda s: s.name):
+        lines.append(f"| `{symbol.spelling}` |")
+
+    lines += ["", t["predicates"], ""]
+    lines.append(f'| {t["col_symbol"]} |')
+    lines.append("|--|")
+    for symbol in sorted(registry.by_category("predicate"), key=lambda s: s.name):
         lines.append(f"| `{symbol.spelling}` |")
 
     lines += ["", t["hints"], ""]

@@ -60,6 +60,9 @@
  *   XR_BUILTIN_IFACE(name, arity)
  *       Built-in constraint interface usable in `T: Name` and `implements`.
  *
+ *   XR_BUILTIN_PREDICATE(name, arity, identity)
+ *       A declaration constraint predicate, never an interface or value type.
+ *
  *   XR_BUILTIN_PRELUDE_DECLARATION(name, module)
  *       A prelude type whose declaration is an exported class of a standard
  *       library module written in xray. The name is one nominal type: when
@@ -93,6 +96,9 @@
 #endif
 #ifndef XR_BUILTIN_IFACE
 #define XR_BUILTIN_IFACE(name, arity)
+#endif
+#ifndef XR_BUILTIN_PREDICATE
+#define XR_BUILTIN_PREDICATE(name, arity, identity)
 #endif
 #ifndef XR_BUILTIN_PRELUDE_DECLARATION
 #define XR_BUILTIN_PRELUDE_DECLARATION(name, module)
@@ -231,6 +237,7 @@ XR_BUILTIN_ENUM("TaskStatus", 0, TASK_STATUS,
 XR_BUILTIN_IFACE("Callable",   1)
 XR_BUILTIN_IFACE("Closeable",  0)
 XR_BUILTIN_IFACE("Comparable", 0)
+XR_BUILTIN_PREDICATE("Equal", 0, VALUE_EQUAL)
 XR_BUILTIN_IFACE("Equatable",  0)
 /* Every enum value satisfies Error, and nothing else does: `throw` already
  * requires an enum error value (E0370), so this is the type of "the error a
@@ -258,5 +265,6 @@ XR_BUILTIN_UNDEFINED_HINT("Box",
 #undef XR_BUILTIN_ENUM
 #undef XR_BUILTIN_ENUM_VARIANT
 #undef XR_BUILTIN_IFACE
+#undef XR_BUILTIN_PREDICATE
 #undef XR_BUILTIN_PRELUDE_DECLARATION
 #undef XR_BUILTIN_UNDEFINED_HINT

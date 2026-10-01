@@ -65,19 +65,25 @@ def main():
     data = {'wire': 22, 'semantic': 56, 'core_packet_hex': current.hex(),
             'core_body_sha256': hashlib.sha256(current[64:]).hexdigest(),
             'core_packet_sha256': hashlib.sha256(current).hexdigest(), 'offsets': offsets}
-    header = ('/* Complete independently framed wire22 semantic56 core declaration. */\n'
+    from derive_assert_equal_vector import vector as current_vector
+    executable, current_offsets = current_vector()
+    header = ('/* Complete independently framed wire22 semantic57 core declaration. */\n'
               'static const uint8_t assert_panics_golden[] = {\n' +
-              '\n'.join('    ' + ','.join(f'0x{byte:02x}' for byte in current[at:at+12]) + ','
-                        for at in range(0, len(current), 12)) + '\n};\n')
+              '\n'.join('    ' + ','.join(f'0x{byte:02x}' for byte in executable[at:at+12]) + ','
+                        for at in range(0, len(executable), 12)) + '\n};\n')
+    header += '\n'.join(f'#define XR_PANICS_VECTOR_{name.upper()} {value}u'
+                        for name,value in current_offsets.items())+'\n'
     if args.write:
         (directory / 'xir_assert_panics_golden.h').write_text(header, encoding='utf-8')
         (directory / 'assert_panics_packet_vectors.json').write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')
     else:
         literal = bytes(int(v, 16) for v in re.findall(r'0x[0-9a-fA-F]{2}',
                         (directory / 'xir_assert_panics_golden.h').read_text(encoding='utf-8')))
-        assert literal == current
+        assert literal == executable
         assert json.loads((directory / 'assert_panics_packet_vectors.json').read_text(encoding='utf-8')) == data
-    print(json.dumps({'bytes': len(current), 'sha256': data['core_packet_sha256'], 'offsets': offsets}, indent=2))
+    print(json.dumps({'historical56_bytes': len(current), 'historical56_sha256': data['core_packet_sha256'],
+                     'current57_bytes':len(executable), 'current57_sha256':hashlib.sha256(executable).hexdigest(),
+                     'historical56_offsets': offsets, 'current57_offsets':current_offsets}, indent=2))
 
 
 if __name__ == '__main__':

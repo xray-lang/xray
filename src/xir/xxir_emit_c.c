@@ -853,6 +853,17 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_SUSPEND:
         append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
         return;
+    case XR_XIR_EQUAL:
+        append(buffer,"        { XrXirValue left = "); emit_value(buffer,function,layout,op->args[0]);
+        append(buffer,"; XrXirValue right = "); emit_value(buffer,function,layout,op->args[1]);
+        append(buffer,";\n        XrXirValueAdmission *admission = xr_xir_call_admission(view);\n"
+            "        bool equal = false;\n"
+            "        XrXirValueStatus status = xr_xir_value_equal(&left,&right,(XrXirType)left.type,admission,&equal);\n"
+            "        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
+            "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+            "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            "        xr_xir_scalar_store(state->frame,%uu,%sequal); }\n",destination,op->immediate ? "!" : "");
+        break;
     case XR_XIR_ASSERT_CONDITION:
         append(buffer, "        if (!xr_xir_scalar_load(state->frame, %uu)) {\n"
             "            XrXirValue message = ", layout->offsets[op->args[0]]);
@@ -1181,7 +1192,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types};
     append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
-           "#include \"xir/xxir_panic.h\"\n"
+           "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

@@ -65,6 +65,21 @@ static bool source_constraint_same(SourceContext *ctx, AstNode *node,
     }
     *same = true; return true;
 }
+/* Predicate spellings come from the registry. Ordinary visible declarations
+ * and parameter bindings win before the builtin category is considered. */
+static uint32_t source_predicate_marker(SourceContext *ctx, const char *name) {
+    if (!name || visible_name(ctx,name)) return 0;
+    int count = 0;
+    XrGenericParam **parameters = source_type_parameters(ctx,&count);
+    for (int p = 0; p < count; ++p)
+        if (!strcmp(parameters[p]->name,name)) return 0;
+#define XR_XIR_PREDICATE_VALUE_EQUAL XR_XIR_CONSTRAINT_EQUAL
+#define XR_BUILTIN_PREDICATE(spelling, arity, identity) \
+    if (!strcmp(name,spelling)) return XR_XIR_PREDICATE_##identity;
+#include "../../stdlib/prelude/builtin_symbols.def"
+#undef XR_XIR_PREDICATE_VALUE_EQUAL
+    return 0;
+}
 static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
     const XrGenericParam *parameter, XrXirConstraint *output) {
     if (!parameter || !parameter->name || !*parameter->name ||
@@ -81,7 +96,7 @@ static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
         const XrTypeRef *ref = parameter->constraints[i];
         if (ref && ref->kind == XR_TREF_NAMED && !ref->nchildren && ref->name) {
             uint32_t marker = !strcmp(ref->name, "Sendable") ? XR_XIR_CONSTRAINT_SENDABLE :
-                !strcmp(ref->name, "Error") ? XR_XIR_CONSTRAINT_ERROR : 0;
+                !strcmp(ref->name, "Error") ? XR_XIR_CONSTRAINT_ERROR : source_predicate_marker(ctx,ref->name);
             if (marker) { result.markers |= marker; continue; }
         }
         XrXirInterfaceApplication application = {0};

@@ -45,7 +45,7 @@ static void assert_lexical(const char *directory,const char *path) {
         }
     }
     CHECK(core==1 && array==1);
-    CHECK(module->defaults && module->defaults->count==2);
+    CHECK(module->defaults && module->defaults->count==3);
     CHECK(module->declarations->functions[module->defaults->records[0].owner].module==1);
     xr_xir_source_result_free(&result);
     CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);

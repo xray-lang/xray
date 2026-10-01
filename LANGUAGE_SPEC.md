@@ -708,6 +708,12 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Lengthable` |
 | `Stringable` |
 
+**Built-in constraint predicates**
+
+| Symbol |
+|--|
+| `Equal` |
+
 **Deliberately absent names**
 
 | Symbol | Diagnostic hint |

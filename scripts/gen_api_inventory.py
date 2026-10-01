@@ -1199,6 +1199,25 @@ def collect_prelude(root: Path) -> list[dict[str, Any]]:
     return out
 
 
+def collect_constraint_predicates(root: Path) -> list[dict[str, Any]]:
+    registry = builtin_symbols.load(root)
+    out: list[dict[str, Any]] = []
+    for symbol in registry.by_category("predicate"):
+        entry = item(
+            category="constraint-predicate",
+            namespace="",
+            name=symbol.name,
+            kind="predicate",
+            signature=symbol.spelling,
+            source=rel(root, registry.path),
+            line=symbol.line,
+        )
+        entry["arity"] = symbol.arity
+        entry["predicate_identity"] = symbol.predicate_identity
+        out.append(entry)
+    return out
+
+
 def collect_interfaces(root: Path) -> list[dict[str, Any]]:
     path = root / "src/frontend/analyzer/xanalyzer_builtin_interfaces.c"
     text = path.read_text(encoding="utf-8")
@@ -1564,6 +1583,7 @@ def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) ->
     items.extend(collect_native_types(root))
     items.extend(collect_globals(root))
     items.extend(collect_prelude(root))
+    items.extend(collect_constraint_predicates(root))
     items.extend(collect_interfaces(root))
     items.extend(collect_keywords(root))
     items.extend(collect_intrinsics(root))

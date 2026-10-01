@@ -41,13 +41,21 @@ static void assert_packet_oom(const XrXirArtifact *checked) {
 static void assert_core_packet(const XrXirSourceResult *source) {
     const XrXirModule *parent=xr_xir_artifact_module(source->checked);
     uint32_t begin=parent->declarations->modules[1].initializer;
+    uint32_t helper_function=UINT32_MAX;
+    for (uint32_t i=0;i<parent->defaults->count;++i) {
+        const XrXirDefaultBinding *record=&parent->defaults->records[i];
+        if (record->owner==begin+1 && record->owner_kind==XR_XIR_DEFAULT_PARAMETER && record->ordinal==1) {
+            CHECK(helper_function==UINT32_MAX);helper_function=record->function;
+        }
+    }
+    CHECK(helper_function<parent->function_count);
     XrXirFunctionIdentity identities[3]={{0},{0,1,0,0,0,0,0},{0}};
     XrXirSourceModule module=parent->declarations->modules[1];module.initializer=0;
     const XrXirLiteral literal={NULL,0};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,&literal,1,UINT32_MAX,UINT32_MAX,NULL};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,1,1,2};
     XrXirDefaultTable defaults={&binding,1};
-    XrXirFunction functions[]={parent->functions[begin],parent->functions[begin+1],parent->functions[begin+3]};
+    XrXirFunction functions[]={parent->functions[begin],parent->functions[begin+1],parent->functions[helper_function]};
     XrXirInstruction helper[]={functions[2].instructions[0],functions[2].instructions[1]};
     helper[0].immediate=0;functions[2].instructions=helper;
     XrXirModule built={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,&defaults};
@@ -76,12 +84,12 @@ static void assert_core_packet(const XrXirSourceResult *source) {
         if (status!=attacks[i].status) fprintf(stderr,"assert rehashed packet attack=%u status=%u expected=%u\n",i,status,attacks[i].status);
         CHECK(status==attacks[i].status && !read && runtime_live==live && runtime_bytes==bytes);
     }
-    for (uint32_t old=54;old<=56;++old) {
+    for (uint32_t old=54;old<=57;++old) {
         memcpy(packet.bytes,assert_condition_golden,packet.length);assert_word(packet.bytes+12,old);
-        if (old==56) assert_word(packet.bytes+8,21);
+        if (old==57) assert_word(packet.bytes+8,21);
         assert_packet_hash(&packet);runtime_attempts=0;XrXirArtifact *read=NULL;
         CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && !runtime_attempts);
     }
     xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(checked);
-    puts("Full 642-byte independent condition KAT and rehashed typed/default/unused/old54/55/wire21 rejection PASS");
+    puts("Full 642-byte independent condition KAT and rehashed typed/default/unused/old54/55/56/wire21 rejection PASS");
 }

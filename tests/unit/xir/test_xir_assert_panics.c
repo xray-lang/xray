@@ -87,7 +87,7 @@ static void panics_role_rejections(const char *directory,const char *path) {
 static void panics_query_roles(const XrXirSourceResult *result) {
     const XrXirModule *module=xr_xir_artifact_module(result->checked);
     const XrXirSourceView *view=xr_xir_source_snapshot_view(result->snapshot);
-    CHECK(view && view->complete && view->module_count==2 && module->defaults && module->defaults->count==2);
+    CHECK(view && view->complete && view->module_count==2 && module->defaults && module->defaults->count==3);
     uint32_t owner=panics_find(module,"assertPanics");
     CHECK(module->generics && module->generics[owner].parameter_count==1 && module->generics[owner].parameter_kinds &&
         module->generics[owner].parameter_kinds[0]==XR_XIR_BINDER_RESULT_VARIABLE);

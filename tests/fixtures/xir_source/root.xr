@@ -372,7 +372,7 @@ fn floatingValues() {
     print(first as i64, second as i64, joined as i64, floatState as i64,
         first > second, second == joined, second != first, second <= joined)
     print((18446744073709551615 as f64) > (9223372036854775807 as f64),
-        (16777217 as f64) > (16777217 as f32), (0 as f32) == -(0 as f64),
+        (16777217 as f64) > (16777217 as f32), (0 as f32) == (-(0 as f64) as f32),
         (127 as f64) as i8, (255 as f32) as u8)
 }
 floatingValues()

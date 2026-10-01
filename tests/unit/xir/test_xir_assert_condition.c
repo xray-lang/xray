@@ -87,7 +87,7 @@ static void assert_bindings(const XrXirSourceResult *source) {
     const XrXirModule *module=xr_xir_artifact_module(source->checked);
     const XrXirSourceView *view=xr_xir_source_snapshot_view(source->snapshot);
     CHECK(view && view->complete && view->module_count==2 && module->declarations->module_count==2);
-    CHECK(module->defaults && module->defaults->count==2);
+    CHECK(module->defaults && module->defaults->count==3);
     const XrXirDefaultBinding *binding=&module->defaults->records[0];
     CHECK(binding->owner_kind==XR_XIR_DEFAULT_PARAMETER && binding->ordinal==1);
     const XrXirFunction *owner=&module->functions[binding->owner];
@@ -127,7 +127,7 @@ static void assert_bindings(const XrXirSourceResult *source) {
         }
         if (decl->range.module==1 && decl->kind==XR_XIR_SOURCE_PARAMETER) ++parameters;
     }
-    CHECK(core==1 && parameters==4);
+    CHECK(core==1 && parameters==7);
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_effects_analyze(source->checked,NULL,&effects)==XR_XIR_OK);
     const XrXirFunctionEffects *effect=xr_xir_effects_function(effects,binding->owner);
@@ -196,7 +196,7 @@ int main(int argc,char **argv) {
     const char *invalid[]={"assert()","assert(1)","assert(true,1)","assert(true,null)","assert(true,\"x\",\"y\")",
         "assert<i64>(true)","const f=assert","check(true)",
         "var flag=true;assert(ref flag)","var flag=true;assert(move flag)",
-        "fn unused(){assert(1)}", "fn wrong<T>(value:T){assert(value)}", "assertEqual(1,1)",
+        "fn unused(){assert(1)}", "fn wrong<T>(value:T){assert(value)}", "assertEqual(1,true)",
         "assertPanics(fn(value:i64){})"};
     for (uint32_t i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i) {
         result=assert_source(argv[1],path,invalid[i],false);xr_xir_source_result_free(&result);

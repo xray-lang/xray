@@ -6,14 +6,15 @@
       "bytes": 542,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "f9a058ffe4931a0e4f99511558b4d58093b408b6b85bb464a21d3ba2c2c62810",
-      "current_digest": "7e76a9c6b3e68bd0c0958c72f994118d0b0488a19c246a8a43f59eebe421c51f",
+      "current_digest": "0fb4f7de6f967cf03b35dee113b7995a23de247584f326537c7a985fb99a783a",
       "body_sha256": "c9e33e6c08dd365ad7092bb4a0267d56501e80fbace2ee2637f8b00faf862f88",
       "previous_contract": 54,
       "previous_digest": "2f6aeb358e4f9484599de121df7bde01e48a5c01c55e6c971291095d913cc020",
       "previous55_digest": "6f41d3996cc80b7ec5a6a260f6574dc0f46427ef8d63306561d53dd9237d471b",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "7e76a9c6b3e68bd0c0958c72f994118d0b0488a19c246a8a43f59eebe421c51f"
     },
     {
       "path": "xir_defaults_golden_bytes.h",
@@ -21,14 +22,15 @@
       "bytes": 221,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "f3c1c94e69901e9c9cd5d5f7cf7357d2f35aa143352ae1ec84a860b52a650dbd",
-      "current_digest": "ad6f38d1cd3ce90b74cac518abc41bd987cb6809ab4d86f4049260a790101c34",
+      "current_digest": "a6dccb85ea663790f1406f3332868be449ce6d308c0af47538b79e1aae32fb7c",
       "body_sha256": "c421deed44cb0b1e23c7342baad2ea1c65dab472ae03c4d196d426ce7e472606",
       "previous_contract": 54,
       "previous_digest": "546ef2715f595cc3c8e013829bff6b76dc4fbcd263c921c7c2d683fb17bedc24",
       "previous55_digest": "e1a0d96d358b17400c34000266e978426ecdaf8b0e9e11e833f853a63d87b1c3",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "ad6f38d1cd3ce90b74cac518abc41bd987cb6809ab4d86f4049260a790101c34"
     },
     {
       "path": "xir_defaults_golden_bytes.h",
@@ -36,14 +38,15 @@
       "bytes": 600,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "eef0a0f67fce5a5147e33788e769b8023ece3b3b986ebd0e4d574f1b4501b2a2",
-      "current_digest": "b097104f719af304fbb9d69934bb022ac81080e1334a7b9fa134f162e9fb0cd5",
+      "current_digest": "2bfe01c2cced9a1c866777db4ca167f98dc785210639d2ada3d04c73a7e0fa4a",
       "body_sha256": "6c6981d02629c209199cf99f6d0dd4d4beb2d3796901dcd9b50075155be5f7ea",
       "previous_contract": 54,
       "previous_digest": "bf95c0a6056097ef844a64d519e6dd3e188de0c904c588fac35f827f742859ca",
       "previous55_digest": "d19d1319d98f08c6b9115156a5b58efc1731820eb31b854200d87a29fee1f13f",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "b097104f719af304fbb9d69934bb022ac81080e1334a7b9fa134f162e9fb0cd5"
     },
     {
       "path": "xir_defaults_golden_bytes.h",
@@ -51,14 +54,15 @@
       "bytes": 405,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "29cb0124c9a86cddf16723a01c60e0b1a832ff8921638c206583053e44f850e0",
-      "current_digest": "dbfccb27f3f37f765877fb64bc49bc7c3dbf16310730fcddb9e96aa1ba1345b0",
+      "current_digest": "0df2248ac0d6b5c28582568e9d177347f1bfcc9603fb6eef48ba67f8cac8d239",
       "body_sha256": "695f8094f7da9a2aa9a47c2f15eef6ace7015c71a3fc906404a8217fb6d94f29",
       "previous_contract": 54,
       "previous_digest": "a762ef3dafc106a60bfc44f2e2da2e0f30dbcae4a35b742585c105f0145f1503",
       "previous55_digest": "0376dd8644047fbc3f493f7df9210e8ba9f21704601f9ffe7764004f764f6de6",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "dbfccb27f3f37f765877fb64bc49bc7c3dbf16310730fcddb9e96aa1ba1345b0"
     },
     {
       "path": "xir_defaults_invoke_golden.h",
@@ -66,14 +70,15 @@
       "bytes": 889,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "efdae59430e4f85cb506740bc0b79793e01bb5118689d31129e7e7939e5fd3d7",
-      "current_digest": "299fca6344808a06b6fc58cbd0fbab0963a549902abd23459856579f17dfb714",
+      "current_digest": "9c4276809587796da6cc5c01e85214d6193bc87304da99b525a49b40654611b4",
       "body_sha256": "5524e829c8526901deb8289aba26a5fc3511711fc150d9e1dab7ac946b9a9c54",
       "previous_contract": 54,
       "previous_digest": "c405636ea3b29fa10aa50834e6b92229b01e76f4a3407a3277616068a1b335a3",
       "previous55_digest": "c9aef3daa7f18ccfa15d5102de490d354d1a4d96786e5310536e2a9837dc293e",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "299fca6344808a06b6fc58cbd0fbab0963a549902abd23459856579f17dfb714"
     },
     {
       "path": "xir_generic_method_golden.h",
@@ -81,14 +86,15 @@
       "bytes": 600,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "eef0a0f67fce5a5147e33788e769b8023ece3b3b986ebd0e4d574f1b4501b2a2",
-      "current_digest": "b097104f719af304fbb9d69934bb022ac81080e1334a7b9fa134f162e9fb0cd5",
+      "current_digest": "2bfe01c2cced9a1c866777db4ca167f98dc785210639d2ada3d04c73a7e0fa4a",
       "body_sha256": "6c6981d02629c209199cf99f6d0dd4d4beb2d3796901dcd9b50075155be5f7ea",
       "previous_contract": 54,
       "previous_digest": "bf95c0a6056097ef844a64d519e6dd3e188de0c904c588fac35f827f742859ca",
       "previous55_digest": "d19d1319d98f08c6b9115156a5b58efc1731820eb31b854200d87a29fee1f13f",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "b097104f719af304fbb9d69934bb022ac81080e1334a7b9fa134f162e9fb0cd5"
     },
     {
       "path": "xir_library_string_goldens.h",
@@ -96,14 +102,15 @@
       "bytes": 691,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "a351f50cc0d9024181d534afe2f2770b0e3c523b7435f91df8db58d51ec439a8",
-      "current_digest": "7a6e9e14db9896e24c78f9a18dd454e3fce608500c8fbea86788c071d87fe0f0",
+      "current_digest": "1f962dc9dabc6560c2dc3a2d4a5cc59c2622d515f49e158710f6191aeaac3c92",
       "body_sha256": "ec4ed224a909b1c3f4407a8b4e974b7e5e0b2ce31fbc26c57268e2d3647bf4db",
       "previous_contract": 54,
       "previous_digest": "19b21264a73cdc60f3aeeed086ac3654a7fb628e51a958916fc75a85da52768f",
       "previous55_digest": "ea0481b71db9de50dc9f9b48cb08d221e27921e2bed580c3b38647b87afdd141",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "7a6e9e14db9896e24c78f9a18dd454e3fce608500c8fbea86788c071d87fe0f0"
     },
     {
       "path": "xir_library_string_goldens.h",
@@ -111,14 +118,15 @@
       "bytes": 689,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "4a36398c5e15ee419371b61ba06f7bf29c05ee2be6dea68ecb016ae826aecca9",
-      "current_digest": "ca95b1d69303b90d0544a32284ff52d6e4c25a8996996f6b59ce41c89d64a8b8",
+      "current_digest": "69ffdd2ebc17b05bcab7e73e80070669406c399f0d448e905682a1bea499c95e",
       "body_sha256": "040082346b7fccae6a9f2069fdae9e25f6220eda7f68c98ad5bbe585907961bb",
       "previous_contract": 54,
       "previous_digest": "3137a61cc4c03e642e0f3264a250c22491b54f00cc04fe0e2361059f4025f818",
       "previous55_digest": "ecc5a8a98737ccb36a6dc7c20567814d3210cf6111dd2b67e1132987c1574ffc",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "ca95b1d69303b90d0544a32284ff52d6e4c25a8996996f6b59ce41c89d64a8b8"
     },
     {
       "path": "xir_library_string_goldens.h",
@@ -126,14 +134,15 @@
       "bytes": 685,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "b1f533da52b1775e80814192351a42000a8d533106026b5115a53a811ada43c5",
-      "current_digest": "4259e59041ced91e2cbca7a6ca188987e834d102896315f3d94bd013595e2a28",
+      "current_digest": "3081fd21f1d43402819c5a38bb295126281a8ce16b2b8be0eeb9cc8a843d3c13",
       "body_sha256": "80a01b3e396a735223a92d90332e9116c59c2577ee240891d8f2c730e5bc6c8c",
       "previous_contract": 54,
       "previous_digest": "1c00a9ea59404a60e21416715c0858b5f7deef2fbbba4aa4e27e97147b94441d",
       "previous55_digest": "f211a79f8e56487aaa86f5e107f7de6d5b80812b94baa8a211a38f753f417c85",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "4259e59041ced91e2cbca7a6ca188987e834d102896315f3d94bd013595e2a28"
     },
     {
       "path": "xir_library_string_goldens.h",
@@ -141,14 +150,15 @@
       "bytes": 681,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "2dde22a935d5f1c9dd908c13021ebdef6355a61ac42befcaa5b621387f4498e9",
-      "current_digest": "1f08ecce8aa32a02d91773fdd82e78ca849b32f686fa37a30a21139ac94fb7d7",
+      "current_digest": "266e742dfe6dfd494d86c7653efa7641da6f51422a33250a36daad290f90a2a2",
       "body_sha256": "7f54107416f19cdeb3900b4280976aa55651ec3d498eb1c1b1ddbb7cfef8465c",
       "previous_contract": 54,
       "previous_digest": "35c11e4330d7550347568f2973ef84eb3dffd81fc3ed3266f2a37668adf32424",
       "previous55_digest": "133af9cdc0852ac9bdb37305ff897eef13534eb5acbd920f27099a65a3262061",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "1f08ecce8aa32a02d91773fdd82e78ca849b32f686fa37a30a21139ac94fb7d7"
     },
     {
       "path": "xir_library_string_goldens.h",
@@ -156,14 +166,15 @@
       "bytes": 1386,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "5e46ae7b18b992b258e17e0ab81062a460eceb0f463abdac54c346cd4e5395f6",
-      "current_digest": "f923d3ee94d4bc3fd6058327baa6ccfe8f5cad88d9c824119a8f1ae39fae070f",
+      "current_digest": "7d851c3da3f632037e32911dccbfb33c9614ccd51185dbac104281bcc8d9a10e",
       "body_sha256": "2c2f2f9790fcd825f6ab9925f0f880f6920a19371b5a96b097814656ba2a798b",
       "previous_contract": 54,
       "previous_digest": "f43c29527ddb643dd56d435328317107ea308a09af791b33606ffaa61621dbaa",
       "previous55_digest": "05a00fe6956788e39b2f2e56769f5e366667ef8e9c74202968a2cc9f55111381",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "f923d3ee94d4bc3fd6058327baa6ccfe8f5cad88d9c824119a8f1ae39fae070f"
     },
     {
       "path": "xir_library_string_goldens.h",
@@ -171,14 +182,15 @@
       "bytes": 688,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "76b71fdcb44449f0a6ccde2080cf6f6a6e49a32aa4c9c5728a6e0cb08ed4132f",
-      "current_digest": "17daa888cd0eda34ff55a4d08b3871e8c50ad3c3f58c31a7777d69dda6aeec2c",
+      "current_digest": "c59fc4596a0773738298948dfaba8326fc34be6b23739a72d2d28978cf5d63c3",
       "body_sha256": "3b97f5db7b359a0c488e8981d9c2d95b48b349e827d6c380e26a537777228cc4",
       "previous_contract": 54,
       "previous_digest": "8c4db525b03f0145c844fe57dfaba12b599e4007a83783c59e7f633e303de68b",
       "previous55_digest": "ebf76c9adf6fb394a3d6fca8943a8a0c5ae21948322c331a3c662874ed8177b2",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "17daa888cd0eda34ff55a4d08b3871e8c50ad3c3f58c31a7777d69dda6aeec2c"
     },
     {
       "path": "xir_library_string_goldens.h",
@@ -186,14 +198,15 @@
       "bytes": 694,
       "schema": 22,
       "old_contract": 53,
-      "current_contract": 56,
+      "current_contract": 57,
       "old_digest": "3ae4825bbcbd237e9c7f3722562c119ff72a4f8185d17e43cf96721ee10acfc9",
-      "current_digest": "fa5ac0e4fd4b3764e0a051c264d40f5a0f0501e389ca50c069c0868a248e77e6",
+      "current_digest": "428827f0f35de276147b9ae3f1fc8b382563551b94ca419f525bc37e41cd77ee",
       "body_sha256": "4c6217b62ea4da3f22d6f8f3a37d872670b144c940ffc4587971cdf074fdbac1",
       "previous_contract": 54,
       "previous_digest": "cbf298cb021ff416c9d57246bcc5499edf9d8a5f6fb352942e05854397ec118e",
       "previous55_digest": "855602fc0ab7237efaf691b856142495e58533c6b1d028c3077554dcdad4d3d6",
-      "historical_schema": 21
+      "historical_schema": 21,
+      "previous56_digest": "fa5ac0e4fd4b3764e0a051c264d40f5a0f0501e389ca50c069c0868a248e77e6"
     }
   ],
   "retired_unchanged": [

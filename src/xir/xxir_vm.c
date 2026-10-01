@@ -15,6 +15,7 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_equal.h"
 #include "xxir_float.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -589,6 +590,17 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_SUSPEND:
         action->kind = XR_XIR_ACTION_SUSPEND;
         break;
+    case XR_XIR_EQUAL: {
+        if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+        XrXirValue left = vm_value_operand(run,op->args[0]);
+        XrXirValue right = vm_value_operand(run,op->args[1]);
+        XrXirValueAdmission *admission = xr_xir_call_admission(run->view);
+        bool equal = false;
+        XrXirValueStatus status = xr_xir_value_equal(&left,&right,(XrXirType)left.type,admission,&equal);
+        if (status != XR_XIR_VALUE_OK) return value_run_status(status);
+        value = op->immediate ? !equal : equal;
+        break;
+    }
     case XR_XIR_ASSERT_CONDITION:
         if (!xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])) {
             XrXirValue message = vm_value_operand(run, op->args[1]);
@@ -812,7 +824,7 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_INVOKE ||
             body->instructions[i].op == XR_XIR_INVOKE_INDIRECT || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
-            body->instructions[i].op == XR_XIR_ASSERT_CONDITION ||
+            body->instructions[i].op == XR_XIR_ASSERT_CONDITION || body->instructions[i].op == XR_XIR_EQUAL ||
             body->instructions[i].op == XR_XIR_PANIC_CATCH ||
             body->instructions[i].op == XR_XIR_CLEANUP_REGISTER || body->instructions[i].op == XR_XIR_CLEANUP_LEAVE ||
             body->instructions[i].op == XR_XIR_CLEANUP_ERROR ||

@@ -25,6 +25,7 @@ _NAMESPACE_TYPE_RE = re.compile(
     r'"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*\)'
 )
 _IFACE_RE = re.compile(r'XR_BUILTIN_IFACE\(\s*"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*\)')
+_PREDICATE_RE = re.compile(r'XR_BUILTIN_PREDICATE\(\s*"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*,\s*(?P<identity>[A-Z0-9_]+)\s*\)')
 _ENUM_RE = re.compile(
     r'XR_BUILTIN_ENUM\(\s*"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*,'
     r'\s*(?P<slot>\w+)\s*,(?P<variants>.*?)\)\s*\n\s*\n',
@@ -45,10 +46,11 @@ _MACRO_DEFINITION_LINE = re.compile(r'^\s*#\s*(define|ifndef|undef)\b')
 @dataclass(frozen=True)
 class Symbol:
     name: str
-    category: str  # prelude_type | type | namespace_type | enum | interface | hint
+    category: str  # prelude_type | type | namespace_type | enum | interface | predicate | hint
     arity: int = 0
     native_type: str | None = None
     prelude_kind: str | None = None
+    predicate_identity: str | None = None
     variants: tuple[tuple[str, str], ...] = ()
     hint: str | None = None
     line: int = 1
@@ -62,6 +64,7 @@ class Symbol:
             "namespace_type",
             "enum",
             "interface",
+            "predicate",
         }
 
     @property
@@ -166,6 +169,10 @@ def load(root: Path | str = ".") -> Registry:
                 line=_line_of(body, match.start()),
             )
         )
+    for match in _PREDICATE_RE.finditer(body):
+        registry.symbols.append(Symbol(name=match.group("name"), category="predicate",
+            arity=int(match.group("arity")), predicate_identity=match.group("identity"),
+            line=_line_of(body, match.start())))
     for match in _HINT_RE.finditer(body):
         registry.symbols.append(
             Symbol(

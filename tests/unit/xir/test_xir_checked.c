@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_checked_fixture.h"
+#include "xir_checked_scalar57_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -132,7 +133,8 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 22 && XR_XIR_CHECKED_CONTRACT == 56 && XR_XIR_OP_COUNT == 117, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 22 && XR_XIR_CHECKED_CONTRACT == 57 && XR_XIR_OP_COUNT == 118, "packet revision");
+    _Static_assert(XR_XIR_EQUAL == 117, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 116, "typed normal result discard operation");
     _Static_assert(XR_XIR_ASSERT_CONDITION == 115, "typed assertion wire operation");
     _Static_assert(XR_XIR_CALL_DEFAULT == 113, "default purpose wire operation");
@@ -170,9 +172,10 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0xad, 0x6f, 0x38, 0xd1, 0xcd, 0x3c, 0xe9, 0x0b, 0x74, 0xca, 0xc5, 0x18, 0xab, 0xc4, 0x1b, 0xd9, 0x87, 0xcb, 0x68, 0x09, 0xab, 0x4d, 0x86, 0xf4, 0x04, 0x92, 0x60, 0xa7, 0x90, 0x10, 0x1c, 0x34
+        0xa6, 0xdc, 0xcb, 0x85, 0xea, 0x66, 0x37, 0x90, 0xf1, 0x40, 0x6f, 0x33, 0x32, 0x86, 0x8b, 0xe4, 0x49, 0xce, 0x6d, 0x30, 0x8c, 0x0a, 0xf4, 0x75, 0x38, 0xb7, 0x9e, 0x1a, 0xae, 0x32, 0xfb, 0x7c
     };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
+    CHECK(packet.length==sizeof(checked_scalar57_golden) && !memcmp(packet.bytes,checked_scalar57_golden,packet.length));
     uint8_t original[221]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 145; offset <= 149; offset += 4) {
         put32(packet.bytes + offset, 1); digest_packet(&packet);

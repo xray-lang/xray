@@ -30,6 +30,25 @@ static const XrXirConstraint *constraint_fact(const XrXirConstraintEnvironment *
         &environment->own_constraints[parameter-environment->parent_count];
 }
 
+static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environment,
+    XrXirType type, uint64_t *work) {
+    for (;;) {
+        if (!work || !*work) return XR_XIR_BUDGET;
+        --*work;
+        uint32_t id = (uint32_t)type;
+        if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
+        if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
+            const XrXirConstraint *fact = constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
+            return fact && (fact->markers & XR_XIR_CONSTRAINT_EQUAL) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        }
+        const XrXirTypeNode *node = xr_xir_type_node(environment->types,type);
+        if (!node || node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_BAD_TYPE;
+        if ((uint32_t)node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
+            (uint32_t)node->element < XR_XIR_CONSTRUCTED_TYPE_LIMIT && (uint32_t)node->element >= id)
+            return XR_XIR_BAD_TYPE;
+        type = node->element;
+    }
+}
 static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environment,
     XrXirType type, uint32_t required, uint64_t *work) {
     const XrXirTypes *types = environment->types;
@@ -42,6 +61,10 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         const XrXirConstraint *fact = parameter ? constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE) : NULL;
         if (parameter ? (!fact || !(fact->markers & XR_XIR_CONSTRAINT_ERROR)) :
             (type != XR_XIR_ERROR && !xr_xir_type_is_enum(types, type))) return XR_XIR_BAD_TYPE;
+    }
+    if (required & XR_XIR_CONSTRAINT_EQUAL) {
+        XrXirStatus status = constraint_equal(environment,type,work);
+        if (status != XR_XIR_OK) return status;
     }
     if (!(required & XR_XIR_CONSTRAINT_SENDABLE)) return XR_XIR_OK;
     for (;;) {

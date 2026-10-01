@@ -435,6 +435,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_strings.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_condition.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_panics.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_equal.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/default_parameters.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/default_invokes.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_array_fields.cmake)
@@ -3453,6 +3454,10 @@ add_test(NAME test_api_inventory_native_declarations
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_native_declarations.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 set_tests_properties(test_api_inventory_native_declarations PROPERTIES LABELS "api;metadata;tooling;native-types")
+add_test(NAME test_api_inventory_predicates
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_predicates.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(test_api_inventory_predicates PROPERTIES LABELS "api;metadata;tooling;xir")
 add_test(
     NAME test_param_mode_tooling_display
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_param_mode_tooling_display.py
