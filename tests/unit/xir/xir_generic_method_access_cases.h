@@ -55,7 +55,7 @@ static void generic_method_access_cases(void) {
         };
         XrXirInterfaceTable table = {interfaces,2};
         XrXirTypes types = {nodes,4,&nominals,&table};
-        XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM};
+        XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
         if (attack == 1 || attack == 4 || attack == 5) {
             modules[0].dependencies = NULL; modules[0].dependency_count = 0;
         }

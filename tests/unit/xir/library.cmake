@@ -14,6 +14,9 @@ add_custom_command(OUTPUT ${XIR_LIBRARY_CHECKED}
     COMMAND $<TARGET_FILE:test_xir_library_source> ${XIR_LIBRARY_CHECKED}
     DEPENDS test_xir_library_source
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_goldens.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_defaults_golden_bytes.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_defaults_wire_cases.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_defaults_invoke_golden.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_map_cases.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_reader_cases.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_dispatch_cases.h

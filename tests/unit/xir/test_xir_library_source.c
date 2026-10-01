@@ -18,13 +18,13 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
-static size_t source_attempts,source_fail_at=SIZE_MAX,source_live,source_bytes;
+static size_t source_attempts,source_fail_at=SIZE_MAX,source_live,source_bytes,source_peak;
 typedef struct LibrarySourceAllocation {void *pointer;size_t bytes;} LibrarySourceAllocation;
 static LibrarySourceAllocation source_owned[4096];
 XR_FUNC void *xr_test_library_source_calloc(size_t count,size_t size){
  CHECK(!size||count<=SIZE_MAX/size);
  if(source_attempts++==source_fail_at)return NULL;void *p=xr_calloc(count,size);
- if(p){CHECK(source_live<4096);CHECK(count*size<=SIZE_MAX-source_bytes);source_owned[source_live++]=(LibrarySourceAllocation){p,count*size};source_bytes+=count*size;}return p;
+ if(p){CHECK(source_live<4096);CHECK(count*size<=SIZE_MAX-source_bytes);source_owned[source_live++]=(LibrarySourceAllocation){p,count*size};source_bytes+=count*size;if(source_bytes>source_peak)source_peak=source_bytes;}return p;
 }
 XR_FUNC void xr_test_library_source_free(void *p){
  if(p)for(size_t i=0;i<source_live;++i)if(source_owned[i].pointer==p){source_bytes-=source_owned[i].bytes;source_owned[i]=source_owned[--source_live];break;}
@@ -70,8 +70,10 @@ static void catalog_thresholds(const XrXirLibraryInput *input) {
  CHECK(budget.work<before.work&&budget.metadata_bytes<before.metadata_bytes&&budget.scratch_bytes==before.scratch_bytes);xr_xir_artifact_free(artifact);
 }
 #include "xir_library_reader_cases.h"
+#include "xir_defaults_wire_cases.h"
 #include "xir_library_map_cases.h"
 #include "xir_library_goldens.h"
+#include "xir_library_source_budget_cases.h"
 static void conflict_text(const char *name,const char *text) {
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,name)>0);
     FILE *file=fopen(path,"wb");CHECK(file);size_t n=strlen(text);CHECK(fwrite(text,1,n,file)==n&&!fclose(file));
@@ -105,7 +107,7 @@ static void source_representation_conflicts(void) {
     }
 }
 static void library_source_case(bool middle_case,const char *packet_path) {
- conflict_text("library.xr","fn secret()->i64 { return 41; }\nexport fn answer()->i64 { return secret(); }\n");
+ conflict_text("library.xr","fn secret(value:i64=41)->i64 { return value; }\nexport fn answer(value:i64=secret())->i64 { return value; }\n");
  XrCompilerSession *producer=xr_compiler_session_new(NULL);CHECK(producer);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
  XrXirSourceRequest library_request={producer,XR_SOURCE_FIXTURES "/library.xr",&authority,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
@@ -131,6 +133,7 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  XrXirLibraryCatalog *catalog=NULL;status=xr_xir_library_catalog_new(&input,NULL,&catalog);
  if(status!=XR_XIR_OK)fprintf(stderr,"catalog %u\n",status);CHECK(status==XR_XIR_OK);
  size_t catalog_sites=runtime_attempts,catalog_live=runtime_live,catalog_bytes=runtime_bytes;
+ library_source_metadata_cases(catalog);
  for(size_t fault=0;fault<catalog_sites;++fault){
   XrXirLibraryCatalog *failed=NULL;runtime_attempts=0;runtime_fail_at=fault;
   XrXirStatus failed_status=xr_xir_library_catalog_new(&input,NULL,&failed);
@@ -153,10 +156,15 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  CHECK(xr_xir_library_catalog_new(&wrong,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
  packet.bytes[identity_offset]='l';xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
  uint8_t saved[8];memcpy(saved,packet.bytes+8,8);
- for(unsigned mode=0;mode<4;++mode){
+ for(unsigned mode=0;mode<7;++mode){
   memcpy(packet.bytes+8,saved,8);
-  if(mode!=3){memset(packet.bytes+8,0,4);packet.bytes[8]=19;}
-  if(mode!=2){memset(packet.bytes+12,0,4);packet.bytes[12]=mode==0?48:50;}
+  if(mode<4){
+   if(mode!=3){memset(packet.bytes+8,0,4);packet.bytes[8]=19;}
+   if(mode!=2){memset(packet.bytes+12,0,4);packet.bytes[12]=mode==0?48:50;}
+  }else{
+   if(mode!=6){memset(packet.bytes+8,0,4);packet.bytes[8]=20;}
+   if(mode!=5){memset(packet.bytes+12,0,4);packet.bytes[12]=51;}
+  }
   xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
   wrong=input;xr_sha256(packet.bytes,packet.length,wrong.sha256);
   CHECK(xr_xir_library_catalog_new(&wrong,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
@@ -234,11 +242,30 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  xr_test_library_source_run(owned);
  CHECK(!source_live&&!source_bytes&&!runtime_live&&!runtime_bytes);
 }
+static void library_unit_boundary_cases(void) {
+ const char *cases[]={
+  "export fn answer(value:())->i64 { return 41; }",
+  "fn empty() {}\nexport fn answer(value:()=empty())->i64 { return 41; }",
+  "fn empty() {}\nfn answer(value:())->i64 { return 41; }\nexport fn result()->i64 { return answer(empty()); }"};
+ for(unsigned i=0;i<3;++i){
+  conflict_text("unit.xr",cases[i]);
+  XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
+  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
+  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/unit.xr",&authority,NULL,NULL,NULL,i<2?XR_XIR_LIBRARY:XR_XIR_PROGRAM,NULL};
+  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+  XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
+  printf("Unit probe=%u status=%u diagnostic=%s\n",i,status,diagnostic.message);
+  CHECK(status==XR_XIR_BAD_TYPE && !result.checked);
+  CHECK(!strcmp(diagnostic.message,"parameter contract is not implemented in XIR"));
+  xr_xir_source_result_free(&result);xr_compiler_session_delete(session);
+  CHECK(!source_live&&!source_bytes&&!runtime_live&&!runtime_bytes);
+ }
+}
 int main(int argc,char **argv) {
  CHECK(argc==1||argc==2);
  conflict_text("root.xr","import {answer} from \"./library\";\nexport fn result()->i64 { return answer(); }\n");
  conflict_text("private.xr","import {secret} from \"./library\";\nexport fn result()->i64 { return secret(); }\n");
- library_independent_goldens();source_representation_conflicts();
+ library_independent_goldens();defaults_wire_cases();library_unit_boundary_cases();source_representation_conflicts();
  library_source_case(false,argc==2?argv[1]:NULL);library_source_case(true,NULL);
  puts("Checked Library direct Source lifetime, exact identities and fault boundaries PASS");return 0;
 }

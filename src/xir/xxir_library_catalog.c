@@ -40,14 +40,20 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m, const char *ident
     for(uint32_t f=0;f<m->function_count;++f){
         if (!budget->work) return XR_XIR_BUDGET; --budget->work;
         const XrXirFunction *fn=&m->functions[f];
-        if(fn->parameter_count || (fn->result!=XR_XIR_UNIT&&fn->result!=XR_XIR_I64) ||
+        if((fn->result!=XR_XIR_UNIT&&fn->result!=XR_XIR_I64) ||
             (m->generics&&m->generics[f].parameter_count) || d->functions[f].nominal_owner ||
             d->functions[f].cleanup_owner || d->functions[f].method_kind!=XR_XIR_NON_MEMBER)
             return XR_XIR_BAD_STAGE;
+        for (uint32_t p = 0; p < fn->parameter_count; ++p) {
+            if (!budget->work) return XR_XIR_BUDGET;
+            --budget->work;
+            if (fn->parameters[p] != XR_XIR_I64)
+                return XR_XIR_BAD_STAGE;
+        }
         for(uint32_t i=0;i<fn->instruction_count;++i){
             if (!budget->work) return XR_XIR_BUDGET; --budget->work;
             const XrXirInstruction *op=&fn->instructions[i];
-            if(op->op!=XR_XIR_CALL&&op->op!=XR_XIR_RETURN&&op->op!=XR_XIR_CONST_INT&&op->op!=XR_XIR_ADD_INT)
+            if(op->op!=XR_XIR_CALL&&op->op!=XR_XIR_CALL_DEFAULT&&op->op!=XR_XIR_RETURN&&op->op!=XR_XIR_CONST_INT&&op->op!=XR_XIR_ADD_INT)
                 return XR_XIR_BAD_STAGE;
         }
     }

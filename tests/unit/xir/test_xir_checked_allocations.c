@@ -58,6 +58,7 @@ static void packet_free(void *p) {
 #include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_generic.c"
+#include "xir/xxir_defaults.c"
 #include "xir/xxir.c"
 #include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"

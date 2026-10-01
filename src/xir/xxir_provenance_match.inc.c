@@ -11,6 +11,7 @@
  */
 #include <stdio.h>
 #include "xxir_constraints.h"
+#include "xxir_defaults_internal.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_implementation_verify.h"
 #include "xxir_interface_members.h"
@@ -38,6 +39,23 @@ static XrXirStatus provenance_call_match(ProvenanceMatch *c, const XrXirOrigin *
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
+}
+static XrXirStatus provenance_default_match(ProvenanceMatch *c,const XrXirOrigin *origin,
+    const XrXirInstruction *from,const XrXirInstruction *to) {
+    if(to->args[0] || to->args[1]) return XR_XIR_BAD_STRUCTURE;
+    if(from->op==XR_XIR_CALL_DEFAULT) {
+        if(to->op!=XR_XIR_CALL || to->targets[0] || to->targets[1]) return XR_XIR_BAD_STRUCTURE;
+    } else if(from->op!=XR_XIR_INVOKE_DEFAULT || to->op!=XR_XIR_INVOKE ||
+        from->targets[0]!=to->targets[0] || from->targets[1]!=to->targets[1]) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xr_xir_default_call_verify(c->source,origin->function,from,c->remaining);
+    if(status!=XR_XIR_OK) return status;
+    const XrXirDefaultBinding *binding=NULL;
+    const uint32_t *identity=xr_xir_default_identity(from);
+    status=xr_xir_default_lookup(c->source,identity[0],identity[1],c->remaining,&binding);
+    if(status!=XR_XIR_OK) return status;
+    if(!binding) return XR_XIR_BAD_STRUCTURE;
+    XrXirInstruction ordinary=*from; ordinary.immediate=binding->function;
+    return provenance_call_match(c,origin,&ordinary,to);
 }
 static XrXirStatus provenance_requirement_match(ProvenanceMatch *c, const XrXirOrigin *origin,
     const XrXirInstruction *from, const XrXirInstruction *to, const XrXirFunction *function) {
@@ -212,12 +230,16 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
         for (uint32_t i = 0; i < from->instruction_count; ++i) {
             const XrXirInstruction *a = &from->instructions[i], *b = &to->instructions[i];
             c->diagnostic->instruction = i;
-            XrXirOp expected = a->op == XR_XIR_CALL_REQUIREMENT ? XR_XIR_CALL : c->destination->stage == XR_XIR_LOWERED ?
+            XrXirOp expected = (a->op == XR_XIR_CALL_REQUIREMENT || a->op == XR_XIR_CALL_DEFAULT) ? XR_XIR_CALL : a->op == XR_XIR_INVOKE_DEFAULT ? XR_XIR_INVOKE : c->destination->stage == XR_XIR_LOWERED ?
                 provenance_lowered_op(c->destination->types, to, a->op, b) : a->op;
-            if (expected != b->op || a->args[0] != b->args[0] || a->args[1] != b->args[1] ||
-                (a->op != XR_XIR_CALL_REQUIREMENT &&
+            if (expected != b->op || (a->op != XR_XIR_INVOKE_DEFAULT &&
+                    (a->args[0] != b->args[0] || a->args[1] != b->args[1])) ||
+                (a->op != XR_XIR_CALL_REQUIREMENT && a->op != XR_XIR_CALL_DEFAULT &&
                     (a->targets[0] != b->targets[0] || a->targets[1] != b->targets[1]))) return XR_XIR_BAD_STRUCTURE;
-            if (a->op == XR_XIR_CALL_REQUIREMENT) {
+            if (a->op == XR_XIR_CALL_DEFAULT || a->op == XR_XIR_INVOKE_DEFAULT) {
+                XrXirStatus status=provenance_default_match(c,origin,a,b);
+                if(status!=XR_XIR_OK) return status;
+            } else if (a->op == XR_XIR_CALL_REQUIREMENT) {
                 XrXirStatus status = provenance_requirement_match(c,origin,a,b,to);
                 if (status != XR_XIR_OK) return status;
             } else if (xr_xir_op_references_function(a->op)) {
@@ -508,7 +530,7 @@ XrXirStatus xr_xir_provenance_functions_match(const XrXirModule *source,
     XrXirDiagnostic location = {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status = XR_XIR_OK;
     if (!source || !destination || !origins || !remaining || !source->functions ||
-        !destination->functions || !destination->function_count || destination->generics ||
+        !destination->functions || !destination->function_count || destination->generics || destination->defaults ||
         (!!source->declarations != !!destination->declarations) ||
         (destination->declarations && !destination->declarations->functions))
         status = XR_XIR_BAD_STRUCTURE;

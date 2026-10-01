@@ -169,6 +169,22 @@ typedef enum XrXirLinkageKind {
     XR_XIR_PROGRAM, XR_XIR_LIBRARY
 } XrXirLinkageKind;
 
+typedef enum XrXirDefaultOwnerKind {
+    XR_XIR_DEFAULT_PARAMETER = 0
+} XrXirDefaultOwnerKind;
+
+typedef struct XrXirDefaultBinding {
+    uint32_t owner_kind;
+    uint32_t owner;
+    uint32_t ordinal;
+    uint32_t function;
+} XrXirDefaultBinding;
+
+typedef struct XrXirDefaultTable {
+    const XrXirDefaultBinding *records;
+    uint32_t count;
+} XrXirDefaultTable;
+
 typedef struct XrXirProvenance XrXirProvenance;
 typedef struct XrXirModule {
     XrXirStage stage;
@@ -179,6 +195,7 @@ typedef struct XrXirModule {
     const XrXirTypes *types;
     const XrXirProvenance *provenance;
     XrXirLinkageKind linkage_kind;
+    const XrXirDefaultTable *defaults;
 } XrXirModule;
 
 typedef struct XrXirBudget {
@@ -210,6 +227,10 @@ typedef struct XrXirArtifact XrXirArtifact;
 
 XR_FUNC XrXirBudget xr_xir_default_budget(void);
 XR_FUNC const char *xr_xir_op_name(XrXirOp op);
+XR_FUNC XrXirStatus xr_xir_defaults_verify(const XrXirModule *module, XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_default_lookup(const XrXirModule *module, uint32_t owner,
+                                        uint32_t ordinal, XrXirBudget *budget,
+                                        const XrXirDefaultBinding **binding);
 XR_FUNC XrXirStatus xr_xir_verify(const XrXirModule *module,
                                 const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_check(const XrXirModule *built, const XrXirBudget *budget,

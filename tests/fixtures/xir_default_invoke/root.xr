@@ -1,0 +1,31 @@
+const cleaned=Atomic(0)
+const entered=Atomic(0)
+enum Failure { Bad { message:string } }
+enum Other { Wrong }
+fn fail()->i64 { throw Failure.Bad{message:"held"+"-error"} }
+fn receive(value:i64=fail())->i64 { return value }
+fn genericReceive<A,B>(value:i64=fail())->i64 { return value }
+struct Reader<A> {
+    value:A
+    read<B>(value:i64=fail())->i64 { return value }
+    static make<B>(value:i64=fail())->i64 { return value }
+}
+final class Box { value:i64; constructor(value:i64=fail()) { this.value=value } }
+fn failClean()->i64 { defer { cleaned.fetchAdd(1) }; throw Failure.Bad{message:"held"+"-error"} }
+fn mustNotEnter(value:i64=failClean())->i64 { entered.fetchAdd(1); return value }
+export fn plain()->i64 { try { return receive() } catch(e) { return 41 } }
+export fn typed()->i64 { try { return receive() } catch(e:Failure) { return 41 } }
+export fn genericCatch()->i64 { try { return genericReceive<string,i64>() } catch(e:Failure) { return 41 } }
+export fn method()->i64 { const r=Reader<string>{value:"parent"};try { return r.read<i64>() } catch(e:Failure) { return 41 } }
+export fn staticMethod()->i64 { try { return Reader<string>.make<i64>() } catch(e:Failure) { return 41 } }
+export fn construction()->i64 { try { return Box().value } catch(e:Failure) { return 41 } }
+export fn nested()->i64 { try { try { return receive() } catch(e:Other) { return 0 } } catch(e:Failure) { return 41 } }
+export fn rethrow()->i64 { try { try { return receive() } catch(e) { throw e } } catch(e:Failure) { return 41 } }
+export fn cleanup()->i64 { try { return mustNotEnter() } catch(e) { if(cleaned.load()==1 && entered.load()==0){return 41}else{return 0} } }
+export fn explicitControl()->i64 { try { return receive(fail()) } catch(e:Failure) { return 41 } }
+export fn heldString()->string { try { receive();return "wrong" } catch(e:Failure) { return "caught"+"-owned" } }
+export fn heldError()->Error { try { receive();return Other.Wrong } catch(e) { return e } }
+export fn escaping()->i64 { try { return receive() } catch(e:Other) { return 0 } }
+fn delayedFail()->i64 { Coro.yield();throw Failure.Bad{message:"held"+"-error"} }
+fn delayedReceive(value:i64=delayedFail())->i64 { return value }
+export fn yieldCatch()->i64 { try { return delayedReceive() } catch(e:Failure) { return 41 } }

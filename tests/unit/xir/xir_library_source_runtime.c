@@ -37,9 +37,15 @@ static bool pair(XrXirProgram *program){
 }
 XR_FUNC void xr_test_library_source_run(XrXirArtifact *owned) {
  CHECK(xr_xir_artifact_verify(owned,NULL,NULL)==XR_XIR_OK);
+ const XrXirModule *original=xr_xir_artifact_module(owned);
+ uint32_t defaults=original->defaults?original->defaults->count:0;
  XrXirArtifact *specialized=NULL,*lowered=NULL;
  CHECK(xr_xir_specialize(owned,NULL,&specialized,NULL)==XR_XIR_OK);xr_xir_artifact_free(owned);
  CHECK(xr_xir_artifact_verify(specialized,NULL,NULL)==XR_XIR_OK);
+ const XrXirModule *projected=xr_xir_artifact_module(specialized);CHECK(!projected->defaults);
+ if(defaults){CHECK(projected->provenance&&projected->provenance->source->module.defaults);
+  CHECK(projected->provenance->source->module.defaults->count==defaults);}
+
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
  CHECK(xr_xir_lower(specialized,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(specialized);
  XrXirProgram *program=NULL;CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){1048576,1048576},&program)==XR_XIR_OK);

@@ -1,5 +1,5 @@
 # The XIR compiler core is independent of legacy executors and stdlib bootstrap.
-add_library(xray_xir_admission STATIC xxir.c xxir_program_match.c xxir_verify.c xxir_effects.c xxir_layout.c xxir_checked.c xxir_generic.c ../base/xsha256.c)
+add_library(xray_xir_admission STATIC xxir.c xxir_program_match.c xxir_verify.c xxir_defaults.c xxir_effects.c xxir_layout.c xxir_checked.c xxir_generic.c ../base/xsha256.c)
 add_library(xray_xir STATIC xxir_specialize.c)
 add_library(xray_xir_declarations STATIC xxir_declarations.c xxir_types.c xxir_constraints.c xxir_constraint_proof.c xxir_interface.c xxir_interface_members.c xxir_implementation.c xxir_implementation_verify.c xxir_type_layout.c ../shared/xnative_declaration.c)
 add_dependencies(xray_xir_declarations gen-native-type-defs)

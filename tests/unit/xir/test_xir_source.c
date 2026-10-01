@@ -27,7 +27,9 @@
 #include "xir_source_inference_selection.h"
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
 #include "xir_source_cases.h"
+#include "xir_source_default_runtime_gaps.h"
 int main(int argc, char **argv) {
+    source_default_runtime_gaps();
     XrCompilerSession *session = xr_compiler_session_new(NULL);
     CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};

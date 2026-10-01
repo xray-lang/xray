@@ -21,12 +21,16 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
 }
 static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     SourceFunction *body = &ctx->bodies[ctx->function];
-    if (!body->error_context || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT))
+    if (!body->error_context || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT &&
+        op.op != XR_XIR_CALL_DEFAULT))
         return source_recipe_append(ctx,op,result);
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t origin = body->count, error = body->block_count;
     if (error == UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"invoke block identity exhausted");
-    op.op = op.op == XR_XIR_CALL ? XR_XIR_INVOKE : XR_XIR_INVOKE_INDIRECT;
+    if (op.op == XR_XIR_CALL_DEFAULT) {
+        op.args[0] = op.targets[0]; op.args[1] = op.targets[1];
+        op.op = XR_XIR_INVOKE_DEFAULT;
+    } else op.op = op.op == XR_XIR_CALL ? XR_XIR_INVOKE : XR_XIR_INVOKE_INDIRECT;
     op.targets[0] = error+1; op.targets[1] = error;
     if (!source_recipe_append(ctx,op,NULL) || !begin_block(ctx)) return false;
     SourceValue caught;

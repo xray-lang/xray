@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_library_goldens.h - Independent schema 20 semantic 51 packets
+ * xir_library_goldens.h - Preserved independent retired-format packets
  *
  * KEY CONCEPT:
  *   Hand-built byte fixtures independently constrain both reader and writer.
@@ -488,7 +488,7 @@ static void library_independent_goldens(void) {
  {"generic-schema-UINTMAX.xrc",library_golden_6,sizeof(library_golden_6)-1,false},
  {"generic-semantic-UINTMAX.xrc",library_golden_7,sizeof(library_golden_7)-1,false},
  {"generic19-50.xrc",library_golden_8,sizeof(library_golden_8)-1,false},
- {"generic20-51.xrc",library_golden_9,sizeof(library_golden_9)-1,true},
+ {"generic20-51.xrc",library_golden_9,sizeof(library_golden_9)-1,false},
  {"library-fake-entry.xrc",library_golden_10,sizeof(library_golden_10)-1,false},
  {"library-fake-root.xrc",library_golden_11,sizeof(library_golden_11)-1,false},
  {"library-kind-UINTMAX.xrc",library_golden_12,sizeof(library_golden_12)-1,false},
@@ -499,7 +499,7 @@ static void library_independent_goldens(void) {
  {"library-only-old-semantic50.xrc",library_golden_17,sizeof(library_golden_17)-1,false},
  {"library-schema-UINTMAX.xrc",library_golden_18,sizeof(library_golden_18)-1,false},
  {"library-semantic-UINTMAX.xrc",library_golden_19,sizeof(library_golden_19)-1,false},
- {"library20-51.xrc",library_golden_20,sizeof(library_golden_20)-1,true},
+ {"library20-51.xrc",library_golden_20,sizeof(library_golden_20)-1,false},
  {"minimal-kind-UINTMAX.xrc",library_golden_21,sizeof(library_golden_21)-1,false},
  {"minimal-old-semantic47.xrc",library_golden_22,sizeof(library_golden_22)-1,false},
  {"minimal-old-semantic48.xrc",library_golden_23,sizeof(library_golden_23)-1,false},
@@ -509,7 +509,7 @@ static void library_independent_goldens(void) {
  {"minimal-schema-UINTMAX.xrc",library_golden_27,sizeof(library_golden_27)-1,false},
  {"minimal-semantic-UINTMAX.xrc",library_golden_28,sizeof(library_golden_28)-1,false},
  {"minimal19-50.xrc",library_golden_29,sizeof(library_golden_29)-1,false},
- {"minimal20-51.xrc",library_golden_30,sizeof(library_golden_30)-1,true},
+ {"minimal20-51.xrc",library_golden_30,sizeof(library_golden_30)-1,false},
  };
  for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
   XrXirArtifact *artifact=NULL;XrXirStatus status=xr_xir_checked_read(cases[i].bytes,cases[i].length,NULL,&artifact,NULL);

@@ -36,7 +36,7 @@ static uint64_t source_manifest_bytes(const XrDeclarationManifest *manifest) {
 }
 static bool source_manifest_module(SourceContext *ctx, SourceManifest *manifest, const char *logical) {
     if (!source_work(ctx, NULL)) return false;
-    uint64_t available = ctx->budget.metadata_bytes - ctx->allocated;
+    uint64_t available = ctx->budget.metadata_bytes;
     size_t limit = available > SIZE_MAX - 1 ? SIZE_MAX - 1 : (size_t)available;
     XrFileBytes bytes = {0};
     XrFileReadStatus read = xr_file_read_under_root(manifest->authority.physical_root, logical, limit, &bytes);
@@ -78,7 +78,7 @@ static bool source_manifest_load(SourceContext *ctx, const XrModuleIdentityAutho
     manifest->authority.physical_root = source_manifest_text(ctx, authority->physical_root);
     manifest->next = ctx->manifests; ctx->manifests = manifest;
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
-    uint64_t available = (ctx->budget.metadata_bytes - ctx->allocated) / 3;
+    uint64_t available = (ctx->budget.metadata_bytes) / 3;
     size_t bytes = available > SIZE_MAX ? SIZE_MAX : (size_t)available;
     size_t work = ctx->budget.work > SIZE_MAX ? SIZE_MAX : (size_t)ctx->budget.work;
     uint32_t record_work = work > UINT32_MAX ? UINT32_MAX : (uint32_t)work;
@@ -91,9 +91,9 @@ static bool source_manifest_load(SourceContext *ctx, const XrModuleIdentityAutho
     if (status == XR_DECLARATION_ABSENT) return true;
     if (status != XR_DECLARATION_OK) return source_manifest_failure(ctx, status);
     uint64_t owned_bytes = source_manifest_bytes(manifest->declarations);
-    if (owned_bytes > ctx->budget.metadata_bytes - ctx->allocated)
+    if (owned_bytes > ctx->budget.metadata_bytes)
         return source_fail(ctx, NULL, XR_XIR_BUDGET, "declaration ownership budget exhausted");
-    ctx->allocated += owned_bytes;
+    ctx->budget.metadata_bytes -= owned_bytes;
     for (uint32_t i = 0; i < manifest->declarations->count; ++i)
         if (!source_manifest_module(ctx, manifest, manifest->declarations->records[i].module)) return false;
     return true;

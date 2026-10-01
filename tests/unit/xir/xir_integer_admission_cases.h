@@ -19,7 +19,7 @@ static void integer_ir_rejections(void) {
             {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
         XrXirBlock block = {0, 2, 0, 0};
         XrXirFunction function = {"integer", 7, parameters, 2, XR_XIR_I8, &block, 1, ops, 2, NULL, 0};
-        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
         XrXirConstraint constraints = {0};
         XrXirGeneric generic = {&constraints, 1, NULL, 0};
         switch (test) {

@@ -55,7 +55,7 @@ static void fixture_init(Fixture *fixture) {
     fixture->instructions[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {6, 0}, {0, 0}, 0, {0}};
     fixture->function = (XrXirFunction) {fixture->name, 5, fixture->parameters, 2,
         XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6, NULL, 0};
-    fixture->module = (XrXirModule) {XR_XIR_BUILT, &fixture->function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    fixture->module = (XrXirModule) {XR_XIR_BUILT, &fixture->function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
 }
 
 static void expect(Fixture *fixture, XrXirStatus status) {
@@ -260,7 +260,7 @@ static void loops_and_storage_order(void) {
     };
     XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 1, 0, 0}, {3, 1, 0, 0}, {4, 1, 0, 0}};
     XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     ops[0].immediate = 2;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
@@ -289,7 +289,7 @@ static void dominance_word_boundary(void) {
             ops[next++] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {b + 1, 0}, 0, {0}};
     }
     XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     ops[64] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {65, 69}, 0, {0}};
     XrXirType boolean = XR_XIR_BOOL;
@@ -310,7 +310,7 @@ static void reverse_storage_and_boolean_values(void) {
     };
     XrXirBlock blocks[] = {{0, 1, 0, 0}, {1, 1, 0, 0}, {2, 4, 0, 0}};
     XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
@@ -328,7 +328,7 @@ static void numeric_admission(void) {
         XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0, {0}}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
         const XrXirBlock block = {0, 2, 0, 0};
         XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};
-        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
         CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
         parameters[1] = XR_XIR_BOOL;
         CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
@@ -397,7 +397,7 @@ static void constructed_metadata(void) {
         memcpy(nodes,saved,sizeof(nodes)); input.type = (XrXirType)256;
     }
     XrXirGeneric generic = {NULL,65536,NULL,0};
-    XrXirModule context = {XR_XIR_BUILT,NULL,1,NULL,&generic,&types, NULL, XR_XIR_PROGRAM};
+    XrXirModule context = {XR_XIR_BUILT,NULL,1,NULL,&generic,&types, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xr_xir_type_in_context(&context,0,(XrXirType)260));
     CHECK(xr_xir_type_in_context(&context,0,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1)));
     CHECK(!xr_xir_type_in_context(&context,0,(XrXirType)XR_XIR_TYPE_PARAMETER_LIMIT));
@@ -486,7 +486,7 @@ static XrXirStatus nominal_context_use(const XrXirTypes *types, XrXirType type,
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
     XrXirGeneric generics[] = {{0},{0},{constraints,count,NULL,0}};
-    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,types,NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,2,0}};
     XrXirStatus status = xr_xir_types_structure_verify(types,budget);
     return status == XR_XIR_OK ? xr_xir_type_use_verify(&context,type,budget) : status;
@@ -501,7 +501,7 @@ static XrXirStatus nominal_catalog_semantics(const XrXirTypes *types, XrXirBudge
     XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0},{"other",5,NULL,0,1}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
-    XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,types,NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
     return xr_xir_verify(&module,budget,NULL);
 }
 static void nominal_pool_ownership(void) {
@@ -766,7 +766,7 @@ static void error_filter_guards(void) {
         XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0}, {"root", 4, &dependency, 1, 1}};
         XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
         XrXirDeclarations declarations = {modules, 2, identities, NULL, 0, NULL, 0, 1, 2, NULL};
-        XrXirModule module = {XR_XIR_BUILT, functions, 4, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM};
+        XrXirModule module = {XR_XIR_BUILT, functions, 4, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
         if (mode == 1) ops[2].args[0] = 1;
         if (mode == 2) { ops[1].targets[0] = 2; ops[1].targets[1] = 1; }
         if (mode == 3) ops[0].immediate = XR_XIR_I64;
@@ -795,7 +795,7 @@ static void panic_handler_packets(const XrXirArtifact *checked) {
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].blocks[1].panic == 2);
     xr_xir_artifact_free(decoded); decoded = NULL;
-    CHECK(packet.length == 493 && packet.bytes[121] == 2);
+    CHECK(packet.length == 497 && packet.bytes[121] == 2);
     CHECK(packet.bytes[349] == XR_XIR_PANIC_CATCH && packet.bytes[389] == XR_XIR_COPY);
     const struct { size_t offset; uint8_t value; } attacks[] = {
         {105, 2}, {121, 1}, {121, 3}, {121, 0}, {137, 2},
@@ -830,7 +830,7 @@ static void panic_handler_structure(void) {
             {XR_XIR_COPY, XR_XIR_I64, {0}, {0}, 0, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0, {0}}};
         XrXirFunction function = {"panic", 5, NULL, 0, XR_XIR_I64, blocks, 3, ops, 8, NULL, 0};
-        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
         if (mode == 1) blocks[0].panic = 2;
         if (mode == 2) blocks[1].panic = 1;
         if (mode == 3) blocks[1].panic = 3;

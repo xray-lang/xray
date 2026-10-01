@@ -7,24 +7,68 @@
  * xxir_source_arguments.inc.c - Declaration-owned default argument functions
  *
  * KEY CONCEPT:
- *   Omission selects an ordinary checked call, not a runtime missing value.
+ *   Omission selects a checked declaration purpose, not a runtime missing value.
  */
+/* The source arena owns the single sorted declaration relation. Import remapping
+ * may reorder owners, so insertion never assumes producer traversal order. */
+static bool source_default_binding_add(SourceContext *ctx, AstNode *node,
+    uint32_t owner, uint32_t ordinal, uint32_t helper) {
+    uint32_t count = ctx->defaults.count, position = 0;
+    const XrXirDefaultBinding *old = ctx->defaults.records;
+    for (; position < count; ++position) {
+        if (!source_work(ctx, node)) return false;
+        if (old[position].owner > owner ||
+            (old[position].owner == owner && old[position].ordinal >= ordinal)) break;
+    }
+    if (position < count && old[position].owner == owner && old[position].ordinal == ordinal)
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter default binding");
+    if (count == UINT32_MAX)
+        return source_fail(ctx, node, XR_XIR_BUDGET, "parameter default inventory exhausted");
+    uint64_t moved = count - position;
+    if (moved > ctx->budget.work)
+        return source_fail(ctx, node, XR_XIR_BUDGET, "parameter default insertion exhausted");
+    ctx->budget.work -= moved;
+    XrXirDefaultBinding *records = (XrXirDefaultBinding *)ctx->defaults.records;
+    if (count == ctx->default_capacity) {
+        uint32_t capacity = count > UINT32_MAX / 2 ? UINT32_MAX : count ? count * 2 : 8;
+        if (count > ctx->budget.work)
+            return source_fail(ctx, node, XR_XIR_BUDGET, "parameter default copy exhausted");
+        ctx->budget.work -= count;
+        records = source_alloc(ctx, capacity, sizeof(*records));
+        if (!records) return false;
+        if (count) memcpy(records, old, (size_t)count * sizeof(*records));
+        ctx->default_capacity = capacity;
+    }
+    if (moved) memmove(records + position + 1, records + position, (size_t)moved * sizeof(*records));
+    records[position] = (XrXirDefaultBinding){XR_XIR_DEFAULT_PARAMETER, owner, ordinal, helper};
+    ctx->defaults = (XrXirDefaultTable){records, count + 1};
+    return true;
+}
+static bool source_default_binding_get(SourceContext *ctx, AstNode *node,
+    uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **binding) {
+    XrXirDeclarations declarations;
+    XrXirModule module = source_module_view(ctx, &declarations);
+    XrXirStatus status = xr_xir_default_lookup(&module, owner, ordinal, &ctx->budget, binding);
+    return status == XR_XIR_OK || source_fail(ctx, node, status, "parameter default lookup failed");
+}
 static bool source_argument_arity(SourceContext *ctx, AstNode *node, uint32_t index, uint32_t supplied) {
     uint32_t count = ctx->functions[index].parameter_count;
     if (supplied > count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "too many call arguments");
     for (uint32_t p = supplied; p < count; ++p) {
-        if (!source_work(ctx, node)) return false;
-        if (!ctx->bodies[index].argument_defaults || !ctx->bodies[index].argument_defaults[p])
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "missing required call argument");
+        const XrXirDefaultBinding *binding = NULL;
+        if (!source_work(ctx, node) || !source_default_binding_get(ctx, node, index, p, &binding)) return false;
+        if (!binding) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "missing required call argument");
     }
     return true;
 }
 static bool source_argument_default(SourceContext *ctx, AstNode *node, uint32_t index, uint32_t parameter,
     SourceSubstitution *substitution, SourceValue *value) {
-    uint32_t helper = ctx->bodies[index].argument_defaults[parameter];
-    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, helper, {0}};
+    const XrXirDefaultBinding *binding = NULL;
+    if (!source_default_binding_get(ctx, node, index, parameter, &binding)) return false;
+    if (!binding) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "parameter default binding is missing");
+    XrXirInstruction op = {XR_XIR_CALL_DEFAULT, XR_XIR_UNIT, {0}, {index, parameter}, 0, {0}};
     return source_work(ctx, node) &&
-        source_substitute(ctx, substitution, ctx->functions[helper].result, 0, &op.type) &&
+        source_substitute(ctx, substitution, ctx->functions[index].parameters[parameter], 0, &op.type) &&
         source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && source_recipe_record(ctx, op, value);
 }
 static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
@@ -50,14 +94,10 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
                 continue;
             }
             seen = true;
-            if (!body->argument_defaults) {
-                body->argument_defaults = source_alloc(ctx, count + offset, sizeof(*body->argument_defaults));
-                if (!body->argument_defaults) return false;
-            }
             if (*next >= ctx->first_closure)
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "default argument function inventory mismatch");
             uint32_t helper = (*next)++;
-            body->argument_defaults[p + offset] = helper;
+            if (!source_default_binding_add(ctx, node, f, p + offset, helper)) return false;
             ctx->functions[helper] = (XrXirFunction) {"$argument_default", 17, NULL, 0,
                 ctx->functions[f].parameters[p + offset], NULL, 0, NULL, 0, NULL, 0};
             SourceFunction *target = &ctx->bodies[helper];
@@ -67,7 +107,9 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             target->default_expression = expression;
             ctx->generics[helper] = ctx->generics[f];
             ctx->identities[helper] = ctx->identities[f];
-    ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
+            ctx->identities[helper].exported = false;
+            ctx->identities[helper].promises = 0;
+            ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
         }
     }
     return true;

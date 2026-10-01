@@ -130,7 +130,7 @@ typedef struct SourceFunction {
     SourceExpressionStorage *expressions;
     uint32_t expression_count;
     uint32_t declaration, generic_owner;
-    uint32_t *constructor_places, *argument_defaults;
+    uint32_t *constructor_places;
     AstNode *default_expression;
     SourceErrorContext *error_context;
     XrXirInitializationRegion *initialization_regions, *initialization_parent;
@@ -158,7 +158,6 @@ typedef struct SourceContext {
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory;
     SourceManifest *manifests;
-    uint64_t allocated;
     XrXirFunction *functions;
     SourceFunction *bodies;
     XrXirSourceModule *modules;
@@ -169,6 +168,8 @@ typedef struct SourceContext {
     SourceTypeScope type_scope;
     XrXirInterfaceTable interfaces;
     XrXirImplementationTable implementations;
+    XrXirDefaultTable defaults;
+    uint32_t default_capacity;
     bool implementations_ready, declarations_building;
     SourceName **interface_sources, **interface_members;
     uint32_t **interface_member_declarations;
@@ -201,7 +202,8 @@ static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *dec
         ctx->implementations.count ? &ctx->implementations : NULL};
     return (XrXirModule){XR_XIR_BUILT,ctx->functions,ctx->function_count,declarations,
         ctx->has_generics ? ctx->generics : NULL,
-        ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL,NULL,ctx->linkage_kind};
+        ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL,NULL,ctx->linkage_kind,
+        ctx->defaults.count ? &ctx->defaults : NULL};
 }
 static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, const char *message) {
     if (ctx->diagnostic.status == XR_XIR_OK) {
@@ -217,7 +219,7 @@ static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, c
 static void *source_alloc(SourceContext *ctx, size_t count, size_t size) {
     if (ctx->diagnostic.status != XR_XIR_OK) return NULL;
     if (count > (SIZE_MAX - sizeof(SourceMemory)) / size ||
-        sizeof(SourceMemory) + count * size > ctx->budget.metadata_bytes - ctx->allocated) {
+        sizeof(SourceMemory) + count * size > ctx->budget.metadata_bytes) {
         source_fail(ctx, NULL, XR_XIR_BUDGET, "source metadata budget exhausted"); return NULL;
     }
     size_t bytes = sizeof(SourceMemory) + count * size;
@@ -225,7 +227,7 @@ static void *source_alloc(SourceContext *ctx, size_t count, size_t size) {
     if (!memory) { source_fail(ctx, NULL, XR_XIR_OUT_OF_MEMORY, "source allocation failed"); return NULL; }
     memory->next = ctx->memory; memory->previous = &ctx->memory;
     if (ctx->memory) ctx->memory->previous = &memory->next;
-    ctx->memory = memory; ctx->allocated += bytes;
+    ctx->memory = memory; ctx->budget.metadata_bytes -= bytes;
     return memory + 1;
 }
 static void source_release_private(void *pointer) {
@@ -1950,8 +1952,9 @@ static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint
     XrXirTypeNode qualified = *found;
     qualified.flags = XR_XIR_CALLABLE_NO_SUSPEND;
     if (!source_intern_type(ctx, qualified, &body->parameters[parameter])) return false;
-    if (body->argument_defaults && body->argument_defaults[parameter])
-        ctx->functions[body->argument_defaults[parameter]].result = body->parameters[parameter];
+    const XrXirDefaultBinding *binding = NULL;
+    if (!source_default_binding_get(ctx, NULL, function, parameter, &binding)) return false;
+    if (binding) ctx->functions[binding->function].result = body->parameters[parameter];
     ctx->function = function; ctx->module = body->module;
     return source_query_parameters(ctx, body->declaration);
 }
@@ -2386,7 +2389,6 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     ctx->query.diagnostic = ctx->diagnostic;
     ctx->query.types = ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL;
     XrXirBudget remaining = ctx->budget;
-    remaining.metadata_bytes -= ctx->allocated;
     XrXirStatus status = xr_xir_source_snapshot_copy(&ctx->query, &remaining, &output->snapshot);
     if (status != XR_XIR_OK) {
         xr_xir_source_result_free(output); memset(&ctx->diagnostic, 0, sizeof(ctx->diagnostic));

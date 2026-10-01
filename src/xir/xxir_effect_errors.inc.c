@@ -113,6 +113,15 @@ static XrXirStatus error_call(ErrorFlow *flow, const XrXirInstruction *call, uin
     if (call->op == XR_XIR_CALL_INDIRECT || call->op == XR_XIR_INVOKE_INDIRECT || call->op == XR_XIR_CALL_REQUIREMENT) {
         error_add(set, 0); return XR_XIR_OK;
     }
+    XrXirInstruction resolved;
+    if(call->op==XR_XIR_CALL_DEFAULT || call->op==XR_XIR_INVOKE_DEFAULT) {
+        const XrXirDefaultBinding *binding=NULL;
+        const uint32_t *identity=xr_xir_default_identity(call);
+        XrXirStatus status=xr_xir_default_lookup(flow->module,identity[0],identity[1],flow->remaining,&binding);
+        if(status!=XR_XIR_OK) return status;
+        if(!binding) return XR_XIR_BAD_STRUCTURE;
+        resolved=*call;resolved.immediate=binding->function;call=&resolved;
+    }
     uint32_t caller = (uint32_t)(flow->function - flow->module->functions);
     const uint64_t *from = flow->effects->errors + (size_t)call->immediate * flow->effects->words;
     if (error_bit(from, 0)) error_add(set, 0);
@@ -186,14 +195,14 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i) {
     else error_type(flow, op->type, out);
     if (op->op == XR_XIR_THROW)
         flow->summary_changed |= error_join(flow->escaping, error_value(flow, flow->work, op->args[0]), words);
-    else if (op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_CALL_REQUIREMENT) {
+    else if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_CALL_REQUIREMENT) {
         uint64_t *temporary = flow->snapshot;
         memset(temporary, 0, (size_t)words * sizeof(*temporary));
         XrXirStatus status=error_call(flow, op, temporary); if (status!=XR_XIR_OK || flow->restart) return status;
         flow->summary_changed |= error_join(flow->escaping, temporary, words);
     }
-    if (op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_CALL_REQUIREMENT ||
-        op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_SUSPEND ||
+    if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_CALL_REQUIREMENT ||
+        op->op == XR_XIR_INVOKE_DEFAULT || op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_SUSPEND ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT ||
         op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR || op->op == XR_XIR_CELL_LOCAL_WRITE)
         return error_cells(flow,UINT32_MAX,NULL);
@@ -278,7 +287,7 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b) {
         XrXirStatus status = error_edge(flow, b, end->targets[0], end, true);
         return status == XR_XIR_OK ? error_edge(flow, b, end->targets[1], end, false) : status;
     }
-    if (end->op == XR_XIR_INVOKE || end->op == XR_XIR_INVOKE_INDIRECT) {
+    if (end->op == XR_XIR_INVOKE_DEFAULT || end->op == XR_XIR_INVOKE || end->op == XR_XIR_INVOKE_INDIRECT) {
         XrXirStatus status = error_edge(flow, b, end->targets[0], NULL, true);
         if (status != XR_XIR_OK) return status;
         memset(flow->snapshot, 0, (size_t)flow->effects->words * sizeof(uint64_t));

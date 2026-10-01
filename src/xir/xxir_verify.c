@@ -16,6 +16,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -131,6 +132,10 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
     if ((op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
+    if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
+        XrXirStatus status = xr_xir_default_call_verify(module,caller_id,op,remaining);
+        if (status != XR_XIR_OK) return status;
+    }
     if (op->op == XR_XIR_CALL_REQUIREMENT) {
         XrXirStatus status = requirement_shape(function, op, module, remaining);
         if (status != XR_XIR_OK) return status;
@@ -139,6 +144,15 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_CELL_READ && xr_xir_type_is_cell(module->types, op->type)) return XR_XIR_BAD_TYPE;
     if (xr_xir_op_references_function(op->op)) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
+            return XR_XIR_BAD_STRUCTURE;
+        bool bound_helper=false,default_authorized=false;
+        XrXirStatus helper_status=xr_xir_default_helper(module,(uint32_t)op->immediate,remaining,&bound_helper);
+        if (helper_status!=XR_XIR_OK) return helper_status;
+        helper_status=default_origin(module,caller_id,(uint32_t)(op-function->instructions),
+            (uint32_t)op->immediate,remaining,&default_authorized);
+        if(helper_status!=XR_XIR_OK) return helper_status;
+        if (bound_helper && ((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) ||
+            !default_authorized))
             return XR_XIR_BAD_STRUCTURE;
         bool registration = op->op == XR_XIR_CLEANUP_REGISTER;
         if ((registration && !module->declarations) || (module->declarations &&
@@ -176,7 +190,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             generic_status = xr_xir_call_type_matches(module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type, remaining);
             if (generic_status != XR_XIR_OK) return generic_status;
         }
-        if (module->declarations && !requirement_origin(module,caller_id,(uint32_t)(op - function->instructions))) {
+        if (module->declarations && !requirement_origin(module,caller_id,(uint32_t)(op - function->instructions)) &&
+            !default_authorized) {
             const XrXirDeclarations *d = module->declarations;
             uint32_t caller_module = d->functions[caller_id].module;
             uint32_t callee_module = d->functions[op->immediate].module;
@@ -216,13 +231,13 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
     uint32_t operands = operand_count(function, op, module);
-    for (uint32_t i = range || op->op == XR_XIR_ENUM_GET ? 2 : operands; i < 2; ++i)
+    for (uint32_t i = range || op->op == XR_XIR_ENUM_GET || op->op == XR_XIR_INVOKE_DEFAULT ? 2 : operands; i < 2; ++i)
         if (op->args[i])
             return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < rule->edges; ++i)
         if (!op->targets[i] || op->targets[i] >= function->block_count)
             return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t i = op->op == XR_XIR_CALL_REQUIREMENT ? 2 : rule->edges; i < 2; ++i)
+    for (uint32_t i = (op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_DEFAULT) ? 2 : rule->edges; i < 2; ++i)
         if (op->targets[i])
             return XR_XIR_BAD_STRUCTURE;
     if (!xr_xir_op_uses_type_arguments(op->op) &&
@@ -1004,6 +1019,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
     if (status == XR_XIR_OK && module->stage == XR_XIR_LOWERED && module->declarations &&
         module->declarations->implementations) status = XR_XIR_BAD_STAGE;
     if (status == XR_XIR_OK) status = xr_xir_implementations_verify(module, &context.remaining);
+    if (status == XR_XIR_OK) status = xr_xir_defaults_verify(module, &context.remaining);
     if (status == XR_XIR_OK) status = xr_xir_module_constraints_verify(module, &context.remaining);
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;

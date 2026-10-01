@@ -89,6 +89,7 @@ static void *runtime_realloc(void *pointer, size_t size) {
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"
 #include "xir/xxir_checked.c"
+#include "xir/xxir_defaults.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
 #include "xir/xxir_program_match.c"

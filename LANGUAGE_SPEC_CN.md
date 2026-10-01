@@ -2859,6 +2859,9 @@ connect("localhost", 443, true)
 - 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
 - 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
 
+- 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
+- 默认表达式的计算效应不继承被调用函数或构造器体的效应承诺。期待返回 `no_suspend` callable 只约束该 callable，不自动约束计算它的表达式；构造器体的 `no_suspend` 不自动禁止在调用方先计算的默认值挂起。完整求值仍须符合实际调用方的效应承诺。
+
 #### 5.2.3 多返回值
 
 ```xray
@@ -7271,7 +7274,20 @@ GET 的唯一四参数 runtime 接口显式接收实际 arena、work/scratch 和
 
 唯一 remapper 先预留全部已使用的目标身份，再复制 body 并重定位 CALL；真实 initializer 可位于输入函数数组任意位置。临时映射按实际 scratch 预留，成功、OOM、work 耗尽或 copy 失败均释放退款；每元素累计 work，永久 body/name 按 metadata 收费。唯一 reader 的 header、摘要、payload 解码和普通复验共同消耗累计 work，连续读取或恶意有效摘要前缀失败也不得重置余额；owned metadata 按唯一发布表示收费，临时 scratch 退出退款。此 reader 合同不声明 Source 所有阶段预算已经统一。
 
+Source 构建上下文的 metadata_bytes 是唯一真实剩余余额：SourceMemory 的完整 header/payload、保留的声明 manifest、Library/implementation 复验及 query 快照复制使用同一余额；成功拥有存储即扣减，不再以另一累计 allocated 计数相减。失败不得用无符号下溢恢复额度或继续越额分配。临时 Source arena 提前释放不返还累计 metadata 费用；已有 scratch 临时映射退款政策不变。最终 Built→Checked 检查仍采用独立阶段预算，整个 Source 多阶段累计预算尚未完成，不以此修复宣称统一。
+
 首个库导入实现边界为同目录 file-backed script authority、单模块、零参数 Unit/i64 和 CONST_INT/ADD_INT/CALL/RETURN；尚未接线的表明确拒绝，不收窄语言的合法泛型、nominal、接口、默认参数或 export const。完整 canonical remap、声明/default helper 事实、公开 const 权限、包认证、stdlib 同源 Checked/native 配对及缓存命中/miss仍须同一管线实现和独立验证。有限导入闭环的 Source/packet/native/mixed、实例、逐 OOM、物理释放及真实旧身份拒绝，不代替完整语言、安全或产品资格。
+
+
+### 17.31 参数默认值的Checked目的关系
+
+参数默认值在原始Built/Checked的唯一拥有式DefaultTable中记录真实owner、完整形参序数和helper身份；不从名字、Source私有ID数组、query或导出顺序推断。所有记录和未调用默认体在声明作用域检查。helper零runtime参数、非export/entry/init/cleanup，持有owner同构的完整nominal-parent加method-own参数/约束和精确形参结果类型；作用域可引用声明方私有名称，不能继承构造/清理或body效应承诺。helper内部合法defer子函数仍遵守普通清理来源。
+
+Built/Checked的CALL_DEFAULT和INVOKE_DEFAULT先检查caller对owner的完整约束、模块/成员及构造权限，再按owner/ordinal从表解析helper；普通CALL/INVOKE/FUNCTION_REF不能直接获得helper权限。存在局部错误处理时，默认计算使用INVOKE_DEFAULT及普通成功/错误continuation、结果/错误投影和拥有式清理；错误不得绕过catch，也不能因调用owner成功而被吞掉。CALL_DEFAULT的targets保存owner/ordinal，INVOKE_DEFAULT的args保存同一声明元数据、targets保存真实CFG边；元数据不是SSA操作数。两者均无runtime实参、immediate为0，保留完整泛型向量及精确形参结果类型。所有现有本地自由函数、static、READ、构造器及泛型默认族原子迁移，导入首族的有限接受域不降低本地语言合同。
+
+特化使用现有Checked实例收集及逐指令Origin来源，将CALL_DEFAULT仅变为普通CALL、INVOKE_DEFAULT仅变为普通INVOKE，清除目的元数据并独立复验；错误边及投影身份保持不变。特化Checked/Lowered不保留第二实例默认表，唯一原表深拥有于provenance.source；按相同caller/instruction位置重算owner/ordinal/helper和完整参数向量，精确验证对应操作和CFG边，不接受同签名替代、角色标签或存在任意provenance的权限豁免。局部catch沿错误continuation推导，不能按普通CALL直接逃逸汇总。全显式调用的generic owner不为表存在强制实例化未使用helper。原始有defaults的闭合模块也走同一特化管线；Lowered拒绝残留目的操作，runtime没有另一默认值解释器。
+
+表、wire、clone、来源和canonical remap统一计实际metadata/scratch/work并在失败不发布；只在Program封存前完成普通实例化。新格式包含每个module及嵌套来源的默认记录，旧格式拒绝。实际单一schema/semantic及runtime ABI由§17.6所述实现常量承担；新增编译期表或操作不机械增加公开runtime ABI，但同ABI旧mandatory proof仍须在真实消费者拒绝。完整能力只有新鲜VM/native独立预期、来源销毁后寿命、每个真实故障点/物理释放和批次资格通过才成立。
 
 ---
 

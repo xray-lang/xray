@@ -796,6 +796,7 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 #include "xir_source_iteration_cases.h"
 #include "xir_source_unit_context_cases.h"
 #include "xir_source_unit_local_cases.h"
+#include "xir_source_parameter_default_cases.h"
 int main(void) {
     generic_storage_cases();
     nominal_query_boundary();
@@ -808,6 +809,7 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    source_parameter_default_cases(&request);
     source_dependency_ready_cases(&request);
     source_unit_context_cases(&request);
     source_unit_local_cases(&request);

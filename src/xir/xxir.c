@@ -70,6 +70,10 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
     xr_xir_declarations_free((XrXirDeclarations *) artifact->module.declarations);
     xr_xir_types_free((XrXirTypes *) artifact->module.types);
     xr_xir_provenance_free((XrXirProvenance *)artifact->module.provenance);
+    if (artifact->module.defaults) {
+        xr_free((void *)artifact->module.defaults->records);
+        xr_free((void *)artifact->module.defaults);
+    }
     xr_free(functions);
     xr_free(artifact);
 }
@@ -83,6 +87,17 @@ static void *copy_bytes(const void *source, size_t size) {
     return copy;
 }
 
+static bool clone_defaults(const XrXirDefaultTable *source, XrXirModule *destination) {
+    if (!source) return true;
+    XrXirDefaultTable *table = xr_calloc(1, sizeof(*table));
+    if (!table) return false;
+    destination->defaults = table;
+    table->records = copy_bytes(source->records, (size_t)source->count * sizeof(*source->records));
+    if (!table->records) return false;
+    table->count = source->count;
+    return true;
+}
+
 static XrXirArtifact *clone_module(const XrXirModule *source) {
     XrXirArtifact *copy = xr_calloc(1, sizeof(*copy));
     if (!copy)
@@ -92,7 +107,7 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         xr_free(copy);
         return NULL;
     }
-    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL, NULL, source->linkage_kind};
+    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL, NULL, source->linkage_kind, NULL};
     XrXirGeneric *generics = NULL;
     if (xr_xir_generics_clone(source, &generics) != XR_XIR_OK) {
         xr_xir_artifact_free(copy); return NULL;
@@ -109,6 +124,9 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         return NULL;
     }
     copy->module.declarations = declarations;
+    if (!clone_defaults(source->defaults, &copy->module)) {
+        xr_xir_artifact_free(copy); return NULL;
+    }
     for (uint32_t i = 0; i < source->function_count; ++i) {
         const XrXirFunction *from = &source->functions[i];
         XrXirFunction *to = &functions[i];

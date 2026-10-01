@@ -13,6 +13,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_types.h"
 #include "xxir_internal.h"
+#include "xxir_defaults_internal.h"
 #include "xxir_implementation_verify.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
@@ -240,8 +241,18 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         for (uint32_t a = 0; a < count; ++a) types[a] = spec_type(c, instance, generic->arguments[op->type_arguments[0] + a]);
         if (c->diagnostic.status != XR_XIR_OK) return false;
         uint32_t declaration = (uint32_t)op->immediate;
+        if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
+            const XrXirDefaultBinding *binding=NULL;
+            const uint32_t *identity=xr_xir_default_identity(op);
+            c->diagnostic.status=xr_xir_default_lookup(c->source,identity[0],identity[1],&c->remaining,&binding);
+            if(c->diagnostic.status!=XR_XIR_OK) return false;
+            if(!binding) { c->diagnostic.status=XR_XIR_BAD_STRUCTURE; return false; }
+            declaration=binding->function;
+            if(op->op==XR_XIR_CALL_DEFAULT) { op->op=XR_XIR_CALL; op->targets[0]=op->targets[1]=0; }
+            else { op->op=XR_XIR_INVOKE; op->args[0]=op->args[1]=0; }
+        }
         if (op->op == XR_XIR_CALL_REQUIREMENT) {
-            XrXirModule actual = {XR_XIR_CHECKED,c->functions,c->count,NULL,NULL,&c->types,NULL,XR_XIR_PROGRAM};
+            XrXirModule actual = {XR_XIR_CHECKED,c->functions,c->count,NULL,NULL,&c->types,NULL,XR_XIR_PROGRAM,NULL};
             XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
             const XrXirInterfaceDeclaration *interface = &c->source->types->interfaces->declarations[op->targets[0]];
             const XrXirInterfaceMethod *method = &interface->methods[op->targets[1]];
@@ -388,11 +399,14 @@ XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *b
     if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
     c.diagnostic.status = xr_xir_artifact_verify(checked, &limits, &c.diagnostic);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
+    if (c.source->provenance) {
+        c.diagnostic.status=xr_xir_recheck(c.source,&limits,output,&c.diagnostic); goto done;
+    }
     if (c.source->types && c.source->types->nominals) {
         c.diagnostic.status = spec_nominal_seed(&c);
         if (c.diagnostic.status != XR_XIR_OK) goto done;
     }
-    if (!c.source->generics && !(c.source->types && c.source->types->interfaces) &&
+    if (!c.source->defaults && !c.source->generics && !(c.source->types && c.source->types->interfaces) &&
         !(c.source->declarations && c.source->declarations->implementations)) {
         c.diagnostic.status = spec_nominal_fields(&c);
         if (c.diagnostic.status != XR_XIR_OK) goto done;
@@ -430,7 +444,7 @@ XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *b
     if (!spec_declarations(&c, &declarations)) goto done;
     c.diagnostic.status = spec_nominal_fields(&c);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
-    XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.types.count || c.types.nominals ? &c.types : NULL, NULL, XR_XIR_PROGRAM};
+    XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.types.count || c.types.nominals ? &c.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirProvenance *provenance = NULL;
     c.diagnostic.status = spec_provenance(&c, &provenance);
     if (c.diagnostic.status != XR_XIR_OK) goto done;

@@ -193,7 +193,7 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
         if (xr_xir_type_is_cell(types, slot->type) || (slot->type != XR_XIR_UNIT && slot->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(types, slot->type)))
             return XR_XIR_BAD_TYPE;
         if (xr_xir_type_span(types, slot->type)) return XR_XIR_BAD_TYPE;
-        XrXirModule scope = {XR_XIR_BUILT, NULL, functions, d, NULL, types, NULL, kind};
+        XrXirModule scope = {XR_XIR_BUILT, NULL, functions, d, NULL, types, NULL, kind, NULL};
         status = xr_xir_type_access(&scope, d->modules[slot->module].initializer, slot->type, budget);
         if (status != XR_XIR_OK) return status;
         if (slot->mutable && slot->type == XR_XIR_ATOMIC_I64) return XR_XIR_BAD_STRUCTURE;

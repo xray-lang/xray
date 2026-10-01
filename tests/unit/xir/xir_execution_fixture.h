@@ -30,7 +30,7 @@ static XrXirArtifact *uninitialized_leaf_fixture(void) {
     };
     const XrXirBlock block = {0, 4, 0, 0};
     const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0};
-    const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
@@ -205,7 +205,7 @@ static XrXirArtifact *fixture_checked(void) {
 #undef FLOAT_PARAMETERS_1
 #undef FLOAT_PARAMETERS_2
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     return artifact;

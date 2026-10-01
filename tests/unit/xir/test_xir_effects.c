@@ -69,7 +69,7 @@ static XrXirArtifact *effect_fixture(bool suspends) {
     XrXirSourceModule source = {"root", 4, NULL, 0, 6};
     XrXirFunctionIdentity identities[8] = {{0}};
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7, NULL};
-    XrXirModule module = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL; XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_check(&module, NULL, &artifact, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "effect fixture %u: f=%u b=%u i=%u\n", status,
@@ -145,7 +145,7 @@ static void effect_long_cycle(void) {
         functions[f] = (XrXirFunction) {"cycle", 5, NULL, 0, XR_XIR_UNIT, &blocks[f], 1, ops[f], 3, NULL, 0};
     }
     ops[COUNT - 1][1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-    XrXirModule module = {XR_XIR_BUILT, functions, COUNT, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, functions, COUNT, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     XrXirEffects *effects = NULL;
@@ -474,7 +474,7 @@ static void effect_callable_weakening(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
     XrXirBlock block = {0, 2, 0, 0};
     XrXirFunction function = {"weaken", 6, &source, 1, (XrXirType)256, &block, 1, ops, 2, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, &types, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked); checked = NULL;

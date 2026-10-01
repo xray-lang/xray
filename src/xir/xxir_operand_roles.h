@@ -66,7 +66,7 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
         op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF;
 }
 static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
-    return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT;
+    return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_INVOKE_DEFAULT;
 }
 static inline bool xr_xir_op_uses_value_path(const XrXirFunction *function, const XrXirInstruction *op) {
     if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) return true;

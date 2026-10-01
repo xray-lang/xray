@@ -21,6 +21,27 @@ static bool requirement_origin(const XrXirModule *module, uint32_t function, uin
         from->instructions[instruction].op == XR_XIR_CALL_REQUIREMENT;
 }
 
+static XrXirStatus default_origin(const XrXirModule *m,uint32_t caller,uint32_t instruction,
+    uint32_t target,XrXirBudget *budget,bool *authorized) {
+    *authorized=false;
+    const XrXirProvenance *p=m->provenance;
+    if (!p) return XR_XIR_OK;
+    if (!p->source || !p->origins || caller>=p->count || target>=p->count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *source=&p->source->module;
+    if (p->origins[caller].function>=source->function_count || !source->functions) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *f=&source->functions[p->origins[caller].function];
+    if (instruction>=f->instruction_count || !f->instructions) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&f->instructions[instruction];
+    XrXirOp destination=m->functions[caller].instructions[instruction].op;
+    if ((op->op!=XR_XIR_CALL_DEFAULT || destination!=XR_XIR_CALL) &&
+        (op->op!=XR_XIR_INVOKE_DEFAULT || destination!=XR_XIR_INVOKE)) return XR_XIR_OK;
+    const XrXirDefaultBinding *binding=NULL;
+    const uint32_t *identity=xr_xir_default_identity(op);
+    XrXirStatus status=xr_xir_default_lookup(source,identity[0],identity[1],budget,&binding);
+    if(status==XR_XIR_OK && binding) *authorized=binding->function==p->origins[target].function;
+    return status;
+}
+
 static XrXirStatus requirement_application(const XrXirModule *module, uint32_t caller,
     const XrXirInstruction *op, XrXirInterfaceApplication *application) {
     const XrXirInterfaceTable *table = module->types ? module->types->interfaces : NULL;

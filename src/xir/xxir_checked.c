@@ -408,6 +408,25 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
     checked_nominals(c, types, nominals);
     checked_interfaces(c, types, interfaces);
 }
+static void checked_defaults(CheckedCursor *c, XrXirModule *module) {
+    const XrXirDefaultTable *original = module->defaults;
+    uint32_t count = checked_u32(c, original ? original->count : 0);
+    if (c->status != XR_XIR_OK || !count) return;
+    XrXirDefaultTable *table = checked_array(c, original, 1, sizeof(*table), 16);
+    if (c->reading) module->defaults = table;
+    if (!table) return;
+    XrXirDefaultBinding *records = checked_array(c, table->records, count, sizeof(*records), 16);
+    if (c->reading) { table->records = records; table->count = records ? count : 0; }
+    if (!records) return;
+    for (uint32_t i = 0; i < count && c->status == XR_XIR_OK; ++i) {
+        XrXirDefaultBinding record = records[i];
+        record.owner_kind = checked_u32(c, record.owner_kind);
+        record.owner = checked_u32(c, record.owner);
+        record.ordinal = checked_u32(c, record.ordinal);
+        record.function = checked_u32(c, record.function);
+        if (c->reading) records[i] = record;
+    }
+}
 static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenance);
 static void checked_provenance(CheckedCursor *c, XrXirModule *m, bool allowed) {
     uint32_t present = checked_u32(c, m->provenance ? 1u : 0u);
@@ -468,6 +487,7 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenan
     }
     checked_generics(c, m);
     checked_types(c, m);
+    if (c->status == XR_XIR_OK) checked_defaults(c, m);
     if (c->status == XR_XIR_OK) checked_provenance(c, m, allow_provenance);
 }
 static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]) {

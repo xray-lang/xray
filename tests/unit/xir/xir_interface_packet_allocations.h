@@ -35,7 +35,7 @@ static XrXirArtifact *interface_allocation_fixture(void) {
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1},{"other",5,&dependency,1,2}};
     XrXirFunctionIdentity identities[] = {{0,1,0,0,0,0, XR_XIR_NON_MEMBER},{0,0,0,0,0,0, XR_XIR_NON_MEMBER},{1,0,0,0,0,0, XR_XIR_NON_MEMBER}};
     XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
-    XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&module,NULL,&checked,NULL) == XR_XIR_OK);
     return checked;

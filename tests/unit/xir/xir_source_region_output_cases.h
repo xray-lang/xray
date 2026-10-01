@@ -48,7 +48,7 @@ static void source_region_output_cases(void) {
         CHECK(ctx.budget.scratch_bytes==before_scratch);
         if (!mode) {
             CHECK(ctx.memory && !ctx.memory->next && attempts==2);
-            CHECK(ctx.allocated==sizeof(SourceMemory)+output_bytes);
+            CHECK(!ctx.budget.metadata_bytes);
             CHECK(function.instructions==(XrXirInstruction *)(ctx.memory+1));
             CHECK(function.blocks==(XrXirBlock *)((unsigned char *)(ctx.memory+1)+block_offset));
             CHECK(function.instruction_count==1 && function.block_count==1);

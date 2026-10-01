@@ -11,7 +11,7 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
-        if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT) {
+        if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_INVOKE_DEFAULT) {
             if (op->targets[0] == op->targets[1]) return XR_XIR_BAD_STRUCTURE;
             for (uint32_t edge = 0; edge < 2; ++edge) {
                 uint32_t block = op->targets[edge], incoming = graph->head[block];
@@ -32,7 +32,7 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
             uint32_t block = graph->owner[i];
             const XrXirInstruction *call = &function->instructions[op->immediate];
             if (!block || function->blocks[block].first != i ||
-                (call->op != XR_XIR_INVOKE && call->op != XR_XIR_INVOKE_INDIRECT) ||
+                (call->op != XR_XIR_INVOKE && call->op != XR_XIR_INVOKE_INDIRECT && call->op != XR_XIR_INVOKE_DEFAULT) ||
                 call->targets[op->op == XR_XIR_INVOKE_ERROR ? 1 : 0] != block)
                 return XR_XIR_BAD_STRUCTURE;
         }

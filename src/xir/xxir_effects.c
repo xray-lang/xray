@@ -12,6 +12,7 @@
  *   recursion or assumptions about function storage order.
  */
 #include "xxir_effects.h"
+#include "xxir_defaults_internal.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
 #include "xxir_interface.h"
@@ -80,7 +81,7 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
         if (effect->suspend < XR_XIR_EFFECT_UNKNOWN) effect->suspend = XR_XIR_EFFECT_UNKNOWN;
         return true;
     }
-    case XR_XIR_CALL: case XR_XIR_INVOKE:
+    case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL: case XR_XIR_INVOKE:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE:
     case XR_XIR_ATOMIC_I64_NEW: case XR_XIR_ATOMIC_I64_LOAD: case XR_XIR_ATOMIC_I64_FETCH_ADD:
@@ -129,7 +130,7 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
             XrXirOp op = function->instructions[i].op;
             if (!effect_seed(module, function, &function->instructions[i], &effects->functions[f]))
                 return XR_XIR_BAD_STRUCTURE;
-            if (op == XR_XIR_CALL || op == XR_XIR_INVOKE) {
+            if (op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_CALL || op == XR_XIR_INVOKE) {
                 if (edges == UINT32_MAX) return XR_XIR_BUDGET;
                 ++edges;
             }
@@ -151,8 +152,16 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
         if (!effect_spend(&remaining->work, function->instruction_count)) return XR_XIR_BUDGET;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE) continue;
+            if (op->op != XR_XIR_INVOKE_DEFAULT && op->op != XR_XIR_CALL_DEFAULT && op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE) continue;
             uint32_t callee = (uint32_t) op->immediate;
+            if(op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
+                const XrXirDefaultBinding *binding=NULL;
+                const uint32_t *identity=xr_xir_default_identity(op);
+                XrXirStatus status=xr_xir_default_lookup(module,identity[0],identity[1],remaining,&binding);
+                if(status!=XR_XIR_OK) return status;
+                if(!binding) return XR_XIR_BAD_STRUCTURE;
+                callee=binding->function;
+            }
             graph->edges[at] = (EffectEdge) {f, graph->heads[callee], i};
             graph->heads[callee] = at++;
         }

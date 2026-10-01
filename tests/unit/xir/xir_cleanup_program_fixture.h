@@ -52,7 +52,7 @@ static XrXirArtifact *cleanup_program_fixture(unsigned mode) {
     XrXirFunctionIdentity identities[3] = {{0}}; identities[2].cleanup_owner = 2;
     XrXirSourceModule source = {"root", 4, NULL, 0, 0};
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 1, NULL};
-    XrXirModule module = {XR_XIR_BUILT, functions, 3, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, functions, 3, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

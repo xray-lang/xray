@@ -75,6 +75,11 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library call identity is invalid");
         result.immediate = map->functions[(uint32_t)result.immediate];
         break;
+    case XR_XIR_CALL_DEFAULT:
+        if (result.targets[0] >= map->function_count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library default owner identity is invalid");
+        result.targets[0] = map->functions[result.targets[0]];
+        break;
     case XR_XIR_RETURN: case XR_XIR_CONST_INT: case XR_XIR_ADD_INT:
         break;
     default:
@@ -84,31 +89,83 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
     return true;
 }
 
+static bool source_library_bound_helper(SourceContext *ctx, const XrXirModule *library,
+    uint32_t function, bool *bound) {
+    *bound = false;
+    if (!library->defaults) return true;
+    for (uint32_t i = 0; i < library->defaults->count; ++i) {
+        if (!source_work(ctx, NULL)) return false;
+        if (library->defaults->records[i].function == function) {
+            *bound = true;
+            return true;
+        }
+    }
+    return true;
+}
+
+static void *source_library_bytes(SourceContext *ctx, const void *input,
+    uint32_t count, size_t size) {
+    if (!count) return NULL;
+    void *output = source_alloc(ctx, count, size);
+    if (output) memcpy(output, input, (size_t)count * size);
+    return output;
+}
+
+static bool source_library_function(SourceContext *ctx, const XrXirModule *library,
+    const SourceLibraryMap *map, uint32_t index) {
+    uint32_t target = map->functions[index];
+    const XrXirFunction *original = &library->functions[index];
+    XrXirFunction *function = &ctx->functions[target];
+    *function = *original;
+    char *name = source_alloc(ctx, (size_t)original->name_length + 1, 1);
+    if (!name) return false;
+    memcpy(name, original->name, original->name_length);
+    name[original->name_length] = 0;
+    function->name = name;
+    function->parameters = source_library_bytes(ctx, original->parameters,
+        original->parameter_count, sizeof(*original->parameters));
+    function->blocks = source_library_bytes(ctx, original->blocks,
+        original->block_count, sizeof(*original->blocks));
+    function->operands = source_library_bytes(ctx, original->operands,
+        original->operand_count, sizeof(*original->operands));
+    XrXirInstruction *instructions = source_alloc(ctx, original->instruction_count, sizeof(*instructions));
+    function->instructions = instructions;
+    if ((original->parameter_count && !function->parameters) || !function->blocks ||
+        (original->operand_count && !function->operands) || !instructions) return false;
+    for (uint32_t i = 0; i < original->instruction_count; ++i)
+        if (!source_library_instruction(ctx, map, &original->instructions[i], &instructions[i])) return false;
+    ctx->identities[target] = library->declarations->functions[index];
+    ctx->identities[target].module = map->module;
+    ctx->bodies[target].module = map->module;
+    ctx->bodies[target].checked_library = true;
+    ctx->bodies[target].parameters = (XrXirType *)function->parameters;
+    bool helper;
+    if (!source_library_bound_helper(ctx, library, index, &helper)) return false;
+    if (helper || index == library->declarations->modules[0].initializer) return true;
+    SourceName *symbol = add_name(ctx, &ctx->names[map->module], name, NULL);
+    if (!symbol) return false;
+    symbol->kind = SOURCE_FUNCTION; symbol->index = target; ctx->function = target;
+    if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, 0,
+        (XrXirSourceRange){map->module,0,0,0,0})) return false;
+    ctx->bodies[target].declaration = symbol->declaration;
+    XrXirSourceDeclaration *query = (XrXirSourceDeclaration *)ctx->query.declarations;
+    query[symbol->declaration - 1].exported = ctx->identities[target].exported;
+    return true;
+}
+
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
-    uint32_t module = map->module;
-    uint32_t initializer = library->declarations->modules[0].initializer;
-    for(uint32_t f=0;f<library->function_count;++f){
-        if(!source_work(ctx,NULL))return false;
-        uint32_t target=map->functions[f];
-        const XrXirFunction *original=&library->functions[f];
-        XrXirInstruction *instructions=source_alloc(ctx,original->instruction_count,sizeof(*instructions));
-        if(!instructions)return false;
-        for(uint32_t i=0;i<original->instruction_count;++i){
-            if (!source_library_instruction(ctx,map,&original->instructions[i],&instructions[i])) return false;
-        }
-        ctx->functions[target]=*original;ctx->functions[target].instructions=instructions;
-        ctx->identities[target]=library->declarations->functions[f];ctx->identities[target].module=map->module;
-        ctx->bodies[target].module=module;ctx->bodies[target].checked_library=true;
-        if(f==initializer)continue;
-        char *name=source_alloc(ctx,(size_t)original->name_length+1,1);if(!name)return false;
-        memcpy(name,original->name,original->name_length);name[original->name_length]=0;
-        SourceName *symbol=add_name(ctx,&ctx->names[module],name,NULL);if(!symbol)return false;
-        symbol->kind=SOURCE_FUNCTION;symbol->index=target;ctx->function=target;
-        if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_FUNCTION,0,(XrXirSourceRange){module,0,0,0,0}))return false;
-        ctx->bodies[target].declaration=symbol->declaration;
-        XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)ctx->query.declarations;
-        query[symbol->declaration-1].exported=ctx->identities[target].exported;
+    for (uint32_t f = 0; f < library->function_count; ++f) {
+        if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
+    }
+    if (!library->defaults) return true;
+    for (uint32_t i = 0; i < library->defaults->count; ++i) {
+        if (!source_work(ctx, NULL)) return false;
+        const XrXirDefaultBinding *binding = &library->defaults->records[i];
+        if (binding->owner >= map->function_count || binding->function >= map->function_count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library default binding identity is invalid");
+        if (!source_default_binding_add(ctx, NULL, map->functions[binding->owner],
+            binding->ordinal, map->functions[binding->function])) return false;
     }
     return true;
 }

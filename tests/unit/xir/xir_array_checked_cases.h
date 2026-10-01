@@ -22,9 +22,9 @@ static void array_checked_cases(void) {
     xr_xir_artifact_free(checked); memset(&f, 0xCC, sizeof(f));
     /* Schema-derived offsets: first record of entry, its operand table, slot. */
     const size_t entry = 281, operands = 845, slot = 1112;
-    CHECK(packet.length == 1192 && packet.bytes[entry] == XR_XIR_CONST_INT &&
+    CHECK(packet.length == 1196 && packet.bytes[entry] == XR_XIR_CONST_INT &&
         packet.bytes[entry + 2 * 40] == XR_XIR_ARRAY_NEW && packet.bytes[operands + 8] == 3);
-    uint8_t original[1192]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[1196]; memcpy(original, packet.bytes, sizeof(original));
     for (uint32_t attack = 0; attack < 20; ++attack) {
         if (attack == 0) put32(packet.bytes + entry + 2 * 40, XR_XIR_OP_COUNT);
         if (attack == 1) put32(packet.bytes + entry + 2 * 40 + 4, 257);

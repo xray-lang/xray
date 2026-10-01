@@ -1,0 +1,11 @@
+const trace=Atomic(0)
+fn step(n:i64)->i64{const prior=trace.load();trace.fetchAdd(prior*9+n);return n}
+struct Receiver{value:i64;read(first:i64,second:i64=step(3),third:i64=step(4))->i64{return trace.load()}}
+fn receiver()->Receiver{step(1);return Receiver{value:41}}
+fn text()->string{return "default"+"-owned"}
+fn take(value:string=text())->string{return value}
+fn delayed()->i64{Coro.yield();return 41}
+final class Box{value:i64;constructor(value:i64=delayed()){this.value=value}}
+export fn order()->i64{return receiver().read(step(2))}
+export fn retained()->string{return take()}
+export fn construct()->i64{return Box().value}

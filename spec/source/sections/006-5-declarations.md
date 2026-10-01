@@ -144,6 +144,9 @@ connect("localhost", 443, true)
 - 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
 - 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
 
+- 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
+- 默认表达式的计算效应不继承被调用函数或构造器体的效应承诺。期待返回 `no_suspend` callable 只约束该 callable，不自动约束计算它的表达式；构造器体的 `no_suspend` 不自动禁止在调用方先计算的默认值挂起。完整求值仍须符合实际调用方的效应承诺。
+
 #### 5.2.3 多返回值
 
 ```xray @id=decl-fn-multi-return
@@ -1398,6 +1401,9 @@ connect("localhost", 443, true)
 - Default expressions are checked against the parameter type in the declaring module, type-parameter and member-authority scope, including unused declarations; they cannot reference caller locals. Parameters of this invocation (including preceding parameters) and `this` are not in default-expression scope. Ordinary generics use only their definition constraints, without gaining capabilities from a concrete instance.
 - Evaluate the receiver or callee first, explicit arguments left to right next, and omitted trailing defaults once each in declaration order last. An explicit argument suppresses its default. Defaults permit ordinary admitted function effects; suspension, failure and owned-result cleanup follow ordinary call rules. Failure preserves earlier side effects and does not enter a callee body that has not started.
 - Defaults may use private names accessible to their declaration; exported callers gain no direct access to those names. Check defaults at their declaration and execute through the same Checked specialization and revalidation pipeline, without caller-side rebinding or runtime AST expansion that bypasses authority. Constructor argument defaults run before field defaults and the constructor body and cannot observe partially constructed `this`.
+
+- Ordinary generic calls complete type-argument inference and all constraint proofs from explicit arguments and existing result context before evaluating omitted defaults. An omitted default contributes no additional caller-side inference evidence; its definition still checks against the formal generic type and original constraints.
+- Default computation does not inherit the body promises of the called function or constructor. Expecting a `no_suspend` callable constrains that returned callable, not automatically the computation producing it. A constructor body's `no_suspend` promise does not automatically forbid suspension in defaults evaluated beforehand by the caller; complete evaluation must still satisfy the actual caller's promises.
 
 #### 5.2.3 Multiple return values
 

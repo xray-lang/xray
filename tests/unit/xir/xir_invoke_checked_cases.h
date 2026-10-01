@@ -27,7 +27,7 @@ static void invoke_generic_cases(void) {
         XrXirGeneric generics[] = {
             {mode ? &caller_constraint : NULL,mode ? 1u : 0u,&parameter,1},
             {&callee_constraint,1,NULL,0}};
-        XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM};
+        XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM, NULL};
         XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
         XrXirStatus status = xr_xir_check(&module,NULL,&checked,NULL);
         /* An unused caller must prove the callee's bound at its definition. */
@@ -70,7 +70,7 @@ static void invoke_checked_cases(void) {
         XrXirFunction functions[] = {
             {"guard",5,&parameter,1,XR_XIR_I64,blocks,3,ops,6,&argument,1},
             {"leaf",4,&parameter,1,XR_XIR_I64,&leaf,1,&ret,1,NULL,0}};
-        XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM};
+        XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
         if (attack == 1) ops[0].targets[1] = 1;
         if (attack == 2) ops[1].immediate = 1;
         if (attack == 3) ops[3].op = XR_XIR_INVOKE_RESULT;

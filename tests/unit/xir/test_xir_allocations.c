@@ -93,6 +93,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_generic.c"
+#include "xir/xxir_defaults.c"
 #include "xir/xxir_specialize.c"
 #include "xir/xxir.c"
 #include "xir/xxir_checked.c"
@@ -507,7 +508,9 @@ static void nominal_pool_allocation_failures(void) {
 }
 
 #include "xir_class_owned_allocations.h"
+#include "xir_default_invoke_allocations.h"
 int main(void) {
+    default_invoke_allocation_cases();
     class_owned_allocations();
     type_temporary_budget_cases();
     type_temporary_allocation_failures();
@@ -533,7 +536,7 @@ int main(void) {
         {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
         {"second", 6, &parameter, 1, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
     };
-    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirBudget exact = xr_xir_default_budget();
     exact.metadata_bytes = sizeof(XrXirArtifact);

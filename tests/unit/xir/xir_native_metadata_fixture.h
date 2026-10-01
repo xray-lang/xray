@@ -28,7 +28,7 @@ static XrXirStatus native_metadata_fixture(const XrXirProgramSpec *spec, XrXirAr
         functions[i] = (XrXirFunction) {names[i], (uint32_t)length, entry->parameters,
             entry->parameter_count, entry->result, &block, 1, instructions[i], 2, NULL, 0};
     }
-    XrXirModule module = {XR_XIR_BUILT, functions, spec->entry_count, spec->declarations, NULL, spec->types, NULL, XR_XIR_PROGRAM};
+    XrXirModule module = {XR_XIR_BUILT, functions, spec->entry_count, spec->declarations, NULL, spec->types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xr_xir_check(&module, NULL, &checked, NULL);
     XrXirArtifact *closed=NULL;

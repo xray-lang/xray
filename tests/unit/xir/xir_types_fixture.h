@@ -33,7 +33,7 @@ static XrXirArtifact *callable_fixture(void) {
         {"identity", 8, &generic, 1, generic, &block, 1, generic_ops, 2, NULL, 0}
     };
     XrXirGeneric generics[] = {{NULL, 0, &fn1, 1}, {&constraint, 1, NULL, 0}};
-    XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, &types, NULL, XR_XIR_PROGRAM};
+    XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);
     memset(signatures, 0xCC, sizeof(signatures)); memset(parameters, 0xCC, sizeof(parameters));
@@ -63,7 +63,7 @@ static XrXirArtifact *function_ir_fixture(void) {
     XrXirSourceModule source = {"root",4,NULL,0,0};
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
-    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types, NULL, XR_XIR_PROGRAM};
+    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);
     return checked;
@@ -87,7 +87,7 @@ static XrXirArtifact *generic_callable_fixture(void) {
         {"caller",6,parameters,2,XR_XIR_STRING,&block,1,caller,2,arguments,2},
         {"apply",5,parameters+2,2,t,&block,1,body,2,&indirect,1}
     };
-    XrXirModule built = {XR_XIR_BUILT,functions,2,NULL,generics,&table, NULL, XR_XIR_PROGRAM};
+    XrXirModule built = {XR_XIR_BUILT,functions,2,NULL,generics,&table, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
     memset(signatures,0xCC,sizeof(signatures)); memset(components,0xCC,sizeof(components));
@@ -128,7 +128,7 @@ static XrXirArtifact *constructed_fixture(void) {
         {"first",5,parameters+4,2,(XrXirType)257,blocks+1,1,body,2,NULL,0},
         {"second",6,parameters+4,2,(XrXirType)257,blocks+1,1,body,2,NULL,0}
     };
-    XrXirModule built = {XR_XIR_BUILT,functions,3,NULL,generics,&types, NULL, XR_XIR_PROGRAM};
+    XrXirModule built = {XR_XIR_BUILT,functions,3,NULL,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
     memset(nodes,0xCC,sizeof(nodes)); memset(inputs,0xCC,sizeof(inputs));

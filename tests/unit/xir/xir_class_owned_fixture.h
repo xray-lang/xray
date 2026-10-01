@@ -78,6 +78,6 @@ static void class_owned_fixture(ClassOwnedFixture *f) {
     f->literal=(XrXirLiteral){"counter",7};f->source=(XrXirSourceModule){"root",4,NULL,0,0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .literals=&f->literal,.literal_count=1,.entry_function=3};
-    f->module=(XrXirModule){XR_XIR_BUILT,f->functions,5,&f->declarations,f->generics,&f->types,NULL, XR_XIR_PROGRAM};
+    f->module=(XrXirModule){XR_XIR_BUILT,f->functions,5,&f->declarations,f->generics,&f->types,NULL, XR_XIR_PROGRAM, NULL};
 }
 #endif // XIR_CLASS_OWNED_FIXTURE_H

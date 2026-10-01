@@ -44,7 +44,9 @@ int main(int argc,char **argv){CHECK(argc==1||argc==2);(void)argv;XrXirArtifact 
  FILE *f=fopen(XR_CHECKED_FIXTURE,"rb");CHECK(f&&!fseek(f,0,SEEK_END));long n=ftell(f);CHECK(n>=64&&n<=262144&&!fseek(f,0,SEEK_SET));
  void *bytes=malloc((size_t)n);CHECK(bytes&&fread(bytes,1,(size_t)n,f)==(size_t)n&&!fclose(f));
  CHECK(xr_xir_checked_read(bytes,(size_t)n,NULL,&checked,NULL)==XR_XIR_OK);free(bytes);
+ CHECK(xr_xir_artifact_module(checked)->defaults&&xr_xir_artifact_module(checked)->defaults->count==2);
  CHECK(xr_xir_specialize(checked,NULL,&special,NULL)==XR_XIR_OK);xr_xir_artifact_free(checked);checked=NULL;
+ CHECK(!xr_xir_artifact_module(special)->defaults&&xr_xir_artifact_module(special)->provenance->source->module.defaults->count==2);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_lower(special,&target,NULL,&lowered,NULL)==XR_XIR_OK);
  xr_xir_artifact_free(special);special=NULL;
  XrXirCSource generated={0};CHECK(xr_xir_emit_c(lowered,"source_library",1048576,&generated)==XR_XIR_OK);
@@ -55,8 +57,8 @@ int main(int argc,char **argv){CHECK(argc==1||argc==2);(void)argv;XrXirArtifact 
 #if CONSUMER_KIND==2
  CHECK(xr_xir_checked_read(spec.proof.bytes,spec.proof.length,NULL,&checked,NULL)==XR_XIR_OK);
  CHECK(xr_xir_lower(checked,&spec.target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(checked);checked=NULL;
- XrXirCallEntry entries[6];XrXirVmBinding bindings[6];CHECK(spec.entry_count==6);
- for(uint32_t f=0;f<6;++f){CHECK(xr_xir_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);if(f%2)entries[f]=spec.entries[f];}
+ XrXirCallEntry entries[8];XrXirVmBinding bindings[8];CHECK(spec.entry_count==8);
+ for(uint32_t f=0;f<8;++f){CHECK(xr_xir_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);if(f%2)entries[f]=spec.entries[f];}
  spec.entries=entries;const XrXirModule *module=xr_xir_artifact_module(lowered);spec.types=module->types;spec.declarations=module->declarations;spec.proof=xr_xir_program_proof(lowered);
 #endif
  CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){1048576,1048576},&program)==XR_XIR_OK);
