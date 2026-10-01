@@ -32,7 +32,7 @@ static XrXirArtifact *constraint_packet_fixture(uint32_t markers) {
         {"entry",5,NULL,0,XR_XIR_I64,&answer_block,1,answer,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
         {"generic",7,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
-    XrXirGeneric generics[] = {{0},{0},{&constraint,1,NULL,0}};
+    XrXirGeneric generics[] = {{0},{0},{&constraint,1,NULL,0, NULL}};
     XrXirSourceModule source = {"alpha",5,NULL,0,1};
     XrXirFunctionIdentity identities[] = {{0},{0},{0}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0, NULL};

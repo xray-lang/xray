@@ -26,6 +26,9 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, const XrXirBudget
     if (spec->abi_version != XR_XIR_PROGRAM_ABI_VERSION ||
         spec->target.architecture != XR_XIR_ARCH_X86_64 || spec->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
         return XR_XIR_BAD_LAYOUT;
+    /* Entry ABI is checked before metadata traversal can allocate or retain. */
+    for (uint32_t i = 0; i < spec->entry_count; ++i)
+        if (spec->entries[i].abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
     if (spec->declarations->implementations || (spec->types && spec->types->interfaces))
         return XR_XIR_BAD_STAGE;
     uint64_t fixed = sizeof(XrXirProgram) + (uint64_t) spec->entry_count * sizeof(XrXirCallEntry) +
@@ -53,7 +56,6 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, const XrXirBudget
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
-        if (entry->abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
         if ((entry->flags & ~XR_XIR_ENTRY_EXIT) ||
             entry->cleanup_owner != spec->declarations->functions[i].cleanup_owner ||
             (entry->cleanup_owner && (entry->result != XR_XIR_UNIT ||

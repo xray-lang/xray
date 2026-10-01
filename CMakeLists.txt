@@ -1700,6 +1700,8 @@ add_dependencies(xray_core
 # SemanticPlan construction remains an internal frontend boundary because it
 # depends on mutable compiler IR ownership analysis.
 set(XRAY_COMPILER_BACKEND_SOURCES
+    src/base/xarena.c
+    src/base/xlog.c
     src/base/xsha256.c
     src/base/xtarget_data_layout.c
     # Assertion SemanticPlan verification consumes the stable core-intrinsic

@@ -66,6 +66,8 @@ XR_FUNC XrValue xr_panic_info_from_value(XrVMRuntime *X, XrValue value);
 
 XR_FUNC XrErrorCode xr_panic_info_get_code(XrVMRuntime *X, XrValue exception);
 XR_FUNC const char *xr_panic_info_get_message(XrVMRuntime *X, XrValue exception);
+/* Borrowed STRING field; no allocation and no C-string length conversion. */
+XR_FUNC XrValue xr_panic_info_get_message_value(XrVMRuntime *X, XrValue exception);
 XR_FUNC XrValue xr_panic_info_get_stacktrace(XrVMRuntime *X, XrValue exception);
 XR_FUNC XrValue xr_panic_info_get_data(XrVMRuntime *X, XrValue exception);
 

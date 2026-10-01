@@ -549,6 +549,8 @@ static XrType *snapshot_type(XiSemanticSnapshot *snapshot, const XrType *source)
     return snapshot->failed ? NULL : copy;
 }
 
+#include "xi_semantic_type_rewrite.inc.c"
+
 static bool snapshot_literal_types(XiSemanticSnapshot *snapshot, XiConstLiteral *literals,
                                    uint16_t count) {
     if (!literals)
@@ -717,6 +719,12 @@ static bool snapshot_module(XiSemanticSnapshot *snapshot, XiModule *module) {
 static bool snapshot_func(XiSemanticSnapshot *snapshot, XiFunc *func) {
     if (!func)
         return true;
+    XrType *callable_type = func->source_callable_type;
+    func->source_callable_type = snapshot_type(snapshot, callable_type);
+    if (callable_type && !func->source_callable_type) {
+        snapshot_note_failure(snapshot, "function callable declaration type");
+        return false;
+    }
     XrType *return_type = func->return_type;
     func->return_type = snapshot_type(snapshot, return_type);
     if (return_type && !func->return_type) {

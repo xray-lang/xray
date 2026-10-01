@@ -36,7 +36,7 @@ static XrXirArtifact *array_generic_fixture(void) {
         {"root", 4, NULL, 0, XR_XIR_I64, &blocks[0], 1, entry, 5, entry_values, 2},
         {"first", 5, &t, 1, t, &blocks[1], 1, body, 6, &value, 1},
         {"second", 6, &t, 1, t, &blocks[1], 1, body, 6, &value, 1}};
-    XrXirGeneric generics[] = {{NULL, 0, arguments, 2}, {&constraints[0], 1, NULL, 0}, {&constraints[1], 1, NULL, 0}};
+    XrXirGeneric generics[] = {{NULL, 0, arguments, 2, NULL}, {&constraints[0], 1, NULL, 0, NULL}, {&constraints[1], 1, NULL, 0, NULL}};
     XrXirModule module = {XR_XIR_BUILT, functions, 3, NULL, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);

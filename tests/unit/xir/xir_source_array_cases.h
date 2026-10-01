@@ -43,7 +43,7 @@ static XrXirValue source_array_run(XrXirInstance *instance, uint32_t function) {
     CHECK(xr_xir_instance_start(instance, function, NULL, 0) == XR_XIR_CALL_READY);
     XrXirCallResult outcome = xr_xir_instance_poll(instance).outcome;
     if (outcome.status != XR_XIR_CALL_RETURNED)
-        fprintf(stderr, "array function %u status %u fault %u\n", function, (unsigned) outcome.status, outcome.fault.code);
+        fprintf(stderr, "array function %u status %u fault %u\n", function, (unsigned) outcome.status, outcome.panic.detail.code);
     CHECK(outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue value = {0};
     CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
@@ -120,8 +120,8 @@ static void source_array_result_cases(XrXirInstance *instance, const uint32_t *f
     CHECK(value.type == XR_XIR_I64 && value.payload == 2); xr_xir_value_drop(&value);
     CHECK(xr_xir_instance_start(instance, functions[ARRAY_REBOUND_FAULT], NULL, 0) == XR_XIR_CALL_READY);
     XrXirCallResult outcome = xr_xir_instance_poll(instance).outcome;
-    CHECK(outcome.status == XR_XIR_CALL_BOUNDS && outcome.fault.code == 430 &&
-        outcome.fault.index == 1 && outcome.fault.length == 1);
+    CHECK(outcome.status == XR_XIR_CALL_BOUNDS && outcome.panic.detail.code == 430 &&
+        outcome.panic.detail.index == 1 && outcome.panic.detail.length == 1);
     value = source_array_run(instance, functions[ARRAY_CURRENT]);
     source_array_text(&value, "only"); xr_xir_value_drop(&value);
     source_array_self_push(instance, functions[ARRAY_SELF_PUSH]);
@@ -153,8 +153,8 @@ static void source_array_result_cases(XrXirInstance *instance, const uint32_t *f
     for (unsigned i = 0; i < 3; ++i) {
         CHECK(xr_xir_instance_start(instance,functions[faults[i]],NULL,0) == XR_XIR_CALL_READY);
         XrXirCallResult failed = xr_xir_instance_poll(instance).outcome;
-        CHECK(failed.status == XR_XIR_CALL_BOUNDS && failed.fault.code == 430);
-        CHECK(failed.fault.index == (i ? 1 : 0) && failed.fault.length == (i ? 1 : 0));
+        CHECK(failed.status == XR_XIR_CALL_BOUNDS && failed.panic.detail.code == 430);
+        CHECK(failed.panic.detail.index == (i ? 1 : 0) && failed.panic.detail.length == (i ? 1 : 0));
         CHECK(failed.value.type == XR_XIR_UNIT && !failed.value.payload && !failed.wake);
         value = source_array_run(instance,functions[ARRAY_PATH_STATE]);
         CHECK(value.type == XR_XIR_I64 && value.payload == states[i]); xr_xir_value_drop(&value);
@@ -211,16 +211,16 @@ static void source_array_sticky_bounds(XrXirProgram *program, uint32_t entry) {
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
     XrXirCallResult outcome = xr_xir_instance_poll(instance).outcome;
-    CHECK(outcome.status == XR_XIR_CALL_BOUNDS && outcome.fault.code == 430 &&
-        outcome.fault.index == -1 && outcome.fault.length == 1);
+    CHECK(outcome.status == XR_XIR_CALL_BOUNDS && outcome.panic.detail.code == 430 &&
+        outcome.panic.detail.index == -1 && outcome.panic.detail.length == 1);
     for (unsigned i = 0; i < 2; ++i) {
         XrXirCallResult failure = {0};
         CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_BOUNDS);
-        CHECK(failure.status == XR_XIR_CALL_BOUNDS && failure.fault.code == 430 &&
-            failure.fault.index == -1 && failure.fault.length == 1 && !failure.fault.reserved);
+        CHECK(failure.status == XR_XIR_CALL_BOUNDS && failure.panic.detail.code == 430 &&
+            failure.panic.detail.index == -1 && failure.panic.detail.length == 1 && !failure.panic.detail.reserved);
         CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_BOUNDS);
         outcome = xr_xir_instance_poll(instance).outcome;
-        CHECK(outcome.status == XR_XIR_CALL_BOUNDS && outcome.fault.index == -1 && outcome.fault.length == 1);
+        CHECK(outcome.status == XR_XIR_CALL_BOUNDS && outcome.panic.detail.index == -1 && outcome.panic.detail.length == 1);
     }
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);

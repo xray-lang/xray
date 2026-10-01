@@ -232,7 +232,7 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     XR_MINIMUM_PAYLOAD(source_methods, 40u);
     XR_MINIMUM_PAYLOAD(types, 64u);
     XR_MINIMUM_PAYLOAD(type_children, 4u);
-    XR_MINIMUM_PAYLOAD(functions, 85u);
+    XR_MINIMUM_PAYLOAD(functions, 98u);
     XR_MINIMUM_PAYLOAD(parameters, 40u);
     XR_MINIMUM_PAYLOAD(captures, 60u);
     XR_MINIMUM_PAYLOAD(blocks, 56u);
@@ -598,6 +598,10 @@ static void decode_functions(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->is_module_initializer = xr_xsm_take_u8(reader);
         record->carries_coroutine_ops = xr_xsm_take_u8(reader);
         record->is_external_entry = xr_xsm_take_u8(reader);
+        record->callable_type = xr_xsm_take_u32(reader);
+        record->unknown_semantic_effects = xr_xsm_take_u32(reader);
+        record->effect_unknown_reasons = xr_xsm_take_u32(reader);
+        record->effect_complete = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         XrSemanticParameterRecord *record = &plan->parameters[i];

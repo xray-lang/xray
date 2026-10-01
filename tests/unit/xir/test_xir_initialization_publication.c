@@ -59,10 +59,10 @@ int main(void) {
     CHECK(first.outcome.status==XR_XIR_CALL_LIMIT);
     CHECK(again.outcome.status==XR_XIR_CALL_LIMIT&&instance->state==XR_XIR_INSTANCE_FAILED);
     CHECK(first.epoch==paused.epoch&&again.epoch==paused.epoch&&!instance->publication_count);
-    CHECK(!again.outcome.value.type&&!again.outcome.value.payload&&!again.outcome.wake&&xr_xir_fault_empty(again.outcome.fault));
+    CHECK(!again.outcome.value.type&&!again.outcome.value.payload&&!again.outcome.wake&&xr_xir_fault_empty(again.outcome.panic.detail));
     CHECK(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_LIMIT);
     XrXirCallResult copy={0};CHECK(xr_xir_instance_copy_failure(instance,&copy)==XR_XIR_CALL_LIMIT);
-    CHECK(copy.status==XR_XIR_CALL_LIMIT&&!copy.value.type&&!copy.value.payload&&xr_xir_fault_empty(copy.fault));
+    CHECK(copy.status==XR_XIR_CALL_LIMIT&&!copy.value.type&&!copy.value.payload&&xr_xir_fault_empty(copy.panic.detail));
     atomic_store(&object->references,references);
     XrXirValue taken={XR_XIR_I64,0,73},before_take=taken;
     CHECK(xr_xir_instance_take_result(instance,&taken)==XR_XIR_CALL_BAD_STATE);

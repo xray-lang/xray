@@ -16,9 +16,11 @@
 #ifndef XR_C_EMISSION_PLAN_INTERNAL_H
 #define XR_C_EMISSION_PLAN_INTERNAL_H
 
+#include "../../base/xarena.h"
 #include "xr_c_emission_plan.h"
 
 struct XrCEmissionPlan {
+    XrArena type_names;
     XrCValueEmissionView *values;
     uint32_t value_count;
     XrCCallArgumentEmissionView *call_arguments;
@@ -36,5 +38,7 @@ struct XrCEmissionPlan {
     XrFingerprint fingerprint;
     bool verified;
 };
+
+XR_FUNC void xr_c_emission_plan_compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out);
 
 #endif  // XR_C_EMISSION_PLAN_INTERNAL_H

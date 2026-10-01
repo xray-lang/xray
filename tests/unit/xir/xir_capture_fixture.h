@@ -63,7 +63,7 @@ static XrXirArtifact *capture_checked(bool throwing) {
         functions[5].instructions = failure; functions[5].instruction_count = 4;
         functions[5].blocks = blocks+2; functions[5].operands = &error_argument; functions[5].operand_count = 1;
     }
-    XrXirGeneric generics[] = {{0},{0},{NULL,0,&concrete,1},{0},{0},{&constraint,1,NULL,0}};
+    XrXirGeneric generics[] = {{0},{0},{NULL,0,&concrete,1, NULL},{0},{0},{&constraint,1,NULL,0, NULL}};
     XrXirSourceModule source = {"root",4,NULL,0,0};
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirLiteral literal = {"captured",8};

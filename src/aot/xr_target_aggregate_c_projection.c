@@ -10,7 +10,9 @@
 
 #include "xr_target_aggregate_c_projection.h"
 #include "../plan/semantic/xr_semantic_value_aggregate_shape.h"
+#include "../plan/target/xr_target_plain_ref_aggregate_shape.h"
 #include "../shared/xr_native_type_core.h"
+#include "../shared/xr_align_guard.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -67,6 +69,7 @@ static bool scalar_native_type(uint16_t machine_kind, uint8_t *out) {
             *out = XR_NATIVE_I32;
             return true;
         case XR_MACHINE_REP_U32:
+        case XR_MACHINE_REP_RUNE:
             *out = XR_NATIVE_U32;
             return true;
         case XR_MACHINE_REP_I64:
@@ -147,6 +150,171 @@ static bool leaf_product_program_family(const XrSemanticProgramProvenance *prove
            provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
 }
 
+static bool fixed_array_field_is_exact(
+    const XrSemanticPlan *semantic, const XrTargetMachineRepRecord *reps, uint32_t rep_count,
+    const XrTargetLayoutRecord *layouts, uint32_t layout_count, const XrTargetFieldRecord *fields,
+    uint32_t field_count, uint32_t semantic_type, const XrTargetFieldRecord *parent,
+    uint8_t *element_native, uint32_t *element_count) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, semantic_type);
+    const XrTargetMachineRepRecord *rep = parent->memory_rep < rep_count ? &reps[parent->memory_rep] : NULL;
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    if (!type || !rep || !children || !xr_target_plain_ref_field_graph(semantic, semantic_type) ||
+        type->kind != XR_KIND_FIXED_ARRAY || type->child_begin >= child_count ||
+        rep->kind != XR_MACHINE_REP_AGGREGATE || rep->detail >= layout_count ||
+        rep->root_kind != XR_TARGET_ROOT_NONE || rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        return false;
+    const XrTargetLayoutRecord *layout = &layouts[rep->detail];
+    const XrSemanticTypeRecord *element = xr_semantic_plan_type(semantic, children[type->child_begin]);
+    uint16_t kind = XR_MACHINE_REP_COUNT;
+    if (!element || xr_target_scalar_rep_for_type(element, false, &kind) != 1 ||
+        !scalar_native_type(kind, element_native) || layout->semantic_type != semantic_type ||
+        layout->kind != XR_TARGET_LAYOUT_AGGREGATE || layout->root_field_count != 0 ||
+        layout->field_count != type->aggregate_extent || layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin ||
+        parent->size != layout->fixed_prefix_size || parent->align != layout->align ||
+        rep->signedness != XR_TARGET_SIGN_NONE || rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE ||
+        rep->lane_count || rep->reserved || rep->register_bits != parent->size * 8u ||
+        rep->memory_size != parent->size || rep->memory_align != parent->align)
+        return false;
+    uint32_t size = 0;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrTargetFieldRecord *lane = &fields[layout->field_begin + i];
+        const XrTargetMachineRepRecord *lane_rep = lane->memory_rep < rep_count ? &reps[lane->memory_rep] : NULL;
+        if (!lane_rep || lane_rep->kind != kind || lane_rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+            lane_rep->root_kind != XR_TARGET_ROOT_NONE || lane->layout != rep->detail ||
+            lane->semantic_field != i || lane->semantic_name != XR_SEMANTIC_INDEX_NONE ||
+            lane->offset != size || lane->size != lane_rep->memory_size ||
+            lane->align != lane_rep->memory_align || lane->align != layout->align ||
+            lane->root_kind != XR_TARGET_ROOT_NONE || lane->flags || lane->reserved ||
+            lane->size > UINT32_MAX - size)
+            return false;
+        size += lane->size;
+    }
+    if (size != layout->fixed_prefix_size)
+        return false;
+    *element_count = layout->field_count;
+    return true;
+}
+
+static bool plain_ref_scalar_geometry(const XrTargetMachineFacts *machine,
+    uint8_t native, XrTargetTypeLayout *out) {
+    if (!machine || !out)
+        return false;
+    switch (native) {
+#define XR_PLAIN_SCALAR_LAYOUT(native_kind, field) case native_kind: *out = machine->data_layout.field; return true;
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_I8, i8)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_U8, u8)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_I16, i16)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_U16, u16)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_I32, i32)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_U32, u32)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_I64, i64)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_U64, u64)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_ISIZE, isize)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_USIZE, usize)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_F32, f32)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_F64, f64)
+        XR_PLAIN_SCALAR_LAYOUT(XR_NATIVE_BOOL, boolean)
+#undef XR_PLAIN_SCALAR_LAYOUT
+        default: return false;
+    }
+}
+
+static bool plain_ref_scalar_rep_is_exact(const XrTargetMachineRepRecord *rep,
+    uint8_t native, const XrTargetTypeLayout *geometry) {
+    if (!rep || !geometry)
+        return false;
+    uint8_t sign = XR_TARGET_SIGN_NONE;
+    switch (native) {
+        case XR_NATIVE_I8: case XR_NATIVE_I16: case XR_NATIVE_I32:
+        case XR_NATIVE_I64: case XR_NATIVE_ISIZE:
+            sign = XR_TARGET_SIGN_SIGNED;
+            break;
+        case XR_NATIVE_U8: case XR_NATIVE_U16: case XR_NATIVE_U32:
+        case XR_NATIVE_U64: case XR_NATIVE_USIZE:
+            sign = XR_TARGET_SIGN_UNSIGNED;
+            break;
+        default:
+            break;
+    }
+    return rep->register_bits == (native == XR_NATIVE_BOOL ? 1u : geometry->size * 8u) &&
+        rep->memory_size == geometry->size && rep->memory_align == geometry->align &&
+        rep->signedness == sign && rep->detail == 0 && rep->lane_count == 0 && rep->reserved == 0 &&
+        rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE && rep->root_kind == XR_TARGET_ROOT_NONE &&
+        rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+}
+
+/* Derive offsets and final padding from the Source field graph and immutable
+ * ABI facts. Hashing a self-consistent but oversized Target layout is not proof. */
+static bool plain_ref_layout_is_exact(const XrTargetPlan *plan, const XrSemanticPlan *semantic,
+    const XrTargetMachineFacts *machine, uint32_t layout_index) {
+    uint32_t layout_count = 0, field_count = 0, rep_count = 0, child_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(plan, &layout_count);
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(plan, &field_count);
+    const XrTargetMachineRepRecord *reps = xr_target_plan_machine_reps(plan, &rep_count);
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    const XrTargetLayoutRecord *layout = layouts && layout_index < layout_count ? &layouts[layout_index] : NULL;
+    const XrSemanticTypeRecord *type = layout ? xr_semantic_plan_type(semantic, layout->semantic_type) : NULL;
+    if (!layout || !type || !fields || !reps || !children || type->kind != XR_KIND_INSTANCE ||
+        !xr_target_plain_ref_field_graph(semantic, layout->semantic_type) ||
+        layout->kind != XR_TARGET_LAYOUT_AGGREGATE || layout->root_field_count ||
+        layout->field_count != type->child_count || layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin)
+        return false;
+    uint32_t cursor = 0, alignment = 1;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrTargetFieldRecord *field = &fields[layout->field_begin + i];
+        const XrTargetMachineRepRecord *rep = field->memory_rep < rep_count ? &reps[field->memory_rep] : NULL;
+        const XrSemanticTypeRecord *child = xr_semantic_plan_type(semantic, children[type->child_begin + i]);
+        uint16_t kind = XR_MACHINE_REP_COUNT;
+        uint8_t native = 0;
+        XrTargetTypeLayout geometry = {0};
+        if (!child || !rep)
+            return false;
+        if (child->kind == XR_KIND_FIXED_ARRAY) {
+            uint32_t count = 0;
+            if (!fixed_array_field_is_exact(semantic, reps, rep_count, layouts, layout_count,
+                fields, field_count, children[type->child_begin + i], field, &native, &count) ||
+                !plain_ref_scalar_geometry(machine, native, &geometry) || !count ||
+                geometry.size > UINT32_MAX / count)
+                return false;
+            const XrTargetLayoutRecord *lanes = &layouts[rep->detail];
+            for (uint16_t n = 0; n < lanes->field_count; n++) {
+                const XrTargetFieldRecord *lane = &fields[lanes->field_begin + n];
+                const XrTargetMachineRepRecord *lane_rep = &reps[lane->memory_rep];
+                if (lane->size != geometry.size || lane->align != geometry.align ||
+                    !plain_ref_scalar_rep_is_exact(lane_rep, native, &geometry))
+                    return false;
+            }
+            geometry.size *= count;
+        } else if (xr_target_scalar_rep_for_type(child, false, &kind) != XR_TARGET_SCALAR_REP_EXACT ||
+            rep->kind != kind || !scalar_native_type(kind, &native) ||
+            !plain_ref_scalar_geometry(machine, native, &geometry) ||
+            !plain_ref_scalar_rep_is_exact(rep, native, &geometry)) {
+            return false;
+        }
+        uint32_t offset = 0;
+        if (!xr_checked_align_u32(cursor, geometry.align, &offset) || geometry.size > UINT32_MAX - offset ||
+            field->offset != offset || field->size != geometry.size || field->align != geometry.align ||
+            rep->memory_size != geometry.size || rep->memory_align != geometry.align ||
+            rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL || rep->root_kind != XR_TARGET_ROOT_NONE)
+            return false;
+        if (child->kind != XR_KIND_FIXED_ARRAY &&
+            (rep->detail || rep->lane_count || rep->reserved ||
+             rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE))
+            return false;
+        cursor = offset + geometry.size;
+        if (geometry.align > alignment)
+            alignment = geometry.align;
+    }
+    if (type->aggregate_align > alignment)
+        alignment = type->aggregate_align;
+    uint32_t size = 0;
+    return xr_checked_align_u32(cursor, alignment, &size) &&
+        layout->fixed_prefix_size == size && layout->align == alignment;
+}
+
 static bool named_struct_projection_hash_depth(
     const XrSemanticPlan *semantic, const XrTargetMachineFacts *machine,
     const XrTargetMachineRepRecord *machine_reps, uint32_t machine_rep_count,
@@ -194,8 +362,19 @@ static bool named_struct_projection_hash_depth(
         const char *name = metadata[shape.field_metadata_begin + i];
         uint8_t native_type = 0;
         uint64_t nested_hash = 0;
-        bool nested = field_rep && field_rep->kind == XR_MACHINE_REP_AGGREGATE;
-        if (nested) {
+        const XrSemanticTypeRecord *field_type =
+            xr_semantic_plan_type(semantic, children[type->child_begin + i]);
+        uint8_t element_native = 0;
+        uint32_t element_count = 0;
+        bool fixed_array = field_type && field_type->kind == XR_KIND_FIXED_ARRAY;
+        bool nested = field_rep && field_rep->kind == XR_MACHINE_REP_AGGREGATE && !fixed_array;
+        if (fixed_array) {
+            native_type = XR_NATIVE_ARRAY;
+            if (!fixed_array_field_is_exact(semantic, machine_reps, machine_rep_count, layouts,
+                    layout_count, fields, field_count, children[type->child_begin + i], field,
+                    &element_native, &element_count))
+                return false;
+        } else if (nested) {
             native_type = XR_NATIVE_NESTED_AGGREGATE;
             if (field_rep->detail >= layout_count ||
                 layouts[field_rep->detail].semantic_type != children[type->child_begin + i] ||
@@ -215,8 +394,8 @@ static bool named_struct_projection_hash_depth(
         hash = hash_word(hash, field->offset);
         hash = hash_word(hash, native_type);
         hash = hash_word(hash, field->size);
-        hash = hash_word(hash, 0); /* no fixed-array element kind */
-        hash = hash_word(hash, 0); /* no fixed-array element count */
+        hash = hash_word(hash, element_native);
+        hash = hash_word(hash, element_count);
         hash = hash_word(hash, 0); /* no flexible tail */
         if (nested)
             hash = hash_word(hash, nested_hash);
@@ -517,4 +696,148 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
     out->abi_key = hash;
     out->kind = XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT;
     return true;
+}
+
+/* The source judgement and each physical row are replayed here. A verified
+ * raw pointer alone is insufficient to identify either its pointee or its ABI. */
+bool xr_c_plain_ref_aggregate_argument_projection(const XrTargetPlan *plan,
+    const XrTargetCallArgumentRecord *argument, XrCAggregateProjection *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    uint32_t call_count = 0, slot_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+    const XrTargetCallRecord *call = argument && calls && argument->call < call_count
+        ? &calls[argument->call] : NULL;
+    const XrTargetSlotRecord *caller_slot = argument && slots && argument->caller_slot < slot_count
+        ? &slots[argument->caller_slot] : NULL;
+    const XrTargetSlotRecord *callee_slot = argument && slots && argument->callee_slot < slot_count
+        ? &slots[argument->callee_slot] : NULL;
+    const XrSemanticPlan *semantic = NULL;
+    uint32_t callee_function = XR_SEMANTIC_INDEX_NONE, caller_function = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticPlan *caller_semantic = NULL;
+    if (!plan || !argument || !out || !call || !caller_slot || !callee_slot ||
+        !xr_target_plan_is_verified(plan) || !xr_target_plan_fingerprint_is_intact(plan) ||
+        !xr_target_plan_function_semantic_binding(plan, call->callee_function, &semantic, &callee_function) ||
+        !xr_target_plan_function_semantic_binding(plan, call->caller_function, &caller_semantic, &caller_function) ||
+        semantic != caller_semantic || call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL || call->flags ||
+        caller_slot->function != call->caller_function || callee_slot->function != call->callee_function ||
+        callee_slot->role != XR_TARGET_SLOT_PARAMETER || caller_slot->root_kind != XR_TARGET_ROOT_NONE ||
+        callee_slot->root_kind != XR_TARGET_ROOT_NONE ||
+        caller_slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        callee_slot->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        argument->mode != XR_TARGET_CALL_REFERENCE || argument->ownership != XR_TARGET_CALL_BORROW ||
+        argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+        argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        argument->reserved8[0] || argument->reserved8[1] || argument->reserved8[2] ||
+        caller_slot->register_rep != argument->register_rep || caller_slot->memory_rep != argument->memory_rep ||
+        callee_slot->register_rep != argument->callee_register_rep || callee_slot->memory_rep != argument->callee_memory_rep)
+        return false;
+    const XrSemanticCallTargetRecord *source_target = xr_semantic_plan_call_target(semantic, call->semantic_call_target);
+    const XrSemanticOperationRecord *source_call = xr_semantic_plan_operation(semantic, call->semantic_operation);
+    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(semantic, argument->callee_parameter);
+    const XrSemanticOperandRecord *source = NULL;
+    if (!source_target || !source_call || !parameter || source_target->operation != call->semantic_operation ||
+        source_target->function != callee_function || source_call->function != caller_function ||
+        source_call->result_value != call->result_value || parameter->function != callee_function ||
+        parameter->ordinal != argument->ordinal || callee_slot->semantic_value != parameter->value ||
+        argument->semantic_operand != source_call->operand_begin + argument->ordinal + 1u ||
+        !xr_target_plain_ref_call_source_is_exact(semantic, source_target, argument->ordinal, &source) ||
+        !source || caller_slot->semantic_value != source->value)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    const XrTargetMachineRepRecord *caller_rep = xr_target_plan_machine_rep(plan, argument->register_rep);
+    const XrTargetMachineRepRecord *caller_mem = xr_target_plan_machine_rep(plan, argument->memory_rep);
+    const XrTargetMachineRepRecord *callee_rep = xr_target_plan_machine_rep(plan, argument->callee_register_rep);
+    const XrTargetMachineRepRecord *callee_mem = xr_target_plan_machine_rep(plan, argument->callee_memory_rep);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(xr_target_plan_profile(plan));
+    if (!operands || argument->semantic_operand >= operand_count ||
+        operands[argument->semantic_operand].value != argument->semantic_value ||
+        !caller_rep || !caller_mem || !callee_rep || !callee_mem || !machine ||
+        caller_rep->kind != XR_MACHINE_REP_AGGREGATE || caller_mem->kind != XR_MACHINE_REP_AGGREGATE ||
+        caller_rep->detail != caller_mem->detail || caller_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        caller_mem->root_kind != XR_TARGET_ROOT_NONE ||
+        caller_rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL || caller_mem->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        callee_rep->kind != XR_MACHINE_REP_RAW_PTR || callee_mem->kind != XR_MACHINE_REP_RAW_PTR ||
+        callee_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED || callee_mem->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        callee_rep->root_kind != XR_TARGET_ROOT_NONE || callee_mem->root_kind != XR_TARGET_ROOT_NONE ||
+        callee_rep->detail || callee_mem->detail || callee_rep->lane_count || callee_mem->lane_count ||
+        callee_rep->signedness != XR_TARGET_SIGN_NONE || callee_mem->signedness != XR_TARGET_SIGN_NONE ||
+        callee_rep->null_encoding != XR_TARGET_NULL_ZERO || callee_mem->null_encoding != XR_TARGET_NULL_ZERO ||
+        callee_slot->size != machine->data_layout.pointer.size ||
+        callee_slot->align != machine->data_layout.pointer.align ||
+        callee_rep->register_bits != machine->data_layout.pointer.size * 8u ||
+        callee_mem->register_bits != machine->data_layout.pointer.size * 8u ||
+        callee_rep->memory_size != machine->data_layout.pointer.size ||
+        callee_mem->memory_size != machine->data_layout.pointer.size ||
+        callee_rep->memory_align != machine->data_layout.pointer.align ||
+        callee_mem->memory_align != machine->data_layout.pointer.align)
+        return false;
+    uint32_t partition = 0;
+    const XrTargetValueRepRecord *held = xr_target_plan_partition_for_semantic(plan, semantic, &partition)
+        ? xr_target_plan_value_rep_for_module(plan, partition, source->value) : NULL;
+    if (!held || held->slot != argument->caller_slot ||
+        !xr_c_aggregate_projection(plan, held, out) ||
+        out->kind != XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT ||
+        !plain_ref_layout_is_exact(plan, semantic, machine, out->layout) ||
+        caller_slot->size != caller_rep->memory_size || caller_slot->align != caller_rep->memory_align)
+        return false;
+    size_t length = strlen(out->c_type);
+    if (length + 3u > sizeof(out->c_type))
+        return false;
+    memcpy(out->c_type + length, " *", 3u);
+    return true;
+}
+
+bool xr_c_plain_ref_aggregate_projection(const XrTargetPlan *plan,
+    const XrTargetValueRepRecord *binding, XrCAggregateProjection *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    uint32_t argument_count = 0, slot_count = 0, call_count = 0;
+    const XrTargetCallArgumentRecord *arguments = xr_target_plan_call_arguments(plan, &argument_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    const XrTargetSlotRecord *slot = binding && slots && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    const XrTargetMachineRepRecord *reg = binding ? xr_target_plan_machine_rep(plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *mem = binding ? xr_target_plan_machine_rep(plan, binding->memory_rep) : NULL;
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(xr_target_plan_profile(plan));
+    if (!plan || !binding || !out || !slot || !reg || !mem ||
+        slot->semantic_value != binding->semantic_value || slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep || reg->kind != XR_MACHINE_REP_RAW_PTR || mem->kind != XR_MACHINE_REP_RAW_PTR ||
+        !machine || reg->detail || mem->detail || reg->lane_count || mem->lane_count ||
+        reg->root_kind != XR_TARGET_ROOT_NONE || mem->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->root_kind != XR_TARGET_ROOT_NONE || slot->reserved ||
+        reg->null_encoding != XR_TARGET_NULL_ZERO || mem->null_encoding != XR_TARGET_NULL_ZERO ||
+        reg->signedness != XR_TARGET_SIGN_NONE || mem->signedness != XR_TARGET_SIGN_NONE ||
+        reg->register_bits != machine->data_layout.pointer.size * 8u ||
+        mem->register_bits != machine->data_layout.pointer.size * 8u ||
+        reg->memory_size != machine->data_layout.pointer.size || mem->memory_size != machine->data_layout.pointer.size ||
+        reg->memory_align != machine->data_layout.pointer.align || mem->memory_align != machine->data_layout.pointer.align ||
+        slot->size != machine->data_layout.pointer.size || slot->align != machine->data_layout.pointer.align ||
+        slot->ownership != reg->ownership || slot->ownership != mem->ownership ||
+        (slot->role == XR_TARGET_SLOT_PARAMETER
+            ? slot->ownership != XR_TARGET_OWNERSHIP_BORROWED
+            : (slot->role != XR_TARGET_SLOT_TEMPORARY || slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)))
+        return false;
+    bool matched = false;
+    for (uint32_t i = 0; arguments && i < argument_count; i++) {
+        const XrTargetCallArgumentRecord *argument = &arguments[i];
+        if (!calls || argument->call >= call_count)
+            return false;
+        bool parameter = slot->role == XR_TARGET_SLOT_PARAMETER;
+        if (parameter ? argument->callee_slot != binding->slot
+            : (argument->semantic_value != binding->semantic_value ||
+               calls[argument->call].caller_function != slot->function))
+            continue;
+        XrCAggregateProjection candidate = {0};
+        if (!xr_c_plain_ref_aggregate_argument_projection(plan, argument, &candidate) ||
+            (matched && (out->abi_key != candidate.abi_key || out->layout != candidate.layout ||
+                         strcmp(out->c_type, candidate.c_type) != 0)))
+            return false;
+        *out = candidate;
+        matched = true;
+    }
+    return matched;
 }

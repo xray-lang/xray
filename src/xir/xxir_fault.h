@@ -28,6 +28,7 @@ typedef struct XrXirFaultDetail {
 #define XR_XIR_PANIC_BOUNDS 430u
 #define XR_XIR_PANIC_MATCH 442u
 #define XR_XIR_PANIC_DEFER_ASYNC 444u
+#define XR_XIR_PANIC_ASSERTION 445u
 
 static inline bool xr_xir_fault_empty(XrXirFaultDetail fault) {
     return !fault.code && !fault.reserved && !fault.index && !fault.length;
@@ -52,6 +53,7 @@ static inline bool xr_xir_fault_defer_async_valid(XrXirFaultDetail fault) {
 }
 static inline bool xr_xir_fault_panic_valid(XrXirFaultDetail fault) {
     return xr_xir_fault_divide_valid(fault) || xr_xir_fault_range_valid(fault) ||
-        xr_xir_fault_bounds_valid(fault) || xr_xir_fault_match_valid(fault) || xr_xir_fault_defer_async_valid(fault);
+        xr_xir_fault_bounds_valid(fault) || xr_xir_fault_match_valid(fault) || xr_xir_fault_defer_async_valid(fault) ||
+        (fault.code == XR_XIR_PANIC_ASSERTION && !fault.reserved && !fault.index && !fault.length);
 }
 #endif // XXIR_FAULT_H

@@ -18,6 +18,7 @@ typedef struct XrXirInferenceRequest {
     const XrXirTypes *types;
     const XrXirType *prefix;
     uint32_t prefix_count, own_count, caller_parameter_count;
+    const uint32_t *parameter_kinds;
 } XrXirInferenceRequest;
 typedef struct XrXirInferenceKnown {
     bool known;

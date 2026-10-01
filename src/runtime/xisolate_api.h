@@ -179,6 +179,10 @@ XR_FUNC void xr_program_image_dispose(XrProgramImage *image);
 XR_FUNC XrProto *xr_compile_source_with_path(struct XrCompilerSession *session, const char *source,
                                              const char *source_file,
                                              const struct XrModuleIdentityAuthority *authority);
+struct XrModuleSourceCompilation;
+XR_FUNC bool xr_compile_module_source(struct XrCompilerSession *session, const char *source,
+    const char *source_file, const struct XrModuleIdentityAuthority *authority,
+    struct XrModuleSourceCompilation *out);
 XR_FUNC int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
                                 const struct XrModuleIdentityAuthority *authority);
 XR_FUNC int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename,

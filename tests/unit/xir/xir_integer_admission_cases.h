@@ -21,7 +21,7 @@ static void integer_ir_rejections(void) {
         XrXirFunction function = {"integer", 7, parameters, 2, XR_XIR_I8, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
         XrXirConstraint constraints = {0};
-        XrXirGeneric generic = {&constraints, 1, NULL, 0};
+        XrXirGeneric generic = {&constraints, 1, NULL, 0, NULL};
         switch (test) {
         case 0: parameters[1] = XR_XIR_U8; break;
         case 1: parameters[1] = XR_XIR_I16; break;

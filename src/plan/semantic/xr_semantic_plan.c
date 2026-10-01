@@ -204,7 +204,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v23\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v24\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -312,6 +312,10 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, function->is_module_initializer);
         hash_u64(&ctx, function->carries_coroutine_ops);
         hash_u64(&ctx, function->is_external_entry);
+        hash_u64(&ctx, function->callable_type);
+        hash_u64(&ctx, function->unknown_semantic_effects);
+        hash_u64(&ctx, function->effect_unknown_reasons);
+        hash_u64(&ctx, function->effect_complete);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         const XrSemanticParameterRecord *parameter = &plan->parameters[i];

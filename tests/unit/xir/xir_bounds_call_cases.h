@@ -31,7 +31,7 @@ static void bounds_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     CHECK(reason == witness->expected);
     CHECK(*(const uint32_t *) view->environment == 1u - witness->cleanups);
     ++witness->cleanups;
-    witness->action.fault = (XrXirFaultDetail) {0};
+    witness->action.panic.detail = (XrXirFaultDetail) {0};
 }
 static bool bounds_output(void *context, const XrXirOutputGroup *group) {
     (void) group;
@@ -50,14 +50,14 @@ static void bounds_fault_boundary(void) {
         witness.action = xr_xir_call_bounds(index, length);
         witness.expected = variant < 5 ? XR_XIR_CALL_BOUNDS : XR_XIR_CALL_BAD_STATE;
         switch (variant) {
-        case 5: witness.action.fault.length = -1; break;
-        case 6: witness.action.fault.index = 1; break;
-        case 7: witness.action.fault.code = 429; break;
-        case 8: witness.action.fault.reserved = 1; break;
+        case 5: witness.action.panic.detail.length = -1; break;
+        case 6: witness.action.panic.detail.index = 1; break;
+        case 7: witness.action.panic.detail.code = 429; break;
+        case 8: witness.action.panic.detail.reserved = 1; break;
         case 9: witness.action.value.reserved = 1; break;
         case 10: witness.action.value.type = XR_XIR_BOOL; break;
         case 11: witness.action.value.payload = XR_XIR_CALL_OOM; break;
-        case 12: witness.action.fault = (XrXirFaultDetail) {0}; break;
+        case 12: witness.action.panic.detail = (XrXirFaultDetail) {0}; break;
         case 13: witness.action.callee = 1; break;
         case 14: witness.action.arguments = &witness.action.value; break;
         case 15: witness.action.argument_count = 1; break;
@@ -82,14 +82,14 @@ static void bounds_fault_boundary(void) {
             !result.value.reserved && !result.value.payload && !result.wake);
         CHECK(witness.cleanups == 2 && !witness.outputs && !accounting.depth);
         CHECK(accounting.allocations == witness.fault_allocations);
-        if (variant < 5) CHECK(result.fault.code == 430 && !result.fault.reserved &&
-            result.fault.index == index && result.fault.length == length);
-        else CHECK(xr_xir_fault_empty(result.fault));
+        if (variant < 5) CHECK(result.panic.detail.code == 430 && !result.panic.detail.reserved &&
+            result.panic.detail.index == index && result.panic.detail.length == length);
+        else CHECK(xr_xir_fault_empty(result.panic.detail));
         XrXirCallResult repeated = xr_xir_call_poll(call);
-        CHECK(!memcmp(&result.fault, &repeated.fault, sizeof(result.fault)));
+        CHECK(!memcmp(&result.panic.detail, &repeated.panic.detail, sizeof(result.panic.detail)));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
-        if (variant < 5) CHECK(result.fault.index == index && result.fault.length == length);
+        if (variant < 5) CHECK(result.panic.detail.index == index && result.panic.detail.length == length);
     }
 }
 static void match_fault_boundary(void) {
@@ -101,10 +101,10 @@ static void match_fault_boundary(void) {
         BoundsWitness witness={0}; witness.action=xr_xir_call_match_failure();
         witness.expected=variant ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_MATCH_FAILURE;
         switch (variant) {
-        case 1: witness.action.fault.code=430; break;
-        case 2: witness.action.fault.reserved=1; break;
-        case 3: witness.action.fault.index=-1; break;
-        case 4: witness.action.fault.length=1; break;
+        case 1: witness.action.panic.detail.code=430; break;
+        case 2: witness.action.panic.detail.reserved=1; break;
+        case 3: witness.action.panic.detail.index=-1; break;
+        case 4: witness.action.panic.detail.length=1; break;
         case 5: witness.action.value.payload=XR_XIR_CALL_BOUNDS; break;
         case 6: witness.action.value.reserved=1; break;
         case 7: witness.action.value.type=XR_XIR_BOOL; break;
@@ -121,12 +121,12 @@ static void match_fault_boundary(void) {
         XrXirCallResult result=xr_xir_call_poll(call);
         CHECK(result.status==witness.expected && result.value.type==XR_XIR_UNIT && !result.value.payload && !result.wake);
         CHECK(witness.cleanups==2 && !witness.outputs && !accounting.depth && accounting.allocations==witness.fault_allocations);
-        CHECK(variant ? xr_xir_fault_empty(result.fault) : xr_xir_fault_match_valid(result.fault));
+        CHECK(variant ? xr_xir_fault_empty(result.panic.detail) : xr_xir_fault_match_valid(result.panic.detail));
         XrXirCallResult repeated=xr_xir_call_poll(call);
-        CHECK(repeated.status==result.status && !memcmp(&result.fault,&repeated.fault,sizeof(result.fault)));
+        CHECK(repeated.status==result.status && !memcmp(&result.panic.detail,&repeated.panic.detail,sizeof(result.panic.detail)));
         CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
         CHECK(!accounting.live_bytes && accounting.allocations==accounting.frees);
-        CHECK(variant ? xr_xir_fault_empty(result.fault) : xr_xir_fault_match_valid(result.fault));
+        CHECK(variant ? xr_xir_fault_empty(result.panic.detail) : xr_xir_fault_match_valid(result.panic.detail));
     }
 }
 #endif // XIR_BOUNDS_CALL_CASES_H

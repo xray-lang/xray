@@ -232,19 +232,19 @@ static void error_marker_definition(void) {
     XrXirInstruction instruction = {XR_XIR_THROW,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirBlock block = {0,1, 0, 0};
     XrXirFunction function = {"e",1,&parameter,1,XR_XIR_I64,&block,1,&instruction,1,NULL,0};
-    XrXirGeneric generic = {&constraint,1,NULL,0};
+    XrXirGeneric generic = {&constraint,1,NULL,0, NULL};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked=NULL,*decoded=NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(checked);
-    CHECK(packet.length==201 && packet.bytes[169]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==205 && !packet.bytes[169] && packet.bytes[173]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(decoded); decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
     for (unsigned i=0;i<sizeof(forged);++i) {
-        packet.bytes[169]=forged[i]; rehash_generic(&packet);
+        packet.bytes[173]=forged[i]; rehash_generic(&packet);
         CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
     xr_xir_checked_packet_free(&packet);
@@ -305,8 +305,8 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(valid, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(valid);
-    CHECK(packet.length > 60 && packet.bytes[packet.length - 60] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 60] = 0; rehash_generic(&packet);
+    CHECK(packet.length > 64 && packet.bytes[packet.length - 64] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[packet.length - 64] = 0; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_checked_packet_free(&packet);
     xr_xir_artifact_free(checked);

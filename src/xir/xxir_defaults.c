@@ -62,6 +62,7 @@ static XrXirStatus default_signature(const XrXirModule *m,const XrXirDefaultBind
         return XR_XIR_BAD_STRUCTURE;
     uint32_t n=f->parameter_count;
     for (uint32_t i=0;i<n;++i) {
+        if (xr_xir_binder_kind(f,i)!=xr_xir_binder_kind(h,i)) return XR_XIR_BAD_TYPE;
         const XrXirConstraint *fc=&f->constraints[i],*hc=&h->constraints[i];
         if(fc->interface_count!=hc->interface_count) return XR_XIR_BAD_TYPE;
         if (!!fc->interfaces!=!!fc->interface_count || !!hc->interfaces!=!!hc->interface_count)

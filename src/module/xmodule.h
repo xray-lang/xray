@@ -90,7 +90,7 @@ typedef struct XrModule {
     void *native_handle;
     XrModuleNativeHandleDestroy native_handle_destroy;
     struct XrClosure *init_fn;
-    void *compiled_code;
+    XrProto *initializer; /* Owned through PUBLISHED and FAILED; closures borrow it. */
 } XrModule;
 
 /* ========== Inline O(1) Export Access ========== */
@@ -173,15 +173,18 @@ struct XrModuleResolver;
 struct XrBytecodeModule;
 struct XrModuleIdentityAuthority;
 
-typedef AstNode *(*XrModuleParseHook)(XrCompilerSession *session, const char *source,
-                                      const char *source_file);
-typedef XrProto *(*XrModuleCompileAstHook)(XrCompilerSession *session, AstNode *ast,
-                                           const char *source_file,
-                                           const struct XrModuleIdentityAuthority *authority);
-typedef XrProto *(*XrModuleCompileSourceHook)(XrCompilerSession *session, const char *source,
-                                              const char *source_file,
-                                              const struct XrModuleIdentityAuthority *authority);
-typedef void (*XrModuleAstFreeHook)(AstNode *ast);
+/* The initializer transfers to the module. The compiler context is consumed
+ * after initialization on every exit and restores the surrounding program. */
+typedef struct XrModuleSourceCompilation {
+    XrProto *initializer;
+    void *context;
+    bool (*dispose_context)(void *context, bool succeeded);
+} XrModuleSourceCompilation;
+
+typedef bool (*XrModuleCompileSourceHook)(XrCompilerSession *session, const char *source,
+                                          const char *source_file,
+                                          const struct XrModuleIdentityAuthority *authority,
+                                          XrModuleSourceCompilation *out);
 
 typedef struct XrModuleRegistry {
     XrHashMap *loaded_modules;   // Module path -> XrModule*
@@ -207,10 +210,7 @@ typedef struct XrModuleRegistry {
     // The module runtime stores an opaque compiler session pointer and only
     // passes it back into toolchain-owned hook functions.
     XrCompilerSession *compiler_session;
-    XrModuleParseHook fn_parse;
-    XrModuleCompileAstHook fn_compile_ast;
     XrModuleCompileSourceHook fn_compile_src;
-    XrModuleAstFreeHook fn_ast_free;
 } XrModuleRegistry;
 
 /* ========== Module System API ========== */
@@ -306,9 +306,6 @@ XR_FUNC ModuleType xr_module_detect_type(const char *path);
 // The module runtime borrows `compiler_session`; it does not own or free it.
 XR_FUNC void xr_module_set_compiler_hooks(struct XrVMRuntime *isolate,
                                           XrCompilerSession *compiler_session,
-                                          XrModuleParseHook parse_fn,
-                                          XrModuleCompileAstHook compile_ast_fn,
-                                          XrModuleCompileSourceHook compile_src_fn,
-                                          XrModuleAstFreeHook ast_free_fn);
+                                          XrModuleCompileSourceHook compile_src_fn);
 
 #endif  // XMODULE_H

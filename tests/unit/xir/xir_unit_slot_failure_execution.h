@@ -78,7 +78,7 @@ static void init_protocol_failures(XrXirProgram *program,uint32_t entry){
         CHECK(r.outcome.status==expected&&trace.output==(mode?1u:2u)&&trace.released==trace.published);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==expected);XrXirCallResult copy={0};
         XrXirValue no_take={XR_XIR_I64,0,73};CHECK(xr_xir_instance_take_result(instance,&no_take)==XR_XIR_CALL_BAD_STATE&&no_take.type==XR_XIR_I64&&no_take.payload==73);
-        CHECK(xr_xir_instance_copy_failure(instance,&copy)==expected&&!copy.value.type&&xr_xir_fault_empty(copy.fault));
+        CHECK(xr_xir_instance_copy_failure(instance,&copy)==expected&&!copy.value.type&&xr_xir_fault_empty(copy.panic.detail));
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
 }

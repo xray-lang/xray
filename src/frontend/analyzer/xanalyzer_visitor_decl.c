@@ -2325,8 +2325,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
             if (param && param->is_rest)
                 has_rest = true;
 
-            // Warn: function parameter missing type annotation
-            if (param && !param->type && !param->is_rest) {
+            // Rest parameters declare their element type just like ordinary parameters.
+            if (param && !param->type) {
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "Parameter '%s' of function '%s' is missing type annotation", param->name,
@@ -4308,9 +4308,8 @@ skip_layout:
                             : xr_type_new_unknown(NULL);
                     param_names[j] = param ? param->name : NULL;
 
-                    // Warn: method parameter missing type annotation (skip constructor)
-                    bool is_rest_param = param && param->is_rest;
-                    if (!(param && param->type) && !md->is_constructor && !is_rest_param) {
+                    // Constructors may infer parameters from their corresponding fields.
+                    if (!(param && param->type) && !md->is_constructor) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "Parameter '%s' of method '%s' is missing type annotation",

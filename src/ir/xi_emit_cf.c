@@ -197,11 +197,13 @@ static bool emit_import_member_fallback(EmitCtx *ctx, XiEmitReg dst, XiEmitReg i
 
 static bool emit_reexport_load(EmitCtx *ctx, XiEmitReg dst, XiEmitReg import_reg, const char *path,
                                const char *name, int src_topo, int src_slot) {
-    if (emit_load_module_slot_checked(ctx, dst, src_topo, src_slot))
+    if (ctx->bind_module_positions && emit_load_module_slot_checked(ctx, dst, src_topo, src_slot))
         return true;
     if (ctx->status != XI_EMIT_OK)
         return false;
-    return emit_import_member_fallback(ctx, dst, import_reg, path, name);
+    const char *runtime_path = xi_emit_runtime_import_path(ctx, path, -1);
+    if (!runtime_path) return false;
+    return emit_import_member_fallback(ctx, dst, import_reg, runtime_path, name);
 }
 
 static bool emit_set_export_checked(EmitCtx *ctx, uint32_t slot, XiEmitReg value_reg,

@@ -13,9 +13,9 @@
 #ifndef XXIR_CALL_H
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
-#include "xxir_fault.h"
+#include "xxir_panic.h"
 
-#define XR_XIR_CALL_ABI_VERSION 19u
+#define XR_XIR_CALL_ABI_VERSION 20u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -25,13 +25,13 @@ typedef enum XrXirCallStatus {
     XR_XIR_CALL_BAD_STATE, XR_XIR_CALL_BUSY, XR_XIR_CALL_DIVIDE_BY_ZERO,
     XR_XIR_CALL_CONSUMED, XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_NUMERIC_RANGE,
     XR_XIR_CALL_BOUNDS, XR_XIR_CALL_MATCH_FAILURE, XR_XIR_CALL_DEFER_ASYNC,
-    XR_XIR_CALL_CANCEL_REQUESTED
+    XR_XIR_CALL_CANCEL_REQUESTED, XR_XIR_CALL_ASSERTION = 19
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
     XrXirValue value;
     uint64_t wake;
-    XrXirFaultDetail fault;
+    XrXirPanicPayload panic;
 } XrXirCallResult;
 typedef enum XrXirActionKind {
     XR_XIR_ACTION_CALL = 1, XR_XIR_ACTION_RETURN, XR_XIR_ACTION_THROW,
@@ -52,7 +52,7 @@ typedef struct XrXirAction {
     const XrXirValue *arguments;
     uint32_t argument_count;
     XrXirValue value;
-    XrXirFaultDetail fault;
+    XrXirPanicPayload panic;
     uint32_t flags;
 } XrXirAction;
 
@@ -62,10 +62,18 @@ XR_FUNC XrXirAction xr_xir_call_fault(XrXirRunStatus status);
 XR_FUNC XrXirAction xr_xir_call_numeric_fault(XrXirRunStatus status, bool remainder);
 XR_FUNC XrXirAction xr_xir_call_bounds(int64_t index, int64_t length);
 XR_FUNC XrXirAction xr_xir_call_match_failure(void);
+/* The returned action borrows message until the current resume returns. */
+XR_FUNC XrXirAction xr_xir_call_assertion(const XrXirValue *message);
 /* Panic-channel statuses are the only faults a protected region may observe. */
 XR_FUNC bool xr_xir_call_panic_status(XrXirCallStatus status);
-XR_FUNC bool xr_xir_call_panic_detail(XrXirCallStatus status, XrXirFaultDetail detail);
+XR_FUNC bool xr_xir_call_panic_payload(XrXirCallStatus status, const XrXirPanicPayload *panic);
 XR_FUNC bool xr_xir_call_panic_action(const XrXirAction *action);
+/* Poll and view results borrow. Explicit copies own both outcome domains. */
+XR_FUNC bool xr_xir_call_result_empty(const XrXirCallResult *result);
+XR_FUNC bool xr_xir_call_result_valid(const XrXirCallResult *result);
+XR_FUNC XrXirValueStatus xr_xir_call_result_copy(const XrXirCallResult *source, XrXirCallResult *output);
+XR_FUNC void xr_xir_call_result_move(XrXirCallResult *source, XrXirCallResult *output);
+XR_FUNC void xr_xir_call_result_drop(XrXirCallResult *result);
 typedef struct XrXirCallView {
     XrXirCall *activation;
     void *instance;
@@ -82,6 +90,8 @@ typedef struct XrXirCallView {
 } XrXirCallView;
 /* Borrowed only by the driver's current resume view, until that callback returns. */
 XR_FUNC XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view);
+/* Consume the driver's admitted returned owner, never the borrowed view copy. */
+XR_FUNC XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirType expected);
 /* Internal authority exists only within an active cleanup callback or value admission. */
 XR_FUNC bool xr_xir_call_cleanup_active(const XrXirCall *activation);
 typedef XrXirAction (*XrXirResumeEntry)(XrXirCallView *view);

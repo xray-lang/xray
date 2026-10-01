@@ -35,8 +35,8 @@ static XrXirArtifact *cleanup_role_fixture(void) {
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 1, NULL};
     const XrXirConstraint constraint = {0}; const XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8};
     XrXirGeneric generics[5] = {{0}};
-    generics[1] = (XrXirGeneric){NULL, 0, arguments, 2};
-    for (uint32_t f = 2; f < 5; ++f) generics[f] = (XrXirGeneric){&constraint, 1, NULL, 0};
+    generics[1] = (XrXirGeneric){NULL, 0, arguments, 2, NULL};
+    for (uint32_t f = 2; f < 5; ++f) generics[f] = (XrXirGeneric){&constraint, 1, NULL, 0, NULL};
     const XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     generics[2].arguments = &argument; generics[2].argument_count = 1;
     generics[3].arguments = &argument; generics[3].argument_count = 1;

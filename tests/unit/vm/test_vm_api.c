@@ -348,10 +348,10 @@ TEST(vm_vararg_entry) {
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
-    /* Xray rest-param syntax: ...nums (no type annotation on rest param).
+    /* Rest declarations specify the element type; the body receives a packed array.
      * Exercises the vararg branch of xr_vm_call_closure. */
     const char *src = "enum VmApiErr { CheckFailed }\n"
-                      "fn sumAll(...nums) -> i64 {\n"
+                      "fn sumAll(...nums: i64) -> i64 {\n"
                       "  var total = 0\n"
                       "  for (var i = 0; i < len(nums); i = i + 1) {\n"
                       "    total = total + nums[i]\n"
@@ -359,7 +359,9 @@ TEST(vm_vararg_entry) {
                       "  return total\n"
                       "}\n"
                       "var r = sumAll(1, 2, 3, 4, 5)\n"
-                      "if (r != 15) { throw VmApiErr.CheckFailed }\n";
+                      "if (r != 15) { throw VmApiErr.CheckFailed }\n"
+                      "if (sumAll() != 0) { throw VmApiErr.CheckFailed }\n"
+                      "if (sumAll(7) != 7) { throw VmApiErr.CheckFailed }\n";
 
     int rc = xr_isolate_dostring(iso, src, &k_vm_api_memory_authority);
     ASSERT_EQ_INT(rc, 0);

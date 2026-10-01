@@ -65,7 +65,7 @@ print(x is i64)                 // true
 | 函数 | 签名 | 说明 |
 |---|---|---|
 | `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false 产生 assertion panic |
-| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | 在定义处已获比较权限的同一静态类型域内比较 |
+| `assertEqual<T: Equal>(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | 普通 TYPE 参数，在定义处证明 Equal 的同T比较 |
 | `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 typed error |
 | `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 panic |
 
@@ -83,8 +83,11 @@ Unit action 类型写 `fn()`，零 payload，不创建普通结果槽；其它�
 不凭具体实例函数体补承诺；词法绑定优先于 builtin 名称。assertEqual 的完整能力及类型域
 按定义处约束合同逐族准入，无约束 T 不在特化时获得深比较权限。普通相等与容器键等价保持
 区别；含 NaN 的数组即使共享 backing 也遵守逐元素关系，memcmp 须有额外 bytewise 证明。
-完整相等能力域尚未冻结，本文不新增 Equatable。本节是声明合同，不代表 §17 尚未准入的
-断言执行族已实现。
+首个有限 Equal 域为 bool、八种定宽整数、f32/f64、string 和递归 Array<T: Equal>，
+详见 §9.2/§17.33；普通 ==、!= 与本断言使用同一关系和证明。Equal 不授自反性或键等价，
+也不是 Equatable 别名。a、b、msg 各按源序求值一次，成功也求值消息；仅正常比较得到 false
+才触发 assertion panic，比较 OOM/LIMIT 保持资源通道。完整相等能力域与正式实现资格仍未完成。
+本节是声明合同，不代表 §17 尚未准入的断言执行族已实现。
 
 ### 13.6 容器构造与静态函数
 
@@ -166,7 +169,7 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | Function | Signature | Description |
 |---|---|---|
 | `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false produces an assertion panic |
-| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | compares one static type with definition-site comparison authority |
+| `assertEqual<T: Equal>(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | ordinary TYPE parameter with definition-site Equal proof for same-T comparison |
 | `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's typed error |
 | `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's panic |
 
@@ -191,9 +194,14 @@ inferred from a concrete instance's body. Lexical bindings precede builtin names
 assertEqual capability/type domain is admitted by definition-site constraints, not by granting an
 unconstrained T deep comparison authority during specialization. Ordinary equality differs from
 container key equivalence. Arrays containing NaN preserve element-wise equality even with shared
-backing; memcmp needs an additional bytewise proof. The complete capability domain remains open;
-this section adds no Equatable and does not claim that the assertion execution family missing
-from §17 has been implemented.
+backing; memcmp needs an additional bytewise proof. The first finite Equal domain is bool,
+the eight fixed-width integers, f32/f64, string and recursive Array<T: Equal>; see §9.2/§17.33.
+Ordinary ==, != and this assertion use the same relation and proof. Equal promises neither
+reflexivity nor key equivalence, and is not an Equatable alias. Evaluate a, b and msg once in
+source order, including success; only a successful false comparison triggers an assertion panic,
+while comparison OOM/LIMIT retains its resource channel. The complete domain and implementation
+qualification remain open; this section does not claim that the assertion execution family
+missing from §17 has been implemented.
 
 ### 13.6 Container Constructors and Static Functions
 

@@ -88,7 +88,7 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
     }
     XrXirType template_parameters[] = {(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE};
     XrXirType concrete = XR_XIR_I64; XrXirConstraint constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
-    XrXirGeneric generics[] = {{NULL,0,&concrete,1},{&constraint,1,NULL,0},{0},{0},{0}};
+    XrXirGeneric generics[] = {{NULL,0,&concrete,1, NULL},{&constraint,1,NULL,0, NULL},{0},{0},{0}};
     XrXirInstruction identity[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
     XrXirBlock generic_block = {0,mode ? 4u : 2u, 0, 0};

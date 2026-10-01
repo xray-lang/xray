@@ -46,6 +46,7 @@ typedef struct SourceCallPlan {
     SourceExpectedType expected_result;
     SourceValue *values;
     uint32_t parameter_offset, value_offset;
+    const uint32_t *parameter_kinds;
 } SourceCallPlan;
 static bool source_call_evidence_view(SourceContext *ctx,XrXirType formal,XrXirType actual_type,XrXirType *evidence) {
     *evidence=actual_type;
@@ -80,7 +81,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
     XrXirInferenceState *state=NULL;
     if (inferred) {
         XrXirInferenceRequest begin={&ctx->types,plan->prefix.types,prefix,own,
-            ctx->generics[ctx->function].parameter_count};
+            ctx->generics[ctx->function].parameter_count,plan->parameter_kinds};
         XrXirStatus status=xr_xir_inference_begin(&begin,&ctx->budget,&state);
         if (status!=XR_XIR_OK) return source_fail(ctx,node,status,
             requirement ? "method inference could not begin" : "direct call inference could not begin");

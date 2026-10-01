@@ -63,8 +63,8 @@ static void path_program_cases(XrXirProgram *program, unsigned kind) {
             XrXirValue argument = {XR_XIR_I64,0,bad ? INT64_MAX : -1};
             CHECK(xr_xir_instance_start(instances[i],f,&argument,1) == XR_XIR_CALL_READY);
             XrXirCallResult failure = xr_xir_instance_poll(instances[i]).outcome;
-            CHECK(failure.status == XR_XIR_CALL_BOUNDS && failure.fault.code == 430);
-            CHECK(failure.fault.index == argument.payload && failure.fault.length == (kind ? 1 : 2));
+            CHECK(failure.status == XR_XIR_CALL_BOUNDS && failure.panic.detail.code == 430);
+            CHECK(failure.panic.detail.index == argument.payload && failure.panic.detail.length == (kind ? 1 : 2));
             CHECK(failure.value.type == XR_XIR_UNIT && !failure.value.payload && !failure.wake);
             CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
         }

@@ -17,12 +17,15 @@
 #include "xr_semantic_allocation_shape.h"
 #include "xr_semantic_array_element_storage_shape.h"
 #include "xr_semantic_type_admission_shape.h"
+#include "xr_semantic_callable_key_shape.h"
+#include "xr_semantic_function_callable_shape.h"
 #include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_class_seal_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_imported_static_method_shape.h"
 #include "xr_semantic_source_class_field_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
+#include "xr_semantic_coroutine_function_shape.h"
 #include "xr_semantic_enum_shape.h"
 #include "xr_semantic_graph.h"
 #include "xr_semantic_ops.h"
@@ -935,6 +938,8 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
         const XrSemanticTypeRecord *type = &plan->types[i];
         if (!verify_id(type->canonical_key, type->id))
             return report(error, error_size, "XR_SEM_0002", "type stable identity is invalid");
+        if (type->kind == XR_KIND_FUNCTION && !xr_semantic_callable_key_frozen_types(plan, type))
+            return report(error, error_size, "XR_SEM_0002", "callable signature graph is incomplete");
         if (!semantic_source_enum_identity_exact(type))
             return report(error, error_size, "XR_SEM_0002",
                           "source enum declaration identity is not exact");
@@ -1171,7 +1176,10 @@ static bool verify_function_key_exact(const XrSemanticPlan *plan, uint32_t index
         !range_valid(function->parameter_begin, function->parameter_count, plan->parameter_count) ||
         (function->parent != XR_SEMANTIC_INDEX_NONE && function->parent >= plan->function_count) ||
         (function->source_class != XR_SEMANTIC_INDEX_NONE &&
-         function->source_class >= plan->source_class_count))
+         function->source_class >= plan->source_class_count) || function->effect_complete > 1u ||
+        (function->callable_type != XR_SEMANTIC_INDEX_NONE &&
+         (function->callable_type >= plan->type_count ||
+          plan->types[function->callable_type].kind != XR_KIND_FUNCTION)))
         return false;
     size_t capacity = strlen(function->canonical_key) + 1u;
     char *expected = (char *) xr_malloc(capacity);
@@ -1183,7 +1191,7 @@ static bool verify_function_key_exact(const XrSemanticPlan *plan, uint32_t index
     for (uint32_t before = 0; before < index; before++)
         if (plan->functions[before].parent == function->parent)
             lexical_ordinal++;
-    bool valid = verifier_key_append(expected, capacity, &used, "function-v3:parent=") &&
+    bool valid = verifier_key_append(expected, capacity, &used, "function-v4:parent=") &&
                  (function->parent == XR_SEMANTIC_INDEX_NONE
                       ? verifier_key_append(expected, capacity, &used, "module-root")
                       : verifier_key_append_id(expected, capacity, &used,
@@ -1221,6 +1229,15 @@ static bool verify_function_key_exact(const XrSemanticPlan *plan, uint32_t index
             verifier_key_append(expected, capacity, &used, ":effects=%u:caps=%u:flags=%u",
                                 function->semantic_effects, function->capability_mask,
                                 (unsigned) function->flags) &&
+            verifier_key_append(expected, capacity, &used, ":callable=") &&
+            (function->callable_type == XR_SEMANTIC_INDEX_NONE ?
+                verifier_key_append(expected, capacity, &used, "none") :
+                verifier_key_append_id(expected, capacity, &used,
+                    plan->types[function->callable_type].id)) &&
+            verifier_key_append(expected, capacity, &used,
+                ":unknown-effects=%u:unknown-reasons=%u:effect-complete=%u",
+                function->unknown_semantic_effects, function->effect_unknown_reasons,
+                (unsigned) function->effect_complete) &&
             strcmp(expected, function->canonical_key) == 0;
     xr_free(expected);
     return valid;
@@ -1321,6 +1338,8 @@ static bool verify_functions(const XrSemanticPlan *plan, char *error, size_t err
                  p + 1u != function->parameter_count))
                 XR_FUNCTION_FAIL("XR_SEM_0013", "parameter contract is invalid");
         }
+        if (!xr_semantic_function_callable_shape_is_exact(plan, function))
+            XR_FUNCTION_FAIL("XR_SEM_0013", "callable declaration shape disagrees with its function");
         for (uint16_t c = 0; c < function->capture_count; c++) {
             const XrSemanticCaptureRecord *capture = &plan->captures[function->capture_begin + c];
             uint8_t allowed_flags =
@@ -4758,6 +4777,18 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
             }
             work.reverse_next[target_index] = work.reverse_head[target->function];
             work.reverse_head[target->function] = target_index;
+        } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                   target->dependency == XR_SEMANTIC_INDEX_NONE) {
+            uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+            if (!xr_semantic_constructor_local_function(plan, target, &constructor)) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "local constructor suspension authority is invalid");
+            }
+            if (constructor != XR_SEMANTIC_INDEX_NONE) {
+                work.reverse_next[target_index] = work.reverse_head[constructor];
+                work.reverse_head[constructor] = target_index;
+            }
         } else if (target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE) {
             const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
             if (target->function != XR_SEMANTIC_INDEX_NONE || operation->opcode != XI_CALL ||
@@ -4767,6 +4798,17 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
                               "native yieldable call-target shape is invalid");
             }
             work.suspendable[operation->function] = 1;
+        } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                   target->dependency != XR_SEMANTIC_INDEX_NONE) {
+            const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
+            if (target->function != XR_SEMANTIC_INDEX_NONE ||
+                target->dependency >= plan->dependency_count || operation->opcode != XI_CALL ||
+                operation->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "dependency constructor call-target shape is invalid");
+            }
+            work.dependency_unknown[operation->function] = 1;
         } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) {
             const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
             if (target->function != XR_SEMANTIC_INDEX_NONE ||
@@ -4922,6 +4964,15 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
                 (plan->operations[operation].opcode == XI_CALL &&
                  target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE);
         }
+        uint32_t local_constructor = XR_SEMANTIC_INDEX_NONE;
+        if (target_index != XR_SEMANTIC_INDEX_NONE) {
+            const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
+            if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                xr_semantic_constructor_local_function(plan, target, &local_constructor) &&
+                local_constructor != XR_SEMANTIC_INDEX_NONE)
+                dynamic_suspend = work.suspendable[local_constructor] != 0;
+        }
         bool expected =
             operation_is_static_suspend(&plan->operations[operation]) || dynamic_suspend;
         /* Dependency exports/methods and sealed-candidate suspension, plus
@@ -4934,6 +4985,11 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
         if (target_index != XR_SEMANTIC_INDEX_NONE) {
             const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
             dependency_deferred =
+                (local_constructor != XR_SEMANTIC_INDEX_NONE &&
+                 work.dependency_unknown[local_constructor] != 0 &&
+                 work.suspendable[local_constructor] == 0) ||
+                (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                 target->dependency != XR_SEMANTIC_INDEX_NONE) ||
                 target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
                 target->kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY ||
                 target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY ||
@@ -5260,6 +5316,33 @@ static bool dependency_method_suspendability(
     return true;
 }
 
+static bool dependency_constructor_suspendability(
+    const XrSemanticPlan *plan, const XrSemanticCallTargetRecord *target,
+    const XrSemanticPlan *const *dependencies, uint32_t dependency_count, bool *result) {
+    if (!plan || !target || !result || target->dependency >= dependency_count ||
+        target->dependency >= plan->dependency_count || !dependencies ||
+        !dependencies[target->dependency] || target->operation >= plan->operation_count)
+        return false;
+    const XrSemanticPlan *dependency = dependencies[target->dependency];
+    const XrSemanticSourceExportRecord *source_export =
+        xr_semantic_plan_source_export(dependency, target->source_export);
+    uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_class = xr_semantic_imported_class_construction_source_class(
+        plan, dependency, &plan->dependencies[target->dependency], source_export,
+        &plan->operations[target->operation], &constructor);
+    if (source_class == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(dependency, constructor);
+    XrStableId zero = {{0}};
+    if (!xr_stable_id_equal(target->callee_function, function ? function->id : zero))
+        return false;
+    int suspension = function ? xr_semantic_function_frozen_suspendability(dependency, constructor) : 0;
+    if (suspension < 0)
+        return false;
+    *result = suspension != 0;
+    return true;
+}
+
 static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
                                                   const XrSemanticPlan *const *dependencies,
                                                   uint32_t dependency_count,
@@ -5319,6 +5402,20 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
             work.reverse_head[target->function] = target_index;
             continue;
         }
+        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            target->dependency == XR_SEMANTIC_INDEX_NONE) {
+            uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+            if (!xr_semantic_constructor_local_function(plan, target, &constructor)) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "module-set local constructor authority is invalid");
+            }
+            if (constructor != XR_SEMANTIC_INDEX_NONE) {
+                work.reverse_next[target_index] = work.reverse_head[constructor];
+                work.reverse_head[constructor] = target_index;
+            }
+            continue;
+        }
         bool directly_suspendable =
             target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
             target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE ||
@@ -5343,6 +5440,14 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
             }
             directly_suspendable =
                 dependency_suspendable[target->dependency][source_export->function] != 0;
+        }
+        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            target->dependency != XR_SEMANTIC_INDEX_NONE &&
+            !dependency_constructor_suspendability(plan, target, dependencies, dependency_count,
+                                                  &directly_suspendable)) {
+            coroutine_authority_work_dispose(&work);
+            return report(error, error_size, "XR_SEM_0019",
+                          "module-set constructor suspendability is unavailable");
         }
         if ((target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY ||
              target->kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY) &&
@@ -5404,6 +5509,24 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
                     &dependency->source_exports[target->source_export];
                 dynamic_suspend =
                     dependency_suspendable[target->dependency][source_export->function] != 0;
+            } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                       target->dependency != XR_SEMANTIC_INDEX_NONE) {
+                if (!dependency_constructor_suspendability(plan, target, dependencies,
+                                                          dependency_count, &dynamic_suspend)) {
+                    coroutine_authority_work_dispose(&work);
+                    return report(error, error_size, "XR_SEM_0019",
+                                  "module-set constructor suspendability is unavailable");
+                }
+            } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                       target->dependency == XR_SEMANTIC_INDEX_NONE) {
+                uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+                if (!xr_semantic_constructor_local_function(plan, target, &constructor)) {
+                    coroutine_authority_work_dispose(&work);
+                    return report(error, error_size, "XR_SEM_0019",
+                                  "module-set local constructor authority is invalid");
+                }
+                dynamic_suspend = constructor != XR_SEMANTIC_INDEX_NONE &&
+                                  work.suspendable[constructor] != 0;
             } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY ||
                        target->kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY) {
                 if (!dependency_method_suspendability(plan, target, dependencies, dependency_count,
@@ -5431,7 +5554,9 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
         }
         bool dependency_call =
             target_index != XR_SEMANTIC_INDEX_NONE &&
-            (plan->call_targets[target_index].kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+            ((plan->call_targets[target_index].kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+              plan->call_targets[target_index].dependency != XR_SEMANTIC_INDEX_NONE) ||
+             plan->call_targets[target_index].kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
              plan->call_targets[target_index].kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY ||
              plan->call_targets[target_index].kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
         bool expected = dependency_call ? dynamic_suspend

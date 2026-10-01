@@ -402,6 +402,8 @@ XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_get_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_iter(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC const char *xi_emit_runtime_import_path(EmitCtx *ctx, const char *specifier,
+                                                int exact_spec_index);
 XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 
 /* ========== Handler Declarations (xi_emit_eh.c) ========== */

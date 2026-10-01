@@ -60,7 +60,7 @@ static void emit_cleanup_entry(CBuffer *buffer, const XrXirFunction *function,
         "    if (state->leaving) {\n        state->leaving = false;\n"
         "        if (state->exit_pc) {\n            uint32_t pc = state->exit_pc; state->exit_pc = 0;\n"
         "            return xr_xir_instance_panic_land(view, state->frame, (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,\n"
-        "                {XR_XIR_I64, 0, view->inbox.status}, view->inbox.fault, 0}, state->exit_destination, pc, &state->pc);\n        }\n"
+        "                {XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0}, state->exit_destination, pc, &state->pc);\n        }\n"
         "        switch (state->leave_instruction) {\n");
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         const XrXirInstruction *op = &function->instructions[i];

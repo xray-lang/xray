@@ -8,6 +8,12 @@
  *   4. Execution produces the same result (via VM)
  */
 
+#include "../../../src/frontend/analyzer/xanalyzer_ast_visitor.h"
+#include "../../../src/frontend/analyzer/xa_node_table.h"
+#include "../../../src/vm/xvm_dispatch_helpers.h"
+#include "../../../src/runtime/class/xclass_lookup.h"
+#include "../../../src/runtime/class/xinstance.h"
+#include "../test_helper.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/frontend/codegen/xcompiler.h"
 #include "../../../src/frontend/codegen/xcompiler_context.h"
@@ -19,6 +25,8 @@
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"
 
+#include "../../../src/analysis/xglobal_producer.h"
+#include "../../../src/module/xmodule_graph.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,15 +96,6 @@ static void setup(void) {
     if (!g_iso) {
         XrVMConfig p = {0};
         g_iso = xray_vm_new_full(&p);
-        XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
-        const XrCompileUnitIdentity identity = {
-            .kind = XR_COMPILE_UNIT_MEMORY,
-            .module_identity = "memory-module-v1:id=21:xi-compare-fixture-v1",
-        };
-        if (!session || !xr_compiler_session_set_compile_unit_identity(session, &identity)) {
-            fprintf(stderr, "failed to install Xi comparison module identity\n");
-            abort();
-        }
     }
 }
 
@@ -113,6 +112,31 @@ static void teardown(void) {
 
 /* ========== Compilation Helpers ========== */
 
+static bool compare_operation_begin(XrCompilerSession *session,
+                                    XrCompilerSessionOperationScope *scope) {
+    const XrCompileUnitIdentity identity = {
+        .kind = XR_COMPILE_UNIT_MEMORY,
+        .module_identity = "memory-module-v1:id=21:xi-compare-fixture-v1",
+    };
+    if (!xr_compiler_session_operation_begin(session, scope))
+        return false;
+    if (xr_compiler_session_set_compile_unit_identity(session, &identity))
+        return true;
+    (void) xr_compiler_session_operation_fail(scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+    return false;
+}
+
+static XrProto *compare_operation_finish(XrCompilerSessionOperationScope *scope, XrProto *proto) {
+    if (!proto) {
+        (void) xr_compiler_session_operation_fail(scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        return NULL;
+    }
+    if (xr_compiler_session_operation_succeed(scope))
+        return proto;
+    xr_instruction_unit_free(proto);
+    return NULL;
+}
+
 /* Compile through the production compiler wrapper. */
 static XrProto *compile_wrapper(const char *source) {
     XR_DCHECK(g_iso != NULL, "isolate must be initialized");
@@ -120,9 +144,12 @@ static XrProto *compile_wrapper(const char *source) {
     /* Create context first — its analyzer installs the current type pool
      * that the parser needs for creating type annotations. */
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerSessionOperationScope operation;
+    if (!compare_operation_begin(session, &operation))
+        return NULL;
     XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (!ctx)
-        return NULL;
+        return compare_operation_finish(&operation, NULL);
     /* xr_compile passes ctx->source_file to the analyzer as the file being
      * analyzed, and file identity selects the nominal owner that declaration
      * analysis records for enums.  Leaving it NULL makes the wrapper path
@@ -133,12 +160,11 @@ static XrProto *compile_wrapper(const char *source) {
     /* Mirror the production compile path: bind the session module graph so
      * declaration analysis (e.g. enums) resolves the same way as the CLI. */
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
-    ctx->source_file = "compare.xr";
 
     AstNode *program = xr_parse_with_source(session, source, ctx->source_file);
     if (!program) {
         xr_compiler_context_free(ctx);
-        return NULL;
+        return compare_operation_finish(&operation, NULL);
     }
 
     /* Re-enter the parse arena: the production wrapper desugars some AST nodes
@@ -154,8 +180,9 @@ static XrProto *compile_wrapper(const char *source) {
         xr_compiler_session_pop_arena(&ast_scope);
     xr_compiler_context_free(ctx);
     xr_program_destroy(program);
-    return proto;
+    return compare_operation_finish(&operation, proto);
 }
+
 
 /* Compile via Xi IR pipeline */
 static XrProto *compile_xi(const char *source) {
@@ -164,9 +191,12 @@ static XrProto *compile_xi(const char *source) {
     /* Create analyzer first — it installs the current type pool for this
      * compiler session before parsing type annotations. */
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerSessionOperationScope operation;
+    if (!compare_operation_begin(session, &operation))
+        return NULL;
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer)
-        return NULL;
+        return compare_operation_finish(&operation, NULL);
     /* Mirror the production compile path: bind the session module graph so
      * declaration analysis (e.g. enums) resolves the same way as the CLI. */
     xa_analyzer_set_graph(analyzer, xr_compiler_session_module_graph(session));
@@ -174,26 +204,56 @@ static XrProto *compile_xi(const char *source) {
     AstNode *program = xr_parse_with_source(session, source, "compare.xr");
     if (!program) {
         xa_analyzer_free(analyzer);
-        return NULL;
+        return compare_operation_finish(&operation, NULL);
     }
 
     xa_analyzer_analyze(analyzer, "compare.xr", program);
 
+    XgGlobalEvidence evidence = {0};
+    int topo_index = 0;
+    XrModuleSpec spec = {0};
+    XrModuleGraph graph = {0};
+    spec.canonical = "memory-module-v1:id=21:xi-compare-fixture-v1";
+    spec.source_path = "compare.xr";
+    spec.kind = XR_MOD_MEMORY;
+    spec.authority.kind = XR_MODULE_IDENTITY_MEMORY;
+    spec.ast = program;
+    xr_module_source_fingerprint(source, &spec.source_content_fingerprint);
+    graph.specs = &spec;
+    graph.spec_count = graph.spec_capacity = 1;
+    graph.topo_order = &topo_index;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+    if (!xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_DEV, 0, NULL, 0, analyzer)) {
+        fprintf(stderr, "[compare diagnostic] direct graph evidence rejected exact fixture\n");
+        xg_global_evidence_free(&evidence);
+        xa_analyzer_free(analyzer);
+        xr_program_destroy(program);
+        return compare_operation_finish(&operation, NULL);
+    }
+
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.module_identity = "memory-module-v1:id=21:xi-compare-fixture-v1";
+    cfg.source_file = "compare.xr";
+    cfg.global_evidence = &evidence;
+    cfg.global_evidence_module_id = 1;
     XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &cfg);
 
+    xg_global_evidence_free(&evidence);
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
 
     if (res.status != XI_PIPE_OK) {
+        fprintf(stderr, "[compare diagnostic] status=%u stage=%u detail=%s\n",
+            (unsigned) res.status, (unsigned) res.error.stage, res.error.detail);
         xi_pipeline_result_free(&res);
-        return NULL;
+        return compare_operation_finish(&operation, NULL);
     }
 
     XrProto *proto = res.proto;
     xi_pipeline_result_free(&res);
-    return proto;
+    return compare_operation_finish(&operation, proto);
 }
 
 /* ========== Execution Capture ========== */
@@ -412,6 +472,7 @@ typedef struct {
     double min_similarity;       /* minimum opcode histogram similarity */
     bool check_exec;             /* compare VM execution output */
     bool expect_runtime_failure; /* both compiled programs must fail execution */
+    const char *expected_stdout; /* independent result when supplied */
 } CompareSpec;
 
 static void run_compare(CompareSpec spec) {
@@ -466,6 +527,12 @@ static void run_compare(CompareSpec spec) {
               out_l ? "ok" : "fail", out_x ? "ok" : "fail");
 
         if (out_l && out_x) {
+            if (spec.expected_stdout) {
+                CHECK(strcmp(out_l, spec.expected_stdout) == 0,
+                      "wrapper stdout differs from independent expectation for '%s'", spec.label);
+                CHECK(strcmp(out_x, spec.expected_stdout) == 0,
+                      "xi stdout differs from independent expectation for '%s'", spec.label);
+            }
             bool match = (strcmp(out_l, out_x) == 0);
             fprintf(stderr, "  exec: rc=%d/%d wrapper=[%s] xi=[%s] %s\n", rc_l, rc_x, out_l, out_x,
                     match ? "MATCH" : "MISMATCH");
@@ -1342,6 +1409,7 @@ TEST(cmp_as_safe_match) {
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
+        .expected_stdout = "hello\n",
     });
 }
 
@@ -1355,6 +1423,7 @@ TEST(cmp_as_safe_mismatch) {
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
+        .expected_stdout = "null\n",
     });
 }
 
@@ -1368,7 +1437,33 @@ TEST(cmp_as_unsafe_mismatch) {
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
+        .expected_stdout = "",
         .expect_runtime_failure = true,
+    });
+}
+
+TEST(cmp_dynamic_as_checked_match) {
+    run_compare((CompareSpec) {
+        .source = "var x: JSON.Value = 42\nvar y = x as i64\nprint(y)",
+        .label = "dynamic checked integer assertion preserves its value",
+        .expect_xi_success = true, .min_similarity = 0.2,
+        .check_exec = true, .expected_stdout = "42\n",
+    });
+}
+TEST(cmp_numeric_as_witness_conversion) {
+    run_compare((CompareSpec) {
+        .source = "var x: f64 = 3.75\nvar y = x as i64\nprint(y)",
+        .label = "numeric conversion uses its typed witness",
+        .expect_xi_success = true, .min_similarity = 0.2,
+        .check_exec = true, .expected_stdout = "3\n",
+    });
+}
+TEST(cmp_numeric_as_witness_truncation) {
+    run_compare((CompareSpec) {
+        .source = "var x: u64 = 257\nvar y = x as u8\nprint(y)",
+        .label = "typed integer truncation remains separate from assertion",
+        .expect_xi_success = true, .min_similarity = 0.2,
+        .check_exec = true, .expected_stdout = "1\n",
     });
 }
 
@@ -1584,6 +1679,164 @@ TEST(cmp_array_sum_func) {
     });
 }
 
+
+
+typedef struct CallableTargetExpectation {
+    XaAnalyzer *analyzer;
+    const char *callee;
+    const char *const *target_names;
+    uint32_t target_node_ids[8];
+    uint32_t target_count;
+    uint32_t calls_checked;
+    bool incomplete;
+} CallableTargetExpectation;
+
+static void collect_expected_callable_declaration(AstNode *node, void *userdata) {
+    CallableTargetExpectation *expect = (CallableTargetExpectation *) userdata;
+    if (!node || node->type != AST_FUNCTION_DECL || !node->as.function_decl.name)
+        return;
+    for (uint32_t i = 0; i < expect->target_count; ++i)
+        if (strcmp(node->as.function_decl.name, expect->target_names[i]) == 0)
+            expect->target_node_ids[i] = node->node_id;
+}
+
+static void check_final_callable_targets(AstNode *node, void *userdata) {
+    CallableTargetExpectation *expect = (CallableTargetExpectation *) userdata;
+    if (!node || node->type != AST_CALL_EXPR || !node->as.call_expr.callee ||
+        node->as.call_expr.callee->type != AST_VARIABLE ||
+        strcmp(node->as.call_expr.callee->as.variable.name, expect->callee) != 0)
+        return;
+    ++expect->calls_checked;
+    XaCallableTargetSetFact fact = {0};
+    CHECK(xa_analyzer_get_callable_target_set(expect->analyzer, node, &fact),
+          "canonical final call fact must be published, including unknown facts");
+    if (expect->incomplete) {
+        CHECK(!fact.complete && fact.target_count == 0 && fact.structural_signature_key == 0,
+              "unknown capture must not retain earlier exact authority");
+        return;
+    }
+    CHECK(fact.complete && fact.structural_signature_key != 0 &&
+          fact.target_count == expect->target_count,
+          "closed capture must contain exactly all observed declaration targets");
+    for (uint32_t i = 0; i < expect->target_count; ++i) {
+        bool found = false;
+        for (uint32_t j = 0; j < fact.target_count; ++j)
+            if (fact.targets[j].function_node_id == expect->target_node_ids[i] &&
+                fact.targets[j].symbol_id != 0 &&
+                fact.targets[j].structural_signature_key == fact.structural_signature_key)
+                found = true;
+        CHECK(expect->target_node_ids[i] != 0 && found,
+              "capture target must join the independently named Source declaration");
+    }
+}
+
+static void check_source_callable_authority(const char *source, CallableTargetExpectation *expect,
+                                           bool expect_live_loan_error) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerSessionOperationScope operation;
+    REQUIRE(compare_operation_begin(session, &operation), "Source authority operation failed");
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    AstNode *program = analyzer ? xr_parse_with_source(session, source, "compare.xr") : NULL;
+    if (!analyzer || !program) {
+        xa_analyzer_free(analyzer);
+        xr_program_destroy(program);
+        (void) xr_compiler_session_operation_fail(&operation, XR_COMPILER_SESSION_OPERATION_FATAL);
+        REQUIRE(false, "Source authority fixture must parse with an analyzer");
+    }
+    xa_analyzer_analyze(analyzer, "compare.xr", program);
+    int diagnostic_count = 0;
+    if (expect_live_loan_error) {
+        bool found = false;
+        for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &diagnostic_count); diag; diag = diag->next)
+            if (diag->severity == XR_DIAG_SEV_ERROR &&
+                diag->code == XR_ERR_ANALYZE_BORROW_CONFLICT &&
+                strstr(diag->message, "OWN-E-LIVE-LOAN"))
+                found = true;
+        CHECK(found, "callable capture rebinding must be refused by actual Source loan authority");
+    } else {
+        for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &diagnostic_count); diag; diag = diag->next)
+            CHECK(diag->severity != XR_DIAG_SEV_ERROR,
+                  "callable target proof fixture must be source-valid");
+        expect->analyzer = analyzer;
+        xa_ast_walk(program, collect_expected_callable_declaration, NULL, expect);
+        xa_ast_walk(program, check_final_callable_targets, NULL, expect);
+        CHECK(expect->calls_checked > 0, "independent Source call expectation found no matching call");
+    }
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+    CHECK(xr_compiler_session_operation_succeed(&operation), "Source authority operation finish failed");
+}
+
+TEST(cmp_compose_multiple_incoming) {
+    run_compare((CompareSpec) {
+        .source = "fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64) -> fn(i64) -> i64 {\n"
+                  " return fn(x: i64) -> i64 { return f(g(x)) }\n}\n"
+                  "fn add1(x: i64) -> i64 { return x + 1 }\n"
+                  "fn add10(x: i64) -> i64 { return x + 10 }\n"
+                  "fn mul2(x: i64) -> i64 { return x * 2 }\n"
+                  "fn mul3(x: i64) -> i64 { return x * 3 }\n"
+                  "var h1 = compose(add1, mul2)\nvar h2 = compose(add10, mul3)\n"
+                  "print(h1(5))\nprint(h2(5))",
+        .label = "all incoming capture targets survive distinct composition calls",
+        .expect_xi_success = true, .min_similarity = 0.1,
+        .check_exec = true, .expected_stdout = "11\n25\n",
+    });
+}
+TEST(cmp_callable_capture_rebind) {
+    const char *source = "fn add1(x: i64) -> i64 { return x + 1 }\n"
+                         "fn add10(x: i64) -> i64 { return x + 10 }\n"
+                         "fn make() -> fn(i64) -> i64 {\n"
+                         " var f = add1\nvar h = fn(x: i64) -> i64 { return f(x) }\n"
+                         " f = add10\nreturn h\n}\nvar h = make()\nprint(h(5))";
+    check_source_callable_authority(source, NULL, true);
+    XrProto *wrapper = compile_wrapper(source);
+    XrProto *direct = compile_xi(source);
+    CHECK(wrapper == NULL && direct == NULL, "both consumers must reject a live callable-owner loan mutation");
+    xr_instruction_unit_free(wrapper);
+    xr_instruction_unit_free(direct);
+}
+TEST(cmp_callable_nested_return) {
+    run_compare((CompareSpec) {
+        .source = "fn add1(x: i64) -> i64 { return x + 1 }\n"
+                  "fn wrap(f: fn(i64) -> i64) -> fn(i64) -> i64 {\n"
+                  " var inner = fn(x: i64) -> i64 { return f(x) }\n"
+                  " return fn(x: i64) -> i64 { return inner(x) + 10 }\n}\n"
+                  "var h = wrap(add1)\nprint(h(5))",
+        .label = "returned outer lambda inherits exact inner capture closure",
+        .expect_xi_success = true, .min_similarity = 0.1,
+        .check_exec = true, .expected_stdout = "16\n",
+    });
+}
+
+
+TEST(cmp_callable_closed_target_union) {
+    const char *source = "fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64) -> fn(i64) -> i64 {\n"
+        " return fn(x: i64) -> i64 { return f(g(x)) }\n}\n"
+        "fn add1(x: i64) -> i64 { return x + 1 }\nfn add10(x: i64) -> i64 { return x + 10 }\n"
+        "fn mul2(x: i64) -> i64 { return x * 2 }\nfn mul3(x: i64) -> i64 { return x * 3 }\n"
+        "var h1 = compose(add1, mul2)\nvar h2 = compose(add10, mul3)\nprint(h1(5))\nprint(h2(5))";
+    const char *f_names[] = {"add1", "add10"};
+    const char *g_names[] = {"mul2", "mul3"};
+    CallableTargetExpectation f_expect = {.callee = "f", .target_names = f_names, .target_count = 2};
+    CallableTargetExpectation g_expect = {.callee = "g", .target_names = g_names, .target_count = 2};
+    check_source_callable_authority(source, &f_expect, false);
+    check_source_callable_authority(source, &g_expect, false);
+}
+TEST(cmp_callable_unknown_invalidates_exact) {
+    const char *source = "fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64) -> fn(i64) -> i64 {\n"
+        " return fn(x: i64) -> i64 { return f(g(x)) }\n}\n"
+        "fn add1(x: i64) -> i64 { return x + 1 }\nfn mul2(x: i64) -> i64 { return x * 2 }\n"
+        "fn unknown(f: fn(i64) -> i64) -> fn(i64) -> i64 { return compose(f, mul2) }\n"
+        "var h = compose(add1, mul2)\nprint(h(5))";
+    CallableTargetExpectation expect = {.callee = "f", .incomplete = true};
+    check_source_callable_authority(source, &expect, false);
+    XrProto *wrapper = compile_wrapper(source);
+    XrProto *direct = compile_xi(source);
+    CHECK(wrapper == NULL && direct == NULL, "unknown incoming target must not obtain a closed executable graph");
+    xr_instruction_unit_free(wrapper);
+    xr_instruction_unit_free(direct);
+}
+
 /* --- Multiple Closures --- */
 
 TEST(cmp_multi_closure) {
@@ -1670,6 +1923,7 @@ TEST(cmp_compose) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
+        .expected_stdout = "11\n",
     });
 }
 
@@ -1782,6 +2036,7 @@ TEST(cmp_class_basic) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
+        .expected_stdout = "3\n4\n",
     });
 }
 
@@ -1803,6 +2058,7 @@ TEST(cmp_class_method) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
+        .expected_stdout = "42\n99\n",
     });
 }
 
@@ -1846,7 +2102,158 @@ TEST(cmp_class_inherit) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
+        .expected_stdout = "Rex\nLabrador\n",
     });
+}
+
+TEST(cmp_super_multiple_levels) {
+    run_compare((CompareSpec) {
+        .source = "class Root {\n root: i64\n constructor(x: i64) { this.root = x }\n}\n"
+                  "class Middle extends Root {\n middle: i64\n constructor(x: i64, y: i64) { super(x); this.middle = y }\n}\n"
+                  "class Leaf extends Middle {\n leaf: i64\n constructor(x: i64, y: i64, z: i64) { super(x, y); this.leaf = z }\n}\n"
+                  "var l = Leaf(7, 9, 11)\nprint(l.root)\nprint(l.middle)\nprint(l.leaf)",
+        .label = "three constructor frames preserve independent receiver owners",
+        .expect_xi_success = true, .min_similarity = 0.1,
+        .check_exec = true, .expected_stdout = "7\n9\n11\n",
+    });
+}
+TEST(cmp_super_ordinary_method) {
+    run_compare((CompareSpec) {
+        .source = "class Parent {\n constructor() {}\n read() -> i64 { return 7 }\n}\n"
+                  "class Child extends Parent {\n constructor() { super() }\n override read() -> i64 { return super.read() + 1 }\n}\n"
+                  "var c = Child()\nprint(c.read())\nprint(c.read())",
+        .label = "ordinary parent method retains its borrowed receiver contract",
+        .expect_xi_success = true, .min_similarity = 0.1,
+        .check_exec = true, .expected_stdout = "8\n8\n",
+    });
+}
+TEST(cmp_super_constructor_error) {
+    run_compare((CompareSpec) {
+        .source = "enum ParentError { Failed }\nclass Parent {\n constructor() { throw ParentError.Failed }\n}\n"
+                  "class Child extends Parent {\n constructor() { super() }\n}\n"
+                  "try { var c = Child(); print(\"unreachable\") } catch (e) { print(\"caught\") }",
+        .label = "parent constructor failure unwinds its acquired owner",
+        .expect_xi_success = true, .min_similarity = 0.1,
+        .check_exec = true, .expected_stdout = "caught\n",
+    });
+}
+
+
+static XrMethod *owner_method(XrClass *cls, bool constructor) {
+    for (uint16_t i = 0; i < cls->method_count; ++i) {
+        XrMethod *m = &cls->methods[i];
+        if (m->type == XMETHOD_CLOSURE && m->as.closure &&
+            (constructor ? xr_method_is_constructor(m) : strcmp(m->name, "read") == 0))
+            return m;
+    }
+    return NULL;
+}
+
+TEST(cmp_super_owner_physical) {
+    const char *source =
+        "class OwnerParent {\n constructor() {}\n read() -> i64 { return 7 }\n}\n"
+        "class OwnerChild extends OwnerParent {\n constructor() { super() }\n"
+        " override read() -> i64 { return super.read() + 1 }\n}\n";
+    XrProto *p = compile_wrapper(source);
+    REQUIRE(p != NULL, "Source receiver-owner fixture compile failed");
+    int rc = -1;
+    char *out = execute_and_capture(p, &rc);
+    defer_proto_free(p);
+    CHECK(rc == 0 && out && strcmp(out, "") == 0, "receiver fixture publication failed");
+    xr_free(out);
+    XrClass *child = xr_class_lookup_by_name(g_iso, "OwnerChild");
+    REQUIRE(child != NULL && child->super != NULL, "published Source child class missing");
+    XrCoroutine *coro = xr_test_init_coro(g_iso);
+    REQUIRE(coro != NULL, "physical coroutine creation failed");
+    XrVMContext *ctx = xr_vm_current_ctx(g_iso);
+    REQUIRE(ctx != NULL && ctx->frame_count == 0, "physical context not quiescent");
+    REQUIRE(ctx->frame_capacity >= 2 && ctx->stack_capacity >= 64,
+            "physical context has insufficient frame and scratch capacity");
+    XrVMContext saved = *ctx;
+    int saved_depth = g_iso->vm.ctor_call_depth;
+    CHECK(saved_depth == 0, "fixture left constructor frames active");
+    for (int kind = 0; kind < 3; ++kind) {
+        XrMethod *caller = owner_method(child, kind != 1);
+        REQUIRE(caller != NULL, "Source-generated caller method missing");
+        XrProto *cp = caller->as.closure->proto;
+        XrInstruction *op = NULL;
+        for (size_t i = 0; i < PROTO_CODE_COUNT(cp); ++i) {
+            if (GET_OPCODE(PROTO_CODE(cp, i)) == OP_SUPERINVOKE) {
+                op = &PROTO_CODE_BASE(cp)[i];
+                break;
+            }
+        }
+        REQUIRE(op != NULL && GETARG_C(*op) == 0, "exact generated SUPERINVOKE missing");
+        int a = GETARG_A(*op);
+        CHECK(a > 0, "Source super producer must use a fresh scratch window");
+        XrValue method_name = PROTO_CONSTANT(cp, GETARG_B(*op));
+        XrMethod *target = owner_method(child->super, kind != 1);
+        REQUIRE(target != NULL && XR_IS_STRING(method_name) &&
+                strcmp(target->name, xr_value_str_data(&method_name)) == 0,
+                "exact source target and call constant differ");
+        XrObjectInstance *inst = xr_instance_new(g_iso, child);
+        REQUIRE(inst != NULL, "owned receiver allocation failed");
+        CHECK(atomic_load_explicit(&inst->hdr.refcount, memory_order_relaxed) == 0,
+              "fresh receiver must have one owner in zero-based RC");
+        memset(ctx->frames, 0, sizeof(XrBcCallFrame) * 2);
+        for (int i = 0; i < saved.stack_capacity; ++i)
+            ctx->stack[i] = XR_NULL_VAL;
+        ctx->frame_count = 1;
+        ctx->handler_count = 0;
+        ctx->pending_error = XR_NULL_VAL;
+        ctx->current_exception = XR_NULL_VAL;
+        ctx->stack_top = ctx->stack + cp->maxstacksize;
+        ctx->frames[0].closure = caller->as.closure;
+        ctx->frames[0].pc = op + 1;
+        ctx->frames[0].base_offset = 0;
+        ctx->stack[a + 1] = xr_value_from_instance(inst);
+        g_iso->vm.ctor_call_depth = 0;
+        if (kind == 2) {
+            g_iso->vm.ctor_call_depth = XR_CTOR_CALL_STACK_MAX;
+            for (int i = 0; i < XR_CTOR_CALL_STACK_MAX; ++i) {
+                g_iso->vm.ctor_call_stack[i].class_ptr = child;
+                g_iso->vm.ctor_call_stack[i].frame_count = 1;
+            }
+        }
+        XrDispatchAction action = vm_superinvoke(g_iso, ctx, *op, ctx->stack,
+                                               &ctx->frames[0], op + 1);
+        if (kind < 2) {
+            CHECK(action == XR_DISP_RESTART && ctx->frame_count == 2,
+                  "successful exact target must publish one frame, kind=%d", kind);
+            CHECK(ctx->frames[1].closure == target->as.closure &&
+                  ctx->frames[1].base_offset == a + 1,
+                  "super receiver must use the unified scratch frame");
+            CHECK(g_iso->vm.ctor_call_depth == 1 &&
+                  g_iso->vm.ctor_call_stack[0].class_ptr == child->super &&
+                  g_iso->vm.ctor_call_stack[0].frame_count == 1,
+                  "exact parent identity and return boundary missing");
+            CHECK(atomic_load_explicit(&inst->hdr.refcount, memory_order_relaxed) ==
+                      (kind == 0 ? 1 : 0),
+                  "only successful constructor acquires a receiver owner");
+            if (kind == 0) {
+                xr_rc_release_value(xr_current_coro_heap(), xr_value_from_instance(inst));
+                CHECK(atomic_load_explicit(&inst->hdr.refcount, memory_order_relaxed) == 0 &&
+                      inst->klass == child && !(inst->hdr.extra & XR_OBJ_DEAD),
+                      "parent result drop must preserve enclosing constructor receiver");
+            }
+        } else {
+            CHECK(action == XR_DISP_RAISE && !XR_IS_NULL(ctx->current_exception) &&
+                  xr_panic_info_get_code(g_iso, ctx->current_exception) == XR_ERR_STACK_OVERFLOW,
+                  "failed frame must raise a real stack panic, kind=%d", kind);
+            CHECK(atomic_load_explicit(&inst->hdr.refcount, memory_order_relaxed) == 0 &&
+                  inst->klass == child && !(inst->hdr.extra & XR_OBJ_DEAD),
+                  "failed frame must not acquire or drop receiver owner, kind=%d", kind);
+            CHECK(ctx->frame_count < 2, "failure must not publish a parent frame");
+        }
+        if (!XR_IS_NULL(ctx->current_exception))
+            xr_rc_release_value(xr_current_coro_heap(), ctx->current_exception);
+        ctx->pending_error = XR_NULL_VAL;
+        ctx->current_exception = XR_NULL_VAL;
+        ctx->stack[a + 1] = XR_NULL_VAL;
+        xr_rc_release_value(xr_current_coro_heap(), xr_value_from_instance(inst));
+        *ctx = saved;
+        g_iso->vm.ctor_call_depth = saved_depth;
+    }
 }
 
 /* ========== Enum Tests ========== */
@@ -1951,6 +2358,7 @@ TEST(cmp_destructure_array) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
+        .expected_stdout = "10\n20\n30\n",
     });
 }
 
@@ -2060,6 +2468,7 @@ TEST(cmp_yield_basic) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
+        .expected_stdout = "before\nafter\n",
     });
 }
 
@@ -2513,6 +2922,9 @@ int main(void) {
     run_cmp_as_safe_match();
     run_cmp_as_safe_mismatch();
     run_cmp_as_unsafe_mismatch();
+    run_cmp_dynamic_as_checked_match();
+    run_cmp_numeric_as_witness_conversion();
+    run_cmp_numeric_as_witness_truncation();
 
     /* Nullish coalesce */
     run_cmp_nullish_coalesce();
@@ -2565,6 +2977,11 @@ int main(void) {
 
     /* Function composition */
     run_cmp_compose();
+    run_cmp_compose_multiple_incoming();
+    run_cmp_callable_capture_rebind();
+    run_cmp_callable_nested_return();
+    run_cmp_callable_closed_target_union();
+    run_cmp_callable_unknown_invalidates_exact();
 
     /* Higher-order apply */
     run_cmp_apply_fn();
@@ -2586,6 +3003,10 @@ int main(void) {
     run_cmp_class_method();
     run_cmp_struct_literal();
     run_cmp_class_inherit();
+    run_cmp_super_multiple_levels();
+    run_cmp_super_ordinary_method();
+    run_cmp_super_constructor_error();
+    run_cmp_super_owner_physical();
 
     /* Enum */
     run_cmp_enum_basic();

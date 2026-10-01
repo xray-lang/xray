@@ -16,6 +16,7 @@
 #include "../../../src/aot/xaot_class_layout.h"
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/aot/xaot_struct_name.h"
+#include "../../../src/aot/xr_target_aggregate_c_projection.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan_internal.h"
@@ -42,6 +43,7 @@
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/semantic/xr_semantic_string_shape.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/ir/xi_backend_lower.h"
@@ -83,6 +85,7 @@ static const char *g_string_runes_c_output = NULL;
 static const char *g_channel_send_c_output;
 static const char *g_rune_to_string_c_output = NULL;
 static const char *g_structural_root_c_output = NULL;
+static const char *g_plain_ref_c_output = NULL;
 
 static void test_func_free(XiFunc *root);
 
@@ -5586,6 +5589,13 @@ TEST(cgen_struct_fixed_array_index_keeps_required_constant_local) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "struct fixed-array index C generation failed");
     TEST_REQUIRE(!had_error, "struct fixed-array index fixture should generate");
+    if (g_plain_ref_c_output) {
+        FILE *output = fopen(g_plain_ref_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "aggregate generated C output stream opened");
+        size_t written = fwrite(code, 1, strlen(code), output);
+        int closed = fclose(output);
+        TEST_REQUIRE(written == strlen(code) && closed == 0, "aggregate generated C output is complete");
+    }
     const char *pick = find_static_function_definition(code, "pick_");
     TEST_REQUIRE(pick != NULL, "pick definition should be emitted");
     const char *pick_end = next_static_after(pick);
@@ -17232,6 +17242,8 @@ TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
 #include "test_xi_cgen_optional.inc.c"
 
 #include "xr_ref_slice_forward_cases.inc.c"
+#include "xr_plain_ref_aggregate_cases.inc.c"
+#include "xr_plain_ref_aggregate_allocations.inc.c"
 
 int main(int argc, char **argv) {
     /* Keep the failing case visible when an always-on contract aborts under CTest. */
@@ -17268,6 +17280,9 @@ int main(int argc, char **argv) {
     }
     if (g_list_cases || g_test_case)
         g_test_filter = NULL;
+    if (argc == 4 && g_test_case &&
+        strcmp(g_test_case, "cgen_struct_fixed_array_index_keeps_required_constant_local") == 0)
+        g_plain_ref_c_output = argv[3];
     if (!g_list_cases)
         setup();
     if (argc == 2 && strcmp(argv[1], "native-direct-authority") == 0) {
@@ -17542,6 +17557,9 @@ int main(int argc, char **argv) {
     run_cgen_clean_narrow_arithmetic_emits_required_constant();
     run_cgen_scalar_emission_plan_owns_local_rep_and_c_spelling();
     run_cgen_struct_fixed_array_index_keeps_required_constant_local();
+    run_cgen_plain_ref_aggregate_authority();
+    run_cgen_plain_ref_aggregate_consumer_authority();
+    run_cgen_plain_ref_aggregate_allocation_ownership();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();
     run_cgen_initializes_file_dir_builtins_from_entry_source();

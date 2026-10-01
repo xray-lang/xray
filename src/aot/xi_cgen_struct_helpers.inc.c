@@ -2675,6 +2675,29 @@ static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         place_load = place_load->args[0];
     if (place_load && place_load->op == XI_PLACE_LOAD && place_load->nargs == 1 &&
         place_load->args[0]) {
+        XrCValueEmissionView loaded = {0}, pointer = {0};
+        bool authoritative = false;
+        if (cg_value_emission_is_named_aggregate(ctx, place_load, &loaded, &authoritative) &&
+            cg_value_emission_view(ctx, f, place_load->args[0], &pointer) == CG_VALUE_EMISSION_FOUND &&
+            pointer.rep == XR_C_VALUE_REP_RAW_PTR && cg_raw_pointer_emission_is_exact(&pointer) &&
+            cg_named_struct_pointer_spelling(pointer.c_type) && loaded.c_type &&
+            strlen(loaded.c_type) == 31u && strncmp(pointer.c_type, loaded.c_type, 31u) == 0) {
+            char layout_type[128], field_name[128];
+            cg_struct_heap_type_name(layout_type, sizeof(layout_type), prefix, sl);
+            if (strcmp(layout_type, loaded.c_type) != 0 || idx < 0 || !sl || idx >= sl->field_count) {
+                (void) cg_value_emission_fail(ctx, "plain ref aggregate field layout disagrees with immutable authority");
+                emit_codegen_abort_expr(out);
+                return;
+            }
+            cg_struct_field_c_name(sl, idx, field_name, sizeof(field_name));
+            emit_vref(out, place_load->args[0]);
+            fprintf(out, "->%s", field_name);
+            return;
+        }
+        if (ctx->error) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
         const XaotValuePlan *load_plan = cg_value_plan_require_legacy(ctx, place_load);
         const char *c_type =
             load_plan && load_plan->rep.kind == XAOT_VALUE_AGGREGATE ? load_plan->rep.c_type : NULL;
@@ -3021,9 +3044,15 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
     else
         emit_struct_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);
     fprintf(out, "[");
-    if (unchecked)
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    else
+    if (unchecked) {
+        /* This field-access consumer reserves the index local in the
+         * declaration policy; read that same local rather than emitting a
+         * literal and leaving its required storage unused. */
+        const char *index_suffix = emit_conversion_prefix_ctx(ctx, out, v->args[1]->type,
+            cg_emitted_value_storage_rep(ctx, v->args[1]), XR_REP_I64);
+        emit_vref(out, v->args[1]);
+        emit_conversion_suffix(out, index_suffix);
+    } else
         fprintf(out, "_idx");
     fprintf(out, "]");
     if (!unchecked)

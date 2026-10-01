@@ -718,6 +718,10 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 <!-- xr-builtin-registry:end -->
 
+有限值相等的新 XIR 合同另冻结内置操作谓词 `Equal`，见 §9.2、§13.5 和 §17.33。
+它不是用户接口或旧 `Equatable` 的别名，不授予排序、键等价或自反性。正式实施尚待完成；
+上面的生成登记表仍反映现存符号来源，不能用手工表项替代来源登记、探针和最后旧消费者删除。
+
 ### 2.3 基本类型
 
 #### 2.3.1 整数类型
@@ -5020,6 +5024,13 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 }
 ```
 
+**有限值相等操作约束（合同冻结，正式实施 PENDING）**：`Equal` 是内置谓词，
+不是用户可 implements 的接口。首域为 bool、八种定宽整数、f32/f64、string 和递归 Array<T>
+（T: Equal）。`<T: Equal>` 与 `where T: Equal` 相同并合取其他条件；无约束 T 的未调用定义
+也不能使用相等操作或转发到 assertEqual。Comparable、Hashable 或同名用户接口不能补此证明。
+它只授同T的 ==、!= 与 assertEqual，不承诺自反性、排序、键等价、显示、成员或构造权限。
+名义/derive、nullable、Map/Set/JSON 等其余域待逐族准入，未实施者明确拒绝，见 §17.33。
+
 **内置约束接口**：
 
 | 接口 | 含义 |
@@ -6098,7 +6109,7 @@ print(x is i64)                 // true
 | 函数 | 签名 | 说明 |
 |---|---|---|
 | `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false 产生 assertion panic |
-| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | 在定义处已获比较权限的同一静态类型域内比较 |
+| `assertEqual<T: Equal>(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | 普通 TYPE 参数，在定义处证明 Equal 的同T比较 |
 | `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 typed error |
 | `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 panic |
 
@@ -6116,8 +6127,11 @@ Unit action 类型写 `fn()`，零 payload，不创建普通结果槽；其它�
 不凭具体实例函数体补承诺；词法绑定优先于 builtin 名称。assertEqual 的完整能力及类型域
 按定义处约束合同逐族准入，无约束 T 不在特化时获得深比较权限。普通相等与容器键等价保持
 区别；含 NaN 的数组即使共享 backing 也遵守逐元素关系，memcmp 须有额外 bytewise 证明。
-完整相等能力域尚未冻结，本文不新增 Equatable。本节是声明合同，不代表 §17 尚未准入的
-断言执行族已实现。
+首个有限 Equal 域为 bool、八种定宽整数、f32/f64、string 和递归 Array<T: Equal>，
+详见 §9.2/§17.33；普通 ==、!= 与本断言使用同一关系和证明。Equal 不授自反性或键等价，
+也不是 Equatable 别名。a、b、msg 各按源序求值一次，成功也求值消息；仅正常比较得到 false
+才触发 assertion panic，比较 OOM/LIMIT 保持资源通道。完整相等能力域与正式实现资格仍未完成。
+本节是声明合同，不代表 §17 尚未准入的断言执行族已实现。
 
 ### 13.6 容器构造与静态函数
 
@@ -7321,6 +7335,28 @@ Source用唯一不发recipe的source_literal_append(ctx,node,bytes,length,&id)�
 同一SourceLibraryMap记录literal_begin/count，按原库顺序追加无去重区间。CONST_STRING原ID须非负且先小于该库自己的count，再经溢出检查加入目标begin；最终merged表中的合法位置不能挽救原库越界ID。CONCAT_STRING仍使用SSA操作数，CALL_DEFAULT沿唯一function/default映射。原函数scratch map全部出口退款，next_function只在整库复制成功后提交，部分builder不得发布Checked；普通语义失败的query snapshot遵守既有complete合同，不能笼统要求全部snapshot为NULL。
 
 资格须包含两个真实库各自literal0且字节不同、反转Catalog输入顺序后的固定结果、默认与显式STRING、私有helper拒绝、原OwnedChecked在所有producer销毁后执行、Source/独立packet VM/真实native/mixed、双Instance、Program销毁后按length读取拥有结果及最终physical0。低层空、UTF8与a\0b三字节literal须四消费者保真，源码parser的NUL拒绝保持原规则，不能当新源码语法。独立手工包与双层有效重hash攻击覆盖原ID越界但merged合法、unused坏UTF8、长度/计数溢出、身份/authority/摘要及重复canonical；逐新真实OOM、第二库失败释放首库、累计预算exact/minus1及scratch退款均验证。保留既有全部默认/来源/预算/故障测试。本有限增量不替代可变库状态隔离、stdlib配对cache命中/miss、完整产品安全或最终旧链删除。
+
+### 17.33 有限 typed 值相等（冻结合同，实施 PENDING）
+
+本节冻结下一个唯一 Checked57/wire22 增量，不声称当前56已执行本族。Equal 使用已有
+marker:u32 的 bit4，ordinary TYPE 的定义处证明、inline/where 合取及来源复验均适用。
+首域仅 bool、八整数、f32/f64、string 和递归 Array<D>；其余域继续明确拒绝且目标保持OPEN。
+同T的 ==、!= 与真实 Core assertEqual<T: Equal> 使用同一 typed 关系。EQUAL=117、
+OP_COUNT=118、stage mask7、两个 VALUE 操作数及 BOOL 结果；immediate仅0(EQ)/1(NE)，
+其它闲置字段为零。NE 仅在成功比较后反转同一结果。旧56及更早重hash包在body分配前拒绝。
+
+FLOAT保持IEEE NaN不等与正负零相等；STRING比较完整length/bytes；Array按length/索引
+逐叶比较，相同指针或共享backing不能绕过NaN。比较用有预算显式DFS，无C递归或深度截断false。
+唯一 typed helper 由 VM/native 共同消费，borrowed输入不copy/drop，只有OK才发布bool；
+BAD_ARGUMENT/OOM/LIMIT保持output和输入owner，所有出口归还真实scratch/domain分配。
+STRING字节、Array元素和扩容工作累计计费，超限不能当作不等或assertPanics成功。
+
+Source/Owned query/clone、默认helper、Library、writer/reader、Checked特化与Lowered复验
+携带同一约束身份。不得借旧Equatable、boxed值adapter、名字白名单或第二executor准入。
+公共Value16/Call20/Program26预计无字段增量，仍须真实fresh布局/provider拒绝和生成C验证。
+资格须含独立完整包与valid-rehash、无约束未调用定义、同名用户接口、NaN共享backing、
+NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physical退款、VM/native/mixed
+分别固定预期及中央默认/ASan。原完整断言/容器/CLI、stdlib配对发布与完整安全保持OPEN。
 
 ---
 

@@ -17,6 +17,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
+#include "../runtime/mem/xcycle_detector.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../base/xmalloc.h"
 #include "../runtime/xglobals_table.h"
@@ -129,13 +130,29 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     }
     main_coro_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
-    // Cleanup private lifecycle state installed by explicit heavy constructors.
-    stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->lifecycle_cleanup) {
-        isolate->lifecycle_cleanup(isolate);
-        isolate->lifecycle_cleanup = NULL;
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+    /* Scan the root execution's heap while class names are still readable.
+     *
+     * The heap itself is torn down later, inside xr_runtime_core_delete — but
+     * the symbol table that owns every interned class name goes away right
+     * during metadata cleanup, so scanning after it would read freed names
+     * on each cycle. Report while every execution dependency is still alive
+     * and before root and fixed finalizers consume the object graph. */
+    {
+        XrCycleReport root_report;
+        (void) xr_cycle_detector_scan(&isolate->core_rt->root_heap, &root_report);
+        /* Claim the scan so the teardown path does not report the same cycles
+         * a second time. */
+        isolate->core_rt->root_heap.is_tearing_down = 1;
+
+        /* The shared domain has no coroutine-heap teardown to bound it and no
+         * `weak` to break it (W4), so a cycle here is a process-lifetime leak.
+         * Workers are stopped by now, which gives the scan the quiescence it
+         * requires. */
+        XrCycleReport shared_report;
+        (void) xr_cycle_detector_scan_shared(&shared_report);
     }
-    lifecycle_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+#endif
 
     stage_start_ns = xr_time_monotonic_ns();
     xr_execution_engine_cleanup(isolate);
@@ -187,6 +204,16 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     stage_start_ns = xr_time_monotonic_ns();
     xr_task_isolate_destroy_deferred(isolate);
     deferred_tasks_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    /* Module code, type identities and native providers must outlive every
+     * object finalizer. Release their owners after deferred Task drops and
+     * before reclaiming fixed bodies or the system class arena. */
+    stage_start_ns = xr_time_monotonic_ns();
+    if (isolate->lifecycle_cleanup) {
+        isolate->lifecycle_cleanup(isolate);
+        isolate->lifecycle_cleanup = NULL;
+    }
+    lifecycle_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
     xr_runtime_core_reclaim_fixed_heap(isolate->core_rt);

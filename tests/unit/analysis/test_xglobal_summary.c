@@ -29,6 +29,13 @@
 #include "../../../src/shared/xr_derive_flags.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "xray_vm.h"
+#include "../../../src/aot/xaot_prepare.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/ir/xi_coro_lower.h"
+#include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_verify.h"
+#include "../plan/target_profile_test_fixture.h"
 #include <string.h>
 
 static XrVMRuntime *g_iso = NULL;
@@ -15937,6 +15944,103 @@ TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
     xg_global_evidence_free(&ev);
 }
 
+/* Convergence publishes verified executable authority before entry derivation. */
+static void assert_entry_plan_from_prepared_callable(const XgGlobalEvidence *evidence) {
+    XrType unit = {
+        .kind = XR_KIND_UNIT, .id = 71, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    XrType callable = {
+        .kind = XR_KIND_FUNCTION, .id = 72, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE,
+        .function = {.return_type = &unit, .throw_effect = XR_FN_EFFECT_NO_THROW},
+    };
+    XiFunc *init = xi_func_new("init", &unit);
+    XiFunc *handler = xi_func_new("handler", &unit);
+    ASSERT_NOT_NULL(init);
+    ASSERT_NOT_NULL(handler);
+    XiBlock *entry = xi_block_new(init);
+    XiBlock *body = xi_block_new(handler);
+    ASSERT_NOT_NULL(entry);
+    ASSERT_NOT_NULL(body);
+    entry->sealed = body->sealed = true;
+    init->children = xr_calloc(1, sizeof(*init->children));
+    ASSERT_NOT_NULL(init->children);
+    init->children[0] = handler;
+    init->nchildren = init->children_cap = 1;
+    init->is_module_initializer = true;
+    init->xg_body_func_id = 1;
+    handler->parent_func = init;
+    handler->xg_body_func_id = 2;
+    XiValue *yield = xi_value_new(handler, body, XI_YIELD, &unit, 0);
+    XiValue *closure = xi_value_new(init, entry, XI_CLOSURE_NEW, &callable, 0);
+    XiValue *call = xi_value_new(init, entry, XI_CALL, &unit, 1);
+    ASSERT_NOT_NULL(yield);
+    ASSERT_NOT_NULL(closure);
+    ASSERT_NOT_NULL(call);
+    closure->aux = handler;
+    call->args[0] = closure;
+    xi_block_set_return(body, NULL);
+    xi_block_set_return(entry, NULL);
+    init->stage = handler->stage = XI_STAGE_SEMANTIC_LOWERED;
+    init->invariant_mask = handler->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    ASSERT_TRUE(xi_coro_lower(init, NULL));
+    init->stage = handler->stage = XI_STAGE_OPTIMIZED;
+    XiModule module = {
+        .identity = "memory-module-v1:id=27:entry-callable-authority-v1",
+        .path = "entry_open_callable.xr", .name = "entry_open_callable", .init = init,
+    };
+    init->module = &module;
+    char error[512] = {0};
+    ASSERT_TRUE(xr_semantic_plan_build_and_attach(init, error, sizeof(error)));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    XrTargetPlan *target = NULL;
+    const XrSemanticPlan *semantics[] = {init->semantic_plan};
+    bool target_built = xr_target_plan_build_program_module_set(
+        semantics, 1, init->semantic_plan, profile, &target, error, sizeof(error));
+    if (!target_built)
+        fprintf(stderr, "entry callable TargetPlan: %s\n", error);
+    ASSERT_TRUE(target_built);
+    ASSERT_TRUE(xr_target_plan_is_verified(target));
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+    XiModule *modules[] = {&module};
+    XaotBundle bundle = {0};
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, evidence, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.entry_plan.unproven_reason, XR_ENTRY_OPEN_REACHABILITY);
+    ASSERT_TRUE(xaot_bundle_set_program_target_plan(&bundle, target));
+    XrCEmissionPlan *emission = NULL;
+    ASSERT_TRUE(xr_c_emission_plan_build(target, init->semantic_plan,
+                                          xr_target_profile_fingerprint(profile), &emission,
+                                          error, sizeof(error)));
+    bundle.module_emission_plans[0] = emission;
+    bool prepared = xaot_prepare_bundle(&bundle, NULL);
+    if (!prepared)
+        fprintf(stderr, "entry callable prepare: %s\n", bundle.error_msg);
+    ASSERT_TRUE(prepared);
+    ASSERT_TRUE(bundle.has_callable_reachability);
+    const XaotFuncPlan *init_plan = xaot_bundle_find_func_plan(&bundle, init);
+    const XaotFuncPlan *handler_plan = xaot_bundle_find_func_plan(&bundle, handler);
+    ASSERT_NOT_NULL(init_plan);
+    ASSERT_NOT_NULL(handler_plan);
+    ASSERT_TRUE(init_plan->reachable && handler_plan->reachable);
+    XrEntryPlan refined;
+    XrTargetPlan *saved_target = bundle.program_target_plan;
+    bundle.program_target_plan = NULL;
+    ASSERT_FALSE(xaot_entry_plan_derive(&bundle, evidence, XG_BUILD_NATIVE_RELEASE, &refined));
+    bundle.program_target_plan = saved_target;
+    ASSERT_TRUE(xaot_entry_plan_derive(&bundle, evidence, XG_BUILD_NATIVE_RELEASE, &refined));
+    ASSERT_EQ_UINT(refined.unproven_reason, XR_ENTRY_PROVEN);
+    ASSERT_EQ_UINT(refined.reachable_body_count, 2);
+    ASSERT_TRUE((refined.required_capability_bits & XG_CAP_TIMER) != 0);
+    xaot_bundle_free(&bundle);
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    init->module = NULL;
+    xi_func_free(init);
+}
+
 TEST(entry_plan_defers_open_function_value_reachability_until_callable_convergence) {
     XgBuildKey key = {.source_hash = 0x197a,
                       .compiler_semver_hash = 2,
@@ -16004,12 +16108,11 @@ TEST(entry_plan_defers_open_function_value_reachability_until_callable_convergen
     init_plan->reachable = 1;
     handler_plan->reachable = 1;
     bundle.has_callable_reachability = true;
-    ASSERT_TRUE(xaot_entry_plan_derive(&bundle, &ev, XG_BUILD_NATIVE_RELEASE, &refined));
-    ASSERT_EQ_UINT(refined.unproven_reason, XR_ENTRY_PROVEN);
-    ASSERT_EQ_UINT(refined.reachable_body_count, 2);
-    ASSERT_TRUE((refined.required_capability_bits & XG_CAP_TIMER) != 0);
-
+    ASSERT_NULL(xaot_bundle_program_target_plan(&bundle));
+    ASSERT_FALSE(xaot_entry_plan_derive(&bundle, &ev, XG_BUILD_NATIVE_RELEASE, &refined));
     xaot_bundle_free(&bundle);
+
+    assert_entry_plan_from_prepared_callable(&ev);
     xg_global_evidence_free(&ev);
 }
 

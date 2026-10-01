@@ -3469,8 +3469,15 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                 XrDestructurePattern *elem = pat->as.array.elements[i];
                 if (!elem)
                     continue;
+                struct XrType *element_type = src->type && XR_TYPE_IS_ARRAY(src->type)
+                                                 ? src->type->container.element_type
+                                                 : NULL;
+                if (!element_type || XR_TYPE_IS_UNKNOWN(element_type)) {
+                    l->had_error = true;
+                    return;
+                }
                 XiValue *idx = xi_const_int(l->func, l->cur_block, i, l->type_int);
-                XiValue *val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
+                XiValue *val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, element_type, 2);
                 if (val) {
                     val->args[0] = src;
                     val->args[1] = idx;

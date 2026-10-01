@@ -21,6 +21,7 @@
 #define XR_SEMANTIC_CLASS_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_constructor_callable_shape.h"
 #include "xr_semantic_local_call_target_shape.h"
 #include "xr_semantic_type_admission_shape.h"
 #include "../../ir/xi.h"
@@ -1283,8 +1284,10 @@ static inline uint32_t xr_semantic_imported_class_construction_authority_source_
              parameter->ownership != XI_OWN_BORROWED) ||
             parameter->reserved != 0 || (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_DEFAULT_SENTINEL)) != 0 ||
             argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) i ||
-            !xr_semantic_parameter_type_admits_argument(dependency, parameter_type, argument_type,
-                                                        parameter->mode) ||
+            (!xr_semantic_parameter_type_admits_argument(dependency, parameter_type, argument_type,
+                                                         parameter->mode) &&
+             !xr_semantic_constructor_callback_argument_admits(
+                 caller, operation, argument, dependency, parameter->type)) ||
             argument->parameter_mode != parameter->mode ||
             argument->transfer_mode != parameter->transfer_mode ||
             argument->access != XR_CALL_ARG_PLAIN || argument->origin != 0 ||

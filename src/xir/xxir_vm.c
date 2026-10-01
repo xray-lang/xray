@@ -190,7 +190,7 @@ static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
             op->op == XR_XIR_ARRAY_LEN, &output, &fault);
     }
     if (status != XR_XIR_CALL_READY) {
-        *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, fault, 0};
+        *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault, {0}}, 0};
         return XR_XIR_RUN_OK;
     }
     if (xr_xir_type_is_owned(run->module->types, op->type)) xr_xir_owned_slot_move(run->frame, destination, &output);
@@ -589,6 +589,12 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_SUSPEND:
         action->kind = XR_XIR_ACTION_SUSPEND;
         break;
+    case XR_XIR_ASSERT_CONDITION:
+        if (!xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])) {
+            XrXirValue message = vm_value_operand(run, op->args[1]);
+            *action = xr_xir_call_assertion(&message);
+        }
+        break;
     case XR_XIR_MATCH_FAIL:
         *action = xr_xir_call_match_failure();
         break;
@@ -649,22 +655,27 @@ static XrXirAction vm_resume(XrXirCallView *view) {
             if (!handler) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
             state->invoke = 0;
             return vm_panic_land(&run, state, handler, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
-                {XR_XIR_I64, 0, view->inbox.status}, view->inbox.fault, 0});
+                {XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0});
         }
         XrXirValue inbox = view->inbox.value;
+        bool discarded = false;
         if (state->invoke) {
             const XrXirInstruction *op = &function->instructions[state->invoke - 1];
             bool error = view->inbox.status == XR_XIR_CALL_THROWN;
             if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
             uint32_t first = function->blocks[op->targets[error ? 1 : 0]].first;
             state->expected = error ? XR_XIR_ERROR : op->type;
-            state->destination = state->expected == XR_XIR_UNIT ? UINT32_MAX : layout->offsets[function->parameter_count + first];
-            state->instruction = first + (state->expected != XR_XIR_UNIT);
+            discarded = !error && function->instructions[first].op == XR_XIR_INVOKE_DISCARD;
+            if (discarded && xr_xir_call_discard_inbox(view,state->expected) != XR_XIR_CALL_READY)
+                return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+            state->destination = discarded || state->expected == XR_XIR_UNIT ? UINT32_MAX : layout->offsets[function->parameter_count + first];
+            state->instruction = first + (discarded || state->expected != XR_XIR_UNIT);
             state->invoke = 0;
             if (error) inbox.type = XR_XIR_ERROR;
         } else
         if (view->inbox.status == XR_XIR_CALL_THROWN)
             return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}, 0};
+        if (!discarded) {
         if (view->inbox.status != XR_XIR_CALL_RETURNED && view->inbox.status != XR_XIR_CALL_THROWN)
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
         if (state->expected == XR_XIR_UNIT ?
@@ -676,6 +687,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
                 return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};
         } else if (state->destination != UINT32_MAX)
             xr_xir_scalar_store(run.frame, state->destination, inbox.payload);
+        }
     }
     uint32_t at = state->instruction;
     XrXirAction action;
@@ -800,6 +812,7 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_INVOKE ||
             body->instructions[i].op == XR_XIR_INVOKE_INDIRECT || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
+            body->instructions[i].op == XR_XIR_ASSERT_CONDITION ||
             body->instructions[i].op == XR_XIR_PANIC_CATCH ||
             body->instructions[i].op == XR_XIR_CLEANUP_REGISTER || body->instructions[i].op == XR_XIR_CLEANUP_LEAVE ||
             body->instructions[i].op == XR_XIR_CLEANUP_ERROR ||

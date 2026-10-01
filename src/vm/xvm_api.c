@@ -401,23 +401,15 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
 /* ========== Exception Handling Implementation ========== */
 
 /*
-** User-visible message of an error value, with exactly the semantics of the
-** AOT's xrt_exception_message_cstr: a raw string yields itself, an exception
-** object yields its `message` field, anything else (a thrown enum error value,
-** say) yields NULL. Kept deliberately narrow so both backends print identical
-** text for spec 8.3.1 rule D3, which requires them to agree verbatim.
+** Borrow the exact STRING bytes of a raw message or PanicInfo field. The
+** owning error remains live during fatal reporting; embedded NUL is data.
 */
-static const char *cleanup_error_message_cstr(XrVMRuntime *isolate, XrValue error) {
-    if (XR_IS_NULL(error))
-        return NULL;
-    if (XR_IS_STRING(error)) {
-        XrString *s = (XrString *) XR_TO_PTR(error);
-        return s ? s->data : NULL;
-    }
-    if (!xr_value_is_panic_info(isolate, error))
-        return NULL;
-    const char *message = xr_panic_info_get_message(isolate, error);
-    return (message && message[0]) ? message : NULL;
+static XrErrorCoreMessageView cleanup_error_message_view(XrVMRuntime *isolate, XrValue error) {
+    XrValue message = XR_IS_STRING(error) ? error : xr_panic_info_get_message_value(isolate, error);
+    if (!XR_IS_STRING(message)) return (XrErrorCoreMessageView){0};
+    const XrString *string = (const XrString *)XR_TO_PTR(message);
+    return string ? (XrErrorCoreMessageView){0, string->data, string->length, false} :
+        (XrErrorCoreMessageView){0};
 }
 
 /*
@@ -428,9 +420,9 @@ static const char *cleanup_error_message_cstr(XrVMRuntime *isolate, XrValue erro
 */
 XR_ERROR_CORE_NORETURN static void cleanup_throw_abort(XrVMRuntime *isolate, XrValue escaped,
                                                        XrValue in_flight) {
-    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW,
-                                    cleanup_error_message_cstr(isolate, escaped),
-                                    cleanup_error_message_cstr(isolate, in_flight));
+    XrErrorCoreMessageView pending = cleanup_error_message_view(isolate, in_flight);
+    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW, cleanup_error_message_view(isolate, escaped),
+        XR_IS_NULL(in_flight) ? NULL : &pending);
 }
 
 XR_FUNC void xr_cleanup_scope_enter(XrVMRuntime *isolate, XrVMContext *ctx) {

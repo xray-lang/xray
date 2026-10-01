@@ -84,6 +84,13 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 }
 ```
 
+**有限值相等操作约束（合同冻结，正式实施 PENDING）**：`Equal` 是内置谓词，
+不是用户可 implements 的接口。首域为 bool、八种定宽整数、f32/f64、string 和递归 Array<T>
+（T: Equal）。`<T: Equal>` 与 `where T: Equal` 相同并合取其他条件；无约束 T 的未调用定义
+也不能使用相等操作或转发到 assertEqual。Comparable、Hashable 或同名用户接口不能补此证明。
+它只授同T的 ==、!= 与 assertEqual，不承诺自反性、排序、键等价、显示、成员或构造权限。
+名义/derive、nullable、Map/Set/JSON 等其余域待逐族准入，未实施者明确拒绝，见 §17.33。
+
 **内置约束接口**：
 
 | 接口 | 含义 |
@@ -399,6 +406,16 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
     return v
 }
 ```
+
+**Finite value-equality operation constraint (frozen contract, implementation PENDING)**:
+`Equal` is a built-in predicate rather than a user-implementable interface. Its first domain is
+bool, the eight fixed-width integers, f32/f64, string and recursive Array<T> where T: Equal.
+`<T: Equal>` and `where T: Equal` mean the same condition and conjoin other requirements.
+An unused unconstrained T definition cannot compare or forward to assertEqual. Comparable,
+Hashable and a same-named user interface do not supply this proof. Equal grants only same-T
+==, != and assertEqual, without reflexivity, ordering, key equivalence, display, member or
+construction authority. Nominal/derive, nullable, Map/Set/JSON and other domains require
+separate admission; unimplemented operations reject explicitly. See §17.33.
 
 **Built-in constraint interfaces**:
 

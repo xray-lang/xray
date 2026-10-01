@@ -108,4 +108,22 @@ XR_FUNC const struct XiClassData *xi_value_class_constructor_call(const XiFunc *
                                                                   const XiValue *call,
                                                                   const XiFunc **out_constructor);
 
+/* Borrowed declaration authority. No analyzer or live dependency body is
+ * retained, and no serialized/public runtime layout uses this record. */
+typedef struct XiImportedConstructorAuthority {
+    const struct XiModule *module;
+    const struct XiClassData *class_data;
+    const struct XrSemanticPlan *plan;
+    uint32_t source_class;
+    uint32_t source_export;
+    uint32_t constructor;
+} XiImportedConstructorAuthority;
+
+XR_FUNC bool xi_value_imported_constructor_authority(
+    const XiFunc *caller, const XiValue *call, XiImportedConstructorAuthority *authority);
+/* -1 means no complete frozen signature, 0 owns, 1 borrows. Operand zero is
+ * the class callee; operand a maps to constructor parameter a after this. */
+XR_FUNC int xi_value_imported_constructor_operand_borrowed(
+    const XiFunc *caller, const XiValue *call, uint16_t operand);
+
 #endif  // XI_VALUE_QUERY_H

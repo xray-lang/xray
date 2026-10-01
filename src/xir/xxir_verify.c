@@ -255,7 +255,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL &&
                op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
-               op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_CALL_INDIRECT &&
+               op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
@@ -857,6 +857,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (!xr_xir_type_is_integer(operand_type)) return XR_XIR_BAD_TYPE;
             }
             if (op->op == XR_XIR_STRING_INDEX_OF && a == 2) operand_type = XR_XIR_I64;
+            if (op->op == XR_XIR_ASSERT_CONDITION) operand_type = a ? XR_XIR_STRING : XR_XIR_BOOL;
             if (op->op == XR_XIR_ATOMIC_I64_FETCH_ADD && a == 1) operand_type = XR_XIR_I64;
             if ((op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {
@@ -1020,6 +1021,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
         module->declarations->implementations) status = XR_XIR_BAD_STAGE;
     if (status == XR_XIR_OK) status = xr_xir_implementations_verify(module, &context.remaining);
     if (status == XR_XIR_OK) status = xr_xir_defaults_verify(module, &context.remaining);
+    if (status == XR_XIR_OK) status = xr_xir_result_binders_verify(module, &context.remaining);
     if (status == XR_XIR_OK) status = xr_xir_module_constraints_verify(module, &context.remaining);
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;

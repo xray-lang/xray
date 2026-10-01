@@ -252,6 +252,21 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
     for (uint32_t f = 0; f < m->function_count && c->status == XR_XIR_OK; ++f) {
         XrXirGeneric g = generics[f];
         g.parameter_count = checked_count(c, g.parameter_count, &c->remaining.parameters);
+        uint32_t kinds_present = checked_u32(c, g.parameter_kinds ? 1u : 0u);
+        if (kinds_present > 1 || (kinds_present && !g.parameter_count)) {
+            c->status = XR_XIR_BAD_STRUCTURE; break;
+        }
+        uint32_t *kinds = kinds_present ? checked_array(c, g.parameter_kinds,
+            g.parameter_count, sizeof(*kinds), 4) : NULL;
+        bool result_variable = false;
+        for (uint32_t p = 0; kinds && p < g.parameter_count && c->status == XR_XIR_OK; ++p) {
+            uint32_t kind = checked_u32(c, kinds[p]);
+            if (kind > XR_XIR_BINDER_RESULT_VARIABLE) c->status = XR_XIR_BAD_STRUCTURE;
+            result_variable |= kind == XR_XIR_BINDER_RESULT_VARIABLE;
+            if (c->reading) kinds[p] = kind;
+        }
+        if (c->status == XR_XIR_OK && kinds_present && !result_variable) c->status = XR_XIR_BAD_STRUCTURE;
+        g.parameter_kinds = kinds;
         g.constraints = checked_constraints(c, g.constraints, g.parameter_count);
         g.argument_count = checked_u32(c, g.argument_count);
         XrXirType *arguments = checked_array(c, g.arguments, g.argument_count, sizeof(*arguments), 4);

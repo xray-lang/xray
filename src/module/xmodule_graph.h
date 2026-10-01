@@ -115,6 +115,8 @@ typedef struct XrModuleGraph {
 
     /* Entry module index */
     int entry_index;
+    /* Failure remains observable even when allocating its diagnostic fails. */
+    bool resolution_failed;
 } XrModuleGraph;
 
 /* ========== API ========== */
@@ -153,6 +155,13 @@ XR_FUNC int xr_module_graph_include(XrModuleGraph *g, const char *source_path,
 XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
                                          const XrModuleIdentityAuthority *entry_authority,
                                          const char *entry_source, char **out_err);
+
+/* Check the caller's exact bytes under a typed logical source identity.
+ * A physical root requires a matching rooted locator. A rootless stdlib source
+ * may use a diagnostic locator but cannot resolve relative file imports. */
+XR_FUNC int xr_module_graph_build_logical_source(XrModuleGraph *g,
+    const XrModuleIdentityAuthority *authority, const char *logical_path,
+    const char *source_path, const char *source, char **out_err);
 
 /* Run topological sort (Tarjan SCC).
  * After success, g->topo_order is filled and g->has_cycle indicates cycles.

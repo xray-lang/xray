@@ -18,6 +18,11 @@
 #include <stdlib.h>
 
 #include "xr_error_messages.h"
+#include "../base/xplatform.h"
+#if defined(XR_OS_WINDOWS)
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 #define XR_ERROR_CORE_INDEX_OOB_BUFSZ 96
 #define XR_ERROR_CORE_TYPE_MISMATCH_BUFSZ 160
@@ -76,13 +81,28 @@ static inline int xr_error_core_format_prefixed(char *buf, size_t cap, int code,
  * `code` is XR_ERR_DEFER_THROW; it is passed in rather than included so this
  * header stays dependency-free, matching xr_error_core_format_prefixed. The VM
  * and AOT both route here so their diagnostics and exit status are identical. */
+static inline void xr_error_core_write_message(FILE *stream, XrErrorCoreMessageView view) {
+    if (view.has_code) fprintf(stream, "E%04d: ", view.code);
+    if (view.message) fwrite(view.message, 1, view.message_len, stream);
+    else fputs(XR_ERROR_CORE_NO_MESSAGE_MSG, stream);
+}
+
 XR_ERROR_CORE_NORETURN static inline void
-xr_error_core_defer_throw_abort(int code, const char *escaped, const char *in_flight) {
+xr_error_core_defer_throw_abort(int code, XrErrorCoreMessageView escaped,
+    const XrErrorCoreMessageView *in_flight) {
     fflush(stdout);
-    fprintf(stderr, "E%04d: %s: %s\n", code, XR_ERROR_CORE_DEFER_THROW_MSG,
-            escaped ? escaped : XR_ERROR_CORE_NO_MESSAGE_MSG);
-    if (in_flight)
-        fprintf(stderr, "  %s: %s\n", XR_ERROR_CORE_DEFER_THROW_IN_FLIGHT_MSG, in_flight);
+#if defined(XR_OS_WINDOWS)
+    /* Fatal reporting never returns; binary mode preserves message LF bytes. */
+    _setmode(_fileno(stderr), _O_BINARY);
+#endif
+    fprintf(stderr, "E%04d: %s: ", code, XR_ERROR_CORE_DEFER_THROW_MSG);
+    xr_error_core_write_message(stderr, escaped);
+    fputc('\n', stderr);
+    if (in_flight) {
+        fprintf(stderr, "  %s: ", XR_ERROR_CORE_DEFER_THROW_IN_FLIGHT_MSG);
+        xr_error_core_write_message(stderr, *in_flight);
+        fputc('\n', stderr);
+    }
     fprintf(stderr, "  %s\n", XR_ERROR_CORE_DEFER_THROW_HINT_MSG);
     fflush(stderr);
     exit(XR_ERROR_CORE_DEFER_THROW_EXIT);

@@ -70,13 +70,13 @@ static void array_program_cases(XrXirProgram *program, bool fail_init) {
         XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
         if (fail_init) {
             CHECK(result.outcome.status == XR_XIR_CALL_BOUNDS && !logs[i].length);
-            CHECK(result.outcome.fault.code == 430 && result.outcome.fault.index == -1 && result.outcome.fault.length == 2);
+            CHECK(result.outcome.panic.detail.code == 430 && result.outcome.panic.detail.index == -1 && result.outcome.panic.detail.length == 2);
             CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_FAILED);
             for (uint32_t repeat = 0; repeat < 3; ++repeat) {
                 CHECK(xr_xir_instance_start(instances[i],2,NULL,0) == XR_XIR_CALL_BOUNDS);
                 XrXirCallResult copy = {0};
                 CHECK(xr_xir_instance_copy_failure(instances[i],&copy) == XR_XIR_CALL_BOUNDS);
-                CHECK(!memcmp(&copy.fault,&result.outcome.fault,sizeof(copy.fault)));
+                CHECK(!memcmp(&copy.panic.detail,&result.outcome.panic.detail,sizeof(copy.panic.detail)));
                 failures[i] = copy;
             }
             CHECK(logs[i].released == 1 && logs[i].releases[0] == 0);
@@ -93,8 +93,8 @@ static void array_program_cases(XrXirProgram *program, bool fail_init) {
                 XrXirValue argument = {XR_XIR_I64,0,bad[index]};
                 CHECK(xr_xir_instance_start(instances[i],5,&argument,1) == XR_XIR_CALL_READY);
                 XrXirCallResult failed = xr_xir_instance_poll(instances[i]).outcome;
-                CHECK(failed.status == XR_XIR_CALL_BOUNDS && failed.fault.code == 430 &&
-                    failed.fault.index == bad[index] && failed.fault.length == 3 &&
+                CHECK(failed.status == XR_XIR_CALL_BOUNDS && failed.panic.detail.code == 430 &&
+                    failed.panic.detail.index == bad[index] && failed.panic.detail.length == 3 &&
                     failed.value.type == XR_XIR_UNIT && !failed.value.payload && !failed.wake);
                 CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
             }
@@ -105,7 +105,7 @@ static void array_program_cases(XrXirProgram *program, bool fail_init) {
             logs[i].releases[1] == 1 && logs[i].releases[2] == 0);
     }
     for (uint32_t i = 0; i < 2; ++i) {
-        if (fail_init) CHECK(failures[i].fault.index == -1 && failures[i].fault.length == 2);
+        if (fail_init) CHECK(failures[i].panic.detail.index == -1 && failures[i].panic.detail.length == 2);
         else {
             XrXirValueAdmission admission = {xr_xir_value_arena(&escaped[i]),NULL,NULL,NULL,10000,65536};
             int64_t length = -1; XrXirValue element = {0}; XrXirFaultDetail fault = {0};

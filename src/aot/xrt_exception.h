@@ -44,7 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(_WIN32)
+#if defined(XR_OS_WINDOWS)
 #if defined(_MSC_VER)
 #include <corecrt_io.h> /* _isatty/_fileno for the panic report's TTY colour gate */
 #else
@@ -179,9 +179,14 @@ static inline const char *xrt_exception_message_cstr(XrValue exc) {
 }
 
 static inline _Noreturn void xrt_cleanup_abort(XrValue escaped, XrValue in_flight) {
-    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW, xrt_exception_message_cstr(escaped),
-                                    XR_IS_NULL(in_flight) ? NULL
-                                                          : xrt_exception_message_cstr(in_flight));
+    XrValue message = xrt_exception_get_message_value(escaped);
+    XrValue pending = xrt_exception_get_message_value(in_flight);
+    XrErrorCoreMessageView escaped_view = {0, XR_IS_STR(message) ? xr_str_data(message) : NULL,
+        XR_IS_STR(message) ? (size_t)xr_str_len(message) : 0, false};
+    XrErrorCoreMessageView pending_view = {0, XR_IS_STR(pending) ? xr_str_data(pending) : NULL,
+        XR_IS_STR(pending) ? (size_t)xr_str_len(pending) : 0, false};
+    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW, escaped_view,
+        XR_IS_NULL(in_flight) ? NULL : &pending_view);
 }
 
 static inline void xrt_cleanup_enter(void) {
@@ -326,11 +331,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
      * `catch panic` may intercept it. A handler pushed inside the body moves
      * xrt_exc_top past the barrier and keeps the panic ordinary. */
     if (xrt_cleanup_depth > 0 && xrt_exc_top == xrt_cleanup_exc_barriers[xrt_cleanup_depth - 1])
-        xr_error_core_defer_throw_abort(
-            XR_ERR_DEFER_THROW, xrt_exception_message_cstr(exc),
-            XR_IS_NULL(xrt_cleanup_saved_errors[xrt_cleanup_depth - 1])
-                ? NULL
-                : xrt_exception_message_cstr(xrt_cleanup_saved_errors[xrt_cleanup_depth - 1]));
+        xrt_cleanup_abort(exc, xrt_cleanup_saved_errors[xrt_cleanup_depth - 1]);
     if (xrt_exc_top) {
         xrt_exc_top->exception = exc;
         longjmp(xrt_exc_top->buf, 1);

@@ -14,7 +14,10 @@
 #include "xi_range.h"
 #include "xi_receiver_alias.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/class/xclass_info.h"
 #include "../stdlib/xstdlib_metadata.h"
+#include "../plan/semantic/xr_semantic_builder.h"
+#include "../plan/semantic/xr_semantic_class_shape.h"
 #include <string.h>
 
 XR_FUNC bool xi_type_is_channel(const XrType *type) {
@@ -29,6 +32,123 @@ XR_FUNC bool xi_type_is_channel(const XrType *type) {
         }
     }
     return false;
+}
+
+XR_FUNC bool xi_value_imported_constructor_authority(
+    const XiFunc *caller, const XiValue *call, XiImportedConstructorAuthority *authority) {
+    if (!caller || !call || !authority || !xi_value_is_constructor_call(call) ||
+        call->nargs == 0 || !call->args || !call->type ||
+        call->type->kind != XR_KIND_INSTANCE || !call->type->instance.class_ref ||
+        call->type->instance.class_ref->xg_class_id == 0 || call->type->is_nullable ||
+        call->type->is_const || call->type->is_value_type || call->type->is_literal)
+        return false;
+    bool plain = call->op == XI_CALL && !call->aux && call->aux_int == 0;
+    bool member = call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0 &&
+                  strcmp((const char *) call->aux, "constructor") == 0;
+    if (!plain && !member)
+        return false;
+    const XiImportRef *ref = xi_value_import_ref(caller, call->args[0]);
+    const XiModule *module = ref ? ref->resolved_module : NULL;
+    if (!ref || !ref->resolution_attempted || !ref->member_name || !ref->member_name[0] ||
+        ref->resolved_func || !module || !module->identity || !module->identity[0] ||
+        !module->init || !module->slot_classes || !module->classes || !module->exports ||
+        ref->resolved_shared_slot < 0 || ref->resolved_shared_slot >= module->nslots ||
+        ref->resolved_export_slot < 0 || ref->resolved_export_slot >= module->nexports)
+        return false;
+    const XiClassData *data = module->slot_classes[ref->resolved_shared_slot];
+    const XiModuleExport *exported = &module->exports[ref->resolved_export_slot];
+    if (!data || !data->needs_runtime_type ||
+        data->xg_class_id != call->type->instance.class_ref->xg_class_id ||
+        exported->class_data != data || exported->function ||
+        exported->shared_slot != ref->resolved_shared_slot || !exported->name ||
+        strcmp(exported->name, ref->member_name) != 0)
+        return false;
+    for (uint16_t i = 0; i < module->nexports; i++)
+        if (i != (uint16_t) ref->resolved_export_slot && module->exports[i].name &&
+            strcmp(module->exports[i].name, exported->name) == 0)
+            return false;
+    uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        if (module->classes[i] != data)
+            continue;
+        if (source_class != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        source_class = i;
+    }
+    const XrSemanticPlan *plan = module->init->semantic_plan;
+    if (!plan || !xr_semantic_plan_is_verified(plan) ||
+        xr_semantic_plan_source_class_count(plan) != module->nclasses)
+        return false;
+    const XrSemanticSourceClassRecord *klass = xr_semantic_plan_source_class(plan, source_class);
+    if (!klass || klass->ordinal != source_class || !klass->name || !data->class_name ||
+        strcmp(klass->name, data->class_name) != 0)
+        return false;
+    uint32_t source_export = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_source_export_count(plan); i++) {
+        const XrSemanticSourceExportRecord *row = xr_semantic_plan_source_export(plan, i);
+        if (!row || !row->name || strcmp(row->name, exported->name) != 0)
+            continue;
+        if (source_export != XR_SEMANTIC_INDEX_NONE ||
+            row->shared_slot != exported->shared_slot ||
+            xr_semantic_source_class_export_source_class(plan, row) != source_class ||
+            !xr_stable_id_equal(row->exported_entity, klass->id))
+            return false;
+        source_export = i;
+    }
+    if (source_export == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    uint32_t constructor = xr_semantic_class_constructor_function(plan, source_class);
+    uint16_t member_index = UINT16_MAX;
+    for (uint16_t i = 0; i < data->nmethod; i++) {
+        if (!data->methods || !data->methods[i].is_constructor || data->methods[i].is_static)
+            continue;
+        if (member_index != UINT16_MAX)
+            return false;
+        member_index = i;
+    }
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, constructor);
+    if (!function) {
+        if (member_index != UINT16_MAX || call->nargs != 1)
+            return false;
+    } else if (member_index == UINT16_MAX || function->source_member_ordinal != member_index ||
+               !xr_semantic_class_constructor_arity_is_exact(plan, constructor, function,
+                                                             (uint16_t) (call->nargs - 1u)) ||
+               xr_semantic_class_constructor_receiver_source_class(
+                   plan, function->parameter_begin) != source_class) {
+        return false;
+    }
+    *authority = (XiImportedConstructorAuthority) {module, data, plan, source_class,
+                                                  source_export, constructor};
+    return true;
+}
+
+XR_FUNC int xi_value_imported_constructor_operand_borrowed(
+    const XiFunc *caller, const XiValue *call, uint16_t operand) {
+    XiImportedConstructorAuthority authority;
+    if (!call || call->op != XI_CALL || operand == 0 || operand >= call->nargs ||
+        !xi_value_imported_constructor_authority(caller, call, &authority))
+        return -1;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(authority.plan, authority.constructor);
+    XiModule *modules[] = {(XiModule *) authority.module};
+    if (!function || !xr_semantic_source_type_admits_parameter(
+                         caller, call->type, authority.plan, function->parameter_begin, modules, 1))
+        return -1;
+    for (uint16_t i = 1; i < call->nargs; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(authority.plan, function->parameter_begin + i);
+        if (!parameter || parameter->function != authority.constructor || parameter->ordinal != i ||
+            parameter->mode != XR_PARAM_READ || parameter->reserved != 0 ||
+            (parameter->ownership != XI_OWN_NONE && parameter->ownership != XI_OWN_OWNED &&
+             parameter->ownership != XI_OWN_BORROWED) ||
+            !call->args[i] || !xr_semantic_source_constructor_argument_admits(
+                                 caller, call->args[i], authority.plan,
+                                 function->parameter_begin + i, modules, 1))
+            return -1;
+    }
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(authority.plan, function->parameter_begin + operand);
+    return parameter->ownership == XI_OWN_BORROWED ? 1 : 0;
 }
 
 XR_FUNC bool xi_type_is_named_instance(const XrType *type, const char *name) {

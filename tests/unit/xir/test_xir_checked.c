@@ -132,7 +132,9 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 21 && XR_XIR_CHECKED_CONTRACT == 53 && XR_XIR_OP_COUNT == 115, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 22 && XR_XIR_CHECKED_CONTRACT == 56 && XR_XIR_OP_COUNT == 117, "packet revision");
+    _Static_assert(XR_XIR_INVOKE_DISCARD == 116, "typed normal result discard operation");
+    _Static_assert(XR_XIR_ASSERT_CONDITION == 115, "typed assertion wire operation");
     _Static_assert(XR_XIR_CALL_DEFAULT == 113, "default purpose wire operation");
     _Static_assert(XR_XIR_INVOKE_DEFAULT == 114, "default error continuation wire operation");
     _Static_assert(XR_XIR_CLASS_NEW == 110 && XR_XIR_CLASS_GET == 111 && XR_XIR_CLASS_SET == 112, "class wire operations");
@@ -168,8 +170,7 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0xf3, 0xc1, 0xc9, 0x4e, 0x69, 0x90, 0x1e, 0x9c, 0x9c, 0xd5, 0xd5, 0xf7, 0xcf, 0x73, 0x57, 0xd2,
-        0xf3, 0x5a, 0xa1, 0x43, 0x35, 0x2a, 0xe1, 0xec, 0x84, 0xa8, 0x60, 0xb5, 0x2a, 0x65, 0x0d, 0xbd
+        0xad, 0x6f, 0x38, 0xd1, 0xcd, 0x3c, 0xe9, 0x0b, 0x74, 0xca, 0xc5, 0x18, 0xab, 0xc4, 0x1b, 0xd9, 0x87, 0xcb, 0x68, 0x09, 0xab, 0x4d, 0x86, 0xf4, 0x04, 0x92, 0x60, 0xa7, 0x90, 0x10, 0x1c, 0x34
     };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[221]; memcpy(original, packet.bytes, sizeof(original));

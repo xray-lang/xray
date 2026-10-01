@@ -29,6 +29,7 @@
 #include "../frontend/lexer/xlex.h"
 #include "../ir/xi.h"
 #include "../module/xmodule_identity.h"
+#include "../module/xmodule_graph.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
@@ -44,6 +45,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <inttypes.h>
+#include <limits.h>
 #include "../frontend/parser/xparse.h"
 #include "../frontend/parser/xparse_internal.h"
 
@@ -97,6 +99,20 @@ const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
     return sym->name->data;
 }
 
+XR_FUNC bool xr_repl_binding_key(uint32_t symbol_id, char *buffer, size_t capacity) {
+    if (!symbol_id || !buffer || !capacity)
+        return false;
+    int written = snprintf(buffer, capacity, "__xray_repl_binding$%" PRIu32, symbol_id);
+    return written > 0 && (size_t) written < capacity;
+}
+
+static XrString *repl_runtime_key(XrVMRuntime *isolate, const XrReplSymbol *symbol) {
+    char buffer[64];
+    if (!isolate || !symbol || !xr_repl_binding_key(symbol->symbol_id, buffer, sizeof(buffer)))
+        return NULL;
+    return xr_string_intern(isolate, buffer, strlen(buffer), 0);
+}
+
 bool xr_repl_peek_int(XrVMRuntime *isolate, const char *name, int64_t *out) {
     if (!isolate || !name || !out)
         return false;
@@ -105,14 +121,13 @@ bool xr_repl_peek_int(XrVMRuntime *isolate, const char *name, int64_t *out) {
     if (!isolate->vm.globals)
         return false;
     XrReplSymbolTable *table = xr_repl_symbols_of(isolate);
-    XrString *key = NULL;
-    if (strcmp(name, REPL_IT_NAME) == 0 && table)
-        key = table->latest_result_name;
-    uint32_t len = (uint32_t) strlen(name);
-    if (!key) {
-        uint32_t hash = xr_hash_bytes(name, len);
-        key = xr_string_intern(isolate, name, len, hash);
-    }
+    const XrReplSymbol *symbol = NULL;
+    if (strcmp(name, REPL_IT_NAME) == 0 && table && table->result_count)
+        symbol = &table->results[table->result_count - 1];
+    for (int i = 0; !symbol && table && i < table->count; ++i)
+        if (strcmp(table->symbols[i].name->data, name) == 0)
+            symbol = &table->symbols[i];
+    XrString *key = repl_runtime_key(isolate, symbol);
     if (!key)
         return false;
     XrValue v = xr_global_dict_get(isolate->vm.globals, key);
@@ -133,6 +148,8 @@ static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
     if (needed <= table->capacity)
         return;
 
+    if (needed < 0 || table->capacity > INT_MAX / 2)
+        return;
     int new_capacity = table->capacity * 2;
     if (new_capacity < needed)
         new_capacity = needed;
@@ -175,6 +192,8 @@ static bool repl_symbols_add_or_update(XrReplSymbolTable *table, const XrReplSym
     }
 
     /* New symbol */
+    if (table->count == INT_MAX)
+        return false;
     repl_symbols_ensure_capacity(table, table->count + 1);
     if (table->count >= table->capacity)
         return false;
@@ -272,6 +291,8 @@ static bool repl_results_append(XrReplSymbolTable *table, const XrReplSymbol *pu
     if (!table || !published || !published->name || !published->type || published->symbol_id == 0)
         return false;
     if (table->result_count == table->result_capacity) {
+        if (table->result_capacity > INT_MAX / 2)
+            return false;
         int next_capacity = table->result_capacity ? table->result_capacity * 2 : 8;
         XrReplSymbol *next = (XrReplSymbol *) xr_realloc(
             table->results, (size_t) next_capacity * sizeof(*table->results));
@@ -283,6 +304,54 @@ static bool repl_results_append(XrReplSymbolTable *table, const XrReplSymbol *pu
     table->results[table->result_count++] = *published;
     table->latest_result_name = published->name;
     return true;
+}
+
+/* Prepare independent metadata before executing any new input effects. */
+static bool repl_symbols_prepare_copy(const XrReplSymbolTable *published,
+                                      XrReplSymbolTable *prepared) {
+    if (!published || !prepared || published->count < 0 || published->result_count < 0 ||
+        (size_t) published->count > SIZE_MAX / sizeof(*prepared->symbols) ||
+        (size_t) published->result_count > SIZE_MAX / sizeof(*prepared->results))
+        return false;
+    *prepared = *published;
+    prepared->symbols = NULL;
+    prepared->results = NULL;
+    prepared->capacity = published->count;
+    prepared->result_capacity = published->result_count;
+    if (published->count) {
+        size_t bytes = (size_t) published->count * sizeof(*prepared->symbols);
+        prepared->symbols = xr_malloc(bytes);
+        if (!prepared->symbols)
+            goto fail;
+        memcpy(prepared->symbols, published->symbols, bytes);
+    }
+    if (published->result_count) {
+        size_t bytes = (size_t) published->result_count * sizeof(*prepared->results);
+        prepared->results = xr_malloc(bytes);
+        if (!prepared->results)
+            goto fail;
+        memcpy(prepared->results, published->results, bytes);
+    }
+    return true;
+fail:
+    xr_free(prepared->symbols);
+    xr_free(prepared->results);
+    memset(prepared, 0, sizeof(*prepared));
+    return false;
+}
+
+static void repl_symbols_dispose_prepared(XrReplSymbolTable *prepared) {
+    xr_free(prepared->symbols);
+    xr_free(prepared->results);
+    memset(prepared, 0, sizeof(*prepared));
+}
+
+static void repl_symbols_commit_prepared(XrReplSymbolTable *published,
+                                         XrReplSymbolTable *prepared) {
+    xr_free(published->symbols);
+    xr_free(published->results);
+    *published = *prepared;
+    memset(prepared, 0, sizeof(*prepared));
 }
 
 /* ========== REPL Auto-echo ==========
@@ -615,6 +684,53 @@ static AstNode *repl_find_reserved_it_decl(AstNode *program) {
     return NULL;
 }
 
+static bool repl_prepare_publication(XrReplSymbolTable *published, XrReplSymbolTable *prepared,
+                                     XrVMRuntime *vm_host, XaAnalyzer *analyzer, XrProto *proto,
+                                     const ReplEchoPlan *echo, XrString **result_key) {
+    *result_key = NULL;
+    if (!repl_symbols_prepare_copy(published, prepared))
+        return false;
+    if (!repl_symbols_collect_from_xi(prepared, vm_host, analyzer, proto))
+        goto fail;
+    if (echo->has_result) {
+        XaSymbol *symbol = xa_scope_lookup(analyzer->current_scope, echo->result_name);
+        XrString *name = xr_string_intern(vm_host, echo->result_name, strlen(echo->result_name), 0);
+        char key[64];
+        XrReplSymbol result;
+        if (!symbol || !name || !xr_repl_binding_key(symbol->id, key, sizeof(key)) ||
+            !repl_symbol_from_analyzer(analyzer, name, true, &result) ||
+            !repl_results_append(prepared, &result))
+            goto fail;
+        *result_key = xr_string_intern(vm_host, key, strlen(key), 0);
+        if (!*result_key || !xa_scope_set_alias(analyzer->current_scope, REPL_IT_NAME, symbol))
+            goto fail;
+    }
+    return true;
+fail:
+    repl_symbols_dispose_prepared(prepared);
+    *result_key = NULL;
+    return false;
+}
+
+typedef struct ReplAbandonedBindings {
+    XrGlobalDict *globals;
+    const XaScope *scope;
+} ReplAbandonedBindings;
+
+static void repl_discard_abandoned_binding(XrString *key, XrValue *value, void *context) {
+    (void) value;
+    ReplAbandonedBindings *bindings = context;
+    for (const XaSymbol *symbol = bindings->scope->owned_symbols; symbol;
+         symbol = symbol->scope_owned_next) {
+        char buffer[64];
+        if (xr_repl_binding_key(symbol->id, buffer, sizeof(buffer)) &&
+            strcmp(key->data, buffer) == 0) {
+            xr_map_delete(bindings->globals->map, xr_string_value(key));
+            return;
+        }
+    }
+}
+
 static void repl_abandon_declaration(XrCompilerSessionReplDeclarationScope *scope,
                                      XrCompilerSessionReplDeclarationState state) {
     XR_CHECK(xr_compiler_session_repl_declaration_abandon(scope, state),
@@ -635,7 +751,8 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
         return result;
     XR_DCHECK(xr_compiler_session_vm_host(session) == vm_host,
               "xr_repl_eval: compiler session VM host mismatch");
-    if (xr_compiler_session_vm_host(session) != vm_host)
+    if (xr_compiler_session_vm_host(session) != vm_host ||
+        xr_compiler_session_current_for_isolate(vm_host) != session)
         return result;
 
     XrCompilerSessionReplDeclarationScope declaration_scope = {0};
@@ -657,7 +774,7 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
-    if (ast->as.program.count > UINT32_MAX) {
+    if (ast->as.program.count < 0) {
         xr_program_destroy(ast);
         repl_abandon_declaration(&declaration_scope,
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
@@ -690,17 +807,15 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
-    if (!xr_compiler_session_retain_repl_program(session, ast)) {
+    if (!xr_compiler_session_retain_repl_source(session, ast, source, authority)) {
         xr_program_destroy(ast);
         repl_abandon_declaration(&declaration_scope,
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
-    /* Per-input state reset on the persistent analyzer.  Diagnostics and
-     * per-AST side tables must not leak across inputs because prior AST
-     * nodes were freed with their owning program arena; their pointers
-     * are stale keys in the analyzer's node_table / selection_table. */
+    /* Diagnostics belong to one submission. The retained input arenas keep
+     * declaration and specialization facts alive for the published graph. */
     xa_analyzer_clear_diagnostics(repl_analyzer);
 
     /* Create compiler context that borrows the persistent analyzer. */
@@ -710,7 +825,7 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
-    ctx->source_file = "<repl>";
+    ctx->source_file = xr_compiler_session_repl_source_file(session);
     ctx->source_content = source;
     ctx->repl_mode = true;
     ctx->post_analyze_hook = repl_elaborate_last_expr;
@@ -719,27 +834,26 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
     /* Seed compiler-side shared_vars from the published typed REPL bindings. */
     xr_repl_symbols_seed_context(repl_symbols, ctx);
 
-    char *module_identity = NULL;
-    XrCompileUnitIdentity compile_identity = {
-        .kind = XR_COMPILE_UNIT_MEMORY,
-    };
-    if (!xr_module_identity_from_logical(authority, NULL, &module_identity)) {
+    XrModuleGraph evidence_view;
+    XrCompileUnitIdentity compile_identity = {.kind = XR_COMPILE_UNIT_MEMORY};
+    if (!xr_compiler_session_repl_graph_view(session, &evidence_view)) {
         xr_compiler_context_free(ctx);
         repl_abandon_declaration(&declaration_scope,
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
-    compile_identity.module_identity = module_identity;
+    compile_identity.module_identity = evidence_view.specs[evidence_view.entry_index].canonical;
+    ctx->module_graph = &evidence_view;
     if (!xr_compiler_session_set_compile_unit_identity(session, &compile_identity)) {
         xr_compiler_context_free(ctx);
-        xr_free(module_identity);
+        xr_compiler_session_repl_graph_view_dispose(&evidence_view);
         repl_abandon_declaration(&declaration_scope,
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
     XrProto *proto = xr_compile(ctx, ast);
     xr_compiler_session_set_compile_unit_identity(session, NULL);
-    xr_free(module_identity);
+    xr_compiler_session_repl_graph_view_dispose(&evidence_view);
 
     if (proto && !ctx->had_error && !xr_entry_plan_derive(proto)) {
         xr_instruction_unit_free(proto);
@@ -760,38 +874,35 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
         return result;
     }
 
+    XrReplSymbolTable prepared = {0};
+    XrString *result_key = NULL;
+    if (!repl_prepare_publication(repl_symbols, &prepared, vm_host, repl_analyzer, proto,
+                                  &echo_plan, &result_key)) {
+        xr_instruction_unit_free(proto);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        return result;
+    }
+
     result.proto = proto;
     if (xr_execute(vm_host, proto) != 0) {
+        ReplAbandonedBindings abandoned = {vm_host->vm.globals, repl_analyzer->current_scope};
+        xr_global_dict_iter(abandoned.globals, repl_discard_abandoned_binding, &abandoned);
+        repl_symbols_dispose_prepared(&prepared);
         result.status = XR_REPL_EVAL_RUNTIME_ERROR;
         repl_abandon_declaration(&declaration_scope,
                                  XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME);
         return result;
     }
 
-    /* Publish only after successful execution. A failed submission cannot
-     * change name resolution for the next prompt. */
-    XR_CHECK(repl_symbols_collect_from_xi(repl_symbols, vm_host, repl_analyzer, proto),
-             "successful REPL declarations lacked typed publication authority");
-    if (echo_plan.has_result) {
-        size_t name_len = strlen(echo_plan.result_name);
-        XrString *interned = xr_string_intern(vm_host, echo_plan.result_name, name_len, /*hash=*/0);
-        XR_CHECK(interned != NULL, "REPL result name interning failed");
-        XR_CHECK(xr_global_dict_has(vm_host->vm.globals, interned),
-                 "successful REPL result was not stored in globals");
-        XaSymbol *result_symbol =
-            xa_scope_lookup(repl_analyzer->current_scope, echo_plan.result_name);
-        XR_CHECK(result_symbol != NULL, "REPL result symbol missing after successful analysis");
-        XrReplSymbol published_result;
-        XR_CHECK(repl_symbol_from_analyzer(repl_analyzer, interned, true, &published_result),
-                 "successful REPL result lacked typed publication authority");
-        XR_CHECK(repl_results_append(repl_symbols, &published_result),
-                 "REPL result metadata allocation failed");
-        xa_scope_set_alias(repl_analyzer->current_scope, REPL_IT_NAME, result_symbol);
-    }
-
+    /* All allocation and authority checks precede execution. Publishing the
+     * prepared metadata and scope cannot fail because of a later allocation. */
+    XR_CHECK(!result_key || xr_global_dict_has(vm_host->vm.globals, result_key),
+             "successful REPL result was not stored in its checked binding");
     XR_CHECK(xr_compiler_session_repl_declaration_publish(&declaration_scope,
                                                           (uint32_t) ast->as.program.count),
              "REPL declaration generation publication failed");
+    repl_symbols_commit_prepared(repl_symbols, &prepared);
     result.status = XR_REPL_EVAL_OK;
     return result;
 }
@@ -816,32 +927,12 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
 /* Look up const-ness in the REPL symbol table for a given name.
  * Returns true if declared as const, false otherwise (including
  * when the symbol table has no entry for this name). */
-static bool repl_symbol_is_const(XrReplSymbolTable *table, XrString *name) {
-    if (!table || !name)
-        return false;
-    for (int i = 0; i < table->count; i++) {
-        if (table->symbols[i].name == name)
-            return table->symbols[i].is_const;
-    }
-    return false;
-}
-
 /* Visitor callback for xr_global_dict_iter.  Prints one `.vars` row. */
 typedef struct {
     XrVMRuntime *isolate;
     XrReplSymbolTable *table;
     int printed_count;
 } ReplVarsCtx;
-
-static bool repl_result_is_internal(XrReplSymbolTable *table, XrString *name) {
-    if (!table || !name)
-        return false;
-    for (int i = 0; i < table->result_count; i++) {
-        if (table->results[i].name == name)
-            return true;
-    }
-    return false;
-}
 
 static void print_vars_value(ReplVarsCtx *ctx, const char *cname, XrValue value, bool is_const) {
     const char *type_name = xr_typeid_name(xr_value_typeid(value));
@@ -868,14 +959,6 @@ static void print_vars_value(ReplVarsCtx *ctx, const char *cname, XrValue value,
     ctx->printed_count++;
 }
 
-static void print_vars_visitor(XrString *name, XrValue *value, void *ud) {
-    ReplVarsCtx *ctx = (ReplVarsCtx *) ud;
-    if (!ctx || !value || repl_result_is_internal(ctx->table, name))
-        return;
-    const char *cname = name ? name->data : "<anon>";
-    print_vars_value(ctx, cname, *value, repl_symbol_is_const(ctx->table, name));
-}
-
 void xr_repl_print_vars(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_repl_print_vars: NULL isolate");
     if (!isolate || !isolate->vm.globals) {
@@ -884,9 +967,16 @@ void xr_repl_print_vars(XrVMRuntime *isolate) {
     }
 
     ReplVarsCtx ctx = {.isolate = isolate, .table = xr_repl_symbols_of(isolate)};
-    xr_global_dict_iter(isolate->vm.globals, print_vars_visitor, &ctx);
+    for (int i = 0; ctx.table && i < ctx.table->count; ++i) {
+        const XrReplSymbol *symbol = &ctx.table->symbols[i];
+        XrString *key = repl_runtime_key(isolate, symbol);
+        if (key && xr_global_dict_has(isolate->vm.globals, key))
+            print_vars_value(&ctx, symbol->name->data, xr_global_dict_get(isolate->vm.globals, key),
+                             symbol->is_const);
+    }
     if (ctx.table && ctx.table->latest_result_name) {
-        XrValue value = xr_global_dict_get(isolate->vm.globals, ctx.table->latest_result_name);
+        XrString *key = repl_runtime_key(isolate, &ctx.table->results[ctx.table->result_count - 1]);
+        XrValue value = xr_global_dict_get(isolate->vm.globals, key);
         print_vars_value(&ctx, REPL_IT_NAME, value, /*is_const=*/true);
     }
     if (ctx.printed_count == 0)

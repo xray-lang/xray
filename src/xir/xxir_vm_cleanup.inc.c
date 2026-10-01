@@ -34,7 +34,7 @@ static XrXirAction vm_cleanup_continue(ScalarRun *run, VmState *state) {
     if (state->landing) {
         uint32_t handler = state->landing; state->landing = 0;
         return vm_panic_land(run, state, handler, (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,
-            {XR_XIR_I64, 0, run->view->inbox.status}, run->view->inbox.fault, 0});
+            {XR_XIR_I64, 0, run->view->inbox.status}, run->view->inbox.panic, 0});
     }
     XrXirRunStatus status = scalar_edge(run, state->instruction, state->exit_block);
     if (status != XR_XIR_RUN_OK) return xr_xir_call_fault(status);

@@ -161,6 +161,13 @@ typedef enum XrCompileUnitKind {
     XR_COMPILE_UNIT_MEMORY,
 } XrCompileUnitKind;
 
+/* Import positions belong to an installed program table. Reusable module
+ * code keeps an exact resolved locator and reads its isolate-owned cache. */
+typedef enum XrVmImportBinding {
+    XR_VM_IMPORT_PROGRAM_TABLE = 0,
+    XR_VM_IMPORT_RUNTIME_MODULE,
+} XrVmImportBinding;
+
 typedef struct XrCompileUnitIdentity {
     XrCompileUnitKind kind;
     const char *module_identity;
@@ -290,11 +297,22 @@ XR_FUNC struct XrReplSymbolTable *
 xr_compiler_session_repl_symbols(const XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session);
-/* A persistent analyzer retains symbols and type references into every REPL
- * input AST.  Transfer the program arena to the session until analyzer
- * teardown; destroying an input immediately would leave those references
- * dangling on the next incremental compile. */
-XR_FUNC bool xr_compiler_session_retain_repl_program(XrCompilerSession *session, AstNode *program);
+/* Each submission transfers its arena and copied source identity to the
+ * session. Published generations seed later evidence; abandoned generations
+ * remain owned only because analyzer references can still point into them. */
+struct XrModuleIdentityAuthority;
+XR_FUNC bool
+xr_compiler_session_retain_repl_source(XrCompilerSession *session, AstNode *program,
+                                       const char *source,
+                                       const struct XrModuleIdentityAuthority *authority);
+/* Retained input arenas and the persistent analyzer share a session lifetime;
+ * their declaration and specialization facts remain valid across prompts. */
+XR_FUNC bool xr_compiler_session_repl_retains_program(const XrCompilerSession *session,
+                                                      const AstNode *program);
+XR_FUNC const char *xr_compiler_session_repl_source_file(const XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_repl_graph_view(XrCompilerSession *session,
+                                                 struct XrModuleGraph *view);
+XR_FUNC void xr_compiler_session_repl_graph_view_dispose(struct XrModuleGraph *view);
 
 XR_FUNC void xr_compiler_session_set_module_graph(XrCompilerSession *session,
                                                   struct XrModuleGraph *graph);
@@ -307,6 +325,9 @@ XR_FUNC bool xr_compiler_session_set_compile_unit_identity(XrCompilerSession *se
                                                            const XrCompileUnitIdentity *identity);
 XR_FUNC XrCompileUnitIdentity
 xr_compiler_session_compile_unit_identity(const XrCompilerSession *session);
+XR_FUNC XrVmImportBinding xr_compiler_session_vm_import_binding(const XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_set_vm_import_binding(XrCompilerSession *session,
+                                                       XrVmImportBinding binding);
 
 XR_FUNC bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *arena,
                                             const char *source_file, XrCompilerSessionScope *scope);

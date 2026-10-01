@@ -25,6 +25,7 @@ typedef struct InferenceObservation {
 struct XrXirInferenceState {
     XrXirBudget *budget;
     XrXirType *arguments;
+    uint32_t *kinds;
     unsigned char *solved;
     uint32_t prefix_count, count, caller_count;
     InferenceObservation *first, *last;
@@ -80,7 +81,8 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
         uint32_t index = id-XR_XIR_TYPE_PARAMETER_BASE;
         if (index < s->prefix_count) return;
-        if (index >= s->count || task->pair.actual == XR_XIR_UNIT ||
+        if (index >= s->count || (task->pair.actual == XR_XIR_UNIT &&
+            (!s->kinds || s->kinds[index] != XR_XIR_BINDER_RESULT_VARIABLE)) ||
             xr_xir_type_is_cell(w->types,task->pair.actual)) { s->status = XR_XIR_BAD_TYPE; return; }
         if (s->solved[index]) s->status = inference_match(s,w->types,NULL,0,
             (XrXirInferencePair){s->arguments[index],task->pair.actual});
@@ -113,7 +115,7 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
 XR_FUNC void xr_xir_inference_dispose(XrXirInferenceState *s) {
     if (!s) return;
     while (s->first) { InferenceObservation *next = s->first->next; xr_free(s->first); s->first = next; }
-    xr_free(s->solved); xr_free(s->arguments); s->budget->scratch_bytes += s->scratch; xr_free(s);
+    xr_free(s->kinds); xr_free(s->solved); xr_free(s->arguments); s->budget->scratch_bytes += s->scratch; xr_free(s);
 }
 XR_FUNC XrXirStatus xr_xir_inference_begin(const XrXirInferenceRequest *r,
     XrXirBudget *budget, XrXirInferenceState **output) {
@@ -127,8 +129,20 @@ XR_FUNC XrXirStatus xr_xir_inference_begin(const XrXirInferenceRequest *r,
     s->budget = budget; s->scratch = sizeof(*s); budget->scratch_bytes -= sizeof(*s);
     s->prefix_count = r->prefix_count; s->count = r->prefix_count+r->own_count; s->caller_count = r->caller_parameter_count;
     s->arguments = inference_alloc(s,(uint64_t)s->count*sizeof(*s->arguments)); s->solved = inference_alloc(s,s->count);
+    if (r->parameter_kinds) {
+        s->kinds = inference_alloc(s,(uint64_t)s->count*sizeof(*s->kinds));
+        bool result = false;
+        for (uint32_t p=0;p<s->count && inference_work(s,1);++p) {
+            uint32_t kind = r->parameter_kinds[p];
+            if (kind > XR_XIR_BINDER_RESULT_VARIABLE) {s->status=XR_XIR_BAD_STRUCTURE;break;}
+            result |= kind == XR_XIR_BINDER_RESULT_VARIABLE;
+            s->kinds[p]=kind;
+        }
+        if (s->status == XR_XIR_OK && (!s->count || !result)) s->status=XR_XIR_BAD_STRUCTURE;
+    }
     for (uint32_t p = 0; p < s->prefix_count && inference_work(s,1); ++p) {
-        if (r->prefix[p] == XR_XIR_UNIT || xr_xir_type_is_cell(r->types,r->prefix[p])) { s->status = XR_XIR_BAD_TYPE; break; }
+        if ((r->prefix[p] == XR_XIR_UNIT && (!s->kinds || s->kinds[p] != XR_XIR_BINDER_RESULT_VARIABLE)) ||
+            xr_xir_type_is_cell(r->types,r->prefix[p])) { s->status = XR_XIR_BAD_TYPE; break; }
         s->status = xr_xir_type_expression_shape(r->types,r->prefix[p],s->caller_count,budget);
         if (s->status == XR_XIR_OK) { s->arguments[p] = r->prefix[p]; s->solved[p] = 1; }
     }

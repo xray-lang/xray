@@ -450,7 +450,7 @@ XR_FUNC void xa_scope_free(XaScope *scope);
 // API: Scope operations
 XR_FUNC void xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol);
 XR_FUNC bool xa_scope_remove_symbol(XaScope *scope, const char *name);  // Returns true if removed
-XR_FUNC void xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol);
+XR_FUNC bool xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol);
 XR_FUNC bool xa_scope_remove_alias(XaScope *scope, const char *alias);
 XR_FUNC XaSymbol *xa_scope_lookup(XaScope *scope, const char *name);
 XR_FUNC XaSymbol *xa_scope_lookup_local(XaScope *scope, const char *name);

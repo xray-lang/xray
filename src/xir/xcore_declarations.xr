@@ -1,0 +1,4 @@
+// Compiler-owned intrinsic signatures and parameter defaults.
+// Executable bodies are supplied by bound typed intrinsic definitions.
+export fn assert(cond: bool, msg: string = "") {}
+export fn assertPanics(action: fn() -> R, msg: string = "") {}

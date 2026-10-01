@@ -14,6 +14,7 @@
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
 #include "xxir_implementation.h"
+#include "xxir_generic.h"
 #include "../base/xmalloc.h"
 
 typedef struct XrXirConstraintEnvironment {
@@ -394,10 +395,18 @@ XrXirStatus xr_xir_constraints_prove(const XrXirProofContext *context,
     if (use->argument_count != formal.parameter_count || use->parameter >= use->argument_count || !use->arguments)
         return proof_run(&proof,XR_XIR_BAD_STRUCTURE);
     for (uint32_t a = 0; status == XR_XIR_OK && a < use->argument_count; ++a) {
-        if (!constraint_argument_shape(proof.environment.types,use->arguments[a],proof.environment.parameter_count))
+        bool result = use->declaration.kind == XR_XIR_CONTEXT_FUNCTION && use->declaration_module->generics &&
+            xr_xir_binder_kind(&use->declaration_module->generics[use->declaration.declaration],a) == XR_XIR_BINDER_RESULT_VARIABLE;
+        const XrXirConstraint *fact = constraint_fact(&formal,a);
+        if (result && (fact->markers || fact->interface_count || fact->interfaces)) status = XR_XIR_BAD_TYPE;
+        else if (result && use->arguments[a] == XR_XIR_UNIT) continue;
+        else if (!constraint_argument_shape(proof.environment.types,use->arguments[a],proof.environment.parameter_count))
             status = XR_XIR_BAD_TYPE;
         else status = proof_type(&proof,use->arguments[a]);
     }
+    if (use->declaration.kind == XR_XIR_CONTEXT_FUNCTION && use->declaration_module->generics &&
+        xr_xir_binder_kind(&use->declaration_module->generics[use->declaration.declaration],use->parameter) == XR_XIR_BINDER_RESULT_VARIABLE)
+        return proof_run(&proof,status);
     ConstraintObligation task = {0}; task.declaration_module = use->declaration_module;
     task.requirement = *constraint_fact(&formal,use->parameter); task.arguments = use->arguments;
     task.argument_count = use->argument_count; task.subject = use->arguments[use->parameter];
@@ -557,8 +566,9 @@ static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_
     if (status == XR_XIR_OK) status = xr_xir_type_use_verify(&context,function->result,budget);
     const XrXirGeneric *g = module->generics ? &module->generics[index] : NULL;
     for (uint32_t a = 0; status == XR_XIR_OK && g && a < g->argument_count; ++a) {
-        if (g->arguments[a] == XR_XIR_UNIT || xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;
-        status = xr_xir_type_use_verify(&context,g->arguments[a],budget);
+        if (xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;
+        status = g->arguments[a] == XR_XIR_UNIT ? xr_xir_result_unit_use(module,index,a,budget) :
+            xr_xir_type_use_verify(&context,g->arguments[a],budget);
     }
     return status;
 }

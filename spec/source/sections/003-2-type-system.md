@@ -131,6 +131,10 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 <!-- xr-builtin-registry:end -->
 
+有限值相等的新 XIR 合同另冻结内置操作谓词 `Equal`，见 §9.2、§13.5 和 §17.33。
+它不是用户接口或旧 `Equatable` 的别名，不授予排序、键等价或自反性。正式实施尚待完成；
+上面的生成登记表仍反映现存符号来源，不能用手工表项替代来源登记、探针和最后旧消费者删除。
+
 ### 2.3 基本类型
 
 #### 2.3.1 整数类型
@@ -1173,6 +1177,12 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Box` | 'Box' is not a built-in type; indirect recursive data through a class node or a container slot such as Array<T> |
 
 <!-- xr-builtin-registry:end -->
+
+The new XIR finite value-equality contract freezes the built-in operation predicate `Equal`;
+see §9.2, §13.5 and §17.33. It is neither a user interface nor an alias for legacy `Equatable`,
+and grants no ordering, key equivalence or reflexivity. Implementation remains pending. The
+generated registry above still reflects existing symbol sources; manual entries cannot replace
+source registration, probes and removal after the last legacy consumer migrates.
 
 ### 2.3 Primitive Types
 

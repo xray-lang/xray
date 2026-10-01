@@ -845,7 +845,8 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
                                  : xr_target_data_layout_host();
     ctx.bind_module_positions =
         !compiler_session ||
-        xr_compiler_session_compile_unit_identity(compiler_session).kind != XR_COMPILE_UNIT_STDLIB;
+        (xr_compiler_session_vm_import_binding(compiler_session) == XR_VM_IMPORT_PROGRAM_TABLE &&
+         xr_compiler_session_compile_unit_identity(compiler_session).kind != XR_COMPILE_UNIT_STDLIB);
     if (!ctx.target_data_layout) {
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
@@ -1058,6 +1059,11 @@ static void xi_emit_ir_tree_commit(XrProto *proto, XiFunc *ir) {
         ir->children[child_index] = NULL;
         child_proto->xi_parent_child = 0;
     }
+    /* Bytecode emission precedes metadata detachment. Its return annotation
+     * must name the same snapshot owned by the attached IR, not the temporary
+     * analyzer that originally described the function. */
+    if (proto->return_type_info)
+        proto->return_type_info = ir->return_type;
     proto->xi_func = ir;
 }
 

@@ -14,6 +14,7 @@
 #include "../base/xdefs.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 struct XiFunc;
 
@@ -26,5 +27,18 @@ struct XiFunc;
 XR_FUNC bool xi_semantic_snapshot_detach(struct XiFunc *root);
 XR_FUNC bool xi_semantic_snapshot_detach_ex(struct XiFunc *root, char *error,
                                              size_t error_size);
+
+
+struct XrType;
+typedef struct XiSemanticTypeReplacement {
+    const struct XrType *source;
+    const struct XrType *canonical;
+} XiSemanticTypeReplacement;
+
+/* Own the complete receiving Xi type graph before committing any replacement.
+ * Failure preserves all old pointers; unpublished arena nodes die with root. */
+XR_FUNC bool xi_semantic_type_rewrite_atomic(
+    struct XiFunc *root, const XiSemanticTypeReplacement *replacements,
+    uint32_t replacement_count);
 
 #endif  // XI_SEMANTIC_SNAPSHOT_H

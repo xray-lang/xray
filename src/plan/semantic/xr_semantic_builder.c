@@ -11,6 +11,7 @@
 #include "xr_semantic_json_codec_shape.h"
 #include "xr_semantic_array_type_shape.h"
 #include "xr_semantic_builder.h"
+#include "xr_semantic_constructor_callable_shape.h"
 #include "xr_semantic_array_element_storage_shape.h"
 #include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
@@ -446,22 +447,48 @@ static bool type_key_object(const XrType *type, XrTextBuilder *key, const XrType
     return true;
 }
 
+/* Nested keys are length framed because callable constraints can themselves
+ * contain function signatures and punctuation. The reader must not discover
+ * structure by searching for delimiters inside an embedded type key. */
+static bool type_key_function_component(const XrType *type, XrTextBuilder *key,
+                                        const XrType **stack, uint32_t depth,
+                                        XrSemanticBuildContext *ctx) {
+    XrTextBuilder child = {0};
+    bool valid = type_key(type, &child, stack, depth, ctx) &&
+                 text_append_component(key, child.data);
+    text_dispose(&child);
+    return valid;
+}
+
 static bool type_key_function(const XrType *type, XrTextBuilder *key, const XrType **stack,
                               uint32_t depth, XrSemanticBuildContext *ctx) {
-    if (type->function.param_count < 0 ||
+    if (type->function.param_count < 0 || type->function.param_count > UINT16_MAX ||
+        type->function.min_params < 0 ||
+        type->function.min_params > type->function.param_count ||
         (type->function.param_count > 0 && !type->function.params) ||
-        !text_append_format(key, "fn:%d:%d:%u:%u:%u", type->function.param_count,
+        !xr_param_mode_is_valid(type->function.receiver_mode) ||
+        type->function.throw_effect > XR_FN_EFFECT_POLY ||
+        type->function.type_param_count < 0 || type->function.type_param_count > UINT16_MAX ||
+        (type->function.type_param_count > 0 &&
+         (!type->function.type_param_names || !type->function.type_param_constraint_counts)) ||
+        type->function.view_origin_count < 0 || type->function.view_origin_count > UINT16_MAX ||
+        (type->function.view_origin_count > 0 && !type->function.view_origin_set) ||
+        !text_append_format(key, "fn-v2:%d:%d:%u:%u:%u:%u:%u:%d", type->function.param_count,
                             type->function.min_params, type->function.is_variadic ? 1u : 0u,
                             type->function.is_c_abi ? 1u : 0u,
-                            (unsigned) type->function.throw_effect))
+                            (unsigned) type->function.throw_effect,
+                            (unsigned) type->function.receiver_mode,
+                            type->function.view_origin_was_elided ? 1u : 0u,
+                            type->function.type_param_count))
         return false;
     for (int i = 0; i < type->function.param_count; i++) {
-        if (!text_append_format(key, ";p%u:", (unsigned) type->function.params[i].mode) ||
-            !type_key(type->function.params[i].type, key, stack, depth, ctx))
+        if (!xr_param_mode_is_valid(type->function.params[i].mode) ||
+            !text_append_format(key, ";p%u:", (unsigned) type->function.params[i].mode) ||
+            !type_key_function_component(type->function.params[i].type, key, stack, depth, ctx))
             return false;
     }
     if (!text_append(key, ";ret:") ||
-        !type_key(type->function.return_type, key, stack, depth, ctx) ||
+        !type_key_function_component(type->function.return_type, key, stack, depth, ctx) ||
         !text_append_format(key, ";view-count:%d", type->function.view_origin_count))
         return false;
     for (int i = 0; i < type->function.view_origin_count; i++) {
@@ -469,6 +496,22 @@ static bool type_key_function(const XrType *type, XrTextBuilder *key, const XrTy
                                 (unsigned) type->function.view_origin_set[i].kind,
                                 (int) type->function.view_origin_set[i].param_ordinal))
             return false;
+    }
+    for (int i = 0; i < type->function.type_param_count; i++) {
+        int count = type->function.type_param_constraint_counts[i];
+        XrType *const *constraints = type->function.type_param_constraints
+                                        ? type->function.type_param_constraints[i] : NULL;
+        if (!type->function.type_param_names[i] || !type->function.type_param_names[i][0] ||
+            count < 0 || count > UINT16_MAX || (count > 0 && !constraints) ||
+            !text_append_format(key, ";generic:%d:", i) ||
+            !text_append_component(key, type->function.type_param_names[i]) ||
+            !text_append_format(key, ":constraints:%d", count))
+            return false;
+        for (int c = 0; c < count; c++) {
+            if (!text_append(key, ";constraint:") ||
+                !type_key_function_component(constraints[c], key, stack, depth, ctx))
+                return false;
+        }
     }
     return true;
 }
@@ -1310,6 +1353,20 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
             return false;
         }
     }
+    if (type->kind == XR_KIND_FUNCTION) {
+        for (int g = 0; g < type->function.type_param_count; g++) {
+            int constraint_count = type->function.type_param_constraint_counts[g];
+            XrType *const *constraints = type->function.type_param_constraints
+                                            ? type->function.type_param_constraints[g] : NULL;
+            for (int c = 0; c < constraint_count; c++) {
+                uint32_t constraint_index;
+                if (!constraints || !add_type(ctx, constraints[c], &constraint_index)) {
+                    xr_free(indices);
+                    return false;
+                }
+            }
+        }
+    }
     XrSemanticTypeRecord *record = &ctx->plan->types[record_index];
     record->child_begin = ctx->plan->type_child_count;
     record->child_count = (uint16_t) count;
@@ -1344,6 +1401,132 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
     }
     xr_free(indices);
     return true;
+}
+
+XR_FUNC bool xr_semantic_source_type_admits_parameter(
+    const XiFunc *caller, const XrType *type, const XrSemanticPlan *dependency,
+    uint32_t parameter, XiModule *const *modules, uint32_t module_count) {
+    const XrSemanticParameterRecord *declared = xr_semantic_plan_parameter(dependency, parameter);
+    const XrSemanticTypeRecord *expected =
+        declared ? xr_semantic_plan_type(dependency, declared->type) : NULL;
+    if (!caller || !type || !expected || !xr_semantic_plan_is_verified(dependency))
+        return false;
+    XrSemanticPlan *scratch = (XrSemanticPlan *) xr_calloc(1, sizeof(*scratch));
+    if (!scratch)
+        return false;
+    atomic_init(&scratch->references, 1);
+    XrFunctionMapEntry function = {.source = caller};
+    XrSemanticBuildContext ctx = {.plan = scratch, .functions = &function, .function_count = 1,
+                                 .dependency_modules = modules, .dependency_module_count = module_count};
+    uint32_t actual = XR_SEMANTIC_INDEX_NONE;
+    bool admitted = add_type(&ctx, type, &actual) &&
+                    xr_semantic_parameter_type_admits_argument(
+                        dependency, expected, xr_semantic_plan_type(scratch, actual), declared->mode);
+    xr_free(ctx.types);
+    xr_semantic_plan_free(scratch);
+    return admitted;
+}
+
+XR_FUNC bool xr_semantic_source_types_equal(
+    const XiFunc *caller, const XrType *left, const XrType *right,
+    XiModule *const *modules, uint32_t module_count) {
+    if (!caller || !left || !right)
+        return false;
+    XrSemanticPlan scratch = {0};
+    XrFunctionMapEntry function = {.source = caller};
+    XrSemanticBuildContext ctx = {.plan = &scratch, .functions = &function, .function_count = 1,
+                                 .dependency_modules = modules, .dependency_module_count = module_count};
+    XrTextBuilder left_key = {0}, right_key = {0};
+    const XrType *stack[64] = {0};
+    bool equal = type_key(left, &left_key, stack, 0, &ctx) &&
+                 type_key(right, &right_key, stack, 0, &ctx) &&
+                 strcmp(left_key.data, right_key.data) == 0;
+    text_dispose(&left_key);
+    text_dispose(&right_key);
+    return equal;
+}
+
+
+/* This producer proof is deliberately limited to a captured-free scalar
+ * identity/constant closure. The artifact verifier reconstructs its own
+ * PARAM/CONST/RETURN proof from frozen operations; complete bits alone grant
+ * no throw-effect, suspension, receiver or generic permission. */
+static bool source_constructor_pure_callback(const XiFunc *caller, const XiValue *closure) {
+    const XiFunc *function = closure && closure->op == XI_CLOSURE_NEW
+                                 ? (const XiFunc *) closure->aux : NULL;
+    const XrType *type = function ? function->source_callable_type : NULL;
+    if (!function || function->parent_func != caller || closure->nargs != 0 ||
+        function->ncaptures != 0 || !type || type != closure->type ||
+        type->kind != XR_KIND_FUNCTION || type->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
+        type->function.receiver_mode != XR_PARAM_READ || type->function.type_param_count != 0 ||
+        type->function.is_c_abi || type->function.is_variadic ||
+        type->function.view_origin_count != 0 || type->function.view_origin_was_elided ||
+        function->has_receiver || function->is_module_initializer || function->is_extern ||
+        function->entry_type == 2 || function->lowering_facts.coroutine_required ||
+        !function->analyzer_effect_complete ||
+        !function->analyzer_effect_fingerprint || function->semantic_effects != 0 ||
+        function->unknown_semantic_effects != 0 || function->effect_unknown_reasons != 0 ||
+        function->nblocks != 1 || !function->blocks || !function->blocks[0] ||
+        function->blocks[0]->kind != XI_BLOCK_RETURN || !function->blocks[0]->control ||
+        function->nparams != type->function.param_count ||
+        function->return_type != type->function.return_type)
+        return false;
+    const XiBlock *block = function->blocks[0];
+    if (block->phis || !block->values || block->control->type != function->return_type)
+        return false;
+    for (uint32_t v = 0; v < block->nvalues; v++) {
+        const XiValue *value = block->values[v];
+        if (!value || value->nargs != 0 || value->aux || value->flags != 0 || !value->type ||
+            value->type->is_nullable || value->type->is_const ||
+            (value->type->kind != XR_KIND_INT && value->type->kind != XR_KIND_FLOAT &&
+             value->type->kind != XR_KIND_BOOL && value->type->kind != XR_KIND_RUNE))
+            return false;
+        if (value->op == XI_CONST)
+            continue;
+        if (value->op != XI_PARAM || value->aux_int < 0 ||
+            (uint32_t) value->aux_int >= function->nparams || !function->params ||
+            function->params[value->aux_int] != value || value->param_mode != XR_PARAM_READ ||
+            type->function.params[value->aux_int].mode != XR_PARAM_READ ||
+            type->function.params[value->aux_int].type != value->type)
+            return false;
+    }
+    return true;
+}
+
+XR_FUNC bool xr_semantic_source_constructor_argument_admits(
+    const XiFunc *caller, const XiValue *argument, const XrSemanticPlan *dependency,
+    uint32_t parameter, XiModule *const *modules, uint32_t module_count) {
+    if (!argument)
+        return false;
+    if (xr_semantic_source_type_admits_parameter(caller, argument->type, dependency,
+                                                parameter, modules, module_count))
+        return true;
+    const XrSemanticParameterRecord *declared = xr_semantic_plan_parameter(dependency, parameter);
+    const XrSemanticTypeRecord *formal = declared
+        ? xr_semantic_plan_type(dependency, declared->type) : NULL;
+    if (!declared || declared->mode != XR_PARAM_READ || !formal ||
+        !source_constructor_pure_callback(caller, argument))
+        return false;
+    XrSemanticPlan scratch = {0};
+    XrFunctionMapEntry function = {.source = caller};
+    XrSemanticBuildContext ctx = {.plan = &scratch, .functions = &function, .function_count = 1,
+        .dependency_modules = modules, .dependency_module_count = module_count};
+    XrTextBuilder actual = {0};
+    const XrType *stack[64] = {0};
+    XrSemanticCallableKeyShape actual_shape = {0}, formal_shape = {0};
+    bool admitted = type_key(argument->type, &actual, stack, 0, &ctx) &&
+        xr_semantic_callable_key_parse(actual.data, &actual_shape) &&
+        xr_semantic_callable_key_parse(formal->canonical_key, &formal_shape) &&
+        actual_shape.throw_effect == XR_FN_EFFECT_NO_THROW &&
+        formal_shape.throw_effect == XR_FN_EFFECT_POLY;
+    if (admitted) {
+        size_t prefix = (size_t) (actual_shape.throw_field - actual.data);
+        admitted = prefix == (size_t) (formal_shape.throw_field - formal->canonical_key) &&
+            memcmp(actual.data, formal->canonical_key, prefix) == 0 &&
+            strcmp(actual_shape.throw_field + 1, formal_shape.throw_field + 1) == 0;
+    }
+    text_dispose(&actual);
+    return admitted;
 }
 
 static bool collect_functions(XrSemanticBuildContext *ctx, const XiFunc *function, uint32_t parent,
@@ -1401,6 +1584,9 @@ static bool collect_semantic_types(XrSemanticBuildContext *ctx) {
     for (uint32_t f = 0; f < ctx->function_count; f++) {
         const XiFunc *function = ctx->functions[f].source;
         uint32_t ignored;
+        if (function->source_callable_type &&
+            !add_type(ctx, function->source_callable_type, &ignored))
+            return false;
         if (!add_type(ctx, function->return_type, &ignored))
             return false;
         for (uint16_t p = 0; p < xi_func_semantic_param_count(function); p++) {
@@ -1710,6 +1896,10 @@ static bool build_function_identity(XrSemanticBuildContext *ctx, uint32_t index,
     record->name = xr_semantic_plan_copy_string(ctx->plan, source->name ? source->name : "");
     if (!record->name || !add_type(ctx, source->return_type, &record->return_type))
         return false;
+    record->callable_type = XR_SEMANTIC_INDEX_NONE;
+    if (source->source_callable_type &&
+        !add_type(ctx, source->source_callable_type, &record->callable_type))
+        return false;
     record->parameter_count = xi_func_semantic_param_count(source);
     record->source_class = ctx->functions[index].source_class;
     record->source_member_ordinal = ctx->functions[index].source_member_ordinal;
@@ -1717,7 +1907,7 @@ static bool build_function_identity(XrSemanticBuildContext *ctx, uint32_t index,
     XrTextBuilder key = {0};
     uint32_t parent = ctx->functions[index].parent;
     bool valid =
-        text_append(&key, "function-v3:parent=") &&
+        text_append(&key, "function-v4:parent=") &&
         (parent == XR_SEMANTIC_INDEX_NONE
              ? text_append(&key, "module-root")
              : text_append_stable_id(&key, ctx->plan->functions[parent].id)) &&
@@ -1742,7 +1932,13 @@ static bool build_function_identity(XrSemanticBuildContext *ctx, uint32_t index,
     }
     valid =
         valid && text_append_format(&key, ":effects=%u:caps=%u:flags=%u", record->semantic_effects,
-                                    record->capability_mask, (unsigned) record->flags);
+                                    record->capability_mask, (unsigned) record->flags) &&
+        text_append(&key, ":callable=") &&
+        (record->callable_type == XR_SEMANTIC_INDEX_NONE ? text_append(&key, "none") :
+            text_append_stable_id(&key, ctx->plan->types[record->callable_type].id)) &&
+        text_append_format(&key, ":unknown-effects=%u:unknown-reasons=%u:effect-complete=%u",
+                           record->unknown_semantic_effects, record->effect_unknown_reasons,
+                           (unsigned) record->effect_complete);
     if (valid)
         record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
     text_dispose(&key);
@@ -1913,6 +2109,9 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         memset(record, 0, sizeof(*record));
         record->parent = ctx->functions[i].parent;
         record->semantic_effects = source->semantic_effects;
+        record->unknown_semantic_effects = source->unknown_semantic_effects;
+        record->effect_unknown_reasons = source->effect_unknown_reasons;
+        record->effect_complete = source->analyzer_effect_complete ? 1u : 0u;
         record->capability_mask = source->requires_unsafe_at_call ? 1u : 0u;
         record->flags =
             (uint8_t) ((source->error_effect_nothrow ? XR_SEM_FUNCTION_NOTHROW : 0u) |
@@ -5225,7 +5424,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         }
         return fail(ctx, "XR_SEM_0019", "builtin runtime method authority is not exact");
     }
-    return append_call_target(ctx, value, index);
+    return true;
 }
 
 static bool build_blocks_and_operations(XrSemanticBuildContext *ctx) {
@@ -5289,6 +5488,26 @@ static bool build_blocks_and_operations(XrSemanticBuildContext *ctx) {
         }
     }
     return true;
+}
+
+/* Call authority can depend on a nested Source closure's complete frozen
+ * body. Publish targets exactly once, in operation order, after all bodies. */
+static bool build_call_targets(XrSemanticBuildContext *ctx) {
+    uint32_t operation = 0;
+    for (uint32_t f = 0; f < ctx->function_count; f++) {
+        const XiFunc *function = ctx->functions[f].source;
+        for (uint32_t b = 0; b < function->nblocks; b++) {
+            const XiBlock *block = function->blocks[b];
+            for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+                if (!append_call_target(ctx, &phi->value, operation++))
+                    return false;
+            }
+            for (uint32_t v = 0; v < block->nvalues; v++)
+                if (!append_call_target(ctx, block->values[v], operation++))
+                    return false;
+        }
+    }
+    return operation == ctx->plan->operation_count;
 }
 
 static int compare_program_type_bindings(const void *left, const void *right) {
@@ -6474,6 +6693,7 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
         !build_function_records(&ctx) || !build_source_methods(&ctx) ||
         !build_capture_records(&ctx) || !prepare_root_shared_store_index(&ctx, root) ||
         !build_source_exports(&ctx, root) || !build_blocks_and_operations(&ctx) ||
+        !build_call_targets(&ctx) ||
         !build_program_binding_rows(&ctx) || !build_semantic_edges(&ctx))
         goto failure;
     XrOwnershipCertificate *ownership = NULL;

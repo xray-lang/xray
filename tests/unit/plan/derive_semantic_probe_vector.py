@@ -144,6 +144,8 @@ def fixture(schema, registry_fingerprint, operation_fingerprint):
     types.sort(key=lambda t:t['id'])
     ti = {t['kind']:i for i,t in enumerate(types)}
     fn_key = f"function-v3:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return={types[ti[0]]['id'].hex()}:params=0:effects=0:caps=0:flags=0"
+    if schema >= 52:
+        fn_key = fn_key.replace('function-v3:', 'function-v4:', 1) + ':callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0'
     fn_id = sid(fn_key)
     ops=[]
     for i,(kind,imm,ck,text) in enumerate([(3,1,4,''),(2,0,6,'owned-by-plan'),(0,42,2,'')]):
@@ -171,7 +173,7 @@ def fixture(schema, registry_fingerprint, operation_fingerprint):
     entities.sort(key=lambda e:e['id'])
     for e in entities:
         if e['parent']!=NONE: e['parent']=entities.index(original[e['parent']])
-    raw=b'xray-semantic-plan-v23\0'+u64(schema)
+    raw=(b'xray-semantic-plan-v24\0' if schema >= 52 else b'xray-semantic-plan-v23\0')+u64(schema)
     raw+=pb(bytes.fromhex(operation_fingerprint))+pb(bytes.fromhex(registry_fingerprint))
     counts=[3,0,0,1,0,0,1,3,0,0,0,0,3,len(entities)]
     raw+=b''.join(u64(n) for n in counts)
@@ -185,6 +187,8 @@ def fixture(schema, registry_fingerprint, operation_fingerprint):
     fn_names='return_type parent parameter_begin parameter_count child_count capture_begin capture_count block_begin block_count value_begin value_count semantic_effects capability_mask source_class source_member_ordinal return_parameter return_provenance source_kind flags is_module_initializer carries_coroutine_ops'.split()
     if schema >= 51: fn_fields.append(0)
     if schema >= 51: fn_names.append('is_external_entry')
+    if schema >= 52: fn_fields.extend([NONE,0,0,0])
+    if schema >= 52: fn_names.extend(['callable_type','unknown_semantic_effects','effect_unknown_reasons','effect_complete'])
     raw+=pb(fn_id)+ps(fn_key)+ps('artifact_probe')+b''.join(u64(n) for n in fn_fields)
     block_key=fn_key+'/block:0'
     block_fields=[0,0,3,0,0,2,NONE,NONE,2,0]
@@ -224,7 +228,7 @@ def fixture(schema, registry_fingerprint, operation_fingerprint):
 
 
 
-def call_target_vectors():
+def legacy_call_target_vectors():
     def identity(key): return sid(key).hex()
     integer_key = 'type-v3:0:0:0:0:0:0:0:0:0:0:0:'
     unit_key = 'type-v3:17:0:0:0:0:0:0:0:0:255:0:'
@@ -290,12 +294,57 @@ def call_target_vectors():
 
 
 
+def call_target_vectors():
+    legacy = legacy_call_target_vectors()
+    integer = legacy['types']['integer']['key']
+    keys = {name: record['key'] for name, record in legacy['types'].items()}
+    keys['callable'] = ('type-v3:13:0:0:0:0:0:0:0:0:0:0:fn-v2:0:0:0:0:0:0:0:0;ret:' +
+                        str(len(integer)) + ':' + integer + ';view-count:0')
+    types = {name: dict(key=key, id=sid(key).hex()) for name, key in keys.items()}
+    def function(name, parent='module-root', ordinal=0, result='integer', parameters=()):
+        return (f'function-v4:parent={parent}:ordinal={ordinal}:name={len(name.encode())}:{name}'
+                ':source-class=none:member=none:source-kind=0:return=' + types[result]['id'] +
+                f':params={len(parameters)}' + ''.join(
+                    f':p{i}:mode=0:type=' + types[p]['id'] for i,p in enumerate(parameters)) +
+                ':effects=0:caps=0:flags=0:callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0')
+    direct = function('direct_call_target_root')
+    child = function('direct_call_target_child', sid(direct).hex())
+    indirect = function('indirect_callable_probe', parameters=('callable',))
+    namespace = function('native_namespace_caller', sid(function('native_namespace_root', result='unit')).hex(), result='unit')
+    builtin = function('builtin_instance_yieldable_probe', result='boolean', parameters=('channel',))
+    shared_root = function('shared_direct_root')
+    shared_child = function('shared_direct_target', sid(shared_root).hex())
+    shared = function('shared_direct_caller', sid(shared_root).hex(), ordinal=1)
+    matrix = [
+        ('direct', 'v3', direct+'/op:2:CALL', ':function='+sid(child).hex()+':kind=1'),
+        ('indirect', 'v3', indirect+'/op:2:CALL', ':callable-type='+types['callable']['id']+':kind=4'),
+        ('namespace', 'v5', namespace+'/op:2:CALL_METHOD', ':native-namespace=time.__sleep:kind=5'),
+        ('builtin', 'v6', builtin+'/op:2:CALL_METHOD', ':builtin-instance=Channel.recvOr:type='+types['channel']['id']+':kind=6'),
+        ('shared', 'v3', shared+'/op:1:CALL', ':function='+sid(shared_child).hex()+':kind=1'),
+    ]
+    fixtures = {}
+    for name, version, operation, suffix in matrix:
+        key = f'call-target-{version}:schema=52:operation='+sid(operation).hex()+suffix
+        current = dict(schema=52, operation_key=operation, operation=sid(operation).hex(), key=key, id=sid(key).hex())
+        fixtures[name] = dict(historical=legacy['fixtures'][name]['historical'],
+                              previous51=legacy['fixtures'][name]['current'], current=current)
+    export_root = function('net_init', result='unit')
+    exported = function('writeBytes', sid(export_root).hex(), result='unit')
+    key = 'source-export-v1:schema=52:name=10:writeBytes:function='+sid(exported).hex()+':slot=0'
+    exports = dict(legacy['source_export']['vectors'])
+    exports['52'] = dict(key=key, id=sid(key).hex())
+    return dict(types=types, fixtures=fixtures,
+                source_export=dict(root_key=export_root, function_key=exported, vectors=exports))
+
+
 def dependency_fixture(schema, registry_fingerprint, operation_registry):
-    assert schema == 51
+    assert schema in (51, 52)
     operation_fingerprint = operation_registry['fingerprint']
     integer='type-v3:0:0:0:0:0:0:0:0:0:0:0:'
     unit='type-v3:17:0:0:0:0:0:0:0:0:255:0:'
     callable=('type-v3:13:0:0:0:0:0:0:0:0:0:0:fn:0:0:0:0:0;ret:'+integer+';view-count:0')
+    if schema >= 52:
+        callable=('type-v3:13:0:0:0:0:0:0:0:0:0:0:fn-v2:0:0:0:0:0:0:0:0;ret:'+str(len(integer))+':'+integer+';view-count:0')
     types=[dict(key=key,id=sid(key),kind=kind,rep=rep,flags=flags,children=children)
            for key,kind,rep,flags,children in [(integer,0,0,0,[]),(unit,17,255,0,[]),(callable,13,0,80,[integer])]]
     types.sort(key=lambda t:t['id'])
@@ -304,9 +353,10 @@ def dependency_fixture(schema, registry_fingerprint, operation_registry):
     for t in types:
         t['child_begin']=child_cursor;child_cursor+=len(t['children'])
     def fn(name,parent='module-root'):
-        return (f'function-v3:parent={parent}:ordinal=0:name={len(name)}:{name}'
+        key = (f'function-v3:parent={parent}:ordinal=0:name={len(name)}:{name}'
                 ':source-class=none:member=none:source-kind=0:return='+sid(unit).hex()+
                 ':params=0:effects=0:caps=0:flags=0')
+        return (key.replace('function-v3:', 'function-v4:', 1) + ':callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0') if schema >= 52 else key
     functions=[fn('net_init')]
     functions.append(fn('writeBytes',sid(functions[0]).hex()))
     opkeys=[functions[0]+'/op:0:CLOSURE_NEW',functions[0]+'/op:1:SET_SHARED',functions[1]+'/op:0:YIELD']
@@ -341,7 +391,7 @@ def dependency_fixture(schema, registry_fingerprint, operation_registry):
     for record in entities:
         if record['parent']!=NONE:record['parent']=entities.index(original[record['parent']])
     counts=[3,0,0,2,0,0,2,3,0,0,1,0,0,len(entities)]
-    raw=b'xray-semantic-plan-v23\0'+u64(schema)+pb(bytes.fromhex(operation_fingerprint))+pb(bytes.fromhex(registry_fingerprint))
+    raw=(b'xray-semantic-plan-v24\0' if schema >= 52 else b'xray-semantic-plan-v23\0')+u64(schema)+pb(bytes.fromhex(operation_fingerprint))+pb(bytes.fromhex(registry_fingerprint))
     raw+=b''.join(u64(n) for n in counts)
     for record in entities:
         raw+=pb(record['id'])+ps(record['key'])+b''.join(u64(record[n]) for n in ['parent','subject','ordinal','kind','subject_kind','flags'])
@@ -356,7 +406,7 @@ def dependency_fixture(schema, registry_fingerprint, operation_registry):
     ]
     for i,key in enumerate(functions):
         raw+=pb(sid(key))+ps(key)+ps(['net_init','writeBytes'][i])
-        raw+=b''.join(u64(n) for n in fnfields[i]+([0] if schema>=51 else []))
+        raw+=b''.join(u64(n) for n in fnfields[i]+([0] if schema>=51 else [])+([NONE,0,0,0] if schema>=52 else []))
     for i,key in enumerate(functions):
         block=key+'/block:0'
         fields=[i,0 if i==0 else 2,2 if i==0 else 1,0,0,2,NONE,NONE,NONE if i==0 else 2,0]
@@ -394,6 +444,36 @@ def dependency_fixture(schema, registry_fingerprint, operation_registry):
                 dependency_key=dep,dependency_id=sid(dep).hex(),export_key=export,export_id=sid(export).hex(),
                 target_key=target,target_id=sid(target).hex(),opfields=opfields,counts=counts)
 
+def entity_identity_vectors(schema):
+    integer = 'type-v3:0:0:0:0:0:0:0:0:0:0:0:'
+    string = 'type-v3:2:0:0:0:0:0:0:0:0:255:0:'
+    shape = ('type-v3:25:0:0:0:0:0:0:0:0:0:0:object:2:0:;5:count:0:' +
+             integer + ';5:label:0:' + string)
+    function = ('function-v3:parent=module-root:ordinal=0:name=20:entity_identity_root'
+                ':source-class=none:member=none:source-kind=0:return='+sid(integer).hex()+
+                ':params=2:p0:mode=0:type='+sid(string).hex()+
+                ':p1:mode=0:type='+sid(shape).hex()+':effects=0:caps=0:flags=0')
+    if schema >= 52:
+        function = function.replace('function-v3:', 'function-v4:', 1) + ':callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0'
+    authority = 'memory-module-v1:id=24:semantic-plan-fixture-v1'
+    def entity(kind, parent, suffix):
+        return f'entity-v1:schema={schema}:kind={kind}:parent={parent}'+suffix
+    package = entity(0, 'none', f':authority={len(authority)}:{authority}')
+    module = entity(1, sid(package).hex(), ':name=21:semantic_plan_fixture:identity='+str(len(authority))+':'+authority)
+    declaration = entity(2, sid(module).hex(), ':function='+sid(function).hex()+':evidence=0')
+    function_entity = entity(6, sid(declaration).hex(), ':function='+sid(function).hex())
+    operation = function+'/op:3:CODEGEN_OPAQUE'
+    operation_entity = entity(9, sid(function_entity).hex(), ':operation='+sid(operation).hex())
+    debug = entity(15, sid(operation_entity).hex(), ':file='+str(len(authority))+':'+authority+
+                   ':start=15:3:end=15:12:discriminator=1:operation='+sid(operation).hex())
+    loan = entity(12, sid(operation_entity).hex(), ':declaration='+sid(declaration).hex()+
+                  ':function='+sid(function).hex()+':operation='+sid(operation).hex()+
+                  ':ordinal=0:type='+sid(string).hex()+':ownership=1:alias=-1')
+    return {name: dict(key=key, id=sid(key).hex()) for name, key in (
+        ('shape',shape),('function',function),('declaration',declaration),
+        ('operation',operation),('operation_entity',operation_entity),('debug',debug),('loan',loan))}
+
+
 def main():
     import argparse
     parser=argparse.ArgumentParser(description='Independently frame the SemanticPlan probe fixture')
@@ -403,26 +483,36 @@ def main():
     args=parser.parse_args()
     globals()['ROOT'] = args.root.resolve()
     guard=read('src/plan/semantic/xr_semantic_ids.h')
-    assert '#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(51)' in guard
+    assert '#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(52)' in guard
     guard=read('src/plan/semantic/xr_program_semantic_closure.h')
     assert '#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(10)' in guard
     operation=operation_registry()
     records={'operation_registry':operation,'call_targets':call_target_vectors()}
-    for old,schema in [(True,49),(False,51)]:
+    for old,schema in [(True,49),(False,51),(False,52)]:
         reg=registry(old)
         plan=fixture(schema,reg['fingerprint'],operation['fingerprint'])
         records[str(schema)]=dict(registry=reg,plan=plan)
         if old: assert plan['fingerprint']==OLD
+        if schema==51: assert plan['fingerprint']=='0b383e254800421c95fd5a678ac2a72252cf44651fae5d820b96448bbbd92a65'
+        if schema==52: assert plan['fingerprint']=='6f039e4401545acf6ec2b986417fd0936220d49c6a4466728f84514e8947b275'
         print('PASS schema',schema,'registry',reg['fingerprint'],'plan',plan['fingerprint'])
-    dependency = dependency_fixture(51, records['51']['registry']['fingerprint'], operation)
+    dependency = dependency_fixture(52, records['52']['registry']['fingerprint'], operation)
     records['source_export_dependency'] = dependency
+    entity_vectors = entity_identity_vectors(52)
+    old_entity = entity_identity_vectors(51)
+    assert old_entity['function']['id'] == '138473ef7c0c3cfec44f28ccfee53992'
+    assert old_entity['debug']['id'] == '793f52d4d1f523206e9a09d9cd0d7cc4'
+    assert old_entity['loan']['id'] == 'f3c3e6f41bbdad0f250a1dd184a5e1d8'
+    records['entity_identity'] = dict(historical51=old_entity, current52=entity_vectors)
     test = (args.test_source.read_text(encoding='utf-8') if args.test_source
             else read('tests/unit/plan/test_semantic_plan.c'))
-    assert OLD in test and records['51']['plan']['fingerprint'] in test
+    assert OLD in test and records['52']['plan']['fingerprint'] in test
     for vector in records['call_targets']['fixtures'].values():
         assert vector['current']['id'] in test
     for name in ['fingerprint','dependency_id','export_id','target_id']:
         assert dependency[name] in test
+    for name in ('debug', 'loan'):
+        assert entity_vectors[name]['id'] in test
     print('PASS source-export dependency', dependency['dependency_id'], 'target', dependency['target_id'])
     args.output.write_text(json.dumps(records,indent=2)+'\n',encoding='utf-8')
 

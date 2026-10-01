@@ -19,6 +19,7 @@
 #include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "../semantic/xr_i64_overflow_predicate_semantics.h"
 #include "xr_target_builder.h"
+#include "xr_target_plain_ref_aggregate_shape.h"
 #include "xr_target_capability.h"
 #include "xr_target_instruction_verify.h"
 #include "xr_i64_overflow_target_instruction.h"
@@ -7417,6 +7418,7 @@ static bool note_local_address_storage_value(XrTargetBuildContext *builder,
         xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
     if ((!xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL) &&
          !semantic_direct_local_scalar_ref_address_is_exact(builder->semantic_plan, operation) &&
+         !xr_target_plain_ref_address_source_is_exact(builder->semantic_plan, operation) &&
          !xr_semantic_native_direct_ref_address_is_exact(builder->semantic_plan, operation) &&
          !builder_source_export_ref_address_is_exact(builder, operation)) ||
         operation->result_value >= analysis->total_values)
@@ -7490,6 +7492,7 @@ static bool builder_add_local_address_storage(XrTargetBuildContext *builder, cha
             xr_semantic_plan_operation(builder->semantic_plan, i);
         if (xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL) ||
             semantic_direct_local_scalar_ref_address_is_exact(builder->semantic_plan, operation) ||
+            xr_target_plain_ref_address_source_is_exact(builder->semantic_plan, operation) ||
             xr_semantic_native_direct_ref_address_is_exact(builder->semantic_plan, operation) ||
             builder_source_export_ref_address_is_exact(builder, operation))
             valid = note_local_address_storage_value(builder, &analysis, i, error, error_size);
@@ -9377,6 +9380,23 @@ static bool note_aggregate_value(XrTargetBuildContext *builder,
         .has_slot = true,
         .resolve_type_rep = true,
     };
+    const XrSemanticParameterRecord *borrowed = NULL;
+    for (uint32_t i = 0; parameter_slot && i < xr_semantic_plan_parameter_count(builder->semantic_plan); i++) {
+        const XrSemanticParameterRecord *candidate = xr_semantic_plan_parameter(builder->semantic_plan, i);
+        if (candidate && candidate->value == semantic_value && candidate->function == semantic_function)
+            borrowed = candidate;
+    }
+    if (xr_target_plain_ref_parameter_source_is_exact(builder->semantic_plan, borrowed)) {
+        XrTargetMachineRepRecord pointer;
+        if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), XR_MACHINE_REP_RAW_PTR, &pointer))
+            return false;
+        pointer.ownership = XR_TARGET_OWNERSHIP_BORROWED;
+        if (!append_rep_intent(builder, &pointer, error, error_size))
+            return false;
+        slot.resolve_type_rep = value.resolve_type_rep = false;
+        slot.register_rep = slot.memory_rep = value.register_rep = value.memory_rep = pointer;
+        slot.ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    }
     return append_slot_intent(builder, &slot, error, error_size) &&
            append_value_intent(builder, &value, error, error_size);
 }
@@ -9411,7 +9431,8 @@ static bool collect_aggregate_intents(XrTargetBuildContext *builder,
         if (operation->function >= function_count)
             return fail(error, error_size, "XR_TARGET_1001",
                         "aggregate operation function identity is out of range");
-        if (operation->result_value == XR_SEMANTIC_INDEX_NONE || operation->opcode == XI_PARAM)
+        if (operation->result_value == XR_SEMANTIC_INDEX_NONE || operation->opcode == XI_PARAM ||
+            xr_target_plain_ref_address_source_is_exact(builder->semantic_plan, operation))
             continue;
         /* Aggregate geometry belongs to the value, whether its function can
          * suspend or not. State rows independently govern persistence across
@@ -11147,7 +11168,13 @@ static bool collect_direct_local_call_intent(XrTargetBuildContext *builder, uint
             operand->transfer_mode == XR_TRANSFER_SHARE &&
             operand->flags == (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) &&
             exact_ref_place;
-        bool exact_reference = exact_scalar_ref || exact_tagged_ref;
+        const XrSemanticOperandRecord *plain_ref_source = NULL;
+        bool exact_plain_ref = !method && !suspends &&
+            xr_target_plain_ref_call_source_is_exact(plan, target, (uint16_t) ordinal,
+                                                     &plain_ref_source);
+        if (exact_plain_ref)
+            reference_storage_value = plain_ref_source->value;
+        bool exact_reference = exact_scalar_ref || exact_tagged_ref || exact_plain_ref;
         if (exact_reference)
             caller_storage_value = reference_storage_value;
         /* A class instance is admitted as an argument through the same shared
@@ -11224,7 +11251,7 @@ static bool collect_direct_local_call_intent(XrTargetBuildContext *builder, uint
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
             (!exact_scalar && !exact_scalar_slice && !exact_unit_enum && !exact_adt_enum &&
-             !exact_class_instance && !exact_tagged_ref && !exact_array_value &&
+             !exact_class_instance && !exact_tagged_ref && !exact_plain_ref && !exact_array_value &&
              !exact_string_value && !exact_managed_aggregate && !exact_leaf_aggregate_argument &&
              !exact_leaf_product_argument) ||
             (!exact_reference && !exact_class_instance &&
@@ -11241,6 +11268,7 @@ static bool collect_direct_local_call_intent(XrTargetBuildContext *builder, uint
              !exact_string_value && !exact_array_value &&
              !exact_class_instance &&
              !(exact_managed_aggregate && parameter->ownership == XI_OWN_BORROWED) &&
+             !(exact_plain_ref && parameter->ownership == XI_OWN_BORROWED) &&
              !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
              !((exact_scalar_slice || exact_unit_enum || exact_adt_enum || exact_tagged_ref) &&
                parameter->ownership == XI_OWN_BORROWED))) {
@@ -11379,7 +11407,8 @@ static bool collect_direct_local_call_intent(XrTargetBuildContext *builder, uint
             .array_element_storage = array_element_storage,
         };
         const char *argument_identity_domain =
-            exact_scalar_ref   ? "xray-target-direct-scalar-ref-argument-v1"
+            exact_plain_ref ? "xray-target-direct-plain-ref-argument-v1"
+            : exact_scalar_ref   ? "xray-target-direct-scalar-ref-argument-v1"
             : exact_tagged_ref ? "xray-target-direct-tagged-ref-argument-v2"
                                : "xray-target-call-argument-v1";
         if (!stable_identity_from_pair(argument_identity_domain, target->id, parameter->id, ordinal,
@@ -15958,6 +15987,18 @@ static bool materialize_calls_and_adapters(const XrTargetBuildContext *builder,
                     XR_TARGET_OWNERSHIP_BORROWED &&
                 materialized->machine_reps[callee->memory_rep].ownership ==
                     XR_TARGET_OWNERSHIP_BORROWED;
+            bool plain_ref_boundary = parameter && caller && callee &&
+                xr_target_plain_ref_parameter_source_is_exact(callee_semantic, parameter) &&
+                argument_intent->mode == XR_TARGET_CALL_REFERENCE &&
+                argument_intent->ownership == XR_TARGET_CALL_BORROW &&
+                materialized->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_AGGREGATE &&
+                materialized->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_AGGREGATE &&
+                materialized->machine_reps[caller->register_rep].ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+                materialized->machine_reps[caller->memory_rep].ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+                materialized->machine_reps[callee->register_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+                materialized->machine_reps[callee->memory_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+                materialized->machine_reps[callee->register_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+                materialized->machine_reps[callee->memory_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED;
             /* An Array or a String handed over by value. Both are
              * reference-capable containers whose one storage fact is the tagged
              * outer value, so both cross this boundary as a plain argument the
@@ -16083,7 +16124,7 @@ static bool materialize_calls_and_adapters(const XrTargetBuildContext *builder,
                  (!callee || callee->slot == XR_SEMANTIC_INDEX_NONE ||
                   ((caller->register_rep != callee->register_rep ||
                     caller->memory_rep != callee->memory_rep) &&
-                   !adt_enum_borrow_boundary && !tagged_ref_borrow_boundary &&
+                   !adt_enum_borrow_boundary && !tagged_ref_borrow_boundary && !plain_ref_boundary &&
                    !container_value_borrow_boundary && !class_instance_boundary &&
                    !native_storage_boundary && !const_read_boundary)))) {
                 if (target_trace_enabled()) {

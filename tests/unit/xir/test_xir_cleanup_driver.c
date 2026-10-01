@@ -58,12 +58,12 @@ static XrXirAction exit_owner_resume(XrXirCallView *view) {
         if (w->mode == 17 || w->mode == 24)
             return (XrXirAction){XR_XIR_ACTION_LEAVE,0,NULL,0,w->error,{0},XR_XIR_ACTION_LEAVE_ERROR};
         if (w->mode == 18 || w->mode == 25)
-            return (XrXirAction){XR_XIR_ACTION_LEAVE,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_DIVIDE_BY_ZERO},{420,0,0,0},XR_XIR_ACTION_LEAVE_PANIC};
+            return (XrXirAction){XR_XIR_ACTION_LEAVE,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_DIVIDE_BY_ZERO},{{420,0,0,0},{0}},XR_XIR_ACTION_LEAVE_PANIC};
         if (w->mode == 2 || w->mode == 15) return exit_action(XR_XIR_ACTION_LEAVE);
     } else {
         ++w->normal_continuations;
         if (w->mode == 17) CHECK(view->inbox.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&view->inbox.value,w->domain,91));
-        if (w->mode == 18) CHECK(view->inbox.status == XR_XIR_CALL_DIVIDE_BY_ZERO && view->inbox.fault.code == 420);
+        if (w->mode == 18) CHECK(view->inbox.status == XR_XIR_CALL_DIVIDE_BY_ZERO && view->inbox.panic.detail.code == 420);
     }
     if (w->mode == 20) return (XrXirAction){XR_XIR_ACTION_CALL,1,&s->argument,1,{0},{0},0};
     if (w->mode == 22) return exit_action(XR_XIR_ACTION_EXIT_DONE);
@@ -97,8 +97,8 @@ static XrXirAction exit_body_resume(XrXirCallView *view) {
     }
     if (view->inbox.status == XR_XIR_CALL_THROWN)
         return (XrXirAction){XR_XIR_ACTION_THROW,0,NULL,0,view->inbox.value,{0},0};
-    if (w->mode == 4) CHECK(view->inbox.status == XR_XIR_CALL_DIVIDE_BY_ZERO && view->inbox.fault.code == 420);
-    else if (w->mode == 7) CHECK(view->inbox.status == XR_XIR_CALL_DEFER_ASYNC && view->inbox.fault.code == 444 && !view->inbox.wake);
+    if (w->mode == 4) CHECK(view->inbox.status == XR_XIR_CALL_DIVIDE_BY_ZERO && view->inbox.panic.detail.code == 420);
+    else if (w->mode == 7) CHECK(view->inbox.status == XR_XIR_CALL_DEFER_ASYNC && view->inbox.panic.detail.code == 444 && !view->inbox.wake);
     else CHECK(view->inbox.status == XR_XIR_CALL_RETURNED);
     exit_event(w,20 + number);
     return exit_action(XR_XIR_ACTION_RETURN);

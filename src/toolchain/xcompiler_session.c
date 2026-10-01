@@ -10,6 +10,7 @@
 
 #include "xcompiler_session.h"
 #include "../module/xmodule_identity.h"
+#include "../module/xmodule_graph.h"
 
 #include "../api/xrepl.h"
 #include "../base/xarena.h"
@@ -25,8 +26,19 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_internal.h"
 #include "../runtime/value/xtype_pool.h"
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
+
+typedef struct XrReplSourceRecord {
+    AstNode *program;
+    char *source;
+    char *source_file;
+    char *namespace_id;
+    char *canonical;
+    XrFingerprint fingerprint;
+    size_t declaration_index;
+} XrReplSourceRecord;
 
 struct XrCompilerSession {
     XrVMRuntime *vm_host;
@@ -61,7 +73,7 @@ struct XrCompilerSession {
 
     struct XrReplSymbolTable *repl_symbols;
     struct XaAnalyzer *repl_analyzer;
-    AstNode **repl_programs;
+    XrReplSourceRecord *repl_programs;
     size_t repl_program_count;
     size_t repl_program_capacity;
     XrCompilerSessionReplDeclarationRecord *repl_declarations;
@@ -73,9 +85,12 @@ struct XrCompilerSession {
     uint64_t published_repl_declaration_count;
     uint64_t abandoned_repl_declaration_count;
     bool repl_declaration_active;
+    XaScope *published_repl_scope;
+    const char *published_repl_file;
 
     struct XrModuleGraph *module_graph;
     XrCompileUnitIdentity compile_unit_identity;
+    XrVmImportBinding vm_import_binding;
 };
 
 static const XrCompilerSessionGenerationSnapshot XR_INITIAL_GENERATIONS = {
@@ -111,6 +126,7 @@ static void clear_transient_operation_state(XrCompilerSession *session) {
     session->ast_identity_epoch++;
     session->module_graph = NULL;
     session->compile_unit_identity = (XrCompileUnitIdentity) {0};
+    session->vm_import_binding = XR_VM_IMPORT_PROGRAM_TABLE;
 }
 
 static void clear_invalidation_history(XrCompilerSession *session) {
@@ -282,8 +298,13 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
             xr_type_set_current_pool(NULL, NULL);
         xa_analyzer_free(session->repl_analyzer);
     }
-    for (size_t i = 0; i < session->repl_program_count; i++)
-        xr_program_destroy(session->repl_programs[i]);
+    for (size_t i = 0; i < session->repl_program_count; i++) {
+        xr_program_destroy(session->repl_programs[i].program);
+        xr_free(session->repl_programs[i].source);
+        xr_free(session->repl_programs[i].source_file);
+        xr_free(session->repl_programs[i].namespace_id);
+        xr_free(session->repl_programs[i].canonical);
+    }
     xr_free(session->repl_programs);
     xr_free(session->repl_declarations);
     if (session->repl_symbols)
@@ -457,6 +478,17 @@ static bool finish_repl_declaration(
     } else {
         session->abandoned_repl_declaration_count++;
     }
+    if (session->repl_analyzer) {
+        if (state == XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED) {
+            session->published_repl_scope = session->repl_analyzer->current_scope;
+            session->published_repl_file = session->repl_analyzer->current_file;
+        } else {
+            session->repl_analyzer->current_scope = session->published_repl_scope
+                                                        ? session->published_repl_scope
+                                                        : session->repl_analyzer->global_scope;
+            session->repl_analyzer->current_file = session->published_repl_file;
+        }
+    }
     session->active_repl_declaration = SIZE_MAX;
     session->repl_declaration_active = false;
     memset(scope, 0, sizeof(*scope));
@@ -506,7 +538,8 @@ static bool begin_incremental_operation(XrCompilerSession *session) {
     if (!session || session->incremental_operation_active ||
         session->repl_declaration_active || session->current_arena ||
         session->compile_string_pool || session->module_graph ||
-        session->compile_unit_identity.module_identity)
+        session->compile_unit_identity.module_identity ||
+        session->vm_import_binding != XR_VM_IMPORT_PROGRAM_TABLE)
         return false;
     session->incremental_operation_active = true;
     session->incremental_operation_failure = XR_COMPILER_SESSION_OPERATION_NONE;
@@ -1046,21 +1079,125 @@ struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *se
     return session ? session->repl_analyzer : NULL;
 }
 
-bool xr_compiler_session_retain_repl_program(XrCompilerSession *session, AstNode *program) {
-    if (!session || !program)
+XR_FUNC bool xr_compiler_session_retain_repl_source(XrCompilerSession *session, AstNode *program,
+                                                    const char *source,
+                                                    const XrModuleIdentityAuthority *authority) {
+    if (!session || !program || !source || !session->repl_declaration_active || !authority ||
+        authority->kind != XR_MODULE_IDENTITY_MEMORY ||
+        !xr_module_identity_authority_valid(authority))
         return false;
     if (session->repl_program_count == session->repl_program_capacity) {
-        size_t next_capacity =
-            session->repl_program_capacity ? session->repl_program_capacity * 2 : 8;
-        AstNode **next = (AstNode **) xr_realloc(session->repl_programs,
-                                                 next_capacity * sizeof(*session->repl_programs));
+        size_t capacity = session->repl_program_capacity ? session->repl_program_capacity * 2u : 8u;
+        if (capacity < session->repl_program_capacity ||
+            capacity > SIZE_MAX / sizeof(XrReplSourceRecord))
+            return false;
+        XrReplSourceRecord *next = xr_realloc(session->repl_programs, capacity * sizeof(*next));
         if (!next)
             return false;
         session->repl_programs = next;
-        session->repl_program_capacity = next_capacity;
+        session->repl_program_capacity = capacity;
     }
-    session->repl_programs[session->repl_program_count++] = program;
+    size_t length = strlen(authority->namespace_id);
+    if (length > SIZE_MAX - 32u)
+        return false;
+    XrReplSourceRecord record = {.program = program,
+                                 .declaration_index = session->active_repl_declaration};
+    record.source = copy_optional_string(source);
+    record.source_file = xr_malloc(40);
+    record.namespace_id = xr_malloc(length + 32u);
+    if (!record.source || !record.namespace_id || !record.source_file)
+        goto fail;
+    snprintf(record.source_file, 40, "<repl-g%llu>",
+             (unsigned long long) session->repl_declarations[record.declaration_index].generation);
+    snprintf(record.namespace_id, length + 32u, "%s-g%llu", authority->namespace_id,
+             (unsigned long long) session->repl_declarations[record.declaration_index].generation);
+    XrModuleIdentityAuthority derived = {XR_MODULE_IDENTITY_MEMORY, record.namespace_id, NULL};
+    if (!xr_module_identity_from_logical(&derived, NULL, &record.canonical))
+        goto fail;
+    if (!xa_analyzer_prepare_input_scope(session->repl_analyzer, record.source_file,
+                                         session->published_repl_scope
+                                             ? session->published_repl_scope
+                                             : session->repl_analyzer->global_scope))
+        goto fail;
+    xr_module_source_fingerprint(record.source, &record.fingerprint);
+    session->repl_programs[session->repl_program_count++] = record;
     return true;
+fail:
+    xr_free(record.source);
+    xr_free(record.source_file);
+    xr_free(record.namespace_id);
+    xr_free(record.canonical);
+    return false;
+}
+
+XR_FUNC bool xr_compiler_session_repl_retains_program(const XrCompilerSession *session,
+                                                      const AstNode *program) {
+    if (!session || !program || !session->repl_declaration_active)
+        return false;
+    for (size_t i = 0; i < session->repl_program_count; ++i) {
+        const XrReplSourceRecord *record = &session->repl_programs[i];
+        if (record->program == program)
+            return record->declaration_index == session->active_repl_declaration &&
+                   session->repl_declarations[record->declaration_index].state ==
+                       XR_COMPILER_SESSION_REPL_DECLARATION_RESERVED;
+    }
+    return false;
+}
+
+XR_FUNC const char *xr_compiler_session_repl_source_file(const XrCompilerSession *session) {
+    if (!session || !session->repl_declaration_active || !session->repl_program_count)
+        return NULL;
+    const XrReplSourceRecord *record = &session->repl_programs[session->repl_program_count - 1];
+    return record->declaration_index == session->active_repl_declaration ? record->source_file
+                                                                         : NULL;
+}
+
+XR_FUNC bool xr_compiler_session_repl_graph_view(XrCompilerSession *session, XrModuleGraph *view) {
+    if (!view)
+        return false;
+    memset(view, 0, sizeof(*view));
+    if (!session || !session->repl_declaration_active || session->repl_program_count > INT_MAX)
+        return false;
+    size_t count = session->repl_program_count;
+    view->specs = xr_calloc(count, sizeof(*view->specs));
+    view->topo_order = xr_calloc(count, sizeof(*view->topo_order));
+    if (!view->specs || !view->topo_order) {
+        xr_compiler_session_repl_graph_view_dispose(view);
+        return false;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        XrReplSourceRecord *source = &session->repl_programs[i];
+        XrCompilerSessionReplDeclarationState state =
+            session->repl_declarations[source->declaration_index].state;
+        bool current = source->declaration_index == session->active_repl_declaration;
+        if (state != XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED && !current)
+            continue;
+        int slot = view->spec_count++;
+        XrModuleSpec *spec = &view->specs[slot];
+        spec->canonical = source->canonical;
+        spec->source_path = source->source_file;
+        spec->kind = XR_MOD_MEMORY;
+        spec->authority =
+            (XrModuleIdentityAuthority) {XR_MODULE_IDENTITY_MEMORY, source->namespace_id, NULL};
+        spec->source_content_fingerprint = source->fingerprint;
+        spec->ast = source->program;
+        spec->status = XR_MODSPEC_ANALYZED;
+        spec->topo_index = slot;
+        view->topo_order[view->topo_count++] = slot;
+        if (current)
+            view->entry_index = slot;
+    }
+    view->spec_capacity = (int) count;
+    view->compiler_session = session;
+    return view->spec_count > 0;
+}
+
+XR_FUNC void xr_compiler_session_repl_graph_view_dispose(XrModuleGraph *view) {
+    if (!view)
+        return;
+    xr_free(view->specs);
+    xr_free(view->topo_order);
+    memset(view, 0, sizeof(*view));
 }
 
 void xr_compiler_session_set_module_graph(XrCompilerSession *session, struct XrModuleGraph *graph) {
@@ -1091,6 +1228,18 @@ bool xr_compiler_session_set_compile_unit_identity(XrCompilerSession *session,
          (module_kind == XR_MODULE_IDENTITY_STDLIB || module_kind == XR_MODULE_IDENTITY_MEMORY)))
         return false;
     session->compile_unit_identity = *identity;
+    return true;
+}
+
+XrVmImportBinding xr_compiler_session_vm_import_binding(const XrCompilerSession *session) {
+    return session ? session->vm_import_binding : XR_VM_IMPORT_PROGRAM_TABLE;
+}
+
+bool xr_compiler_session_set_vm_import_binding(XrCompilerSession *session, XrVmImportBinding binding) {
+    if (!session || !session->incremental_operation_active ||
+        (binding != XR_VM_IMPORT_PROGRAM_TABLE && binding != XR_VM_IMPORT_RUNTIME_MODULE))
+        return false;
+    session->vm_import_binding = binding;
     return true;
 }
 

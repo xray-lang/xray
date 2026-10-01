@@ -72,6 +72,24 @@
 #define XR_C_RELEASE_SYMBOL "xrt_release"
 #define XR_C_STRING_SLICE_RANGE_SYMBOL "xrt_string_slice_range"
 
+static const char *own_pointer_type(XrCEmissionPlan *plan, const char *name) {
+    if (!plan || !name)
+        return NULL;
+    if (!plan->type_names.head)
+        xr_arena_init(&plan->type_names, 128u);
+    return xr_arena_strdup(&plan->type_names, name);
+}
+
+static bool named_struct_pointer_type(const char *name) {
+    if (!name || strlen(name) != 33u || strncmp(name, "xrt_struct_abi_", 15u) != 0 ||
+        strcmp(name + 31u, " *") != 0)
+        return false;
+    for (uint32_t i = 15u; i < 31u; i++)
+        if (!((name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f')))
+            return false;
+    return true;
+}
+
 typedef struct XrCEmissionModuleScope {
     const XrTargetPlan *target;
     const XrSemanticPlan *semantic;
@@ -82,6 +100,107 @@ typedef struct XrCEmissionModuleScope {
     uint32_t argument_begin, argument_end;
     XrTargetProgramReachability reachability;
 } XrCEmissionModuleScope;
+
+static bool emission_error(char *error, size_t error_size, const char *code, const char *detail);
+
+/* A frozen aggregate-to-pointer row already claims this boundary. Loss of
+ * its exact Source or physical proof is malformed authority, not an absent
+ * optional C projection. Classification here grants no emission permission. */
+static bool plain_ref_aggregate_claims_are_exact(const XrCEmissionModuleScope *scope,
+    char *error, size_t error_size) {
+    uint32_t count = 0;
+    const XrTargetCallArgumentRecord *arguments = xr_target_plan_call_arguments(scope->target, &count);
+    for (uint32_t i = scope->argument_begin; i < scope->argument_end; i++) {
+        if (!arguments || i >= count)
+            return emission_error(error, error_size, "XR_TARGET_1001", "plain ref argument partition is invalid");
+        const XrTargetCallArgumentRecord *argument = &arguments[i];
+        const XrTargetMachineRepRecord *caller = xr_target_plan_machine_rep(scope->target, argument->register_rep);
+        const XrTargetMachineRepRecord *callee = xr_target_plan_machine_rep(scope->target, argument->callee_register_rep);
+        uint32_t call_count = 0, local_function = XR_SEMANTIC_INDEX_NONE;
+        const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &call_count);
+        const XrSemanticPlan *owner = NULL;
+        bool bound = calls && argument->call < call_count &&
+            xr_target_plan_function_semantic_binding(scope->target, calls[argument->call].callee_function,
+                &owner, &local_function);
+        const XrSemanticParameterRecord *parameter = bound
+            ? xr_semantic_plan_parameter(owner, argument->callee_parameter) : NULL;
+        const XrSemanticTypeRecord *type = parameter ? xr_semantic_plan_type(owner, parameter->type) : NULL;
+        bool aggregate_pointer = caller && callee && caller->kind == XR_MACHINE_REP_AGGREGATE &&
+            callee->kind == XR_MACHINE_REP_RAW_PTR;
+        bool source_ref = parameter && parameter->function == local_function && type && parameter->mode == XR_PARAM_REF &&
+            type->kind == XR_KIND_INSTANCE && (type->flags & XR_SEM_TYPE_VALUE) != 0;
+        if (!aggregate_pointer && !source_ref)
+            continue;
+        XrCAggregateProjection exact = {0};
+        if (!xr_c_plain_ref_aggregate_argument_projection(scope->target, argument, &exact))
+            return emission_error(error, error_size, "XR_TARGET_1001", "plain ref aggregate claim lost exact authority");
+    }
+    return true;
+}
+
+static bool plain_ref_argument_view(const XrCEmissionModuleScope *scope,
+    const XrTargetCallArgumentRecord *argument, XrCAggregateProjection *projection,
+    XrCCallArgumentEmissionView *out) {
+    if (!scope || !argument || !projection || !out ||
+        !xr_c_plain_ref_aggregate_argument_projection(scope->target, argument, projection))
+        return false;
+    uint32_t count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &count);
+    if (!calls || argument->call >= count)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->semantic_call_value = calls[argument->call].result_value;
+    out->semantic_operand = argument->semantic_operand;
+    out->semantic_value = argument->semantic_value;
+    out->callee_parameter = argument->callee_parameter;
+    out->ordinal = argument->ordinal;
+    out->caller_register_kind = XR_MACHINE_REP_AGGREGATE;
+    out->caller_memory_kind = XR_MACHINE_REP_AGGREGATE;
+    out->callee_register_kind = XR_MACHINE_REP_RAW_PTR;
+    out->callee_memory_kind = XR_MACHINE_REP_RAW_PTR;
+    out->mode = XR_TARGET_CALL_REFERENCE;
+    out->ownership = XR_TARGET_CALL_BORROW;
+    out->transfer_mode = XR_TRANSFER_SHARE;
+    out->flags = XR_TARGET_CALL_ARGUMENT_ADDRESSABLE;
+    out->c_type = projection->c_type;
+    return true;
+}
+
+static bool plain_ref_abi_is_exact(const XrCEmissionPlan *plan,
+    const XrCEmissionModuleScope *scope, const XrTargetCallArgumentRecord *argument,
+    const XrCAggregateProjection *projection) {
+    uint32_t call_count = 0, callee_function = UINT32_MAX;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &call_count);
+    const XrSemanticPlan *semantic = NULL;
+    if (!calls || argument->call >= call_count ||
+        !xr_target_plan_function_semantic_binding(scope->target, calls[argument->call].callee_function,
+                                                  &semantic, &callee_function) ||
+        semantic != scope->semantic)
+        return false;
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(semantic, callee_function);
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(semantic, argument->callee_parameter);
+    const XrCFunctionAbiEmissionView *match = NULL;
+    for (uint32_t i = 0; i < plan->function_abi_count; i++) {
+        const XrCFunctionAbiEmissionView *row = &plan->function_abis[i];
+        if (row->semantic_function != callee_function || row->ordinal != argument->ordinal + 1u)
+            continue;
+        if (match)
+            return false;
+        match = row;
+    }
+    return function && parameter && match && match->semantic_value == parameter->value &&
+        match->parameter_count == function->parameter_count &&
+        match->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+        match->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+        match->slot_class == XR_C_ABI_SLOT_BORROWED_PLACE &&
+        match->boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
+        match->rep == XR_C_VALUE_REP_RAW_PTR && match->pointee_rep == XR_C_VALUE_REP_AGGREGATE &&
+        match->aggregate_class == XR_C_ABI_AGGREGATE_NONE &&
+        match->c_type && strcmp(match->c_type, projection->c_type) == 0 &&
+        match->pointee_c_type && strlen(match->pointee_c_type) == 31u &&
+        strncmp(match->pointee_c_type, projection->c_type, 31u) == 0;
+}
 
 static bool emission_module_scope(const XrTargetPlan *target_plan,
                                   const XrSemanticPlan *semantic_plan,
@@ -3383,7 +3502,7 @@ static bool target_plan_has_call_result_rep(const XrCEmissionModuleScope *scope,
     return false;
 }
 
-static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
+void xr_c_emission_plan_compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
     static const uint8_t domain[] = "xray-c-emission-plan-v28\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -3641,7 +3760,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
                                    strcmp(value->c_type, "void * *") != 0 &&
                                    strcmp(value->c_type, "XrValue *") != 0 &&
                                    strcmp(value->c_type, "int64_t *") != 0 &&
-                                   strcmp(value->c_type, "xr_span_t *") != 0))
+                                   strcmp(value->c_type, "xr_span_t *") != 0 &&
+                                   !named_struct_pointer_type(value->c_type)))
                 return false;
             expected_c_type = value->c_type;
             break;
@@ -3827,7 +3947,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
             ((value->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
               value->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
               (strcmp(value->c_type, "void *") == 0 || strcmp(value->c_type, "int64_t *") == 0 ||
-               strcmp(value->c_type, "xr_span_t *") == 0))) &&
+               strcmp(value->c_type, "xr_span_t *") == 0 ||
+               named_struct_pointer_type(value->c_type)))) &&
             value->literal_byte_length == 0 && value->literal_bytes == NULL &&
             value->recipe_operand_value != UINT32_MAX &&
             value->recipe_operand_value != value->semantic_value &&
@@ -4022,7 +4143,13 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
                                 argument->callee_register_kind == argument->caller_register_kind &&
                                 argument->callee_memory_kind == argument->caller_register_kind &&
                                 argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE;
-        if ((!exact_tagged_ref && !exact_scalar_ref) ||
+        bool exact_plain_ref = named_struct_pointer_type(argument->c_type) &&
+            argument->caller_register_kind == XR_MACHINE_REP_AGGREGATE &&
+            argument->caller_memory_kind == XR_MACHINE_REP_AGGREGATE &&
+            argument->callee_register_kind == XR_MACHINE_REP_RAW_PTR &&
+            argument->callee_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+            argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE;
+        if ((!exact_tagged_ref && !exact_scalar_ref && !exact_plain_ref) ||
             argument->mode != XR_TARGET_CALL_REFERENCE ||
             argument->ownership != XR_TARGET_CALL_BORROW ||
             argument->transfer_mode != XR_TRANSFER_SHARE ||
@@ -4054,7 +4181,7 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
             return false;
     }
     XrFingerprint actual = {{0}};
-    compute_fingerprint(plan, &actual);
+    xr_c_emission_plan_compute_fingerprint(plan, &actual);
     return xr_fingerprint_equal(actual, plan->fingerprint);
 }
 
@@ -4208,6 +4335,8 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
                                         size_t error_size) {
     XrCEmissionModuleScope scope = *module_scope;
     const XrTargetPlan *target_plan = scope.target;
+    if (!plain_ref_aggregate_claims_are_exact(&scope, error, error_size))
+        return false;
     if (!verify_container_copy_call_storage(target_plan, scope.semantic, scope.partition))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission verification authority is missing");
@@ -4296,6 +4425,12 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             aggregate_supported = true;
             expected_register = expected_memory = XR_C_VALUE_REP_AGGREGATE;
             register_c_type = memory_c_type = aggregate.c_type;
+            register_supported = memory_supported = true;
+        }
+        XrCAggregateProjection plain_ref = {0};
+        if (xr_c_plain_ref_aggregate_projection(target_plan, binding, &plain_ref)) {
+            expected_register = expected_memory = XR_C_VALUE_REP_RAW_PTR;
+            register_c_type = memory_c_type = plain_ref.c_type;
             register_supported = memory_supported = true;
         }
         if (!register_supported && !memory_supported)
@@ -4722,8 +4857,15 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             classify_direct_local_tagged_ref_argument(&scope, target_argument, &expected);
         bool exact_ref_argument = match == XR_C_TAGGED_REF_ARGUMENT_EXACT;
         bool scalar_ref_argument = false;
+        XrCAggregateProjection plain_ref_projection = {0};
+        bool plain_ref_argument = plain_ref_argument_view(&scope, target_argument, &plain_ref_projection, &expected);
+        if (plain_ref_argument) {
+            exact_ref_argument = true;
+            if (!plain_ref_abi_is_exact(plan, &scope, target_argument, &plain_ref_projection))
+                return emission_error(error, error_size, "XR_TARGET_1001", "plain ref aggregate ABI is not exact");
+        }
         XrCScalarRefProjection scalar_ref_projection = {0};
-        if (match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
+        if (!plain_ref_argument && match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
             XrCScalarRefProjectionStatus scalar_status = xr_c_scalar_ref_project_argument(
                 target_plan, target_argument, &scalar_ref_projection);
             if (scalar_status == XR_C_SCALAR_REF_NOT_THIS_FAMILY)
@@ -4838,6 +4980,8 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
     XrCEmissionModuleScope scope = *module_scope;
     const XrTargetPlan *target_plan = scope.target;
     const XrSemanticPlan *semantic = scope.semantic;
+    if (!plain_ref_aggregate_claims_are_exact(&scope, error, error_size))
+        return false;
     const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(semantic);
     if (provenance &&
         provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
@@ -4965,6 +5109,13 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
             register_c_type = memory_c_type = aggregate.c_type;
             register_is_value = memory_is_value = true;
         }
+        XrCAggregateProjection plain_ref = {0};
+        bool plain_ref_supported = xr_c_plain_ref_aggregate_projection(target_plan, binding, &plain_ref);
+        if (plain_ref_supported) {
+            register_c_rep = memory_c_rep = XR_C_VALUE_REP_RAW_PTR;
+            register_c_type = memory_c_type = plain_ref.c_type;
+            register_is_value = memory_is_value = true;
+        }
         if (!register_is_value && !memory_is_value)
             continue;
         if (!register_is_value || !memory_is_value || register_rep->kind != memory_rep->kind ||
@@ -4980,7 +5131,7 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
                                   "i64 overflow C recipe authority is malformed");
         uint8_t direct_tagged_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         uint32_t local_address_source = UINT32_MAX;
-        if (register_rep->kind == XR_MACHINE_REP_RAW_PTR && !scalar_ref_address &&
+        if (register_rep->kind == XR_MACHINE_REP_RAW_PTR && !scalar_ref_address && !plain_ref_supported &&
             !exact_direct_local_tagged_ref_parameter_recipe(&scope, binding,
                                                             &direct_tagged_ref_storage) &&
             !exact_local_address_recipe(&scope, binding, &local_address_source) &&
@@ -5082,7 +5233,11 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
         XrDirectLocalTaggedRefArgumentMatch match =
             classify_direct_local_tagged_ref_argument(&scope, argument, &projected);
         bool exact_ref_argument = match == XR_C_TAGGED_REF_ARGUMENT_EXACT;
-        if (match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
+        XrCAggregateProjection plain_ref_projection = {0};
+        bool plain_ref_argument = plain_ref_argument_view(&scope, argument, &plain_ref_projection, &projected);
+        if (plain_ref_argument)
+            exact_ref_argument = true;
+        if (!plain_ref_argument && match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
             XrCScalarRefProjection scalar_ref = {0};
             XrCScalarRefProjectionStatus scalar_status =
                 xr_c_scalar_ref_project_argument(target_plan, argument, &scalar_ref);
@@ -5189,8 +5344,14 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
             c_rep = XR_C_VALUE_REP_AGGREGATE;
             c_type = aggregate.c_type;
         }
+        XrCAggregateProjection plain_ref = {0};
+        bool plain_ref_supported = xr_c_plain_ref_aggregate_projection(target_plan, binding, &plain_ref);
+        if (plain_ref_supported) {
+            c_rep = XR_C_VALUE_REP_RAW_PTR;
+            c_type = plain_ref.c_type;
+        }
         if (!register_rep || !memory_rep || register_rep->kind != memory_rep->kind ||
-            (!aggregate_supported && !scalar_ref_address &&
+            (!aggregate_supported && !scalar_ref_address && !plain_ref_supported &&
              !machine_kind_to_c_rep(&scope, binding->semantic_value, register_rep->kind, &c_rep,
                                     &c_type)))
             continue;
@@ -5211,7 +5372,8 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
         value->recipe_operand_value = UINT32_MAX;
         value->recipe_argument_value = UINT32_MAX;
         value->recipe_callee_function = UINT32_MAX;
-        value->c_type = aggregate_supported ? xr_strdup(c_type) : c_type;
+        value->c_type = aggregate_supported ? xr_strdup(c_type)
+            : plain_ref_supported ? own_pointer_type(plan, c_type) : c_type;
         if (aggregate_supported) {
             value->address_projection = aggregate.kind;
             value->backing_value = aggregate.backing_value;
@@ -5781,7 +5943,17 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
         XrDirectLocalTaggedRefArgumentMatch match = classify_direct_local_tagged_ref_argument(
             &scope, &target_call_arguments[i], &projected);
         bool exact_ref_argument = match == XR_C_TAGGED_REF_ARGUMENT_EXACT;
-        if (match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
+        XrCAggregateProjection plain_ref_projection = {0};
+        bool plain_ref_argument = plain_ref_argument_view(&scope, &target_call_arguments[i], &plain_ref_projection, &projected);
+        if (plain_ref_argument) {
+            projected.c_type = own_pointer_type(plan, projected.c_type);
+            if (!projected.c_type) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003", "plain ref call type allocation failed");
+            }
+            exact_ref_argument = true;
+        }
+        if (!plain_ref_argument && match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
             XrCScalarRefProjection scalar_ref = {0};
             XrCScalarRefProjectionStatus scalar_status = xr_c_scalar_ref_project_argument(
                 target_plan, &target_call_arguments[i], &scalar_ref);
@@ -6015,7 +6187,21 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
                         agreed
                             ? xr_target_plan_machine_rep(target_plan, agreed->callee_register_rep)
                             : NULL;
-                    if (!agreed && slot_class == XR_C_ABI_SLOT_VALUE &&
+                    XrCAggregateProjection plain_ref = {0};
+                    bool plain_ref_supported = binding &&
+                        xr_c_plain_ref_aggregate_projection(target_plan, binding, &plain_ref);
+                    if (plain_ref_supported) {
+                        char pointee_name[40] = {0};
+                        memcpy(pointee_name, plain_ref.c_type, 31u);
+                        rep = XR_C_VALUE_REP_RAW_PTR;
+                        pointee_rep = XR_C_VALUE_REP_AGGREGATE;
+                        c_type = own_pointer_type(plan, plain_ref.c_type);
+                        pointee_c_type = own_pointer_type(plan, pointee_name);
+                        if (!c_type || !pointee_c_type) {
+                            xr_c_emission_plan_free(plan);
+                            return emission_error(error, error_size, "XR_EXEC_5003", "plain ref ABI type allocation failed");
+                        }
+                    } else if (!agreed && slot_class == XR_C_ABI_SLOT_VALUE &&
                         function_states_own_boundary(function) &&
                         declared_boundary_c_rep(&scope, declared_type, &rep, &c_type)) {
                         /* Same reason as the return row. A borrowed place is
@@ -6152,7 +6338,7 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
             plan->function_abis = NULL;
         }
     }
-    compute_fingerprint(plan, &plan->fingerprint);
+    xr_c_emission_plan_compute_fingerprint(plan, &plan->fingerprint);
     if (!emission_plan_verify_scoped(&scope, plan, expected_profile_fingerprint, error,
                                      error_size)) {
         xr_c_emission_plan_free(plan);
@@ -6205,6 +6391,7 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
     xr_free(plan->recipe_arguments);
     xr_free(plan->call_arguments);
     xr_free(plan->values);
+    xr_arena_destroy(&plan->type_names);
     xr_free(plan);
 }
 

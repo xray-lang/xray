@@ -1709,7 +1709,7 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **ar
 
 // Full AST analysis
 // Find or create file entry
-static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) {
+static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file, XaScope *parent) {
     if (!analyzer || !file)
         return NULL;
 
@@ -1741,7 +1741,7 @@ static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) 
         return NULL;
     }
 
-    entry->file_scope = xa_scope_new(XA_SCOPE_GLOBAL, analyzer->global_scope);
+    entry->file_scope = xa_scope_new(XA_SCOPE_GLOBAL, parent);
     if (!entry->file_scope) {
         if (fmap)
             xr_hashmap_delete(fmap, entry->path);
@@ -1756,6 +1756,19 @@ static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) 
     analyzer->file_count++;
 
     return entry;
+}
+
+XR_FUNC bool xa_analyzer_prepare_input_scope(XaAnalyzer *analyzer, const char *file,
+                                             XaScope *parent) {
+    if (!analyzer || !file || !parent)
+        return false;
+    XaScope *root = parent;
+    while (root->parent)
+        root = root->parent;
+    if (root != analyzer->global_scope)
+        return false;
+    XaFileEntry *entry = find_or_create_file(analyzer, file, parent);
+    return entry && entry->file_scope && entry->file_scope->parent == parent;
 }
 
 bool xa_analyzer_push_file_scope(XaAnalyzer *analyzer, const char *file,
@@ -2207,7 +2220,11 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
         return;
 
     xa_analyzer_sync_type_ref_ast_epoch(analyzer);
-    if (!analyzer->graph && analyzer->type_ref_batch_root_id != ast->node_id) {
+    bool retained_repl_input =
+        analyzer == xr_compiler_session_repl_analyzer(analyzer->compiler_session) &&
+        xr_compiler_session_repl_retains_program(analyzer->compiler_session, ast);
+    if (!analyzer->graph && !retained_repl_input &&
+        analyzer->type_ref_batch_root_id != ast->node_id) {
         xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
         xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
     }
@@ -2235,7 +2252,7 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     xa_symbol_set_registry(analyzer->symbols_by_id);
 
     // Track file
-    XaFileEntry *entry = find_or_create_file(analyzer, file);
+    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
     if (entry) {
         entry->dirty = false;
     }
@@ -2296,7 +2313,7 @@ void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) 
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
 
     // Find file entry
-    XaFileEntry *entry = find_or_create_file(analyzer, file);
+    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
 
     // Check if content changed using hash (incremental optimization)
     XaIncrementalCtx *incr = (XaIncrementalCtx *) analyzer->incremental;
@@ -2342,7 +2359,7 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
 
     // Find file entry
-    XaFileEntry *entry = find_or_create_file(analyzer, file);
+    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
 
     // Check if content changed using provided hash (true incremental check)
     if (entry && entry->content_hash == content_hash && !entry->dirty) {
@@ -2483,7 +2500,7 @@ void xa_analyzer_invalidate_range(XaAnalyzer *analyzer, const char *file, uint32
     (void) end_line;
     if (!analyzer || !file)
         return;
-    XaFileEntry *entry = find_or_create_file(analyzer, file);
+    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
     if (entry) {
         entry->dirty = true;
     }

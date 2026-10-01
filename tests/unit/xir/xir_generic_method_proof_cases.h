@@ -30,8 +30,8 @@ static void generic_method_proof_fixture(GenericMethodProofFixture *g) {
     f->nodes[0].parameters = &g->parameter; f->nodes[0].parameter_count = 1;
     f->nodes[0].result = g->arguments[0]; f->nodes[0].parameter_span = 1;
     g->function_constraints[0] = f->bound; g->function_constraints[1] = g->own;
-    f->generics[0] = (XrXirGeneric){&g->own,1,NULL,0};
-    f->generics[1] = (XrXirGeneric){g->function_constraints,2,NULL,0};
+    f->generics[0] = (XrXirGeneric){&g->own,1,NULL,0, NULL};
+    f->generics[1] = (XrXirGeneric){g->function_constraints,2,NULL,0, NULL};
     for (uint32_t n = 0; n < 2; ++n) {
         g->parameters[n][0] = n ? f->box_parameter : f->meter;
         g->parameters[n][1] = g->arguments[n];

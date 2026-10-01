@@ -63,8 +63,8 @@ static void class_owned_fixture(ClassOwnedFixture *f) {
     f->entry[6]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0,{0}};
     f->generic_parameter=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE;f->generic_argument=XR_XIR_I64;
     f->constraint.markers=XR_XIR_CONSTRAINT_SENDABLE;
-    f->generics[4]=(XrXirGeneric){&f->constraint,1,NULL,0};
-    f->generics[3]=(XrXirGeneric){NULL,0,&f->generic_argument,1};
+    f->generics[4]=(XrXirGeneric){&f->constraint,1,NULL,0, NULL};
+    f->generics[3]=(XrXirGeneric){NULL,0,&f->generic_argument,1, NULL};
     f->generic_return[0]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     f->blocks[0]=(XrXirBlock){0,1,0,0};f->blocks[1]=(XrXirBlock){0,2,0,0};
     f->blocks[2]=(XrXirBlock){0,4,0,0};f->blocks[3]=(XrXirBlock){0,7,0,0};f->blocks[4]=(XrXirBlock){0,1,0,0};

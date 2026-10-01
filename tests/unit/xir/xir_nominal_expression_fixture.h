@@ -51,7 +51,7 @@ static XrXirArtifact *nominal_expression_fixture(void) {
         {"init", 4, NULL, 0, XR_XIR_UNIT, blocks + 2, 1, &init, 1, NULL, 0},
         {"escape", 6, NULL, 0, XR_XIR_STRING, blocks + 3, 1, escape, 3, &escape_operand, 1}};
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8, XR_XIR_STRING};
-    XrXirGeneric generics[] = {{NULL, 0, arguments, 3}, {&constraint, 1, NULL, 0}, {0}, {NULL,0,arguments+2,1}};
+    XrXirGeneric generics[] = {{NULL, 0, arguments, 3, NULL}, {&constraint, 1, NULL, 0, NULL}, {0}, {NULL,0,arguments+2,1, NULL}};
     XrXirSourceModule source = {"alpha", 5, NULL, 0, 2};
     XrXirFunctionIdentity identities[4] = {{0}}; identities[3].exported = 1;
     XrXirLiteral literal = {"generic",7};
@@ -83,7 +83,7 @@ static inline XrXirArtifact *nominal_forwarding_checked(void) {
     generics[1].arguments = &outer; generics[1].argument_count = 1;
     XrXirInstruction identity[] = {{XR_XIR_COPY,t,{0},{0},0, {0}}, {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0, {0}}};
     functions[4] = (XrXirFunction) {"identity",8,&t,1,t,&identity_block,1,identity,2,NULL,0};
-    generics[4] = (XrXirGeneric) {&constraint,1,NULL,0};
+    generics[4] = (XrXirGeneric) {&constraint,1,NULL,0, NULL};
     built.functions = functions; built.function_count = 5; built.generics = generics; built.declarations = &declarations;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(base);

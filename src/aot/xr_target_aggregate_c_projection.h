@@ -37,6 +37,13 @@ XR_FUNC bool xr_c_aggregate_projection(
     const XrTargetValueRepRecord *binding,
     XrCAggregateProjection *out);
 
+XR_FUNC bool xr_c_plain_ref_aggregate_argument_projection(const XrTargetPlan *target_plan,
+    const XrTargetCallArgumentRecord *argument, XrCAggregateProjection *out);
+
+/* Projects only an exact local pointer-free ref aggregate boundary. */
+XR_FUNC bool xr_c_plain_ref_aggregate_projection(const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, XrCAggregateProjection *out);
+
 /* Projects the pointer-free leaf-program aggregate from its typed program and
  * TargetPlan rows.  No source spelling or Xi layout participates. */
 XR_FUNC bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan,

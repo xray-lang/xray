@@ -11,6 +11,8 @@
 #ifndef XR_SEMANTIC_NATIVE_LEAF_SHAPE_H
 #define XR_SEMANTIC_NATIVE_LEAF_SHAPE_H
 
+#include "xr_semantic_callable_key_shape.h"
+
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../module/xmodule_identity.h"
@@ -336,37 +338,32 @@ static inline bool xr_semantic_native_direct_function_type_is_exact(
         function_type->child_count > child_count - function_type->child_begin ||
         !function_type->canonical_key || !children)
         return false;
-    const char *cursor = strstr(function_type->canonical_key, ":fn:");
-    unsigned parameters = 0, minimum = 0, variadic = 1, c_abi = 1, throw_effect = UINT_MAX;
-    int consumed = 0;
-    if (!cursor ||
-        sscanf(cursor, ":fn:%u:%u:%u:%u:%u%n", &parameters, &minimum, &variadic, &c_abi,
-               &throw_effect, &consumed) != 5 ||
-        parameters != arity || minimum != arity || variadic != 0 || c_abi != 0 ||
-        (throw_effect != XR_FN_EFFECT_MAY_THROW && throw_effect != XR_FN_EFFECT_NO_THROW))
+    XrSemanticCallableKeyShape shape = {0};
+    if (!xr_semantic_callable_key_parse(function_type->canonical_key, &shape) ||
+        shape.parameter_count != arity || shape.minimum_parameters != arity ||
+        shape.is_variadic != 0 || shape.is_c_abi != 0 ||
+        shape.receiver_mode != XR_PARAM_READ || shape.generic_parameter_count != 0 ||
+        shape.view_origin_count != 0 || shape.view_origin_was_elided != 0 ||
+        (shape.throw_effect != XR_FN_EFFECT_MAY_THROW && shape.throw_effect != XR_FN_EFFECT_NO_THROW))
         return false;
-    cursor += consumed;
+    XrSemanticCallableKeyCursor cursor = {shape.parameter_begin,
+        function_type->canonical_key + strlen(function_type->canonical_key)};
     for (uint32_t ordinal = 0; ordinal < arity; ordinal++) {
         uint8_t mode = arguments[ordinal].parameter_mode;
-        const char *prefix = mode == XR_PARAM_REF ? ";p1:" : ";p0:";
-        const size_t prefix_length = 4;
+        uint8_t declared_mode = 0;
+        XrSemanticCallableKeySlice component = {0};
         uint32_t child = children[function_type->child_begin + ordinal];
         const XrSemanticTypeRecord *child_type = xr_semantic_plan_type(plan, child);
-        size_t length =
-            child_type && child_type->canonical_key ? strlen(child_type->canonical_key) : 0;
-        if (!length || strncmp(cursor, prefix, prefix_length) != 0 ||
-            strncmp(cursor + prefix_length, child_type->canonical_key, length) != 0 ||
+        if (!child_type || !xr_semantic_callable_key_parameter(&cursor, &declared_mode, &component) ||
+            declared_mode != mode ||
+            !xr_semantic_callable_key_slice_equal(component, child_type->canonical_key) ||
             arguments[ordinal].type != child || (mode != XR_PARAM_READ && mode != XR_PARAM_REF))
             return false;
-        cursor += prefix_length + length;
     }
     const uint32_t result = children[function_type->child_begin + arity];
     const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(plan, result);
-    size_t result_length =
-        result_type && result_type->canonical_key ? strlen(result_type->canonical_key) : 0;
-    return result_length && operation->result_type == result && strncmp(cursor, ";ret:", 5) == 0 &&
-           strncmp(cursor + 5, result_type->canonical_key, result_length) == 0 &&
-           strcmp(cursor + 5 + result_length, ";view-count:0") == 0;
+    return result_type && operation->result_type == result &&
+           xr_semantic_callable_key_slice_equal(shape.result, result_type->canonical_key);
 }
 
 static inline bool xr_semantic_native_direct_signature_is_exact(

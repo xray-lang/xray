@@ -233,6 +233,10 @@ static void encode_functions(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, record->is_module_initializer);
         xr_xsm_put_u8(writer, record->carries_coroutine_ops);
         xr_xsm_put_u8(writer, record->is_external_entry);
+        xr_xsm_put_u32(writer, record->callable_type);
+        xr_xsm_put_u32(writer, record->unknown_semantic_effects);
+        xr_xsm_put_u32(writer, record->effect_unknown_reasons);
+        xr_xsm_put_u8(writer, record->effect_complete);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         const XrSemanticParameterRecord *record = &plan->parameters[i];

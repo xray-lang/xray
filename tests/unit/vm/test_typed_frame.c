@@ -191,8 +191,16 @@ static XrSemanticPlan *build_executable_semantic_plan(void) {
     return semantic;
 }
 
-static XrSemanticPlan *build_lifecycle_semantic_plan(void) {
-    XiFunc *function = xi_func_new("typed_frame_lifecycle_probe", &stub_int);
+static XrSemanticPlan *build_lifecycle_semantic_plan(unsigned variant) {
+    char name[96];
+    const char *function_name = "typed_frame_lifecycle_probe";
+    if (variant != 0) {
+        int length = snprintf(name, sizeof(name),
+                              "typed_frame_lifecycle_probe_%u", variant);
+        REQUIRE(length > 0 && (size_t) length < sizeof(name));
+        function_name = name;
+    }
+    XiFunc *function = xi_func_new(function_name, &stub_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
@@ -282,7 +290,7 @@ static TypedFrameFixture make_executable_fixture(void) {
 }
 
 static TypedFrameFixture make_lifecycle_fixture(void) {
-    return make_fixture_from_semantic(build_lifecycle_semantic_plan());
+    return make_fixture_from_semantic(build_lifecycle_semantic_plan(0));
 }
 
 static TypedFrameFixture make_native_fixture(void) {
@@ -291,7 +299,7 @@ static TypedFrameFixture make_native_fixture(void) {
 
 static TypedFrameFixture make_native_lifecycle_fixture(void) {
     return make_native_fixture_from_semantic(
-        build_lifecycle_semantic_plan());
+        build_lifecycle_semantic_plan(0));
 }
 
 static void append_unrelated_lifecycle_partitions(TypedFrameFixture *fixture,
@@ -360,6 +368,39 @@ static void dispose_fixture(TypedFrameFixture *fixture) {
     xr_target_profile_free(fixture->profile);
     xr_semantic_plan_free(fixture->semantic);
     memset(fixture, 0, sizeof(*fixture));
+}
+
+/* Stable IDs order slots independently of source order. Select a verified
+ * fixture with scalar guards on both sides without rewriting its layout. */
+static TypedFrameFixture make_guarded_lifecycle_fixture(void) {
+    for (unsigned variant = 0; variant < 16; variant++) {
+        TypedFrameFixture fixture = make_fixture_from_semantic(
+            build_lifecycle_semantic_plan(variant));
+        REQUIRE(fixture.plan->functions_count == 1 &&
+                fixture.plan->root_slots_count == 1);
+        const XrTargetFunctionRecord *function = &fixture.plan->functions[0];
+        uint32_t owned_slot = fixture.plan->root_slots[0];
+        bool before = false;
+        bool after = false;
+        for (uint32_t slot = function->slot_begin;
+             slot < function->slot_begin + function->slot_count; slot++) {
+            const XrTargetSlotRecord *record = &fixture.plan->slots[slot];
+            const XrTargetMachineRepRecord *rep =
+                &fixture.plan->machine_reps[record->memory_rep];
+            if (rep->kind < XR_MACHINE_REP_I1 ||
+                rep->kind > XR_MACHINE_REP_RUNE ||
+                rep->root_kind != XR_TARGET_ROOT_NONE ||
+                rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+                continue;
+            before |= slot < owned_slot;
+            after |= slot > owned_slot;
+        }
+        if (before && after)
+            return fixture;
+        dispose_fixture(&fixture);
+    }
+    REQUIRE(false);
+    return (TypedFrameFixture) {0};
 }
 
 /* The production builder does not yet emit every representation kind the
@@ -1002,7 +1043,7 @@ static XrTypedFrameStatus execute_lifecycle_cleanup(
 }
 
 static void test_owned_string_coroutine_lifecycle(void) {
-    TypedFrameFixture fixture = make_lifecycle_fixture();
+    TypedFrameFixture fixture = make_guarded_lifecycle_fixture();
     REQUIRE(fixture.plan->root_maps_count == 1 &&
             fixture.plan->root_slots_count == 1 &&
             fixture.plan->cleanups_count == 2 &&

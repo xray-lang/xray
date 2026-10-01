@@ -2284,6 +2284,10 @@ typedef struct XiFunc {
      * root Xi arena and analyzer/AST back-pointers have been severed. */
     bool semantic_snapshot_detached;
 
+    /* Full typed callable declaration. Capturing a generic owner does not
+     * grant this declaration type parameters. Joined to the owned snapshot. */
+    struct XrType *source_callable_type;
+
     /* Module back-pointer for program-level init functions. */
     struct XiModule *module;
 

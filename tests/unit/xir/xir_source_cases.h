@@ -439,7 +439,7 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
             XrXirCallResult failure = {0};
             CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_CANCELLED &&
                 failure.status == XR_XIR_CALL_CANCELLED && failure.value.type == XR_XIR_UNIT &&
-                xr_xir_fault_empty(failure.fault));
+                xr_xir_fault_empty(failure.panic.detail));
             CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_CANCELLED);
         } else CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
@@ -612,8 +612,8 @@ static void source_search_bounds(XrXirInstance *instance, uint32_t function) {
         CHECK(result.status == (invalid ? XR_XIR_CALL_BOUNDS : XR_XIR_CALL_RETURNED));
         if (invalid) {
             CHECK(result.value.type == XR_XIR_UNIT && result.value.payload == 0);
-            CHECK(result.fault.code == 430 && !result.fault.reserved && result.fault.index == starts[i] && result.fault.length == 4);
-        } else CHECK(result.value.type == XR_XIR_I64 && result.value.payload == (starts[i]==4 ? -1 : 3) && xr_xir_fault_empty(result.fault));
+            CHECK(result.panic.detail.code == 430 && !result.panic.detail.reserved && result.panic.detail.index == starts[i] && result.panic.detail.length == 4);
+        } else CHECK(result.value.type == XR_XIR_I64 && result.value.payload == (starts[i]==4 ? -1 : 3) && xr_xir_fault_empty(result.panic.detail));
     }
 }
 /* calculate(33) catches a nested enum pattern thrown by another function; in
@@ -639,9 +639,9 @@ static void source_match_faults(XrXirInstance *instance, uint32_t function) {
         if (input) CHECK(result.outcome.status==XR_XIR_CALL_RETURNED && result.outcome.value.type==XR_XIR_I64 && result.outcome.value.payload==kind+44);
         else {
             CHECK(result.outcome.status==XR_XIR_CALL_MATCH_FAILURE && result.outcome.value.type==XR_XIR_UNIT && !result.outcome.value.payload);
-            CHECK(xr_xir_fault_match_valid(result.outcome.fault));
+            CHECK(xr_xir_fault_match_valid(result.outcome.panic.detail));
             XrXirInstanceResult repeated=xr_xir_instance_poll(instance);
-            CHECK(repeated.outcome.status==XR_XIR_CALL_MATCH_FAILURE && xr_xir_fault_match_valid(repeated.outcome.fault));
+            CHECK(repeated.outcome.status==XR_XIR_CALL_MATCH_FAILURE && xr_xir_fault_match_valid(repeated.outcome.panic.detail));
         }
     }
 }

@@ -455,6 +455,29 @@ XR_FUNC XiTopBinding xi_lower_find_top_binding(XiLower *l, uint32_t symbol_id, c
     return b;
 }
 
+/* A visible name can be redeclared with another type. Storage uses the
+ * checked symbol owner so compiled callers cannot be retargeted by spelling. */
+static const char *xi_lower_repl_binding_key(XiLower *lower, XiTopBinding binding) {
+    XiLower *owner = lower;
+    while (owner && !owner->is_program)
+        owner = owner->parent;
+    if (!owner)
+        return NULL;
+    uint32_t symbol_id = 0;
+    for (int i = 0; i < owner->var_count; ++i) {
+        if (owner->shared_map[i] == binding.slot && owner->vars[i].name &&
+            strcmp(owner->vars[i].name, binding.name) == 0) {
+            if (symbol_id && symbol_id != owner->vars[i].symbol_id)
+                return NULL;
+            symbol_id = owner->vars[i].symbol_id;
+        }
+    }
+    char buffer[64];
+    return xr_repl_binding_key(symbol_id, buffer, sizeof(buffer))
+               ? arena_strdup(lower->func, buffer)
+               : NULL;
+}
+
 XR_FUNC XiValue *xi_lower_emit_top_load(XiLower *l, XiTopBinding binding, struct XrType *type) {
     XR_DCHECK(binding.slot >= 0, "xi_lower_emit_top_load: binding has no slot");
     XR_DCHECK(binding.name != NULL, "xi_lower_emit_top_load: binding has no name");
@@ -465,7 +488,7 @@ XR_FUNC XiValue *xi_lower_emit_top_load(XiLower *l, XiTopBinding binding, struct
     if (l->repl_mode) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, type, 0);
         if (v)
-            v->aux = (void *) arena_strdup(l->func, binding.name);
+            v->aux = (void *) xi_lower_repl_binding_key(l, binding);
         return v;
     }
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, type, 0);
@@ -483,7 +506,7 @@ XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiVal
         store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
         if (store) {
             store->args[0] = val;
-            store->aux = (void *) arena_strdup(l->func, binding.name);
+            store->aux = (void *) xi_lower_repl_binding_key(l, binding);
             store->flags |= XI_FLAG_SIDE_EFFECT;
         }
     } else {
@@ -1846,6 +1869,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             l.func->return_storage_known = true;
         }
     }
+    /* Retain the analyzed declaration contract, never recover it from syntax.
+     * Anonymous callable facts are published by the verified typed body. */
+    l.func->source_callable_type = function_links && function_links->type &&
+        function_links->type->kind == XR_KIND_FUNCTION ? function_links->type :
+        xa_analyzer_get_node_type(analyzer, func_node);
+    if (l.func->source_callable_type &&
+        l.func->source_callable_type->kind != XR_KIND_FUNCTION)
+        l.func->source_callable_type = NULL;
     xi_lower_bind_function_body_id(&l,
                                    xi_lower_function_evidence_source_node_id(&l, func_node, fdecl),
                                    func_node->line > 0 ? (uint32_t) func_node->line : 0);

@@ -16,6 +16,15 @@ target_link_libraries(xray_xir_vm PUBLIC xray_xir xray_xir_scalar)
 add_library(xray_xir_cgen STATIC xxir_emit_c.c ../aot/xi_cgen_verify_output.c)
 target_link_libraries(xray_xir_cgen PUBLIC xray_xir)
 add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_type_inference.c xxir_library_catalog.c)
+set(XIR_CORE_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_core_declarations_source.inc.c)
+add_custom_command(OUTPUT ${XIR_CORE_SOURCE}
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/embed_xir_core_source.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/xcore_declarations.xr --output ${XIR_CORE_SOURCE}
+    DEPENDS ${PROJECT_SOURCE_DIR}/scripts/embed_xir_core_source.py ${CMAKE_CURRENT_SOURCE_DIR}/xcore_declarations.xr
+    VERBATIM)
+add_custom_target(gen-xir-core-source DEPENDS ${XIR_CORE_SOURCE})
+add_dependencies(xray_xir_source gen-xir-core-source)
+target_include_directories(xray_xir_source PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(xray_xir_source PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(xray_xir_source PUBLIC xray_xir xray_xir_scalar)
 foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_vm xray_xir_cgen xray_xir_source)

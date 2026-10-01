@@ -536,33 +536,8 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
 
-    /* Primitive conversion casts (unsafe `as T` only).
-     * Safe casts (`as T?`) must go through the typeof check below
-     * so that type mismatch returns null instead of converting. */
-    if (!is_safe) {
-        if (tid == 8 /* XR_TID_I64 */) {
-            emit_inst(ctx, CREATE_ABC(OP_TOINT, dst, src, 0));
-            return;
-        }
-        if (tid == 11 /* XR_TID_F64 */) {
-            emit_inst(ctx, CREATE_ABC(OP_TOFLOAT, dst, src, 0));
-            return;
-        }
-        if (tid == 12 /* XR_TID_STRING */) {
-            emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, src,
-                                      xi_emit_tostring_hint_for_type(v->args[0]->type)));
-            return;
-        }
-        if (tid == 1 /* XR_TID_BOOL */) {
-            emit_inst(ctx, CREATE_ABC(OP_TOBOOL, dst, src, 0));
-            return;
-        }
-        if (tid == XR_TID_RUNE) {
-            emit_inst(ctx, CREATE_ABC(OP_TORUNE, dst, src, 0));
-            return;
-        }
-    }
-
+    /* Dynamic casts assert the runtime type. Numeric conversions are
+     * emitted separately from their typed conversion witness. */
     if (dst != src)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 

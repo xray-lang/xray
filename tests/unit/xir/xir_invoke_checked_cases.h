@@ -25,8 +25,8 @@ static void invoke_generic_cases(void) {
             {"guard",5,&parameter,1,parameter,blocks,3,ops,5,&argument,1},
             {"leaf",4,&t,1,t,&leaf,1,&ret,1,NULL,0}};
         XrXirGeneric generics[] = {
-            {mode ? &caller_constraint : NULL,mode ? 1u : 0u,&parameter,1},
-            {&callee_constraint,1,NULL,0}};
+            {mode ? &caller_constraint : NULL,mode ? 1u : 0u,&parameter,1, NULL},
+            {&callee_constraint,1,NULL,0, NULL}};
         XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM, NULL};
         XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
         XrXirStatus status = xr_xir_check(&module,NULL,&checked,NULL);

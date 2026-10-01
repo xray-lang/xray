@@ -22,8 +22,6 @@
 #include "../base/xlog.h"
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm.h"
-#include "../frontend/parser/xast.h"
-#include "../frontend/parser/xparse.h"
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../runtime/xerror.h"
@@ -47,21 +45,23 @@
 // xr_vm_execute_module declared in vm/xvm.h (included via xisolate_internal.h → xvm_state.h → ...)
 
 void xr_module_set_compiler_hooks(XrVMRuntime *isolate, XrCompilerSession *compiler_session,
-                                  XrModuleParseHook parse_fn, XrModuleCompileAstHook compile_ast_fn,
-                                  XrModuleCompileSourceHook compile_src_fn,
-                                  XrModuleAstFreeHook ast_free_fn) {
+                                  XrModuleCompileSourceHook compile_src_fn) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    /* Module system may legitimately not be initialised on isolates that
-     * do not import code (e.g. transient analyzer-only isolates), so this
-     * is a graceful no-op rather than an assertion. */
     if (!registry)
         return;
     registry->compiler_session = compiler_session;
-    registry->fn_parse = parse_fn;
-    registry->fn_compile_ast = compile_ast_fn;
     registry->fn_compile_src = compile_src_fn;
-    registry->fn_ast_free = ast_free_fn;
 }
+
+static bool module_source_context_release(XrModuleSourceCompilation *compilation, bool success) {
+    if (!compilation->context)
+        return success;
+    bool finished = compilation->dispose_context &&
+        compilation->dispose_context(compilation->context, success);
+    memset(compilation, 0, sizeof(*compilation));
+    return success && finished;
+}
+
 /* ========== Helper Functions ========== */
 
 /*
@@ -219,7 +219,7 @@ XrModule *xr_module_create_native(XrVMRuntime *isolate, const char *name) {
     module->native_handle = NULL;
     module->native_handle_destroy = NULL;
     module->init_fn = NULL;
-    module->compiled_code = NULL;
+    module->initializer = NULL;
 
     return module;
 }
@@ -245,7 +245,7 @@ XrModule *xr_module_create_script(XrVMRuntime *isolate, const char *name, const 
     module->native_handle = NULL;
     module->native_handle_destroy = NULL;
     module->init_fn = NULL;
-    module->compiled_code = NULL;
+    module->initializer = NULL;
 
     return module;
 }
@@ -417,9 +417,9 @@ void xr_module_free(XrModule *module) {
         xr_free(module->export_flags);
     if (module->symbol_to_index)
         xr_free(module->symbol_to_index);
-    if (module->compiled_code) {
-        xr_free(module->compiled_code);
-        module->compiled_code = NULL;
+    if (module->initializer) {
+        xr_instruction_unit_free(module->initializer);
+        module->initializer = NULL;
     }
 }
 
@@ -884,6 +884,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     xr_isolate_set_current_module(isolate, module);
 
     XrProto *code = NULL;
+    XrModuleSourceCompilation compilation = {0};
     char path[XR_PATH_MAX];
     const char *source = NULL;
     char *owned_source = NULL;
@@ -1007,15 +1008,20 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
         XrModuleIdentityAuthority authority = {
             .kind = XR_MODULE_IDENTITY_STDLIB,
             .namespace_id = module_name,
+            .physical_root = owned_source ? registry->stdlib_path : NULL,
         };
-        code = registry->fn_compile_src(registry->compiler_session, source, path, &authority);
-        if (!code) {
+        if (!registry->fn_compile_src(registry->compiler_session, source, path, &authority,
+                                       &compilation)) {
             xr_isolate_set_current_module(isolate, prev_module);
             xr_free(owned_source);
             xr_log_warning("module", "failed to compile extension '%s'", path);
             return false;
         }
     }
+
+    if (!code)
+        code = compilation.initializer;
+    module->initializer = code;
 
     // Execute extension script
     XR_DBG_MODULE("before execute: current_module=%s",
@@ -1024,6 +1030,8 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
                       : "null");
 
     int result = xr_vm_execute_module(isolate, code);
+    if (!module_source_context_release(&compilation, result == 0))
+        result = -1;
 
     XR_DBG_MODULE("after execute: result=%d, current_module=%s", result,
                   xr_isolate_get_current_module(isolate)
@@ -1121,16 +1129,16 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
     // 3. Load xray script extension layer (optional)
     if (!load_script_extension(isolate, module, module_name)) {
         xr_log_warning("module", "failed to load extension for '%s'", module_name);
-        xr_hashmap_delete(registry->loaded_modules, module_name);
+        /* The registry keeps failed initialization sticky and owns its code
+         * until teardown; another import cannot repeat partial side effects. */
         xr_module_fail(module);
-        xr_module_free(module);
         return NULL;
     }
 
     if (!xr_module_publish(module)) {
-        xr_hashmap_delete(registry->loaded_modules, module_name);
+        /* The registry keeps failed initialization sticky and owns its code
+         * until teardown; another import cannot repeat partial side effects. */
         xr_module_fail(module);
-        xr_module_free(module);
         return NULL;
     }
 
@@ -1150,16 +1158,13 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
 ** Note: module parameter is an already created module object (for circular dependency detection)
 */
 static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, const char *path) {
-    if (!isolate || !module || !path) {
+    if (!isolate || !module || !path)
         return NULL;
-    }
-
-    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(isolate);
     const XrBytecodeModule *embedded = find_embedded_module(registry, path);
-    char *source = NULL;
-    AstNode *ast = NULL;
+    XrModuleSourceCompilation compilation = {0};
     XrProto *code = NULL;
-
+    char *source = NULL;
     if (embedded) {
         XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
         code = xr_bootstrap_container_read(isolate, embedded->bytecode, embedded->bytecode_size,
@@ -1174,88 +1179,38 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
         if (!source)
             return NULL;
     }
-
-    // Set current module context for export collection and relative imports.
-    XrModule *prev_module = xr_isolate_get_current_module(isolate);
+    XrModule *previous = xr_isolate_get_current_module(isolate);
     xr_isolate_set_current_module(isolate, module);
-
-    // Normalize path, remove redundant "./"
     char *clean_path = normalize_path(path);
-
-    if (!code) {
-        if (!registry || !registry->compiler_session || !registry->fn_parse ||
-            !registry->fn_compile_ast) {
-            xr_isolate_set_current_module(isolate, prev_module);
-            xr_free(source);
-            xr_free(clean_path);
-            xr_log_warning("module", "compiler not available (lite runtime)");
-            return NULL;
-        }
-        ast = registry->fn_parse(registry->compiler_session, source, clean_path);
-        if (!ast) {
-            xr_isolate_set_current_module(isolate, prev_module);
-            xr_free(source);
-            xr_free(clean_path);
-            return NULL;
-        }
-
-        const XrModuleIdentityAuthority *authority =
-            module_authority_for_source(registry, clean_path);
-        if (!authority) {
-            if (registry->fn_ast_free)
-                registry->fn_ast_free(ast);
-            xr_isolate_set_current_module(isolate, prev_module);
-            xr_free(source);
-            xr_free(clean_path);
-            xr_log_warning("module", "typed module authority unavailable for '%s'", path);
-            return NULL;
-        }
-        code = registry->fn_compile_ast(registry->compiler_session, ast, clean_path, authority);
-        if (!code) {
-            if (registry->fn_ast_free)
-                registry->fn_ast_free(ast);
-            xr_isolate_set_current_module(isolate, prev_module);
-            xr_free(source);
-            xr_free(clean_path);
-            return NULL;
-        }
-    }
-
-    /* The module owns its initializer proto from this point on, including the
-     * FAILED state. Memoizing a failed initialization must not orphan the
-     * compiled code while preserving the one-shot execution guarantee. */
-    module->compiled_code = code;
-
-    // 6. Execute module code (use dedicated module execution function, don't reset VM state)
-    void *saved_module_registry = xr_isolate_get_module_registry(isolate);
-
-    int result = xr_vm_execute_module(isolate, code);
-
-    // Restore module_registry that might have been corrupted during VM execution
-    if (!xr_isolate_get_module_registry(isolate) && saved_module_registry) {
-        xr_isolate_set_module_registry(isolate, saved_module_registry);
-    }
-
-    // Execution error should cause module loading to fail
-    if (result != 0) {
-        if (registry->fn_ast_free)
-            registry->fn_ast_free(ast);
+    if (!clean_path) {
         xr_free(source);
-        xr_free(clean_path);
-        xr_isolate_set_current_module(isolate, prev_module);
+        xr_instruction_unit_free(code);
+        xr_isolate_set_current_module(isolate, previous);
         return NULL;
     }
-
-    // 7. Cleanup - code stays module-owned because exported closures reference it.
-    if (ast && registry->fn_ast_free)
-        registry->fn_ast_free(ast);
+    if (!code) {
+        const XrModuleIdentityAuthority *authority =
+            module_authority_for_source(registry, clean_path);
+        if (!registry || !registry->compiler_session || !registry->fn_compile_src ||
+            !authority || !registry->fn_compile_src(registry->compiler_session, source,
+                                                     clean_path, authority, &compilation)) {
+            xr_free(source);
+            xr_free(clean_path);
+            xr_isolate_set_current_module(isolate, previous);
+            return NULL;
+        }
+        code = compilation.initializer;
+    }
+    /* Failed initialization owns its code too, so memoization does not orphan
+     * the initializer or invalidate any partially constructed heap objects. */
+    module->initializer = code;
+    int result = xr_vm_execute_module(isolate, code);
+    if (!module_source_context_release(&compilation, result == 0))
+        result = -1;
     xr_free(source);
     xr_free(clean_path);
-
-    // 8. Restore context
-    xr_isolate_set_current_module(isolate, prev_module);
-
-    return module;
+    xr_isolate_set_current_module(isolate, previous);
+    return result == 0 ? module : NULL;
 }
 
 /* ========== Main Interface Implementation ========== */

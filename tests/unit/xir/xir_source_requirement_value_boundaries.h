@@ -39,7 +39,9 @@ static void source_requirement_value_boundaries(XrXirSourceRequest *request) {
         defaults+=function->name_length==17 && !memcmp(function->name,"$argument_default",17);
     }
     CHECK(helpers==3 && closures==2 && cleanups==1 && defaults==1 && required>helpers);
-    CHECK(module->declarations->entry_function==required-1);
+    CHECK(module->declarations->entry_function==required-helpers-1);
+    const XrXirFunction *entry=&module->functions[module->declarations->entry_function];
+    CHECK(entry->name_length==6 && !memcmp(entry->name,"$entry",6) && !entry->parameter_count && entry->result==XR_XIR_I64);
     xr_xir_source_result_free(&baseline);
     for (uint32_t exact=0;exact<2;++exact) {
         XrXirBudget budget=xr_xir_default_budget(); budget.functions=required-(exact ? 0u : 1u);

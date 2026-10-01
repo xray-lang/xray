@@ -90,6 +90,11 @@ XR_FUNC XrModuleGraph *xr_module_graph_new(XrCompilerSession *compiler_session,
     }
     g->spec_capacity = GRAPH_INITIAL_CAP;
     g->id_index = xr_hashmap_new();
+    if (!g->id_index) {
+        xr_free(g->specs);
+        xr_free(g);
+        return NULL;
+    }
     g->resolver = resolver;
     g->compiler_session = compiler_session;
     g->X = xr_compiler_session_vm_host(compiler_session);
@@ -183,13 +188,13 @@ static int graph_add_spec(XrModuleGraph *g, const char *canonical, const char *l
 }
 
 /* Add a dependency edge from spec at `from_idx` to spec at `to_idx`. */
-static void spec_add_dep(XrModuleSpec *s, int to_idx) {
+static bool spec_add_dep(XrModuleSpec *s, int to_idx) {
     XR_DCHECK(s != NULL, "spec_add_dep: NULL spec");
 
     /* Deduplicate */
     for (int i = 0; i < s->dep_count; i++) {
         if (s->dep_indices[i] == to_idx)
-            return;
+            return true;
     }
 
     if (s->dep_count >= s->dep_capacity) {
@@ -198,11 +203,12 @@ static void spec_add_dep(XrModuleSpec *s, int to_idx) {
             new_cap = 4;
         int *tmp = xr_realloc(s->dep_indices, (size_t) new_cap * sizeof(int));
         if (!tmp)
-            return;
+            return false;
         s->dep_indices = tmp;
         s->dep_capacity = new_cap;
     }
     s->dep_indices[s->dep_count++] = to_idx;
+    return true;
 }
 
 static bool graph_stdlib_embedded_path(const char *module_name, char *buf, size_t buf_size) {
@@ -296,11 +302,16 @@ static char *make_unresolved_message(const char *specifier) {
 }
 
 static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char *specifier) {
-    if (!g || spec_idx < 0 || spec_idx >= g->spec_count || !specifier)
+    if (!g)
         return;
+    if (spec_idx < 0 || spec_idx >= g->spec_count || !specifier) {
+        g->resolution_failed = true;
+        return;
+    }
 
     XrModuleSpec *from_spec = &g->specs[spec_idx];
     if (!xr_module_identity_authority_valid(&from_spec->authority)) {
+        g->resolution_failed = true;
         if (!g->unresolved_error)
             g->unresolved_error = xr_strdup("importer module identity authority is invalid");
         return;
@@ -310,6 +321,7 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     int rc = xr_module_resolver_resolve(g->resolver, specifier, from_spec->source_path,
                                         &from_spec->authority, &mid, &err);
     if (rc != 0) {
+        g->resolution_failed = true;
         /* A registered native module resolves with a NULL source_path rather
          * than failing, so reaching here means the specifier names nothing. */
         if (!g->unresolved_error)
@@ -327,6 +339,11 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
         if (graph_stdlib_embedded_path(mid.authority.namespace_id, embedded_path,
                                        sizeof(embedded_path))) {
             mid.source_path = xr_strdup(embedded_path);
+            if (!mid.source_path) {
+                g->resolution_failed = true;
+                xr_module_id_cleanup(&mid);
+                return;
+            }
         } else {
             xr_module_id_cleanup(&mid);
             return;
@@ -335,6 +352,7 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
 
     /* Find or create target spec in the graph. */
     if (!xr_module_identity_authority_valid(&mid.authority)) {
+        g->resolution_failed = true;
         if (!g->unresolved_error)
             g->unresolved_error = xr_strdup("resolved module identity authority is invalid");
         xr_module_id_cleanup(&mid);
@@ -354,12 +372,14 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     if (target_idx >= 0 && !newly_discovered &&
         (g->specs[target_idx].representation != mid.representation ||
          (mid.representation == XR_MODULE_CHECKED_LIBRARY && g->specs[target_idx].resource != mid.resource))) {
+        g->resolution_failed = true;
         if (!g->unresolved_error) g->unresolved_error = xr_strdup("module identity representation conflicts with an existing graph node");
         xr_module_id_cleanup(&mid); return;
     }
     if (target_idx >= 0 && mid.representation == XR_MODULE_CHECKED_LIBRARY) {
         if (!g->admit_checked_resources || !mid.resource ||
             (g->specs[target_idx].resource && g->specs[target_idx].resource != mid.resource)) {
+            g->resolution_failed = true;
             if (!g->unresolved_error) g->unresolved_error = xr_strdup("Checked resource is not admitted by this graph consumer");
             xr_module_id_cleanup(&mid); return;
         }
@@ -368,10 +388,15 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     }
     xr_module_id_cleanup(&mid);
 
+    if (target_idx < 0) {
+        g->resolution_failed = true;
+        return;
+    }
     if (target_idx >= 0) {
         /* Re-fetch from_spec pointer since realloc may have moved it. */
         from_spec = &g->specs[spec_idx];
-        spec_add_dep(from_spec, target_idx);
+        if (!spec_add_dep(from_spec, target_idx))
+            g->resolution_failed = true;
     }
 }
 
@@ -470,8 +495,8 @@ static int graph_expand(XrModuleGraph *g, const GraphSourceRoot *root, char **ou
         }
         /* Skip stdlib native (no source to parse).  The in-memory entry is
          * the only source-less spec that still has source text. */
-        bool is_memory_entry = (qi == entry_idx && root->source != NULL);
-        if (!spec->source_path && !is_memory_entry)
+        bool is_supplied_entry = (qi == entry_idx && root->source != NULL);
+        if (!spec->source_path && !is_supplied_entry)
             continue;
 
         /* Skip already processed */
@@ -481,7 +506,7 @@ static int graph_expand(XrModuleGraph *g, const GraphSourceRoot *root, char **ou
         /* Parse source */
         char *owned_source = NULL;
         const char *source = root->source;
-        if (spec->embedded_source) {
+        if (!is_supplied_entry && spec->embedded_source) {
             source = xr_get_embedded_stdlib(spec->authority.namespace_id);
             if (!source) {
                 xr_log_warning("module_graph", "embedded stdlib source missing: %s",
@@ -494,7 +519,7 @@ static int graph_expand(XrModuleGraph *g, const GraphSourceRoot *root, char **ou
                 }
                 return -1;
             }
-        } else if (!is_memory_entry) {
+        } else if (!is_supplied_entry) {
             XrFileBytes input = {0};
             XrFileReadStatus read_status = xr_file_read_under_root(spec->authority.physical_root,
                 spec->logical_path, SIZE_MAX - 1, &input);
@@ -534,7 +559,7 @@ static int graph_expand(XrModuleGraph *g, const GraphSourceRoot *root, char **ou
 
         /* Resolve imports and discover new modules */
         collect_and_resolve_imports(g, qi, ast);
-        if (g->unresolved_error) {
+        if (g->resolution_failed) {
             if (out_err) {
                 *out_err = g->unresolved_error;
                 g->unresolved_error = NULL;
@@ -630,6 +655,40 @@ XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
     return rc;
 }
 
+int xr_module_graph_build_logical_source(XrModuleGraph *g,
+    const XrModuleIdentityAuthority *authority, const char *logical_path,
+    const char *source_path, const char *source, char **out_err) {
+    if (out_err)
+        *out_err = NULL;
+    char *identity = NULL, *physical_identity = NULL, *physical_logical = NULL;
+    if (!g || g->spec_count || !source ||
+        !xr_module_identity_from_logical(authority, logical_path, &identity)) {
+        if (out_err) *out_err = xr_strdup("source entry requires an empty graph and valid authority");
+        return -1;
+    }
+    bool valid = true;
+    if (authority->kind == XR_MODULE_IDENTITY_MEMORY)
+        valid = source_path == NULL;
+    else if (authority->physical_root)
+        valid = source_path && xr_module_identity_from_source(authority, source_path,
+                    &physical_identity, &physical_logical) &&
+                strcmp(identity, physical_identity) == 0;
+    else
+        valid = authority->kind == XR_MODULE_IDENTITY_STDLIB;
+    if (!valid) {
+        if (out_err) *out_err = xr_strdup("source locator conflicts with its logical authority");
+        xr_free(identity); xr_free(physical_identity); xr_free(physical_logical);
+        return -1;
+    }
+    XrModuleKind kind = authority->kind == XR_MODULE_IDENTITY_MEMORY ? XR_MOD_MEMORY :
+        authority->kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB :
+        authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE;
+    GraphSourceRoot entry = {identity, logical_path, source_path, kind, authority, source};
+    int result = graph_expand(g, &entry, out_err);
+    xr_free(identity); xr_free(physical_identity); xr_free(physical_logical);
+    return result;
+}
+
 /* ========== Topological Sort (Tarjan SCC) ========== */
 
 typedef struct {
@@ -677,18 +736,7 @@ static void graph_tarjan_strongconnect(GraphTarjanCtx *tc, int v) {
     if (vn->lowlink == vn->index) {
         int scc_id = tc->next_scc++;
 
-        /* Grow scc_sizes if needed */
-        if (scc_id >= tc->scc_cap) {
-            int new_cap = tc->scc_cap * 2;
-            if (new_cap < 16)
-                new_cap = 16;
-            int *tmp = xr_realloc(tc->scc_sizes, (size_t) new_cap * sizeof(int));
-            if (tmp) {
-                memset(tmp + tc->scc_cap, 0, (size_t) (new_cap - tc->scc_cap) * sizeof(int));
-                tc->scc_sizes = tmp;
-                tc->scc_cap = new_cap;
-            }
-        }
+        XR_DCHECK(scc_id < tc->scc_cap, "tarjan: SCC storage is bounded by node count");
 
         int scc_size = 0;
         int w;
@@ -820,9 +868,13 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g) {
 
     GraphTarjanNode *nodes = xr_calloc(n, sizeof(GraphTarjanNode));
     int *stack = xr_calloc(n, sizeof(int));
-    if (!nodes || !stack) {
+    int *scc_sizes = xr_calloc(n, sizeof(int));
+    int *order = xr_calloc(n, sizeof(int));
+    if (!nodes || !stack || !scc_sizes || !order) {
         xr_free(nodes);
         xr_free(stack);
+        xr_free(scc_sizes);
+        xr_free(order);
         return -1;
     }
 
@@ -839,8 +891,8 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g) {
         .stack_top = 0,
         .next_index = 0,
         .next_scc = 0,
-        .scc_sizes = NULL,
-        .scc_cap = 0,
+        .scc_sizes = scc_sizes,
+        .scc_cap = n,
     };
 
     for (int i = 0; i < n; i++) {
@@ -876,28 +928,22 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g) {
         g->cycle_desc = build_cycle_desc(g, tc.scc_sizes, tc.next_scc);
     }
 
-    /* Build topological order from SCC ids.
-     * Tarjan produces SCCs in reverse topological order. */
-    xr_free(g->topo_order);
-    g->topo_order = xr_calloc(n, sizeof(int));
-    g->topo_count = n;
-
-    if (g->topo_order) {
-        /* Tarjan emits SCCs in reverse topological order:
-         * SCC 0 is the last in dependency chain (leaf), higher IDs are earlier.
-         * For init order (leaves first), iterate SCC 0..next_scc-1. */
-        int pos = 0;
-        for (int scc = 0; scc < tc.next_scc && pos < n; scc++) {
-            for (int i = 0; i < n; i++) {
-                if (g->specs[i].scc_id == scc) {
-                    g->topo_order[pos] = i;
-                    g->specs[i].topo_index = pos;
-                    pos++;
-                }
+    /* Tarjan emits leaf SCCs first. Publish a complete order only after all
+     * required storage has been admitted; an OOM cannot erase cycle evidence. */
+    int pos = 0;
+    for (int scc = 0; scc < tc.next_scc && pos < n; scc++) {
+        for (int i = 0; i < n; i++) {
+            if (g->specs[i].scc_id == scc) {
+                order[pos] = i;
+                g->specs[i].topo_index = pos;
+                pos++;
             }
         }
-        g->topo_count = pos;
     }
+    XR_DCHECK(pos == n, "tarjan: every graph node must be ordered");
+    xr_free(g->topo_order);
+    g->topo_order = order;
+    g->topo_count = pos;
 
     xr_free(nodes);
     xr_free(stack);

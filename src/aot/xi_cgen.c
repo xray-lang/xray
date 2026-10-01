@@ -3461,9 +3461,27 @@ static const XrCEmissionPlan *cg_function_c_emission_plan(XiCgenCtx *ctx, const 
     return xaot_bundle_emission_plan_for_func(ctx->aot_bundle, function);
 }
 
+/* Named pointee identity is introduced and independently checked by the
+ * emission plan. This consumer accepts only that sealed row's canonical token,
+ * without deriving storage from a live Xi or analyzer type. */
+static bool cg_named_struct_pointer_spelling(const char *name) {
+    if (!name || strlen(name) != 33u || strncmp(name, "xrt_struct_abi_", 15u) != 0 ||
+        strcmp(name + 31u, " *") != 0)
+        return false;
+    for (uint32_t i = 15u; i < 31u; i++)
+        if (!((name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f')))
+            return false;
+    return true;
+}
+
 static bool cg_native_ref_argument_storage_is_exact(const XrCCallArgumentEmissionView *view) {
-    if (!view || !view->c_type || view->caller_memory_kind != view->caller_register_kind ||
-        view->callee_register_kind != view->caller_register_kind ||
+    if (!view || !view->c_type || view->caller_memory_kind != view->caller_register_kind)
+        return false;
+    if (view->caller_register_kind == XR_MACHINE_REP_AGGREGATE)
+        return view->callee_register_kind == XR_MACHINE_REP_RAW_PTR &&
+            view->callee_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+            cg_named_struct_pointer_spelling(view->c_type);
+    if (view->callee_register_kind != view->caller_register_kind ||
         view->callee_memory_kind != view->caller_register_kind)
         return false;
     return (view->caller_register_kind == XR_MACHINE_REP_I64 &&
@@ -3554,10 +3572,14 @@ static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
                view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
                view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
                (strcmp(view->c_type, "void *") == 0 || strcmp(view->c_type, "int64_t *") == 0 ||
-                strcmp(view->c_type, "xr_span_t *") == 0);
+                strcmp(view->c_type, "xr_span_t *") == 0 ||
+                cg_named_struct_pointer_spelling(view->c_type));
     return view->materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
            (strcmp(view->c_type, "const void *") == 0 || strcmp(view->c_type, "void *") == 0 ||
-            strcmp(view->c_type, "const void * *") == 0 || strcmp(view->c_type, "void * *") == 0);
+            strcmp(view->c_type, "const void * *") == 0 || strcmp(view->c_type, "void * *") == 0 ||
+            (view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+             view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+             cg_named_struct_pointer_spelling(view->c_type)));
 }
 
 /* Reconstruct the pointee carrier for a local Array ref place only from the
@@ -9084,6 +9106,13 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
 
     CgArrayElemInfo info;
     switch (op) {
+        case XI_PRINT: {
+            const XrPrintPlan *plan = xi_print_plan(user);
+            /* The unsigned renderer reads the native bits through the BOX
+             * operand; emitting the tagged adapter would leave dead storage. */
+            return plan && plan->arity == user->nargs && arg_index < user->nargs &&
+                   xi_print_operand_renders_unsigned(user->args[arg_index]);
+        }
         case XI_INDEX_GET:
             return arg_index == 1 && user->nargs >= 2 &&
                    cg_array_value_storage_info(ctx, f, user->args[0], &info, CG_ARRAY_STORAGE_READ);

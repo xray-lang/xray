@@ -101,6 +101,57 @@ TEST(graph_new_free) {
     xr_module_resolver_free(r);
 }
 
+TEST(graph_logical_source_checks_supplied_bytes_under_exact_file_authority) {
+    setup();
+    create_file("main.xr", "this disk content must not be parsed\n");
+    XrModuleResolverConfig config = {0};
+    XrModuleResolver *resolver = xr_module_resolver_new(&config);
+    XrModuleGraph *graph = xr_module_graph_new(g_session, resolver);
+    ASSERT_NOT_NULL(graph);
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_SCRIPT, .physical_root = g_tmpdir,
+    };
+    const char *supplied = "var supplied = 42\n";
+    char *error = NULL;
+    ASSERT_EQ_INT(xr_module_graph_build_logical_source(graph, &authority, "main.xr",
+                                                       abs_path("main.xr"), supplied, &error), 0);
+    ASSERT_NULL(error);
+    ASSERT_EQ_INT(graph->spec_count, 1);
+    ASSERT_NOT_NULL(graph->specs[graph->entry_index].ast);
+    XrFingerprint expected;
+    xr_module_source_fingerprint(supplied, &expected);
+    ASSERT_EQ_INT(memcmp(&graph->specs[graph->entry_index].source_content_fingerprint,
+                          &expected, sizeof(expected)), 0);
+    xr_module_graph_free(graph);
+    graph = xr_module_graph_new(g_session, resolver);
+    ASSERT_EQ_INT(xr_module_graph_build_logical_source(graph, &authority, "other.xr",
+                                                       abs_path("main.xr"), supplied, &error), -1);
+    ASSERT_NOT_NULL(error);
+    ASSERT_EQ_INT(graph->spec_count, 0);
+    xr_free(error);
+    xr_module_graph_free(graph);
+    xr_module_resolver_free(resolver);
+    teardown();
+}
+
+TEST(graph_memory_source_rejects_file_or_logical_authority) {
+    XrModuleResolverConfig config = {0};
+    XrModuleResolver *resolver = xr_module_resolver_new(&config);
+    XrModuleGraph *graph = xr_module_graph_new(g_session, resolver);
+    ASSERT_NOT_NULL(graph);
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY, .namespace_id = "logical-source-memory",
+    };
+    char *error = NULL;
+    ASSERT_EQ_INT(xr_module_graph_build_logical_source(graph, &authority, "wrong.xr", NULL,
+                                                       "var value = 42", &error), -1);
+    ASSERT_NOT_NULL(error);
+    ASSERT_EQ_INT(graph->spec_count, 0);
+    xr_free(error);
+    xr_module_graph_free(graph);
+    xr_module_resolver_free(resolver);
+}
+
 TEST(graph_single_file_no_imports) {
     setup();
     create_file("main.xr", "var x = 42\n");
@@ -473,6 +524,8 @@ RUN_TEST_SUITE("Lifecycle");
 RUN_TEST(graph_new_free);
 
 RUN_TEST_SUITE("Build - Basic");
+RUN_TEST(graph_logical_source_checks_supplied_bytes_under_exact_file_authority);
+RUN_TEST(graph_memory_source_rejects_file_or_logical_authority);
 RUN_TEST(graph_single_file_no_imports);
 RUN_TEST(graph_linear_deps);
 RUN_TEST(graph_diamond_deps);

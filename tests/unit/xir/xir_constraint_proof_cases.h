@@ -156,7 +156,7 @@ static void constraint_proof_hidden_nominal_bounds(void) {
         XrXirConstraint constraints[2] = {{0},{0}};
         if (valid) constraints[0] = f.bound;
         constraints[1].interfaces = &f.parent; constraints[1].interface_count = 1;
-        XrXirGeneric generic = {constraints,2,NULL,0};
+        XrXirGeneric generic = {constraints,2,NULL,0, NULL};
         XrXirFunction function = {0};
         XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&f.types,NULL, XR_XIR_PROGRAM, NULL};
         XrXirBudget budget = xr_xir_default_budget();
@@ -228,7 +228,7 @@ static void constraint_proof_malformed(void) {
     constraint_proof_fixture(&f); f.context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0,0};
     CHECK(constraint_proof_status(&f)==XR_XIR_BAD_TYPE);
     constraint_proof_fixture(&f);
-    XrXirConstraint empty = {0}; XrXirGeneric generic = {&empty,1,NULL,0};
+    XrXirConstraint empty = {0}; XrXirGeneric generic = {&empty,1,NULL,0, NULL};
     XrXirFunction function = {0};
     XrXirModule actual = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL, XR_XIR_PROGRAM, NULL};
     f.context = (XrXirProofContext){&actual,{XR_XIR_CONTEXT_FUNCTION,0,0}};
@@ -246,7 +246,7 @@ static void constraint_proof_shared_type_walk(void) {
         nodes[i].parameters = parameters[i]; nodes[i].parameter_count = 2; nodes[i].result = child;
     }
     XrXirTypes types = {nodes,DEPTH,NULL,NULL}; XrXirConstraint empty = {0};
-    XrXirGeneric generic = {&empty,1,NULL,0}; XrXirFunction function = {0};
+    XrXirGeneric generic = {&empty,1,NULL,0, NULL}; XrXirFunction function = {0};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirBudget structure = xr_xir_default_budget();
@@ -268,7 +268,7 @@ static void constraint_proof_interface_identity_work(void) {
     XrXirTypes types = {&signature,1,NULL,&interfaces};
     XrXirInterfaceApplication application = {0,NULL,0};
     XrXirConstraint constraints[COUNT] = {0}; constraints[0] = (XrXirConstraint){0,&application,1};
-    XrXirGeneric generic = {constraints,COUNT,NULL,0}; XrXirFunction function = {0};
+    XrXirGeneric generic = {constraints,COUNT,NULL,0, NULL}; XrXirFunction function = {0};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirBudget structure = xr_xir_default_budget();
@@ -311,7 +311,7 @@ static void constraint_proof_scalar_signatures(void) {
 static void constraint_proof_scalar_generic_forwarding(void) {
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirConstraint callee = {.markers=XR_XIR_CONSTRAINT_SENDABLE}, caller = {0};
-    XrXirGeneric generics[] = {{&callee,1,NULL,0},{&caller,1,&parameter,1}};
+    XrXirGeneric generics[] = {{&callee,1,NULL,0, NULL},{&caller,1,&parameter,1, NULL}};
     uint32_t operand = 0;
     XrXirInstruction identity = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirInstruction forwarding[] = {

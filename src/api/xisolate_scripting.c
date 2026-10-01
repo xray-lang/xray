@@ -41,6 +41,7 @@
 
 typedef struct ProgramGraphState {
     XrModuleGraph *graph;
+    XrModuleGraph *previous_graph;
     XaAnalyzer *analyzer;
     XrModuleRegistry *registry;
     XrModule **previous_module_table;
@@ -58,8 +59,8 @@ static XrSourceCache *ensure_script_source_cache(XrVMRuntime *isolate) {
 static void program_graph_cleanup(XrCompilerSession *session, ProgramGraphState *state) {
     if (!state)
         return;
-    if (session)
-        xr_compiler_session_set_module_graph(session, NULL);
+    if (session && state->graph && xr_compiler_session_module_graph(session) == state->graph)
+        xr_compiler_session_set_module_graph(session, state->previous_graph);
     if (state->registry && state->registry->module_table == state->owned_module_table) {
         state->registry->module_table = state->previous_module_table;
         state->registry->module_table_count = state->previous_module_table_count;
@@ -99,8 +100,9 @@ static bool analyze_program_graph(XrCompilerSession *session, XrModuleGraph *gra
 
         const char *analysis_file = spec->source_path ? spec->source_path : spec->canonical;
         xa_analyzer_analyze(analyzer, analysis_file, (XrAstNode *) spec->ast);
-        spec->export_symbols =
-            xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
+        if (!xa_analyzer_collect_export_symbols_checked(analyzer, (XrAstNode *) spec->ast,
+                                                          &spec->export_symbols))
+            graph_errors++;
 
         graph_errors += xa_analyzer_print_errors(analyzer, spec->source_path ? spec->source_path
                                                                              : spec->canonical);
@@ -180,6 +182,7 @@ static bool prepare_program_graph(XrVMRuntime *isolate, XrCompilerSession *sessi
 
     memset(state, 0, sizeof(*state));
     state->graph = graph;
+    state->previous_graph = xr_compiler_session_module_graph(session);
     state->registry = registry;
     if (!analyze_program_graph(session, graph, &state->analyzer)) {
         program_graph_cleanup(session, state);
@@ -207,6 +210,119 @@ static bool prepare_program_graph(XrVMRuntime *isolate, XrCompilerSession *sessi
         program_graph_cleanup(session, state);
         return false;
     }
+    return true;
+}
+
+typedef struct ModuleSourceContext {
+    XrCompilerSession *session;
+    XrCompilerSessionOperationScope operation;
+    XrVmImportBinding previous_import_binding;
+    ProgramGraphState state;
+} ModuleSourceContext;
+
+static bool module_source_context_dispose(void *opaque, bool succeeded) {
+    ModuleSourceContext *context = (ModuleSourceContext *) opaque;
+    if (!context)
+        return false;
+    program_graph_cleanup(context->session, &context->state);
+    bool restored = xr_compiler_session_set_vm_import_binding(
+        context->session, context->previous_import_binding);
+    bool result = succeeded ? xr_compiler_session_operation_succeed(&context->operation)
+        : xr_compiler_session_operation_fail(&context->operation,
+                                             XR_COMPILER_SESSION_OPERATION_FATAL);
+    xr_free(context);
+    return restored && result;
+}
+
+static bool module_source_graph_build(ModuleSourceContext *context, const char *source,
+    const char *file, const XrModuleIdentityAuthority *authority) {
+    XrVMRuntime *isolate = xr_compiler_session_vm_host(context->session);
+    XrModuleRegistry *registry = isolate ? xr_isolate_get_module_registry(isolate) : NULL;
+    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+    XrModuleGraph *graph = resolver ? xr_module_graph_new(context->session, resolver) : NULL;
+    if (!graph)
+        return false;
+    context->state.graph = graph;
+    context->state.registry = registry;
+    context->state.previous_graph = xr_compiler_session_module_graph(context->session);
+    char stdlib_logical[512], *identity = NULL, *logical = NULL, *error = NULL;
+    bool valid = false;
+    if (authority && authority->kind == XR_MODULE_IDENTITY_STDLIB) {
+        int length = snprintf(stdlib_logical, sizeof(stdlib_logical), "%s/%s.xr",
+                              authority->namespace_id, authority->namespace_id);
+        valid = length > 0 && (size_t) length < sizeof(stdlib_logical) &&
+            xr_module_graph_build_logical_source(graph, authority, stdlib_logical,
+                                                 file, source, &error) == 0;
+    } else if (authority && authority->kind == XR_MODULE_IDENTITY_MEMORY) {
+        valid = xr_module_graph_build_logical_source(graph, authority, NULL, NULL,
+                                                     source, &error) == 0;
+    } else {
+        valid = xr_module_identity_from_source(authority, file, &identity, &logical) &&
+            xr_module_graph_build_logical_source(graph, authority, logical,
+                                                 file, source, &error) == 0;
+    }
+    xr_free(identity); xr_free(logical);
+    if (!valid || xr_module_graph_topological_sort(graph) != 0 ||
+        !graph->topo_order || graph->topo_count <= 0) {
+        fprintf(stderr, "Error: %s\n", error ? error : "invalid Source module graph");
+        xr_free(error);
+        return false;
+    }
+    xr_free(error);
+    if (!analyze_program_graph(context->session, graph, &context->state.analyzer))
+        return false;
+    xr_compiler_session_set_module_graph(context->session, graph);
+    return xr_compile_module_graph_dependencies(context->session, context->state.analyzer,
+                                                 graph, &context->state.compilation);
+}
+
+bool xr_compile_module_source(XrCompilerSession *session, const char *source,
+    const char *source_file, const XrModuleIdentityAuthority *authority,
+    XrModuleSourceCompilation *out) {
+    if (!out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (!session || !source || !xr_module_identity_authority_valid(authority))
+        return false;
+    ModuleSourceContext *context = xr_calloc(1, sizeof(*context));
+    if (!context)
+        return false;
+    context->session = session;
+    context->previous_import_binding = xr_compiler_session_vm_import_binding(session);
+    if (!xr_compiler_session_operation_begin(session, &context->operation)) {
+        xr_free(context);
+        return false;
+    }
+    if (!xr_compiler_session_set_vm_import_binding(session, XR_VM_IMPORT_RUNTIME_MODULE) ||
+        !module_source_graph_build(context, source, source_file, authority)) {
+        (void) module_source_context_dispose(context, false);
+        return false;
+    }
+    ProgramGraphState *state = &context->state;
+    XrModuleSpec *entry = &state->graph->specs[state->graph->entry_index];
+    int slot = entry->topo_index;
+    XrProto *code = slot >= 0 && slot < state->compilation.count ?
+        xr_compile_ast_in_graph(session, state->analyzer, entry->ast,
+            entry->source_path ? entry->source_path : entry->canonical, state->graph,
+            state->compilation.modules, state->compilation.count,
+            &state->compilation.modules[slot], &entry->authority) : NULL;
+    XrVMRuntime *isolate = xr_compiler_session_vm_host(session);
+    if (!code || !xr_program_image_build(isolate, state->graph, &state->compilation,
+                                         &state->image)) {
+        xr_free_code(isolate, code);
+        (void) module_source_context_dispose(context, false);
+        return false;
+    }
+    xr_program_image_install(&state->image, state->registry);
+    if (authority->kind != XR_MODULE_IDENTITY_STDLIB &&
+        !preload_program_modules(isolate, state->graph, state)) {
+        xr_free_code(isolate, code);
+        (void) module_source_context_dispose(context, false);
+        return false;
+    }
+    out->initializer = code;
+    out->context = context;
+    out->dispose_context = module_source_context_dispose;
     return true;
 }
 

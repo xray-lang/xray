@@ -20,7 +20,7 @@ static void floating_ir_rejections(void) {
         XrXirBlock block = {0, 2, 0, 0};
         XrXirFunction function = {"floating", 8, types, 2, XR_XIR_BOOL, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-        XrXirConstraint constraint = {0}; XrXirGeneric generic = {&constraint, 1, NULL, 0};
+        XrXirConstraint constraint = {0}; XrXirGeneric generic = {&constraint, 1, NULL, 0, NULL};
         switch (test) {
         case 0: types[1] = XR_XIR_F64; break;
         case 1: types[0] = XR_XIR_I32; break;

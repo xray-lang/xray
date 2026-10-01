@@ -170,6 +170,10 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
         query_declaration_place(storage, &offset, &source->declarations[i], &declarations[i]);
         declarations[i].generic_constraints = query_constraints(copy,
             source->declarations[i].generic_constraints, declarations[i].generic_parameter_count);
+        declarations[i].type_parameter_kinds = query_copy(copy,
+            source->declarations[i].type_parameter_kinds,
+            source->declarations[i].type_parameter_kinds ? declarations[i].generic_parameter_count : 0,
+            sizeof(uint32_t));
     }
 }
 static void query_literal(SourceQueryCopy *copy, XrXirLiteral *literal) {

@@ -147,7 +147,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceValue *arguments=storage.values;
     arguments[0] = receiver;
     SourceCallPlan plan = {SOURCE_CALL_REQUIREMENT,{application.arguments,parent},substitution,NULL,
-        formal.parameters,formal.result,result_context,arguments,0,1};
+        formal.parameters,formal.result,result_context,arguments,0,1,NULL};
     if (!source_call_plan_arguments(ctx,node,&plan)) goto done;
     if (!source_requirement_prove(ctx,node,selected.member,application,substitution,&signature)) goto done;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);

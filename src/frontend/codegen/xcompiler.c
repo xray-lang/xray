@@ -42,10 +42,8 @@ static uint32_t compiler_graph_module_id(const XrModuleGraph *graph, const AstNo
         /* The graph owns the exact analyzed AST used to produce its evidence.
          * Imports may reparse that module before bytecode generation, so the
          * explicit typed module identity is the only durable reparse join. */
-        bool same_module =
-            spec->ast == ast ||
-            (module_identity && spec->canonical &&
-             strcmp(spec->canonical, module_identity) == 0);
+        bool same_module = spec->ast == ast || (module_identity && spec->canonical &&
+                                                strcmp(spec->canonical, module_identity) == 0);
         if (!same_module)
             continue;
         if (match != XG_NO_ID) {
@@ -84,8 +82,7 @@ static bool compiler_standalone_graph_view(const XrCompilerContext *ctx, AstNode
             break;
     }
     if (ctx->source_content)
-        xr_module_source_fingerprint(ctx->source_content,
-                                     &spec_out->source_content_fingerprint);
+        xr_module_source_fingerprint(ctx->source_content, &spec_out->source_content_fingerprint);
 
     memset(view_out, 0, sizeof(*view_out));
     *topo_index_out = 0;
@@ -115,13 +112,6 @@ static int drain_analyzer_diagnostics(XrCompilerContext *ctx) {
     for (XaDiagnostic *d = diagnostics; d; d = d->next) {
         if (d->code == 0 || d->reported)
             continue;
-        /* REPL mode: suppress analyzer diagnostics — analyzer cannot see
-         * cross-compilation-unit shared variables seeded from prior inputs
-         * and would produce false-positive undefined/unused warnings. */
-        if (ctx->repl_mode) {
-            d->reported = true;
-            continue;
-        }
         const char *file = d->location.file ? d->location.file : ctx->source_file;
         int col = d->location.column > 0 ? d->location.column : 1;
         if (d->severity == XR_DIAG_SEV_ERROR) {
@@ -276,11 +266,9 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
                 compiler_graph_module_id(evidence_graph, ast, compile_identity.module_identity);
             if (module_id == XG_NO_ID ||
                 !xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
-                    &global_evidence, evidence_graph, XG_BUILD_DEV, 0, NULL, 0,
-                    ctx->analyzer)) {
+                    &global_evidence, evidence_graph, XG_BUILD_DEV, 0, NULL, 0, ctx->analyzer)) {
                 xg_global_evidence_free(&global_evidence);
-                fprintf(stderr,
-                        "[xcompiler] global evidence graph identity failed for '%s'\n",
+                fprintf(stderr, "[xcompiler] global evidence graph identity failed for '%s'\n",
                         ctx->source_file ? ctx->source_file : "<unknown>");
                 return NULL;
             }

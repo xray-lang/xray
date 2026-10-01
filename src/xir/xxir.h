@@ -122,12 +122,21 @@ typedef struct XrXirConstraint {
     uint32_t interface_count;
 } XrXirConstraint;
 
+typedef enum XrXirTypeBinderKind {
+    XR_XIR_BINDER_TYPE = 0,
+    XR_XIR_BINDER_RESULT_VARIABLE = 1
+} XrXirTypeBinderKind;
 typedef struct XrXirGeneric {
     const XrXirConstraint *constraints;
     uint32_t parameter_count;
     const XrXirType *arguments;
     uint32_t argument_count;
+    const uint32_t *parameter_kinds;
 } XrXirGeneric;
+static inline uint32_t xr_xir_binder_kind(const XrXirGeneric *record, uint32_t parameter) {
+    return record && record->parameter_kinds && parameter < record->parameter_count ?
+        record->parameter_kinds[parameter] : XR_XIR_BINDER_TYPE;
+}
 
 typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
 

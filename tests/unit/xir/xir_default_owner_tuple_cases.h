@@ -55,7 +55,7 @@ static void default_tuple_case(bool constructor,unsigned mode) {
         {.nominal_owner=1,.method_kind=XR_XIR_MEMBER_HELPER}};
     XrXirSourceModule source={"root",4,NULL,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=ids,.entry_function=1};
-    XrXirGeneric generics[4]={{0},{NULL,0,actual,8},{owner,4,NULL,0},{helper,4,NULL,0}};
+    XrXirGeneric generics[4]={{0},{NULL,0,actual,8, NULL},{owner,4,NULL,0, NULL},{helper,4,NULL,0, NULL}};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,2,1,3};
     XrXirDefaultTable defaults={&binding,1};
     if(constructor){

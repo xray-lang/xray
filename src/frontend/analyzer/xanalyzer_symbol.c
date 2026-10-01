@@ -550,11 +550,10 @@ bool xa_scope_remove_symbol(XaScope *scope, const char *name) {
 
 // Bind a lookup-only alias to an existing symbol. The alias does not own the
 // symbol and does not appear in xa_scope_get_all_symbols().
-void xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol) {
+XR_FUNC bool xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol) {
     if (!scope || !scope->aliases || !alias || !symbol)
-        return;
-    XR_CHECK(xr_hashmap_set(scope->aliases, alias, symbol),
-             "scope alias insert failed (out of memory)");
+        return false;
+    return xr_hashmap_set(scope->aliases, alias, symbol);
 }
 
 bool xa_scope_remove_alias(XaScope *scope, const char *alias) {

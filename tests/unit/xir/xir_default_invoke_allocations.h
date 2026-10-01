@@ -42,7 +42,7 @@ static bool default_invoke_allocation_case(void) {
     XrXirTypes types={&node,1,&nt,NULL};
     XrXirType args[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_BOOL,XR_XIR_F64};
     XrXirConstraint constraints[4]={{0},{0},{0},{0}};
-    XrXirGeneric generics[4]={{0},{NULL,0,args,4},{constraints,4,NULL,0},{constraints,4,NULL,0}};
+    XrXirGeneric generics[4]={{0},{NULL,0,args,4, NULL},{constraints,4,NULL,0, NULL},{constraints,4,NULL,0, NULL}};
     entry[0].type_arguments[1]=4;
     XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL,XR_XIR_PROGRAM,&table};
 

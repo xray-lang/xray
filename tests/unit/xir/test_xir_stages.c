@@ -396,7 +396,7 @@ static void constructed_metadata(void) {
         CHECK(xr_xir_types_structure_verify(&types,&budget) != XR_XIR_OK);
         memcpy(nodes,saved,sizeof(nodes)); input.type = (XrXirType)256;
     }
-    XrXirGeneric generic = {NULL,65536,NULL,0};
+    XrXirGeneric generic = {NULL,65536,NULL,0, NULL};
     XrXirModule context = {XR_XIR_BUILT,NULL,1,NULL,&generic,&types, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xr_xir_type_in_context(&context,0,(XrXirType)260));
     CHECK(xr_xir_type_in_context(&context,0,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1)));
@@ -485,7 +485,7 @@ static XrXirStatus nominal_context_use(const XrXirTypes *types, XrXirType type,
     XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0},{"other",5,NULL,0,1}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
-    XrXirGeneric generics[] = {{0},{0},{constraints,count,NULL,0}};
+    XrXirGeneric generics[] = {{0},{0},{constraints,count,NULL,0, NULL}};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,2,0}};
     XrXirStatus status = xr_xir_types_structure_verify(types,budget);

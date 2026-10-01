@@ -286,6 +286,23 @@ add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
     VERBATIM)
 add_executable(test_xir_native xir/test_xir_native.c ${XIR_SCALAR_GENERATED})
 target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
+# Complete panic outcomes keep message ownership independent of result values.
+add_executable(test_xir_panic_carrier xir/test_xir_panic_carrier.c xir/xir_legacy_call_provider.c)
+target_link_libraries(test_xir_panic_carrier PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_panic_carrier PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_panic_carrier PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_panic_carrier COMMAND $<TARGET_FILE:test_xir_panic_carrier>)
+add_test(NAME test_xir_panic_carrier_fatal COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/check_xir_panic_carrier_fatal.py $<TARGET_FILE:test_xir_panic_carrier>)
+add_test(NAME test_xir_panic_carrier_wire_vector COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_panic_carrier_vector.py
+    --output ${CMAKE_CURRENT_BINARY_DIR}/generated/panic-carrier-wire-vector.json)
+set_tests_properties(test_xir_panic_carrier test_xir_panic_carrier_fatal test_xir_panic_carrier_wire_vector
+    PROPERTIES LABELS "unit;xir;ownership;abi")
+
 add_executable(test_xir_values xir/test_xir_values.c)
 target_link_libraries(test_xir_values PRIVATE xray_xir_scalar)
 add_executable(test_xir_instances xir/test_xir_instances.c)
@@ -416,6 +433,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_identity.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_inline.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_strings.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_condition.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_panics.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/default_parameters.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/default_invokes.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_array_fields.cmake)
@@ -1067,6 +1086,7 @@ add_xray_unit_test(test_xrd_effect_metadata analyzer/test_xrd_effect_metadata.c)
 add_xray_bootstrap_unit_test(test_mono analyzer/test_mono.c)
 add_xray_unit_test(test_interface_conformance analyzer/test_interface_conformance.c)
 add_xray_bootstrap_unit_test(test_xglobal_summary analysis/test_xglobal_summary.c)
+target_sources(test_xglobal_summary PRIVATE plan/target_profile_test_fixture.c)
 add_xray_bootstrap_unit_test(test_xglobal_cache_payload analysis/test_xglobal_cache_payload.c)
 
 # ============================================================================
@@ -1372,6 +1392,19 @@ set_tests_properties(test_xr_program_imported_callable_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;callable;multi-module;generated-c;native;task-301")
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_bootstrap_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+
+add_library(xr_c_emission_allocation_probe OBJECT
+    aot/xr_c_emission_allocation_probe.c aot/xr_c_emission_arena_probe.c)
+target_include_directories(xr_c_emission_allocation_probe PRIVATE ${XRAY_COMMON_INCLUDES})
+if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
+    target_compile_options(xr_c_emission_allocation_probe PRIVATE
+        "/FI${CMAKE_CURRENT_SOURCE_DIR}/aot/xr_c_emission_allocation_probe.h")
+else()
+    target_compile_options(xr_c_emission_allocation_probe PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/aot/xr_c_emission_allocation_probe.h")
+endif()
+target_sources(test_xi_cgen PRIVATE $<TARGET_OBJECTS:xr_c_emission_allocation_probe>)
+
 add_xray_bootstrap_unit_test(test_xaot_emission_coverage aot/test_xaot_emission_coverage.c
     plan/target_profile_test_fixture.c)
 set_tests_properties(test_xaot_emission_coverage PROPERTIES
@@ -1696,6 +1729,7 @@ if(XRAY_C_MSVC_FRONTEND)
         "--msvc-runtime=$<TARGET_GENEX_EVAL:xray_aot_core,$<TARGET_PROPERTY:xray_aot_core,MSVC_RUNTIME_LIBRARY>>")
 endif()
 foreach(execution_case IN ITEMS
+        cgen_struct_fixed_array_index_keeps_required_constant_local
         cgen_ref_slice_forward_read_authority
         cgen_nullable_unit_enum_compare_execution
         cgen_nullable_unit_enum_execution
@@ -3910,3 +3944,84 @@ set_tests_properties(test_cgen_raw_slice PROPERTIES LABELS "aot;ownership" TIMEO
 
 # Include every test, even when new declarations are appended later.
 cmake_language(DEFER CALL xray_prepend_windows_asan_runtime_to_directory_tests)
+
+# Compile the actual Source coordinators with an allocation-only test boundary.
+add_xray_unit_test(test_module_source_allocations module/test_module_source_allocations.c
+    module/xr_module_graph_allocation_probe.c
+    module/xr_module_context_allocation_probe.c)
+set_tests_properties(test_module_source_allocations PROPERTIES
+    LABELS "unit;module;ownership;source" RUN_SERIAL TRUE TIMEOUT 120)
+
+add_xray_bootstrap_unit_test(test_callable52_source_facts plan/test_callable52_source_facts.c plan/target_profile_test_fixture.c)
+target_sources(test_callable52_source_facts PRIVATE plan/test_callable52_graph_oom_probe.c)
+
+add_xray_bootstrap_unit_test(test_vm_parallel_original_source_probe vm/test_vm_parallel_isolate.c)
+
+
+# All production consumers still use the same fresh core. Only these two
+# exact owners receive the test allocator; no production test-mode branch.
+add_library(xi_nominal_rewrite_allocation_probe OBJECT
+    ${CMAKE_SOURCE_DIR}/src/ir/xi.c
+    ${CMAKE_SOURCE_DIR}/src/ir/xi_semantic_snapshot.c)
+target_include_directories(xi_nominal_rewrite_allocation_probe PRIVATE ${XRAY_COMMON_INCLUDES})
+target_compile_definitions(xi_nominal_rewrite_allocation_probe PRIVATE
+    $<TARGET_PROPERTY:xray_core_objs,COMPILE_DEFINITIONS>)
+if(MSVC)
+    target_compile_options(xi_nominal_rewrite_allocation_probe PRIVATE
+        /W4 /WX "/FI${CMAKE_CURRENT_SOURCE_DIR}/program/xr_program_allocation_probe.h")
+else()
+    target_compile_options(xi_nominal_rewrite_allocation_probe PRIVATE
+        -Wall -Wextra -Werror -include "${CMAKE_CURRENT_SOURCE_DIR}/program/xr_program_allocation_probe.h")
+endif()
+add_executable(test_xi_nominal_rewrite_allocations
+    ir/test_xi_nominal_rewrite_allocations.c
+    $<TARGET_OBJECTS:xi_nominal_rewrite_allocation_probe>
+    "$<FILTER:$<TARGET_OBJECTS:xray_core_objs>,EXCLUDE,/xi([_]semantic[_]snapshot)?[.]c[.](o|obj)$>")
+target_include_directories(test_xi_nominal_rewrite_allocations PRIVATE
+    ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(test_xi_nominal_rewrite_allocations PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_link_libraries(test_xi_nominal_rewrite_allocations PRIVATE xray_stdlib_bootstrap_core)
+add_test(NAME test_xi_nominal_rewrite_allocations COMMAND test_xi_nominal_rewrite_allocations)
+
+add_xray_bootstrap_unit_test(test_callable52_constructor_artifact
+    plan/test_callable52_constructor_artifact.c
+    plan/test_callable52_attacker_encoder.c
+    plan/target_profile_test_fixture.c)
+
+add_xray_bootstrap_unit_test(test_callable52_wire_oracle plan/test_callable52_wire_oracle.c)
+add_test(NAME test_callable52_wire_encoder
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/plan/derive_callable52_wire.py)
+add_xray_bootstrap_unit_test(test_callable52_physical_lifecycle
+    runtime/test_typed_lifecycle_audit.c plan/target_profile_test_fixture.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/ownership/xr_ownership_audit.c
+    ${CMAKE_SOURCE_DIR}/src/vm/audit/xr_typed_lifecycle_audit.c)
+
+
+# Substitute only the actual REPL coordinator allocator for this failure gate.
+add_library(xr_repl_publication_allocation_probe OBJECT ${CMAKE_SOURCE_DIR}/src/api/xrepl.c)
+target_include_directories(xr_repl_publication_allocation_probe PRIVATE ${XRAY_COMMON_INCLUDES})
+target_compile_definitions(xr_repl_publication_allocation_probe PRIVATE
+    $<TARGET_PROPERTY:xray_core_objs,COMPILE_DEFINITIONS>)
+if(MSVC)
+    target_compile_options(xr_repl_publication_allocation_probe PRIVATE
+        /W4 /WX "/FI${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
+else()
+    target_compile_options(xr_repl_publication_allocation_probe PRIVATE
+        -Wall -Wextra -Werror -include "${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
+endif()
+add_executable(test_repl_publication_allocations
+    api/test_repl_publication_allocations.c
+    $<TARGET_OBJECTS:xr_repl_publication_allocation_probe>
+    "$<FILTER:$<TARGET_OBJECTS:xray_core_objs>,EXCLUDE,/xrepl[.]c[.](o|obj)$>")
+target_include_directories(test_repl_publication_allocations PRIVATE
+    ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(test_repl_publication_allocations PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_link_libraries(test_repl_publication_allocations PRIVATE xray_stdlib_bootstrap_core)
+add_test(NAME test_repl_publication_allocations COMMAND test_repl_publication_allocations)
+set_tests_properties(test_repl_publication_allocations PROPERTIES
+    LABELS "unit;source;ownership;repl" RUN_SERIAL TRUE TIMEOUT 120)
+
+add_xray_bootstrap_unit_test(test_callable_variadic_declaration
+    plan/test_callable_variadic_declaration.c plan/test_callable52_attacker_encoder.c)
+set_tests_properties(test_callable_variadic_declaration PROPERTIES
+    LABELS "unit;source;ownership;semantic" TIMEOUT 120)

@@ -15,6 +15,11 @@
 XR_FUNC XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *budget,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_generics_structure_verify(const XrXirModule *module, XrXirBudget *remaining);
+XR_FUNC XrXirStatus xr_xir_result_binders_verify(const XrXirModule *module, XrXirBudget *remaining);
+XR_FUNC XrXirStatus xr_xir_result_argument(const XrXirModule *module, uint32_t caller,
+    XrXirType type, XrXirBudget *remaining);
+XR_FUNC XrXirStatus xr_xir_result_unit_use(const XrXirModule *module, uint32_t caller,
+    uint32_t argument, XrXirBudget *remaining);
 XR_FUNC XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **output);
 XR_FUNC void xr_xir_generics_free(XrXirGeneric *generics, uint32_t functions);
 XR_FUNC bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type);

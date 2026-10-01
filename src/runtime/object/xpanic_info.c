@@ -191,6 +191,12 @@ const char *xr_panic_info_get_message(XrVMRuntime *X, XrValue exception) {
     return s->data;
 }
 
+XR_FUNCDEF XrValue xr_panic_info_get_message_value(XrVMRuntime *X, XrValue exception) {
+    XrObjectInstance *inst = exception_instance(X, exception);
+    if (!inst || !XR_IS_STRING(inst->fields[PANIC_INFO_FIELD_MESSAGE])) return xr_null();
+    return inst->fields[PANIC_INFO_FIELD_MESSAGE];
+}
+
 XrValue xr_panic_info_get_stacktrace(XrVMRuntime *X, XrValue exception) {
     XrObjectInstance *inst = exception_instance(X, exception);
     if (!inst)

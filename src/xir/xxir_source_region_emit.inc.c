@@ -180,7 +180,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
         }
         for (uint32_t e=0;e<role.edges;++e)
             if (!source_region_id(blocks,body->block_count,op.targets[e],&op.targets[e])) goto invalid;
-        if (op.op==XR_XIR_INVOKE_RESULT || op.op==XR_XIR_INVOKE_ERROR ||
+        if (op.op==XR_XIR_INVOKE_RESULT || op.op==XR_XIR_INVOKE_ERROR || op.op==XR_XIR_INVOKE_DISCARD ||
             ((op.op==XR_XIR_CLEANUP_LEAVE || op.op==XR_XIR_CLEANUP_ERROR) && op.immediate)) {
             bool frontier=op.op==XR_XIR_CLEANUP_LEAVE || op.op==XR_XIR_CLEANUP_ERROR;
             uint32_t value;

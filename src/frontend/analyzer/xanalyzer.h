@@ -283,6 +283,8 @@ XR_FUNC void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *g
 // API: Analysis
 XR_FUNC void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast);
 XR_FUNC void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast);
+XR_FUNC bool xa_analyzer_prepare_input_scope(XaAnalyzer *analyzer, const char *file,
+                                             XaScope *parent);
 XR_FUNC bool xa_analyzer_push_file_scope(XaAnalyzer *analyzer, const char *file,
                                          XaAnalyzerFileScope *scope);
 XR_FUNC void xa_analyzer_pop_file_scope(XaAnalyzer *analyzer, XaAnalyzerFileScope *scope);

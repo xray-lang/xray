@@ -1,0 +1,45 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xr_c_emission_allocation_probe.h - Isolated emission and arena allocation boundary
+ */
+#ifndef XR_C_EMISSION_ALLOCATION_PROBE_H
+#define XR_C_EMISSION_ALLOCATION_PROBE_H
+
+#include "../program/xr_program_source_allocation_probe.h"
+
+#define xr_c_emission_plan_build xr_test_c_emission_plan_build
+#define xr_c_emission_plan_free xr_test_c_emission_plan_free
+#define xr_c_emission_plan_is_verified xr_test_c_emission_plan_is_verified
+#define xr_c_emission_plan_verify xr_test_c_emission_plan_verify
+#define xr_c_emission_plan_value_count xr_test_c_emission_plan_value_count
+#define xr_c_emission_plan_call_argument_count xr_test_c_emission_plan_call_argument_count
+#define xr_c_emission_plan_cleanup_count xr_test_c_emission_plan_cleanup_count
+#define xr_c_emission_plan_fingerprint xr_test_c_emission_plan_fingerprint
+#define xr_c_emission_plan_target_fingerprint xr_test_c_emission_plan_target_fingerprint
+#define xr_c_emission_plan_profile_fingerprint xr_test_c_emission_plan_profile_fingerprint
+#define xr_c_emission_plan_value_view xr_test_c_emission_plan_value_view
+#define xr_c_emission_plan_function_abi_count xr_test_c_emission_plan_function_abi_count
+#define xr_c_emission_plan_function_abi_at xr_test_c_emission_plan_function_abi_at
+#define xr_c_emission_plan_function_abi_view xr_test_c_emission_plan_function_abi_view
+#define xr_c_emission_plan_call_argument_view xr_test_c_emission_plan_call_argument_view
+#define xr_c_emission_plan_cleanup_view xr_test_c_emission_plan_cleanup_view
+#define xr_c_emission_plan_compute_fingerprint xr_test_c_emission_plan_compute_fingerprint
+
+#define xr_arena_init xr_test_emission_arena_init
+#define xr_arena_alloc xr_test_emission_arena_alloc
+#define xr_arena_alloc_array xr_test_emission_arena_alloc_array
+#define xr_arena_alloc_raw xr_test_emission_arena_alloc_raw
+#define xr_arena_destroy xr_test_emission_arena_destroy
+#define xr_arena_reset xr_test_emission_arena_reset
+#define xr_arena_strdup xr_test_emission_arena_strdup
+#define xr_arena_strndup xr_test_emission_arena_strndup
+#define xr_arena_get_allocated_size xr_test_emission_arena_get_allocated_size
+#define xr_arena_save xr_test_emission_arena_save
+#define xr_arena_restore xr_test_emission_arena_restore
+#define xr_arena_get_stats xr_test_emission_arena_get_stats
+
+#endif // XR_C_EMISSION_ALLOCATION_PROBE_H

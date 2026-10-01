@@ -287,18 +287,18 @@ static void failed_initialization(void) {
             CHECK(xr_xir_instance_copy_failure(instance, &copy) == expected);
             CHECK(copy.status == expected && (mode == 2 ? error_fixture_is_code(&copy.value,reader,91) : copy.value.payload == 0) && !copy.wake);
             if (mode == 4) {
-                CHECK(copy.fault.code == 430 && !copy.fault.reserved &&
-                    copy.fault.index == INT64_MIN && copy.fault.length == 3);
+                CHECK(copy.panic.detail.code == 430 && !copy.panic.detail.reserved &&
+                    copy.panic.detail.index == INT64_MIN && copy.panic.detail.length == 3);
                 escaped = copy;
-            } else CHECK(xr_xir_fault_empty(copy.fault));
+            } else CHECK(xr_xir_fault_empty(copy.panic.detail));
             xr_xir_value_drop(&copy.value);
             XrXirCallResult repeated = xr_xir_instance_poll(instance).outcome;
-            CHECK(repeated.status == expected && !memcmp(&repeated.fault, &copy.fault, sizeof(copy.fault)));
+            CHECK(repeated.status == expected && !memcmp(&repeated.panic.detail, &copy.panic.detail, sizeof(copy.panic.detail)));
         }
         CHECK(f.witness.begins[2] == 1 && !f.witness.begins[0] && !f.witness.begins[1]);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
         xr_xir_program_drop(program); CHECK(f.witness.releases == 1);
-        if (mode == 4) CHECK(escaped.fault.code == 430 && escaped.fault.index == INT64_MIN && escaped.fault.length == 3);
+        if (mode == 4) CHECK(escaped.panic.detail.code == 430 && escaped.panic.detail.index == INT64_MIN && escaped.panic.detail.length == 3);
         xr_xir_domain_drop(reader);
     }
 }

@@ -56,6 +56,8 @@ typedef struct XrReplSymbolTable {
     uint64_t next_result_id;
 } XrReplSymbolTable;
 
+XR_FUNC bool xr_repl_binding_key(uint32_t symbol_id, char *buffer, size_t capacity);
+
 // Lifecycle
 XR_FUNC XrReplSymbolTable *xr_repl_symbols_new(void);
 XR_FUNC void xr_repl_symbols_free(XrReplSymbolTable *table);
@@ -115,8 +117,10 @@ typedef struct XrReplEvalResult {
  * Compile and execute one REPL submission atomically with respect to the
  * implicit last-result binding.
  * - Seeds compiler context from session-owned repl_symbols (name metadata)
- * - Emits OP_GETGLOBAL/OP_SETGLOBAL for top-level variable access
+ * - Pins top-level storage to the checked declaration symbol, not its spelling
  * - Publishes declarations and a new `it` only after successful execution
+ * - Redeclaration shadows the visible name; prior code keeps its typed binding
+ * - Failure removes new bindings; writes to prior bindings are ordinary effects
  * - Returns the compiled proto even on runtime failure so callers can free it
  */
 XR_FUNC XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,

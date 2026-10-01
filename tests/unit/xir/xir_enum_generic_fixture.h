@@ -40,7 +40,7 @@ static XrXirArtifact *enum_generic_checked(unsigned mode) {
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0},{"beta",4,&dependency,1,3}};
     XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL};
-    XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1},{&function_constraint,1,NULL,0},{0}};
+    XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1, NULL},{&function_constraint,1,NULL,0, NULL},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     if (mode == 1 || mode == 5) function_constraint.markers = 0;
     if (mode == 2) declaration.exported = 0;

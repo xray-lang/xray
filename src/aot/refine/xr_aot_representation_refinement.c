@@ -8306,8 +8306,80 @@ static bool oracle_cleanup_local_addr(const VerifyAuthority *ctx, uint32_t opera
            slot->register_rep == binding->register_rep && slot->memory_rep == binding->memory_rep;
 }
 
+static bool oracle_plain_ref_aggregate_storage(const VerifyAuthority *ctx, uint32_t value,
+    XrRep *out_storage, uint16_t *out_kind) {
+    if (!ctx || value >= ctx->value_count || !out_storage || !out_kind)
+        return false;
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, value);
+    XrCAggregateProjection projection = {0};
+    if (!binding || !xr_c_plain_ref_aggregate_projection(ctx->target_plan, binding, &projection))
+        return false;
+    *out_storage = XR_REP_RAWPTR;
+    *out_kind = XR_MACHINE_REP_RAW_PTR;
+    return true;
+}
+
+static bool oracle_plain_ref_aggregate_load(const VerifyAuthority *ctx, uint32_t index) {
+    const XrSemanticOperationRecord *operation = ctx
+        ? xr_semantic_plan_operation(ctx->semantic, index) : NULL;
+    uint32_t count = 0;
+    const XrSemanticOperandRecord *operands = ctx
+        ? xr_semantic_plan_operands(ctx->semantic, &count) : NULL;
+    if (!operation || !operands || operation->opcode != XI_PLACE_LOAD ||
+        operation->operand_count != 1 || operation->operand_begin >= count ||
+        operation->effects != xi_generated_op_effects(XI_PLACE_LOAD) ||
+        operation->flags != xi_generated_op_default_flags(XI_PLACE_LOAD) ||
+        operation->metadata_count || operation->semantic_immediate ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED)
+        return false;
+    const XrSemanticOperandRecord *place = &operands[operation->operand_begin];
+    if (place->type != operation->result_type || place->role != XR_SEM_OPERAND_VALUE ||
+        place->parameter != -1 || place->parameter_mode != XR_PARAM_READ ||
+        place->transfer_mode != XR_TRANSFER_SHARE || place->ownership_action != XR_SEM_OPERAND_BORROW ||
+        place->access != XR_CALL_ARG_PLAIN || place->origin != XI_PLACE_ORIGIN_NONE ||
+        place->lifetime != XI_PLACE_LIFETIME_NONE || place->escape != XI_PLACE_ESCAPE_NONE || place->flags)
+        return false;
+    const XrTargetValueRepRecord *pointer = verify_target_value_rep(ctx, place->value);
+    const XrTargetValueRepRecord *loaded = verify_target_value_rep(ctx, operation->result_value);
+    XrCAggregateProjection address = {0}, aggregate = {0};
+    return pointer && loaded &&
+        xr_c_plain_ref_aggregate_projection(ctx->target_plan, pointer, &address) &&
+        xr_c_aggregate_projection(ctx->target_plan, loaded, &aggregate) &&
+        aggregate.kind == XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT &&
+        address.abi_key == aggregate.abi_key && address.layout == aggregate.layout;
+}
+
+static bool oracle_plain_ref_aggregate_call_use(const VerifyAuthority *ctx, uint32_t operation,
+    uint16_t operand, uint32_t value) {
+    uint32_t argument_count = 0, call_count = 0;
+    const XrTargetCallArgumentRecord *arguments = xr_target_plan_call_arguments(ctx->target_plan, &argument_count);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrSemanticOperationRecord *source = xr_semantic_plan_operation(ctx->semantic, operation);
+    if (!source || source->opcode != XI_CALL || !operand || !calls)
+        return false;
+    uint32_t matches = 0;
+    for (uint32_t i = 0; arguments && i < argument_count; i++) {
+        const XrTargetCallArgumentRecord *argument = &arguments[i];
+        if (argument->call >= call_count)
+            return false;
+        const XrTargetCallRecord *call = &calls[argument->call];
+        if (xr_target_plan_module_for_function(ctx->target_plan, call->caller_function, NULL) != ctx->semantic ||
+            call->semantic_operation != operation || argument->semantic_value != value ||
+            argument->semantic_operand != source->operand_begin + operand)
+            continue;
+        XrCAggregateProjection projection = {0};
+        if (!xr_c_plain_ref_aggregate_argument_projection(ctx->target_plan, argument, &projection))
+            return false;
+        matches++;
+    }
+    return matches == 1;
+}
+
 static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                       XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (oracle_plain_ref_aggregate_storage(ctx, semantic_value, out_storage, out_machine_kind))
+        return true;
     if (oracle_slice_view_storage(ctx, semantic_value, out_storage, out_machine_kind))
         return true;
     /* A nullable scalar names the tagged carrier whatever produced it, so the
@@ -9474,6 +9546,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_PLACE_LOAD:
             if (operand_index != 0 || source_value >= ctx->value_count)
                 return false;
+            if (oracle_plain_ref_aggregate_load(ctx, operation_index)) {
+                *out_storage = XR_REP_RAWPTR;
+                return true;
+            }
             {
                 XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_place_use_in_scope(&ctx->scalar_ref_scope, operation_index, operand_index, source_value);
                 if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
@@ -9541,6 +9617,22 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_LOCAL_ADDR:
             if (operand_index != 0)
                 return false;
+            {
+                XrRep pointer_storage = XR_REP_COUNT;
+                if (oracle_plain_ref_aggregate_storage(ctx, operation->result_value,
+                        &pointer_storage, &ignored_kind)) {
+                    const XrTargetValueRepRecord *held = verify_target_value_rep(ctx, source_value);
+                    const XrTargetValueRepRecord *pointer = verify_target_value_rep(ctx, operation->result_value);
+                    XrCAggregateProjection aggregate = {0}, address = {0};
+                    if (!held || !pointer || operation->operand_count != 1 ||
+                        !xr_c_aggregate_projection(ctx->target_plan, held, &aggregate) ||
+                        !xr_c_plain_ref_aggregate_projection(ctx->target_plan, pointer, &address) ||
+                        aggregate.abi_key != address.abi_key || aggregate.layout != address.layout)
+                        return false;
+                    *out_storage = XR_REP_TAGGED;
+                    return true;
+                }
+            }
             {
                 uint32_t scalar_ref_source = XR_SEMANTIC_INDEX_NONE;
                 XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_local_addr_in_scope(&ctx->scalar_ref_scope, operation_index, &scalar_ref_source);
@@ -9790,6 +9882,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             return oracle_machine_storage(ctx, operation->result_value, out_storage, &ignored_kind);
         case XI_CALL:
         case XI_TAIL_CALL: {
+            if (oracle_plain_ref_aggregate_call_use(ctx, operation_index, operand_index, source_value)) {
+                *out_storage = XR_REP_RAWPTR;
+                return true;
+            }
             if (oracle_native_direct_candidate(ctx, operation_index)) {
                 if (operation->opcode != XI_CALL || operand_index == 0)
                     return false;

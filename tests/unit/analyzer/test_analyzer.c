@@ -1213,6 +1213,47 @@ static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     return false;
 }
 
+TEST(analyzer_rest_parameters_require_element_annotations) {
+    static const char *const untyped[] = {
+        "fn sum(...nums) -> i64 { return 0 }\n",
+        "class Totals { sum(...nums) -> i64 { return 0 } }\n",
+        "class Totals { static sum(...nums) -> i64 { return 0 } }\n",
+    };
+    for (size_t i = 0; i < sizeof(untyped) / sizeof(untyped[0]); i++) {
+        XaAnalyzer *a = analyzer_run_source("untyped-rest.xr", untyped[i]);
+        ASSERT(a != NULL);
+        int count = 0;
+        XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(a, &count);
+        bool missing_element_type = false;
+        for (XaDiagnostic *diag = diagnostics; diag; diag = diag->next)
+            if (diag->code == XR_ERR_ANALYZE_MISSING_TYPE &&
+                diag->severity == XR_DIAG_SEV_ERROR && diag->message &&
+                strstr(diag->message, "Parameter 'nums'") &&
+                strstr(diag->message, "missing type annotation"))
+                missing_element_type = true;
+        xa_analyzer_free(a);
+        setup_pool();
+        ASSERT(missing_element_type);
+    }
+    XaAnalyzer *a = analyzer_run_source(
+        "typed-rest.xr",
+        "fn sum(...nums: i64) -> i64 { return 0 }\n"
+        "class Totals { sum(...nums: i64) -> i64 { return 0 }\n"
+        "static from(...nums: i64) -> i64 { return 0 } }\n"
+        "class Counter { value: i64\n"
+        "constructor(value) { this.value = value } }\n");
+    ASSERT(a != NULL);
+    int count = 0;
+    bool accepted = true;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(a, &count); diag;
+         diag = diag->next)
+        if (diag->severity == XR_DIAG_SEV_ERROR)
+            accepted = false;
+    xa_analyzer_free(a);
+    setup_pool();
+    ASSERT(accepted);
+}
+
 TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked) {
     XaAnalyzer *valid = analyzer_run_source(
         "receiver-valid.xr",
@@ -8210,6 +8251,7 @@ int main(int argc, char **argv) {
         return tests_failed ? 1 : 0;
     }
 
+    RUN_TEST(analyzer_rest_parameters_require_element_annotations);
     RUN_TEST(analyzer_override_requires_declaration_and_matching_target);
 
     printf("Type tests:\n");

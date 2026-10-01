@@ -18,7 +18,9 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
                 if (incoming == UINT32_MAX || graph->next[incoming] != UINT32_MAX ||
                     graph->predecessor[incoming] != graph->owner[i]) return XR_XIR_BAD_STRUCTURE;
                 const XrXirInstruction *first = &function->instructions[function->blocks[block].first];
-                if (!edge && op->type == XR_XIR_UNIT) {
+                if (!edge && first->op == XR_XIR_INVOKE_DISCARD) {
+                    if (first->immediate != i || first->type != XR_XIR_UNIT) return XR_XIR_BAD_STRUCTURE;
+                } else if (!edge && op->type == XR_XIR_UNIT) {
                     if (first->op == XR_XIR_INVOKE_RESULT || first->op == XR_XIR_INVOKE_ERROR)
                         return XR_XIR_BAD_STRUCTURE;
                 } else if (first->op != (edge ? XR_XIR_INVOKE_ERROR : XR_XIR_INVOKE_RESULT) ||
@@ -26,7 +28,7 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
                     return XR_XIR_BAD_STRUCTURE;
             }
         }
-        if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_ERROR) {
+        if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_ERROR || op->op == XR_XIR_INVOKE_DISCARD) {
             if (op->immediate < 0 || (uint64_t) op->immediate >= function->instruction_count)
                 return XR_XIR_BAD_STRUCTURE;
             uint32_t block = graph->owner[i];

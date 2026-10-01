@@ -1643,11 +1643,82 @@ static bool catch_capture_state_equal(const CatchCaptureState *a, const CatchCap
            effect_summary_equal(&a->caught_summary, &b->caught_summary);
 }
 
+
+typedef struct FunctionCaptureFilterCtx {
+    ErrorSetCtx *ctx;
+    XaScope *function_scope;
+    FunctionValueAliasState *state;
+} FunctionCaptureFilterCtx;
+
+static void collect_function_capture_alias_pre(AstNode *node, void *userdata) {
+    FunctionCaptureFilterCtx *filter = (FunctionCaptureFilterCtx *) userdata;
+    if (!filter || !node || node->type != AST_VARIABLE)
+        return;
+    XaSymbol *sym = lookup_variable_symbol(filter->ctx->analyzer, node);
+    if (!sym || !symbol_has_function_type(sym) || sym->id == 0 ||
+        (filter->function_scope && sym->scope &&
+         xa_scope_is_descendant(sym->scope, filter->function_scope)))
+        return;
+    for (int i = 0; i < filter->state->count; ++i)
+        if (filter->state->ids[i] == sym->id)
+            return;
+    for (int i = 0; i < filter->ctx->function_value_alias_count; ++i) {
+        if (filter->ctx->function_value_alias_ids[i] != sym->id)
+            continue;
+        int slot = filter->state->count++;
+        filter->state->ids[slot] = sym->id;
+        filter->state->targets[slot] = filter->ctx->function_value_alias_targets[i];
+        return;
+    }
+}
+
+/* Capture only lexical references, and join every observed creation context.
+ * An absent binding is unseen; a present empty target is unknown and stays
+ * unknown. Neither unrelated ambient aliases nor the last caller can replace
+ * the declaration owner's closed-world capture domain. */
+static void merge_function_capture_alias_state(ErrorSetCtx *ctx,
+                                                FunctionValueAliasState *into,
+                                                const FunctionValueAliasState *incoming) {
+    for (int i = 0; i < incoming->count; ++i) {
+        int slot = -1;
+        for (int j = 0; j < into->count; ++j)
+            if (into->ids[j] == incoming->ids[i]) {
+                slot = j;
+                break;
+            }
+        if (slot < 0) {
+            if (into->count >= 128) {
+                ctx->call_error_effect_publication_failed = true;
+                return;
+            }
+            slot = into->count++;
+            into->ids[slot] = incoming->ids[i];
+            into->targets[slot] = incoming->targets[i];
+            ctx->changed = true;
+            continue;
+        }
+        FunctionValueTarget prior = into->targets[slot];
+        FunctionValueTarget next = function_value_target_is_exact(prior) &&
+                                           function_value_target_is_exact(incoming->targets[i])
+                                       ? function_value_target_merge(prior, incoming->targets[i], ctx)
+                                       : function_value_target_none();
+        if (!function_value_target_equal(prior, next)) {
+            into->targets[slot] = next;
+            ctx->changed = true;
+        }
+    }
+}
+
 static void record_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_expr) {
     if (!ctx || !function_expr || function_expr->type != AST_FUNCTION_EXPR)
         return;
-    FunctionValueAliasState state;
-    capture_function_value_alias_state(ctx, &state);
+    FunctionValueAliasState state = {0};
+    FunctionCaptureFilterCtx filter = {
+        .ctx = ctx,
+        .function_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, function_expr),
+        .state = &state,
+    };
+    xa_ast_walk(function_like_body(function_expr), collect_function_capture_alias_pre, NULL, &filter);
     CatchCaptureState catch_state;
     capture_current_catch_capture_state(ctx, &catch_state);
 
@@ -1666,11 +1737,10 @@ static void record_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_exp
         memset(entry, 0, sizeof(*entry));
         entry->function_expr = function_expr;
         ctx->changed = true;
-    } else if (!function_value_alias_state_equal(&entry->state, &state) ||
-               !catch_capture_state_equal(&entry->catch_state, &catch_state)) {
+    } else if (!catch_capture_state_equal(&entry->catch_state, &catch_state)) {
         ctx->changed = true;
     }
-    entry->state = state;
+    merge_function_capture_alias_state(ctx, &entry->state, &state);
     catch_capture_state_clear(&entry->catch_state);
     entry->catch_state = catch_state;
 }
@@ -1681,11 +1751,9 @@ static void apply_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_expr
         return;
     for (int i = 0; i < entry->state.count; i++) {
         uint32_t id = entry->state.ids[i];
-        if (id == 0 || function_value_alias_id_present(ctx, id))
+        if (id == 0)
             continue;
         FunctionValueTarget target = entry->state.targets[i];
-        if (!function_value_target_is_exact(target))
-            continue;
         XaSymbol *sym = lookup_symbol_by_id(ctx, id);
         if (!sym || !symbol_has_function_type(sym))
             continue;
@@ -2037,7 +2105,10 @@ static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr)
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
+    bool saved_publish_call_facts = ctx->publish_call_error_effect_facts;
+    ctx->publish_call_error_effect_facts = false;
     es_walk_block(ctx, fn->body);
+    ctx->publish_call_error_effect_facts = saved_publish_call_facts;
     leave_callee_body_coro_boundary(ctx, &saved_coro_boundary);
     ctx->current_catch_var = saved_catch_var;
     ctx->current_catch_symbol_id = saved_catch_symbol_id;
@@ -2119,7 +2190,9 @@ static void apply_function_param_targets(ErrorSetCtx *ctx, AstNode *fn_node, XaS
             continue;
         }
         invalidate_function_value_alias_target(ctx, param_sym->id);
-        if (!entry->unknown && function_value_target_is_exact(entry->target))
+        if (entry->unknown)
+            set_function_value_alias_target(ctx, param_sym, function_value_target_none());
+        else if (function_value_target_is_exact(entry->target))
             set_function_value_alias_target(ctx, param_sym, entry->target);
     }
 }
@@ -5322,6 +5395,12 @@ static XrFnThrowEffect publish_body_effect(ErrorSetCtx *ctx, AstNode *node,
             xa_effect_summary_is_complete(summary) ? XA_EFFECT_COMPLETE : XA_EFFECT_INCOMPLETE,
         .unknown_reasons = summary->unknown_reasons,
     };
+    XaBodyEffectFact previous = {0};
+    bool had_previous = xa_analyzer_get_body_effect(ctx->analyzer, node, &previous);
+    if (!had_previous || previous.effect_id != fact.effect_id ||
+        previous.completeness != fact.completeness || previous.unknown_reasons != fact.unknown_reasons ||
+        previous.throw_effect != fact.throw_effect)
+        ctx->changed = true;
     if (fact.effect_id == XA_EFFECT_NONE ||
         !xa_analyzer_set_body_effect(ctx->analyzer, node, &fact))
         ctx->body_effect_publication_failed = true;
@@ -5502,9 +5581,12 @@ static void publish_call_error_effect_fact(ErrorSetCtx *ctx, AstNode *call_node,
             if (function_expr) {
                 XaEffectSummary function_summary;
                 xa_effect_summary_init(&function_summary);
-                if (!compute_function_expr_summary(ctx, function_expr, &function_summary) ||
-                    !xa_effect_summary_add_summary(ctx->analyzer->effect_db, &summary,
-                                                   &function_summary))
+                bool saved_publish_call_facts = ctx->publish_call_error_effect_facts;
+                ctx->publish_call_error_effect_facts = false;
+                bool computed = compute_function_expr_summary(ctx, function_expr, &function_summary);
+                ctx->publish_call_error_effect_facts = saved_publish_call_facts;
+                if (!computed || !xa_effect_summary_add_summary(ctx->analyzer->effect_db, &summary,
+                                                                &function_summary))
                     xa_effect_summary_mark_incomplete(&summary,
                                                       XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE);
                 xa_effect_summary_clear(&function_summary);
@@ -5606,7 +5688,8 @@ static void publish_program_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *p
     ctx->linked_scope_depth = 0;
     for (int i = 0; i < program->as.program.count; i++)
         es_walk_stmt(ctx, program->as.program.statements[i]);
-    publish_body_effect(ctx, program, &sink);
+    if (ctx->publish_call_error_effect_facts)
+        publish_body_effect(ctx, program, &sink);
     xa_effect_summary_clear(&sink);
     ctx->current_summary = NULL;
     ctx->analyzer->current_scope = saved_scope;
@@ -5881,10 +5964,16 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     for (;;) {
         ctx.changed = false;
 
+        /* Initializer calls provide real incoming callable targets. They
+         * participate in the same finite domain as named and lambda bodies;
+         * no call facts are published until that domain stops changing. */
+        publish_program_call_error_effect_facts(&ctx, ast);
         for (int i = 0; i < func_count; i++) {
             infer_function_error_set(&ctx, funcs[i].node, funcs[i].sym);
         }
 
+        for (int i = 0; i < function_exprs.count; ++i)
+            infer_function_expr_throw_effect(&ctx, function_exprs.items[i]);
         if (!ctx.changed)
             break;
     }
@@ -5921,6 +6010,8 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     publish_program_call_error_effect_facts(&ctx, ast);
     for (int i = 0; i < func_count; i++)
         publish_function_call_error_effect_facts(&ctx, funcs[i].node, funcs[i].sym);
+    for (int i = 0; i < function_exprs.count; ++i)
+        infer_function_expr_throw_effect(&ctx, function_exprs.items[i]);
     ctx.publish_call_error_effect_facts = false;
     if (ctx.call_error_effect_publication_failed) {
         const char *message = "call-error-effect publication failed (AnalysisResourceFailure)";

@@ -717,6 +717,12 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 
 <!-- xr-builtin-registry:end -->
 
+The new XIR finite value-equality contract freezes the built-in operation predicate `Equal`;
+see §9.2, §13.5 and §17.33. It is neither a user interface nor an alias for legacy `Equatable`,
+and grants no ordering, key equivalence or reflexivity. Implementation remains pending. The
+generated registry above still reflects existing symbol sources; manual entries cannot replace
+source registration, probes and removal after the last legacy consumer migrates.
+
 ### 2.3 Primitive Types
 
 #### 2.3.1 Integer Types
@@ -5053,6 +5059,16 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 }
 ```
 
+**Finite value-equality operation constraint (frozen contract, implementation PENDING)**:
+`Equal` is a built-in predicate rather than a user-implementable interface. Its first domain is
+bool, the eight fixed-width integers, f32/f64, string and recursive Array<T> where T: Equal.
+`<T: Equal>` and `where T: Equal` mean the same condition and conjoin other requirements.
+An unused unconstrained T definition cannot compare or forward to assertEqual. Comparable,
+Hashable and a same-named user interface do not supply this proof. Equal grants only same-T
+==, != and assertEqual, without reflexivity, ordering, key equivalence, display, member or
+construction authority. Nominal/derive, nullable, Map/Set/JSON and other domains require
+separate admission; unimplemented operations reject explicitly. See §17.33.
+
 **Built-in constraint interfaces**:
 
 | Interface | Meaning |
@@ -6137,7 +6153,7 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | Function | Signature | Description |
 |---|---|---|
 | `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false produces an assertion panic |
-| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | compares one static type with definition-site comparison authority |
+| `assertEqual<T: Equal>(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | ordinary TYPE parameter with definition-site Equal proof for same-T comparison |
 | `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's typed error |
 | `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's panic |
 
@@ -6162,9 +6178,14 @@ inferred from a concrete instance's body. Lexical bindings precede builtin names
 assertEqual capability/type domain is admitted by definition-site constraints, not by granting an
 unconstrained T deep comparison authority during specialization. Ordinary equality differs from
 container key equivalence. Arrays containing NaN preserve element-wise equality even with shared
-backing; memcmp needs an additional bytewise proof. The complete capability domain remains open;
-this section adds no Equatable and does not claim that the assertion execution family missing
-from §17 has been implemented.
+backing; memcmp needs an additional bytewise proof. The first finite Equal domain is bool,
+the eight fixed-width integers, f32/f64, string and recursive Array<T: Equal>; see §9.2/§17.33.
+Ordinary ==, != and this assertion use the same relation and proof. Equal promises neither
+reflexivity nor key equivalence, and is not an Equatable alias. Evaluate a, b and msg once in
+source order, including success; only a successful false comparison triggers an assertion panic,
+while comparison OOM/LIMIT retains its resource channel. The complete domain and implementation
+qualification remain open; this section does not claim that the assertion execution family
+missing from §17 has been implemented.
 
 ### 13.6 Container Constructors and Static Functions
 
@@ -7475,6 +7496,34 @@ One no-emission source_literal_append(ctx,node,bytes,length,&id) manages the exi
 The sole SourceLibraryMap records literal_begin/count for a contiguous original-order range. Check CONST_STRING's nonnegative original ID against its own Library count before overflow-checked base addition; a valid merged index cannot rescue an invalid original definition. CONCAT_STRING still uses SSA operands and CALL_DEFAULT uses the existing function/default map. Refund the original function scratch map on all exits and commit next_function only after copying the complete Library. Never publish a partial Checked builder. Ordinary semantic-failure query snapshots retain the existing complete contract rather than requiring NULL for every failure.
 
 Qualification includes two real Libraries each owning literal0 with different bytes, reversed Catalog order with fixed results, omitted/explicit STRING arguments, private-helper rejection, the original OwnedChecked executed after all producers die, Source/independent packet VM/actual native/mixed, two Instances, retained owned bytes read by length after Program destruction, and final physical zero. Empty, UTF8 and low-level three-byte a\0b literals must survive all four consumers; Source parser NUL rejection remains unchanged. Independent manual packets and correctly rehashed attacks cover original-ID-outside-source-but-inside-merged, unused invalid UTF8, length/count overflow, identities/authority/digests and every duplicate canonical variant. Fail every new actual allocation, release the first Library when the second fails, test cumulative exact/minus1 budgets and scratch refunds. Preserve all existing default, origin, budget and fault gates. This finite extension does not qualify mutable Library state isolation, stdlib paired-cache hits/misses, complete product safety or final legacy deletion.
+
+### 17.33 Finite typed value equality (frozen contract, implementation PENDING)
+
+This section freezes the next sole Checked57/wire22 increment; current56 does not thereby
+execute this family. Equal uses bit4 of the existing marker:u32, with ordinary TYPE
+definition-site proofs, inline/where conjunction and provenance revalidation. The first domain
+is only bool, eight integers, f32/f64, string and recursive Array<D>. Other domains still reject
+explicitly and remain goals. Same-T ==, != and real Core assertEqual<T: Equal> share one typed
+relation. EQUAL=117, OP_COUNT=118 and stage mask7 take two VALUE operands and produce BOOL;
+immediate is only0(EQ)/1(NE), with zero unused fields. NE inverts only a successful comparison.
+Correctly rehashed56 and older packets reject before body allocation.
+
+FLOAT retains IEEE NaN inequality and signed-zero equality; STRING compares full length/bytes;
+Array compares length then indexed leaves, without pointer/shared-backing shortcuts around NaN.
+Use budgeted explicit DFS rather than C recursion or a depth cutoff returning false. VM/native
+consume one typed helper: borrowed inputs are neither copied nor dropped, and only OK publishes
+bool. BAD_ARGUMENT/OOM/LIMIT preserve output and input owners; all exits refund real scratch/domain
+allocations. Charge cumulative STRING bytes, Array elements and growth work. Exhaustion cannot
+mean inequality or satisfy assertPanics.
+
+Source/Owned query/clone, default helpers, Library, writer/reader, Checked specialization and
+Lowered revalidation retain one constraint identity. No legacy Equatable, boxed-value adapter,
+name whitelist or second executor grants authority. Public Value16/Call20/Program26 are expected
+to add no fields, subject to actual fresh layout/provider-rejection/generated-C gates. Require
+independent full packets/valid-rehash, unused unconstrained definitions, same-named user
+interfaces, shared-backing NaN, NUL/depth257, every actual OOM and exact/minus1, dead producers,
+two Instances and physical refunds, separate fixed VM/native/mixed outcomes and central
+default/ASan. Complete assertions/containers/CLI, paired stdlib publication and full safety remain OPEN.
 
 ---
 

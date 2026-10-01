@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include "xi_pipeline.h"
+#include "../plan/semantic/xr_semantic_coroutine_function_shape.h"
 #include "../base/xglobal_indices.h"
 #include "xi_semantic_snapshot.h"
 #include "../frontend/analyzer/xa_typed_program.h"
@@ -29,6 +30,7 @@
 #include "xi_arc.h"
 #include "xi_arc_verify.h"
 #include "xi_import_resolve.h"
+#include "xi_imported_constructor_normalize.h"
 #include "xi_coro_analyze.h"
 #include "xi_source_move_verify.h"
 #include "xi_stage.h"
@@ -330,86 +332,7 @@ static bool xi_pipeline_coro_is_sealed_builtin_constructor(const XiValue *call) 
  * immutable graph is the surviving target-neutral authority. */
 static int xi_pipeline_coro_plan_function_suspendability(const XrSemanticPlan *plan,
                                                          uint32_t selected) {
-    if (!plan || !xr_semantic_plan_is_verified(plan))
-        return -1;
-    const uint32_t function_count = (uint32_t) xr_semantic_plan_function_count(plan);
-    const uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(plan);
-    if (selected >= function_count)
-        return -1;
-    uint8_t *suspendable =
-        function_count ? (uint8_t *) xr_calloc(function_count, sizeof(*suspendable)) : NULL;
-    uint32_t *head =
-        function_count ? (uint32_t *) xr_malloc((size_t) function_count * sizeof(*head)) : NULL;
-    uint32_t *next =
-        target_count ? (uint32_t *) xr_malloc((size_t) target_count * sizeof(*next)) : NULL;
-    uint32_t *queue =
-        function_count ? (uint32_t *) xr_malloc((size_t) function_count * sizeof(*queue)) : NULL;
-    if ((function_count && (!suspendable || !head || !queue)) || (target_count && !next)) {
-        xr_free(suspendable);
-        xr_free(head);
-        xr_free(next);
-        xr_free(queue);
-        return -1;
-    }
-    for (uint32_t i = 0; i < function_count; i++)
-        head[i] = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; i < target_count; i++)
-        next[i] = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; i < xr_semantic_plan_entity_count(plan); i++) {
-        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
-        const XrSemanticOperationRecord *operation =
-            entity && entity->kind == XR_SEM_ENTITY_COROUTINE_STATE
-                ? xr_semantic_plan_operation(plan, entity->subject)
-                : NULL;
-        if (operation && operation->function < function_count)
-            suspendable[operation->function] = 1;
-    }
-    for (uint32_t i = 0; i < target_count; i++) {
-        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
-        const XrSemanticOperationRecord *operation =
-            target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
-        bool propagates = target && operation && target->function < function_count &&
-                          ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
-                            (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL)) ||
-                           (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL &&
-                            operation->opcode == XI_CALL_METHOD) ||
-                           (target->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL &&
-                            operation->opcode == XI_CALL_METHOD));
-        if (!propagates)
-            continue;
-        next[i] = head[target->function];
-        head[target->function] = i;
-    }
-    uint32_t begin = 0;
-    uint32_t end = 0;
-    for (uint32_t i = 0; i < function_count; i++)
-        if (suspendable[i])
-            queue[end++] = i;
-    while (begin < end) {
-        uint32_t callee = queue[begin++];
-        for (uint32_t edge = head[callee]; edge != XR_SEMANTIC_INDEX_NONE; edge = next[edge]) {
-            const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, edge);
-            const XrSemanticOperationRecord *operation =
-                target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
-            if (!operation || operation->function >= function_count) {
-                xr_free(suspendable);
-                xr_free(head);
-                xr_free(next);
-                xr_free(queue);
-                return -1;
-            }
-            if (!suspendable[operation->function]) {
-                suspendable[operation->function] = 1;
-                queue[end++] = operation->function;
-            }
-        }
-    }
-    int result = suspendable[selected] ? 1 : 0;
-    xr_free(suspendable);
-    xr_free(head);
-    xr_free(next);
-    xr_free(queue);
-    return result;
+    return xr_semantic_function_frozen_suspendability(plan, selected);
 }
 
 /* Suspendability of a dependency class constructor from the dependency's
@@ -1141,6 +1064,12 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (cfg->module_graph && cfg->graph_modules && cfg->graph_module_count > 0) {
         xi_resolve_imports(ir, cfg->module_graph, cfg->source_file, cfg->graph_modules,
                            cfg->graph_module_count);
+    }
+    if (!xi_imported_constructor_normalize(ir, X, cfg)) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL,
+                              "grounded constructor normalization failed atomically");
+        goto fail;
     }
     xi_arc_analyze_contracts(ir);
 

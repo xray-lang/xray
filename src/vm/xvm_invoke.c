@@ -939,8 +939,7 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrVMRuntime *isolate, XrVMContext *vm_ct
     int b = GETARG_B(instr);
     int nargs = GETARG_C(instr);
 
-    bool is_ctor_call = (a == 0);
-    XrValue this_val = is_ctor_call ? base[0] : base[a + 1];
+    XrValue this_val = base[a + 1];
 
     if (!xr_value_is_instance(this_val)) {
         VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "super can only be called on class instance");
@@ -989,7 +988,7 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrVMRuntime *isolate, XrVMContext *vm_ct
     // subclass fields follow at N+. The PRIMITIVE ctor writes parent fields
     // in-place and does not need to know about subclass fields.
     if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
-        int arg_base = is_ctor_call ? 1 : (a + 2);
+        int arg_base = a + 2;
         int base_offset = (int) (base - vm_ctx->stack);
         int frame_index = (int) (frame - vm_ctx->frames);
         XrValue result = method->as.primitive(isolate, this_val, &base[arg_base], nargs);
@@ -1001,7 +1000,7 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrVMRuntime *isolate, XrVMContext *vm_ct
         return XR_DISP_NEXT;
     }
     if (method->type == XMETHOD_YIELDABLE_PRIMITIVE && method->as.yieldable_primitive != NULL) {
-        int arg_base = is_ctor_call ? 1 : (a + 2);
+        int arg_base = a + 2;
         return vm_call_yieldable_primitive_method(isolate, vm_ctx, method, this_val,
                                                   &base[arg_base], nargs, base, a, &frame, pc);
     }
@@ -1020,38 +1019,21 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrVMRuntime *isolate, XrVMContext *vm_ct
                  proto->numparams - 1, nargs);
     }
 
-    if (is_ctor_call) {
-        int current_param_count = frame->closure->proto->numparams;
-        int call_base_offset = current_param_count + 1;
-
-        base[call_base_offset] = this_val;
-        for (int idx = 0; idx < nargs; idx++) {
-            base[call_base_offset + 1 + idx] = base[1 + idx];
-        }
-
-        if (isolate->vm.ctor_call_depth >= XR_CTOR_CALL_STACK_MAX) {
-            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "constructor call depth exceeded");
-        }
-        isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].class_ptr = super_class;
-        isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].frame_count = vm_ctx->frame_count;
-        isolate->vm.ctor_call_depth++;
-
-        if (vm_push_bc_frame(vm_ctx, closure, call_base_offset, &base, &frame, pc) == NULL) {
-            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
-                     "stack overflow before super constructor call");
-        }
-    } else {
-        if (isolate->vm.ctor_call_depth >= XR_CTOR_CALL_STACK_MAX) {
-            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "super call depth exceeded");
-        }
-        isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].class_ptr = super_class;
-        isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].frame_count = vm_ctx->frame_count;
-        isolate->vm.ctor_call_depth++;
-
-        if (vm_push_bc_frame(vm_ctx, closure, a + 1, &base, &frame, pc) == NULL) {
-            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow before super method call");
-        }
+    if (isolate->vm.ctor_call_depth >= XR_CTOR_CALL_STACK_MAX) {
+        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "super call depth exceeded");
     }
+    int caller_frame_count = vm_ctx->frame_count;
+    if (vm_push_bc_frame(vm_ctx, closure, a + 1, &base, &frame, pc) == NULL) {
+        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow before super method call");
+    }
+    /* A source constructor owns its receiver and returns that owner. The
+     * enclosing constructor keeps its original owner, so a successful parent
+     * frame receives an independent token rather than consuming an alias. */
+    if (xr_method_is_constructor(method))
+        xr_rc_retain_value(this_val);
+    isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].class_ptr = super_class;
+    isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].frame_count = caller_frame_count;
+    isolate->vm.ctor_call_depth++;
 
     return XR_DISP_RESTART;
 }

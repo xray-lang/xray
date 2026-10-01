@@ -17,6 +17,7 @@
 #include "../semantic/xr_semantic_json_codec_shape.h"
 #include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "xr_target_verify.h"
+#include "xr_target_plain_ref_aggregate_shape.h"
 #include "xr_target_capability.h"
 #include "xr_target_instruction_verify.h"
 #include "xr_i64_overflow_target_instruction.h"
@@ -884,7 +885,8 @@ static bool borrowed_raw_pointer_rep_is_exact(const XrTargetPlan *plan,
             }
             uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
             if (!semantic_direct_local_tagged_ref_parameter_is_exact_verify(view.semantic,
-                                                                            parameter, &storage))
+                                                                            parameter, &storage) &&
+                !xr_target_plain_ref_parameter_source_is_exact(view.semantic, parameter))
                 return false;
             found = true;
         }
@@ -4340,7 +4342,7 @@ static bool verify_value_binding(
                              operation->function == semantic_function;
     bool exact_local_address =
         xr_semantic_local_addr_is_exact(semantic, operation, NULL) ||
-        semantic_direct_local_ref_address_is_exact_verify(semantic, operation, false) ||
+        (semantic_direct_local_ref_address_is_exact_verify(semantic, operation, false) || xr_target_plain_ref_address_source_is_exact(semantic, operation)) ||
         xr_semantic_native_direct_ref_address_is_exact(semantic, operation) ||
         verifier_source_export_ref_address_is_exact(plan, semantic, operation);
     bool exact_dynamic_value =
@@ -4537,6 +4539,7 @@ static bool verify_value_binding(
     bool exact_scalar_slice_parameter = semantic_scalar_slice_parameter_is_exact(semantic, parameter) &&
                                        parameter->type == semantic_type;
     uint8_t exact_tagged_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    bool exact_plain_ref_parameter = xr_target_plain_ref_parameter_source_is_exact(semantic, parameter);
     bool exact_tagged_ref_parameter = semantic_direct_local_tagged_ref_parameter_is_exact_verify(
                                           semantic, parameter, &exact_tagged_ref_storage) &&
                                       parameter->type == semantic_type;
@@ -4739,7 +4742,7 @@ static bool verify_value_binding(
              * the builder never produces. */
             eligibility = 0;
         }
-    } else if (exact_tagged_ref_parameter || exact_local_address) {
+    } else if (exact_tagged_ref_parameter || exact_plain_ref_parameter || exact_local_address) {
         /* An address is a pointer whatever it points at, and the plan records
          * the subject's type on both sides of the operation because source has
          * no way to write "pointer to int". So the expected kind here cannot
@@ -4844,13 +4847,13 @@ static bool verify_value_binding(
             plan->machine_reps[record->memory_rep].root_kind != XR_TARGET_ROOT_DYNAMIC)
             XR_VALUE_BINDING_FAIL(9);
     }
-    if (exact_tagged_ref_parameter &&
+    if ((exact_tagged_ref_parameter || exact_plain_ref_parameter) &&
         (plan->machine_reps[record->register_rep].ownership != XR_TARGET_OWNERSHIP_BORROWED ||
          plan->machine_reps[record->memory_rep].ownership != XR_TARGET_OWNERSHIP_BORROWED ||
          plan->machine_reps[record->register_rep].root_kind != XR_TARGET_ROOT_NONE ||
          plan->machine_reps[record->memory_rep].root_kind != XR_TARGET_ROOT_NONE))
         XR_VALUE_BINDING_FAIL(13);
-    if (expected_kind == XR_MACHINE_REP_RAW_PTR && !exact_tagged_ref_parameter && !forwarded &&
+    if (expected_kind == XR_MACHINE_REP_RAW_PTR && !exact_tagged_ref_parameter && !exact_plain_ref_parameter && !forwarded &&
         (plan->machine_reps[record->register_rep].ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
          plan->machine_reps[record->memory_rep].ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
          plan->machine_reps[record->register_rep].root_kind != XR_TARGET_ROOT_NONE ||
@@ -7253,7 +7256,11 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     operand->transfer_mode == XR_TRANSFER_SHARE &&
                     operand->flags == (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) &&
                     argument_ref_place;
-                bool argument_reference = argument_scalar_ref || argument_tagged_ref;
+                bool argument_plain_ref = !method && !suspends &&
+                    xr_target_plain_ref_call_source_is_exact(semantic, target, (uint16_t) ordinal, NULL);
+                bool argument_reference = argument_scalar_ref || argument_tagged_ref || argument_plain_ref;
+                if (argument_plain_ref)
+                    argument_kind = XR_MACHINE_REP_AGGREGATE;
                 /* An Array or a String handed over by value travels the plain
                  * argument path: the tagged value is copied and the allocation
                  * shared, so the row states no place, no element storage, and
@@ -7387,6 +7394,15 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                           XR_TARGET_OWNERSHIP_BORROWED &&
                       caller_value->slot < plan->slots_count &&
                       plan->slots[caller_value->slot].role == XR_TARGET_SLOT_PARAMETER));
+                bool plain_ref_boundary = argument_plain_ref && caller_value && callee_value &&
+                    plan->machine_reps[caller_value->register_rep].kind == XR_MACHINE_REP_AGGREGATE &&
+                    plan->machine_reps[caller_value->memory_rep].kind == XR_MACHINE_REP_AGGREGATE &&
+                    plan->machine_reps[caller_value->register_rep].ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+                    plan->machine_reps[caller_value->memory_rep].ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+                    plan->machine_reps[callee_value->register_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+                    plan->machine_reps[callee_value->memory_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+                    plan->machine_reps[callee_value->register_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+                    plan->machine_reps[callee_value->memory_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED;
                 /* The declaration decides whether the callee borrows or owns a
                  * by-value container; the caller may itself hold either
                  * ownership while handing over the same tagged carrier. */
@@ -7421,7 +7437,8 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                             xr_semantic_plan_type(semantic, operand->type),
                             xr_semantic_plan_type(semantic, parameter->type), parameter->mode));
                 const char *argument_identity_domain =
-                    argument_scalar_ref   ? "xray-target-direct-scalar-ref-argument-v1"
+                    argument_plain_ref ? "xray-target-direct-plain-ref-argument-v1"
+                    : argument_scalar_ref   ? "xray-target-direct-scalar-ref-argument-v1"
                     : argument_tagged_ref ? "xray-target-direct-tagged-ref-argument-v2"
                                           : "xray-target-call-argument-v1";
                 /* Kept in step with the builder through one shared judgement:
@@ -7454,7 +7471,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
                     (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
                      argument_adt_enum || argument_class_instance || argument_native_storage ||
-                     argument_tagged_ref || argument_container_value || argument_leaf_aggregate ||
+                     argument_tagged_ref || argument_plain_ref || argument_container_value || argument_leaf_aggregate ||
                      argument_managed_aggregate) &&
                     (argument_reference || argument_class_instance || argument_native_storage ||
                      (argument_container_value &&
@@ -7470,6 +7487,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     (parameter->ownership == XI_OWN_NONE || argument_u8_slice || argument_string_value ||
                      argument_array_value || argument_class_instance || argument_native_storage ||
                      (argument_managed_aggregate && parameter->ownership == XI_OWN_BORROWED) ||
+                     (argument_plain_ref && parameter->ownership == XI_OWN_BORROWED) ||
                      (argument_adt_enum && parameter->ownership == XI_OWN_OWNED) ||
                      ((argument_u8_slice || argument_unit_enum || argument_adt_enum ||
                        argument_tagged_ref) &&
@@ -7493,7 +7511,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     argument->callee_memory_rep == callee_value->memory_rep &&
                     ((caller_value->register_rep == callee_value->register_rep &&
                       caller_value->memory_rep == callee_value->memory_rep) ||
-                     adt_enum_borrow_boundary || tagged_ref_borrow_boundary ||
+                     adt_enum_borrow_boundary || tagged_ref_borrow_boundary || plain_ref_boundary ||
                      container_value_borrow_boundary || class_instance_boundary ||
                      native_storage_boundary || const_read_boundary) &&
                     plan->machine_reps[argument->register_rep].kind ==

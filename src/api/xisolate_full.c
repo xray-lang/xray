@@ -36,7 +36,6 @@
 #include "../module/xmodule.h"
 #include "../module/xprelude_runtime.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
-#include "../runtime/mem/xcycle_detector.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../vm/xvm_internal.h"
 #include "../vm/xvm_profiler.h"
@@ -181,9 +180,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     xr_module_system_init(isolate);
 
     // Compiler hooks for import
-    xr_module_set_compiler_hooks(isolate, isolate->compiler_session, xr_parse_with_source,
-                                 xr_compile_ast_with_source, xr_compile_source_with_path,
-                                 xr_program_destroy);
+    xr_module_set_compiler_hooks(isolate, isolate->compiler_session, xr_compile_module_source);
 
     // Private native storage classes for net source wrappers are registered up
     // front inside stdlib loaders. Pure stdlib classes such as
@@ -248,29 +245,7 @@ static void isolate_cleanup_full(XrVMRuntime *isolate) {
         isolate->core_rt->type_registry = NULL;
     }
 
-#ifdef XR_ENABLE_CYCLE_DETECTOR
-    /* Scan the root execution's heap while class names are still readable.
-     *
-     * The heap itself is torn down later, inside xr_runtime_core_delete — but
-     * the symbol table that owns every interned class name goes away right
-     * below, so a scan from there would print freed memory for the type of
-     * each object on a cycle. This is the last point where a cycle in the main
-     * execution can be reported with names attached. */
-    {
-        XrCycleReport root_report;
-        (void) xr_cycle_detector_scan(&isolate->core_rt->root_heap, &root_report);
-        /* Claim the scan so the teardown path does not report the same cycles
-         * a second time. */
-        isolate->core_rt->root_heap.is_tearing_down = 1;
 
-        /* The shared domain has no coroutine-heap teardown to bound it and no
-         * `weak` to break it (W4), so a cycle here is a process-lifetime leak.
-         * Workers are stopped by now, which gives the scan the quiescence it
-         * requires. */
-        XrCycleReport shared_report;
-        (void) xr_cycle_detector_scan_shared(&shared_report);
-    }
-#endif
 
     if (isolate->core_rt->symbol_table) {
         xr_symbol_table_destroy((XrSymbolTable *) isolate->core_rt->symbol_table);
@@ -327,6 +302,7 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
 
     XrExecutionContext *previous =
         xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
+    isolate->lifecycle_cleanup = isolate_cleanup_full;
     int init_result = isolate_init_full(isolate);
     if (init_result == 0 &&
         (isolate->params.script_file || isolate->params.script_argc != 0 ||
@@ -336,11 +312,9 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
         init_result = -1;
     xr_exec_context_restore(previous);
     if (init_result != 0) {
-        isolate_cleanup_full(isolate);
         xray_vm_delete(isolate);
         return NULL;
     }
-    isolate->lifecycle_cleanup = isolate_cleanup_full;
     return isolate;
 
 #if XR_ENABLE_VM_PROFILER

@@ -32,7 +32,7 @@ static void method_owner_cases(void) {
         {"main",4,NULL,0,XR_XIR_I64,&block,1,code,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
         {"read",4,&receiver,1,XR_XIR_I64,&block,1,member_code,2,NULL,0}};
-    XrXirGeneric generic[3] = {{0},{0},{constraints,2,NULL,0}};
+    XrXirGeneric generic[3] = {{0},{0},{constraints,2,NULL,0, NULL}};
     XrXirFunctionIdentity identities[3] = {{0,1,0,0,0,0,XR_XIR_NON_MEMBER},
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER},{0,0,1,XR_XIR_MEMBER_PRIVATE,0,0,XR_XIR_READ_METHOD}};
     XrXirSourceModule source = {"alpha",5,NULL,0,1};
@@ -61,7 +61,7 @@ static void method_owner_cases(void) {
         XrXirBlock entry_block={0,3,0,0};uint32_t operands[]={0};
         XrXirFunction original_main=functions[0];
         functions[0]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,3,operands,1};
-        generic[0]=(XrXirGeneric){NULL,0,call_args,2};types.nodes=pair;types.count=2;
+        generic[0]=(XrXirGeneric){NULL,0,call_args,2, NULL};types.nodes=pair;types.count=2;
         XrXirArtifact *original=NULL,*special=NULL;
         CHECK(xr_xir_check(&module,NULL,&original,NULL)==XR_XIR_OK);
         CHECK(xr_xir_specialize(original,NULL,&special,NULL)==XR_XIR_OK);xr_xir_artifact_free(original);

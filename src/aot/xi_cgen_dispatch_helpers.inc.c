@@ -15906,6 +15906,32 @@ static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
+    XrCValueEmissionView loaded = {0}, pointer = {0};
+    bool authoritative = false;
+    if (cg_value_emission_is_named_aggregate(ctx, v, &loaded, &authoritative) &&
+        cg_value_emission_view(ctx, f, v->args[0], &pointer) == CG_VALUE_EMISSION_FOUND &&
+        pointer.rep == XR_C_VALUE_REP_RAW_PTR && cg_raw_pointer_emission_is_exact(&pointer) &&
+        cg_named_struct_pointer_spelling(pointer.c_type) && loaded.c_type &&
+        strlen(loaded.c_type) == 31u && strncmp(pointer.c_type, loaded.c_type, 31u) == 0) {
+        const XrSemanticOperationRecord *source = cg_semantic_operation_for_value(ctx, f, v);
+        uint32_t operand_count = 0;
+        const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(f->semantic_plan, &operand_count);
+        if (!source || !operands || source->opcode != XI_PLACE_LOAD || source->operand_count != 1 ||
+            source->operand_begin >= operand_count ||
+            operands[source->operand_begin].value != pointer.semantic_value) {
+            (void) cg_value_emission_fail(ctx, "plain ref aggregate load disagrees with immutable source operand");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "(*");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        return;
+    }
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     CgFixedArrayLaneInfo fixed;
     if (cg_fixed_array_lane_info_from_type(v->type, &fixed)) {
         if (cg_value_plan_storage_rep(ctx, v) == XR_REP_RAWPTR) {

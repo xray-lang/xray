@@ -11,6 +11,9 @@
 
 #include "xi_emit_internal.h"
 #include "xi_emit_vm_gen.h"
+#include "xi_import_resolve.h"
+#include "../module/xmodule_graph.h"
+#include "../toolchain/xcompiler_session.h"
 #include "xi_own.h"
 #include "../analysis/xglobal_summary.h"
 #include "../runtime/value/xtype.h"
@@ -1511,6 +1514,51 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     return false;
 }
 
+/* The original facade owns the imported spelling even when export resolution
+ * reaches a different underlying module. Graph locators are copied into proto
+ * constants; no graph pointer or transient topological index survives here. */
+XR_FUNC const char *xi_emit_runtime_import_path(EmitCtx *ctx, const char *specifier,
+                                                int exact_spec_index) {
+    if (!ctx || !specifier) return NULL;
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(ctx->isolate);
+    const XrModuleGraph *graph = xr_compiler_session_module_graph(session);
+    if (!graph) {
+        if (xr_compiler_session_vm_import_binding(session) == XR_VM_IMPORT_RUNTIME_MODULE) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return NULL;
+        }
+        return specifier;
+    }
+    int target = exact_spec_index;
+    if (target < 0) {
+        XrCompileUnitIdentity unit = xr_compiler_session_compile_unit_identity(session);
+        int owner = unit.module_identity ? xr_module_graph_find(graph, unit.module_identity) : -1;
+        const char *importer = owner >= 0 ? graph->specs[owner].canonical :
+            (ctx->func->module ? ctx->func->module->path : NULL);
+        if (specifier[0] == '.') {
+            const char *source_path = owner >= 0 ? graph->specs[owner].source_path : importer;
+            const char *canonical = xi_resolve_import_canonical(graph, source_path, specifier);
+            target = canonical ? xr_module_graph_find(graph, canonical) : -1;
+        } else {
+            if (owner >= 0 && unit.kind == XR_COMPILE_UNIT_STDLIB &&
+                graph->specs[owner].kind == XR_MOD_STDLIB &&
+                graph->specs[owner].authority.kind == XR_MODULE_IDENTITY_STDLIB &&
+                graph->specs[owner].authority.namespace_id &&
+                strcmp(graph->specs[owner].authority.namespace_id, specifier) == 0)
+                target = owner;
+            else
+                target = xr_module_graph_find_named_dependency(graph, importer, specifier);
+        }
+    }
+    if (target < 0 || target >= graph->spec_count) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return NULL;
+    }
+    const char *path = xr_module_spec_import_name(&graph->specs[target]);
+    if (!path) emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+    return path;
+}
+
 /* Module import emission.
  * Selective imports → OP_LOAD_MODULE_SLOT (single indexed load).
  * Whole-module imports → OP_LOAD_MODULE (module object by topo index).
@@ -1557,7 +1605,10 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     /* By name: stdlib/native modules not in the graph, a REPL without a
      * module table, or a library unit whose loading program is unknown. */
-    int mod_idx = add_const_string(ctx, ref->module_path);
+    const char *path = xi_emit_runtime_import_path(ctx, ref->module_path,
+        ref->has_exact_target ? ref->exact_target_spec_index : -1);
+    if (!path) return;
+    int mod_idx = add_const_string(ctx, path);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABx(OP_IMPORT, dst, mod_idx));

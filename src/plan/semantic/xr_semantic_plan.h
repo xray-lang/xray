@@ -410,6 +410,12 @@ typedef struct XrSemanticFunctionRecord {
     /* A typed export, link or entry manifest can enter this function without
      * a call in the source graph. This execution fact does not change its ID. */
     uint8_t is_external_entry;
+    /* Full callable declaration and body facts from the same typed source.
+     * NONE is a missing declaration, never a nongeneric/readonly proof. */
+    uint32_t callable_type;
+    uint32_t unknown_semantic_effects;
+    uint32_t effect_unknown_reasons;
+    uint8_t effect_complete;
 } XrSemanticFunctionRecord;
 
 typedef struct XrSemanticParameterRecord {

@@ -491,9 +491,11 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
     }
     if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT) {
         uint32_t normal = function->blocks[op->targets[0]].first, error = function->blocks[op->targets[1]].first;
-        destination = op->type == XR_XIR_UNIT ? UINT32_MAX : layout->offsets[function->parameter_count + normal];
+        bool discard = function->instructions[normal].op == XR_XIR_INVOKE_DISCARD;
+        destination = discard || op->type == XR_XIR_UNIT ? UINT32_MAX : layout->offsets[function->parameter_count + normal];
+        append(buffer,"        state->discard = %s;\n",discard ? "true" : "false");
         append(buffer, "        state->invoking = true; state->normal_pc = %uu; state->error_pc = %uu; state->error_destination = %uu;\n",
-            normal + (op->type != XR_XIR_UNIT), error + 1, layout->offsets[function->parameter_count + error]);
+            normal + (discard || op->type != XR_XIR_UNIT), error + 1, layout->offsets[function->parameter_count + error]);
     } else append(buffer, "        state->invoking = false;\n");
     uint32_t panic_destination = 0, handler_pc = 0;
     bool protected_call = emit_protection(function, layout, (uint32_t) (op - function->instructions),
@@ -574,7 +576,7 @@ static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     }
     append(buffer, "        if (status != XR_XIR_CALL_READY) ");
     emit_fault_return(buffer, function, layout, index,
-        "(XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, fault, 0}");
+        "(XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault, {0}}, 0}");
     append(buffer, "\n");
     if (xr_xir_type_is_owned(buffer->types, op->type))
         append(buffer, "        xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
@@ -832,7 +834,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         emit_resume_call(buffer, function, op, layout, destination);
         return;
-    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR: case XR_XIR_PANIC_CATCH:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_PANIC_CATCH:
         append(buffer, "        goto invalid;\n"); return;
     case XR_XIR_PANIC_CODE:
         append(buffer, "        { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
@@ -851,6 +853,14 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_SUSPEND:
         append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
         return;
+    case XR_XIR_ASSERT_CONDITION:
+        append(buffer, "        if (!xr_xir_scalar_load(state->frame, %uu)) {\n"
+            "            XrXirValue message = ", layout->offsets[op->args[0]]);
+        emit_value(buffer, function, layout, op->args[1]);
+        append(buffer, ";\n            ");
+        emit_fault_return(buffer, function, layout, index, "xr_xir_call_assertion(&message)");
+        append(buffer, "\n        }\n");
+        break;
     case XR_XIR_MATCH_FAIL:
         append(buffer, "        ");
         emit_fault_return(buffer, function, layout, index, "xr_xir_call_match_failure()");
@@ -892,7 +902,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     }
     append(buffer, "typedef struct %s_state_%u {\n"
            "    uint32_t pc, destination, expected, normal_pc, error_pc, error_destination, panic_pc, panic_destination;\n"
-           "    bool initialized, waiting, invoking;\n", prefix, index);
+           "    bool initialized, waiting, invoking, discard;\n", prefix, index);
     if (emit_has_cleanup(function)) append(buffer,
         "    uint32_t frontier, cleanup_parent, exit_target, exit_pc, exit_destination, leave_instruction, panic_frontier;\n"
         "    bool cleanup_waiting, leaving;\n");
@@ -926,18 +936,23 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "                state->exit_target = state->panic_frontier; state->exit_pc = panic_pc;\n"
            "                state->exit_destination = state->panic_destination; state->leaving = true;\n"
            "                return (XrXirAction){XR_XIR_ACTION_LEAVE, 0, NULL, 0, {XR_XIR_I64, 0, view->inbox.status},\n"
-           "                    view->inbox.fault, XR_XIR_ACTION_LEAVE_PANIC};\n            }\n");
+           "                    view->inbox.panic, XR_XIR_ACTION_LEAVE_PANIC};\n            }\n");
     append(buffer, "            return xr_xir_instance_panic_land(view, state->frame, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
-           "{XR_XIR_I64, 0, view->inbox.status}, view->inbox.fault, 0}, state->panic_destination, panic_pc, &state->pc);\n"
+           "{XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0}, state->panic_destination, panic_pc, &state->pc);\n"
            "        }\n"
            "        XrXirValue inbox = view->inbox.value;\n"
+           "        bool discarded = false;\n"
            "        if (state->invoking) {\n"
            "            bool error = view->inbox.status == XR_XIR_CALL_THROWN;\n"
            "            if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
            "            state->pc = error ? state->error_pc : state->normal_pc; state->invoking = false;\n"
            "            if (error) { state->expected = XR_XIR_ERROR; state->destination = state->error_destination; inbox.type = XR_XIR_ERROR; }\n"
+           "            else if (state->discard) {\n"
+           "                if (xr_xir_call_discard_inbox(view, (XrXirType)state->expected) != XR_XIR_CALL_READY) goto invalid;\n"
+           "                discarded = true;\n            }\n"
            "        } else if (view->inbox.status == XR_XIR_CALL_THROWN)\n"
            "            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}, 0};\n"
+           "        if (!discarded) {\n"
            "        if (view->inbox.status != XR_XIR_CALL_RETURNED && view->inbox.status != XR_XIR_CALL_THROWN) goto invalid;\n"
            "        if (state->expected == XR_XIR_UNIT) {\n"
            "            if (inbox.type || inbox.reserved || inbox.payload) goto invalid;\n"
@@ -947,7 +962,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "!= XR_XIR_VALUE_OK) goto limit;\n"
            "        } else if (state->destination != UINT32_MAX)\n"
            "            xr_xir_scalar_store(state->frame, state->destination, inbox.payload);\n"
-           "    }\n    switch (state->pc) {\n");
+           "        }\n    }\n    switch (state->pc) {\n");
     for (uint32_t i = 0; i < function->instruction_count; ++i)
         emit_resume_step(buffer, module, function, layout, i);
     append(buffer, "    default: break;\n    }\ninvalid:\n"
@@ -1178,12 +1193,14 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     append(&buffer,
            "_Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8, \"XIR fault layout\");\n"
            "_Static_assert(offsetof(XrXirFaultDetail, index) == 8 && offsetof(XrXirFaultDetail, length) == 16, \"XIR fault offsets\");\n"
-           "_Static_assert(sizeof(XrXirAction) == 72 && _Alignof(XrXirAction) == 8, \"XIR action layout\");\n"
-           "_Static_assert(offsetof(XrXirAction, value) == 24 && offsetof(XrXirAction, fault) == 40 && "
-           "offsetof(XrXirAction, flags) == 64, \"XIR action offsets\");\n"
-           "_Static_assert(sizeof(XrXirCallResult) == 56 && _Alignof(XrXirCallResult) == 8, \"XIR result layout\");\n"
+           "_Static_assert(sizeof(XrXirPanicPayload) == 40 && _Alignof(XrXirPanicPayload) == 8, \"XIR panic layout\");\n"
+           "_Static_assert(offsetof(XrXirPanicPayload, detail) == 0 && offsetof(XrXirPanicPayload, message) == 24, \"XIR panic offsets\");\n"
+           "_Static_assert(sizeof(XrXirAction) == 88 && _Alignof(XrXirAction) == 8, \"XIR action layout\");\n"
+           "_Static_assert(offsetof(XrXirAction, value) == 24 && offsetof(XrXirAction, panic) == 40 && "
+           "offsetof(XrXirAction, flags) == 80, \"XIR action offsets\");\n"
+           "_Static_assert(sizeof(XrXirCallResult) == 72 && _Alignof(XrXirCallResult) == 8, \"XIR result layout\");\n"
            "_Static_assert(offsetof(XrXirCallResult, value) == 8 && offsetof(XrXirCallResult, wake) == 24 && "
-           "offsetof(XrXirCallResult, fault) == 32, \"XIR result offsets\");\n");
+           "offsetof(XrXirCallResult, panic) == 32, \"XIR result offsets\");\n");
     for (uint32_t f = 0; f < module->function_count && buffer.status == XR_XIR_OK; ++f)
         emit_resume_function(&buffer, artifact, symbol_prefix, f);
     append(&buffer, "XR_DATADEF const XrXirCallEntry %s_entries[] = {\n", symbol_prefix);

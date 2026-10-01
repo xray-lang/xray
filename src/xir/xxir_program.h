@@ -15,7 +15,7 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 25u
+#define XR_XIR_PROGRAM_ABI_VERSION 26u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirProgramBudget {
     uint64_t metadata_bytes, work;

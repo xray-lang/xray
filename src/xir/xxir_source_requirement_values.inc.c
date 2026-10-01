@@ -52,7 +52,7 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types,request->signature);
     if (signature.parameter_count >= 65536)
         return source_fail(ctx,site,XR_XIR_BUDGET,"bound requirement parameter budget exhausted");
-    uint32_t outer = ctx->function, index = ctx->function_count - (ctx->linkage_kind == XR_XIR_PROGRAM);
+    uint32_t outer = ctx->function, index = ctx->function_count;
     SourceFunction *parent = &ctx->bodies[outer], *body = &ctx->bodies[index];
     uint32_t generic_count = ctx->generics[outer].parameter_count;
     XrXirConstraint *constraints = generic_count ? source_alloc(ctx,generic_count,sizeof(*constraints)) : NULL;

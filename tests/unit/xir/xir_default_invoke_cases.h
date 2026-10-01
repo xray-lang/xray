@@ -47,7 +47,7 @@ static void default_invoke_case(unsigned mode,bool generic) {
     XrXirTypes types={&node,1,&nt,NULL};
     XrXirType args[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_BOOL,XR_XIR_F64};
     XrXirConstraint constraints[4]={{0},{0},{0},{0}};
-    XrXirGeneric generics[4]={{0},{NULL,0,args,4},{constraints,4,NULL,0},{constraints,4,NULL,0}};
+    XrXirGeneric generics[4]={{0},{NULL,0,args,4, NULL},{constraints,4,NULL,0, NULL},{constraints,4,NULL,0, NULL}};
     if(generic)entry[0].type_arguments[1]=4;
     XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generic?generics:NULL,&types,NULL,XR_XIR_PROGRAM,&table};
     XrXirStatus expected=XR_XIR_BAD_STRUCTURE;

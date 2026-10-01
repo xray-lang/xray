@@ -33,7 +33,7 @@ static XrXirValue source_float_run(XrXirInstance *instance, uint32_t function) {
     CHECK(xr_xir_instance_start(instance, function, NULL, 0) == XR_XIR_CALL_READY);
     XrXirCallResult outcome = xr_xir_instance_poll(instance).outcome;
     if (outcome.status != XR_XIR_CALL_RETURNED)
-        fprintf(stderr, "float function %u status %u fault %u\n", function, (unsigned) outcome.status, outcome.fault.code);
+        fprintf(stderr, "float function %u status %u fault %u\n", function, (unsigned) outcome.status, outcome.panic.detail.code);
     CHECK(outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue value = {0};
     CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);

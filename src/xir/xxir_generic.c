@@ -13,7 +13,10 @@
 #include "xxir_types.h"
 #include "xxir_constraints.h"
 #include "xxir_constraint_proof.h"
+#include "xxir_internal.h"
 #include "../base/xmalloc.h"
+
+#include "xxir_result_binders.inc.c"
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
     if (!module || function >= module->function_count) return false;
@@ -54,18 +57,29 @@ XrXirStatus xr_xir_generics_structure_verify(const XrXirModule *module, XrXirBud
         remaining->parameters -= g->parameter_count;
         uint64_t count = (uint64_t) g->parameter_count + g->argument_count;
         uint64_t bytes = (uint64_t) g->parameter_count * sizeof(*g->constraints) +
-            (uint64_t) g->argument_count * sizeof(*g->arguments);
+            (uint64_t) g->argument_count * sizeof(*g->arguments) +
+            (g->parameter_kinds ? (uint64_t)g->parameter_count * sizeof(*g->parameter_kinds) : 0);
         if (bytes > SIZE_MAX || bytes > remaining->metadata_bytes || count + 1 > remaining->work) return XR_XIR_BUDGET;
         remaining->metadata_bytes -= bytes; remaining->work -= count + 1;
         if ((g->parameter_count != 0) != (g->constraints != NULL) ||
             (g->argument_count != 0) != (g->arguments != NULL)) return XR_XIR_BAD_STRUCTURE;
         templates |= g->parameter_count != 0;
+        bool result_binder = false;
+        if (g->parameter_kinds && !g->parameter_count) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < g->parameter_count; ++p) {
+            uint32_t kind = xr_xir_binder_kind(g,p);
+            if (kind > XR_XIR_BINDER_RESULT_VARIABLE) return XR_XIR_BAD_STRUCTURE;
+            result_binder |= kind == XR_XIR_BINDER_RESULT_VARIABLE;
             XrXirStatus status = xr_xir_constraint_structure(module->types, g->constraints[p], g->parameter_count, remaining);
             if (status != XR_XIR_OK) return status;
         }
+        if (g->parameter_kinds && !result_binder) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t a = 0; a < g->argument_count; ++a) {
-            if (g->arguments[a] == XR_XIR_UNIT || xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;
+            if (g->arguments[a] == XR_XIR_UNIT) {
+                XrXirStatus status = xr_xir_result_unit_use(module,f,a,remaining);
+                if (status != XR_XIR_OK) return status;
+            }
+            if (xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xr_xir_type_expression_shape(module->types,g->arguments[a],g->parameter_count,remaining);
             if (status != XR_XIR_OK) return status;
         }
@@ -77,6 +91,7 @@ void xr_xir_generics_free(XrXirGeneric *generics, uint32_t functions) {
     for (uint32_t f = 0; f < functions; ++f) {
         xr_xir_constraint_array_free((XrXirConstraint *)generics[f].constraints, generics[f].parameter_count);
         xr_free((void *) generics[f].arguments);
+        xr_free((void *) generics[f].parameter_kinds);
     }
     xr_free(generics);
 }
@@ -92,11 +107,14 @@ XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **outp
         XrXirStatus status = xr_xir_constraint_array_copy_verified(from->constraints, from->parameter_count, &constraints);
         XrXirType *arguments = from->argument_count ? xr_malloc((size_t) from->argument_count * sizeof(*arguments)) : NULL;
         copy[f].constraints = constraints; copy[f].arguments = arguments;
-        if (status != XR_XIR_OK || (from->argument_count && !arguments)) {
+        uint32_t *kinds = from->parameter_kinds ? xr_malloc((size_t)from->parameter_count * sizeof(*kinds)) : NULL;
+        copy[f].parameter_kinds = kinds;
+        if (status != XR_XIR_OK || (from->argument_count && !arguments) || (from->parameter_kinds && !kinds)) {
             xr_xir_generics_free(copy, module->function_count);
             return status != XR_XIR_OK ? status : XR_XIR_OUT_OF_MEMORY;
         }
         if (from->argument_count) memcpy(arguments, from->arguments, (size_t) from->argument_count * sizeof(*arguments));
+        if (kinds) memcpy(kinds,from->parameter_kinds,(size_t)from->parameter_count * sizeof(*kinds));
     }
     *output = copy; return XR_XIR_OK;
 }
@@ -108,7 +126,11 @@ XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
     if (count != to->parameter_count || first > from->argument_count ||
         count > from->argument_count - first || (!count && first)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t a = 0; a < count; ++a) {
-        XrXirStatus status = xr_xir_type_satisfies(module, caller, from->arguments[first + a], (XrXirConstraint){0}, remaining);
+        XrXirType argument = from->arguments[first+a];
+        XrXirStatus status = xr_xir_binder_kind(to,a) == XR_XIR_BINDER_RESULT_VARIABLE ?
+            xr_xir_result_argument(module,caller,argument,remaining) :
+            xr_xir_type_satisfies(module,caller,argument,(XrXirConstraint){0},remaining);
+        if (xr_xir_binder_kind(to,a) == XR_XIR_BINDER_TYPE && result_symbol(from,argument)) return XR_XIR_BAD_TYPE;
         if (status != XR_XIR_OK) return status;
         XrXirProofContext context = {module, {XR_XIR_CONTEXT_FUNCTION,caller,0}};
         XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_FUNCTION,(uint32_t)call->immediate,0}, a,

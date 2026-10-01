@@ -61,7 +61,7 @@ typedef struct XirString {
 } XirString;
 typedef struct XirPanicInfo {
     XirObject object;
-    XrXirFaultDetail detail;
+    XrXirPanicPayload panic;
 } XirPanicInfo;
 
 _Static_assert(sizeof(void *) == sizeof(int64_t), "XIR pointer payload width");
@@ -91,7 +91,7 @@ static XrXirValue string_value(XirString *string) {
     memcpy(&value.payload, &string, sizeof(string));
     return value;
 }
-/* Built-in carriers own no type arena and no nested values. */
+/* Built-in carriers own no type arena. PanicInfo retains its STRING message. */
 static bool arena_free_carrier(XrXirType type) {
     return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_PANIC_INFO;
 }
@@ -145,7 +145,8 @@ static bool value_header_valid(const XrXirValue *value) {
         type = object->type;
     }
     if (type == XR_XIR_PANIC_INFO)
-        return !object->arena && !object->kind && xr_xir_fault_panic_valid(((XirPanicInfo *) object)->detail);
+        return !object->arena && !object->kind && xr_xir_panic_valid(&((XirPanicInfo *) object)->panic) &&
+            !xr_xir_panic_empty(&((XirPanicInfo *) object)->panic);
     if (arena_free_carrier(type))
         return !object->arena && !object->kind;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(object->arena), type);
@@ -470,6 +471,7 @@ static void release_pending(XirObject *pending) {
             if (array->data) xr_xir_domain_deallocate(domain, array->data, array->capacity * array->stride);
             xr_xir_domain_deallocate(domain, array, (size_t)array_header_bytes(arena, array->element));
         } else if (object->type == XR_XIR_PANIC_INFO) {
+            queue_release(&((XirPanicInfo *)object)->panic.message, &pending);
             xr_xir_domain_deallocate(domain, object, sizeof(XirPanicInfo));
         } else {
             XR_CHECK(object->type == XR_XIR_ATOMIC_I64, "unknown owned value kind");

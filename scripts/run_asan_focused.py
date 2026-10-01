@@ -127,10 +127,24 @@ XIR_TESTS = (
     "test_xir_panic_source",
     "test_xir_panic_native",
     "test_xir_panic_mixed",
+    "test_xir_panic_carrier",
+    "test_xir_assert_condition",
+    "test_xir_assert_condition_native",
+    "test_xir_assert_panics",
+    "test_xir_assert_panics_native",
+)
+
+XIR_CTESTS = XIR_TESTS + (
+    "test_xir_panic_carrier_fatal",
+    "test_xir_panic_carrier_wire_vector",
+    "test_xir_assert_condition_wire_vector",
+    "test_xir_assert_panics_allocations",
+    "test_xir_assert_panics_wire_vector",
+    "test_xir_binder_wire_vectors",
 )
 
 EXACT_PROFILES = {
-    "xir": (XIR_TESTS, XIR_TESTS),
+    "xir": (XIR_CTESTS, XIR_TESTS),
     "canonical-program": (
         canonical_profile.CTEST_NAMES,
         canonical_profile.BUILD_TARGETS,

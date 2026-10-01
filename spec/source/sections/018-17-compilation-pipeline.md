@@ -439,6 +439,28 @@ Source用唯一不发recipe的source_literal_append(ctx,node,bytes,length,&id)�
 
 资格须包含两个真实库各自literal0且字节不同、反转Catalog输入顺序后的固定结果、默认与显式STRING、私有helper拒绝、原OwnedChecked在所有producer销毁后执行、Source/独立packet VM/真实native/mixed、双Instance、Program销毁后按length读取拥有结果及最终physical0。低层空、UTF8与a\0b三字节literal须四消费者保真，源码parser的NUL拒绝保持原规则，不能当新源码语法。独立手工包与双层有效重hash攻击覆盖原ID越界但merged合法、unused坏UTF8、长度/计数溢出、身份/authority/摘要及重复canonical；逐新真实OOM、第二库失败释放首库、累计预算exact/minus1及scratch退款均验证。保留既有全部默认/来源/预算/故障测试。本有限增量不替代可变库状态隔离、stdlib配对cache命中/miss、完整产品安全或最终旧链删除。
 
+### 17.33 有限 typed 值相等（冻结合同，实施 PENDING）
+
+本节冻结下一个唯一 Checked57/wire22 增量，不声称当前56已执行本族。Equal 使用已有
+marker:u32 的 bit4，ordinary TYPE 的定义处证明、inline/where 合取及来源复验均适用。
+首域仅 bool、八整数、f32/f64、string 和递归 Array<D>；其余域继续明确拒绝且目标保持OPEN。
+同T的 ==、!= 与真实 Core assertEqual<T: Equal> 使用同一 typed 关系。EQUAL=117、
+OP_COUNT=118、stage mask7、两个 VALUE 操作数及 BOOL 结果；immediate仅0(EQ)/1(NE)，
+其它闲置字段为零。NE 仅在成功比较后反转同一结果。旧56及更早重hash包在body分配前拒绝。
+
+FLOAT保持IEEE NaN不等与正负零相等；STRING比较完整length/bytes；Array按length/索引
+逐叶比较，相同指针或共享backing不能绕过NaN。比较用有预算显式DFS，无C递归或深度截断false。
+唯一 typed helper 由 VM/native 共同消费，borrowed输入不copy/drop，只有OK才发布bool；
+BAD_ARGUMENT/OOM/LIMIT保持output和输入owner，所有出口归还真实scratch/domain分配。
+STRING字节、Array元素和扩容工作累计计费，超限不能当作不等或assertPanics成功。
+
+Source/Owned query/clone、默认helper、Library、writer/reader、Checked特化与Lowered复验
+携带同一约束身份。不得借旧Equatable、boxed值adapter、名字白名单或第二executor准入。
+公共Value16/Call20/Program26预计无字段增量，仍须真实fresh布局/provider拒绝和生成C验证。
+资格须含独立完整包与valid-rehash、无约束未调用定义、同名用户接口、NaN共享backing、
+NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physical退款、VM/native/mixed
+分别固定预期及中央默认/ASan。原完整断言/容器/CLI、stdlib配对发布与完整安全保持OPEN。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -981,5 +1003,33 @@ One no-emission source_literal_append(ctx,node,bytes,length,&id) manages the exi
 The sole SourceLibraryMap records literal_begin/count for a contiguous original-order range. Check CONST_STRING's nonnegative original ID against its own Library count before overflow-checked base addition; a valid merged index cannot rescue an invalid original definition. CONCAT_STRING still uses SSA operands and CALL_DEFAULT uses the existing function/default map. Refund the original function scratch map on all exits and commit next_function only after copying the complete Library. Never publish a partial Checked builder. Ordinary semantic-failure query snapshots retain the existing complete contract rather than requiring NULL for every failure.
 
 Qualification includes two real Libraries each owning literal0 with different bytes, reversed Catalog order with fixed results, omitted/explicit STRING arguments, private-helper rejection, the original OwnedChecked executed after all producers die, Source/independent packet VM/actual native/mixed, two Instances, retained owned bytes read by length after Program destruction, and final physical zero. Empty, UTF8 and low-level three-byte a\0b literals must survive all four consumers; Source parser NUL rejection remains unchanged. Independent manual packets and correctly rehashed attacks cover original-ID-outside-source-but-inside-merged, unused invalid UTF8, length/count overflow, identities/authority/digests and every duplicate canonical variant. Fail every new actual allocation, release the first Library when the second fails, test cumulative exact/minus1 budgets and scratch refunds. Preserve all existing default, origin, budget and fault gates. This finite extension does not qualify mutable Library state isolation, stdlib paired-cache hits/misses, complete product safety or final legacy deletion.
+
+### 17.33 Finite typed value equality (frozen contract, implementation PENDING)
+
+This section freezes the next sole Checked57/wire22 increment; current56 does not thereby
+execute this family. Equal uses bit4 of the existing marker:u32, with ordinary TYPE
+definition-site proofs, inline/where conjunction and provenance revalidation. The first domain
+is only bool, eight integers, f32/f64, string and recursive Array<D>. Other domains still reject
+explicitly and remain goals. Same-T ==, != and real Core assertEqual<T: Equal> share one typed
+relation. EQUAL=117, OP_COUNT=118 and stage mask7 take two VALUE operands and produce BOOL;
+immediate is only0(EQ)/1(NE), with zero unused fields. NE inverts only a successful comparison.
+Correctly rehashed56 and older packets reject before body allocation.
+
+FLOAT retains IEEE NaN inequality and signed-zero equality; STRING compares full length/bytes;
+Array compares length then indexed leaves, without pointer/shared-backing shortcuts around NaN.
+Use budgeted explicit DFS rather than C recursion or a depth cutoff returning false. VM/native
+consume one typed helper: borrowed inputs are neither copied nor dropped, and only OK publishes
+bool. BAD_ARGUMENT/OOM/LIMIT preserve output and input owners; all exits refund real scratch/domain
+allocations. Charge cumulative STRING bytes, Array elements and growth work. Exhaustion cannot
+mean inequality or satisfy assertPanics.
+
+Source/Owned query/clone, default helpers, Library, writer/reader, Checked specialization and
+Lowered revalidation retain one constraint identity. No legacy Equatable, boxed-value adapter,
+name whitelist or second executor grants authority. Public Value16/Call20/Program26 are expected
+to add no fields, subject to actual fresh layout/provider-rejection/generated-C gates. Require
+independent full packets/valid-rehash, unused unconstrained definitions, same-named user
+interfaces, shared-backing NaN, NUL/depth257, every actual OOM and exact/minus1, dead producers,
+two Instances and physical refunds, separate fixed VM/native/mixed outcomes and central
+default/ASan. Complete assertions/containers/CLI, paired stdlib publication and full safety remain OPEN.
 
 <!-- /xr-spec:en -->

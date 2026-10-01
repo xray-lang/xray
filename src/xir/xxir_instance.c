@@ -125,10 +125,11 @@ static void clear_slots(XrXirInstance *instance) {
     }
 }
 static void fail_initialization(XrXirInstance *instance, XrXirCallResult failure) {
-    instance->failure = instance_result(failure.status);
-    instance->failure.fault = failure.fault;
-    if (xr_xir_value_copy(&failure.value, &instance->failure.value) != XR_XIR_VALUE_OK)
-        instance->failure = instance_result(XR_XIR_CALL_LIMIT);
+    XrXirCallResult copy = instance_result(XR_XIR_CALL_READY);
+    XrXirValueStatus status = xr_xir_call_result_copy(&failure, &copy);
+    if (status != XR_XIR_VALUE_OK) copy = instance_result(value_call_status(status));
+    xr_xir_call_result_drop(&instance->failure);
+    xr_xir_call_result_move(&copy, &instance->failure);
     instance->state = XR_XIR_INSTANCE_FAILED;
     instance->current_module = UINT32_MAX;
     clear_slots(instance);
@@ -318,17 +319,15 @@ XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue 
     return xr_xir_call_take_result(instance->call, output);
 }
 XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output) {
-    if (!instance || !output || output->status != XR_XIR_CALL_READY ||
-        output->value.type != XR_XIR_UNIT || output->value.reserved || output->value.payload ||
-        output->wake || !xr_xir_fault_empty(output->fault)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!instance || !xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->state != XR_XIR_INSTANCE_FAILED) return XR_XIR_CALL_BAD_STATE;
-    XrXirCallResult copy = instance->failure;
-    copy.value = (XrXirValue) {0};
-    XrXirCallStatus status = value_call_status(xr_xir_value_copy(&instance->failure.value, &copy.value));
+    XrXirCallResult copy = instance_result(XR_XIR_CALL_READY);
+    XrXirCallStatus status = value_call_status(xr_xir_call_result_copy(&instance->failure, &copy));
     if (status != XR_XIR_CALL_READY) return status;
-    *output = copy;
-    return copy.status;
+    XrXirCallStatus failure_status = copy.status;
+    xr_xir_call_result_move(&copy, output);
+    return failure_status;
 }
 XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -352,7 +351,7 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     if (instance->function_gate) instance->function_gate->instance = NULL;
     XrXirCallStatus status = xr_xir_call_free(instance->call);
     clear_slots(instance);
-    xr_xir_value_drop(&instance->failure.value);
+    xr_xir_call_result_drop(&instance->failure);
     instance_dispose(instance);
     return status;
 }
@@ -651,7 +650,7 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
         XrXirInstance *instance = view_instance(view);
         XrXirValue info = {0};
         status = !instance ? XR_XIR_CALL_BAD_STATE :
-            value_call_status(xr_xir_panic_info_new(instance->domain, action.fault, &info));
+            value_call_status(xr_xir_panic_info_new(instance->domain, &action.panic, &info));
         if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(frame, destination, &info);
     }
     if (status != XR_XIR_CALL_READY)

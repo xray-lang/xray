@@ -191,7 +191,12 @@ TEST(sync_root_elides_coroutine_with_ordinary_allocation) {
     ASSERT_NOT_NULL(proto);
     ASSERT_NULL(iso->main_coro);
 
-    XrString *name = xr_string_intern_permanent(iso, "n", 1);
+    XrReplSymbolTable *table = xr_repl_symbols_of(iso);
+    int binding = find_symbol(table, "n");
+    ASSERT_GE(binding, 0);
+    char key[64];
+    ASSERT_TRUE(xr_repl_binding_key(table->symbols[binding].symbol_id, key, sizeof(key)));
+    XrString *name = xr_string_intern_permanent(iso, key, strlen(key));
     ASSERT_NOT_NULL(name);
     XrValue value = xr_global_dict_get(iso->vm.globals, name);
     ASSERT_TRUE(XR_IS_INT(value));
@@ -446,7 +451,7 @@ TEST(repl_cross_input_function_mutates_shared) {
     xray_vm_delete(iso);
 }
 
-TEST(repl_redefinition_reuses_slot) {
+TEST(repl_redefinition_replaces_visible_binding) {
     /* `var x = 1` followed by `var x = 2` should keep one entry in
      * the symbol table, not duplicate it (repl_symbols_add_or_update
      * promises this contract).  Also asserts the second value
@@ -921,6 +926,205 @@ TEST(repl_print_type_simple_expression) {
     xray_vm_delete(iso);
 }
 
+TEST(repl_old_callables_pin_their_source_generation) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProto *protos[5];
+    protos[0] = eval_repl(session, iso, "fn value() -> i64 { return 40 }\n");
+    ASSERT_NOT_NULL(protos[0]);
+    protos[1] = eval_repl(session, iso, "fn before() -> i64 { return value() + 2 }\n");
+    ASSERT_NOT_NULL(protos[1]);
+    protos[2] = eval_repl(session, iso, "fn value() -> string { return \"later\" }\n");
+    ASSERT_NOT_NULL(protos[2]);
+    protos[3] = eval_repl(session, iso, "var old = before()\n");
+    ASSERT_NOT_NULL(protos[3]);
+    protos[4] = eval_repl(session, iso, "var latest = value()\n");
+    ASSERT_NOT_NULL(protos[4]);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "old", &value));
+    ASSERT_EQ_INT(value, 42);
+    XrReplSymbolTable *table = xr_repl_symbols_of(iso);
+    int latest = find_symbol(table, "latest");
+    ASSERT_GE(latest, 0);
+    char key[64];
+    ASSERT_TRUE(xr_repl_binding_key(table->symbols[latest].symbol_id, key, sizeof(key)));
+    XrValue text =
+        xr_global_dict_get(iso->vm.globals, xr_string_intern_permanent(iso, key, strlen(key)));
+    ASSERT_TRUE(XR_IS_STRING(text));
+    ASSERT_EQ_INT(XR_TO_STRING(text)->length, 5);
+    ASSERT_EQ_INT(memcmp(XR_TO_STRING(text)->data, "later", 5), 0);
+    for (int i = 4; i >= 0; --i)
+        xr_free_code(iso, protos[i]);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_shadowed_variable_keeps_the_old_typed_owner) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProto *protos[4];
+    protos[0] = eval_repl(session, iso, "var x = 11\n");
+    ASSERT_NOT_NULL(protos[0]);
+    protos[1] = eval_repl(session, iso, "fn read() -> i64 { return x }\n");
+    ASSERT_NOT_NULL(protos[1]);
+    protos[2] = eval_repl(session, iso, "var x = \"later\"\n");
+    ASSERT_NOT_NULL(protos[2]);
+    protos[3] = eval_repl(session, iso, "var old = read()\n");
+    ASSERT_NOT_NULL(protos[3]);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "old", &value));
+    ASSERT_EQ_INT(value, 11);
+    ASSERT_FALSE(xr_repl_peek_int(iso, "x", &value));
+    for (int i = 3; i >= 0; --i)
+        xr_free_code(iso, protos[i]);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_compile_failure_does_not_publish_a_declaration) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProto *first = eval_repl(session, iso, "fn value() -> i64 { return 5 }\n");
+    ASSERT_NOT_NULL(first);
+    XrReplEvalResult failed =
+        xr_repl_eval(session, iso, "fn value() -> string { return 1 }\n", &k_repl_memory_authority);
+    ASSERT_EQ(XR_REPL_EVAL_COMPILE_ERROR, failed.status);
+    ASSERT_NULL(failed.proto);
+    XrProto *last = eval_repl(session, iso, "var answer = value()\n");
+    ASSERT_NOT_NULL(last);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "answer", &value));
+    ASSERT_EQ_INT(value, 5);
+    XrCompilerSessionReplGenerationSnapshot ledger =
+        xr_compiler_session_repl_generation_snapshot(session);
+    ASSERT_EQ_INT(ledger.published_count, 2);
+    ASSERT_EQ_INT(ledger.abandoned_count, 1);
+    xr_free_code(iso, last);
+    xr_free_code(iso, first);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_runtime_failure_does_not_replace_a_binding) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProto *first = eval_repl(session, iso, "fn value() -> i64 { return 5 }\n");
+    ASSERT_NOT_NULL(first);
+    uint32_t bindings_before = xr_global_dict_count(iso->vm.globals);
+    XrReplEvalResult failed = xr_repl_eval(
+        session, iso,
+        "fn value() -> string { return \"later\" }\nvar zero = 0\nvar crash = 1 / zero\n",
+        &k_repl_memory_authority);
+    ASSERT_EQ(XR_REPL_EVAL_RUNTIME_ERROR, failed.status);
+    ASSERT_NOT_NULL(failed.proto);
+    ASSERT_EQ_INT(xr_global_dict_count(iso->vm.globals), bindings_before);
+    XrProto *last = eval_repl(session, iso, "var answer = value()\n");
+    ASSERT_NOT_NULL(last);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "answer", &value));
+    ASSERT_EQ_INT(value, 5);
+    XrCompilerSessionReplGenerationSnapshot ledger =
+        xr_compiler_session_repl_generation_snapshot(session);
+    ASSERT_EQ_INT(ledger.published_count, 2);
+    ASSERT_EQ_INT(ledger.abandoned_count, 1);
+    xr_free_code(iso, last);
+    xr_free_code(iso, failed.proto);
+    xr_free_code(iso, first);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_generic_source_facts_survive_later_inputs) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProto *protos[3];
+    protos[0] = eval_repl(session, iso,
+                          "fn identity<T>(x: T) -> T { return x }\nvar first = identity(41)\n");
+    ASSERT_NOT_NULL(protos[0]);
+    protos[1] = eval_repl(session, iso, "fn later() -> i64 { return identity(42) }\n");
+    ASSERT_NOT_NULL(protos[1]);
+    protos[2] = eval_repl(session, iso, "var answer = later()\n");
+    ASSERT_NOT_NULL(protos[2]);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "first", &value));
+    ASSERT_EQ_INT(value, 41);
+    ASSERT_TRUE(xr_repl_peek_int(iso, "answer", &value));
+    ASSERT_EQ_INT(value, 42);
+    for (int i = 2; i >= 0; --i)
+        xr_free_code(iso, protos[i]);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_published_initializers_are_not_executed_again) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    FILE *output = tmpfile();
+    ASSERT_NOT_NULL(output);
+    xr_isolate_set_stdout(iso, output);
+    XrProto *first = eval_repl(session, iso, "print(\"init\")\nvar x = 41\n");
+    ASSERT_NOT_NULL(first);
+    XrProto *last = eval_repl(session, iso, "var answer = x + 1\n");
+    ASSERT_NOT_NULL(last);
+    char buffer[32];
+    read_tmp_output(output, buffer, sizeof(buffer));
+    ASSERT_STR_EQ(buffer, "init\n");
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "answer", &value));
+    ASSERT_EQ_INT(value, 42);
+    xr_free_code(iso, last);
+    xr_free_code(iso, first);
+    fclose(output);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_runtime_failure_keeps_prior_binding_side_effects) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProto *first = eval_repl(session, iso, "var x = 11\n");
+    ASSERT_NOT_NULL(first);
+    XrReplEvalResult failed = xr_repl_eval(
+        session, iso, "x += 1\nvar zero = 0\nvar crash = 1 / zero\n", &k_repl_memory_authority);
+    ASSERT_EQ(XR_REPL_EVAL_RUNTIME_ERROR, failed.status);
+    ASSERT_NOT_NULL(failed.proto);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "x", &value));
+    ASSERT_EQ_INT(value, 12);
+    ASSERT_EQ_INT(xr_repl_symbols_of(iso)->count, 1);
+    xr_free_code(iso, failed.proto);
+    xr_free_code(iso, first);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_failed_callable_input_cannot_change_published_targets) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProto *first = eval_repl(session, iso,
+                               "fn apply(f: fn(i64) -> i64, x: i64) -> i64 { return f(x) }\n"
+                               "fn original(x: i64) -> i64 { return x + 1 }\n");
+    ASSERT_NOT_NULL(first);
+    XrReplEvalResult failed =
+        xr_repl_eval(session, iso,
+                     "fn original(x: i64) -> i64 { return x * 2 }\n"
+                     "var transient = apply(original, 10)\nvar zero = 0\nvar crash = 1 / zero\n",
+                     &k_repl_memory_authority);
+    ASSERT_EQ(XR_REPL_EVAL_RUNTIME_ERROR, failed.status);
+    ASSERT_NOT_NULL(failed.proto);
+    XrProto *last = eval_repl(session, iso, "var answer = apply(original, 10)\n");
+    ASSERT_NOT_NULL(last);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "answer", &value));
+    ASSERT_EQ_INT(value, 11);
+    ASSERT_EQ_INT(find_symbol(xr_repl_symbols_of(iso), "transient"), -1);
+    xr_free_code(iso, last);
+    xr_free_code(iso, failed.proto);
+    xr_free_code(iso, first);
+    xray_vm_delete(iso);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -953,7 +1157,7 @@ RUN_TEST(repl_cross_input_call_rejects_missing_type_authority);
 RUN_TEST(repl_cross_input_call_rejects_invalid_symbol_authority);
 RUN_TEST(repl_cross_input_function_reads_shared);
 RUN_TEST(repl_cross_input_function_mutates_shared);
-RUN_TEST(repl_redefinition_reuses_slot);
+RUN_TEST(repl_redefinition_replaces_visible_binding);
 RUN_TEST(repl_function_calls_function_cross_input);
 RUN_TEST(repl_function_recursive_self_reference);
 RUN_TEST(repl_function_mutates_array_cross_input);
@@ -969,6 +1173,16 @@ RUN_TEST(repl_unit_before_value_does_not_create_it);
 RUN_TEST(repl_it_is_reserved_for_implicit_results);
 RUN_TEST(repl_eval_requires_explicit_valid_memory_identity);
 RUN_TEST(repl_auto_echo_evaluates_expression_once);
+
+RUN_TEST_SUITE("REPL Generation Publication");
+RUN_TEST(repl_generic_source_facts_survive_later_inputs);
+RUN_TEST(repl_published_initializers_are_not_executed_again);
+RUN_TEST(repl_runtime_failure_keeps_prior_binding_side_effects);
+RUN_TEST(repl_failed_callable_input_cannot_change_published_targets);
+RUN_TEST(repl_old_callables_pin_their_source_generation);
+RUN_TEST(repl_shadowed_variable_keeps_the_old_typed_owner);
+RUN_TEST(repl_compile_failure_does_not_publish_a_declaration);
+RUN_TEST(repl_runtime_failure_does_not_replace_a_binding);
 
 RUN_TEST_SUITE("REPL Introspection");
 RUN_TEST(repl_print_vars_empty_is_safe);

@@ -1,0 +1,326 @@
+{
+  "51": {
+    "schema": 51,
+    "header_size": 152,
+    "payload_size": 4786,
+    "artifact_size": 4938,
+    "function_tail_offset": 3366,
+    "function_tail_bytes": 0,
+    "payload_sha256": "ddc42251394c861a5a787462b74c45f70b7d0a2693e4b578dcd1b33b97d5d39b",
+    "artifact_sha256": "fc12a051062b90017cf9e14b038a091a6dbbd706bc0143299241ad65bf27c6df",
+    "records": [
+      {
+        "kind": "entity",
+        "begin": 372,
+        "key": "entity-v1:schema=51:kind=13:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:storage-domain=2"
+      },
+      {
+        "kind": "entity",
+        "begin": 492,
+        "key": "entity-v1:schema=51:kind=6:parent=c1e9cd9900a940b574308cf6cf5d264f:function=7774aded59667959a08114b6b48e33a6"
+      },
+      {
+        "kind": "entity",
+        "begin": 636,
+        "key": "entity-v1:schema=51:kind=9:parent=15dd137657c7c973b65e77c3f9a387a5:operation=f89496dfc6344d6116064dea3eb99a1d"
+      },
+      {
+        "kind": "entity",
+        "begin": 781,
+        "key": "entity-v1:schema=51:kind=3:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:type=b61afa0568238859e33006d6462197d0"
+      },
+      {
+        "kind": "entity",
+        "begin": 921,
+        "key": "entity-v1:schema=51:kind=13:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:storage-domain=4"
+      },
+      {
+        "kind": "entity",
+        "begin": 1041,
+        "key": "entity-v1:schema=51:kind=3:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:type=5623172a118a19949395830497945438"
+      },
+      {
+        "kind": "entity",
+        "begin": 1181,
+        "key": "entity-v1:schema=51:kind=3:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:type=7f9a4af799f0cacb0662c60bc8340cb8"
+      },
+      {
+        "kind": "entity",
+        "begin": 1321,
+        "key": "entity-v1:schema=51:kind=1:parent=aa1eeb10a07b411e000103e983a01a9b:name=21:semantic_plan_fixture:identity=47:memory-module-v1:id=24:semantic-plan-fixture-v1"
+      },
+      {
+        "kind": "entity",
+        "begin": 1513,
+        "key": "entity-v1:schema=51:kind=9:parent=15dd137657c7c973b65e77c3f9a387a5:operation=468b9121c7a6397fb6baa77e87048d09"
+      },
+      {
+        "kind": "entity",
+        "begin": 1658,
+        "key": "entity-v1:schema=51:kind=0:parent=none:authority=47:memory-module-v1:id=24:semantic-plan-fixture-v1"
+      },
+      {
+        "kind": "entity",
+        "begin": 1793,
+        "key": "entity-v1:schema=51:kind=13:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:storage-domain=3"
+      },
+      {
+        "kind": "entity",
+        "begin": 1913,
+        "key": "entity-v1:schema=51:kind=2:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:function=7774aded59667959a08114b6b48e33a6:evidence=0"
+      },
+      {
+        "kind": "entity",
+        "begin": 2068,
+        "key": "entity-v1:schema=51:kind=9:parent=15dd137657c7c973b65e77c3f9a387a5:operation=425e288101998d1746e3be019a754131"
+      },
+      {
+        "kind": "entity",
+        "begin": 2213,
+        "key": "entity-v1:schema=51:kind=13:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:storage-domain=6"
+      },
+      {
+        "kind": "entity",
+        "begin": 2333,
+        "key": "entity-v1:schema=51:kind=13:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:storage-domain=5"
+      },
+      {
+        "kind": "entity",
+        "begin": 2453,
+        "key": "entity-v1:schema=51:kind=13:parent=9fcd7bdc13f3ea6600d31fe14d4f3c3a:storage-domain=1"
+      },
+      {
+        "kind": "entity",
+        "begin": 2573,
+        "key": "entity-v1:schema=51:kind=11:parent=15dd137657c7c973b65e77c3f9a387a5:owner=d1f1fcc5a2c1fce63805821869fdcbac"
+      },
+      {
+        "kind": "type",
+        "begin": 2715,
+        "key": "type-v3:0:0:0:0:0:0:0:0:0:0:0:"
+      },
+      {
+        "kind": "type",
+        "begin": 2837,
+        "key": "type-v3:3:0:0:0:0:0:0:0:0:255:0:"
+      },
+      {
+        "kind": "type",
+        "begin": 2961,
+        "key": "type-v3:2:0:0:0:0:0:0:0:0:255:0:"
+      },
+      {
+        "kind": "function",
+        "begin": 3085,
+        "key": "function-v3:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0"
+      },
+      {
+        "kind": "block",
+        "begin": 3366,
+        "key": "function-v3:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0/block:0"
+      },
+      {
+        "kind": "operation",
+        "begin": 3611,
+        "key": "function-v3:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0/op:0:CONST"
+      },
+      {
+        "kind": "operation",
+        "begin": 3989,
+        "key": "function-v3:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0/op:1:CONST"
+      },
+      {
+        "kind": "operation",
+        "begin": 4367,
+        "key": "function-v3:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0/op:2:CONST"
+      },
+      {
+        "kind": "constant",
+        "begin": 4745,
+        "key": ""
+      },
+      {
+        "kind": "constant",
+        "begin": 4770,
+        "key": ""
+      },
+      {
+        "kind": "constant",
+        "begin": 4808,
+        "key": ""
+      },
+      {
+        "kind": "owner",
+        "begin": 4833,
+        "key": "owner-v2:f89496dfc6344d6116064dea3eb99a1d:value=1"
+      },
+      {
+        "kind": "edge-state",
+        "begin": 4914,
+        "key": ""
+      }
+    ]
+  },
+  "52": {
+    "schema": 52,
+    "header_size": 152,
+    "payload_size": 5139,
+    "artifact_size": 5291,
+    "function_tail_offset": 3434,
+    "function_tail_bytes": 13,
+    "payload_sha256": "22d938374cbafb89fc224b98d332ff04240efeb2a33a36c7ec6774c39de7e9c1",
+    "artifact_sha256": "9189181b2126eccf17a1c838d45d046abcfd31dbeab584c71c7831da511c7ae4",
+    "records": [
+      {
+        "kind": "entity",
+        "begin": 372,
+        "key": "entity-v1:schema=52:kind=13:parent=647cb324085f6c45053259d4fc4e7836:storage-domain=6"
+      },
+      {
+        "kind": "entity",
+        "begin": 492,
+        "key": "entity-v1:schema=52:kind=0:parent=none:authority=47:memory-module-v1:id=24:semantic-plan-fixture-v1"
+      },
+      {
+        "kind": "entity",
+        "begin": 627,
+        "key": "entity-v1:schema=52:kind=13:parent=647cb324085f6c45053259d4fc4e7836:storage-domain=5"
+      },
+      {
+        "kind": "entity",
+        "begin": 747,
+        "key": "entity-v1:schema=52:kind=13:parent=647cb324085f6c45053259d4fc4e7836:storage-domain=4"
+      },
+      {
+        "kind": "entity",
+        "begin": 867,
+        "key": "entity-v1:schema=52:kind=9:parent=59244435e75421209fc6b781b52801ec:operation=19a82ff683d92abd9eea2c0a1cc8a8ef"
+      },
+      {
+        "kind": "entity",
+        "begin": 1012,
+        "key": "entity-v1:schema=52:kind=3:parent=647cb324085f6c45053259d4fc4e7836:type=b61afa0568238859e33006d6462197d0"
+      },
+      {
+        "kind": "entity",
+        "begin": 1152,
+        "key": "entity-v1:schema=52:kind=13:parent=647cb324085f6c45053259d4fc4e7836:storage-domain=1"
+      },
+      {
+        "kind": "entity",
+        "begin": 1272,
+        "key": "entity-v1:schema=52:kind=2:parent=647cb324085f6c45053259d4fc4e7836:function=99dfe8517b9d1b8f6bdc6485cff7aeb6:evidence=0"
+      },
+      {
+        "kind": "entity",
+        "begin": 1427,
+        "key": "entity-v1:schema=52:kind=6:parent=572c979b5e1cfd5c7adfa8c5625dff40:function=99dfe8517b9d1b8f6bdc6485cff7aeb6"
+      },
+      {
+        "kind": "entity",
+        "begin": 1571,
+        "key": "entity-v1:schema=52:kind=1:parent=16610b3c9c86faf3e214f2aa296fbb78:name=21:semantic_plan_fixture:identity=47:memory-module-v1:id=24:semantic-plan-fixture-v1"
+      },
+      {
+        "kind": "entity",
+        "begin": 1763,
+        "key": "entity-v1:schema=52:kind=13:parent=647cb324085f6c45053259d4fc4e7836:storage-domain=2"
+      },
+      {
+        "kind": "entity",
+        "begin": 1883,
+        "key": "entity-v1:schema=52:kind=3:parent=647cb324085f6c45053259d4fc4e7836:type=7f9a4af799f0cacb0662c60bc8340cb8"
+      },
+      {
+        "kind": "entity",
+        "begin": 2023,
+        "key": "entity-v1:schema=52:kind=13:parent=647cb324085f6c45053259d4fc4e7836:storage-domain=3"
+      },
+      {
+        "kind": "entity",
+        "begin": 2143,
+        "key": "entity-v1:schema=52:kind=9:parent=59244435e75421209fc6b781b52801ec:operation=3c1152bc753dafb36723ba20439edd16"
+      },
+      {
+        "kind": "entity",
+        "begin": 2288,
+        "key": "entity-v1:schema=52:kind=9:parent=59244435e75421209fc6b781b52801ec:operation=20dae331db60c75da02c84d670aa8e24"
+      },
+      {
+        "kind": "entity",
+        "begin": 2433,
+        "key": "entity-v1:schema=52:kind=3:parent=647cb324085f6c45053259d4fc4e7836:type=5623172a118a19949395830497945438"
+      },
+      {
+        "kind": "entity",
+        "begin": 2573,
+        "key": "entity-v1:schema=52:kind=11:parent=59244435e75421209fc6b781b52801ec:owner=a624a47c99486affb91624448d287d4e"
+      },
+      {
+        "kind": "type",
+        "begin": 2715,
+        "key": "type-v3:0:0:0:0:0:0:0:0:0:0:0:"
+      },
+      {
+        "kind": "type",
+        "begin": 2837,
+        "key": "type-v3:3:0:0:0:0:0:0:0:0:255:0:"
+      },
+      {
+        "kind": "type",
+        "begin": 2961,
+        "key": "type-v3:2:0:0:0:0:0:0:0:0:255:0:"
+      },
+      {
+        "kind": "function",
+        "begin": 3085,
+        "key": "function-v4:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0:callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0"
+      },
+      {
+        "kind": "block",
+        "begin": 3447,
+        "key": "function-v4:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0:callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0/block:0"
+      },
+      {
+        "kind": "operation",
+        "begin": 3760,
+        "key": "function-v4:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0:callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0/op:0:CONST"
+      },
+      {
+        "kind": "operation",
+        "begin": 4206,
+        "key": "function-v4:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0:callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0/op:1:CONST"
+      },
+      {
+        "kind": "operation",
+        "begin": 4652,
+        "key": "function-v4:parent=module-root:ordinal=0:name=14:artifact_probe:source-class=none:member=none:source-kind=0:return=5623172a118a19949395830497945438:params=0:effects=0:caps=0:flags=0:callable=none:unknown-effects=0:unknown-reasons=0:effect-complete=0/op:2:CONST"
+      },
+      {
+        "kind": "constant",
+        "begin": 5098,
+        "key": ""
+      },
+      {
+        "kind": "constant",
+        "begin": 5123,
+        "key": ""
+      },
+      {
+        "kind": "constant",
+        "begin": 5161,
+        "key": ""
+      },
+      {
+        "kind": "owner",
+        "begin": 5186,
+        "key": "owner-v2:3c1152bc753dafb36723ba20439edd16:value=1"
+      },
+      {
+        "kind": "edge-state",
+        "begin": 5267,
+        "key": ""
+      }
+    ]
+  }
+}
