@@ -56,12 +56,12 @@ static void catalog_thresholds(const XrXirLibraryInput *input) {
   unsigned rounds=0;size_t live=runtime_live,bytes=runtime_bytes;
   while(low<high){CHECK(++rounds<=64);uint64_t middle=low+(high-low)/2;XrXirBudget budget=defaults;
    if(dimension)budget.metadata_bytes=middle;else budget.work=middle;
-   XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_library_catalog_new(input,&budget,&catalog);
+   XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_library_catalog_new(input,1,&budget,&catalog);
    CHECK(status==XR_XIR_OK||status==XR_XIR_BUDGET);if(status==XR_XIR_OK){xr_xir_library_catalog_free(catalog);high=middle;}else{CHECK(!catalog);low=middle+1;}
    CHECK(runtime_live==live&&runtime_bytes==bytes);
   }
   CHECK(low);for(unsigned below=0;below<2;++below){XrXirBudget budget=defaults;if(dimension)budget.metadata_bytes=low-below;else budget.work=low-below;
-   XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_library_catalog_new(input,&budget,&catalog)==(below?XR_XIR_BUDGET:XR_XIR_OK));xr_xir_library_catalog_free(catalog);CHECK(runtime_live==live&&runtime_bytes==bytes);
+   XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_library_catalog_new(input,1,&budget,&catalog)==(below?XR_XIR_BUDGET:XR_XIR_OK));xr_xir_library_catalog_free(catalog);CHECK(runtime_live==live&&runtime_bytes==bytes);
   }
   printf("Catalog exact %s threshold=%llu; minus1 BUDGET physicalbaseline\n",dimension?"metadata":"work",(unsigned long long)low);
  }
@@ -74,6 +74,7 @@ static void catalog_thresholds(const XrXirLibraryInput *input) {
 #include "xir_library_map_cases.h"
 #include "xir_library_goldens.h"
 #include "xir_library_source_budget_cases.h"
+#include "xir_library_string_catalog_cases.h"
 static void conflict_text(const char *name,const char *text) {
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,name)>0);
     FILE *file=fopen(path,"wb");CHECK(file);size_t n=strlen(text);CHECK(fwrite(text,1,n,file)==n&&!fclose(file));
@@ -91,7 +92,7 @@ static void source_representation_conflicts(void) {
         xr_xir_source_result_free(&result);xr_compiler_session_delete(producer);
         XrXirLibraryInput input={authority,"collision.xr",packet.bytes,packet.length,{0}};
         xr_sha256(packet.bytes,packet.length,input.sha256);
-        XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_library_catalog_new(&input,NULL,&catalog)==XR_XIR_OK);
+        XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_library_catalog_new(&input,1,NULL,&catalog)==XR_XIR_OK);
         xr_xir_checked_packet_free(&packet);
         conflict_text("collision.xr",mode?"import {answer} from \"./bridge\"; export fn result()->i64 {return answer();}":
             "import {answer} from \"./collision\"; export fn result()->i64 {return answer();}");
@@ -130,13 +131,13 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,packet.length);xr_sha256_final(&sha,input.sha256);
  fprintf(stderr,"producer destroyed\n");
  runtime_attempts=0;
- XrXirLibraryCatalog *catalog=NULL;status=xr_xir_library_catalog_new(&input,NULL,&catalog);
+ XrXirLibraryCatalog *catalog=NULL;status=xr_xir_library_catalog_new(&input,1,NULL,&catalog);
  if(status!=XR_XIR_OK)fprintf(stderr,"catalog %u\n",status);CHECK(status==XR_XIR_OK);
  size_t catalog_sites=runtime_attempts,catalog_live=runtime_live,catalog_bytes=runtime_bytes;
  library_source_metadata_cases(catalog);
  for(size_t fault=0;fault<catalog_sites;++fault){
   XrXirLibraryCatalog *failed=NULL;runtime_attempts=0;runtime_fail_at=fault;
-  XrXirStatus failed_status=xr_xir_library_catalog_new(&input,NULL,&failed);
+  XrXirStatus failed_status=xr_xir_library_catalog_new(&input,1,NULL,&failed);
   runtime_fail_at=SIZE_MAX;
   if(failed_status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"catalog fault %zu status %u\n",fault,failed_status);
   CHECK(failed_status==XR_XIR_OUT_OF_MEMORY&&!failed);CHECK(runtime_live==catalog_live&&runtime_bytes==catalog_bytes);
@@ -144,16 +145,16 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  catalog_thresholds(&input);reader_remaining_cases(packet.bytes,packet.length);
  printf("Catalog/Checked hooked allocation OOM=%zu; external identity helper excluded\n",catalog_sites);
  XrXirLibraryCatalog *bad=NULL;XrXirLibraryInput wrong=input;wrong.sha256[0]^=1;
- CHECK(xr_xir_library_catalog_new(&wrong,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
- wrong=input;wrong.logical_path="other.xr";CHECK(xr_xir_library_catalog_new(&wrong,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+ CHECK(xr_xir_library_catalog_new(&wrong,1,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+ wrong=input;wrong.logical_path="other.xr";CHECK(xr_xir_library_catalog_new(&wrong,1,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
  wrong=input;wrong.authority.kind=XR_MODULE_IDENTITY_PROJECT;wrong.authority.namespace_id="other";
- CHECK(xr_xir_library_catalog_new(&wrong,NULL,&bad)==XR_XIR_BAD_STAGE&&!bad);
+ CHECK(xr_xir_library_catalog_new(&wrong,1,NULL,&bad)==XR_XIR_BAD_STAGE&&!bad);
  size_t identity_offset=0;
  for(size_t i=64;i+10<=packet.length;++i)if(!memcmp(packet.bytes+i,"library.xr",10)){identity_offset=i;break;}
  CHECK(identity_offset);packet.bytes[identity_offset]='x';
  xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
  wrong=input;xr_sha256(packet.bytes,packet.length,wrong.sha256);
- CHECK(xr_xir_library_catalog_new(&wrong,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+ CHECK(xr_xir_library_catalog_new(&wrong,1,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
  packet.bytes[identity_offset]='l';xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
  uint8_t saved[8];memcpy(saved,packet.bytes+8,8);
  for(unsigned mode=0;mode<7;++mode){
@@ -167,14 +168,15 @@ static void library_source_case(bool middle_case,const char *packet_path) {
   }
   xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
   wrong=input;xr_sha256(packet.bytes,packet.length,wrong.sha256);
-  CHECK(xr_xir_library_catalog_new(&wrong,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+  CHECK(xr_xir_library_catalog_new(&wrong,1,NULL,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
   XrXirArtifact *bad_artifact=NULL;
   CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&bad_artifact,NULL)==XR_XIR_BAD_STRUCTURE&&!bad_artifact);
  }
  memcpy(packet.bytes+8,saved,8);
  xr_xir_checked_packet_free(&packet);
  /* A matching resource with a different authority must fail even when source exists. */
- XrModuleResourceBinding binding=*xr_xir_library_catalog_resource(catalog);
+ size_t resource_count=0;const XrModuleResourceBinding *resources=xr_xir_library_catalog_resources(catalog,&resource_count);
+ CHECK(resources&&resource_count==1);XrModuleResourceBinding binding=resources[0];
  binding.authority.physical_root="E:/different-root";
  XrModuleResolverConfig resolver_config={NULL,NULL,&binding,1};
  XrModuleResolver *resolver=xr_module_resolver_new(&resolver_config);CHECK(resolver);
@@ -185,7 +187,7 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  CHECK(error&&strstr(error,"authority binding"));xr_free(error);xr_module_id_cleanup(&identity);xr_module_resolver_free(resolver);
  library_unmatched_source_imports(&authority,catalog);
  CHECK(remove(XR_SOURCE_FIXTURES "/library.xr")==0);
- resolver_config.resources=xr_xir_library_catalog_resource(catalog);resolver=xr_module_resolver_new(&resolver_config);CHECK(resolver);
+ resolver_config.resources=xr_xir_library_catalog_resources(catalog,&resolver_config.resource_count);resolver=xr_module_resolver_new(&resolver_config);CHECK(resolver);
  XrCompilerSession *old_session=xr_compiler_session_new(NULL);CHECK(old_session);
  XrModuleGraph *old_graph=xr_module_graph_new(old_session,resolver);CHECK(old_graph);error=NULL;
  CHECK(xr_module_graph_build(old_graph,XR_SOURCE_FIXTURES "/root.xr",&authority,&error)==-1);
@@ -265,7 +267,7 @@ int main(int argc,char **argv) {
  CHECK(argc==1||argc==2);
  conflict_text("root.xr","import {answer} from \"./library\";\nexport fn result()->i64 { return answer(); }\n");
  conflict_text("private.xr","import {secret} from \"./library\";\nexport fn result()->i64 { return secret(); }\n");
- library_independent_goldens();defaults_wire_cases();library_unit_boundary_cases();source_representation_conflicts();
+ library_string_catalog_cases();library_independent_goldens();defaults_wire_cases();library_unit_boundary_cases();source_representation_conflicts();
  library_source_case(false,argc==2?argv[1]:NULL);library_source_case(true,NULL);
  puts("Checked Library direct Source lifetime, exact identities and fault boundaries PASS");return 0;
 }

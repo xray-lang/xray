@@ -777,20 +777,40 @@ static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
 #include "xxir_source_path.inc.c"
-static bool source_string_literal(SourceContext *ctx, AstNode *node, const char *bytes,
-    size_t length, SourceValue *value) {
-    if (ctx->literal_count == ctx->literal_capacity) {
-        uint32_t capacity = ctx->literal_capacity ? ctx->literal_capacity * 2 : 16;
-        if (capacity < ctx->literal_capacity) return source_fail(ctx, node, XR_XIR_BUDGET, "literal capacity overflow");
+static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
+    size_t length, uint32_t *literal) {
+    if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    if (!literal || (length && !bytes))
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "string literal bytes are missing");
+    if (length > UINT32_MAX || ctx->literal_count == UINT32_MAX)
+        return source_fail(ctx, node, XR_XIR_BUDGET, "string literal exceeds format limit");
+    bool grow = ctx->literal_count == ctx->literal_capacity;
+    uint32_t capacity = ctx->literal_capacity;
+    if (grow) {
+        if (capacity > UINT32_MAX / 2)
+            return source_fail(ctx, node, XR_XIR_BUDGET, "literal capacity overflow");
+        capacity = capacity ? capacity * 2 : 16;
+    }
+    if (!source_work(ctx, node)) return false;
+    if (grow) {
+        if (ctx->literal_count > ctx->budget.work)
+            return source_fail(ctx, node, XR_XIR_BUDGET, "literal copy work exhausted");
         XrXirLiteral *literals = source_alloc(ctx, capacity, sizeof(*literals));
         if (!literals) return false;
+        ctx->budget.work -= ctx->literal_count;
         if (ctx->literal_count) memcpy(literals, ctx->literals, ctx->literal_count * sizeof(*literals));
         ctx->literals = literals; ctx->literal_capacity = capacity;
     }
-    if (length > UINT32_MAX) return source_fail(ctx, node, XR_XIR_BUDGET, "string literal exceeds format limit");
-    uint32_t id = ctx->literal_count++;
-    ctx->literals[id] = (XrXirLiteral) {bytes, (uint32_t) length};
-    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_STRING, XR_XIR_STRING, {0, 0}, {0, 0}, id, {0}}, value);
+    uint32_t id = ctx->literal_count;
+    ctx->literals[id] = (XrXirLiteral){bytes, (uint32_t)length};
+    ++ctx->literal_count; *literal = id;
+    return true;
+}
+static bool source_string_literal(SourceContext *ctx, AstNode *node, const char *bytes,
+    size_t length, SourceValue *value) {
+    uint32_t id;
+    return source_literal_append(ctx, node, bytes, length, &id) &&
+        source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_STRING, XR_XIR_STRING, {0, 0}, {0, 0}, id, {0}}, value);
 }
 #include "xxir_source_enum.inc.c"
 #include "xxir_source_enum_text.inc.c"
@@ -2410,8 +2430,9 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
         source_fail(&ctx,NULL,XR_XIR_BAD_STRUCTURE,"source linkage kind is invalid"); goto done;
     }
     ctx.linkage_kind = request->linkage_kind;
-    const XrModuleResourceBinding *resource=xr_xir_library_catalog_resource(request->libraries);
-    XrModuleResolverConfig config = {request->stdlib_path, request->lockfile,resource,resource?1u:0u};
+    size_t resource_count = 0;
+    const XrModuleResourceBinding *resources = xr_xir_library_catalog_resources(request->libraries, &resource_count);
+    XrModuleResolverConfig config = {request->stdlib_path, request->lockfile,resources,resource_count};
     resolver = xr_module_resolver_new(&config);
     ctx.graph = resolver ? xr_module_graph_new(request->session, resolver) : NULL;
     if (!ctx.graph) { source_fail(&ctx, NULL, XR_XIR_OUT_OF_MEMORY, "module graph allocation failed"); goto done; }

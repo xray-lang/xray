@@ -1,0 +1,16 @@
+import {alpha,longValue} from "./alpha";
+import {beta,emptyValue} from "./beta";
+import {embedded} from "./nul";
+export fn left()->string { return alpha(); }
+export fn right()->string { return beta(); }
+export fn explicitLeft()->string { return alpha("explicit"); }
+export fn explicitRight()->string { return beta("explicit"); }
+export fn rootLiteral()->string { return "root-owned"; }
+export fn empty()->string { return emptyValue(); }
+export fn longText()->string { return longValue(); }
+export fn embeddedNul()->string { return embedded(); }
+
+import {empty as wireEmptyValue} from "./empty";
+import {longText as wireLongValue} from "./long";
+export fn wireLong()->string {return wireLongValue();}
+export fn wireEmpty()->string {return wireEmptyValue();}

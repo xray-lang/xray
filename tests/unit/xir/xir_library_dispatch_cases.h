@@ -30,7 +30,9 @@ static void library_unmatched_source_imports(const XrModuleIdentityAuthority *au
         xr_xir_source_result_free(&result);xr_compiler_session_delete(session);
         CHECK(runtime_live==live&&runtime_bytes==bytes&&source_live==source_count&&source_bytes==source_size);
     }
-    XrModuleResolverConfig config={NULL,NULL,xr_xir_library_catalog_resource(catalog),1};
+    XrModuleResolverConfig config={0};
+    config.resources=xr_xir_library_catalog_resources(catalog,&config.resource_count);
+    CHECK(config.resources&&config.resource_count==1);
     XrModuleResolver *resolver=xr_module_resolver_new(&config);CHECK(resolver);
     XrModuleId identity={0};char *error=NULL;
     CHECK(xr_module_resolver_resolve(resolver,"./dir/../library",XR_SOURCE_FIXTURES "/root.xr",authority,&identity,&error)==-1);

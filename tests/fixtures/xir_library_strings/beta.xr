@@ -1,0 +1,3 @@
+fn prefix()->string { return "乙-owned"; }
+export fn beta(s:string=prefix())->string { return s+"?"; }
+export fn emptyValue()->string { return ""; }

@@ -11,7 +11,9 @@
  */
 static void library_source_metadata_cases(const XrXirLibraryCatalog *catalog) {
     size_t live=source_live,bytes=source_bytes,rlive=runtime_live,rbytes=runtime_bytes;
-    const XrModuleResourceBinding *resource=xr_xir_library_catalog_resource(catalog);
+    size_t resource_count=0;
+    const XrModuleResourceBinding *resource=xr_xir_library_catalog_resources(catalog,&resource_count);
+    CHECK(resource&&resource_count==1);
     const XrXirModule *module=xr_xir_artifact_module(resource->checked);
     XrXirBudget budget=xr_xir_default_budget(),before=budget;
     CHECK(xr_xir_verify_remaining(module,&budget,NULL)==XR_XIR_OK);

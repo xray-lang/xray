@@ -30,6 +30,7 @@ typedef struct SourceLibraryMap {
     uint32_t *functions;
     uint32_t function_count;
     uint32_t next_function;
+    uint32_t literal_begin, literal_count;
 } SourceLibraryMap;
 
 static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
@@ -44,6 +45,8 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
     uint32_t initializer = declarations->modules[0].initializer;
     if (initializer >= library->function_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library initializer identity is invalid");
+    if (declarations->literal_count > UINT32_MAX - ctx->literal_count)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal inventory exhausted");
     size_t bytes = (size_t)library->function_count * sizeof(uint32_t);
     if (bytes / sizeof(uint32_t) != library->function_count ||
         bytes > ctx->budget.scratch_bytes)
@@ -61,7 +64,8 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
         }
         functions[f] = f == initializer ? module : next++;
     }
-    *output = (SourceLibraryMap){module,functions,library->function_count,next};
+    *output = (SourceLibraryMap){module,functions,library->function_count,next,
+        ctx->literal_count,declarations->literal_count};
     return true;
 }
 
@@ -80,7 +84,14 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library default owner identity is invalid");
         result.targets[0] = map->functions[result.targets[0]];
         break;
-    case XR_XIR_RETURN: case XR_XIR_CONST_INT: case XR_XIR_ADD_INT:
+    case XR_XIR_CONST_STRING:
+        if (result.immediate < 0 || (uint64_t)result.immediate >= map->literal_count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal identity is invalid");
+        if ((uint64_t)result.immediate > UINT32_MAX - map->literal_begin)
+            return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal identity overflow");
+        result.immediate += map->literal_begin;
+        break;
+    case XR_XIR_RETURN: case XR_XIR_CONST_INT: case XR_XIR_ADD_INT: case XR_XIR_CONCAT_STRING:
         break;
     default:
         return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library instruction remapping is not admitted");
@@ -153,8 +164,30 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     return true;
 }
 
+static bool source_library_literals(SourceContext *ctx, const XrXirModule *library,
+    const SourceLibraryMap *map) {
+    const XrXirDeclarations *declarations = library->declarations;
+    for (uint32_t i = 0; i < map->literal_count; ++i) {
+        const XrXirLiteral *original = &declarations->literals[i];
+        if (original->length && !original->bytes)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal bytes are missing");
+        if (original->length > ctx->budget.work)
+            return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal copy work exhausted");
+        char *bytes = original->length ? source_alloc(ctx, original->length, 1) : NULL;
+        if (original->length && !bytes) return false;
+        ctx->budget.work -= original->length;
+        if (original->length) memcpy(bytes, original->bytes, original->length);
+        uint32_t id;
+        if (!source_literal_append(ctx, NULL, bytes, original->length, &id)) return false;
+        if (id != map->literal_begin + i)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal interval is inconsistent");
+    }
+    return true;
+}
+
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
+    if (!source_library_literals(ctx, library, map)) return false;
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
     }

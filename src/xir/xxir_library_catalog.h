@@ -21,8 +21,9 @@ typedef struct XrXirLibraryInput {
     size_t length;
     uint8_t sha256[32];
 } XrXirLibraryInput;
-XR_FUNC XrXirStatus xr_xir_library_catalog_new(const XrXirLibraryInput *input,
+XR_FUNC XrXirStatus xr_xir_library_catalog_new(const XrXirLibraryInput *inputs, size_t count,
     const XrXirBudget *budget, XrXirLibraryCatalog **output);
 XR_FUNC void xr_xir_library_catalog_free(XrXirLibraryCatalog *catalog);
-XR_FUNC const XrModuleResourceBinding *xr_xir_library_catalog_resource(const XrXirLibraryCatalog *catalog);
+XR_FUNC const XrModuleResourceBinding *xr_xir_library_catalog_resources(
+    const XrXirLibraryCatalog *catalog, size_t *count);
 #endif // XXIR_LIBRARY_CATALOG_H

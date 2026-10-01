@@ -1,0 +1,1 @@
+import {prefix} from "./alpha"; export fn bad()->string{return prefix();}
