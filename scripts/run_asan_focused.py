@@ -103,6 +103,7 @@ XIR_TESTS = (
     "test_xir_emit_output",
     "test_xir_output_vm",
     "test_xir_output_native",
+    "test_xir_output_status",
     "test_xir_source",
     "test_xir_source_native",
     "test_xir_source_admission",

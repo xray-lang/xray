@@ -8,7 +8,7 @@
  */
 #ifndef XIR_STRUCT_SET_CASES_H
 #define XIR_STRUCT_SET_CASES_H
-static bool struct_set_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus struct_set_output(void *context, const XrXirOutputGroup *group) {
     unsigned *calls = context, event = (*calls)++;
     CHECK(group->stream == XR_XIR_STDOUT && event < 6);
     if (event % 2) {
@@ -21,12 +21,12 @@ static bool struct_set_output(void *context, const XrXirOutputGroup *group) {
         const char *bytes; size_t count;
         CHECK(xr_xir_string_view(&group->values[0],&bytes,&count) && count == 11 && !memcmp(bytes,"replacement",11));
     }
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void struct_set_cases(XrXirProgram *program) {
     XrXirInstance *instances[2] = {0}; unsigned outputs = 0;
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider) {struct_set_output,&outputs};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, struct_set_output, &outputs};
     for (unsigned i = 0; i < 2; ++i)
         CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);

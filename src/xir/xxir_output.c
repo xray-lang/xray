@@ -32,40 +32,42 @@ static bool output_piece(const XrXirValue *value, char *scalar, const char **byt
     if (count <= 0 || count >= 32) return false;
     *bytes = scalar; *length = (size_t) count; return true;
 }
-bool xr_xir_output_render(void *context, const XrXirOutputGroup *group) {
+XrXirOutputStatus xr_xir_output_render(void *context, const XrXirOutputGroup *group) {
     XrXirOutputSink *sink = context;
-    if (!sink || !sink->write || !group ||
+    if (!sink) return XR_XIR_OUTPUT_BAD_ARGUMENT;
+    if (sink->abi_version != XR_XIR_CALL_ABI_VERSION || sink->reserved) return XR_XIR_OUTPUT_BAD_ABI;
+    if (!sink->write || !group ||
         (group->stream != XR_XIR_STDOUT && group->stream != XR_XIR_STDERR) ||
         (group->line && group->stream != XR_XIR_STDOUT) ||
         (group->count && !group->values) || group->count > 65536 ||
-        (!group->line && group->count != 1)) return false;
+        (!group->line && group->count != 1)) return XR_XIR_OUTPUT_BAD_ARGUMENT;
     size_t total = group->line ? (group->count ? group->count : 1) : 0;
-    if (total > sink->byte_limit) return false;
+    if (total > sink->byte_limit) return XR_XIR_OUTPUT_LIMIT;
     for (uint32_t i = 0; i < group->count; ++i) {
         char scalar[32]; const char *bytes = NULL; size_t length = 0;
-        if (!output_piece(&group->values[i], scalar, &bytes, &length) ||
-            length > sink->byte_limit - total) return false;
+        if (!output_piece(&group->values[i], scalar, &bytes, &length)) return XR_XIR_OUTPUT_BAD_ARGUMENT;
+        if (length > sink->byte_limit - total) return XR_XIR_OUTPUT_LIMIT;
         total += length;
     }
     char *buffer = xr_malloc(total ? total : 1);
-    if (!buffer) return false;
+    if (!buffer) return XR_XIR_OUTPUT_OOM;
     size_t used = 0;
     for (uint32_t i = 0; i < group->count; ++i) {
         char scalar[32]; const char *bytes = NULL; size_t length = 0;
         size_t separator = group->line && i ? 1 : 0;
         if (!output_piece(&group->values[i], scalar, &bytes, &length) ||
             separator > total - used || length > total - used - separator) {
-            xr_free(buffer); return false;
+            xr_free(buffer); return XR_XIR_OUTPUT_BAD_ARGUMENT;
         }
         if (group->line && i) buffer[used++] = ' ';
         memcpy(buffer + used, bytes, length); used += length;
     }
     if (group->line) {
-        if (used == total) { xr_free(buffer); return false; }
+        if (used == total) { xr_free(buffer); return XR_XIR_OUTPUT_BAD_ARGUMENT; }
         buffer[used++] = '\n';
     }
-    if (used != total) { xr_free(buffer); return false; }
-    bool accepted = sink->write(sink->context, group->stream, buffer, used);
+    if (used != total) { xr_free(buffer); return XR_XIR_OUTPUT_BAD_ARGUMENT; }
+    XrXirOutputStatus status = sink->write(sink->context, group->stream, buffer, used);
     xr_free(buffer);
-    return accepted;
+    return status >= XR_XIR_OUTPUT_OK && status <= XR_XIR_OUTPUT_BAD_ABI ? status : XR_XIR_OUTPUT_BAD_ARGUMENT;
 }

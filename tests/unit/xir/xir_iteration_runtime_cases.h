@@ -12,14 +12,14 @@
 #ifndef XIR_ITERATION_RUNTIME_CASES_H
 #define XIR_ITERATION_RUNTIME_CASES_H
 typedef struct IterationTrace {unsigned count;} IterationTrace;
-static bool iteration_trace(void *context,const XrXirOutputGroup *group){
+static XrXirOutputStatus iteration_trace(void *context,const XrXirOutputGroup *group){
  IterationTrace *trace=context;const int64_t expected[]={10,11,20};
- C(group->count==1 && trace->count<3 && group->values[0].type==XR_XIR_I64 && group->values[0].payload==expected[trace->count]);++trace->count;return true;
+ C(group->count==1 && trace->count<3 && group->values[0].type==XR_XIR_I64 && group->values[0].payload==expected[trace->count]);++trace->count;return XR_XIR_OUTPUT_OK;
 }
 static void iteration_runtime_faults(XrXirProgram *program) {
  size_t base=runtime_live,bytes=runtime_bytes,sites=0;
  for(size_t pass=0;pass<=sites;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
- XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirValue value={0};
+ XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirValue value={0};
  XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,3,NULL,0);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;

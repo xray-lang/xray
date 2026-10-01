@@ -49,7 +49,7 @@ static void library_string_drop(XrXirValue held[2][LIBRARY_STRING_EXPORTS]) {
 }
 static bool library_string_pair(XrXirProgram *program,const uint32_t ids[LIBRARY_STRING_EXPORTS],
     XrXirValue held[2][LIBRARY_STRING_EXPORTS]) {
-    for(uint32_t i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+    for(uint32_t i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         for(uint32_t e=0;e<LIBRARY_STRING_EXPORTS&&status!=XR_XIR_CALL_OOM;++e){
             CHECK(status==XR_XIR_CALL_READY||status==XR_XIR_CALL_RETURNED);

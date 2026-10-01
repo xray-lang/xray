@@ -36,7 +36,7 @@ static XrXirValue nominal_transport_cases(const XrXirCallEntry *entries, const X
     CHECK(xr_xir_struct_new((XrXirType)256,fields,2,&admission,&arguments[0]) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&fields[1]);
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries,4,NULL,65536,1000,10,&accounting,{0},admission};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 4; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 1000; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = admission;
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config,2,arguments,2,&call) == XR_XIR_CALL_READY);
     xr_xir_value_drop(&arguments[0]);

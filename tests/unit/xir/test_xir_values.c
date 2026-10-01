@@ -154,7 +154,7 @@ static void concurrent_copies(unsigned kind) {
     xr_xir_domain_drop(domain);
 }
 typedef struct TypedOutput { uint32_t seen; bool reject; } TypedOutput;
-static bool typed_write(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus typed_write(void *context, const XrXirOutputGroup *group) {
     CHECK(group && !group->line && group->count == 1);
     XrXirOutputStream stream = group->stream;
     const XrXirValue *value = &group->values[0];
@@ -163,7 +163,7 @@ static bool typed_write(void *context, const XrXirOutputGroup *group) {
     CHECK(value->type == (uint32_t) (output->seen ? XR_XIR_I64 : XR_XIR_BOOL));
     CHECK(value->payload == (output->seen ? INT64_MIN : 1));
     ++output->seen;
-    return !output->reject;
+    return (!output->reject) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 typedef struct TypedFrame { uint32_t pc; XrXirValue value; } TypedFrame;
 static XrXirAction typed_resume(XrXirCallView *view) {
@@ -184,8 +184,7 @@ static void typed_output(void) {
     for (uint32_t mode = 0; mode < 3; ++mode) {
         TypedOutput output = {0, mode == 1};
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting,
-            {mode == 2 ? NULL : typed_write, &output}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = mode == 2 ? (XrXirOutputProvider) {0} : (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
         CHECK(xr_xir_call_poll(call).status == (mode ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_RETURNED));
@@ -214,7 +213,7 @@ static void atomic_boundaries(void) {
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_UNIT, 0, atomic_output_resume, NULL, NULL, 0, 0};
     XrXirCallAccounting accounting = {0};
     TypedOutput output = {0};
-    XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {typed_write, &output}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = (XrXirValueAdmission) {0};
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, 0, &cell, 1, &call) == XR_XIR_CALL_READY);
     CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_BAD_STATE && !output.seen);

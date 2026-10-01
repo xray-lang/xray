@@ -87,7 +87,7 @@ static bool function_case_run(bool cancel) {
     bool success = false;
     XrXirStatus sealed = function_case_seal(&releases, &program);
     if (sealed != XR_XIR_OK) { CHECK(sealed == XR_XIR_OUT_OF_MEMORY && !program && !releases); return false; }
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status != XR_XIR_CALL_READY) goto failed;
     status = xr_xir_instance_new(program, &config, &other);

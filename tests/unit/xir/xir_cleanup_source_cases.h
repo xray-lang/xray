@@ -18,14 +18,14 @@ static void cleanup_source_string(const XrXirValue *value, const char *expected)
     CHECK(xr_xir_string_view(value, &bytes, &length));
     CHECK(length == strlen(expected) && !memcmp(bytes, expected, length));
 }
-static bool cleanup_source_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus cleanup_source_output(void *context, const XrXirOutputGroup *group) {
     CleanupSourceLog *log = context;
     CHECK(group->line && group->stream == XR_XIR_STDOUT && group->count == 1 && log->at < log->count);
     const CleanupExpected *expected = &log->values[log->at++];
     CHECK(group->values[0].type == (uint32_t)expected->type);
     if (expected->type == XR_XIR_STRING) cleanup_source_string(&group->values[0], expected->text);
     else CHECK(group->values[0].payload == expected->number);
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void cleanup_source_cases(XrXirProgram *program, const uint32_t *functions) {
     const CleanupExpected scopes[] = {{XR_XIR_STRING,0,"nested"},{XR_XIR_STRING,0,"inner"},
@@ -46,8 +46,8 @@ static void cleanup_source_cases(XrXirProgram *program, const uint32_t *function
     XrXirInstance *instances[CLEANUP_SOURCE_FUNCTIONS] = {0};
     XrXirValue results[CLEANUP_SOURCE_FUNCTIONS] = {{0}};
     for (unsigned i = 0; i < CLEANUP_SOURCE_FUNCTIONS; ++i) {
-        XrXirInstanceConfig config = xr_xir_instance_defaults();
-        config.output = (XrXirOutputProvider){cleanup_source_output, &logs[i]};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, cleanup_source_output, &logs[i]};
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
     }
     xr_xir_program_drop(program);
@@ -88,10 +88,10 @@ static void cleanup_source_cases(XrXirProgram *program, const uint32_t *function
     CHECK(element.type == XR_XIR_I64 && element.payload == 1); xr_xir_value_drop(&element);
     for (unsigned i = 0; i < CLEANUP_SOURCE_FUNCTIONS; ++i) xr_xir_value_drop(&results[i]);
 }
-static bool cleanup_allocation_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus cleanup_allocation_output(void *context, const XrXirOutputGroup *group) {
     (void)context;
     CHECK(group && group->count == 1);
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void cleanup_source_allocations(XrXirProgram *program, const uint32_t *functions) {
     size_t baseline = runtime_live, bytes = runtime_bytes, total = 0;
@@ -99,8 +99,8 @@ static void cleanup_source_allocations(XrXirProgram *program, const uint32_t *fu
         size_t sites = 0;
         for (size_t pass = 0; pass <= sites; ++pass) {
             runtime_attempts = 0; runtime_fail_at = pass ? pass - 1 : SIZE_MAX;
-            XrXirInstanceConfig config = xr_xir_instance_defaults();
-            config.output = (XrXirOutputProvider){cleanup_allocation_output, NULL};
+            XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+            config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, cleanup_allocation_output, NULL};
             XrXirInstance *instance = NULL; XrXirValue value = {0};
             XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
             if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, functions[f], NULL, 0);
@@ -135,7 +135,7 @@ static void cleanup_source_allocations(XrXirProgram *program, const uint32_t *fu
 }
 static void cleanup_source_fatal(XrXirProgram *program, uint32_t function) {
     XrXirInstance *instance = NULL;
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance, function, NULL, 0) == XR_XIR_CALL_READY);

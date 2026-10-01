@@ -35,7 +35,7 @@ static bool native_invoke_allocation_run(const XrXirCallEntry *entries, uint32_t
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     XrXirCall *call = NULL; XrXirValue owned = {0};
     XrXirCallAccounting accounting = {0}; bool completed = false;
-    XrXirCallConfig config = {entries,5,NULL,65536,100,10,&accounting,{NULL,NULL},{0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirValueStatus status = xr_xir_domain_new(65536,&domain);
     if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
     ErrorFixture fixture; error_fixture_init(&fixture,true);
@@ -92,7 +92,7 @@ int main(void) {
         XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
         XrXirTypeArena *arena=error_fixture_arena(domain);
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {tables[mode], 5, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = tables[mode]; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         config.admission=error_fixture_admission(domain,arena);
         XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;

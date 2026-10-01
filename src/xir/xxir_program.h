@@ -52,6 +52,7 @@ typedef enum XrXirLifecycleEvent {
 } XrXirLifecycleEvent;
 typedef void (*XrXirLifecycleEntry)(void *context, XrXirLifecycleEvent event, uint32_t index);
 typedef struct XrXirInstanceConfig {
+    uint32_t abi_version, struct_size;
     uint64_t metadata_limit, value_limit, call_limit, poll_limit;
     uint32_t depth_limit;
     XrXirOutputProvider output;
@@ -67,7 +68,7 @@ typedef struct XrXirInstanceResult {
 XR_FUNC XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget budget,
                                       XrXirProgram **output);
 XR_FUNC void xr_xir_program_drop(XrXirProgram *program);
-XR_FUNC XrXirInstanceConfig xr_xir_instance_defaults(void);
+XR_FUNC XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size);
 XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     XrXirType type, const XrXirValue *input, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceConfig *config,

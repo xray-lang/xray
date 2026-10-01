@@ -10,7 +10,7 @@
 #define XIR_ASSERT_EQUAL_INPUTS_H
 static XrXirCallStatus equal_instance_bounded(XrXirProgram *program,uint32_t function,uint64_t limit) {
     size_t live=runtime_live,bytes=runtime_bytes;
-    XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();config.poll_limit=limit;
+    XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);config.poll_limit=limit;
     XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
     if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,function,NULL,0);
     if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll(instance).outcome.status;
@@ -37,7 +37,7 @@ static void equal_instance_oom(XrXirProgram *program,uint32_t function) {
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
     for (size_t point=0;point<=sites;++point) {
         runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
-        XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+        XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,function,NULL,0);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll(instance).outcome.status;

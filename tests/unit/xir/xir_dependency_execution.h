@@ -21,7 +21,7 @@ return status;
 }
 static void ready_pair(XrXirProgram *program,XrXirValue held[2][2]){
  XrXirInstance *instances[2]={NULL,NULL};
-XrXirInstanceConfig config=xr_xir_instance_defaults();
+XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
 
  for(unsigned i=0;
 i<2;
@@ -73,7 +73,7 @@ pass<=sites;
 ++pass){runtime_attempts=0;
 runtime_fail_at=pass?pass-1:SIZE_MAX;
 XrXirInstance *instance=NULL;
-XrXirInstanceConfig config=xr_xir_instance_defaults();
+XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
 XrXirValue value={0};
 
  XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);

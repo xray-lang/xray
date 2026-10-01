@@ -105,8 +105,7 @@ static XrXirCallStatus carrier_run(uint32_t mode) {
             carrier_release, NULL, 0, 1}
     };
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries, (mode >= 2 && mode <= 4) || mode == 12 ? 3u : 2u, &witness,
-        1048576, 100, 8, &accounting, {0}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = (mode >= 2 && mode <= 4) || mode == 12 ? 3u : 2u; config.instance = &witness; config.byte_limit = 1048576; config.poll_limit = 100; config.depth_limit = 8; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirCall *call = NULL;
     XrXirCallStatus status = xr_xir_call_new(&config, 0, NULL, 0, &call);
     if (status == XR_XIR_CALL_READY) {

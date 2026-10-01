@@ -18,7 +18,7 @@ typedef struct ProgramLog {
     XrXirOutputStream streams[32];
     uint32_t outputs, releases[8], released;
 } ProgramLog;
-static bool program_write(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus program_write(void *context, const XrXirOutputGroup *group) {
     CHECK(group && !group->line && group->count == 1);
     XrXirOutputStream stream = group->stream;
     const XrXirValue *value = &group->values[0];
@@ -26,7 +26,7 @@ static bool program_write(void *context, const XrXirOutputGroup *group) {
     CHECK(log->outputs < 32);
     log->streams[log->outputs] = stream;
     CHECK(xr_xir_value_copy(value, &log->values[log->outputs++]) == XR_XIR_VALUE_OK);
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void program_trace(void *context, XrXirLifecycleEvent event, uint32_t index) {
     ProgramLog *log = context;
@@ -69,8 +69,8 @@ static void program_cases(XrXirProgram *program, uint32_t mode) {
     XrXirInstanceResult suspended[2] = {0};
     XrXirValue strings[2] = {0}, cells[2] = {0};
     for (uint32_t i = 0; i < 2; ++i) {
-        XrXirInstanceConfig config = xr_xir_instance_defaults();
-        config.output = (XrXirOutputProvider) {program_write, &logs[i]};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, program_write, &logs[i]};
         config.trace = program_trace; config.trace_context = &logs[i];
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i], 3, NULL, 0) == XR_XIR_CALL_READY);

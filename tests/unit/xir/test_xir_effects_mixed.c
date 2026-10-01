@@ -69,7 +69,7 @@ static void effect_mixed(bool callback_native, bool methods) {
         module->declarations, {owner, effect_mixed_free}, module->types, xr_xir_program_proof(owner->artifact)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget){33554432, 64000000}, &program) == XR_XIR_OK);
-    XrXirInstanceConfig config = xr_xir_instance_defaults(); XrXirInstance *instance = NULL;
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     const int64_t expected[] = {11, 13, 36};
     for (unsigned i = 0; i < (methods ? 3u : 2u); ++i) {

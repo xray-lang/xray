@@ -15,7 +15,7 @@
 #include "xir/xxir_enum.h"
 static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrXirValue held[2][3]) {
     for(uint32_t n=0;n<2;++n){
-        XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirInstance *instance=NULL;
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         for(uint32_t e=0;e<14 && status!=XR_XIR_CALL_OOM;++e){
             status=xr_xir_instance_start(instance,ids[e],NULL,0);
@@ -70,7 +70,7 @@ static void default_invoke_seal_faults(const XrXirProgramSpec *spec) {
 }
 static void default_invoke_cancel(XrXirProgram *program,uint32_t entry) {
     size_t base=runtime_live,bytes=runtime_bytes;
-    XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirInstance *instance=NULL;
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
     XrXirInstanceResult run=xr_xir_instance_poll(instance);CHECK(run.outcome.status==XR_XIR_CALL_SUSPENDED);

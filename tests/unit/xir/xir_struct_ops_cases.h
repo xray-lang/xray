@@ -10,17 +10,17 @@
 #define XIR_STRUCT_OPS_CASES_H
 #include "xir/xxir_struct.h"
 #include "xir/xxir_type_arena.h"
-static bool struct_ops_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus struct_ops_output(void *context, const XrXirOutputGroup *group) {
     unsigned *calls = context; ++*calls;
     CHECK(group->stream == XR_XIR_STDOUT && !group->line && group->count == 1);
     const char *bytes; size_t count;
     CHECK(xr_xir_string_view(&group->values[0],&bytes,&count) && count == 11 && !memcmp(bytes,"constructed",11));
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void struct_ops_cases(XrXirProgram *program) {
     XrXirInstance *instances[3] = {0}; unsigned outputs = 0;
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider) {struct_ops_output,&outputs};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, struct_ops_output, &outputs};
     for (unsigned i = 0; i < 3; ++i)
         CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);

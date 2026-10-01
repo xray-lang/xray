@@ -12,11 +12,11 @@
 #include "xir/xxir_error.h"
 #include "xir/xxir_enum.h"
 typedef struct InitTrace {uint32_t output,begins,ready,published,released,stack[16];bool reject;} InitTrace;
-static bool init_output(void *context,const XrXirOutputGroup *group){
+static XrXirOutputStatus init_output(void *context,const XrXirOutputGroup *group){
     InitTrace *trace=context;const char *text=NULL;size_t size=0;
     CHECK(group->stream==XR_XIR_STDOUT&&group->line&&group->count==1&&trace->output<2);
     CHECK(xr_xir_string_view(&group->values[0],&text,&size)&&size==1&&text[0]==(trace->output?'B':'A'));
-    ++trace->output;return !trace->reject;
+    ++trace->output;return (!trace->reject) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 static void init_trace(void *context,XrXirLifecycleEvent event,uint32_t index){
     InitTrace *trace=context;
@@ -40,7 +40,7 @@ static void init_failure_value(const XrXirValue *error){
 }
 static void init_pair(XrXirProgram *program,uint32_t entry,XrXirValue held[3]){
     XrXirInstance *instances[2]={0};InitTrace traces[2]={{0}};XrXirInstanceResult paused[2];
-    for(unsigned i=0;i<2;++i){XrXirInstanceConfig c=xr_xir_instance_defaults();c.output=(XrXirOutputProvider){init_output,&traces[i]};c.trace=init_trace;c.trace_context=&traces[i];
+    for(unsigned i=0;i<2;++i){XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &traces[i]};c.trace=init_trace;c.trace_context=&traces[i];
         CHECK(xr_xir_instance_new(program,&c,&instances[i])==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_READY);
         paused[i]=xr_xir_instance_poll(instances[i]);CHECK(paused[i].outcome.status==XR_XIR_CALL_SUSPENDED);
@@ -58,7 +58,7 @@ static void init_pair(XrXirProgram *program,uint32_t entry,XrXirValue held[3]){
         CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
     }
     /* A new instance retries; none of the two failed instances is revived. */
-    InitTrace trace={0};XrXirInstanceConfig c=xr_xir_instance_defaults();c.output=(XrXirOutputProvider){init_output,&trace};c.trace=init_trace;c.trace_context=&trace;
+    InitTrace trace={0};XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
     XrXirInstance *retry=NULL;CHECK(xr_xir_instance_new(program,&c,&retry)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(retry,entry,NULL,0)==XR_XIR_CALL_READY);XrXirInstanceResult r=xr_xir_instance_poll(retry);
     CHECK(r.outcome.status==XR_XIR_CALL_SUSPENDED);CHECK(xr_xir_instance_resume(retry,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);
@@ -69,7 +69,7 @@ static void init_pair(XrXirProgram *program,uint32_t entry,XrXirValue held[3]){
 static void init_retained(XrXirValue held[3]){for(unsigned i=0;i<3;++i){init_failure_value(&held[i]);xr_xir_value_drop(&held[i]);}}
 static void init_protocol_failures(XrXirProgram *program,uint32_t entry){
     for(unsigned mode=0;mode<2;++mode){InitTrace trace={0};trace.reject=mode!=0;
-        XrXirInstanceConfig c=xr_xir_instance_defaults();c.output=(XrXirOutputProvider){init_output,&trace};c.trace=init_trace;c.trace_context=&trace;
+        XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
         XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&c,&instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);XrXirInstanceResult r=xr_xir_instance_poll(instance);
         if(!mode){CHECK(r.outcome.status==XR_XIR_CALL_SUSPENDED);CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
@@ -85,7 +85,7 @@ static void init_protocol_failures(XrXirProgram *program,uint32_t entry){
 static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
     size_t live_before=runtime_live,bytes_before=runtime_bytes,sites=0;
     for(size_t pass=0;pass<=sites;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
-        InitTrace trace={0};XrXirInstanceConfig c=xr_xir_instance_defaults();c.output=(XrXirOutputProvider){init_output,&trace};c.trace=init_trace;c.trace_context=&trace;
+        InitTrace trace={0};XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
         XrXirInstance *instance=NULL;XrXirCallResult held={0};XrXirCallStatus status=xr_xir_instance_new(program,&c,&instance);
         if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,entry,NULL,0);
         if(status==XR_XIR_CALL_READY){XrXirInstanceResult r=xr_xir_instance_poll(instance);status=r.outcome.status;

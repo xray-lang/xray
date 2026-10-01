@@ -92,13 +92,13 @@ static void drain_release(XrXirCallView *view, XrXirCallStatus reason) {
     xr_xir_value_drop(&s->values[0]); xr_xir_value_drop(&s->values[1]);
     xr_xir_owned_slot_clear(s,(uint32_t)offsetof(DrainState,panic));
 }
-static bool drain_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus drain_output(void *context, const XrXirOutputGroup *group) {
     DrainWitness *w = context;
     CHECK(!xr_xir_call_cleanup_active(w->activation));
     CHECK(xr_xir_instance_start_function(w->instance,&w->generated,NULL,0) == XR_XIR_CALL_BAD_STATE);
     CHECK(group->count == 1 && group->values[0].type == XR_XIR_I64 && group->values[0].payload == 21);
     CHECK(xr_xir_instance_stop(w->instance) == XR_XIR_CALL_READY);
-    ++w->outputs; return true;
+    ++w->outputs; return XR_XIR_OUTPUT_OK;
 }
 static void drain_lease(void *context) { ++((DrainWitness *)context)->leases; }
 static XrXirArtifact *drain_proof(const XrXirDeclarations *declarations, const XrXirTypes *types,
@@ -153,7 +153,7 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
     CHECK(!w.leases);
     CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){16u<<20,1000000},&program) == XR_XIR_OK);
     xr_xir_artifact_free(proof);
-    XrXirInstanceConfig config = xr_xir_instance_defaults(); config.output = (XrXirOutputProvider){drain_output,&w};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, drain_output, &w};
     CHECK(xr_xir_instance_new(program,&config,&w.instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(w.instance,1,NULL,0) == XR_XIR_CALL_READY);

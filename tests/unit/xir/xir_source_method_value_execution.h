@@ -40,8 +40,8 @@ static XrXirCallStatus source_method_value_count(XrXirInstance *instance, uint32
     return status;
 }
 static void source_method_value_attempt(XrXirProgram *program, SourceMethodValueEntries entries, XrXirValue results[6]) {
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider){runtime_sink,NULL};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, runtime_sink, NULL};
     XrXirInstance *instance = NULL;
     XrXirCallStatus status = xr_xir_instance_new(program,&config,&instance);
     if (status == XR_XIR_CALL_READY) status = source_method_value_count(instance,entries.count,0);

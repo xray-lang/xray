@@ -21,7 +21,7 @@ static void phi_cases(const XrXirCallEntry *entry) {
         CHECK(xr_xir_string_new(domain, "a", 1, &args[0]) == XR_XIR_VALUE_OK);
         CHECK(xr_xir_string_new(domain, "b", 1, &args[1]) == XR_XIR_VALUE_OK);
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entry, 1, NULL, 65536, mode > 6 ? mode - 6 : 100, 4, &accounting, {NULL, NULL}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = mode > 6 ? mode - 6 : 100; config.depth_limit = 4; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
         xr_xir_value_drop(&args[0]); xr_xir_value_drop(&args[1]);
@@ -58,7 +58,7 @@ static void numeric_cleanup(const XrXirCallEntry *entry) {
         CHECK(xr_xir_string_new(domain, "a", 1, &args[0]) == XR_XIR_VALUE_OK);
         CHECK(xr_xir_string_new(domain, "b", 1, &args[1]) == XR_XIR_VALUE_OK);
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entry, 1, NULL, 65536, 100, 4, &accounting, {NULL, NULL}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 4; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
         xr_xir_value_drop(&args[0]); xr_xir_value_drop(&args[1]);
@@ -81,7 +81,7 @@ static void local_cases(const XrXirCallEntry *entry) {
         CHECK(xr_xir_string_new(domain, "a", 1, &arguments[0]) == XR_XIR_VALUE_OK);
         CHECK(xr_xir_string_new(domain, "b", 1, &arguments[1]) == XR_XIR_VALUE_OK);
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entry, 1, NULL, 65536, mode == 3 ? 3 : 100, 4, &accounting, {NULL, NULL}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = mode == 3 ? 3 : 100; config.depth_limit = 4; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, arguments, 3, &call) == XR_XIR_CALL_READY);
         XrXirCallResult outcome = xr_xir_call_poll(call);

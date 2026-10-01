@@ -13,7 +13,7 @@
 #define XIR_DEFAULT_GAP_RUNTIME_H
 static bool gap_pair(XrXirProgram *program,const uint32_t ids[3],XrXirValue held[2]) {
     for(uint32_t n=0;n<2;++n){
-        XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirInstance *instance=NULL;
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         for(uint32_t e=0;e<3 && status!=XR_XIR_CALL_OOM;++e){
             CHECK(status==XR_XIR_CALL_READY || status==XR_XIR_CALL_RETURNED);

@@ -17,7 +17,7 @@
 #include "xir/xxir_array.h"
 #include "xir_bitwise_cases.h"
 typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
-static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+static XrXirOutputStatus source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     SourceOutput *output = context;
     CHECK(stream == (output->calls == 6 ? XR_XIR_STDERR : XR_XIR_STDOUT));
     CHECK(output->calls < 59);
@@ -84,9 +84,9 @@ static bool source_bytes(void *context, XrXirOutputStream stream, const char *by
     else if (output->calls == 7 && output->reject_write) CHECK(length == 6 && !memcmp(bytes, "false\n", 6));
     else CHECK(length == 5 && !memcmp(bytes, "true\n", 5));
     ++output->calls;
-    return !(output->reject_write && output->calls == 7);
+    return (!(output->reject_write && output->calls == 7)) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
-static bool source_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus source_output(void *context, const XrXirOutputGroup *group) {
     XrXirOutputSink *sink = context;
     SourceOutput *output = sink->context;
     if (output->calls == 58) {
@@ -350,10 +350,10 @@ static bool source_output(void *context, const XrXirOutputGroup *group) {
     }
     return xr_xir_output_render(sink, group);
 }
-static bool source_reject(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus source_reject(void *context, const XrXirOutputGroup *group) {
     uint32_t *calls = context;
     CHECK(group && group->line && group->stream == XR_XIR_STDOUT && group->count == 2);
-    ++*calls; return false;
+    ++*calls; return XR_XIR_OUTPUT_ERROR;
 }
 static void source_resume_once(XrXirInstance *instance, XrXirInstanceResult suspended) {
     CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED && suspended.outcome.wake && suspended.epoch);
@@ -395,9 +395,9 @@ static void source_resume_pair(XrXirInstance **instances, uint32_t entry, XrXirV
  * suspended, then while the handler's bindings and capturing closure are live. */
 static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t resume_text) {
     for (unsigned mode = 0; mode < 12; ++mode) {
-        SourceOutput output = {0}; XrXirOutputSink sink = {source_bytes, &output, 65536};
-        XrXirInstanceConfig config = xr_xir_instance_defaults(); config.poll_limit = 8000;
-        config.output = (XrXirOutputProvider) {source_output, &sink};
+        SourceOutput output = {0}; XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, source_bytes, &output, 65536};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.poll_limit = 8000;
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, source_output, &sink};
         XrXirInstance *instance = NULL;
         CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
@@ -447,7 +447,7 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
 }
 static void source_failed_init(XrXirProgram *program, uint32_t entry, XrXirInstanceConfig config) {
     uint32_t calls = 0;
-    config.output = (XrXirOutputProvider) {source_reject, &calls};
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, source_reject, &calls};
     XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
@@ -691,13 +691,13 @@ static void source_generic_result_drop(XrXirValue *value, uint32_t kind) {
 }
 static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions functions, XrXirValue *results) {
     SourceOutput outputs[2] = {{0, false}, {0, true}};
-    XrXirOutputSink sinks[2] = {{source_bytes, &outputs[0], 65536}, {source_bytes, &outputs[1], 65536}};
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirOutputSink sinks[2] = {{XR_XIR_CALL_ABI_VERSION, 0, source_bytes, &outputs[0], 65536}, {XR_XIR_CALL_ABI_VERSION, 0, source_bytes, &outputs[1], 65536}};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     config.metadata_limit = 65536; config.value_limit = 65536; config.call_limit = 65536;
     config.poll_limit = 8000; config.depth_limit = 96;
     XrXirInstance *instances[2] = {NULL, NULL};
     for (uint32_t i = 0; i < 2; ++i) {
-        config.output = (XrXirOutputProvider) {source_output, &sinks[i]};
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, source_output, &sinks[i]};
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
     }

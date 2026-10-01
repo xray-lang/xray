@@ -39,7 +39,7 @@ static XrXirCallStatus source_enum_identity_count(XrXirInstance *instance, uint3
     return status;
 }
 static void source_enum_identity_attempt(XrXirProgram *program, SourceEnumIdentityEntries entries, XrXirValue results[4]) {
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirInstance *instance = NULL;
     XrXirCallStatus status = xr_xir_instance_new(program,&config,&instance);
     if (status == XR_XIR_CALL_READY) status = source_enum_identity_count(instance,entries.count,0);

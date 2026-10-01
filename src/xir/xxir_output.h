@@ -12,11 +12,12 @@
 #ifndef XXIR_OUTPUT_H
 #define XXIR_OUTPUT_H
 #include "xxir_call.h"
-typedef bool (*XrXirByteOutputEntry)(void *context, XrXirOutputStream stream, const char *bytes, size_t length);
+typedef XrXirOutputStatus (*XrXirByteOutputEntry)(void *context, XrXirOutputStream stream, const char *bytes, size_t length);
 typedef struct XrXirOutputSink {
+    uint32_t abi_version, reserved;
     XrXirByteOutputEntry write;
     void *context;
     size_t byte_limit;
 } XrXirOutputSink;
-XR_FUNC bool xr_xir_output_render(void *context, const XrXirOutputGroup *group);
+XR_FUNC XrXirOutputStatus xr_xir_output_render(void *context, const XrXirOutputGroup *group);
 #endif

@@ -81,60 +81,60 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_float.c"
 #include "xir/xxir_call.c"
 #include "xir/xxir_output.c"
-static bool counted_float_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+static XrXirOutputStatus counted_float_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     size_t *published = context;
     CHECK(stream == XR_XIR_STDOUT && length == 9 && !memcmp(bytes, "0.1 -0.0\n", 9));
     ++*published;
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void float_output_allocation(void) {
     XrXirValue values[] = {{XR_XIR_F32, 0, INT64_C(0x3dcccccd)}, {XR_XIR_F64, 0, INT64_MIN}};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 2, true};
     size_t published = 0, before = calls;
-    XrXirOutputSink sink = {counted_float_sink, &published, 9};
+    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, counted_float_sink, &published, 9};
     fail_at = calls;
-    CHECK(!xr_xir_output_render(&sink, &group) && !published && !live);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OOM && !published && !live);
     CHECK(calls == before + 1);
     fail_at = SIZE_MAX; before = calls;
-    CHECK(xr_xir_output_render(&sink, &group) && published == 1 && !live);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && published == 1 && !live);
     CHECK(calls == before + 1);
     before = calls; sink.byte_limit = 8;
-    CHECK(!xr_xir_output_render(&sink, &group) && published == 1 && calls == before && !live);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT && published == 1 && calls == before && !live);
 }
-static bool counted_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+static XrXirOutputStatus counted_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     size_t *published = context;
     CHECK(stream == XR_XIR_STDOUT && length == 12 && !memcmp(bytes, "false 0 123\n", 12));
     ++*published;
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void output_allocation(void) {
     XrXirValue values[] = {{XR_XIR_BOOL, 0, 0}, {XR_XIR_I64, 0, 0}, {XR_XIR_I64, 0, 123}};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 3, true};
     size_t published = 0;
-    XrXirOutputSink sink = {counted_sink, &published, 12};
+    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, counted_sink, &published, 12};
     fail_at = calls;
-    CHECK(!xr_xir_output_render(&sink, &group) && !published && !live);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OOM && !published && !live);
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_output_render(&sink, &group) && published == 1 && !live);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && published == 1 && !live);
     size_t before = calls;
     sink.byte_limit = 10;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT);
     sink.byte_limit = 12;
     values[0].payload = 2;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     values[0].payload = 0; values[1].reserved = 1;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     values[1].reserved = 0; values[1].type = XR_XIR_UNIT;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     values[1].type = XR_XIR_I64;
     group.stream = XR_XIR_STDERR;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     group.stream = XR_XIR_STDOUT; group.line = false;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     group.line = true; group.count = 65537;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     group.count = 3; group.values = NULL;
-    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     CHECK(calls == before && published == 1 && !live);
 }
 static XrXirAction identity_resume(XrXirCallView *view) {
@@ -168,7 +168,7 @@ static void fail_sequence(void) {
     XrXirType type = XR_XIR_STRING;
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_STRING, 0, identity_resume, NULL, NULL, 0, 0};
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {NULL, NULL}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirCall *call = NULL;
     XrXirCallStatus admitted = xr_xir_call_new(&config, 0, &left, 1, &call);
     if (admitted == XR_XIR_CALL_READY) {
@@ -198,7 +198,7 @@ static void saturation(void) {
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, parameters, 2, XR_XIR_STRING,
         0, identity_resume, NULL, NULL, 0, 0};
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {NULL, NULL}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirCall *call = NULL;
     size_t baseline = live;
     CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_LIMIT && !call);

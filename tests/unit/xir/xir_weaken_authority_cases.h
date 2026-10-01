@@ -70,7 +70,7 @@ static void weaken_authority_cases(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget){2097152, 16000000}, &program) == XR_XIR_OK);
     xr_xir_artifact_free(proof);
-    XrXirInstance *instance = NULL, *other = NULL; XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstance *instance = NULL, *other = NULL; XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program, &config, &other) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance, 2, NULL, 0) == XR_XIR_CALL_READY);

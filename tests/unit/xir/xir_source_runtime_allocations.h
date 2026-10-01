@@ -19,9 +19,9 @@ typedef struct RuntimeSourceEntries {
     uint32_t generic_method_number, generic_method_text, generic_method_array;
 } RuntimeSourceEntries;
 
-static bool runtime_sink(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus runtime_sink(void *context, const XrXirOutputGroup *group) {
     (void) context;
-    CHECK(group && group->count <= 18); return true;
+    CHECK(group && group->count <= 18); return XR_XIR_OUTPUT_OK;
 }
 static XrXirCallStatus runtime_drive(XrXirInstance *instance) {
     XrXirInstanceResult result = xr_xir_instance_poll(instance);
@@ -34,8 +34,8 @@ static XrXirCallStatus runtime_drive(XrXirInstance *instance) {
     return result.outcome.status;
 }
 static void runtime_source_attempt(XrXirProgram *program, RuntimeSourceEntries entries) {
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider) {runtime_sink, NULL};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, runtime_sink, NULL};
     XrXirInstance *instance = NULL; XrXirValue result = {0}, argument = {XR_XIR_BOOL, 0, 1};
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entries.entry, NULL, 0);

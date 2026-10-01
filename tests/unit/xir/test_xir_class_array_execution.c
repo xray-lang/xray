@@ -25,7 +25,7 @@ extern const XrXirProgramSpec source_class_array_program;
 static void class_runtime_faults(XrXirProgram *program) {
  size_t base=runtime_live,bytes=runtime_bytes,sites=0;
  for(size_t pass=0;pass<=sites;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
- XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirValue value={0};
+ XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirValue value={0};
  XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,3,NULL,0);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;
@@ -74,7 +74,7 @@ int main(void){
  C(xr_xir_program_seal(&spec,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
  class_runtime_faults(program);
  XrXirValue saved[2]={{0},{0}};
- for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+ for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
  C(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
  XrXirValue number={0};C(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);C(number.type==XR_XIR_I64 && number.payload==41);xr_xir_value_drop(&number);

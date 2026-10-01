@@ -41,7 +41,7 @@ static void equal_pipeline_oom(const char *directory,const char *path) {
     kept=runtime_live;kept_bytes=runtime_bytes;sites=0;
     for (size_t point=0;point<=sites;++point) {
         runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
-        XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+        XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,entry,NULL,0);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll(instance).outcome.status;

@@ -31,13 +31,13 @@ static void panics_resource(const char *directory,const char *path) {
     uint32_t cancelled=panics_find(xr_xir_artifact_module(lowered),"cancelled");
     XrXirProgram *program=NULL;CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
     size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=NULL;
-    XrXirInstanceConfig config=xr_xir_instance_defaults();config.depth_limit=3;
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);config.depth_limit=3;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,limited,NULL,0)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_LIMIT);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(runtime_live==live && runtime_bytes==bytes);
-    config=xr_xir_instance_defaults();CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,cancelled,NULL,0)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);

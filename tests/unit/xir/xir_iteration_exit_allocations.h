@@ -18,9 +18,9 @@ static void iteration_exit_allocations(XrXirProgram *program) {
         for (size_t pass=0;pass<=(sites ? sites : 1);++pass) {
             runtime_fail_at=SIZE_MAX;
             XrXirInstance *instance=NULL;
-            XrXirInstanceConfig config=xr_xir_instance_defaults();
+            XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
             IterationTrace trace={0};
-            config.output=(XrXirOutputProvider){iteration_trace,&trace};
+            config.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, iteration_trace, &trace};
             C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
             C(xr_xir_instance_start(instance,5,NULL,0)==XR_XIR_CALL_READY);
             XrXirInstanceResult paused=xr_xir_instance_poll(instance);

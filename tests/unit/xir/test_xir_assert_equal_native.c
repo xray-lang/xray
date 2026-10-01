@@ -27,7 +27,7 @@ static void equal_native_release(void *pointer) {
 static void equal_native_cases(XrXirProgram *program) {
     const int64_t expected[]={1,7,3,5,6,7,0,3,123,11,12,13,14};
     equal_instance_oom(program,equal_checked_functions[2]);
-    XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+    XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     for (uint32_t i=0;i<13;++i) {
         CHECK(xr_xir_instance_start(instance,equal_checked_functions[i],NULL,0)==XR_XIR_CALL_READY);
@@ -62,7 +62,7 @@ static void equal_native_mixed(const XrXirProgramSpec *native,bool root_native) 
 int main(void) {
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
     _Static_assert(XR_XIR_VALUE_ABI_VERSION==16 && sizeof(XrXirValue)==16,"public value ABI");
-    _Static_assert(XR_XIR_CALL_ABI_VERSION==20 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
+    _Static_assert(XR_XIR_CALL_ABI_VERSION==21 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
     _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==26 && sizeof(XrXirProgramSpec)==96,"public program ABI");
     const XrXirProgramSpec *spec=&equal_checked_program;
@@ -71,5 +71,5 @@ int main(void) {
     equal_native_mixed(spec,false);CHECK(!runtime_live && !runtime_bytes);
     equal_native_mixed(spec,true);CHECK(!runtime_live && !runtime_bytes);
     CHECK(equal_native_releases==2);
-    puts("13 independent outcomes: native and both VM/native directions PASS; Value16 Call20 Program26 unchanged; physical baseline restored");return 0;
+    puts("13 independent outcomes: native and both VM/native directions PASS; Value16 Call21 Program26; carrier layouts unchanged; physical baseline restored");return 0;
 }

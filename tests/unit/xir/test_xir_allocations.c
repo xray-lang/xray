@@ -26,9 +26,10 @@ static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_
 } while (0)
 
 static size_t calls, live, class_live_bytes, fail_at = SIZE_MAX;
-typedef struct AllocationRecord { void *pointer; size_t bytes; } AllocationRecord;
+typedef struct AllocationRecord { void *pointer; size_t bytes; uint64_t identity; } AllocationRecord;
 static AllocationRecord *allocation_records;
 static size_t allocation_capacity;
+#include "xir_segment_lifetime_probe.h"
 /* Bookkeeping is outside the counted implementation allocation boundary. */
 static void allocation_record(void *pointer, size_t bytes) {
     if (!pointer) return;
@@ -39,7 +40,7 @@ static void allocation_record(void *pointer, size_t bytes) {
         CHECK(grown);allocation_records=grown;allocation_capacity=capacity;
     }
     CHECK(bytes<=SIZE_MAX-class_live_bytes);
-    allocation_records[live++]=(AllocationRecord){pointer,bytes};class_live_bytes+=bytes;
+    allocation_records[live++]=(AllocationRecord){pointer,bytes,new_allocation_identity()};class_live_bytes+=bytes;
 }
 static void *counted_malloc(size_t size) {
     if (calls++ == fail_at) return NULL;
@@ -51,12 +52,15 @@ static void *counted_calloc(size_t count, size_t size) {
     void *pointer=xr_calloc(count,size);allocation_record(pointer,count*size);return pointer;
 }
 static void counted_free(void *pointer) {
+    uint64_t identity=0;
     if (pointer) {
         size_t index=0;while(index<live && allocation_records[index].pointer!=pointer)++index;
-        CHECK(index<live);class_live_bytes-=allocation_records[index].bytes;
+        CHECK(index<live);identity=allocation_records[index].identity;
+        class_live_bytes-=allocation_records[index].bytes;
         allocation_records[index]=allocation_records[--live];
     }
     xr_free(pointer);
+    if (identity) segment_probe_free(identity);
     if (!live) {xr_free(allocation_records);allocation_records=NULL;allocation_capacity=0;CHECK(!class_live_bytes);}
 }
 static void *counted_realloc(void *pointer, size_t size) {
@@ -69,7 +73,9 @@ static void *counted_realloc(void *pointer, size_t size) {
         if (!was_null) {
             class_live_bytes-=allocation_records[index].bytes;
             CHECK(size<=SIZE_MAX-class_live_bytes);class_live_bytes+=size;
-            allocation_records[index]=(AllocationRecord){replacement,size};
+            uint64_t identity=allocation_records[index].identity;
+            if (replacement!=pointer) {segment_probe_free(identity);identity=new_allocation_identity();}
+            allocation_records[index]=(AllocationRecord){replacement,size,identity};
         } else allocation_record(replacement,size);
     }
     return replacement;
@@ -186,10 +192,10 @@ static void phi_snapshot_failure(void) {
     printf("PHI lower physical release: %zu allocation sites; partial snapshot failure leaves destinations unchanged\n", sites);
 }
 
-static bool allocation_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+static XrXirOutputStatus allocation_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     size_t *published = context;
     CHECK(stream == XR_XIR_STDERR && length == 1 && bytes[0] == 'x');
-    ++*published; return true;
+    ++*published; return XR_XIR_OUTPUT_OK;
 }
 static size_t write_allocation_failures(void) {
     XrXirArtifact *artifact = output_fixture();
@@ -201,16 +207,16 @@ static size_t write_allocation_failures(void) {
     size_t baseline = live, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         size_t published = 0;
-        XrXirOutputSink sink = {allocation_bytes, &published, 65536};
+        XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, allocation_bytes, &published, 65536};
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {xr_xir_output_render, &sink}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
         XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
         if (status == XR_XIR_CALL_READY) {
             XrXirCallResult result = xr_xir_call_poll(call);
-            CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_BOOL);
-            CHECK(result.value.payload == (attempt ? 0 : 1));
+            if (attempt) CHECK(result.status == XR_XIR_CALL_OOM && result.value.type == XR_XIR_UNIT);
+            else CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_BOOL && result.value.payload == 1);
         } else CHECK(attempt && status == XR_XIR_CALL_OOM && !call);
         if (!attempt) sites = calls;
         CHECK(published == (attempt ? 0u : 1u));
@@ -222,12 +228,12 @@ static size_t write_allocation_failures(void) {
     CHECK(!live); return sites;
 }
 
-static bool allocation_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus allocation_output(void *context, const XrXirOutputGroup *group) {
     CHECK(group && !group->line && group->count == 1);
     XrXirOutputStream stream = group->stream;
     const XrXirValue *value = &group->values[0];
     (void) context; (void) stream;
-    return value->type == XR_XIR_STRING;
+    return (value->type == XR_XIR_STRING) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
     XrXirDomain *domain = NULL; XrXirTypeArena *arena=NULL;
@@ -236,7 +242,7 @@ static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
     XrXirCallEntry entries[3];
     XrXirVmBinding bindings[3];
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {allocation_output, NULL}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, allocation_output, NULL}; config.admission = (XrXirValueAdmission) {0};
     for (uint32_t i = 0; i < 3; ++i) {
         XrXirStatus status = xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]);
         if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
@@ -276,7 +282,7 @@ static bool invoke_allocation_run(XrXirArtifact *artifact, uint32_t mode, uint32
     XrXirCall *call = NULL; XrXirValue owned = {0};
     XrXirCallEntry entries[5]; XrXirVmBinding bindings[5];
     XrXirCallAccounting accounting = {0}; bool completed = false;
-    XrXirCallConfig config = {entries,5,NULL,65536,100,10,&accounting,{NULL,NULL},{0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     for (uint32_t i = 0; i < 5; ++i) {
         XrXirStatus status = xr_xir_vm_bind(artifact,i,&bindings[i],&entries[i]);
         if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
@@ -365,7 +371,7 @@ static size_t call_allocation_failures(void) {
         fail_at = attempt ? attempt - 1 : SIZE_MAX;
         calls = 0;
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirValue argument = {XR_XIR_I64, 0, 3};
         XrXirCall *call = NULL;
         XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
@@ -383,11 +389,11 @@ static size_t call_allocation_failures(void) {
 }
 
 #include "xir_program_fixture.h"
-static bool program_allocation_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus program_allocation_output(void *context, const XrXirOutputGroup *group) {
     CHECK(group && !group->line && group->count == 1);
     XrXirOutputStream stream = group->stream;
     const XrXirValue *value = &group->values[0];
-    (void) context; (void) stream; (void) value; return true;
+    (void) context; (void) stream; (void) value; return XR_XIR_OUTPUT_OK;
 }
 static size_t program_allocation_failures(void) {
     size_t expected_calls = 0;
@@ -401,8 +407,8 @@ static size_t program_allocation_failures(void) {
             CHECK(attempt && sealed == XR_XIR_OUT_OF_MEMORY && !program && artifact == original);
         } else {
             CHECK(!artifact);
-            XrXirInstanceConfig config = xr_xir_instance_defaults();
-            config.output.write = program_allocation_output;
+            XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+            config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, program_allocation_output, NULL};
             XrXirInstance *instance = NULL;
             XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
             if (status != XR_XIR_CALL_READY) CHECK(attempt && status == XR_XIR_CALL_OOM && !instance);

@@ -14,8 +14,9 @@
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
 #include "xxir_panic.h"
+#include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 20u
+#define XR_XIR_CALL_ABI_VERSION 21u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -122,12 +123,14 @@ typedef struct XrXirOutputGroup {
     uint32_t count;
     bool line;
 } XrXirOutputGroup;
-typedef bool (*XrXirOutputEntry)(void *context, const XrXirOutputGroup *group);
+typedef XrXirOutputStatus (*XrXirOutputEntry)(void *context, const XrXirOutputGroup *group);
 typedef struct XrXirOutputProvider {
+    uint32_t abi_version, reserved;
     XrXirOutputEntry write;
     void *context;
 } XrXirOutputProvider;
 typedef struct XrXirCallConfig {
+    uint32_t abi_version, struct_size;
     const XrXirCallEntry *entries;
     uint32_t entry_count;
     void *instance;
@@ -138,6 +141,15 @@ typedef struct XrXirCallConfig {
     XrXirValueAdmission admission;
 } XrXirCallConfig;
 
+/* Failed initialization leaves the complete caller buffer unchanged. */
+XR_FUNC XrXirCallStatus xr_xir_call_config_init(XrXirCallConfig *config, size_t size);
+/* An absent provider has no callback, context or versioned state. */
+static inline bool xr_xir_output_provider_valid(const XrXirOutputProvider *provider) {
+    if (!provider) return false;
+    if (!provider->abi_version)
+        return !provider->reserved && !provider->write && !provider->context;
+    return provider->abi_version == XR_XIR_CALL_ABI_VERSION && !provider->reserved && provider->write;
+}
 XR_FUNC XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     const XrXirValue *arguments, uint32_t count, XrXirCall **output);
 XR_FUNC XrXirCallResult xr_xir_call_poll(XrXirCall *activation);

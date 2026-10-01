@@ -113,7 +113,7 @@ static XrXirProgram *class_exit_program(unsigned mode,uint32_t *entry) {
 static void class_exit_cases(void) {
  for(unsigned mode=0;mode<3;++mode){uint32_t entry=UINT32_MAX;XrXirProgram *program=class_exit_program(mode,&entry);size_t base=runtime_live,bytes=runtime_bytes,sites=0;
  for(size_t pass=0;pass<=sites;++pass){runtime_fail_at=pass?pass-1:SIZE_MAX;runtime_attempts=0;XrXirInstance *instance=NULL;XrXirValue value={0};
- XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
+ XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,entry,NULL,0);
  if(status==XR_XIR_CALL_READY){XrXirInstanceResult result=xr_xir_instance_poll(instance);status=result.outcome.status;
  if(status==XR_XIR_CALL_SUSPENDED){if(mode==0)status=xr_xir_instance_stop(instance);
@@ -127,7 +127,7 @@ static void class_exit_cases(void) {
 }
 static void class_program_retained_case(void) {
  uint32_t entry=UINT32_MAX;XrXirProgram *program=class_exit_program(2,&entry);
- XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+ XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
  CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
  XrXirInstanceResult result=xr_xir_instance_poll(instance);CHECK(result.outcome.status==XR_XIR_CALL_SUSPENDED);

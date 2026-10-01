@@ -24,7 +24,7 @@ static void capture_result(const XrXirValue *value, bool throwing) {
     CHECK(xr_xir_string_view(value,&bytes,&count) && count == 9 && !memcmp(bytes,"captured!",9));
 }
 static void capture_cases(XrXirProgram *program, bool throwing) {
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirDomain *domain = NULL; XrXirValue suffix = {0};
     CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain,"!",1,&suffix) == XR_XIR_VALUE_OK);

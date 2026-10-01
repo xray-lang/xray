@@ -17,7 +17,7 @@ typedef struct ArrayProgramLog {
     size_t length;
     uint32_t releases[3], released;
 } ArrayProgramLog;
-static bool array_program_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus array_program_output(void *context, const XrXirOutputGroup *group) {
     ArrayProgramLog *log = context;
     CHECK(group->line && group->count == 1 && group->stream == XR_XIR_STDOUT);
     const XrXirValue *value = group->values;
@@ -32,7 +32,7 @@ static bool array_program_output(void *context, const XrXirOutputGroup *group) {
     CHECK(log->length + length + 1 < sizeof(log->bytes));
     memcpy(log->bytes + log->length, bytes, length); log->length += length;
     log->bytes[log->length++] = '\n';
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void array_program_trace(void *context, XrXirLifecycleEvent event, uint32_t slot) {
     ArrayProgramLog *log = context;
@@ -59,8 +59,8 @@ static void array_program_cases(XrXirProgram *program, bool fail_init) {
     ArrayProgramLog logs[2] = {0};
     XrXirCallResult failures[2] = {0};
     for (uint32_t i = 0; i < 2; ++i) {
-        XrXirInstanceConfig config = xr_xir_instance_defaults();
-        config.output = (XrXirOutputProvider) {array_program_output,&logs[i]};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, array_program_output, &logs[i]};
         config.trace = array_program_trace; config.trace_context = &logs[i];
         CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
     }

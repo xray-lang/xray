@@ -61,7 +61,7 @@ static void assert_runtime_oom(XrXirProgram *program, uint32_t function) {
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
     for (size_t fault=0;fault<=sites;++fault) {
         runtime_attempts=0;runtime_fail_at=fault ? fault-1 : SIZE_MAX;
-        XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+        XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,function,NULL,0);
         unsigned suspensions=0;
@@ -80,7 +80,7 @@ static void assert_runtime_oom(XrXirProgram *program, uint32_t function) {
 static void assert_cases(XrXirProgram *program, const uint32_t *functions) {
     assert_runtime_oom(program,functions[ASSERT_INFORMATION]);
     assert_runtime_oom(program,functions[ASSERT_SUSPENDED]);
-    XrXirInstanceConfig config=xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirValue held[2]={{0}};
     for (uint32_t repeat=0;repeat<2;++repeat) {
         unsigned initialized=0;config.trace=assert_initialization_trace;config.trace_context=&initialized;

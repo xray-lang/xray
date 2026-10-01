@@ -28,7 +28,7 @@
 extern const XrXirProgramSpec source_library_program;
 #endif
 static bool pair(XrXirProgram *program){
- for(unsigned i=0;i<2;++i){XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirInstance *instance=NULL;
+ for(unsigned i=0;i<2;++i){XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
   XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
   if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,2,NULL,0);
   if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;

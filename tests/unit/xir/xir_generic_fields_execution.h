@@ -32,7 +32,7 @@ static XrXirCallStatus generic_fields_run(XrXirInstance *instance,GenericFieldEn
  return s;
 }
 static void generic_fields_pair(XrXirProgram *program,GenericFieldEntries e,XrXirValue held[2]){
- XrXirInstance *instances[2]={NULL,NULL};XrXirInstanceConfig config=xr_xir_instance_defaults();
+ XrXirInstance *instances[2]={NULL,NULL};XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  for(unsigned i=0;i<2;++i)CHECK(xr_xir_instance_new(program,&config,&instances[i])==XR_XIR_CALL_READY);
  for(unsigned i=0;i<2;++i)CHECK(generic_fields_run(instances[i],e,&held[i])==XR_XIR_CALL_RETURNED);
  for(unsigned i=0;i<2;++i)CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
@@ -40,7 +40,7 @@ static void generic_fields_pair(XrXirProgram *program,GenericFieldEntries e,XrXi
 static void generic_fields_faults(XrXirProgram *program,GenericFieldEntries e){
  size_t live=runtime_live,bytes=runtime_bytes,points=0;
  for(size_t pass=0;pass<=points;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
-  XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirValue held={0};
+  XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirValue held={0};
   XrXirCallStatus s=xr_xir_instance_new(program,&config,&instance);
   if(s==XR_XIR_CALL_READY)s=generic_fields_run(instance,e,&held);
   if(!pass){CHECK(s==XR_XIR_CALL_RETURNED);points=runtime_attempts;CHECK(points);}else CHECK(s==XR_XIR_CALL_OOM);

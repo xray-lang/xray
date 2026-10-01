@@ -13,15 +13,15 @@
 XR_DATA const XrXirProgramSpec locked_package_program;
 XR_DATA const uint32_t locked_package_entry;
 XR_DATA const uint32_t locked_package_inactive;
-static bool unexpected_output(void *context, const XrXirOutputGroup *group) {
-    (void)context; (void)group; CHECK(false); return false;
+static XrXirOutputStatus unexpected_output(void *context, const XrXirOutputGroup *group) {
+    (void)context; (void)group; CHECK(false); return XR_XIR_OUTPUT_ERROR;
 }
 int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&locked_package_program,
         (XrXirProgramBudget){33554432, 64000000}, &program) == XR_XIR_OK);
-    XrXirInstanceConfig config = xr_xir_instance_defaults(); XrXirInstance *instance = NULL;
-    config.output = (XrXirOutputProvider){unexpected_output, NULL};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, unexpected_output, NULL};
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance, locked_package_inactive, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(xr_xir_instance_start(instance, locked_package_entry, NULL, 0) == XR_XIR_CALL_READY);

@@ -165,9 +165,13 @@ static XrXirAction initialization_resume(XrXirCallView *view) {
     return (XrXirAction) {XR_XIR_ACTION_CALL, instance->requested, view->arguments,
         view->argument_count, {0, 0, 0}, {0}, 0};
 }
-XrXirInstanceConfig xr_xir_instance_defaults(void) {
-    return (XrXirInstanceConfig) {UINT64_C(16) << 20, UINT64_C(16) << 20,
-        UINT64_C(16) << 20, UINT64_C(1000000), 4096, {NULL, NULL}, NULL, NULL};
+XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size) {
+    if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (size != sizeof(*config)) return XR_XIR_CALL_BAD_ABI;
+    *config = (XrXirInstanceConfig) {XR_XIR_CALL_ABI_VERSION, sizeof(*config),
+        UINT64_C(16) << 20, UINT64_C(16) << 20, UINT64_C(16) << 20,
+        UINT64_C(1000000), 4096, {0}, NULL, NULL};
+    return XR_XIR_CALL_READY;
 }
 static void instance_dispose(XrXirInstance *instance) {
     xr_free(instance->entries); xr_free(instance->slots); xr_free(instance->published);
@@ -186,6 +190,9 @@ XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceCo
     if (!output) return XR_XIR_CALL_BAD_ARGUMENT;
     *output = NULL;
     if (!program || !config) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (config->abi_version != XR_XIR_CALL_ABI_VERSION || config->struct_size != sizeof(*config))
+        return XR_XIR_CALL_BAD_ABI;
+    if (!xr_xir_output_provider_valid(&config->output)) return XR_XIR_CALL_BAD_ABI;
     const XrXirDeclarations *d = program->declarations;
     uint64_t bytes = sizeof(XrXirInstance) + (uint64_t) d->slot_count * (sizeof(XrXirValue) + 5) +
         (uint64_t) d->module_count * 5 + ((uint64_t) program->entry_count + 1) * sizeof(XrXirCallEntry);
@@ -274,9 +281,14 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     uint32_t root = instance->program->entry_count;
     instance->entries[root] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, requested->parameters,
         count, requested->result, sizeof(uint32_t), initialization_resume, NULL, NULL, 0, 0};
-    XrXirCallConfig config = {instance->entries, root + 1, instance, instance->config.call_limit,
-        instance->config.poll_limit, instance->config.depth_limit, &instance->accounting[(instance->epoch + 1) % 2], instance->config.output,
-        *admission};
+    XrXirCallConfig config;
+    status = xr_xir_call_config_init(&config, sizeof(config));
+    if (status != XR_XIR_CALL_READY) { drop_arguments(owned, count); return status; }
+    config.entries = instance->entries; config.entry_count = root + 1; config.instance = instance;
+    config.byte_limit = instance->config.call_limit; config.poll_limit = instance->config.poll_limit;
+    config.depth_limit = instance->config.depth_limit;
+    config.accounting = &instance->accounting[(instance->epoch + 1) % 2];
+    config.output = instance->config.output; config.admission = *admission;
     XrXirCall *replacement = NULL;
     status = xr_xir_call_new(&config, root, owned, count, &replacement);
     drop_arguments(owned, count);

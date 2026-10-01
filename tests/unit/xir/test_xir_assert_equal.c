@@ -182,7 +182,7 @@ static void equal_run(XrXirArtifact *lowered,const char *generated_path) {
     XrXirProgram *program=NULL;
     CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
     equal_instance_oom(program,entries[2]);
-    XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+    XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     for (uint32_t i=0;i<13;++i) {
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);
@@ -206,7 +206,7 @@ static void equal_existing_fixture(const char *directory,const char *path,const 
     uint32_t entry=module->declarations->entry_function;CHECK(entry<module->function_count);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
-    XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+    XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);

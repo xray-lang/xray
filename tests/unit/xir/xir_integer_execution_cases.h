@@ -28,26 +28,26 @@ static const IntegerExecutionCase integer_execution_rows[] = {
 #include "xir_integer_cases.def"
 #undef XIR_INTEGER_CASE
 };
-static bool integer_output_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+static XrXirOutputStatus integer_output_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     unsigned *calls = context;
     const char expected[] = "-128 -32768 -2147483648 -9223372036854775808 255 65535 4294967295 18446744073709551615\n";
     CHECK(stream == XR_XIR_STDOUT && length == sizeof(expected) - 1);
     CHECK(!memcmp(bytes, expected, length));
-    ++*calls; return true;
+    ++*calls; return XR_XIR_OUTPUT_OK;
 }
 static void integer_value_boundaries(void) {
     XrXirValue values[] = {{XR_XIR_I8, 0, INT8_MIN}, {XR_XIR_I16, 0, INT16_MIN},
         {XR_XIR_I32, 0, INT32_MIN}, {XR_XIR_I64, 0, INT64_MIN}, {XR_XIR_U8, 0, UINT8_MAX},
         {XR_XIR_U16, 0, UINT16_MAX}, {XR_XIR_U32, 0, UINT32_MAX}, {XR_XIR_U64, 0, -1}};
     unsigned calls = 0;
-    XrXirOutputSink sink = {integer_output_bytes, &calls, 1024};
+    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, integer_output_bytes, &calls, 1024};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 8, true};
-    CHECK(xr_xir_output_render(&sink, &group) && calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && calls == 1);
     sink.byte_limit = 79;
-    CHECK(!xr_xir_output_render(&sink, &group) && calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT && calls == 1);
     sink.byte_limit = 1024;
     values[0].payload = 128;
-    CHECK(!xr_xir_output_render(&sink, &group) && calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT && calls == 1);
     values[0].payload = INT8_MIN;
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(4096, &domain) == XR_XIR_VALUE_OK);

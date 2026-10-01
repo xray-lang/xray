@@ -334,8 +334,19 @@ static void abort_frames(XrXirCall *call, XrXirCallStatus reason) {
 }
 #include "xxir_call_exit.inc.c"
 
+XrXirCallStatus xr_xir_call_config_init(XrXirCallConfig *config, size_t size) {
+    if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (size != sizeof(*config)) return XR_XIR_CALL_BAD_ABI;
+    *config = (XrXirCallConfig) {XR_XIR_CALL_ABI_VERSION, sizeof(*config), NULL, 0, NULL,
+        UINT64_C(16) << 20, UINT64_C(1000000), 4096, NULL, {0}, {0}};
+    return XR_XIR_CALL_READY;
+}
 static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes) {
-    if (!config || !config->entries || !config->entry_count || config->entry_count > 65536 ||
+    if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (config->abi_version != XR_XIR_CALL_ABI_VERSION || config->struct_size != sizeof(*config))
+        return XR_XIR_CALL_BAD_ABI;
+    if (!xr_xir_output_provider_valid(&config->output)) return XR_XIR_CALL_BAD_ABI;
+    if (!config->entries || !config->entry_count || config->entry_count > 65536 ||
         !config->accounting || config->accounting->live_bytes || config->accounting->depth ||
         config->accounting->allocations != config->accounting->frees)
         return XR_XIR_CALL_BAD_ARGUMENT;
@@ -428,6 +439,16 @@ XR_FUNCDEF XrXirAction xr_xir_call_assertion(const XrXirValue *message) {
         {XR_XIR_I64, 0, XR_XIR_CALL_ASSERTION}, {{XR_XIR_PANIC_ASSERTION, 0, 0, 0}, *message}, 0};
 }
 
+static XrXirCallStatus output_call_status(XrXirOutputStatus status) {
+    switch (status) {
+    case XR_XIR_OUTPUT_OK: return XR_XIR_CALL_READY;
+    case XR_XIR_OUTPUT_OOM: return XR_XIR_CALL_OOM;
+    case XR_XIR_OUTPUT_LIMIT: return XR_XIR_CALL_LIMIT;
+    case XR_XIR_OUTPUT_ERROR: return XR_XIR_CALL_OUTPUT_ERROR;
+    case XR_XIR_OUTPUT_BAD_ABI: return XR_XIR_CALL_BAD_ABI;
+    default: return XR_XIR_CALL_BAD_ARGUMENT;
+    }
+}
 static void accept_action(XrXirCall *call, XrXirAction action) {
     bool panic = fault_panics(&action);
     uint32_t allowed = action.kind == XR_XIR_ACTION_CALL ? XR_XIR_ACTION_PROTECTED | XR_XIR_ACTION_CLEANUP :
@@ -463,15 +484,16 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         }
         XrXirOutputGroup group = {action.callee == XR_XIR_OUTPUT_LINE ? XR_XIR_STDOUT :
             (XrXirOutputStream) action.callee, action.arguments, action.argument_count, action.callee == XR_XIR_OUTPUT_LINE};
-        bool accepted = call->config.output.write && call->config.output.write(
-            call->config.output.context, &group);
+        XrXirOutputStatus output_status = call->config.output.write ?
+            call->config.output.write(call->config.output.context, &group) : XR_XIR_OUTPUT_ERROR;
         if (call->cancel_requested && !cleanup_active(call)) request_exit_status(call, XR_XIR_CALL_CANCELLED);
-        else if (writing && call->config.output.write) {
+        else if (writing && call->config.output.write &&
+            (output_status == XR_XIR_OUTPUT_OK || output_status == XR_XIR_OUTPUT_ERROR)) {
             xr_xir_call_result_drop(&call->top->inbox);
             call->top->inbox = call_result(XR_XIR_CALL_RETURNED);
-            call->top->inbox.value = (XrXirValue) {XR_XIR_BOOL, 0, accepted ? 1 : 0};
+            call->top->inbox.value = (XrXirValue) {XR_XIR_BOOL, 0, output_status == XR_XIR_OUTPUT_OK};
         }
-        else if (!accepted) abort_frames(call, XR_XIR_CALL_OUTPUT_ERROR);
+        else if (output_status != XR_XIR_OUTPUT_OK) abort_frames(call, output_call_status(output_status));
         return;
     }
     if (action.kind == XR_XIR_ACTION_CALL) {

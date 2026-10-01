@@ -20,14 +20,14 @@ static UnitEntries unit_entries(const XrXirModule *module){
  }
  CHECK(entries.answer!=UINT32_MAX&&entries.text!=UINT32_MAX);return entries;
 }
-static bool unit_output(void *context,const XrXirOutputGroup *group){
+static XrXirOutputStatus unit_output(void *context,const XrXirOutputGroup *group){
  UnitTrace *trace=context;CHECK(group->stream==XR_XIR_STDOUT&&group->line&&group->count==1);
  const XrXirValue *v=&group->values[0];CHECK(v->type==XR_XIR_I64&&v->payload>=1&&v->payload<=4);
  CHECK((uint32_t)v->payload>trace->last);trace->last=(uint32_t)v->payload;
- trace->digits=trace->digits*10+trace->last;++trace->count;return true;
+ trace->digits=trace->digits*10+trace->last;++trace->count;return XR_XIR_OUTPUT_OK;
 }
 static XrXirInstanceConfig unit_config(UnitTrace *trace){
- XrXirInstanceConfig config=xr_xir_instance_defaults();config.output=(XrXirOutputProvider){unit_output,trace};return config;
+ XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);config.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, unit_output, trace};return config;
 }
 static void unit_retained(XrXirValue held[2]){
  static const char expected[]="unit-owned-long-string-survives-instance-and-program-destruction";

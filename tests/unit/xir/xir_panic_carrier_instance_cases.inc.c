@@ -87,17 +87,17 @@ static void abi_cases(void) {
         CHECK(xr_xir_program_seal(&invalid, (XrXirProgramBudget){16777216, 64000000}, &program) == XR_XIR_BAD_LAYOUT);
         CHECK(!program && !runtime_attempts && !fixture.callbacks && !fixture.releases);
         CHECK(runtime_live == baseline_count && runtime_bytes == baseline_bytes);
-        fixture.entries[0].abi_version = 20;
+        fixture.entries[0].abi_version = XR_XIR_CALL_ABI_VERSION;
     }
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {fixture.entries, 2, NULL, 65536, 32, 8, &accounting, {0}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = fixture.entries; config.entry_count = 2; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 32; config.depth_limit = 8; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     fixture.entries[1].abi_version = 19;
     XrXirCall *call = NULL; runtime_attempts = 0;
     CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_BAD_ABI && !call && !runtime_attempts);
     CHECK(!fixture.callbacks && !fixture.releases);
-    fixture.entries[1].abi_version = 20;
+    fixture.entries[1].abi_version = XR_XIR_CALL_ABI_VERSION;
     CHECK(old_provider_entry_bytes() == sizeof(XrXirCallEntry));
-    XrXirCallConfig old_config = {&old_provider_entry, 1, NULL, 65536, 32, 8, &accounting, {0}, {0}};
+    XrXirCallConfig old_config; CHECK(xr_xir_call_config_init(&old_config, sizeof(old_config)) == XR_XIR_CALL_READY); old_config.entries = &old_provider_entry; old_config.entry_count = 1; old_config.instance = NULL; old_config.byte_limit = 65536; old_config.poll_limit = 32; old_config.depth_limit = 8; old_config.accounting = &accounting; old_config.output = (XrXirOutputProvider) {0}; old_config.admission = (XrXirValueAdmission) {0};
     runtime_attempts = 0;
     CHECK(xr_xir_call_new(&old_config, 0, NULL, 0, &call) == XR_XIR_CALL_BAD_ABI && !call && !runtime_attempts);
     XrXirCallEntry saved = fixture.entries[0]; fixture.entries[0] = old_provider_entry;
@@ -121,7 +121,7 @@ static XrXirCallStatus instance_once(PanicProgramFixture *f, size_t fault_index,
     size_t baseline_count = runtime_live, baseline_bytes = runtime_bytes;
     runtime_attempts = 0; runtime_fail_at = fault_index;
     XrXirInstance *instance = NULL;
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, 1, NULL, 0);
     XrXirCallResult held = {0}, again = {0};
@@ -172,7 +172,7 @@ static XrXirCallStatus handler_once(PanicProgramFixture *f, size_t point, size_t
     size_t baseline_count = runtime_live, baseline_bytes = runtime_bytes;
     runtime_attempts = 0; runtime_fail_at = point;
     XrXirInstance *instance = NULL;
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, 1, NULL, 0);
     if (status == XR_XIR_CALL_READY) {

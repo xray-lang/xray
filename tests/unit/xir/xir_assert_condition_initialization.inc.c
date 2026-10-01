@@ -14,7 +14,7 @@ static void assert_initialization(const char *directory,const char *path) {
     CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK && !lowered);
     XrXirCallResult owned[2]={{0}};
     for (uint32_t i=0;i<2;++i) {
-        XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+        XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
         XrXirInstanceResult result=xr_xir_instance_poll(instance);

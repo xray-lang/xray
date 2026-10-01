@@ -14,12 +14,12 @@
 #include "shared/xr_decimal_float.h"
 #include "xir/xxir_output.h"
 typedef struct FloatOutputProbe { unsigned calls; bool accept; } FloatOutputProbe;
-static bool float_output_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+static XrXirOutputStatus float_output_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     const char expected[] = "0.1 0.1 -0.0 inf nan 1e+16\n";
     FloatOutputProbe *probe = context;
     CHECK(stream == XR_XIR_STDOUT && length == sizeof(expected) - 1 && !memcmp(bytes, expected, length));
     ++probe->calls;
-    return probe->accept;
+    return (probe->accept) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 static void float_output_group(void) {
     XrXirValue values[] = {
@@ -28,17 +28,17 @@ static void float_output_group(void) {
         {XR_XIR_F64, 0, INT64_C(0x7ff8000000000000)}, {XR_XIR_F64, 0, INT64_C(0x4341c37937e08000)}
     };
     FloatOutputProbe probe = {0, true};
-    XrXirOutputSink sink = {float_output_bytes, &probe, sizeof("0.1 0.1 -0.0 inf nan 1e+16\n") - 1};
+    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, float_output_bytes, &probe, sizeof("0.1 0.1 -0.0 inf nan 1e+16\n") - 1};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 6, true};
-    CHECK(xr_xir_output_render(&sink, &group) && probe.calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && probe.calls == 1);
     --sink.byte_limit;
-    CHECK(!xr_xir_output_render(&sink, &group) && probe.calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT && probe.calls == 1);
     ++sink.byte_limit; values[4].payload = INT64_C(0x7ff0000000000001);
-    CHECK(!xr_xir_output_render(&sink, &group) && probe.calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT && probe.calls == 1);
     values[4].payload = INT64_C(0x7ff8000000000000); values[4].reserved = 1;
-    CHECK(!xr_xir_output_render(&sink, &group) && probe.calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT && probe.calls == 1);
     values[4].reserved = 0; probe.accept = false;
-    CHECK(!xr_xir_output_render(&sink, &group) && probe.calls == 2);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_ERROR && probe.calls == 2);
 }
 static void float_format_cases(void) {
     static const struct { uint32_t width; uint64_t bits; const char *expected; } cases[] = {

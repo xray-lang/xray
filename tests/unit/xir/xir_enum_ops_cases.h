@@ -9,18 +9,18 @@
 #ifndef XIR_ENUM_OPS_CASES_H
 #define XIR_ENUM_OPS_CASES_H
 #include "xir/xxir_enum.h"
-static bool enum_ops_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus enum_ops_output(void *context, const XrXirOutputGroup *group) {
     unsigned *calls = context; ++*calls;
     CHECK(group->stream == XR_XIR_STDOUT && group->line && group->count == 4);
     const int64_t expected[] = {1,23,0};
     for (uint32_t i = 0; i < 3; ++i) CHECK(group->values[i].type == XR_XIR_I64 && group->values[i].payload == expected[i]);
     const char *bytes = NULL; size_t count = 0;
     CHECK(xr_xir_string_view(&group->values[3],&bytes,&count) && count == 11 && !memcmp(bytes,"constructed",11));
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void enum_ops_cases(XrXirProgram *program) {
     XrXirInstance *instances[2] = {0}; unsigned outputs = 0; XrXirValue escaped = {0};
-    XrXirInstanceConfig config = xr_xir_instance_defaults(); config.output = (XrXirOutputProvider) {enum_ops_output,&outputs};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, enum_ops_output, &outputs};
     for (unsigned i = 0; i < 2; ++i) CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
     for (unsigned i = 0; i < 2; ++i) {
@@ -47,7 +47,7 @@ static void enum_ops_cases(XrXirProgram *program) {
 }
 static void enum_wrong_variant_cases(XrXirProgram *program) {
     unsigned outputs = 0; XrXirInstance *instance = NULL;
-    XrXirInstanceConfig config = xr_xir_instance_defaults(); config.output = (XrXirOutputProvider) {enum_ops_output,&outputs};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, enum_ops_output, &outputs};
     CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY); xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance,2,NULL,0) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_BAD_STATE && outputs == 0);

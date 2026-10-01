@@ -10,7 +10,7 @@
 #define XIR_PATH_PROGRAM_CASES_H
 #include "xir/xxir_array.h"
 #include "xir/xxir_struct.h"
-static bool path_program_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus path_program_output(void *context, const XrXirOutputGroup *group) {
     unsigned *calls = context; ++*calls;
     const int64_t expected[] = {99,99,84,61,2,11};
     CHECK(group->line && group->stream == XR_XIR_STDOUT && group->count == 7);
@@ -18,7 +18,7 @@ static bool path_program_output(void *context, const XrXirOutputGroup *group) {
         CHECK(group->values[i].type == XR_XIR_I64 && group->values[i].payload == expected[i]);
     const char *bytes = NULL; size_t length = 0;
     CHECK(xr_xir_string_view(&group->values[6],&bytes,&length) && length == 6 && !memcmp(bytes,"edited",6));
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static XrXirValue path_program_result(XrXirInstance *instance, uint32_t entry) {
     CHECK(xr_xir_instance_start(instance,entry,NULL,0) == XR_XIR_CALL_READY);
@@ -52,8 +52,8 @@ static void path_program_value(XrXirValue *root, bool changed) {
 }
 static void path_program_cases(XrXirProgram *program, unsigned kind) {
     XrXirInstance *instances[2] = {0}; XrXirValue escaped[2] = {0}, slots[2] = {0}; unsigned outputs = 0;
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider){path_program_output,&outputs};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, path_program_output, &outputs};
     for (unsigned i = 0; i < 2; ++i)
         CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);

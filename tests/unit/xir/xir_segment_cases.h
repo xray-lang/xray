@@ -42,7 +42,7 @@ static XrXirAction segment_resume(XrXirCallView *view) {
     uint32_t level = (uint32_t) view->arguments[0].payload;
     if (!state->phase) {
         for (uint32_t b = 0; b < w->state_bytes; ++b) CHECK(!((unsigned char *) state)[b]);
-        w->states[level] = state; w->arguments[level] = view->arguments;
+        segment_probe_observe(level,state); w->states[level] = state; w->arguments[level] = view->arguments;
         memset((unsigned char *) state + sizeof(*state), (int) (level + 1), w->state_bytes - sizeof(*state));
         state->phase = 1;
         segment_check(view);
@@ -52,9 +52,7 @@ static XrXirAction segment_resume(XrXirCallView *view) {
     }
     segment_check(view);
     if (level) {
-#if defined(XR_XIR_FRAME_ASAN)
-        CHECK(__asan_address_is_poisoned(w->states[level - 1]));
-#endif
+        segment_probe_retired(level-1);
         if (view->inbox.status == XR_XIR_CALL_THROWN)
             return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value, {0}, 0};
         CHECK(view->inbox.status == XR_XIR_CALL_RETURNED && view->inbox.value.payload == level - 1);
@@ -80,10 +78,11 @@ static XrXirCallEntry segment_entry(uint32_t bytes) {
         bytes, segment_resume, segment_cleanup, NULL, 0, 0};
 }
 static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
+    segment_probe_begin();
     SegmentWitness witness = {0}; witness.root = 48; witness.state_bytes = bytes;
     witness.mode = mode; witness.passes = passes; witness.last_cleanup = UINT32_MAX;
     XrXirCallEntry entry = segment_entry(bytes); XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {&entry, 1, &witness, 2 * 1024 * 1024, 100000, 64, &accounting, {0}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = &witness; config.byte_limit = 2 * 1024 * 1024; config.poll_limit = 100000; config.depth_limit = 64; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirDomain *domain=NULL; XrXirTypeArena *arena=NULL;
     if (mode==2) {
         CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK); arena=error_fixture_arena(domain);
@@ -122,12 +121,12 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
             bytes, mode, passes, (unsigned long long) accounting.peak_bytes,
             (unsigned long long) accounting.allocations, witness.cleanups);
     }
-    return sites;
+    segment_probe_end();return sites;
 }
 static void segment_budget_cases(void) {
     SegmentWitness witness = {0}; witness.state_bytes = 131; witness.passes = 1;
     XrXirCallEntry entry = segment_entry(131); XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {&entry, 1, &witness, 65536, 100, 2, &accounting, {0}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 2; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     uint64_t metadata = 0; CHECK(table_size(&config, &metadata) == XR_XIR_CALL_READY);
     uint64_t minimum = metadata + frame_align(sizeof(CallSegment)) +
         frame_align(state_offset() + ((uint64_t) entry.state_bytes + 7) / 8 * 8 + sizeof(XrXirValue)) + 16;
@@ -173,7 +172,7 @@ static void segment_copy_failure(void) {
             {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_UNIT, large ? 8193u : 16u, segment_copy_resume, segment_copy_cleanup, NULL, 0, 0}
         };
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 4, &accounting, {0}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 4; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
         CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_LIMIT && witness.cleanups == large + 1);
@@ -200,5 +199,11 @@ static void segment_cases(void) {
         fail_at = SIZE_MAX;
         printf("Segment frame allocation failures: state=%u sites=%zu\n", bytes, sites);
     }
+    CHECK(segment_lease_releases && segment_retired_resident && segment_retired_freed);
+    CHECK(segment_observed_allocations && segment_observed_allocations==segment_allocation_frees);
+    printf("Segment lifetime identities: lease releases=%llu, retired resident=%llu, retired reclaimed=%llu, real poison events=%llu, observed allocations=%llu, physical allocation frees=%llu\n",
+        (unsigned long long)segment_lease_releases,(unsigned long long)segment_retired_resident,
+        (unsigned long long)segment_retired_freed,(unsigned long long)segment_poison_events,
+        (unsigned long long)segment_observed_allocations,(unsigned long long)segment_allocation_frees);
 }
 #endif // XIR_SEGMENT_CASES_H

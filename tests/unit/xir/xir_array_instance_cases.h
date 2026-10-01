@@ -211,7 +211,7 @@ static void array_instance_cases(void) {
         XrXirProgram *program = NULL; XrXirInstance *instance = NULL;
         CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
         xr_xir_artifact_free(proof);
-        XrXirInstanceConfig config = xr_xir_instance_defaults();
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         if (mode) config.poll_limit = 64;
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
         xr_xir_program_drop(program);

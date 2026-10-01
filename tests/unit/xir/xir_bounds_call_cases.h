@@ -33,10 +33,10 @@ static void bounds_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     ++witness->cleanups;
     witness->action.panic.detail = (XrXirFaultDetail) {0};
 }
-static bool bounds_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus bounds_output(void *context, const XrXirOutputGroup *group) {
     (void) group;
     ++((BoundsWitness *) context)->outputs;
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void bounds_fault_boundary(void) {
     const XrXirCallEntry entries[] = {
@@ -73,8 +73,7 @@ static void bounds_fault_boundary(void) {
         }
         XrXirCallAccounting accounting = {0};
         witness.accounting = &accounting;
-        XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 2, &accounting,
-            {bounds_output, &witness}, {0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 2; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, bounds_output, &witness}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_call_poll(call);
@@ -115,7 +114,7 @@ static void match_fault_boundary(void) {
         default: break;
         }
         XrXirCallAccounting accounting={0}; witness.accounting=&accounting;
-        XrXirCallConfig config={entries,2,&witness,65536,10,2,&accounting,{bounds_output,&witness},{0}};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 2; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, bounds_output, &witness}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call=NULL;
         CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_READY);
         XrXirCallResult result=xr_xir_call_poll(call);

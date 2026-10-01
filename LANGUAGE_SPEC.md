@@ -7503,10 +7503,10 @@ The sole SourceLibraryMap records literal_begin/count for a contiguous original-
 
 Qualification includes two real Libraries each owning literal0 with different bytes, reversed Catalog order with fixed results, omitted/explicit STRING arguments, private-helper rejection, the original OwnedChecked executed after all producers die, Source/independent packet VM/actual native/mixed, two Instances, retained owned bytes read by length after Program destruction, and final physical zero. Empty, UTF8 and low-level three-byte a\0b literals must survive all four consumers; Source parser NUL rejection remains unchanged. Independent manual packets and correctly rehashed attacks cover original-ID-outside-source-but-inside-merged, unused invalid UTF8, length/count overflow, identities/authority/digests and every duplicate canonical variant. Fail every new actual allocation, release the first Library when the second fails, test cumulative exact/minus1 budgets and scratch refunds. Preserve all existing default, origin, budget and fault gates. This finite extension does not qualify mutable Library state isolation, stdlib paired-cache hits/misses, complete product safety or final legacy deletion.
 
-### 17.33 Finite typed value equality (frozen contract, implementation PENDING)
+### 17.33 Finite typed value equality
 
-This section freezes the next sole Checked57/wire22 increment; current56 does not thereby
-execute this family. Equal uses bit4 of the existing marker:u32, with ordinary TYPE
+The sole Checked57/wire22 carries this finite domain; the complete equality family and
+public CLI migration remain incomplete. Equal uses bit4 of the existing marker:u32, with ordinary TYPE
 definition-site proofs, inline/where conjunction and provenance revalidation. The first domain
 is only bool, eight integers, f32/f64, string and recursive Array<D>. Other domains still reject
 explicitly and remain goals. Same-T ==, != and real Core assertEqual<T: Equal> share one typed
@@ -7524,12 +7524,23 @@ mean inequality or satisfy assertPanics.
 
 Source/Owned query/clone, default helpers, Library, writer/reader, Checked specialization and
 Lowered revalidation retain one constraint identity. No legacy Equatable, boxed-value adapter,
-name whitelist or second executor grants authority. Public Value16/Call20/Program26 are expected
-to add no fields, subject to actual fresh layout/provider-rejection/generated-C gates. Require
+name whitelist or second executor grants authority. This family adds no public Value/Program
+fields; current Value16/Call21/Program26 are defined by §17.6 and §17.34 and require actual
+fresh layout/provider-rejection/generated-C gates. Require
 independent full packets/valid-rehash, unused unconstrained definitions, same-named user
 interfaces, shared-backing NaN, NUL/depth257, every actual OOM and exact/minus1, dead producers,
 two Instances and physical refunds, separate fixed VM/native/mixed outcomes and central
 default/ASan. Complete assertions/containers/CLI, paired stdlib publication and full safety remain OPEN.
+
+### 17.34 Typed output and explicit configuration initialization
+
+The sole XrXirOutputStatus is OK=0, OOM=1, LIMIT=2, OUTPUT_ERROR=3, BAD_ARGUMENT=4 or BAD_ABI=5. Renderer, byte sink and group provider return the same closed status. Failure while preparing a complete group never calls the sink; success calls it at most once, preserving actual lengths, embedded NUL, UTF8, empty-print newline and long strings. Already written IO bytes do not promise rollback. Unknown statuses become BAD_ARGUMENT, without a boolean conversion that loses resource failures.
+
+PRINT failure preserves the exact Call status. For a valid configured provider, WRITE_STREAM maps OK to true and OUTPUT_ERROR to false. An absent provider remains Call OUTPUT_ERROR; OOM/LIMIT/BAD_ARGUMENT/BAD_ABI never become false. Existing cancellation priority remains. Resource failure is not panic and cannot satisfy assertPanics.
+
+Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
+
+Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
 
 ---
 

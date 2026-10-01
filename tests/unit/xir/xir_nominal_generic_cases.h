@@ -10,7 +10,7 @@
 #define XIR_NOMINAL_GENERIC_CASES_H
 static void nominal_generic_cases(XrXirProgram *program) {
     XrXirInstance *instances[2] = {NULL, NULL};
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     for (unsigned i = 0; i < 2; ++i)
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);

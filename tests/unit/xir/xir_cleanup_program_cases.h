@@ -9,17 +9,17 @@
 #ifndef XIR_CLEANUP_PROGRAM_CASES_H
 #define XIR_CLEANUP_PROGRAM_CASES_H
 typedef struct CleanupProgramLog { int64_t values[8]; uint32_t count; } CleanupProgramLog;
-static bool cleanup_program_write(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus cleanup_program_write(void *context, const XrXirOutputGroup *group) {
     CleanupProgramLog *log = context;
     CHECK(group->stream == XR_XIR_STDOUT && !group->line && group->count == 1);
     CHECK(group->values[0].type == XR_XIR_I64 && log->count < 8);
     log->values[log->count++] = group->values[0].payload;
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void cleanup_program_cases(XrXirProgram *program, unsigned mode) {
     CleanupProgramLog log = {0}; XrXirInstance *instance = NULL;
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider){cleanup_program_write, &log};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, cleanup_program_write, &log};
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance, 1, NULL, 0) == XR_XIR_CALL_READY);

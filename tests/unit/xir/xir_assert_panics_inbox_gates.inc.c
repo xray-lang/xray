@@ -58,7 +58,7 @@ static void panics_inbox_gates(void) {
         {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_STRING,0,panics_inbox_child,panics_inbox_release,NULL,0,0}
     };
     XrXirCallAccounting accounting={0};
-    XrXirCallConfig config={entries,2,&witness,1048576,100,16,&accounting,{0},{0}};XrXirCall *call=NULL;
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 1048576; config.poll_limit = 100; config.depth_limit = 16; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};XrXirCall *call=NULL;
     CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_READY);
     CHECK(xr_xir_call_poll(call).status==XR_XIR_CALL_RETURNED && witness.released==1 && witness.consumed==1);
     CHECK(xr_xir_call_discard_inbox(&witness.saved,XR_XIR_STRING)==XR_XIR_CALL_BAD_STATE);

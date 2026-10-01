@@ -128,7 +128,7 @@ static size_t exit_run(uint32_t mode, uint64_t polls, uint32_t depth) {
         {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,exit_child_resume,exit_release,&w,0,0},
         {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_STRING,sizeof(uint32_t),exit_outer_resume,exit_release,&w,0,0}};
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries,4,NULL,65536,polls,depth,&accounting,{0},admission};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 4; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = polls; config.depth_limit = depth; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = admission;
     XrXirCall *call = NULL; attempts = 0;
     XrXirCallStatus status = xr_xir_call_new(&config,mode == 8 ? 3u : 0u,NULL,0,&call);
     XrXirValue owned = {0};

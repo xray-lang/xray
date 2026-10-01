@@ -168,7 +168,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->spec.proof = xr_xir_program_proof(f->proof);
 }
 static XrXirInstance *new_instance(XrXirProgram *program, Trace *log) {
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     config.trace = trace; config.trace_context = log;
     CHECK(xr_xir_instance_new(program, &config, &log->instance) == XR_XIR_CALL_READY);
     return log->instance;

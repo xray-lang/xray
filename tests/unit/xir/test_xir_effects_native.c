@@ -34,7 +34,7 @@ XR_DATA const uint32_t witness_generic_where_selected_entry;
 XR_DATA const XrXirProgramSpec witness_cross_program;
 XR_DATA const uint32_t witness_cross_selected_entry;
 static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expected) {
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirInstance *instance = NULL;
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entry, NULL, 0);

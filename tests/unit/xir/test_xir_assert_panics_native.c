@@ -25,7 +25,7 @@ static void panics_native_release(void *pointer) {
 static void panics_native_cases(XrXirProgram *program,bool matrix) {
     const int64_t expected[]={445,445,445,445,445,0,11,11,420,420,123,3,19,445};
     const uint32_t *functions=matrix ? panics_matrix_functions : panics_checked_functions;
-    XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+    XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     for (uint32_t i=0;i<(matrix ? 14u : 4u);++i) {
         CHECK(xr_xir_instance_start(instance,functions[i],NULL,0)==XR_XIR_CALL_READY);
@@ -66,7 +66,7 @@ static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool 
 int main(void) {
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
     _Static_assert(XR_XIR_VALUE_ABI_VERSION==16 && sizeof(XrXirValue)==16,"public value ABI");
-    _Static_assert(XR_XIR_CALL_ABI_VERSION==20 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
+    _Static_assert(XR_XIR_CALL_ABI_VERSION==21 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
     _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==26 && sizeof(XrXirProgramSpec)==96,"public program ABI");
     for (uint32_t matrix=0;matrix<2;++matrix) {
@@ -77,5 +77,5 @@ int main(void) {
         panics_native_mixed(spec,matrix!=0,true);CHECK(!runtime_live && !runtime_bytes);
     }
     CHECK(panics_native_releases==4);
-    puts("18 independent outcomes: native and both VM/native directions PASS; Value16 Call20 Program26 unchanged; physical baseline restored");return 0;
+    puts("18 independent outcomes: native and both VM/native directions PASS; Value16 Call21 Program26; carrier layouts unchanged; physical baseline restored");return 0;
 }

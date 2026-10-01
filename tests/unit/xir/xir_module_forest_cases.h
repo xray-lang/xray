@@ -9,13 +9,13 @@
 #ifndef XIR_MODULE_FOREST_CASES_H
 #define XIR_MODULE_FOREST_CASES_H
 typedef struct ForestLog { uint32_t outputs, begins[3], releases; } ForestLog;
-static bool forest_write(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus forest_write(void *context, const XrXirOutputGroup *group) {
     ForestLog *log = context;
     const int64_t expected[] = {11, 22};
     CHECK(log->outputs < 2 && group->count == 1);
     CHECK(group->values[0].type == XR_XIR_I64 && group->values[0].payload == expected[log->outputs]);
     ++log->outputs;
-    return true;
+    return XR_XIR_OUTPUT_OK;
 }
 static void forest_trace(void *context, XrXirLifecycleEvent event, uint32_t index) {
     ForestLog *log = context;
@@ -24,8 +24,8 @@ static void forest_trace(void *context, XrXirLifecycleEvent event, uint32_t inde
 }
 static void module_forest_cases(XrXirProgram *program) {
     ForestLog log = {0};
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider){forest_write, &log};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, forest_write, &log};
     config.trace = forest_trace; config.trace_context = &log;
     XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);

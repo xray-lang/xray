@@ -16,13 +16,13 @@
 enum { FLOAT_ENTRY, FLOAT_RESULT, FLOAT_ADVANCE, FLOAT_CURRENT, FLOAT_CAPTURED,
     FLOAT_SUSPENDED, FLOAT_FUNCTION_COUNT };
 typedef struct SourceFloatOutput { unsigned count; bool reject; } SourceFloatOutput;
-static bool source_float_bytes(void *pointer, XrXirOutputStream stream, const char *bytes, size_t length) {
+static XrXirOutputStatus source_float_bytes(void *pointer, XrXirOutputStream stream, const char *bytes, size_t length) {
     static const char *const expected[] = {"3.5 1.5\n", "4.0 1.75\n", "inf -inf nan -0.0\n"};
     SourceFloatOutput *output = pointer;
     CHECK(stream == XR_XIR_STDOUT && output->count < sizeof(expected) / sizeof(expected[0]));
     const char *text = expected[output->count++];
     CHECK(length == strlen(text) && !memcmp(bytes, text, length));
-    return !output->reject;
+    return (!output->reject) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 static void source_float_text(const XrXirValue *value, const char *expected) {
     const char *bytes = NULL; size_t length = 0;
@@ -61,18 +61,18 @@ typedef struct SourceFloatFaultOutput {
     XrXirOutputSink sink;
     bool failed_allocation;
 } SourceFloatFaultOutput;
-static bool source_float_fault_render(void *pointer, const XrXirOutputGroup *group) {
+static XrXirOutputStatus source_float_fault_render(void *pointer, const XrXirOutputGroup *group) {
     SourceFloatFaultOutput *output = pointer;
     SourceFloatOutput *bytes = output->sink.context;
     size_t first = runtime_attempts;
     unsigned groups = bytes->count;
-    bool accepted = xr_xir_output_render(&output->sink, group);
+    XrXirOutputStatus status = xr_xir_output_render(&output->sink, group);
     bool failed_here = runtime_fail_at >= first && runtime_fail_at < runtime_attempts;
     if (failed_here) {
-        CHECK(!accepted && bytes->count == groups);
+        CHECK(status == XR_XIR_OUTPUT_OOM && bytes->count == groups);
         output->failed_allocation = true;
     }
-    return accepted;
+    return status;
 }
 static void source_float_runtime_failures(XrXirProgram *program, uint32_t entry) {
     const size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
@@ -80,9 +80,9 @@ static void source_float_runtime_failures(XrXirProgram *program, uint32_t entry)
     for (size_t site = 0; site <= sites; ++site) {
         runtime_attempts = 0; runtime_fail_at = site ? site - 1 : SIZE_MAX;
         SourceFloatOutput output = {0};
-        SourceFloatFaultOutput rendering = {{source_float_bytes, &output, 4096}, false};
-        XrXirInstanceConfig config = xr_xir_instance_defaults();
-        config.output = (XrXirOutputProvider) {source_float_fault_render, &rendering};
+        SourceFloatFaultOutput rendering = {{XR_XIR_CALL_ABI_VERSION, 0, source_float_bytes, &output, 4096}, false};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, source_float_fault_render, &rendering};
         XrXirInstance *instance = NULL;
         const char *phase = "new";
         XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
@@ -90,7 +90,7 @@ static void source_float_runtime_failures(XrXirProgram *program, uint32_t entry)
         if (status == XR_XIR_CALL_READY) { phase = "poll"; status = xr_xir_instance_poll(instance).outcome.status; }
         if (!site) { CHECK(status == XR_XIR_CALL_RETURNED && output.count == 3); sites = runtime_attempts; }
         else {
-            XrXirCallStatus expected = rendering.failed_allocation ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_OOM;
+            XrXirCallStatus expected = XR_XIR_CALL_OOM;
             if (status != expected) fprintf(stderr,
                 "Float runtime allocation site=%zu/%zu fail_at=%zu attempts=%zu phase=%s status=%u outputs=%u live=%zu/%zu\n",
                 site, sites, runtime_fail_at, runtime_attempts, phase, (unsigned) status, output.count, runtime_live, baseline_live);
@@ -110,20 +110,21 @@ static void source_float_output_failures(XrXirProgram *program, uint32_t entry) 
     const size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
     for (unsigned mode = 0; mode < 2; ++mode) {
         SourceFloatOutput output = {0, mode != 0};
-        XrXirOutputSink sink = {source_float_bytes, &output, mode ? 4096 : 1};
-        XrXirInstanceConfig config = xr_xir_instance_defaults();
-        config.output = (XrXirOutputProvider) {xr_xir_output_render, &sink};
+        XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, source_float_bytes, &output, mode ? 4096 : 1};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
+        XrXirCallStatus expected = mode ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_LIMIT;
         XrXirInstance *instance = NULL;
         CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_OUTPUT_ERROR);
+        CHECK(xr_xir_instance_poll(instance).outcome.status == expected);
         CHECK(output.count == mode);
         for (unsigned again = 0; again < 2; ++again) {
             XrXirCallResult failure = {0};
-            CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_OUTPUT_ERROR);
-            CHECK(failure.status == XR_XIR_CALL_OUTPUT_ERROR);
-            CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_OUTPUT_ERROR);
-            CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_OUTPUT_ERROR);
+            CHECK(xr_xir_instance_copy_failure(instance, &failure) == expected);
+            CHECK(failure.status == expected);
+            CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == expected);
+            CHECK(xr_xir_instance_poll(instance).outcome.status == expected);
             CHECK(output.count == mode);
         }
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
@@ -137,9 +138,9 @@ static void source_float_call_failures(XrXirProgram *program, const uint32_t *fu
         size_t sites = 0;
         for (size_t site = 0; site <= sites; ++site) {
             SourceFloatOutput output = {0};
-            XrXirOutputSink sink = {source_float_bytes, &output, 4096};
-            XrXirInstanceConfig config = xr_xir_instance_defaults();
-            config.output = (XrXirOutputProvider) {xr_xir_output_render, &sink};
+            XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, source_float_bytes, &output, 4096};
+            XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+            config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
             XrXirInstance *instance = NULL;
             CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
             XrXirValue value = source_float_run(instance, functions[FLOAT_ENTRY]);
@@ -183,12 +184,12 @@ static void source_float_program_cases(XrXirProgram *program, const uint32_t *fu
     source_float_output_failures(program, functions[FLOAT_ENTRY]);
     const size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
     SourceFloatOutput output[2] = {{0}, {0}};
-    XrXirOutputSink sinks[2] = {{source_float_bytes, &output[0], 4096}, {source_float_bytes, &output[1], 4096}};
+    XrXirOutputSink sinks[2] = {{XR_XIR_CALL_ABI_VERSION, 0, source_float_bytes, &output[0], 4096}, {XR_XIR_CALL_ABI_VERSION, 0, source_float_bytes, &output[1], 4096}};
     XrXirInstance *instances[2] = {0};
     XrXirValue retained[2] = {{0}, {0}};
     for (unsigned i = 0; i < 2; ++i) {
-        XrXirInstanceConfig config = xr_xir_instance_defaults();
-        config.output = (XrXirOutputProvider) {xr_xir_output_render, &sinks[i]};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sinks[i]};
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
         source_float_bits(source_float_run(instances[i], functions[FLOAT_ENTRY]), XR_XIR_I64, 0);
         CHECK(output[i].count == 3);

@@ -81,7 +81,7 @@ static void witness_promise_execute(XrXirArtifact *checked,
     CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},
         &program) == XR_XIR_OK && !lowered);
     for (uint32_t run = 0; run < 2; ++run) {
-        XrXirInstanceConfig config = xr_xir_instance_defaults(); XrXirInstance *instance = NULL;
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
         XrXirCallStatus started = xr_xir_instance_start(instance,entry,NULL,0);
         if (started != XR_XIR_CALL_READY)

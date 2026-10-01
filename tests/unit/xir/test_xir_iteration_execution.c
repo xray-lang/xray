@@ -43,14 +43,14 @@ int main(void){
  iteration_runtime_faults(program);
  iteration_exit_allocations(program);
  XrXirValue saved[2]={{0},{0}};
- for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();
+ for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
  C(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
  XrXirValue number={0};C(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);C(number.type==XR_XIR_I64 && number.payload==41);xr_xir_value_drop(&number);
  C(xr_xir_instance_start(instance,4,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
  C(xr_xir_instance_take_result(instance,&saved[i])==XR_XIR_CALL_RETURNED);C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
  for(unsigned cancel=0;cancel<2;++cancel){
- XrXirInstance *instance=NULL;XrXirInstanceConfig config=xr_xir_instance_defaults();IterationTrace trace={0};config.output=(XrXirOutputProvider){iteration_trace,&trace};
+ XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);IterationTrace trace={0};config.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, iteration_trace, &trace};
  C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
  C(xr_xir_instance_start(instance,5,NULL,0)==XR_XIR_CALL_READY);
  XrXirInstanceResult resumed=xr_xir_instance_poll(instance);C(resumed.outcome.status==XR_XIR_CALL_SUSPENDED);

@@ -25,7 +25,7 @@ static void string_bytes(const XrXirValue *value, const char *expected, size_t s
     CHECK(xr_xir_string_view(value, &bytes, &length));
     CHECK(length == size && !memcmp(bytes, expected, size));
 }
-static bool string_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus string_output(void *context, const XrXirOutputGroup *group) {
     CHECK(group && !group->line && group->count == 1);
     XrXirOutputStream stream = group->stream;
     const XrXirValue *value = &group->values[0];
@@ -39,7 +39,7 @@ static bool string_output(void *context, const XrXirOutputGroup *group) {
     CHECK(xr_xir_call_free(output->call) == XR_XIR_CALL_BUSY);
     if (output->mode == 6 && output->calls == 3)
         CHECK(xr_xir_call_cancel(output->call) == XR_XIR_CALL_CANCEL_REQUESTED);
-    return output->mode != 3;
+    return (output->mode != 3) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 static void string_error_bytes(const XrXirValue *value, XrXirDomain *domain) {
     XrXirValueAdmission admission={xr_xir_value_arena(value),domain,NULL,NULL,10000,65536};
@@ -57,8 +57,7 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
     CHECK(xr_xir_string_new(domain, string_right, sizeof(string_right) - 1, &arguments[1]) == XR_XIR_VALUE_OK);
     XrXirCallAccounting accounting = {0};
     StringOutput output = {0, mode, NULL};
-    XrXirCallConfig config = {entries, 3, NULL, 65536, mode == 5 ? 15 : 100, 10,
-        &accounting, {mode == 4 ? NULL : string_output, &output}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = mode == 5 ? 15 : 100; config.depth_limit = 10; config.accounting = &accounting; config.output = mode == 4 ? (XrXirOutputProvider) {0} : (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, string_output, &output}; config.admission = (XrXirValueAdmission) {0};
     config.admission=error_fixture_admission(domain,arena);
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, mode == 5 || mode == 6 ? 2 : 0, arguments, 2, &call) == XR_XIR_CALL_READY);

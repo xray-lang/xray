@@ -12,13 +12,13 @@
 enum { PANIC_DIRECT, PANIC_BOUND, PANIC_BOUNDS, PANIC_NESTED, PANIC_CHANNELS,
     PANIC_ORDINARY, PANIC_LOCAL, PANIC_INDIRECT, PANIC_SUSPENDED, PANIC_HANDLER,
     PANIC_INFORMATION, PANIC_MATCH, PANIC_UNCAUGHT, PANIC_ENTRY, PANIC_FUNCTIONS };
-static bool panic_output(void *context, const XrXirOutputGroup *group) {
+static XrXirOutputStatus panic_output(void *context, const XrXirOutputGroup *group) {
     unsigned *calls = context;
     const int64_t expected[] = {17, 421, 23, 5};
     CHECK(!*calls && group->stream == XR_XIR_STDOUT && group->line && group->count == 4);
     for (unsigned i = 0; i < 4; ++i)
         CHECK(group->values[i].type == XR_XIR_I64 && group->values[i].payload == expected[i]);
-    ++*calls; return true;
+    ++*calls; return XR_XIR_OUTPUT_OK;
 }
 static XrXirCallResult panic_poll(XrXirInstance *instance, unsigned *suspensions) {
     XrXirInstanceResult result = xr_xir_instance_poll(instance);
@@ -49,8 +49,8 @@ static void panic_failures(XrXirProgram *program, uint32_t entry) {
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
         runtime_attempts = 0; runtime_fail_at = site ? site - 1 : SIZE_MAX;
-        XrXirInstanceConfig config = xr_xir_instance_defaults(); XrXirInstance *instance = NULL;
-        unsigned calls = 0; config.output = (XrXirOutputProvider) {panic_output, &calls};
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
+        unsigned calls = 0; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, panic_output, &calls};
         XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
         if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entry, NULL, 0);
         unsigned suspensions = 0;
@@ -73,8 +73,8 @@ static void panic_failures(XrXirProgram *program, uint32_t entry) {
 }
 static void panic_cancel(XrXirProgram *program, uint32_t entry) {
     const size_t live = runtime_live, bytes = runtime_bytes;
-    XrXirInstanceConfig config = xr_xir_instance_defaults(); XrXirInstance *instance = NULL;
-    unsigned calls = 0; config.output = (XrXirOutputProvider) {panic_output, &calls};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
+    unsigned calls = 0; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, panic_output, &calls};
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
     XrXirInstanceResult paused = xr_xir_instance_poll(instance);
@@ -91,8 +91,8 @@ static void panic_cases(XrXirProgram *program, const uint32_t *functions) {
     panic_failures(program, functions[PANIC_HANDLER]);
     panic_cancel(program, functions[PANIC_SUSPENDED]);
     panic_cancel(program, functions[PANIC_HANDLER]);
-    unsigned calls = 0; XrXirInstanceConfig config = xr_xir_instance_defaults();
-    config.output = (XrXirOutputProvider) {panic_output, &calls};
+    unsigned calls = 0; XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, panic_output, &calls};
     XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     const unsigned integers[] = {PANIC_DIRECT, PANIC_NESTED, PANIC_CHANNELS,
@@ -129,7 +129,7 @@ static void panic_cases(XrXirProgram *program, const uint32_t *functions) {
     CHECK(!runtime_live && !runtime_bytes);
 }
 static void panic_sticky(XrXirProgram *program, uint32_t entry) {
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirInstance *instances[2] = {NULL, NULL};
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);

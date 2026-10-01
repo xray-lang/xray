@@ -63,7 +63,7 @@ static void source_parameter_defaults_execute(XrXirArtifact *owned) {
     XrXirProgram *program=NULL;
     CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
     for(uint32_t i=0;i<2;++i){
-        XrXirInstanceConfig config=xr_xir_instance_defaults();XrXirInstance *instance=NULL;
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);

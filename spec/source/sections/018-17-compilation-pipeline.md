@@ -439,9 +439,9 @@ Source用唯一不发recipe的source_literal_append(ctx,node,bytes,length,&id)�
 
 资格须包含两个真实库各自literal0且字节不同、反转Catalog输入顺序后的固定结果、默认与显式STRING、私有helper拒绝、原OwnedChecked在所有producer销毁后执行、Source/独立packet VM/真实native/mixed、双Instance、Program销毁后按length读取拥有结果及最终physical0。低层空、UTF8与a\0b三字节literal须四消费者保真，源码parser的NUL拒绝保持原规则，不能当新源码语法。独立手工包与双层有效重hash攻击覆盖原ID越界但merged合法、unused坏UTF8、长度/计数溢出、身份/authority/摘要及重复canonical；逐新真实OOM、第二库失败释放首库、累计预算exact/minus1及scratch退款均验证。保留既有全部默认/来源/预算/故障测试。本有限增量不替代可变库状态隔离、stdlib配对cache命中/miss、完整产品安全或最终旧链删除。
 
-### 17.33 有限 typed 值相等（冻结合同，实施 PENDING）
+### 17.33 有限 typed 值相等
 
-本节冻结下一个唯一 Checked57/wire22 增量，不声称当前56已执行本族。Equal 使用已有
+唯一 Checked57/wire22 承载本有限域；完整相等声明族及公开CLI迁移仍未完成。Equal 使用已有
 marker:u32 的 bit4，ordinary TYPE 的定义处证明、inline/where 合取及来源复验均适用。
 首域仅 bool、八整数、f32/f64、string 和递归 Array<D>；其余域继续明确拒绝且目标保持OPEN。
 同T的 ==、!= 与真实 Core assertEqual<T: Equal> 使用同一 typed 关系。EQUAL=117、
@@ -456,10 +456,20 @@ STRING字节、Array元素和扩容工作累计计费，超限不能当作不等
 
 Source/Owned query/clone、默认helper、Library、writer/reader、Checked特化与Lowered复验
 携带同一约束身份。不得借旧Equatable、boxed值adapter、名字白名单或第二executor准入。
-公共Value16/Call20/Program26预计无字段增量，仍须真实fresh布局/provider拒绝和生成C验证。
+本族不增加公开Value/Program字段；当前Value16/Call21/Program26由§17.6与§17.34定义，仍须真实fresh布局/provider拒绝和生成C验证。
 资格须含独立完整包与valid-rehash、无约束未调用定义、同名用户接口、NaN共享backing、
 NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physical退款、VM/native/mixed
 分别固定预期及中央默认/ASan。原完整断言/容器/CLI、stdlib配对发布与完整安全保持OPEN。
+
+### 17.34 Typed output与显式配置初始化
+
+唯一XrXirOutputStatus为OK=0、OOM=1、LIMIT=2、OUTPUT_ERROR=3、BAD_ARGUMENT=4、BAD_ABI=5；renderer、byte sink及group provider返回同一封闭状态。完整group准备失败不得调用sink；成功最多调用一次，按真实length保留embedded NUL、UTF8、空print换行及长字符串。IO已写出的bytes不承诺回滚。未知status归为BAD_ARGUMENT，不允许bool转换丢失资源失败。
+
+PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将OK映为true、OUTPUT_ERROR映为false；缺provider仍为Call OUTPUT_ERROR，OOM/LIMIT/BAD_ARGUMENT/BAD_ABI不得映为false。取消保持既有优先级。资源失败不成为panic，不能被assertPanics消费为成功。
+
+当前Call ABI为21。Provider/Sink以abi_version与reserved=0开头；有callback先验21，无provider仅准canonical全零。CallConfig/InstanceConfig以abi_version和struct_size开头，在读取其它字段前验21及exact sizeof。Windows x86_64实测Provider24、Sink32、CallConfig136、InstanceConfig88；这些数值不代替其它target的实际ABI验证。唯一xr_xir_call_config_init(config,size)与xr_xir_instance_config_init(config,size)返回CallStatus，成功才写，失败保留全部output bytes；旧按值defaults符号删除，无别名或wrapper。旧Call20 entry必须在执行callback前拒绝；旧embedding defaults对象必须链接拒绝，不能用重编旧对象替代证据。
+
+Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
 
 <!-- /xr-spec:cn -->
 
@@ -1004,10 +1014,10 @@ The sole SourceLibraryMap records literal_begin/count for a contiguous original-
 
 Qualification includes two real Libraries each owning literal0 with different bytes, reversed Catalog order with fixed results, omitted/explicit STRING arguments, private-helper rejection, the original OwnedChecked executed after all producers die, Source/independent packet VM/actual native/mixed, two Instances, retained owned bytes read by length after Program destruction, and final physical zero. Empty, UTF8 and low-level three-byte a\0b literals must survive all four consumers; Source parser NUL rejection remains unchanged. Independent manual packets and correctly rehashed attacks cover original-ID-outside-source-but-inside-merged, unused invalid UTF8, length/count overflow, identities/authority/digests and every duplicate canonical variant. Fail every new actual allocation, release the first Library when the second fails, test cumulative exact/minus1 budgets and scratch refunds. Preserve all existing default, origin, budget and fault gates. This finite extension does not qualify mutable Library state isolation, stdlib paired-cache hits/misses, complete product safety or final legacy deletion.
 
-### 17.33 Finite typed value equality (frozen contract, implementation PENDING)
+### 17.33 Finite typed value equality
 
-This section freezes the next sole Checked57/wire22 increment; current56 does not thereby
-execute this family. Equal uses bit4 of the existing marker:u32, with ordinary TYPE
+The sole Checked57/wire22 carries this finite domain; the complete equality family and
+public CLI migration remain incomplete. Equal uses bit4 of the existing marker:u32, with ordinary TYPE
 definition-site proofs, inline/where conjunction and provenance revalidation. The first domain
 is only bool, eight integers, f32/f64, string and recursive Array<D>. Other domains still reject
 explicitly and remain goals. Same-T ==, != and real Core assertEqual<T: Equal> share one typed
@@ -1025,11 +1035,22 @@ mean inequality or satisfy assertPanics.
 
 Source/Owned query/clone, default helpers, Library, writer/reader, Checked specialization and
 Lowered revalidation retain one constraint identity. No legacy Equatable, boxed-value adapter,
-name whitelist or second executor grants authority. Public Value16/Call20/Program26 are expected
-to add no fields, subject to actual fresh layout/provider-rejection/generated-C gates. Require
+name whitelist or second executor grants authority. This family adds no public Value/Program
+fields; current Value16/Call21/Program26 are defined by §17.6 and §17.34 and require actual
+fresh layout/provider-rejection/generated-C gates. Require
 independent full packets/valid-rehash, unused unconstrained definitions, same-named user
 interfaces, shared-backing NaN, NUL/depth257, every actual OOM and exact/minus1, dead producers,
 two Instances and physical refunds, separate fixed VM/native/mixed outcomes and central
 default/ASan. Complete assertions/containers/CLI, paired stdlib publication and full safety remain OPEN.
+
+### 17.34 Typed output and explicit configuration initialization
+
+The sole XrXirOutputStatus is OK=0, OOM=1, LIMIT=2, OUTPUT_ERROR=3, BAD_ARGUMENT=4 or BAD_ABI=5. Renderer, byte sink and group provider return the same closed status. Failure while preparing a complete group never calls the sink; success calls it at most once, preserving actual lengths, embedded NUL, UTF8, empty-print newline and long strings. Already written IO bytes do not promise rollback. Unknown statuses become BAD_ARGUMENT, without a boolean conversion that loses resource failures.
+
+PRINT failure preserves the exact Call status. For a valid configured provider, WRITE_STREAM maps OK to true and OUTPUT_ERROR to false. An absent provider remains Call OUTPUT_ERROR; OOM/LIMIT/BAD_ARGUMENT/BAD_ABI never become false. Existing cancellation priority remains. Resource failure is not panic and cannot satisfy assertPanics.
+
+Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
+
+Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
 
 <!-- /xr-spec:en -->

@@ -24,8 +24,8 @@ static void reject(const XrXirSourceRequest *request, const char *message) {
     xr_xir_source_result_free(&result);
 }
 
-static bool unexpected_output(void *context, const XrXirOutputGroup *group) {
-    (void)context; (void)group; CHECK(false); return false;
+static XrXirOutputStatus unexpected_output(void *context, const XrXirOutputGroup *group) {
+    (void)context; (void)group; CHECK(false); return XR_XIR_OUTPUT_ERROR;
 }
 static void execute(XrXirArtifact *checked, const char *output) {
     XrXirArtifact *closed = NULL, *lowered = NULL;
@@ -53,8 +53,8 @@ static void execute(XrXirArtifact *checked, const char *output) {
     }
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget){33554432, 64000000}, &program) == XR_XIR_OK);
-    XrXirInstanceConfig config = xr_xir_instance_defaults(); XrXirInstance *instance = NULL;
-    config.output = (XrXirOutputProvider){unexpected_output, NULL};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
+    config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, unexpected_output, NULL};
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance, inactive, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);

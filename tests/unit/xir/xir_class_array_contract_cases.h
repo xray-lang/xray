@@ -13,7 +13,7 @@
 _Static_assert(XR_XIR_CHECKED_SCHEMA==22 && XR_XIR_CHECKED_CONTRACT==57,
     "class Array fields use the current default-binding schema and semantic contract");
 _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==26 && XR_XIR_VALUE_ABI_VERSION==16 &&
-    XR_XIR_CALL_ABI_VERSION==20,"class field values use the current carrier ABIs");
+    XR_XIR_CALL_ABI_VERSION==21,"class field values use the current carrier ABIs");
 static uint8_t *class_array_old_contract(const uint8_t *bytes,size_t length,uint8_t revision) {
     C(length>=64 && bytes[8]==22 && !bytes[9] && !bytes[10] && !bytes[11]);
     C(bytes[12]==57 && !bytes[13] && !bytes[14] && !bytes[15]);

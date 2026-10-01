@@ -39,7 +39,7 @@ static void source_requirement_value_ownership(const XrXirSourceRequest *request
     CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
     XrXirValue retained[2]={{0},{0}};
     for (uint32_t run=0;run<2;++run) {
-        XrXirInstanceConfig config=xr_xir_instance_defaults(); XrXirInstance *instance=NULL;
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance=NULL;
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         for (uint32_t call=0;call<3;++call) {
             uint32_t entry=call==1 ? entries[0] : entries[1];

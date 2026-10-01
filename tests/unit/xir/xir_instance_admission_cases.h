@@ -17,7 +17,7 @@ static void admission_case_setup(unsigned *releases, XrXirProgram **program,
     fail_at = SIZE_MAX;
     CHECK(!live);
     CHECK(function_case_seal(releases, program) == XR_XIR_OK);
-    XrXirInstanceConfig config = xr_xir_instance_defaults();
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(*program, &config, instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(*instance, 2, NULL, 0) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll(*instance).outcome.status == XR_XIR_CALL_RETURNED);

@@ -320,7 +320,7 @@ static void specialized_result(XrXirArtifact *lowered) {
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 7}, {0}}, result = {0};
     CHECK(xr_xir_string_new(domain, "generic", 7, &arguments[1]) == XR_XIR_VALUE_OK);
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 8, &accounting, {NULL, NULL}, {0}};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 8; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_READY);
     CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_RETURNED);
