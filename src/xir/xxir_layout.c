@@ -67,7 +67,7 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
     XrXirStatus signature_status = xr_xir_types_structure_verify(module->types, &signature_budget);
     if (signature_status != XR_XIR_OK) return signature_status;
     XrXirStatus declaration_status = xr_xir_declarations_verify(module->declarations, module->types,
-        module->function_count, &signature_budget);
+        module->function_count, module->linkage_kind, &signature_budget);
     if (declaration_status != XR_XIR_OK) return declaration_status;
     bytes = signature_budget.metadata_bytes; work = signature_budget.work;
     for (uint32_t f = 0; f < module->function_count; ++f) {

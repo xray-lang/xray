@@ -41,7 +41,7 @@ static void class_array_core_cases(void){
  XrXirFunction functions[]={ {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0}, {"new",3,cp,2,ct,&blocks[1],1,ctor,2,operands,2}, {"replace",7,ap,2,(XrXirType)256,&blocks[2],1,add,3,NULL,0}, {"entry",5,NULL,0,XR_XIR_I64,&entryblock,1,entry,2,NULL,0}};
  XrXirFunctionIdentity ids[]={{0},{.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},{0}};
  XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
- XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL};XrXirDiagnostic d;XrXirStatus s=xr_xir_verify(&m,NULL,&d);
+ XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL, XR_XIR_PROGRAM};XrXirDiagnostic d;XrXirStatus s=xr_xir_verify(&m,NULL,&d);
  if(s!=XR_XIR_OK)fprintf(stderr,"class array core status %u fn %u block %u instruction %u reason %u\n",s,d.function,d.block,d.instruction,d.reason);
  CLASS_CHECK(s==XR_XIR_OK);
  XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;CLASS_CHECK(xr_xir_check(&m,NULL,&checked,&d)==XR_XIR_OK);

@@ -40,7 +40,7 @@ static XrXirArtifact *cleanup_role_fixture(void) {
     const XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     generics[2].arguments = &argument; generics[2].argument_count = 1;
     generics[3].arguments = &argument; generics[3].argument_count = 1;
-    XrXirModule module = {XR_XIR_BUILT, functions, 5, &declarations, generics, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, functions, 5, &declarations, generics, NULL, NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
     memset(identities, 0xCC, sizeof(identities));

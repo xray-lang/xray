@@ -60,7 +60,7 @@ static XrXirArtifact *module_forest_fixture(bool invalid) {
     const XrXirSlot slot = {0, XR_XIR_STRING, 0};
     const XrXirLiteral literal = {"must not initialize", 19};
     const XrXirDeclarations declarations = {modules, 3, identities, &slot, 1, &literal, 1, 1, 3, NULL};
-    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_check(&built, NULL, &checked, &diagnostic);

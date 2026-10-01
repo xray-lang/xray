@@ -31,6 +31,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
     uint32_t end = *next;
     for (uint32_t f = (uint32_t)ctx->graph->spec_count; f < end; ++f) {
         SourceFunction *body = &ctx->bodies[f];
+        if (body->checked_library) continue;
         AstNode *node = body->node;
         XrParamNode **parameters = NULL;
         uint32_t count = 0, offset = 0;

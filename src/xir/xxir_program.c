@@ -43,7 +43,7 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, const XrXirBudget
      * the remaining metadata budget after the other program allocations. */
     *work = signature_budget.work;
     signature_budget.metadata_bytes = *bytes; signature_budget.work = *work;
-    status = xr_xir_declarations_verify(spec->declarations, spec->types, spec->entry_count, &signature_budget);
+    status = xr_xir_declarations_verify(spec->declarations, spec->types, spec->entry_count, XR_XIR_PROGRAM, &signature_budget);
     *bytes = signature_budget.metadata_bytes; *work = signature_budget.work;
     if (status != XR_XIR_OK) return status;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {

@@ -10,8 +10,8 @@
 #define XIR_PATH_CHECKED_CASES_H
 #include "xir/xxir_value_place.h"
 static void path_array_packet_attacks(XrXirCheckedPacket *packet) {
-    CHECK(packet32(packet,64) == 1);
-    size_t at = 72;
+    CHECK(packet32(packet,64) == 0 && packet32(packet,68) == 1);
+    size_t at = 76;
     at += 4 + packet32(packet,at);
     at += 4 + (size_t)packet32(packet,at) * 4;
     at += 4;
@@ -60,7 +60,7 @@ static void path_array_checked_cases(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{8},{0},0,{0}}};
     XrXirInstruction ops[9]; XrXirBlock block = {0,9,0,0};
     XrXirFunction function = {"paths",5,&parameter,1,XR_XIR_I64,&block,1,ops,9,NULL,0};
-    XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,&types,NULL};
+    XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,&types,NULL, XR_XIR_PROGRAM};
     for (unsigned mode = 0; mode < 8; ++mode) {
         memcpy(ops,original,sizeof(ops));
         if (mode == 1) ops[0].immediate = 1;
@@ -149,7 +149,7 @@ static void path_ancestor_checked_cases(void) {
     XrXirSourceModule source = {"alpha",5,NULL,0,0};
     XrXirFunctionIdentity identities[3] = {{0}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
-    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL};
+    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM};
     for (unsigned mode = 0; mode < 4; ++mode) {
         nominal.fields[0].flags = mode == 1 ? 0 : XR_XIR_FIELD_MUTABLE;
         if (mode >= 2) nominal.fields[0].flags |= XR_XIR_FIELD_PRIVATE;

@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 4 || argc == 5);
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_PROJECT, "consumer", argv[1]};
-    XrXirSourceRequest request = {session, argv[2], &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, argv[2], &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     reject(&request, "requires an exact checksummed");
     XrLockfile *lock = xr_lockfile_new(); CHECK(lock); request.lockfile = lock;
     CHECK(xr_lockfile_add_package(lock, "fixture/math", "1.0.0", "", ""));

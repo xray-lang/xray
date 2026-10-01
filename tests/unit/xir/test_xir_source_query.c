@@ -807,7 +807,7 @@ int main(void) {
     write_source(library, "export fn visible(value:i64)->i64 { return value }\nfn hidden(value:i64)->i64 { return value }\n");
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     source_dependency_ready_cases(&request);
     source_unit_context_cases(&request);
     source_unit_local_cases(&request);

@@ -158,7 +158,7 @@ static void constraint_proof_hidden_nominal_bounds(void) {
         constraints[1].interfaces = &f.parent; constraints[1].interface_count = 1;
         XrXirGeneric generic = {constraints,2,NULL,0};
         XrXirFunction function = {0};
-        XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&f.types,NULL};
+        XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&f.types,NULL, XR_XIR_PROGRAM};
         XrXirBudget budget = xr_xir_default_budget();
         CHECK(xr_xir_generics_structure_verify(&module,&budget)==XR_XIR_OK);
         CHECK(xr_xir_module_constraints_verify(&module,&budget)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
@@ -230,7 +230,7 @@ static void constraint_proof_malformed(void) {
     constraint_proof_fixture(&f);
     XrXirConstraint empty = {0}; XrXirGeneric generic = {&empty,1,NULL,0};
     XrXirFunction function = {0};
-    XrXirModule actual = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL};
+    XrXirModule actual = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL, XR_XIR_PROGRAM};
     f.context = (XrXirProofContext){&actual,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirType actual_arguments[] = {XR_XIR_I64,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE};
     f.use.arguments = actual_arguments;
@@ -247,7 +247,7 @@ static void constraint_proof_shared_type_walk(void) {
     }
     XrXirTypes types = {nodes,DEPTH,NULL,NULL}; XrXirConstraint empty = {0};
     XrXirGeneric generic = {&empty,1,NULL,0}; XrXirFunction function = {0};
-    XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL};
+    XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirBudget structure = xr_xir_default_budget();
     CHECK(xr_xir_types_structure_verify(&types,&structure)==XR_XIR_OK);
@@ -269,7 +269,7 @@ static void constraint_proof_interface_identity_work(void) {
     XrXirInterfaceApplication application = {0,NULL,0};
     XrXirConstraint constraints[COUNT] = {0}; constraints[0] = (XrXirConstraint){0,&application,1};
     XrXirGeneric generic = {constraints,COUNT,NULL,0}; XrXirFunction function = {0};
-    XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL};
+    XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirBudget structure = xr_xir_default_budget();
     CHECK(xr_xir_types_structure_verify(&types,&structure)==XR_XIR_OK);
@@ -301,7 +301,7 @@ static void constraint_proof_scalar_signatures(void) {
             XrXirType forged = invalid[(i-1)/2];
             if (i%2) parameter = forged; else function.result = forged;
         }
-        XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL};
+        XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM};
         XrXirArtifact *checked = NULL;
         CHECK(xr_xir_check(&module,NULL,&checked,NULL)==(i ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK((checked!=NULL)==!i);
@@ -321,7 +321,7 @@ static void constraint_proof_scalar_generic_forwarding(void) {
     XrXirFunction functions[] = {
         {"identity",8,&parameter,1,parameter,&leaf,1,&identity,1,NULL,0},
         {"forward",7,&parameter,1,parameter,&body,1,forwarding,2,&operand,1}};
-    XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL};
+    XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM};
     for (uint32_t valid = 0; valid < 2; ++valid) {
         caller.markers = valid ? XR_XIR_CONSTRAINT_SENDABLE : 0;
         XrXirArtifact *checked = NULL;
@@ -344,14 +344,14 @@ static void constraint_proof_scalar_slot_sharing(void) {
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{.module=1}};
     XrXirSlot slot = {1,XR_XIR_ERROR,0};
     XrXirDeclarations declarations = {modules,2,identities,&slot,1,NULL,0,1,2,NULL};
-    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL};
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL, XR_XIR_PROGRAM};
     /* Declaration obligations precede initializer execution. Error and PanicInfo
      * are valid owned slot types, but neither can be shared from another module. */
     for (uint32_t type = 0; type < 3; ++type) for (uint32_t owner = 0; owner < 2; ++owner) {
         slot.type = type == 0 ? XR_XIR_ERROR : type == 1 ? XR_XIR_PANIC_INFO : XR_XIR_STRING;
         slot.module = owner;
         XrXirBudget budget = xr_xir_default_budget();
-        CHECK(xr_xir_declarations_verify(&declarations,NULL,3,&budget)==XR_XIR_OK);
+        CHECK(xr_xir_declarations_verify(&declarations,NULL,3,module.linkage_kind,&budget)==XR_XIR_OK);
         for (uint32_t f = 0; f < 3; ++f)
             CHECK(xr_xir_type_expression_shape(NULL,functions[f].result,0,&budget)==XR_XIR_OK);
         uint64_t scratch = budget.scratch_bytes;

@@ -533,7 +533,7 @@ int main(void) {
         {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
         {"second", 6, &parameter, 1, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
     };
-    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirBudget exact = xr_xir_default_budget();
     exact.metadata_bytes = sizeof(XrXirArtifact);

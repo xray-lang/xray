@@ -113,7 +113,7 @@ static XrXirArtifact *drain_proof(const XrXirDeclarations *declarations, const X
         {"main",4,NULL,0,XR_XIR_I64,&value_block,1,value,2,NULL,0},
         {"cleanup",7,parameters,late_gate ? 1u : 2u,XR_XIR_UNIT,&unit_block,1,&unit,1,NULL,0},
         {"callee",6,parameters,1,XR_XIR_I64,&value_block,1,callee_value,2,NULL,0}};
-    XrXirModule built = {XR_XIR_BUILT,functions,4,declarations,NULL,types,NULL};
+    XrXirModule built = {XR_XIR_BUILT,functions,4,declarations,NULL,types,NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

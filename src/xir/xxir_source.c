@@ -11,6 +11,7 @@
  */
 #include "xxir_source.h"
 #include "xxir_operand_roles.h"
+#include "xxir_library_catalog.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_implementation.h"
 #include "xxir_implementation_verify.h"
@@ -112,6 +113,7 @@ typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, r
 typedef struct SourceRecipeStorage { struct SourceRecipeStorage *next; } SourceRecipeStorage;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
+    bool checked_library;
     XrGenericParam **type_parameters;
     uint32_t type_parameter_count;
     bool infer_result, saw_return, constructor_captured, constructor_shared;
@@ -151,6 +153,7 @@ typedef struct SourceTypeScope {
 } SourceTypeScope;
 typedef struct SourceContext {
     XrModuleGraph *graph;
+    XrXirLinkageKind linkage_kind;
     XrXirBudget budget;
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory;
@@ -192,12 +195,13 @@ typedef struct SourceContext {
 
 static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
     *declarations = (XrXirDeclarations){ctx->modules,(uint32_t)ctx->graph->spec_count,ctx->identities,
-        ctx->slots,ctx->slot_count,ctx->literals,ctx->literal_count,(uint32_t)ctx->graph->entry_index,
-        ctx->function_count ? ctx->function_count - 1 : 0,
+        ctx->slots,ctx->slot_count,ctx->literals,ctx->literal_count,
+        ctx->linkage_kind == XR_XIR_LIBRARY ? UINT32_MAX : (uint32_t)ctx->graph->entry_index,
+        ctx->linkage_kind == XR_XIR_LIBRARY ? UINT32_MAX : (ctx->function_count ? ctx->function_count - 1 : 0),
         ctx->implementations.count ? &ctx->implementations : NULL};
     return (XrXirModule){XR_XIR_BUILT,ctx->functions,ctx->function_count,declarations,
         ctx->has_generics ? ctx->generics : NULL,
-        ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL,NULL};
+        ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL,NULL,ctx->linkage_kind};
 }
 static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, const char *message) {
     if (ctx->diagnostic.status == XR_XIR_OK) {
@@ -686,7 +690,7 @@ static SourceName *visible_name(SourceContext *ctx, const char *name) {
 static SourceName *imported_declaration(SourceContext *ctx, SourceName *symbol, const char *name) {
     SourceName *target = find_name(ctx, ctx->names[symbol->module], name);
     if (!target || (target->kind != SOURCE_FUNCTION && target->kind != SOURCE_NOMINAL &&
-        target->kind != SOURCE_INTERFACE) || !target->node->is_exported) {
+        target->kind != SOURCE_INTERFACE) || !(target->kind == SOURCE_FUNCTION ? ctx->identities[target->index].exported : (target->node && target->node->is_exported))) {
         source_fail(ctx, symbol->node, XR_XIR_BAD_STRUCTURE, "import requires an exported declaration"); return NULL;
     }
     if (symbol->kind == SOURCE_IMPORT && symbol->declaration) {
@@ -1796,12 +1800,22 @@ static bool count_closures(AstNode *node, void *pointer) {
     --scan->depth;
     return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source declaration shape");
 }
+#include "xxir_source_library.inc.c"
+
 static bool collect_declarations(SourceContext *ctx) {
-    uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + 1, slots = 0, nominals = 0, interfaces = 0;
+    uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     SourceClosureCount closures = {ctx,0,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
+        if (ctx->graph->specs[m].representation == XR_MODULE_CHECKED_LIBRARY) {
+            const XrXirModule *library=source_library_module(ctx,m);
+            if(!library)return false;
+            if(library->function_count-1 > ctx->budget.functions ||
+                functions > ctx->budget.functions-(library->function_count-1))
+                return source_fail(ctx,NULL,XR_XIR_BUDGET,"library function inventory exhausted");
+            functions+=library->function_count-1;continue;
+        }
         if (!count_closures(ast,&closures)) return false;
         if (!ast || ast->type != AST_PROGRAM) return source_fail(ctx, ast, XR_XIR_BAD_STRUCTURE, "parsed module required");
         for (int i = 0; i < ast->as.program.count; ++i) {
@@ -1837,7 +1851,7 @@ static bool collect_declarations(SourceContext *ctx) {
     functions += closures.defaults;
     if (functions > ctx->budget.functions || closures.count > ctx->budget.functions - functions)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"function budget exhausted");
-    ctx->first_closure = ctx->next_closure = functions - 1;
+    ctx->first_closure = ctx->next_closure = functions - (ctx->linkage_kind == XR_XIR_PROGRAM);
     functions += closures.count;
     ctx->function_count = functions; ctx->slot_count = slots;
     if (nominals > UINT32_MAX - functions)
@@ -1873,6 +1887,7 @@ static bool collect_declarations(SourceContext *ctx) {
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
+        if(ctx->graph->specs[m].representation==XR_MODULE_CHECKED_LIBRARY)continue;
         for (int i = 0; i < ast->as.program.count; ++i) {
             AstNode *node = ast->as.program.statements[i];
             if (node->type == AST_INTERFACE_DECL && !source_interface_declare(ctx,node)) return false;
@@ -1897,11 +1912,14 @@ static bool collect_declarations(SourceContext *ctx) {
         ctx->bodies[m].module = m;
         ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
         ctx->identities[m].module = m;
+        if(spec->representation==XR_MODULE_CHECKED_LIBRARY){
+            if(!source_library_install(ctx,m,&function))return false;continue;
+        }
         for (int i = 0; i < spec->ast->as.program.count; ++i) {
             AstNode *node = spec->ast->as.program.statements[i];
             if (node->type == AST_FUNCTION_DECL) { if (!declare_function(ctx, node, function++)) return false; }
             else if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
-                if (node->is_exported || (!node->as.var_decl.is_const && m != (uint32_t) ctx->graph->entry_index))
+                if (node->is_exported || (!node->as.var_decl.is_const && (ctx->linkage_kind == XR_XIR_LIBRARY || m != (uint32_t) ctx->graph->entry_index)))
                     return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "library mutable or exported state is not admitted");
                 SourceName *symbol = add_name(ctx, &ctx->names[m], node->as.var_decl.name, node);
                 if (!symbol) return false;
@@ -1913,7 +1931,7 @@ static bool collect_declarations(SourceContext *ctx) {
     }
     if (!source_nominal_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || !source_argument_functions(ctx, &function) || function != ctx->first_closure)
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "field initializer function inventory mismatch");
-    ctx->closure_limit = ctx->function_count - 1;
+    ctx->closure_limit = ctx->function_count - (ctx->linkage_kind == XR_XIR_PROGRAM);
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         for (SourceName *p = ctx->names[m]; p; p = p->next)
@@ -2293,10 +2311,12 @@ static bool build_bodies(SourceContext *ctx) {
         ctx->module = (uint32_t) ctx->graph->topo_order[t]; ctx->function = ctx->module;
         ctx->locals = ctx->scope = NULL; ctx->returned = false;
         AstNode *ast = ctx->graph->specs[ctx->module].ast;
+        if(ctx->graph->specs[ctx->module].representation==XR_MODULE_CHECKED_LIBRARY)continue;
         for (int i = 0; i < ast->as.program.count; ++i) if (!statement(ctx, ast->as.program.statements[i], true)) return false;
         if (!finish_body(ctx)) return false;
     }
     for (uint32_t f = count; f < ctx->first_closure; ++f) {
+        if(ctx->bodies[f].checked_library)continue;
         ctx->function = f; ctx->module = ctx->bodies[f].module; ctx->returned = false;
         ctx->locals = ctx->scope = NULL;
         if (ctx->bodies[f].node->type == AST_STRUCT_DECL) {
@@ -2332,6 +2352,7 @@ static bool build_bodies(SourceContext *ctx) {
     }
     if (ctx->next_closure != ctx->closure_limit)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"closure declaration was not checked");
+    if (ctx->linkage_kind == XR_XIR_LIBRARY) return true;
     ctx->function = ctx->function_count - 1; ctx->module = (uint32_t) ctx->graph->entry_index;
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
@@ -2383,10 +2404,16 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     if (!request || !request->session || !request->entry_path || !request->authority || !output) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
-    XrModuleResolverConfig config = {request->stdlib_path, request->lockfile};
+    if (request->linkage_kind != XR_XIR_PROGRAM && request->linkage_kind != XR_XIR_LIBRARY) {
+        source_fail(&ctx,NULL,XR_XIR_BAD_STRUCTURE,"source linkage kind is invalid"); goto done;
+    }
+    ctx.linkage_kind = request->linkage_kind;
+    const XrModuleResourceBinding *resource=xr_xir_library_catalog_resource(request->libraries);
+    XrModuleResolverConfig config = {request->stdlib_path, request->lockfile,resource,resource?1u:0u};
     resolver = xr_module_resolver_new(&config);
     ctx.graph = resolver ? xr_module_graph_new(request->session, resolver) : NULL;
     if (!ctx.graph) { source_fail(&ctx, NULL, XR_XIR_OUT_OF_MEMORY, "module graph allocation failed"); goto done; }
+    ctx.graph->admit_checked_resources = true;
     if (xr_module_graph_build(ctx.graph, request->entry_path, request->authority, &error) != 0) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph build failed"); goto done;
     }

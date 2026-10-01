@@ -41,7 +41,7 @@ static void unit_wire_attack(const uint8_t *original,size_t size,uint8_t *copy,s
  if(faults)printf("Unit slot malformed packet %zu OOM points, no partial artifact and physical baseline restored\n",points);
 }
 static void unit_slot_wire_cases(const uint8_t *bytes,size_t size){
- CHECK(size>=64&&size<=262144);UnitWireCursor c={bytes,size,64};
+ CHECK(size>=64&&size<=262144);UnitWireCursor c={bytes,size,64};CHECK(unit_wire_read(&c,4)==0);
  uint32_t functions=(uint32_t)unit_wire_read(&c,4);CHECK(unit_wire_read(&c,4)==1&&functions<=size/24);
  uint32_t *owners=malloc((functions?functions:1)*sizeof(*owners));CHECK(owners);
  size_t capacity=size/40,used=0;UnitWireOp *ops=malloc((capacity?capacity:1)*sizeof(*ops));CHECK(ops);
@@ -77,6 +77,9 @@ static void unit_slot_wire_cases(const uint8_t *bytes,size_t size){
   }
  }
  CHECK(unit_writes>=2&&unit_reads&&attacks>=10);
+ unit_wire_attack(bytes,size,copy,12,4,50,XR_XIR_BAD_STRUCTURE,false);
+ unit_wire_attack(bytes,size,copy,8,4,19,XR_XIR_BAD_STRUCTURE,false);
+ unit_wire_attack(bytes,size,copy,64,4,UINT32_MAX,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,12,4,49,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,12,4,48,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,8,4,18,XR_XIR_BAD_STRUCTURE,false);

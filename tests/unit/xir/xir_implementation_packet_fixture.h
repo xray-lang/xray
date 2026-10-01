@@ -32,7 +32,7 @@ static XrXirArtifact *implementation_packet_fixture(void) {
     XrXirImplementation implementation = {0,{0,&argument,1},&binding,1};
     XrXirImplementationTable table = {&implementation,1};
     XrXirDeclarations declarations = {&module,1,identities,NULL,0,NULL,0,0,0,&table};
-    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL};
+    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
     argument = XR_XIR_BOOL; binding.function = UINT32_MAX;

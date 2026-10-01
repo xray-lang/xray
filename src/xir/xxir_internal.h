@@ -61,4 +61,7 @@ XR_FUNC XrXirStatus xr_xir_recheck(const XrXirModule *checked, const XrXirBudget
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_layout_verify(const XrXirArtifact *artifact, const XrXirBudget *budget);
 
+/* Internal pipeline entry: preserve accumulated verification budget. */
+XR_FUNC XrXirStatus xr_xir_checked_read_remaining(const void *bytes, size_t length,
+    XrXirBudget *budget, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 #endif // XXIR_INTERNAL_H

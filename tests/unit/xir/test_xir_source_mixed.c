@@ -52,7 +52,7 @@ int main(void) {
         fixture_source_inference_values[5]},fixture_source_inference_count};
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL};
+    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     XrXirSourceResult query_result_1 = {0};
     XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, NULL);

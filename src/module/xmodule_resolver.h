@@ -34,6 +34,14 @@ struct XrVMRuntime;
 struct XrProject;
 struct XrLockfile;
 
+/* Explicit representations preserve the existing typed authority domain. */
+typedef enum XrModuleRepresentation { XR_MODULE_SOURCE, XR_MODULE_CHECKED_LIBRARY } XrModuleRepresentation;
+typedef struct XrModuleResourceBinding {
+    const char *canonical, *logical_path, *source_locator;
+    XrModuleIdentityAuthority authority;
+    const void *checked; /* Borrowed from the immutable compiler-owned catalog. */
+} XrModuleResourceBinding;
+
 /* ========== Module ID ========== */
 
 /*
@@ -54,6 +62,8 @@ typedef struct {
     char *source_path; /* Absolute .xr path, or NULL for native stdlib.
                           Owned string — caller must xr_free() */
     XrModuleIdentityAuthority authority; /* Owned authority coordinate and I/O root */
+    XrModuleRepresentation representation;
+    const XrModuleResourceBinding *resource;
 } XrModuleId;
 
 /* Free contents of an XrModuleId (does NOT free the struct itself). */
@@ -75,6 +85,8 @@ typedef struct {
      */
     struct XrLockfile *lockfile;
 
+    const XrModuleResourceBinding *resources;
+    size_t resource_count;
 } XrModuleResolverConfig;
 
 /* ========== Resolver Instance ========== */

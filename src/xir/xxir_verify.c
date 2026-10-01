@@ -925,7 +925,8 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirBudget *rem
     if (module->stage != XR_XIR_CHECKED && module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     if (!p->source || p->source->module.provenance || !p->origins || p->count != module->function_count)
         return XR_XIR_BAD_STRUCTURE;
-    if (p->source->module.stage != XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
+    if (p->source->module.stage != XR_XIR_CHECKED ||
+        p->source->module.linkage_kind != XR_XIR_PROGRAM) return XR_XIR_BAD_STAGE;
     uint64_t bytes = sizeof(*p) + (uint64_t)p->count * sizeof(*p->origins);
     if (!spend(&remaining->metadata_bytes, bytes) || !spend(&remaining->work, p->count)) return XR_XIR_BUDGET;
     for (uint32_t i = 0; i < p->count; ++i) {
@@ -968,6 +969,11 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
     XrXirStatus status = XR_XIR_OK;
     if (!module || !module->functions || !module->function_count)
         status = XR_XIR_BAD_STRUCTURE;
+    else if (module->linkage_kind != XR_XIR_PROGRAM && module->linkage_kind != XR_XIR_LIBRARY)
+        status = XR_XIR_BAD_STRUCTURE;
+    else if (module->linkage_kind == XR_XIR_LIBRARY &&
+             (module->stage == XR_XIR_LOWERED || module->provenance))
+        status = XR_XIR_BAD_STAGE;
     else if (module->stage != XR_XIR_BUILT && module->stage != XR_XIR_CHECKED &&
              module->stage != XR_XIR_LOWERED)
         status = XR_XIR_BAD_STAGE;
@@ -989,7 +995,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
     }
     if (status == XR_XIR_OK) {
         status = xr_xir_declarations_verify(module->declarations, module->types, module->function_count,
-            &context.remaining);
+            module->linkage_kind, &context.remaining);
     }
     if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining);
     if (status == XR_XIR_OK) status = xr_xir_generics_structure_verify(module, &context.remaining);
@@ -1001,9 +1007,11 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
     if (status == XR_XIR_OK) status = xr_xir_module_constraints_verify(module, &context.remaining);
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;
-        const XrXirFunction *entry = &module->functions[d->entry_function];
-        if (entry->parameter_count || entry->result != XR_XIR_I64 ||
-            (module->generics && module->generics[d->entry_function].parameter_count)) status = XR_XIR_BAD_TYPE;
+        if (module->linkage_kind == XR_XIR_PROGRAM) {
+            const XrXirFunction *entry = &module->functions[d->entry_function];
+            if (entry->parameter_count || entry->result != XR_XIR_I64 ||
+                (module->generics && module->generics[d->entry_function].parameter_count)) status = XR_XIR_BAD_TYPE;
+        }
         for (uint32_t m = 0; m < d->module_count && status == XR_XIR_OK; ++m) {
             const XrXirFunction *init = &module->functions[d->modules[m].initializer];
             if (init->parameter_count || init->result != XR_XIR_UNIT ||

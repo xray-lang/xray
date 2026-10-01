@@ -15,6 +15,7 @@
 #include "../module/xmodule_identity.h"
 struct XrCompilerSession;
 struct XrLockfile;
+struct XrXirLibraryCatalog;
 typedef struct XrXirSourceRequest {
     struct XrCompilerSession *session;
     const char *entry_path;
@@ -23,6 +24,8 @@ typedef struct XrXirSourceRequest {
     const char *stdlib_path;
     /* Borrowed for this synchronous check; package imports require exact entries. */
     struct XrLockfile *lockfile;
+    XrXirLinkageKind linkage_kind;
+    const struct XrXirLibraryCatalog *libraries;
 } XrXirSourceRequest;
 XR_FUNC XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic);

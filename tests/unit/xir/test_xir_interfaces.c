@@ -146,7 +146,7 @@ static XrXirStatus check_interface_module(const XrXirTypes *types, XrXirFunction
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1},{"other",5,&dependency,1,2}};
     XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
-    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL};
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM};
     return xr_xir_check(&module,NULL,checked,diagnostic);
 }
 static void checked_owner_lifetime(void) {
@@ -195,7 +195,7 @@ static XrXirStatus inherited_module_verify(Fixture *f, XrXirBudget *budget) {
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirTypes types = f->types; types.interfaces = &f->table;
-    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL};
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM};
     return xr_xir_verify(&module,budget,NULL);
 }
 static void inherited_contexts(void) {

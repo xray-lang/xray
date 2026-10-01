@@ -304,7 +304,7 @@ int main(void) {
         "fn hidden<T>(x:T)->T { return x }\n");
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     member_reference_authority(&request, library);
     member_call_authority(&request, false);
     member_call_authority(&request, true);

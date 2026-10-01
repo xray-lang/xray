@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 3);
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_source_check(&request, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "array source %u %u:%d:%d %s\n", status,

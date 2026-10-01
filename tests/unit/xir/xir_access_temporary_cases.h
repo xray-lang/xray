@@ -39,24 +39,24 @@ static void access_temporary_cases(void) {
     const uint64_t metadata=sizeof(declarations)+sizeof(source)+sizeof(identities)+sizeof(slot)+1;
     b=xr_xir_default_budget();b.metadata_bytes=metadata;b.scratch_bytes=5;
     calls=0;
-    CHECK(xr_xir_declarations_verify(&declarations,&types,2,&b)==XR_XIR_OK);
+    CHECK(xr_xir_declarations_verify(&declarations,&types,2,module.linkage_kind,&b)==XR_XIR_OK);
     CHECK(b.metadata_bytes==0 && b.scratch_bytes==5 && !live);
     size_t sites=calls;CHECK(sites==3);
     for(size_t i=0;i<sites;++i) {
         b=xr_xir_default_budget();b.metadata_bytes=metadata;b.scratch_bytes=5;
         uint64_t work=b.work;calls=0;fail_at=i;
-        CHECK(xr_xir_declarations_verify(&declarations,&types,2,&b)==XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_declarations_verify(&declarations,&types,2,module.linkage_kind,&b)==XR_XIR_OUT_OF_MEMORY);
         CHECK(b.scratch_bytes==5 && b.work<work && !live);
     }
     fail_at=SIZE_MAX;
     b=xr_xir_default_budget();b.metadata_bytes=metadata;b.scratch_bytes=4;
-    CHECK(xr_xir_declarations_verify(&declarations,&types,2,&b)==XR_XIR_BUDGET);
+    CHECK(xr_xir_declarations_verify(&declarations,&types,2,module.linkage_kind,&b)==XR_XIR_BUDGET);
     CHECK(b.scratch_bytes==4 && !live);
     b=xr_xir_default_budget();b.metadata_bytes=metadata-1;b.scratch_bytes=5;
-    CHECK(xr_xir_declarations_verify(&declarations,&types,2,&b)==XR_XIR_BUDGET);
+    CHECK(xr_xir_declarations_verify(&declarations,&types,2,module.linkage_kind,&b)==XR_XIR_BUDGET);
     CHECK(b.scratch_bytes==5 && !live);
     b=xr_xir_default_budget();b.work=0;b.scratch_bytes=5;
-    CHECK(xr_xir_declarations_verify(&declarations,&types,2,&b)==XR_XIR_BUDGET);
+    CHECK(xr_xir_declarations_verify(&declarations,&types,2,module.linkage_kind,&b)==XR_XIR_BUDGET);
     CHECK(b.scratch_bytes==5 && !live);
     uint32_t dependencies[2]={1,0};
     XrXirSourceModule modules[2]={{"a",1,dependencies,1,0},{"b",1,dependencies+1,1,1}};
@@ -64,7 +64,7 @@ static void access_temporary_cases(void) {
     XrXirDeclarations cycle={.modules=modules,.module_count=2,.functions=cycle_ids,.entry_function=2};
     b=xr_xir_default_budget();b.scratch_bytes=10;
     uint64_t work=b.work;
-    CHECK(xr_xir_declarations_verify(&cycle,NULL,3,&b)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_declarations_verify(&cycle,NULL,3,XR_XIR_PROGRAM,&b)==XR_XIR_BAD_STRUCTURE);
     CHECK(b.scratch_bytes==10 && b.work<work && !live);
     cycle_ids[2].module=1;cycle.root_module=1;
     XrXirModule private_scope={.stage=XR_XIR_CHECKED,.function_count=3,.declarations=&cycle,.types=&types};

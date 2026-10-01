@@ -93,7 +93,7 @@ static XrXirArtifact *local_fixture(void) {
         {"swap", 4, fault_parameters, 3, XR_XIR_STRING, phi_blocks, 4, phi_ops, 13, phi_inputs, 12},
         {"initialize", 10, parameters, 3, XR_XIR_STRING, initialization_blocks, 4, initialization_ops, 10, NULL, 0},
         {"reset", 5, fault_parameters, 3, XR_XIR_STRING, reset_blocks, 4, reset_ops, 17, reset_inputs, 12}};
-    const XrXirModule built = {XR_XIR_BUILT, functions, 5, NULL, NULL, NULL, NULL};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 5, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     return checked;

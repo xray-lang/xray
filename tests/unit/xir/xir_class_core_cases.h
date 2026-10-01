@@ -38,7 +38,7 @@ static void class_core_cases(void){
  XrXirFunction functions[]={ {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0}, {"new",3,cp,2,ct,&blocks[1],1,ctor,2,operands,2}, {"add",3,ap,2,XR_XIR_I64,&blocks[2],1,add,4,NULL,0}, {"entry",5,NULL,0,XR_XIR_I64,&entryblock,1,entry,6,entryops,4}};
  XrXirFunctionIdentity ids[]={{0},{.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},{0}};
  XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
- XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL};XrXirDiagnostic d;XrXirStatus s=xr_xir_verify(&m,NULL,&d);
+ XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL, XR_XIR_PROGRAM};XrXirDiagnostic d;XrXirStatus s=xr_xir_verify(&m,NULL,&d);
  CLASS_CHECK(s==XR_XIR_OK);
  XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;CLASS_CHECK(xr_xir_check(&m,NULL,&checked,&d)==XR_XIR_OK);
  XrXirCheckedPacket packet={0};CLASS_CHECK(xr_xir_checked_write(checked,NULL,&packet,&d)==XR_XIR_OK);CLASS_CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,&d)==XR_XIR_OK);

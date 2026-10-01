@@ -92,7 +92,7 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         xr_free(copy);
         return NULL;
     }
-    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL, NULL};
+    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL, NULL, source->linkage_kind};
     XrXirGeneric *generics = NULL;
     if (xr_xir_generics_clone(source, &generics) != XR_XIR_OK) {
         xr_xir_artifact_free(copy); return NULL;
@@ -185,6 +185,8 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
     XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
     if (source == XR_XIR_CHECKED) {
+        if (input->linkage_kind != XR_XIR_PROGRAM)
+            return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         if (input->generics || (input->types && input->types->interfaces))
             return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         XrXirLayout layout;

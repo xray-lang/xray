@@ -29,7 +29,7 @@ static void write_source(const char *path, const char *source) {
 #include "xir_source_cleanup_admission.h"
 #include "xir_source_conditional_cases.h"
 static void stdlib_resolution(void) {
-    XrModuleResolverConfig config = {XR_SOURCE_STDLIB, NULL};
+    XrModuleResolverConfig config = {XR_SOURCE_STDLIB, NULL, NULL, 0};
     XrModuleResolver *resolver = xr_module_resolver_new(&config); CHECK(resolver);
     XrModuleId first = {0}, second = {0}; char *error = NULL;
     CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &first, &error) == 0 && !error);
@@ -59,7 +59,7 @@ static void primitive_authority(XrCompilerSession *session, const char *director
     const char *body = "export fn emit(value: string) -> bool { return __writeStderr(value) }\n";
     write_source(output, body); write_source(other, body);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, directory};
-    XrXirSourceRequest request = {session, output, &authority, NULL, XR_SOURCE_STDLIB, NULL};
+    XrXirSourceRequest request = {session, output, &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_1 = {0};
     XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, NULL);
@@ -689,7 +689,7 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     primitive_authority(session, absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB, NULL};
+    XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     unit_slot_admission(&request,root);
     source_integer_contexts(&request, root);
     source_decimal_contexts(&request, root);

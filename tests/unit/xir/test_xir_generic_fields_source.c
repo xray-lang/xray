@@ -40,7 +40,7 @@ static void generic_fields_query_facts(const XrXirSourceResult *result){
 int main(int argc,char **argv){generic_storage_cases();
  CHECK(argc==1||argc==2);XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
- XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL};
+ XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
  size_t sites=0,retained_live=0,retained_bytes=0;XrXirArtifact *owned=NULL;
  for(size_t pass=0;pass<=sites;++pass){
   source_attempts=0;source_fail_at=pass?pass-1:SIZE_MAX;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

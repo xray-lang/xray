@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     SourceTestFiles files = {0}; source_files_open(&files);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, files.root};
-    XrXirSourceRequest request = {session, files.entry, &authority, NULL, NULL, NULL};
+    XrXirSourceRequest request = {session, files.entry, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_source_check(&request, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "%u at %d:%d: %s\n", status,

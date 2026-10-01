@@ -36,8 +36,16 @@ static bool checked_room(CheckedCursor *c, size_t size) {
     }
     return true;
 }
+/* Decode work is cumulative; writer sizing uses its separate capacity contract. */
+static bool checked_read_work(CheckedCursor *c, size_t bytes) {
+    if (c->status != XR_XIR_OK) return false;
+    if (!c->reading) return true;
+    if (bytes > c->remaining.work) { c->status = XR_XIR_BUDGET; return false; }
+    c->remaining.work -= bytes;
+    return true;
+}
 static uint64_t checked_integer(CheckedCursor *c, uint64_t value, unsigned width) {
-    if (!checked_room(c, width)) return 0;
+    if (!checked_room(c, width) || !checked_read_work(c,width)) return 0;
     if (c->reading) value = 0;
     for (unsigned i = 0; i < width; ++i) {
         if (c->reading) value |= (uint64_t) c->input[c->position + i] << (8 * i);
@@ -73,7 +81,7 @@ static void *checked_array(CheckedCursor *c, const void *source, uint32_t count,
 }
 static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *length) {
     *length = checked_u32(c, *length);
-    if (!checked_room(c, *length)) return NULL;
+    if (!checked_room(c, *length) || !checked_read_work(c,*length)) return NULL;
     if (c->reading) {
         char *copy = checked_array(c, NULL, *length, 1, 1);
         if (*length && !copy) return NULL;
@@ -435,6 +443,10 @@ static void checked_provenance(CheckedCursor *c, XrXirModule *m, bool allowed) {
     }
 }
 static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenance) {
+    uint32_t kind = checked_u32(c, (uint32_t)m->linkage_kind);
+    if (c->status == XR_XIR_OK && kind > XR_XIR_LIBRARY) c->status = XR_XIR_BAD_STRUCTURE;
+    if (c->reading && c->status == XR_XIR_OK) m->linkage_kind = (XrXirLinkageKind)kind;
+    if (c->status != XR_XIR_OK) return;
     uint32_t count = checked_count(c, m->function_count, &c->remaining.functions);
     uint32_t declarations = checked_u32(c, m->declarations ? 1u : 0u);
     if (c->status == XR_XIR_OK && declarations > 1) c->status = XR_XIR_BAD_STRUCTURE;
@@ -509,33 +521,53 @@ XrXirStatus xr_xir_checked_write(const XrXirArtifact *artifact,
     *output = (XrXirCheckedPacket) {bytes, size};
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_checked_read(const void *bytes, size_t length,
-    const XrXirBudget *budget, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xr_xir_checked_read_remaining(const void *bytes, size_t length,
+    XrXirBudget *budget, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     if (!output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     *output = NULL;
     XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
     if (!bytes || length < 64) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     if (length > checked_capacity(&limits)) return checked_error(XR_XIR_BUDGET, diagnostic);
-    if (memcmp(bytes, "XRCHK\0\0\0", 8)) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     CheckedCursor c = {bytes, NULL, 8, length, 0, limits, XR_XIR_OK, true};
-    uint32_t schema = checked_u32(&c, 0), contract = checked_u32(&c, 0);
-    uint32_t stage = checked_u32(&c, 0), reserved = checked_u32(&c, 0);
-    uint64_t payload = checked_integer(&c, 0, 8);
-    if (schema != XR_XIR_CHECKED_SCHEMA || contract != XR_XIR_CHECKED_CONTRACT || reserved || payload != length - 64)
-        return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    if (stage != XR_XIR_CHECKED) return checked_error(XR_XIR_BAD_STAGE, diagnostic);
-    uint8_t digest[32]; checked_digest(bytes, length, digest);
-    if (memcmp(digest, (const uint8_t *) bytes + 32, 32)) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    if (sizeof(XrXirArtifact) > limits.metadata_bytes) return checked_error(XR_XIR_BUDGET, diagnostic);
-    XrXirArtifact *artifact = xr_calloc(1, sizeof(*artifact));
-    if (!artifact) return checked_error(XR_XIR_OUT_OF_MEMORY, diagnostic);
-    artifact->module.stage = XR_XIR_CHECKED; artifact->budget = limits;
-    c.position = 64; c.allocated = sizeof(*artifact);
-    checked_module(&c, &artifact->module, true);
-    if (c.status == XR_XIR_OK && c.position != length) c.status = XR_XIR_BAD_STRUCTURE;
-    if (c.status != XR_XIR_OK) checked_error(c.status, diagnostic);
-    else c.status = xr_xir_artifact_verify(artifact, &limits, diagnostic);
-    if (c.status != XR_XIR_OK) { xr_xir_artifact_free(artifact); return c.status; }
-    *output = artifact;
+    XrXirArtifact *artifact = NULL;
+    if (!checked_read_work(&c,8)) goto decode_failure;
+    if (memcmp(bytes,"XRCHK\0\0\0",8)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
+    uint32_t schema = checked_u32(&c,0), contract = checked_u32(&c,0);
+    uint32_t stage = checked_u32(&c,0), reserved = checked_u32(&c,0);
+    uint64_t payload = checked_integer(&c,0,8);
+    if (c.status != XR_XIR_OK) goto decode_failure;
+    if (schema != XR_XIR_CHECKED_SCHEMA || contract != XR_XIR_CHECKED_CONTRACT || reserved || payload != length-64) {
+        c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure;
+    }
+    if (stage != XR_XIR_CHECKED) { c.status=XR_XIR_BAD_STAGE; goto decode_failure; }
+    /* Hash reads length-32 bytes; comparing the stored digest reads another 32. */
+    if (!checked_read_work(&c,length)) goto decode_failure;
+    uint8_t digest[32]; checked_digest(bytes,length,digest);
+    if (memcmp(digest,(const uint8_t *)bytes+32,32)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
+    if (sizeof(XrXirArtifact)>limits.metadata_bytes) { c.status=XR_XIR_BUDGET; goto decode_failure; }
+    artifact=xr_calloc(1,sizeof(*artifact));
+    if (!artifact) { c.status=XR_XIR_OUT_OF_MEMORY; goto decode_failure; }
+    artifact->module.stage=XR_XIR_CHECKED; artifact->budget=limits;
+    c.position=64; c.allocated=sizeof(*artifact);
+    checked_module(&c,&artifact->module,true);
+    if (c.status==XR_XIR_OK && c.position!=length) c.status=XR_XIR_BAD_STRUCTURE;
+    if (c.status!=XR_XIR_OK) goto decode_failure;
+    /* Metadata/counts describe one artifact: verifier charges those once.
+     * Do not subtract decoded allocation bytes a second time. */
+    limits.work=c.remaining.work;
+    c.status=xr_xir_verify_remaining(&artifact->module,&limits,diagnostic);
+    if (budget) *budget=limits;
+    if (c.status!=XR_XIR_OK) { xr_xir_artifact_free(artifact); return c.status; }
+    *output=artifact;
     return XR_XIR_OK;
+decode_failure:
+    if (budget) budget->work=c.remaining.work;
+    xr_xir_artifact_free(artifact);
+    return checked_error(c.status,diagnostic);
+}
+
+XrXirStatus xr_xir_checked_read(const void *bytes, size_t length,
+    const XrXirBudget *budget, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    XrXirBudget remaining=budget?*budget:xr_xir_default_budget();
+    return xr_xir_checked_read_remaining(bytes,length,&remaining,output,diagnostic);
 }

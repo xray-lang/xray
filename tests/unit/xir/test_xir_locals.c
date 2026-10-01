@@ -124,7 +124,7 @@ static void initialization_loops(void) {
     };
     XrXirBlock blocks[] = {{0, 3, 0, 0}, {3, 2, 0, 0}, {5, 2, 0, 0}, {7, 1, 0, 0}};
     XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     ops[0].immediate = 1;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);

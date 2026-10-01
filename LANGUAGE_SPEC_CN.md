@@ -7263,6 +7263,16 @@ GET 的唯一四参数 runtime 接口显式接收实际 arena、work/scratch 和
 
 唯一当前协议由§17.6实现常量定义；旧 value target、旧有效摘要 Checked 包及同 Program 的旧 embedded proof 必须由实际 seal/read 拒绝，不保留旧 GET、别名或第二 reader。独立 VM/native/packet/mixed 预期、真实旧缓存、逐 OOM、拥有结果寿命、物理释放和完整适用安全须分别验证；本节不声明完整语言、stdlib 同源配对发布、默认产品或跨平台资格通过。
 
+### 17.30 无入口 Checked Library 与真实导入
+
+编译期 Module 显式携带 PROGRAM/LIBRARY kind，不能从 entry 哨兵推断权限。Library 保留真实声明、初始化函数、imports 和定义处约束检查，从 inventory 起不分配用户 entry；它可以拥有式检查、复验、序列化和读入，但不得直接特化为可执行 Program、Lowered 或 seal。链接后的 PROGRAM 必须有真实合法 root/entry，普通实例化仍在 Checked 上完成并复验、在不可变 Program 封存前结束。每个 wire module（包括 provenance）编码实际 kind，未知 kind、Library 假 entry、Program 缺 entry 和旧格式全部拒绝；不保留第二 reader 或 fake entry。
+
+编译器借用的 opaque catalog 独立拥有已检查库体，完整包摘要、真实 resolver authority、canonical/logical 身份和 source locator 必须匹配。表示在图节点发现时绑定一次，已存在 SOURCE 不能因导入被改成 CHECKED_LIBRARY；匹配的坏库不得回退 AST。未匹配导入继续普通 Source 解析。查询导出事实不授调用权限；私有调用仍按真实声明 owner 拒绝。最终首次 owned Checked 深复制全部所需事实，原 SourceResult/Session/graph/catalog 销毁后仍可复验并执行，不允许用重新解析库源码补能力。
+
+唯一 remapper 先预留全部已使用的目标身份，再复制 body 并重定位 CALL；真实 initializer 可位于输入函数数组任意位置。临时映射按实际 scratch 预留，成功、OOM、work 耗尽或 copy 失败均释放退款；每元素累计 work，永久 body/name 按 metadata 收费。唯一 reader 的 header、摘要、payload 解码和普通复验共同消耗累计 work，连续读取或恶意有效摘要前缀失败也不得重置余额；owned metadata 按唯一发布表示收费，临时 scratch 退出退款。此 reader 合同不声明 Source 所有阶段预算已经统一。
+
+首个库导入实现边界为同目录 file-backed script authority、单模块、零参数 Unit/i64 和 CONST_INT/ADD_INT/CALL/RETURN；尚未接线的表明确拒绝，不收窄语言的合法泛型、nominal、接口、默认参数或 export const。完整 canonical remap、声明/default helper 事实、公开 const 权限、包认证、stdlib 同源 Checked/native 配对及缓存命中/miss仍须同一管线实现和独立验证。有限导入闭环的 Source/packet/native/mixed、实例、逐 OOM、物理释放及真实旧身份拒绝，不代替完整语言、安全或产品资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)

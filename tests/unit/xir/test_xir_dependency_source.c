@@ -37,7 +37,7 @@ static void ready_free(void *p){if(p){CHECK(source_live);--source_live;}xr_free(
 int main(int argc,char **argv){
  CHECK(argc==1||argc==2);XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
- XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL};
+ XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
  SourceContext context={0};context.budget=xr_xir_default_budget();SourceConversionRecipe conversion={0};
  CHECK(source_conversion_plan(&context,NULL,XR_XIR_UNIT,(SourceExpectedType){true,XR_XIR_UNIT},&conversion)&&!conversion.needed);
  CHECK(source_conversion_plan(&context,NULL,XR_XIR_I8,(SourceExpectedType){false,XR_XIR_UNIT},&conversion)&&conversion.target==XR_XIR_I8);

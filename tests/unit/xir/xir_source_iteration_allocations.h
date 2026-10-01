@@ -18,7 +18,7 @@ static void source_iteration_allocations(XrCompilerSession *session){
     FILE *file=fopen(path,"wb");CHECK(file);
     CHECK(fputs("export fn answer()->i64{var xs=[10,11,20];var n=0;for(i,x in xs){defer{n+=0};xs.push(99);if(i==1){n+=x;continue};n+=x};return n}\n",file)>=0 && fclose(file)==0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={session,path,&authority,NULL,XR_SOURCE_STDLIB,NULL};size_t sites=0;
+    XrXirSourceRequest request={session,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};size_t sites=0;
     for(size_t site=0;site<=sites;++site){
         attempts=0;fail_at=site?site-1:SIZE_MAX;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);

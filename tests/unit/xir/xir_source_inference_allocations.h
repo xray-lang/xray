@@ -22,7 +22,7 @@ static void inference_source_allocation_fixture(XrCompilerSession *session,
     FILE *file=fopen(path,"wb"); CHECK(file);
     CHECK(fputs(source,file)>=0 && fclose(file)==0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={session,path,&authority,NULL,NULL,NULL};
+    XrXirSourceRequest request={session,path,&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     size_t baseline=live,sites=0;
     CHECK(resolver_fault==0);
     for (size_t attempt=0;attempt<=sites;++attempt) {

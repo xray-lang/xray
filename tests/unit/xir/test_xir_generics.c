@@ -201,7 +201,7 @@ static void error_erasure_packet(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     XrXirBlock block = {0, 2, 0, 0};
     XrXirFunction function = {"erase", 5, &parameter, 1, XR_XIR_ERROR, &block, 1, ops, 2, NULL, 0};
-    XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
+    XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
@@ -233,18 +233,18 @@ static void error_marker_definition(void) {
     XrXirBlock block = {0,1, 0, 0};
     XrXirFunction function = {"e",1,&parameter,1,XR_XIR_I64,&block,1,&instruction,1,NULL,0};
     XrXirGeneric generic = {&constraint,1,NULL,0};
-    XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL};
+    XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*decoded=NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(checked);
-    CHECK(packet.length==193 && packet.bytes[165]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==197 && packet.bytes[169]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(decoded); decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
     for (unsigned i=0;i<sizeof(forged);++i) {
-        packet.bytes[165]=forged[i]; rehash_generic(&packet);
+        packet.bytes[169]=forged[i]; rehash_generic(&packet);
         CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
     xr_xir_checked_packet_free(&packet);
@@ -296,7 +296,7 @@ static void forwarding(void) {
     for (unsigned i = 0; i < 3; ++i) ops[i].type = t;
     caller.instructions = ops;
     XrXirFunction views[] = {caller, functions[1]};
-    XrXirModule module = {XR_XIR_BUILT, views, 2, NULL, generics, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, views, 2, NULL, generics, NULL, NULL, XR_XIR_PROGRAM};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
     constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);

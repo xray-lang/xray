@@ -46,7 +46,7 @@ static XrXirArtifact *nominal_transport_fixture(void) {
     XrXirSourceModule source = {"alpha",5,NULL,0,0};
     XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
-    XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,NULL,&types, NULL};
+    XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};

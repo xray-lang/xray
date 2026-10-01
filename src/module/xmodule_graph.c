@@ -341,6 +341,7 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
         return;
     }
     int target_idx = xr_module_graph_find(g, mid.canonical);
+    bool newly_discovered = target_idx < 0;
     if (target_idx < 0) {
         target_idx = graph_add_spec(g, mid.canonical, mid.logical_path, mid.source_path, mid.kind,
                                     &mid.authority);
@@ -349,6 +350,21 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
                     strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
             g->specs[target_idx].embedded_source = true;
         }
+    }
+    if (target_idx >= 0 && !newly_discovered &&
+        (g->specs[target_idx].representation != mid.representation ||
+         (mid.representation == XR_MODULE_CHECKED_LIBRARY && g->specs[target_idx].resource != mid.resource))) {
+        if (!g->unresolved_error) g->unresolved_error = xr_strdup("module identity representation conflicts with an existing graph node");
+        xr_module_id_cleanup(&mid); return;
+    }
+    if (target_idx >= 0 && mid.representation == XR_MODULE_CHECKED_LIBRARY) {
+        if (!g->admit_checked_resources || !mid.resource ||
+            (g->specs[target_idx].resource && g->specs[target_idx].resource != mid.resource)) {
+            if (!g->unresolved_error) g->unresolved_error = xr_strdup("Checked resource is not admitted by this graph consumer");
+            xr_module_id_cleanup(&mid); return;
+        }
+        g->specs[target_idx].representation = mid.representation;
+        g->specs[target_idx].resource = mid.resource;
     }
     xr_module_id_cleanup(&mid);
 
@@ -444,6 +460,14 @@ static int graph_expand(XrModuleGraph *g, const GraphSourceRoot *root, char **ou
     for (int qi = 0; qi < g->spec_count; qi++) {
         XrModuleSpec *spec = &g->specs[qi];
 
+        if (spec->representation == XR_MODULE_CHECKED_LIBRARY) {
+            if (!g->admit_checked_resources || !spec->resource || !spec->resource->checked) {
+                if (out_err) *out_err = xr_strdup("Checked graph resource is invalid");
+                return -1;
+            }
+            spec->status = XR_MODSPEC_RESOLVED;
+            continue;
+        }
         /* Skip stdlib native (no source to parse).  The in-memory entry is
          * the only source-less spec that still has source text. */
         bool is_memory_entry = (qi == entry_idx && root->source != NULL);

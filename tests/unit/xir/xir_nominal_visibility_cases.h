@@ -46,7 +46,7 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
             XrXirBudget budget = xr_xir_default_budget();
             budget.metadata_bytes = 65536; budget.work = 100000;
             CHECK(xr_xir_declarations_verify(&declarations, &types, 9,
-                &budget) == XR_XIR_BAD_TYPE);
+                XR_XIR_PROGRAM, &budget) == XR_XIR_BAD_TYPE);
         }
         identities[1].exported = 1;
     }

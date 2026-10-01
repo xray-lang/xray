@@ -20,7 +20,7 @@ static void initialization_region_allocations(void) {
     };
     const XrXirBlock blocks[]={{0,4, 0, 0},{4,2, 0, 0},{6,2, 0, 0}};
     const XrXirFunction function={"initialize",10,&parameter,1,XR_XIR_STRING,blocks,1,ops,4,NULL,0};
-    const XrXirModule module={XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL};
+    const XrXirModule module={XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM};
     XrXirInitializationRegion outer={0},inner={0};
     outer.function=function; outer.function.instruction_count=6; outer.function.block_count=2;
     outer.first_instruction=4; outer.first_block=1; outer.checkpoint=2;

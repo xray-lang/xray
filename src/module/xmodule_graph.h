@@ -49,6 +49,8 @@ typedef struct XrModuleSpec {
     char *logical_path;   /* Authority-root-relative path (owned, xr_free) */
     char *source_path;    /* Absolute path to source file (owned) */
     XrModuleKind kind;    /* stdlib / file / package */
+    XrModuleRepresentation representation;
+    const XrModuleResourceBinding *resource; /* Catalog outlives this graph. */
     XrModuleIdentityAuthority authority; /* Owned typed authority */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
     XrFingerprint source_content_fingerprint; /* Full source bytes; never a locator */
@@ -103,6 +105,7 @@ typedef struct XrModuleGraph {
 
     /* The resolver used during build */
     XrModuleResolver *resolver;
+    bool admit_checked_resources; /* Opt-in by the single Checked Source builder. */
 
     /* Compiler session used for parsing graph sources. */
     struct XrCompilerSession *compiler_session;

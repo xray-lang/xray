@@ -41,7 +41,7 @@ static XrXirArtifact *enum_ops_checked(unsigned invalid, bool wrong_variant) {
     XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER}};
     XrXirLiteral literal = {"constructed",11};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
-    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL};
+    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM};
     if (wrong_variant) {
         entry[2].immediate = 0; entry[2].args[1] = 0; entry[8].args[0] = 0;
         operands[0] = 3; operands[1] = 4; operands[2] = 7; operands[3] = 5; functions[2].operand_count = 4;

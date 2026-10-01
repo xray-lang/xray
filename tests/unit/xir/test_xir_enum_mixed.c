@@ -26,7 +26,7 @@ XR_DATA const uint32_t fixture_enum_values[4],fixture_enum_count;
 static XrXirArtifact *enum_checked(void) {
     XrCompilerSession *session=xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,XR_SOURCE_STDLIB,NULL};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"source %u: %s\n",status,diagnostic.message);

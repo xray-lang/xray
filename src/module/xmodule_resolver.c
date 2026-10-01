@@ -517,6 +517,8 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
 
 /* ========== Resolution: project-relative path ========== */
 
+#include "xmodule_checked_resource.inc.c"
+
 /* ========== Main Resolution Entry ========== */
 
 int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
@@ -531,6 +533,9 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
     if (err_buf)
         *err_buf = NULL;
 
+    int resource_result = resolve_checked_resource(r, specifier, importer_path,
+        importer_authority, out_id, err_buf);
+    if (resource_result) return resource_result > 0 ? 0 : -1;
     /* Check cache */
     char *cache_key = make_cache_key(specifier, importer_path, importer_authority);
     if (cache_key) {

@@ -165,6 +165,10 @@ typedef struct XrXirTypes {
     const XrXirInterfaceTable *interfaces;
 } XrXirTypes;
 
+typedef enum XrXirLinkageKind {
+    XR_XIR_PROGRAM, XR_XIR_LIBRARY
+} XrXirLinkageKind;
+
 typedef struct XrXirProvenance XrXirProvenance;
 typedef struct XrXirModule {
     XrXirStage stage;
@@ -174,6 +178,7 @@ typedef struct XrXirModule {
     const XrXirGeneric *generics;
     const XrXirTypes *types;
     const XrXirProvenance *provenance;
+    XrXirLinkageKind linkage_kind;
 } XrXirModule;
 
 typedef struct XrXirBudget {
@@ -222,7 +227,7 @@ XR_FUNC XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact,
                                         const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_artifact_free(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *declarations,
-    const XrXirTypes *types, uint32_t functions, XrXirBudget *budget);
+    const XrXirTypes *types, uint32_t functions, XrXirLinkageKind kind, XrXirBudget *budget);
 /* Module-owned signatures follow descriptor/identity structure admission. */
 XR_FUNC XrXirStatus xr_xir_method_signature_verify(const XrXirModule *module,
     uint32_t function, XrXirBudget *budget);

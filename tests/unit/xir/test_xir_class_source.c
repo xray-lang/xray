@@ -20,7 +20,7 @@
 #include <string.h>
 #define C(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
 int main(int argc,char **argv){C(argc==1 || argc==2);XrCompilerSession *session=xr_compiler_session_new(NULL);C(session);
- XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL};XrXirSourceResult result={0};XrXirSourceDiagnostic d={0};XrXirStatus status=xr_xir_source_check(&request,&result,&d);fprintf(stderr,"source=%u %d:%d %s\n",status,d.line,d.column,d.message);C(status==XR_XIR_OK);
+ XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};XrXirSourceResult result={0};XrXirSourceDiagnostic d={0};XrXirStatus status=xr_xir_source_check(&request,&result,&d);fprintf(stderr,"source=%u %d:%d %s\n",status,d.line,d.column,d.message);C(status==XR_XIR_OK);
  XrXirCheckedPacket packet={0};C(xr_xir_checked_write(result.checked,NULL,&packet,NULL)==XR_XIR_OK);C(packet.length<=262144);
  if(argc==2){FILE *packet_file=fopen(argv[1],"wb");C(packet_file);C(fwrite(packet.bytes,1,packet.length,packet_file)==packet.length);C(!fclose(packet_file));}
  XrXirArtifact *decoded=NULL;C(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);xr_xir_checked_packet_free(&packet);xr_xir_source_result_free(&result);result.checked=decoded;

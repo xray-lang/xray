@@ -43,7 +43,7 @@ static void interface_access_cases(void) {
         };
         XrXirInterfaceTable table = {interfaces,2};
         XrXirTypes types = {nodes,3,&nominals,&table};
-        XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL};
+        XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM};
         if (attack == 1) { module.declarations = NULL; types.nominals = NULL; types.count = 0; types.nodes = NULL;
             interfaces[0].methods = NULL; interfaces[0].method_count = 0; argument = XR_XIR_I64; }
         if (attack == 2) interfaces[0].module = (XrXirLiteral){"ghost",5};
