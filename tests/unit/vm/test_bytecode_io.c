@@ -1252,19 +1252,19 @@ TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules) {
     XrVMRuntime *reader = new_test_isolate();
     ASSERT_NOT_NULL(reader);
 
-    XrEnumType *writer_canonical = xr_stdlib_enum_type_get(writer, "net", "NetError");
-    XrEnumType *reader_enum = xr_stdlib_enum_type_get(reader, "net", "NetError");
+    XrEnumType *writer_canonical = xr_stdlib_enum_type_get(writer, "Coro", "CoroState");
+    XrEnumType *reader_enum = xr_stdlib_enum_type_get(reader, "Coro", "CoroState");
     ASSERT_NOT_NULL(writer_canonical);
     ASSERT_NOT_NULL(reader_enum);
 
     /* The source compiler creates a distinct enum object for the declaration.
      * Stdlib serialization must attach the explicit module identity rather
      * than depending on pointer identity with the native cache. */
-    char *members[10];
-    ASSERT_EQ_UINT(writer_canonical->member_count, 10);
+    char *members[5];
+    ASSERT_EQ_UINT(writer_canonical->member_count, 5);
     for (uint32_t i = 0; i < writer_canonical->member_count; i++)
         members[i] = (char *) xr_enum_type_member_name(writer_canonical, i);
-    XrEnumType *writer_enum = xr_enum_type_new(writer, "net", "NetError", members, 10);
+    XrEnumType *writer_enum = xr_enum_type_new(writer, "Coro", "CoroState", members, 5);
     ASSERT_NOT_NULL(writer_enum);
     ASSERT_TRUE(writer_enum != writer_canonical);
 
@@ -1280,7 +1280,7 @@ TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules) {
 
     size_t size = 0;
     XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
-    uint8_t *bytes = xr_bootstrap_container_write_stdlib(writer, "net", proto, 0, &size, &error);
+    uint8_t *bytes = xr_bootstrap_container_write_stdlib(writer, "Coro", proto, 0, &size, &error);
     ASSERT_NOT_NULL(bytes);
     ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
 
@@ -1303,7 +1303,7 @@ TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape) {
     ASSERT_NOT_NULL(writer);
 
     char *members[] = {"Closed"};
-    XrEnumType *wrong = xr_enum_type_new(writer, "net", "NetError", members, 1);
+    XrEnumType *wrong = xr_enum_type_new(writer, "Coro", "CoroState", members, 1);
     ASSERT_NOT_NULL(wrong);
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
@@ -1311,7 +1311,7 @@ TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape) {
 
     size_t size = 123;
     XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
-    ASSERT_NULL(xr_bootstrap_container_write_stdlib(writer, "net", proto, 0, &size, &error));
+    ASSERT_NULL(xr_bootstrap_container_write_stdlib(writer, "Coro", proto, 0, &size, &error));
     ASSERT_EQ_UINT(size, 0);
     ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_METADATA);
 

@@ -22,9 +22,31 @@ class FocusedSelectionTest(unittest.TestCase):
     def test_t0_is_a_bounded_exact_inventory(self):
         self.assertLess(len(runner.T0_CTEST_NAMES), 100)
         self.assertEqual(len(runner.T0_CTEST_NAMES), len(set(runner.T0_CTEST_NAMES)))
-        self.assertTrue(set(runner.canonical_profile.CTEST_NAMES) <=
+        self.assertTrue(set(runner.canonical_profile.T0_CTEST_NAMES) <=
                         set(runner.T0_CTEST_NAMES))
         self.assertNotIn(".*", runner.T0_INCLUDE)
+
+    def test_t0_defers_complete_matrices_without_removing_broad_coverage(self):
+        canonical = set(runner.canonical_profile.CTEST_NAMES)
+        feedback = set(runner.T0_CTEST_NAMES)
+        for name in runner.canonical_profile.T0_DEFERRED_CTEST_NAMES:
+            self.assertIn(name, canonical)
+            self.assertNotIn(name, feedback)
+        for tier in ("t1", "t2"):
+            include, exclude, _ = runner.TIERS[tier]
+            for name in canonical:
+                with self.subTest(tier=tier, name=name):
+                    self.assertTrue(not include or runner.re.search(include, name))
+                    self.assertFalse(exclude and runner.re.search(exclude, name))
+        self.assertLessEqual(
+            set(runner.canonical_profile.T0_BUILD_TARGETS)
+            - set(runner.canonical_profile._SUPPORT_BUILD_TARGET_TESTS),
+            feedback,
+        )
+        self.assertFalse(
+            set(runner.canonical_profile.T0_DEFERRED_CTEST_NAMES)
+            & set(runner.canonical_profile.T0_BUILD_TARGETS)
+        )
 
     def test_generic_identity_profile_reuses_the_shared_exact_inventory(self):
         profile = runner.EXACT_PROFILES["generic-identity"]
@@ -490,6 +512,20 @@ class EmptySelectionTest(unittest.TestCase):
             corpus.assert_not_called()
             process.assert_not_called()
         return result, output.getvalue(), build, ctest
+
+    def test_complete_t0_builds_feedback_targets_and_preserves_test_failure(self):
+        names = list(runner.T0_CTEST_NAMES)
+        with mock.patch.object(runner.canonical_profile, "executed_ctest_names",
+                               return_value=tuple(names)):
+            result, output, build, ctest = self.run_selection(
+                [names, names, names], ctest_code=8)
+        self.assertEqual(result, 8, output)
+        build.assert_called_once()
+        self.assertIs(build.call_args.kwargs["required_targets"],
+                      runner.canonical_profile.T0_BUILD_TARGETS)
+        self.assertLess(len(build.call_args.kwargs["required_targets"]),
+                        len(runner.canonical_profile.BUILD_TARGETS))
+        ctest.assert_called_once()
 
     def test_empty_selection_fails_before_build_or_test_for_every_tier(self):
         for tier in (*runner.TIERS, *runner.EXACT_PROFILES):

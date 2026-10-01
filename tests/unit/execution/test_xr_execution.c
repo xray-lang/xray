@@ -18,6 +18,7 @@
 #include "../plan/target_profile_test_fixture.h"
 #include "../program/xr_program_provider_fixture.h"
 #include "../program/xr_program_module_fixture.h"
+#include "../program/xr_program_identity_vectors.h"
 #include "../../../src/program/xr_validated_program_internal.h"
 
 #include <stdatomic.h>
@@ -158,6 +159,14 @@ static XrValidatedProgram *build_validated_provider_program(
                                      sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
     REQUIRE(xr_program_write(core_program, &artifact, build_diagnostic, sizeof(build_diagnostic)) ==
             XR_PROGRAM_BUILD_OK);
+    if (!nullary) {
+        REQUIRE(artifact.size == sizeof(xr_identity_execution_current_wire));
+        REQUIRE(memcmp(artifact.bytes, xr_identity_execution_current_wire, artifact.size) == 0);
+        REQUIRE(xr_program_validate(xr_identity_execution_legacy_wire,
+                                    sizeof(xr_identity_execution_legacy_wire), NULL, &validated,
+                                    &verify_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+        REQUIRE(validated == NULL);
+    }
     REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
                                 &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     xr_program_artifact_free(&artifact);
@@ -451,26 +460,22 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *first = create_instance(program, first_profile, &first_bindings, 1);
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
-    /* Derived from the independent format-3.0 vector after reproducing both
-     * old ExecutionIds: append six builtin rows and the empty initializer
-     * table, encode format 3.9 and current CoreSpec, preserve all other payloads.
-     * The assertion-message revision replaces only normative CoreSpec bytes13..44
-     * in that fixed wire, after reproducing its ProgramId and both ExecutionIds.
-     * Prior vectors and derivation remain in portable Task308 evidence.
-     * Profile, boundary and kernel identities are unchanged. */
+    /* Independently framed format 3.11 includes the affine string-builder
+     * builtin and current normative CoreSpec. The full wire assertion above
+     * preserves every provider and function field; obsolete wire is rejected. */
     XrProgramId program_id = xr_validated_program_id(program);
     XrFingerprint program_fingerprint;
     memcpy(program_fingerprint.bytes, program_id.bytes, sizeof(program_fingerprint.bytes));
     require_fingerprint(program_fingerprint,
-                        "3cbcea9370fb5d06fc10aa641a58dedf1980b991060a830c952d3b2cfd355076");
+                        "3d109c21dda6e6d45f0c3699ce5a04a9cc1273dc3c3ce4bc6569ca84ae81f6cb");
     require_fingerprint(xr_target_profile_fingerprint(first_profile),
                         "2484cd1d386a6d2b8d98be381bf9effe558961efb05455afd1dfdd62e994df4a");
     require_fingerprint(xr_target_profile_fingerprint(foreign_profile),
                         "64f2f74782b9273b0f7d0863a94c5b2e8e4ef223dca48b38ff6cce04ff50ea66");
     require_fingerprint(xr_execution_instance_id(first),
-                        "d37a9f35b874a861458d2837c8dff39c818a21982fa9323b8dad8e64116cd2bb");
+                        "9dbd6b8bbb34f74551040535be983e593a0592c71ae74eae9b8538335226e6a7");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "44899dfb37d5562ddf9cc6cdb718a2d9090ce634c22cdf84be94c80a7ee27aec");
+                        "5a4b70581e2aee10aafd5eb8d00d2515718ae96e5b8a5249d341242338354547");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));

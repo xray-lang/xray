@@ -6136,10 +6136,35 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 
 | Function | Signature | Description |
 |---|---|---|
-| `assert(cond, msg?)` | `(bool, string?) -> ()` | throws when `cond` is false |
-| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | deep equality for one static type |
-| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | expects only a typed error |
-| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | expects only a panic |
+| `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false produces an assertion panic |
+| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | compares one static type with definition-site comparison authority |
+| `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's typed error |
+| `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's panic |
+
+`msg?` denotes omission, not `string?`; explicit null, nullable strings and other types are invalid.
+The condition/action and message expressions are each evaluated once in source order, including
+success. Omission uses the single parameter-default mechanism. `R` is the builtin's exact result
+variable from the checked callable signature, not an ordinary source generic parameter or `any`.
+A Unit action has type `fn()` with zero payload and no ordinary result slot. Other results require
+the admitted copyable, storable result contract. A normal result is destroyed exactly once before
+the missing expected failure produces an assertion panic. View and noncopyable results require
+their own return contracts; ordinary generic Unit and storage rules are not relaxed.
+
+When a condition assertion fails, `PanicInfo.message` preserves the exact bytes and length of the
+evaluated `msg`; an omitted message is the empty string. Diagnostics render the error code,
+source location and display prefix separately, without adding them to the message, truncating
+its bytes or treating a C string terminator as its boundary.
+
+The protected region covers only the action call and cleanup, not evaluation of action/message
+expressions. Typed errors and panics differ; OOM, LIMIT, cancellation and provider/ABI/admission
+failures cannot satisfy an expectation. Unknown callable effects remain unknown, rather than being
+inferred from a concrete instance's body. Lexical bindings precede builtin names. The complete
+assertEqual capability/type domain is admitted by definition-site constraints, not by granting an
+unconstrained T deep comparison authority during specialization. Ordinary equality differs from
+container key equivalence. Arrays containing NaN preserve element-wise equality even with shared
+backing; memcmp needs an additional bytewise proof. The complete capability domain remains open;
+this section adds no Equatable and does not claim that the assertion execution family missing
+from §17 has been implemented.
 
 ### 13.6 Container Constructors and Static Functions
 

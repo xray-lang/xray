@@ -1,6 +1,21 @@
 # Unit tests for xray
 # All unit tests are managed here (no glob in root CMakeLists.txt)
 
+# Literal semantic vectors are derived independently of compiler libraries.
+add_test(NAME test_program_identity_vectors
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/program/derive_identity_vectors.py
+        --output ${CMAKE_CURRENT_BINARY_DIR}/program-identity-vectors.json)
+add_test(NAME test_source_closure_identity_vectors
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/program/derive_frontend_closure_vector.py
+        --output ${CMAKE_CURRENT_BINARY_DIR}/source-closure-identity-vectors.json)
+set_tests_properties(test_program_identity_vectors test_source_closure_identity_vectors PROPERTIES
+    LABELS "unit;semantic;program-identity;self-test")
+add_test(NAME test_semantic_probe_identity_vector
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/plan/derive_semantic_probe_vector.py
+        --output ${CMAKE_CURRENT_BINARY_DIR}/semantic-probe-identity-vector.json)
+set_tests_properties(test_semantic_probe_identity_vector PROPERTIES
+    LABELS "unit;semantic;program-identity;self-test")
+
 # ============================================================================
 # Macro for adding unit tests that link to xray_core
 # ============================================================================
@@ -1681,6 +1696,7 @@ if(XRAY_C_MSVC_FRONTEND)
         "--msvc-runtime=$<TARGET_GENEX_EVAL:xray_aot_core,$<TARGET_PROPERTY:xray_aot_core,MSVC_RUNTIME_LIBRARY>>")
 endif()
 foreach(execution_case IN ITEMS
+        cgen_ref_slice_forward_read_authority
         cgen_nullable_unit_enum_compare_execution
         cgen_nullable_unit_enum_execution
         cgen_ref_slice_copy_execution
@@ -2930,6 +2946,9 @@ set_tests_properties(test_c_emission_typed_rules PROPERTIES
     LABELS "aot;cgen;typed-rules;mutation")
 add_xray_unit_test(test_xi_backend_plan_contract aot/test_xi_backend_plan_contract.c)
 add_xray_unit_test(test_xrt_array aot/test_xrt_array.c)
+add_xray_unit_test(test_xrt_net_resolve_owner aot/test_xrt_net_resolve_owner.c)
+set_tests_properties(test_xrt_net_resolve_owner PROPERTIES
+    TIMEOUT 15 LABELS "aot;runtime;network;ownership;allocation")
 add_executable(test_xrt_udp_retry aot/test_xrt_udp_retry.c)
 target_include_directories(test_xrt_udp_retry PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 if(WIN32)

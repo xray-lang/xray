@@ -22,7 +22,8 @@
 typedef struct ScalarRefClaim {
     const XrSemanticOperationRecord *call;
     const XrSemanticOperationRecord *address;
-    const XrSemanticOperandRecord *source;
+    uint32_t source_value;
+    uint32_t source_type;
     const XrSemanticCallTargetRecord *semantic_target;
     const XrSemanticParameterRecord *parameter;
     uint32_t call_index;
@@ -158,6 +159,51 @@ static bool parameter_is_scalar_ref(const XrSemanticPlan *semantic,
            native_ref_kind(semantic, parameter->type) != XR_MACHINE_REP_COUNT;
 }
 
+/* A forwarded ref view retains its parameter place. No local address or new
+ * descriptor storage is introduced at the nested call boundary. */
+static bool claim_source_is_exact(const XrSemanticPlan *semantic, ScalarRefClaim *claim,
+                                  const XrSemanticOperandRecord *argument) {
+    claim->address = operation_for_value(semantic, argument->value, &claim->address_index);
+    if (claim->address) {
+        const XrSemanticOperandRecord *source = NULL;
+        if (argument->origin != XI_PLACE_ORIGIN_STACK_LOCAL ||
+            claim->address->function != claim->call->function ||
+            claim->address->result_value != argument->value ||
+            !xr_semantic_ref_argument_local_addr_is_exact(
+                semantic, claim->address, claim->parameter->type, &source))
+            return false;
+        claim->source_value = source->value;
+        claim->source_type = source->type;
+        return true;
+    }
+    const XrSemanticParameterRecord *forwarded =
+        parameter_for_value(semantic, argument->value, NULL);
+    if (argument->origin != XI_PLACE_ORIGIN_PARAM ||
+        !xr_semantic_slice_ref_parameter_is_exact(semantic, claim->parameter) ||
+        !parameter_is_exact(semantic, forwarded) ||
+        !xr_semantic_slice_ref_parameter_is_exact(semantic, forwarded) ||
+        forwarded->function != claim->call->function ||
+        forwarded->type != claim->parameter->type)
+        return false;
+    const XrSemanticOperationRecord *definition = NULL;
+    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->result_value != argument->value)
+            continue;
+        if (definition)
+            return false;
+        definition = candidate;
+    }
+    if (!definition || definition->opcode != XI_PARAM ||
+        definition->function != claim->call->function ||
+        definition->result_type != forwarded->type || definition->operand_count != 0)
+        return false;
+    claim->source_value = forwarded->value;
+    claim->source_type = forwarded->type;
+    return true;
+}
+
 static XrAotScalarRefV1Status semantic_claim(
     const XrSemanticPlan *semantic, uint32_t operation_index,
     uint16_t operand_index, uint32_t source_value, ScalarRefClaim *out) {
@@ -200,10 +246,6 @@ static XrAotScalarRefV1Status semantic_claim(
         return XR_AOT_SCALAR_REF_V1_UNRELATED;
     const XrSemanticOperandRecord *argument =
         &operands[operation->operand_begin + operand_index];
-    uint32_t address_index = XR_SEMANTIC_INDEX_NONE;
-    const XrSemanticOperationRecord *address =
-        operation_for_value(semantic, source_value, &address_index);
-    const XrSemanticOperandRecord *source = NULL;
     bool exact = parameter_is_exact(semantic, parameter) &&
                  target->dependency == XR_SEMANTIC_INDEX_NONE &&
                  target->source_export == XR_SEMANTIC_INDEX_NONE &&
@@ -222,27 +264,24 @@ static XrAotScalarRefV1Status semantic_claim(
                  argument->transfer_mode == XR_TRANSFER_SHARE &&
                  argument->flags ==
                      (XR_SEM_OPERAND_CALL_CONTRACT |
-                      XR_SEM_OPERAND_ADDRESSABLE) &&
-                 address && address->function == operation->function &&
-                 address->result_value == source_value &&
-                 xr_semantic_ref_argument_local_addr_is_exact(
-                     semantic, address, parameter->type, &source);
+                      XR_SEM_OPERAND_ADDRESSABLE);
     if (!exact)
         return XR_AOT_SCALAR_REF_V1_INVALID;
-    if (out)
-        *out = (ScalarRefClaim) {
+    ScalarRefClaim claim = {
             .call = operation,
-            .address = address,
-            .source = source,
             .semantic_target = target,
             .parameter = parameter,
             .call_index = operation_index,
-            .address_index = address_index,
+            .address_index = XR_SEMANTIC_INDEX_NONE,
             .semantic_target_index = target_index,
             .parameter_index = parameter_index,
             .operand_index = operand_index,
             .ordinal = ordinal,
         };
+    if (!claim_source_is_exact(semantic, &claim, argument))
+        return XR_AOT_SCALAR_REF_V1_INVALID;
+    if (out)
+        *out = claim;
     return XR_AOT_SCALAR_REF_V1_EXACT;
 }
 
@@ -336,27 +375,29 @@ static bool target_argument_is_exact(const XrSemanticPlan *semantic, const XrTar
     const XrTargetValueRepRecord *caller = NULL;
     const XrTargetValueRepRecord *callee =
         scoped_value_binding(semantic, target, claim->parameter->value);
-    const XrTargetValueRepRecord *address =
-        scoped_value_binding(semantic, target, claim->address->result_value);
+    const XrTargetValueRepRecord *address = claim->address
+        ? scoped_value_binding(semantic, target, claim->address->result_value) : NULL;
+    uint32_t argument_value = claim->address ? claim->address->result_value : claim->source_value;
     if (!call || !argument || call->id != target_call_index ||
         call->semantic_call_target != claim->semantic_target_index ||
         call->caller_function != caller_function || call->callee_function != callee_function ||
         call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
         call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL || call->adapter_count != 0 ||
-        !source_value_slot_is_exact(semantic, target, claim->source->value, claim->call->function,
-                                    claim->source->type, &caller) ||
+        !source_value_slot_is_exact(semantic, target, claim->source_value, claim->call->function,
+                                    claim->source_type, &caller) ||
         !value_slot_is_exact(semantic, target, claim->parameter->value, claim->parameter->function,
                              XR_TARGET_SLOT_PARAMETER, native_ref_kind(semantic, claim->parameter->type)) ||
-        !value_slot_is_exact(semantic, target, claim->address->result_value, claim->call->function,
-                             XR_TARGET_SLOT_TEMPORARY, XR_MACHINE_REP_RAW_PTR))
+        (claim->address &&
+         !value_slot_is_exact(semantic, target, claim->address->result_value, claim->call->function,
+                              XR_TARGET_SLOT_TEMPORARY, XR_MACHINE_REP_RAW_PTR)))
         return false;
     XrStableId expected;
-    return address && address->slot != caller->slot &&
+    return (!claim->address || (address && address->slot != caller->slot)) &&
            scalar_ref_identity(claim->semantic_target->id, claim->parameter->id, claim->ordinal,
                                &expected) &&
            xr_stable_id_equal(argument->identity, expected) && argument->call == call->id &&
            argument->semantic_operand == claim->call->operand_begin + claim->operand_index &&
-           argument->semantic_value == claim->address->result_value &&
+           argument->semantic_value == argument_value &&
            argument->callee_parameter == claim->parameter_index &&
            argument->caller_slot == caller->slot && argument->callee_slot == callee->slot &&
            argument->register_rep == caller->register_rep &&

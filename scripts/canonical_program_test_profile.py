@@ -207,6 +207,29 @@ def load_inventory(manifest: Path = source_fixtures.MANIFEST,
 
 CTEST_NAMES, BUILD_TARGETS = load_inventory()
 
+# A source fixture's native executable is an independent static link. Keep the
+# complete source/backend matrices and allocation sweeps in the canonical
+# preflight and broad tiers; routine edit feedback uses the shared semantic
+# owners and verifier instead of building every fixture executable.
+T0_DEFERRED_CTEST_NAMES = (
+    "test_xr_program_source_allocations",
+    "test_xr_program_value_struct_string_allocations",
+    "test_xr_program_source_build",
+    "test_xr_program_vm_runtime",
+    "xr_program_h2_backend_differential",
+)
+T0_CTEST_NAMES = tuple(
+    name for name in _SCRIPT_AND_EXECUTABLE_TESTS
+    if name not in T0_DEFERRED_CTEST_NAMES
+)
+T0_BUILD_TARGETS = tuple(
+    name for name in _EXECUTABLE_TARGETS
+    if name in T0_CTEST_NAMES
+) + tuple(
+    target for target, test in _SUPPORT_BUILD_TARGET_TESTS.items()
+    if test in T0_CTEST_NAMES
+)
+
 
 def ctest_regex(names: tuple[str, ...] = CTEST_NAMES) -> str:
     # CTest uses its C++/POSIX-style regex engine, which has no Python-style

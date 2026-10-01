@@ -603,7 +603,29 @@ static void test_determinism_roundtrip_and_identity(void) {
     xr_program_compute_id(byte_compare_vector, sizeof(byte_compare_vector), &previous_id);
     xr_program_id_hex(previous_id, previous_hex);
     CHECK(strcmp(previous_hex, "1bc457be305a4ce40fd7c37814e57f06ea46f4333d1fc2d41738014c6476f411") == 0);
-    CHECK(memcmp(first.bytes, byte_compare_vector, sizeof(byte_compare_vector)) == 0);
+    XrValidatedProgram *obsolete = NULL;
+    XrProgramDiagnostic obsolete_diagnostic;
+    CHECK(xr_program_validate(byte_compare_vector, sizeof(byte_compare_vector), NULL,
+                              &obsolete, &obsolete_diagnostic) ==
+          XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+    CHECK(obsolete == NULL &&
+          obsolete_diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_CORE_SPEC_IDENTITY);
+    /* The complete fixed wire retains its row and offset oracle. The new
+     * current operation registry changes only its normative semantic binding. */
+    static const uint8_t array_append_core[32] = {
+        0x69, 0x07, 0x5c, 0x19, 0xfb, 0x8d, 0x9b, 0x74,
+        0x07, 0x5b, 0xe1, 0xc9, 0xc4, 0x8e, 0x9b, 0xbc,
+        0xf8, 0xb8, 0xcc, 0x09, 0xdb, 0xc4, 0x11, 0x8b,
+        0x5e, 0xfa, 0x33, 0x32, 0xb6, 0xb6, 0x77, 0x6a,
+    };
+    uint8_t array_append_vector[sizeof(byte_compare_vector)];
+    memcpy(array_append_vector, byte_compare_vector, sizeof(byte_compare_vector));
+    memcpy(array_append_vector + 13u, array_append_core, sizeof(array_append_core));
+    xr_program_compute_id(array_append_vector, sizeof(array_append_vector), &previous_id);
+    xr_program_id_hex(previous_id, previous_hex);
+    CHECK(strcmp(previous_hex,
+                 "0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b") == 0);
+    CHECK(memcmp(first.bytes, array_append_vector, sizeof(array_append_vector)) == 0);
     CHECK(xr_program_id_equal(first.id, previous_id));
     printf("Canonical ProgramId: %s (%zu bytes)\n", id_hex, first.size);
 

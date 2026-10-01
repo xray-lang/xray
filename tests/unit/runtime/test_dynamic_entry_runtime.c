@@ -183,7 +183,9 @@ static XrType stub_assertion_action = {
         },
 };
 static XrType stub_module_namespace = {
-    .kind = XR_KIND_STRUCT_OBJECT,
+    /* A module namespace is an opaque borrowed-static identity, not a
+     * structural value with independently addressable fields. */
+    .kind = XR_KIND_UNKNOWN,
     .id = 4,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,

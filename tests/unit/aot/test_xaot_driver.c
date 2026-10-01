@@ -253,6 +253,22 @@ static bool write_file_text(const char *path, const char *text) {
     return fclose(f) == 0;
 }
 
+
+static bool save_driver_authority_generated_c(const XaotBuildResult *result, const char *name) {
+    const char *directory = getenv("XRAY_TEST_AUTHORITY_OUTPUT_DIR");
+    if (!directory || !directory[0])
+        return true;
+    char path[XR_TEST_PATH_MAX];
+    int length = snprintf(path, sizeof(path), "%s/%s.c", directory, name);
+    if (length < 0 || (size_t) length >= sizeof(path))
+        return false;
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(result, &size);
+    bool written = source && size && write_file_text(path, source);
+    xr_free(source);
+    return written;
+}
+
 static bool mkdir_one(const char *path) {
     if (xr_test_mkdir(path) == 0)
         return true;
@@ -1056,7 +1072,11 @@ static void test_driver_native_resolution_owned_result(void) {
     ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "netpoll"));
     size_t size = 0;
     char *source = xaot_build_result_amalgamate(&result, &size);
-    ASSERT_TRUE(source && size && strstr(source, "xrt_net_resolve_all"));
+    ASSERT_TRUE(source && size && strstr(source, "xr_aot_async_submit") &&
+                strstr(source, "xrt_net_resolve_request_invoke") &&
+                strstr(source, "xr_aot_async_resume") &&
+                strstr(source, "xrt_net_resolve_materialize"));
+    ASSERT_TRUE(!strstr(source, "xrt_net_resolve_all("));
     const char *output = getenv("XRAY_TEST_OUTPUT_C");
     if (output && output[0])
         ASSERT_TRUE(write_file_text(output, source));
@@ -1103,6 +1123,13 @@ static void test_spawn_target_contributes_artifact_runtime_capabilities(void) {
     ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "timer"));
     ASSERT_TRUE(result.plan_dump != NULL);
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=worker", "reachable=1"));
+    const char *output = getenv("XRAY_TEST_OUTPUT_C");
+    if (output && output[0]) {
+        size_t size = 0;
+        char *source = xaot_build_result_amalgamate(&result, &size);
+        ASSERT_TRUE(source && size && write_file_text(output, source));
+        xr_free(source);
+    }
 
     xaot_build_result_free(&result);
     release_target_profile(&options);
@@ -1186,11 +1213,12 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
     passed++;
 }
 
-static void test_driver_rejects_package_summary_graph_without_program_authority(void) {
+static void test_driver_requires_source_for_cached_package(void) {
     char root[XR_TEST_PATH_MAX];
     char home_dir[XR_TEST_PATH_MAX];
     char entry_source[XR_TEST_PATH_MAX];
     char cache_dir[XR_TEST_PATH_MAX];
+    char package_source[XR_TEST_PATH_MAX];
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
     XaotBuildResult result;
@@ -1204,15 +1232,16 @@ static void test_driver_rejects_package_summary_graph_without_program_authority(
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
-    payload = install_package_payload(home_dir, cache_dir, "codex/pkg",
-                                      "fn package_value() -> i64 {\n"
-                                      "    return 5\n"
-                                      "}\n");
-    ASSERT_TRUE(payload != NULL);
+    ASSERT_TRUE(write_package_source(home_dir, "codex/pkg",
+                                     "export fn package_value() -> i64 { return 5 }\n",
+                                     package_source, sizeof(package_source)));
+    payload = make_package_payload_for_source(home_dir, "codex/pkg", package_source);
+    ASSERT_TRUE(payload && write_global_payload_to_cache(cache_dir, payload));
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkg\" as pkg\n"
                                               "fn value() -> i64 {\n"
-                                              "    return 7\n"
-                                              "}\n"));
+                                              "    return pkg.package_value()\n"
+                                              "}\n"
+                                              "print(value())\n"));
     lockfile = make_package_lockfile(home_dir, coordinates, 1);
     ASSERT_TRUE(lockfile != NULL);
     old_home = dup_env_value("HOME");
@@ -1225,6 +1254,13 @@ static void test_driver_rejects_package_summary_graph_without_program_authority(
     options.incremental_cache_dir = cache_dir;
     options.lockfile = lockfile;
 
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 2 && result.n_sources == 2 && result.sources);
+    ASSERT_TRUE(save_driver_authority_generated_c(&result, "package-source"));
+    xaot_build_result_free(&result);
+    /* A warm summary cannot replace the source authority of an imported module. */
+    ASSERT_TRUE(xr_test_unlink(package_source) == 0);
+    memset(&result, 0, sizeof(result));
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
     ASSERT_TRUE(result.module_summary_cache.tasks == 0u);
     ASSERT_TRUE(result.n_sources == 0);
@@ -1241,7 +1277,7 @@ static void test_driver_rejects_package_summary_graph_without_program_authority(
     passed++;
 }
 
-static void test_driver_rejects_missing_canonical_program_target_plan_authority(void) {
+static void test_driver_requires_target_profile_for_cached_program(void) {
     char root[XR_TEST_PATH_MAX];
     char home_dir[XR_TEST_PATH_MAX];
     char entry_source[XR_TEST_PATH_MAX];
@@ -1261,11 +1297,11 @@ static void test_driver_rejects_missing_canonical_program_target_plan_authority(
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
     payload_a = install_package_payload(home_dir, cache_dir, "codex/pkga",
-                                        "fn package_a() -> i64 {\n"
+                                        "export fn package_a() -> i64 {\n"
                                         "    return 11\n"
                                         "}\n");
     payload_b = install_package_payload(home_dir, cache_dir, "codex/pkgb",
-                                        "fn package_b() -> i64 {\n"
+                                        "export fn package_b() -> i64 {\n"
                                         "    return 13\n"
                                         "}\n");
     ASSERT_TRUE(payload_a != NULL);
@@ -1273,8 +1309,9 @@ static void test_driver_rejects_missing_canonical_program_target_plan_authority(
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
                                               "import \"codex/pkgb\" as b\n"
                                               "fn value() -> i64 {\n"
-                                              "    return 17\n"
-                                              "}\n"));
+                                              "    return a.package_a() + b.package_b()\n"
+                                              "}\n"
+                                              "print(value())\n"));
     lockfile = make_package_lockfile(home_dir, coordinates, 2);
     ASSERT_TRUE(lockfile != NULL);
     old_home = dup_env_value("HOME");
@@ -1288,7 +1325,15 @@ static void test_driver_rejects_missing_canonical_program_target_plan_authority(
     options.lockfile = lockfile;
     options.module_summary_workers = 8u;
 
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 3 && result.n_sources == 3 && result.sources);
+    ASSERT_TRUE(save_driver_authority_generated_c(&result, "package-target"));
+    xaot_build_result_free(&result);
+    XrTargetProfile *profile = options.target_profile;
+    options.target_profile = NULL;
+    memset(&result, 0, sizeof(result));
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
+    options.target_profile = profile;
     ASSERT_TRUE(result.target_plan_cache.hits == 0u);
     ASSERT_TRUE(result.target_plan_cache.misses == 0u);
     ASSERT_TRUE(result.target_plan_cache.rejected == 0u);
@@ -1310,7 +1355,7 @@ static void test_driver_rejects_missing_canonical_program_target_plan_authority(
     passed++;
 }
 
-static void test_driver_rejects_package_dependency_graph_without_program_authority(void) {
+static void test_driver_requires_transitive_source_for_cached_package(void) {
     char root[XR_TEST_PATH_MAX];
     char home_dir[XR_TEST_PATH_MAX];
     char entry_source[XR_TEST_PATH_MAX];
@@ -1333,14 +1378,14 @@ static void test_driver_rejects_package_dependency_graph_without_program_authori
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
     ASSERT_TRUE(write_package_source(home_dir, "codex/pkgb",
-                                     "fn package_b() -> i64 {\n"
+                                     "export fn package_b() -> i64 {\n"
                                      "    return 23\n"
                                      "}\n",
                                      pkg_b_source, sizeof(pkg_b_source)));
     ASSERT_TRUE(write_package_source(home_dir, "codex/pkga",
                                      "import \"codex/pkgb\" as b\n"
-                                     "fn package_a() -> i64 {\n"
-                                     "    return 19\n"
+                                     "export fn package_a() -> i64 {\n"
+                                     "    return b.package_b() + 19\n"
                                      "}\n",
                                      pkg_a_source, sizeof(pkg_a_source)));
     ordered_sources[0] = pkg_b_source;
@@ -1354,8 +1399,9 @@ static void test_driver_rejects_package_dependency_graph_without_program_authori
     ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_b));
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
                                               "fn value() -> i64 {\n"
-                                              "    return 29\n"
-                                              "}\n"));
+                                              "    return a.package_a() + 29\n"
+                                              "}\n"
+                                              "print(value())\n"));
     lockfile = make_package_lockfile(home_dir, ordered_canonicals, 2);
     ASSERT_TRUE(lockfile != NULL);
     old_home = dup_env_value("HOME");
@@ -1368,6 +1414,13 @@ static void test_driver_rejects_package_dependency_graph_without_program_authori
     options.incremental_cache_dir = cache_dir;
     options.lockfile = lockfile;
 
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 3 && result.n_sources == 3 && result.sources);
+    ASSERT_TRUE(save_driver_authority_generated_c(&result, "package-transitive"));
+    xaot_build_result_free(&result);
+    /* Both cached summaries remain present when the transitive source is removed. */
+    ASSERT_TRUE(xr_test_unlink(pkg_b_source) == 0);
+    memset(&result, 0, sizeof(result));
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
     ASSERT_TRUE(result.module_summary_cache.tasks == 0u);
     ASSERT_TRUE(result.n_sources == 0);
@@ -1968,6 +2021,17 @@ static void test_driver_native_storage_construction(void) {
 
 int main(void) {
     const char *filter = getenv("XRAY_TEST_FILTER");
+    if (filter && strcmp(filter, "runtime_capabilities") == 0) {
+        test_spawn_target_contributes_artifact_runtime_capabilities();
+        test_driver_native_resolution_owned_result();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "timer_capability") == 0) {
+        test_spawn_target_contributes_artifact_runtime_capabilities();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
     if (filter && strcmp(filter, "native_resolution") == 0) {
         test_driver_native_resolution_owned_result();
         printf("%d passed, %d failed\n", passed, failed);
@@ -2018,14 +2082,14 @@ int main(void) {
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
-    if (filter && strcmp(filter, "missing_program_target_plan_authority") == 0) {
-        test_driver_rejects_missing_canonical_program_target_plan_authority();
+    if (filter && strcmp(filter, "package_target_profile_authority") == 0) {
+        test_driver_requires_target_profile_for_cached_program();
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
-    if (filter && strcmp(filter, "package_program_target_plan_authority") == 0) {
-        test_driver_rejects_package_summary_graph_without_program_authority();
-        test_driver_rejects_package_dependency_graph_without_program_authority();
+    if (filter && strcmp(filter, "package_source_authority") == 0) {
+        test_driver_requires_source_for_cached_package();
+        test_driver_requires_transitive_source_for_cached_package();
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
@@ -2056,9 +2120,9 @@ int main(void) {
     test_net_tls_link_manifest_tracks_built_runtime();
     test_driver_hosted_fragment_borrows_runtime_ownership();
     test_driver_validates_freestanding_runtime_provider();
-    test_driver_rejects_package_summary_graph_without_program_authority();
-    test_driver_rejects_missing_canonical_program_target_plan_authority();
-    test_driver_rejects_package_dependency_graph_without_program_authority();
+    test_driver_requires_source_for_cached_package();
+    test_driver_requires_target_profile_for_cached_program();
+    test_driver_requires_transitive_source_for_cached_package();
     test_driver_requires_exact_typed_entry_authority();
     test_driver_direct_i64_call_consumes_target_plan();
     test_driver_leaf_aggregate_call_consumes_target_plan();

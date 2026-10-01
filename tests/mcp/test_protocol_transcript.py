@@ -4,10 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import queue
-import signal
 import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
@@ -210,19 +208,32 @@ def test_oversized_line_does_not_close_server(xray: Path) -> None:
         session.close()
 
 
-def test_sigterm_stops_server_cleanly(xray: Path) -> None:
+def test_stdin_eof_stops_server_cleanly(xray: Path) -> None:
     session = McpSession(xray)
-    time.sleep(0.2)
-    session.proc.send_signal(signal.SIGTERM)
     try:
-        session.proc.wait(timeout=5)
-    except subprocess.TimeoutExpired as exc:
-        session.proc.kill()
-        session.proc.wait(timeout=5)
-        raise AssertionError(f"SIGTERM did not stop MCP server; stderr={session.stderr_text()}") from exc
-    session._stdout_thread.join(timeout=1)
-    session._stderr_thread.join(timeout=1)
-    assert session.proc.returncode == 0, session.stderr_text()
+        initialize(session, 1)
+        mark_initialized(session)
+        session.send(request("ping", 2, {}))
+        response = session.recv()
+        assert response.get("id") == 2, response
+        assert response.get("result") == {}, response
+        assert session.proc.stdin is not None
+        session.proc.stdin.close()
+        try:
+            session.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired as exc:
+            session.proc.kill()
+            session.proc.wait(timeout=5)
+            raise AssertionError(
+                f"stdin EOF did not stop MCP server; stderr={session.stderr_text()}"
+            ) from exc
+        session._stdout_thread.join(timeout=1)
+        session._stderr_thread.join(timeout=1)
+        assert session.proc.returncode == 0, session.stderr_text()
+        assert "stdin closed, shutting down" in session.stderr_text(), session.stderr_text()
+        assert "MCP server stopped" in session.stderr_text(), session.stderr_text()
+    finally:
+        session.close()
 
 
 def test_runner_stdout_is_protocol_isolated(xray: Path) -> None:
@@ -432,7 +443,7 @@ def main() -> int:
         test_unknown_request_and_notification,
         test_parse_error_and_content_length_line,
         test_oversized_line_does_not_close_server,
-        test_sigterm_stops_server_cleanly,
+        test_stdin_eof_stops_server_cleanly,
         test_runner_stdout_is_protocol_isolated,
         test_resources_and_prompts_protocol_paths,
         test_resources_read_protocol_paths,

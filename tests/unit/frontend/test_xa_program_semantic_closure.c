@@ -359,6 +359,9 @@ typedef struct ScalarGraphPlanFixture {
 
 static bool scalar_graph_c_emission_binding_is_exact(ScalarGraphPlanFixture *fixture,
                                                      const XrTargetPlan *target);
+static bool scalar_graph_generic_mutations_are_rejected(
+    ScalarGraphPlanFixture *fixture, XrTargetPlan *target, XaotBundle *bundle,
+    const XrCProgramDirectI64EmissionBinding *scope);
 
 static bool write_source_file(const char *path, const char *source) {
     FILE *file = fopen(path, "wb");
@@ -1610,7 +1613,7 @@ static bool scalar_graph_aot_scope_is_exact(const ScalarGraphPlanFixture *fixtur
 
 static bool scalar_graph_cgen_render(ScalarGraphPlanFixture *fixture, XrTargetPlan *target,
                                      XiModule *ordered_modules[2], uint32_t ordered_entry,
-                                     bool mutate_legacy_generic_after_binding,
+                                     bool mutate_legacy_evidence_after_binding,
                                      ScalarGraphCgenOutput *output) {
     if (!fixture || !target || !ordered_modules || !output || ordered_entry >= 2u)
         return false;
@@ -1646,10 +1649,12 @@ static bool scalar_graph_cgen_render(ScalarGraphPlanFixture *fixture, XrTargetPl
     }
 
     XiFunc *mutated[4] = {0};
-    bool saved_generic[4] = {0};
     uint32_t saved_xg_body[4] = {0};
     uint32_t mutated_count = 0;
-    if (exact && mutate_legacy_generic_after_binding) {
+    if (exact && mutate_legacy_evidence_after_binding)
+        exact = scalar_graph_generic_mutations_are_rejected(fixture, target, &bundle,
+                                                            &program_scope);
+    if (exact && mutate_legacy_evidence_after_binding) {
         XiFunc *candidates[4] = {
             fixture->modules[0] ? fixture->modules[0]->init : NULL,
             fixture->modules[1] ? fixture->modules[1]->init : NULL,
@@ -1664,9 +1669,10 @@ static bool scalar_graph_cgen_render(ScalarGraphPlanFixture *fixture, XrTargetPl
             if (!function || duplicate)
                 continue;
             mutated[mutated_count] = function;
-            saved_generic[mutated_count] = function->is_generic_template;
             saved_xg_body[mutated_count] = function->xg_body_func_id;
-            function->is_generic_template = true;
+            /* The frozen typed binding owns emission identity, independently
+             * of mutable legacy evidence numbering. Ordinary-function
+             * admission still rejects a generic-template signature. */
             function->xg_body_func_id = UINT32_C(7001) + mutated_count;
             mutated_count++;
         }
@@ -1692,7 +1698,6 @@ static bool scalar_graph_cgen_render(ScalarGraphPlanFixture *fixture, XrTargetPl
             output->modules[original] && !xi_cgen_has_error(ctx);
     }
     for (uint32_t i = 0; i < mutated_count; i++) {
-        mutated[i]->is_generic_template = saved_generic[i];
         mutated[i]->xg_body_func_id = saved_xg_body[i];
     }
     xr_c_program_direct_i64_emission_release(&program_scope);
@@ -1755,6 +1760,62 @@ static bool scalar_graph_cgen_entry_emit(XiCgenCtx *ctx, ScalarGraphPlanFixture 
                          (int) fixture->entry_index);
     }
     return xr_close_memstream(stream, source, size) == 0;
+}
+
+static bool scalar_graph_generic_mutations_are_rejected(
+    ScalarGraphPlanFixture *fixture, XrTargetPlan *target, XaotBundle *bundle,
+    const XrCProgramDirectI64EmissionBinding *scope) {
+    XiFunc *functions[2] = {
+        (XiFunc *) (uintptr_t) scope->caller.xi_function,
+        (XiFunc *) (uintptr_t) scope->callee.xi_function,
+    };
+    if (!functions[0] || !functions[1] || functions[0] == functions[1])
+        return false;
+    bool exact = true;
+    for (uint32_t function = 0; exact && function < 2u; function++) {
+        for (uint32_t entry = SCALAR_GRAPH_CGEN_MAIN;
+             exact && entry <= SCALAR_GRAPH_CGEN_CALLER_TU; entry++) {
+            char error[512] = {0};
+            XiCgenCtx *ctx = xi_cgen_ctx_new();
+            bool saved_generic = functions[function]->is_generic_template;
+            exact = !saved_generic && ctx && xi_cgen_ctx_set_aot_bundle(ctx, bundle);
+            if (exact) {
+                xi_cgen_resolve_module_imports(ctx, fixture->modules, 2);
+                char *source = NULL;
+                size_t size = 0;
+                exact = !xi_cgen_has_error(ctx) &&
+                        scalar_graph_cgen_entry_emit(ctx, fixture, (ScalarGraphCgenEntry) entry,
+                                                    &source, &size) &&
+                        !xi_cgen_has_error(ctx) && source && size;
+                xr_free(source);
+            }
+            if (exact) {
+                functions[function]->is_generic_template = true;
+                exact = !xi_program_semantic_verify_module_set(
+                            fixture->modules, 2u, fixture->entry_index, NULL, error,
+                            sizeof(error)) &&
+                        strstr(error, "XR_SEM_0019:") != NULL &&
+                        !xr_c_program_direct_i64_emission_verify(
+                            scope, target, fixture->modules, 2u, error, sizeof(error));
+                if (exact) {
+                    char *source = NULL;
+                    size_t size = 0;
+                    exact = scalar_graph_cgen_entry_emit(
+                                ctx, fixture, (ScalarGraphCgenEntry) entry, &source, &size) &&
+                            xi_cgen_has_error(ctx) && size == 0u;
+                    xr_free(source);
+                }
+            }
+            functions[function]->is_generic_template = saved_generic;
+            xi_cgen_ctx_free(ctx);
+            exact = exact && xi_program_semantic_verify_module_set(
+                                  fixture->modules, 2u, fixture->entry_index, NULL, error,
+                                  sizeof(error)) &&
+                    xr_c_program_direct_i64_emission_verify(
+                        scope, target, fixture->modules, 2u, error, sizeof(error));
+        }
+    }
+    return exact;
 }
 
 static bool scalar_graph_cgen_entry_rejects_changed_authority(
@@ -3511,18 +3572,33 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ASSERT_TRUE(
         scalar_graph_outer_resign_rejects(closure, SCALAR_GRAPH_OUTER_RESIGN_WRONG_IMPORT_LOCATOR));
 
-    static const uint8_t expected_resolver_binding[16] = {
+    static const uint8_t expected_resolver_binding_v9[16] = {
         0x7c, 0xe0, 0x3d, 0x6c, 0x28, 0xe4, 0x66, 0x1b,
         0xdc, 0x92, 0xc7, 0x6b, 0x26, 0x4e, 0xe2, 0xaf,
     };
-    static const uint8_t expected_fingerprint[32] = {
+    static const uint8_t expected_fingerprint_v9[32] = {
         0x8b, 0x4b, 0xe9, 0x03, 0x61, 0x11, 0x97, 0x4b, 0x5e, 0x71, 0xce,
         0x16, 0x43, 0x42, 0xfa, 0x5d, 0x31, 0x92, 0x21, 0xf3, 0x07, 0xf4,
         0x00, 0x82, 0x94, 0x70, 0x00, 0x06, 0x44, 0x45, 0x6c, 0x27,
     };
-    static const uint8_t expected_generation_id[16] = {
+    static const uint8_t expected_generation_id_v9[16] = {
         0x62, 0x0e, 0xf1, 0x56, 0x6d, 0x11, 0xdc, 0x78,
         0x39, 0xaa, 0x7f, 0xc8, 0x00, 0xf4, 0xd5, 0x27,
+    };
+    /* Closure v10 changes all schema-framed source and exact-scalar identities. */
+    static const uint8_t expected_resolver_binding[16] = {
+        0x50, 0x8f, 0x5c, 0x4f, 0xea, 0x4b, 0xb6, 0xd8,
+        0xc9, 0x75, 0x3e, 0xb8, 0xc9, 0x0a, 0x5e, 0x9d,
+    };
+    static const uint8_t expected_fingerprint[32] = {
+        0x64, 0x89, 0xc5, 0xbe, 0x49, 0xb6, 0x4d, 0xa1,
+        0x20, 0x72, 0xe4, 0x9d, 0x85, 0x3d, 0x95, 0x97,
+        0x91, 0x69, 0xfb, 0x6a, 0x6e, 0x4b, 0xa7, 0x9e,
+        0xec, 0xb4, 0x35, 0xfe, 0xc7, 0x09, 0xa8, 0xc3,
+    };
+    static const uint8_t expected_generation_id[16] = {
+        0x93, 0x1f, 0xe9, 0x0b, 0x1c, 0x0e, 0x59, 0x21,
+        0xa7, 0xd1, 0x9a, 0x5c, 0xfb, 0x77, 0x2e, 0xbd,
     };
     XrFingerprint fingerprint = xr_program_semantic_closure_fingerprint(closure);
     XrGenerationClosureId generation_id = xr_program_semantic_closure_generation_id(closure);
@@ -3531,6 +3607,25 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ASSERT_TRUE(memcmp(fingerprint.bytes, expected_fingerprint, sizeof(expected_fingerprint)) == 0);
     ASSERT_TRUE(
         memcmp(generation_id.bytes, expected_generation_id, sizeof(expected_generation_id)) == 0);
+    closure->schema = UINT32_C(9);
+    memcpy(closure->fingerprint.bytes, expected_fingerprint_v9, sizeof(expected_fingerprint_v9));
+    memcpy(closure->generation_id.bytes, expected_generation_id_v9, sizeof(expected_generation_id_v9));
+    ASSERT_FALSE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    ASSERT_TRUE(strstr(error, "program semantic closure header is incomplete") != NULL);
+    closure->schema = UINT32_C(10);
+    closure->fingerprint = fingerprint;
+    closure->generation_id = generation_id;
+    ASSERT_TRUE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    memcpy(closure->dependencies[0].resolver_binding.bytes, expected_resolver_binding_v9,
+           sizeof(expected_resolver_binding_v9));
+    memcpy(closure->calls[0].resolver_binding.bytes, expected_resolver_binding_v9,
+           sizeof(expected_resolver_binding_v9));
+    ASSERT_FALSE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    memcpy(closure->dependencies[0].resolver_binding.bytes, expected_resolver_binding,
+           sizeof(expected_resolver_binding));
+    memcpy(closure->calls[0].resolver_binding.bytes, expected_resolver_binding,
+           sizeof(expected_resolver_binding));
+    ASSERT_TRUE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
 
     ScalarGraphPlanFixture plan_fixture;
     ASSERT_MSG(

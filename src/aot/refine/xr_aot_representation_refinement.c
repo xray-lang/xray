@@ -5001,8 +5001,9 @@ static bool oracle_native_yieldable_fresh_result_call(const VerifyAuthority *ctx
     const XrTargetCallRecord *call = calls && index < call_count ? &calls[index] : NULL;
     const XrSemanticCallTargetRecord *target = call
         ? xr_semantic_plan_call_target(ctx->semantic, call->semantic_call_target) : NULL;
+    const XrStdlibDefEntry *entry = NULL;
     if (!operation || !binding || !call || !target ||
-        !xr_semantic_native_yieldable_fresh_result_is_exact(ctx->semantic, operation, NULL))
+        !xr_semantic_native_yieldable_fresh_result_is_exact(ctx->semantic, operation, &entry))
         return false;
     bool namespace_call = target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
     if (!namespace_call && target->kind != XR_SEM_CALL_TARGET_NATIVE_YIELDABLE)
@@ -5014,9 +5015,10 @@ static bool oracle_native_yieldable_fresh_result_call(const VerifyAuthority *ctx
            target->dependency == XR_SEMANTIC_INDEX_NONE &&
            target->source_export == XR_SEMANTIC_INDEX_NONE &&
            target->callable_type == XR_SEMANTIC_INDEX_NONE &&
-           aot_pair_identity(namespace_call ? "xray-target-native-namespace-yieldable-v1"
-                                             : "xray-target-native-yieldable-v1",
-                             target->id, operation->id, operation->operand_count - 1u, &expected) &&
+           aot_pair_identity(namespace_call ? "xray-target-native-namespace-yieldable-v2"
+                                             : "xray-target-native-yieldable-v2",
+                             target->id, operation->id, entry->runtime_capabilities, &expected) &&
+           call->runtime_capabilities == entry->runtime_capabilities &&
            xr_stable_id_equal(call->identity, expected) && call->id == index &&
            call->semantic_operation == operation_index && call->caller_function == caller &&
            call->callee_function == XR_SEMANTIC_INDEX_NONE &&
@@ -7888,8 +7890,9 @@ static bool oracle_native_yieldable_callee_use(const VerifyAuthority *ctx, uint3
     XrStableId expected_identity = {{0}};
     uint32_t caller_function = XR_SEMANTIC_INDEX_NONE;
     return verify_target_function_index(ctx, operation->function, &caller_function) &&
-           aot_pair_identity("xray-target-native-yieldable-v1", target->id, operation->id,
-                             operation->operand_count - 1u, &expected_identity) &&
+           aot_pair_identity("xray-target-native-yieldable-v2", target->id, operation->id,
+                             entry->runtime_capabilities, &expected_identity) &&
+           call->runtime_capabilities == entry->runtime_capabilities &&
            xr_stable_id_equal(call->identity, expected_identity) && call->id == call_index &&
            call->semantic_call_target == target_index &&
            call->semantic_operation == operation_index &&

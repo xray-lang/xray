@@ -9,6 +9,7 @@
  */
 
 #include "xr_c_scalar_ref_projection.h"
+#include "../refine/xr_aot_scalar_ref_v1.h"
 
 #include "../../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "../../plan/semantic/xr_semantic_plan.h"
@@ -40,6 +41,9 @@ static bool scalar_ref_target_rows(const XrTargetPlan *plan,
     const XrTargetMachineRepRecord *callee_memory =
         argument ? xr_target_plan_machine_rep(plan, argument->callee_memory_rep) : NULL;
     const bool view = callee_register && callee_register->kind == XR_MACHINE_REP_VIEW;
+    const bool forwarded = view && caller_slot &&
+        caller_slot->role == XR_TARGET_SLOT_PARAMETER &&
+        caller_slot->semantic_value == argument->semantic_value;
     const uint16_t kind = view ? XR_MACHINE_REP_VIEW : XR_MACHINE_REP_I64;
     const uint8_t ownership = view ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_TRIVIAL;
     if (!plan || !argument || !out || !call || !caller_slot || !callee_slot ||
@@ -52,11 +56,12 @@ static bool scalar_ref_target_rows(const XrTargetPlan *plan,
         argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
         argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
         argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
-        argument->reserved8[2] != 0 || caller_slot->semantic_value == argument->semantic_value ||
+        argument->reserved8[2] != 0 ||
+        (!forwarded && caller_slot->semantic_value == argument->semantic_value) ||
         caller_slot->register_rep != argument->register_rep ||
         caller_slot->memory_rep != argument->memory_rep ||
         caller_slot->function != call->caller_function ||
-        callee_slot->semantic_value == argument->semantic_value ||
+        (!forwarded && callee_slot->semantic_value == argument->semantic_value) ||
         callee_slot->function != call->callee_function ||
         callee_slot->role != XR_TARGET_SLOT_PARAMETER ||
         argument->register_rep != argument->callee_register_rep ||
@@ -137,13 +142,26 @@ static bool scalar_ref_semantic_rows(const XrTargetPlan *plan,
          (type->kind != XR_KIND_INT || type->scalar_rep != XR_NATIVE_I64 || type->child_count != 0 ||
           type->aggregate_extent != 0 || type->aggregate_align != 0 || type->flags != 0 ||
           type->builtin_type != XR_TID_NULL)) ||
-        !xr_semantic_ref_argument_local_addr_is_exact(semantic, address, parameter->type,
-                                                      &source) ||
         argument->caller_slot >= slot_count ||
-        slots[argument->caller_slot].semantic_value != source->value)
+        xr_aot_scalar_ref_v1_call_use_status(semantic, plan, call->semantic_operation,
+            (uint16_t) (argument->ordinal + 1u), argument->semantic_value) !=
+            XR_AOT_SCALAR_REF_V1_EXACT)
         return false;
     bool view = xr_semantic_slice_ref_parameter_is_exact(semantic, parameter);
-    out->source_value = source->value;
+    uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+    if (address->opcode == XI_PARAM) {
+        if (!view || slots[argument->caller_slot].role != XR_TARGET_SLOT_PARAMETER)
+            return false;
+        source_value = address->result_value;
+    } else {
+        if (!xr_semantic_ref_argument_local_addr_is_exact(semantic, address, parameter->type,
+                                                         &source))
+            return false;
+        source_value = source->value;
+    }
+    if (slots[argument->caller_slot].semantic_value != source_value)
+        return false;
+    out->source_value = source_value;
     memset(&out->function_abi, 0, sizeof(out->function_abi));
     out->function_abi.semantic_function = callee_function;
     out->function_abi.semantic_value = parameter->value;
@@ -236,6 +254,10 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_address(
     if (!slots || binding->slot >= slot_count)
         return XR_C_SCALAR_REF_MALFORMED;
     const XrTargetSlotRecord *slot = &slots[binding->slot];
+    /* Parameter places already have a borrowed-pointer ABI. Forwarding them
+     * creates no local address and therefore has no local-address recipe. */
+    if (slot->role == XR_TARGET_SLOT_PARAMETER)
+        return XR_C_SCALAR_REF_NOT_THIS_FAMILY;
     bool matched = false;
     XrCScalarRefProjection projection = {0};
     for (uint32_t i = 0; arguments && i < argument_count; i++) {

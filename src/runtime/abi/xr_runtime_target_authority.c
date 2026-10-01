@@ -893,25 +893,25 @@ make_freestanding_providers(uint64_t provider_capabilities,
     return true;
 }
 
-static XrRuntimeAbiStatus make_native_authority_base(uint8_t runtime_profile,
-                                                     XrRuntimeTargetAuthority *out) {
+static XrRuntimeAbiStatus make_native_authority_base_in_place(uint8_t runtime_profile,
+                                                              XrRuntimeTargetAuthority *out) {
     if (!out)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
-    XrRuntimeTargetAuthority authority;
-    memset(&authority, 0, sizeof(authority));
-    if (!make_native_machine_facts(runtime_profile, &authority.machine))
+    /* The caller owns unpublished scratch; only its public factory commits it. */
+    memset(out, 0, sizeof(*out));
+    if (!make_native_machine_facts(runtime_profile, &out->machine))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     XrRuntimeAbiStatus status = xr_runtime_object_header_native_materialization_facts(
-        &authority.object_header_materialization);
+        &out->object_header_materialization);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    status = xr_runtime_string_object_contract_build(&authority.string_contract);
+    status = xr_runtime_string_object_contract_build(&out->string_contract);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    uint8_t target_endian = authority.object_header_materialization.target_endian;
-    if (target_endian != (uint8_t) authority.machine.data_layout.endian)
+    uint8_t target_endian = out->object_header_materialization.target_endian;
+    if (target_endian != (uint8_t) out->machine.data_layout.endian)
         return XR_RUNTIME_ABI_INVALID_SHAPE;
-    XrRuntimeAbiContract *abi = &authority.runtime_abi;
+    XrRuntimeAbiContract *abi = &out->runtime_abi;
     *abi = (XrRuntimeAbiContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .stable_id_width = XR_STABLE_ID_BYTES,
@@ -924,7 +924,7 @@ static XrRuntimeAbiStatus make_native_authority_base(uint8_t runtime_profile,
         .unknown_enum_policy = XR_RUNTIME_UNKNOWN_ENUM_REJECT,
         .reserved_zero_policy = XR_RUNTIME_RESERVED_ZERO_REJECT,
     };
-    status = xr_runtime_object_header_abi_materialize(&authority.object_header_materialization,
+    status = xr_runtime_object_header_abi_materialize(&out->object_header_materialization,
                                                       &abi->object_header);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
@@ -934,23 +934,24 @@ static XrRuntimeAbiStatus make_native_authority_base(uint8_t runtime_profile,
         !make_layout_record(&abi->layout_descriptor) ||
         !make_callback(&abi->extent_provider_callback))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
-    if (abi->pointer_width != authority.machine.data_layout.pointer.size ||
-        abi->dynamic_value.size != authority.machine.data_layout.xr_value.size ||
-        abi->dynamic_value.alignment != authority.machine.data_layout.xr_value.align)
+    if (abi->pointer_width != out->machine.data_layout.pointer.size ||
+        abi->dynamic_value.size != out->machine.data_layout.xr_value.size ||
+        abi->dynamic_value.alignment != out->machine.data_layout.xr_value.align)
         return XR_RUNTIME_ABI_INVALID_SHAPE;
     make_leaf_records(abi);
     XrFingerprint fingerprint;
     status = xr_runtime_abi_contract_fingerprint(abi, &fingerprint);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    *out = authority;
     return XR_RUNTIME_ABI_OK;
 }
 
-XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuthority *out) {
+XR_FUNCDEF XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuthority *out) {
+    if (!out)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     XrRuntimeTargetAuthority authority;
     XrRuntimeAbiStatus status =
-        make_native_authority_base(XR_TARGET_RUNTIME_PROFILE_HOSTED, &authority);
+        make_native_authority_base_in_place(XR_TARGET_RUNTIME_PROFILE_HOSTED, &authority);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     size_t hosted_provider_count = 0u;
@@ -982,7 +983,7 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(uint64_t prov
 
     XrRuntimeTargetAuthority authority;
     XrRuntimeAbiStatus status =
-        make_native_authority_base(XR_TARGET_RUNTIME_PROFILE_FREESTANDING, &authority);
+        make_native_authority_base_in_place(XR_TARGET_RUNTIME_PROFILE_FREESTANDING, &authority);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     size_t selected_count = 0;

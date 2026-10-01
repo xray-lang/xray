@@ -6097,10 +6097,27 @@ print(x is i64)                 // true
 
 | 函数 | 签名 | 说明 |
 |---|---|---|
-| `assert(cond, msg?)` | `(bool, string?) -> ()` | `cond` 为 false 时抛异常 |
-| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | 同一静态类型的值深相等 |
-| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 typed error |
-| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 panic |
+| `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false 产生 assertion panic |
+| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | 在定义处已获比较权限的同一静态类型域内比较 |
+| `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 typed error |
+| `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 panic |
+
+`msg?` 只表示可以省略，不表示 `string?`；显式 null、可空字符串及非字符串均非法。
+条件/action 表达式和消息按源序各求值一次，成功路径也求值消息；省略使用唯一默认参数机制。
+条件断言失败时，`PanicInfo.message` 精确保存已求值的 `msg` 字节与长度；省略消息得到空字符串。
+错误码、源码位置及显示前缀由诊断层单独呈现，不拼入该消息，不截断或按 C 字符串终止符读取。
+`R` 是 builtin 从已检查 callable 签名取得的精确结果变量，不是普通源码泛型形参或 `any`。
+Unit action 类型写 `fn()`，零 payload，不创建普通结果槽；其它结果须满足已准入的
+可复制、可保存结果合同。正常返回先销毁结果恰好一次，再产生缺失期望的 assertion panic。
+视图及不可复制结果须待各自返回合同准入，不放宽普通泛型 Unit 或存储规则。
+
+保护域只包括 action 调用及清理，action/msg 表达式本身的失败不在域内。typed error/panic
+不同；OOM、LIMIT、取消及 provider/ABI/准入失败不能使断言成功。未知 callable 效应保持未知，
+不凭具体实例函数体补承诺；词法绑定优先于 builtin 名称。assertEqual 的完整能力及类型域
+按定义处约束合同逐族准入，无约束 T 不在特化时获得深比较权限。普通相等与容器键等价保持
+区别；含 NaN 的数组即使共享 backing 也遵守逐元素关系，memcmp 须有额外 bytewise 证明。
+完整相等能力域尚未冻结，本文不新增 Equatable。本节是声明合同，不代表 §17 尚未准入的
+断言执行族已实现。
 
 ### 13.6 容器构造与静态函数
 

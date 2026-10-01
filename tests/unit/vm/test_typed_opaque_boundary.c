@@ -6,6 +6,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_module.h"
+#include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
@@ -13,8 +14,13 @@
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
+#include "../../../src/runtime/abi/xr_runtime_target_profile.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/class/xclass_info.h"
+#include "../../../src/stdlib/xstdlib_metadata.h"
 #include "../../../src/vm/xr_typed_frame.h"
+#include "../../../src/vm/xr_typed_lifecycle.h"
+#include "../../../src/vm/xr_typed_dispatch.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,7 +77,9 @@ static XrType stub_raw_pointer_function = {
         },
 };
 static XrType stub_module_namespace = {
-    .kind = XR_KIND_STRUCT_OBJECT,
+    /* Legacy SemanticPlan namespaces use an exact borrowed-static import
+     * carrier, not the inline structural value kind. */
+    .kind = XR_KIND_UNKNOWN,
     .id = 5,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
@@ -148,7 +156,8 @@ static void attach_fixture_module(XiFunc *root, const char *name) {
         REQUIRE(xi_module_set_identity(root->module, identity));
 }
 
-static XrSemanticPlan *build_identity_semantic(const char *name, XrType *type) {
+static XrSemanticPlan *build_identity_semantic(const char *name, XrType *type,
+                                                 XiClassData *source_class, bool borrowed) {
     XiFunc *function = xi_func_new(name, type);
     REQUIRE(function);
     XiBlock *entry = xi_block_new(function);
@@ -159,11 +168,28 @@ static XrSemanticPlan *build_identity_semantic(const char *name, XrType *type) {
     REQUIRE(function->params);
     function->params[0] = xi_param(function, entry, 0, type);
     REQUIRE(function->params[0]);
+    function->params[0]->param_mode = XR_PARAM_READ;
+    function->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    if (borrowed) {
+        function->arc_borrow_sig =
+            (XiBorrowSig *) xi_func_arena_alloc(function, sizeof(*function->arc_borrow_sig));
+        REQUIRE(function->arc_borrow_sig);
+        memset(function->arc_borrow_sig, 0, sizeof(*function->arc_borrow_sig));
+        function->arc_borrow_sig->nparams = 1;
+        function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+        function->arc_borrow_sig->valid = true;
+    }
     xi_block_set_return(entry, function->params[0]);
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
     attach_fixture_module(function, "opaque-identity-fixture");
+    if (source_class) {
+        function->module->classes = (XiClassData **) xr_calloc(1, sizeof(*function->module->classes));
+        REQUIRE(function->module->classes);
+        function->module->classes[0] = source_class;
+        function->module->nclasses = 1;
+    }
     bool built = xr_semantic_plan_build(function, &semantic, diagnostic, sizeof(diagnostic));
     if (!built)
         fprintf(stderr, "%s semantic build failed: %s\n", name, diagnostic);
@@ -342,34 +368,167 @@ static void test_raw_pointer_is_opaque_bytes(void) {
     dispose_plan(&fixture);
 }
 
-static void require_rooted_object_execution_unavailable(XrType *type, const char *name) {
-    XrSemanticPlan *semantic = build_identity_semantic(name, type);
-    bool rooted_object_type = false;
-    for (uint32_t i = 0; i < semantic->type_count; i++) {
-        const XrSemanticTypeRecord *record = &semantic->types[i];
-        if (record->kind == XR_KIND_INSTANCE &&
-            (record->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
-                (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
-            rooted_object_type = true;
+typedef struct RejectedOwnerProbe {
+    uint32_t resolves;
+    uint32_t reclaims;
+} RejectedOwnerProbe;
+
+static uint32_t rejected_kernel_calls;
+
+static XrRuntimeObjectHeader *reject_object_resolution(void *context, uintptr_t address) {
+    RejectedOwnerProbe *probe = (RejectedOwnerProbe *) context;
+    (void) address;
+    probe->resolves++;
+    return NULL;
+}
+
+static void reject_object_reclamation(void *context, XrRuntimeObjectHeader *header) {
+    RejectedOwnerProbe *probe = (RejectedOwnerProbe *) context;
+    (void) header;
+    probe->reclaims++;
+}
+
+static XrArrayPushStatus reject_array_push(XrValue receiver, XrValue value) {
+    (void) receiver;
+    (void) value;
+    rejected_kernel_calls++;
+    return XR_ARRAY_PUSH_INVALID_ARRAY;
+}
+
+/* A carrier does not authorize a RELEASE or a native kernel. Refusal must
+ * preserve the caller's bytes and must never ask an allocator to resolve an
+ * opaque address. Both generated dispatch providers enforce the same edge. */
+static void require_execution_authority_unavailable(const XrTargetPlan *plan, uint32_t function) {
+    XrTypedFrame *frame = NULL;
+    REQUIRE(create_frame(plan, function, &frame) == XR_TYPED_FRAME_SLOT_INVALID);
+    REQUIRE(!frame);
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    RejectedOwnerProbe probe = {0};
+    XrTypedLifecycleBindings bindings = {
+        .resolve_object = reject_object_resolution,
+        .reclaim_object = reject_object_reclamation,
+        .allocation_context = &probe,
+    };
+    XrTypedLifecycleContext lifecycle = {0};
+    REQUIRE(xr_typed_lifecycle_context_init(plan, &fingerprint, function, &bindings, &lifecycle) ==
+            XR_TYPED_LIFECYCLE_CONTRACT_UNAVAILABLE);
+    REQUIRE(!lifecycle.plan && !lifecycle.owners && lifecycle.owner_count == 0);
+    xr_typed_lifecycle_context_dispose(&lifecycle);
+    REQUIRE(probe.resolves == 0 && probe.reclaims == 0);
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+        int64_t argument = 43;
+        int64_t result = 9;
+        XrTypedDispatchI64Request scalar_request = {
+            .verified_plan = plan,
+            .required_plan_fingerprint = &fingerprint,
+            .arguments = &argument,
+            .result = &result,
+            .provider = providers[i],
+            .function = function,
+            .argument_count = 1,
+        };
+        REQUIRE(xr_typed_dispatch_execute_i64(&scalar_request) == XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+        REQUIRE(argument == 43 && result == 0);
+        XrValue arguments[2] = {
+            {.tag = XR_TAG_PTR, .ptr = (void *) (uintptr_t) 1u, .heap_type = 0},
+            {.tag = XR_TAG_I64, .i = 73},
+        };
+        XrValue saved[2];
+        memcpy(saved, arguments, sizeof(saved));
+        rejected_kernel_calls = 0;
+        XrTypedDispatchValueRequest request = {
+            .verified_plan = plan,
+            .required_plan_fingerprint = &fingerprint,
+            .arguments = arguments,
+            .array_push = reject_array_push,
+            .provider = providers[i],
+            .function = function,
+            .argument_count = 2,
+        };
+        REQUIRE(xr_typed_dispatch_execute_values(&request) == XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+        REQUIRE(memcmp(saved, arguments, sizeof(saved)) == 0 && rejected_kernel_calls == 0);
     }
-    REQUIRE(rooted_object_type);
-    XrTargetProfile *profile = build_profile();
-    XrTargetPlan *plan = NULL;
-    char diagnostic[512] = {0};
-    bool built = xr_target_plan_build(semantic, profile, &plan, diagnostic, sizeof(diagnostic));
-    if (!built)
-        fprintf(stderr, "%s target build failed: %s\n", name, diagnostic);
-    REQUIRE(built && plan && xr_target_plan_is_verified(plan));
+}
+
+static void require_rooted_object_execution_unavailable(XrType *type, const char *name,
+                                                        XiClassData *declaration, bool borrowed) {
+    PlanFixture fixture = build_plan(build_identity_semantic(name, type, declaration, borrowed));
+    XrSemanticPlan *semantic = fixture.semantic;
+    REQUIRE(xr_semantic_plan_is_verified(semantic) && semantic->function_count == 1 &&
+            semantic->parameter_count == 1 && semantic->call_target_count == 0);
+    const XrSemanticParameterRecord *parameter = &semantic->parameters[0];
+    REQUIRE(parameter->function == 0 && parameter->ordinal == 0 &&
+            parameter->mode == XR_PARAM_READ && parameter->transfer_mode == XR_TRANSFER_SHARE &&
+            parameter->flags == XR_SEM_PARAMETER_REQUIRED &&
+            parameter->ownership == (borrowed ? XI_OWN_BORROWED : XI_OWN_OWNED));
+    REQUIRE(parameter->type < semantic->type_count &&
+            semantic->functions[0].return_type == parameter->type);
+    const XrSemanticTypeRecord *record = &semantic->types[parameter->type];
+    REQUIRE(record->kind == XR_KIND_INSTANCE && record->builtin_type == XR_TID_NULL &&
+            record->scalar_rep == XR_SCALAR_REP_NONE && record->child_count == 0 &&
+            record->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT));
+    XrStableId zero = {{0}};
+    if (declaration) {
+        REQUIRE(semantic->source_class_count == 1 && record->source_class == 0 &&
+                !xr_stable_id_equal(record->source_class_identity, zero));
+        const XrSemanticSourceClassRecord *source_class = &semantic->source_classes[0];
+        REQUIRE(xr_stable_id_equal(source_class->id, record->source_class_identity) &&
+                strcmp(source_class->name, type->instance.class_name) == 0 &&
+                source_class->ordinal == 0 && source_class->method_count == 0 &&
+                source_class->flags ==
+                    (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) &&
+                strstr(record->canonical_key, ";source-class:") != NULL);
+    } else {
+        REQUIRE(semantic->source_class_count == 0 && record->source_class == XR_SEMANTIC_INDEX_NONE &&
+                xr_stable_id_equal(record->source_class_identity, zero) &&
+                strstr(record->canonical_key, ";source-class:") == NULL);
+    }
     uint32_t slot = XR_SEMANTIC_INDEX_NONE;
-    uint32_t function = find_function_with_rep(plan, XR_MACHINE_REP_DYN_VALUE, &slot);
-    REQUIRE(function == XR_SEMANTIC_INDEX_NONE && slot == XR_SEMANTIC_INDEX_NONE);
-    uint32_t function_count = 0;
-    REQUIRE(xr_target_plan_functions(plan, &function_count));
-    for (uint32_t i = 0; i < function_count; i++)
-        REQUIRE(xr_target_plan_function_execution_family_mask(plan, i) == 0);
-    xr_target_plan_free(plan);
-    xr_target_profile_free(profile);
-    xr_semantic_plan_free(semantic);
+    uint32_t function = find_function_with_rep(fixture.plan, XR_MACHINE_REP_DYN_VALUE, &slot);
+    REQUIRE(function == 0 && slot != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetSlotRecord *slot_record = &fixture.plan->slots[slot];
+    const XrTargetMachineRepRecord *rep = &fixture.plan->machine_reps[slot_record->register_rep];
+    const XrTargetMachineFacts *facts = xr_target_profile_machine_facts(fixture.profile);
+    uint8_t expected_ownership = borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED;
+    REQUIRE(slot_record->semantic_value == parameter->value &&
+            slot_record->semantic_operation == XR_SEMANTIC_INDEX_NONE &&
+            slot_record->logical_slot == XR_SEMANTIC_INDEX_NONE &&
+            slot_record->role == XR_TARGET_SLOT_PARAMETER &&
+            slot_record->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            slot_record->ownership == expected_ownership &&
+            slot_record->register_rep == slot_record->memory_rep &&
+            rep->kind == XR_MACHINE_REP_DYN_VALUE && rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            rep->ownership == expected_ownership && rep->null_encoding == XR_TARGET_NULL_TAGGED &&
+            rep->register_bits == facts->data_layout.xr_value.size * 8u &&
+            slot_record->size == facts->data_layout.xr_value.size &&
+            slot_record->align == facts->data_layout.xr_value.align &&
+            rep->memory_size == slot_record->size && rep->memory_align == slot_record->align);
+    REQUIRE(fixture.plan->functions_count == 1 && fixture.plan->slots_count == 1 &&
+            fixture.plan->instructions_count == 0 && fixture.plan->calls_count == 0 &&
+            fixture.plan->call_arguments_count == 0 && fixture.plan->root_maps_count == 0 &&
+            fixture.plan->root_slots_count == 0 && fixture.plan->cleanups_count == 0 &&
+            fixture.plan->coroutines_count == 0 && fixture.plan->adapters_count == 0 &&
+            fixture.plan->entry_expectations_count == 0);
+    REQUIRE(xr_target_plan_function_execution_family_mask(fixture.plan, function) == 0 &&
+            fixture.plan->functions[function].root_count == 0 &&
+            fixture.plan->functions[function].cleanup_count == 0);
+    /* Baseline allocator/panic capabilities do not identify a native callee,
+     * an opaque payload adapter, an owner root or a field/provider binding. */
+    REQUIRE(fixture.plan->capabilities_count == 2 &&
+            fixture.plan->capabilities[0].capability == XR_TARGET_CAPABILITY_ALLOCATOR &&
+            fixture.plan->capabilities[0].provider_role == XR_TARGET_PROVIDER_ROLE_ALLOCATOR &&
+            fixture.plan->capabilities[1].capability == XR_TARGET_CAPABILITY_PANIC &&
+            fixture.plan->capabilities[1].provider_role == XR_TARGET_PROVIDER_ROLE_PANIC);
+    require_execution_authority_unavailable(fixture.plan, function);
+    printf("opaque %s: source_classes=%u ownership=%s DYN=1 instructions=0 roots=0 cleanup=0 "
+           "calls=0 frame=SLOT_INVALID lifecycle=CONTRACT_UNAVAILABLE providers=2 scalar/value refused\n",
+           name, semantic->source_class_count, borrowed ? "borrowed" : "owned");
+    fflush(stdout);
+    dispose_plan(&fixture);
 }
 
 static void test_rooted_handles_are_not_frame_transport(void) {
@@ -387,10 +546,79 @@ static void test_rooted_handles_are_not_frame_transport(void) {
     REQUIRE(!frame);
     dispose_plan(&channel);
 
-    require_rooted_object_execution_unavailable(&stub_mutex, "opaque_mutex");
-    require_rooted_object_execution_unavailable(&stub_socket, "opaque_socket");
-    require_rooted_object_execution_unavailable(&stub_foreign_handle, "opaque_foreign_handle");
-    require_rooted_object_execution_unavailable(&stub_graph_node, "opaque_graph_node");
+    require_rooted_object_execution_unavailable(&stub_mutex, "opaque_mutex", NULL, false);
+    require_rooted_object_execution_unavailable(&stub_socket, "opaque_socket", NULL, false);
+    require_rooted_object_execution_unavailable(&stub_foreign_handle, "opaque_foreign_handle", NULL, false);
+    require_rooted_object_execution_unavailable(&stub_graph_node, "opaque_graph_node", NULL, false);
+}
+
+static void test_declared_class_and_native_storage_authority(void) {
+    XrClassInfo class_info = {.name = "GraphNode", .xg_class_id = 812};
+    XiClassData declaration = {
+        .class_info = &class_info,
+        .xg_class_id = class_info.xg_class_id,
+        .class_name = class_info.name,
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    XrType declared = {
+        .kind = XR_KIND_INSTANCE, .id = 12, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE,
+        .instance = {.class_name = class_info.name, .class_ref = &class_info},
+    };
+    require_rooted_object_execution_unavailable(&declared, "declared_graph_owned", &declaration, false);
+    require_rooted_object_execution_unavailable(&declared, "declared_graph_borrowed", &declaration, true);
+
+    const XrStdlibNativeClassDefEntry *native = xr_stdlib_metadata_unique_native_class_span(
+        "net", 3, "__NetConnStorage", strlen("__NetConnStorage"));
+    REQUIRE(native && strcmp(native->builtin_kind, "XR_BK_NET_CONN_STORAGE") == 0 &&
+            native->native_body_expr && native->native_body_expr[0] &&
+            strcmp(native->source_wrapper, "NetConn") == 0 &&
+            strcmp(native->source_storage_field, "_storage") == 0);
+    XrType storage = {
+        .kind = XR_KIND_INSTANCE, .id = 13, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE,
+        .instance = {.class_name = native->name},
+    };
+    REQUIRE(xr_stdlib_metadata_resource_identity(native, &storage.instance.resource_id));
+    /* Independent SHA-256 golden for the resource domain and length-prefixed
+     * declaration (net, __NetConnStorage), truncated to the first 16 bytes. */
+    static const XrStableId expected_resource = {{
+        0x0b, 0x55, 0x1a, 0x7a, 0x09, 0x78, 0x02, 0x97,
+        0x3f, 0x0b, 0x08, 0x7b, 0xd7, 0x96, 0x56, 0xc3,
+    }};
+    REQUIRE(xr_stable_id_equal(storage.instance.resource_id, expected_resource));
+    XrStableId zero = {{0}};
+    REQUIRE(!xr_stable_id_equal(storage.instance.resource_id, zero));
+    require_rooted_object_execution_unavailable(&storage, "native_storage_owned", NULL, false);
+    require_rooted_object_execution_unavailable(&storage, "native_storage_borrowed", NULL, true);
+
+    /* A real source declaration may reuse a native spelling. Its nonzero
+     * source identity prevents it from becoming registry-native storage. */
+    class_info.name = native->name;
+    declaration.class_name = native->name;
+    declared.instance.class_name = native->name;
+    require_rooted_object_execution_unavailable(&declared, "source_native_name_shadow", &declaration, false);
+}
+
+static void test_fabricated_geometry_and_capability_rejected(void) {
+    PlanFixture fixture = build_plan(build_identity_semantic("opaque_tamper", &stub_graph_node, NULL, false));
+    uint32_t slot = XR_SEMANTIC_INDEX_NONE;
+    uint32_t function = find_function_with_rep(fixture.plan, XR_MACHINE_REP_DYN_VALUE, &slot);
+    REQUIRE(function != XR_SEMANTIC_INDEX_NONE && slot != XR_SEMANTIC_INDEX_NONE);
+    XrTargetSlotRecord saved = fixture.plan->slots[slot];
+    fixture.plan->slots[slot].size++;
+    require_verify_rejected(fixture.plan, "XR_TARGET_1001");
+    XrTypedFrame *frame = NULL;
+    REQUIRE(create_frame(fixture.plan, function, &frame) == XR_TYPED_FRAME_SLOT_INVALID && !frame);
+    fixture.plan->slots[slot] = saved;
+    uint16_t provider = fixture.plan->capabilities[0].provider_role;
+    fixture.plan->capabilities[0].provider_role = XR_TARGET_PROVIDER_ROLE_PANIC;
+    require_verify_rejected(fixture.plan, "XR_TARGET_1004");
+    fixture.plan->capabilities[0].provider_role = provider;
+    xr_target_plan_compute_fingerprint(fixture.plan, &fixture.plan->fingerprint);
+    char diagnostic[512] = {0};
+    REQUIRE(xr_target_plan_verify(fixture.plan, diagnostic, sizeof(diagnostic)));
+    require_execution_authority_unavailable(fixture.plan, function);
+    dispose_plan(&fixture);
 }
 
 static void test_fabricated_adapters_fail_closed(void) {
@@ -567,8 +795,11 @@ static PlanFixture build_entry_plan(void) {
         .profile = build_profile(),
     };
     const XrSemanticPlan *semantic_dependencies[] = {dependency};
-    REQUIRE(xr_target_plan_build_module_set(semantic, semantic_dependencies, 1, fixture.profile,
-                                            &fixture.plan, diagnostic, sizeof(diagnostic)));
+    bool built = xr_target_plan_build_module_set(semantic, semantic_dependencies, 1, fixture.profile,
+                                                &fixture.plan, diagnostic, sizeof(diagnostic));
+    if (!built)
+        fprintf(stderr, "opaque entry target build failed: %s\n", diagnostic);
+    REQUIRE(built);
     REQUIRE(fixture.plan && fixture.plan->entry_expectations_count == 1 &&
             fixture.plan->entry_expectations[0].adapter_kind == XR_TARGET_ENTRY_ADAPTER_IDENTITY);
     xi_func_free(caller_root);
@@ -587,9 +818,70 @@ static void test_non_identity_entry_rejected(void) {
     dispose_plan(&fixture);
 }
 
+
+static void test_native_authority_output_and_profile_boundary(void) {
+    /* Keep the large caller snapshot off the stack so the default thread stack
+     * exercises the runtime factories and lifecycle admission themselves. */
+    XrRuntimeTargetAuthority *authority =
+        (XrRuntimeTargetAuthority *) xr_malloc(sizeof(*authority));
+    REQUIRE(authority != NULL);
+    REQUIRE(xr_runtime_target_authority_native_hosted(NULL) ==
+            XR_RUNTIME_ABI_INVALID_ARGUMENT);
+    REQUIRE(xr_runtime_target_authority_native_freestanding(
+                XR_TARGET_FOUNDATION_CAPABILITY_MASK, NULL) ==
+            XR_RUNTIME_ABI_INVALID_ARGUMENT);
+    static const uint64_t rejected_capabilities[] = {
+        0,
+        XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+            XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY),
+    };
+    for (size_t i = 0; i < sizeof(rejected_capabilities) /
+                                sizeof(rejected_capabilities[0]); i++) {
+        memset(authority, 0xa5, sizeof(*authority));
+        REQUIRE(xr_runtime_target_authority_native_freestanding(
+                    rejected_capabilities[i], authority) ==
+                XR_RUNTIME_ABI_INVALID_ARGUMENT);
+        const uint8_t *bytes = (const uint8_t *) authority;
+        for (size_t byte = 0; byte < sizeof(*authority); byte++)
+            REQUIRE(bytes[byte] == 0xa5);
+    }
+    REQUIRE(xr_runtime_target_authority_native_hosted(authority) == XR_RUNTIME_ABI_OK);
+    REQUIRE(authority->machine.runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED &&
+            authority->provider_count != 0);
+    XrTargetProfileBuildInput input = {
+        .machine = authority->machine,
+        .runtime_abi = &authority->runtime_abi,
+        .object_header_materialization = &authority->object_header_materialization,
+        .string_contract = &authority->string_contract,
+        .providers = authority->providers,
+        .provider_count = authority->provider_count,
+    };
+    char diagnostic[512] = {0};
+    XrTargetProfile *projected = NULL;
+    XrTargetProfile *native = NULL;
+    REQUIRE(xr_target_profile_build(&input, &projected, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_target_profile_build_native_hosted(&native, diagnostic,
+                                                         sizeof(diagnostic)));
+    REQUIRE(xr_target_profile_require_exact(projected, native, diagnostic,
+                                            sizeof(diagnostic)));
+    xr_target_profile_free(native);
+    xr_target_profile_free(projected);
+    REQUIRE(!xr_runtime_target_profile_build_native_hosted(NULL, diagnostic,
+                                                          sizeof(diagnostic)));
+    input.machine.data_layout.pointer.size++;
+    projected = (XrTargetProfile *) (uintptr_t) 1;
+    REQUIRE(!xr_target_profile_build(&input, &projected, diagnostic,
+                                     sizeof(diagnostic)) &&
+            projected == NULL);
+    xr_free(authority);
+}
+
 int main(void) {
+    test_native_authority_output_and_profile_boundary();
     test_raw_pointer_is_opaque_bytes();
     test_rooted_handles_are_not_frame_transport();
+    test_declared_class_and_native_storage_authority();
+    test_fabricated_geometry_and_capability_rejected();
     test_fabricated_adapters_fail_closed();
     test_non_identity_entry_rejected();
     puts("typed opaque boundary tests passed");

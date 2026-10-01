@@ -323,6 +323,21 @@ static XrType stub_shadow_string_builder = {
             .class_ref = &stub_shadow_string_builder_info,
         },
 };
+static XrType stub_bool_channel = {
+    .kind = XR_KIND_CHANNEL,
+    .id = 37,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_bool},
+};
+static XrClassInfo stub_shadow_channel_info = {.name = "Channel"};
+static XrType stub_shadow_channel = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 38,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "Channel", .class_ref = &stub_shadow_channel_info},
+};
 static XrType stub_semaphore = {
     .kind = XR_KIND_INSTANCE,
     .id = 11,
@@ -849,7 +864,7 @@ static XrSemanticPlan *build_native_namespace_yieldable_plan(const char *module,
         .resolved_module = source_resolved ? &fake_source : NULL,
         .resolution_attempted = resolution_attempted,
     };
-    XiValue *import = xi_value_new(root, root_entry, XI_IMPORT_REF, &stub_shape, 0);
+    XiValue *import = xi_value_new(root, root_entry, XI_IMPORT_REF, &stub_module_namespace, 0);
     XiValue *store = xi_value_new(root, root_entry, XI_SET_SHARED, &stub_unit, 1);
     REQUIRE(import != NULL && store != NULL);
     import->aux = &import_ref;
@@ -857,7 +872,7 @@ static XrSemanticPlan *build_native_namespace_yieldable_plan(const char *module,
     store->aux_int = 0;
     root->nshared = 1;
     xi_block_set_return(root_entry, NULL);
-    XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_shape, 0);
+    XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_module_namespace, 0);
     XiValue *argument = xi_const_int(caller, caller_entry, 1, &stub_int);
     XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 2);
     REQUIRE(receiver != NULL && argument != NULL && call != NULL);
@@ -989,7 +1004,7 @@ static XrSemanticPlan *build_builtin_instance_yieldable_plan(XrType *receiver_ty
                                                              uint16_t argument_count,
                                                              bool publish_state,
                                                              bool expect_success) {
-    XiFunc *function = xi_func_new("builtin_instance_yieldable_probe", &stub_unit);
+    XiFunc *function = xi_func_new("builtin_instance_yieldable_probe", &stub_bool);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
@@ -1002,7 +1017,7 @@ static XrSemanticPlan *build_builtin_instance_yieldable_plan(XrType *receiver_ty
     XiValue *arguments[4] = {0};
     REQUIRE(argument_count <= 4);
     for (uint16_t index = 0; index < argument_count; index++) {
-        arguments[index] = xi_const_int(function, entry, index + 1, &stub_int);
+        arguments[index] = xi_const_bool(function, entry, false, &stub_bool);
         REQUIRE(arguments[index] != NULL);
     }
     XiValue *call =
@@ -2534,6 +2549,36 @@ static void expect_decode_failure(const uint8_t *bytes, size_t size, const char 
     REQUIRE(strncmp(error, code, strlen(code)) == 0);
 }
 
+
+/* Rehashing both envelopes cannot grant a selector that the registry refuses. */
+static void expect_rehashed_selector_failure(XrSemanticPlan *plan, uint32_t operation,
+                                             const uint8_t *bytes, size_t size,
+                                             const char *replacement) {
+    const XrSemanticOperationRecord *call = &plan->operations[operation];
+    REQUIRE(call->metadata_count == 1 && call->metadata_begin < plan->metadata_count);
+    const char *saved = plan->metadata[call->metadata_begin];
+    size_t length = strlen(saved);
+    REQUIRE(length == strlen(replacement) && length <= 32);
+    uint8_t needle[36] = {0};
+    write_u32_le(needle, (uint32_t) length);
+    memcpy(needle + sizeof(uint32_t), saved, length);
+    size_t offset = find_raw_bytes(bytes, size, needle, sizeof(uint32_t) + length);
+    REQUIRE(offset >= XR_XSM_HEADER_SIZE && offset < size);
+    REQUIRE(find_raw_bytes(bytes + offset + sizeof(uint32_t) + length,
+                           size - offset - sizeof(uint32_t) - length,
+                           needle, sizeof(uint32_t) + length) == SIZE_MAX);
+    plan->metadata[call->metadata_begin] = replacement;
+    XrFingerprint fingerprint;
+    xr_semantic_plan_compute_fingerprint(plan, &fingerprint);
+    plan->metadata[call->metadata_begin] = saved;
+    uint8_t *mutation = copy_bytes(bytes, size);
+    memcpy(mutation + offset + sizeof(uint32_t), replacement, length);
+    rewrite_plan_fingerprint(mutation, fingerprint);
+    rewrite_payload_digest(mutation, size);
+    expect_decode_failure(mutation, size, "XR_SEM_0019");
+    xr_free(mutation);
+}
+
 static void expect_verify_failure_at(XrSemanticPlan *plan, const char *code, int line);
 #define expect_verify_failure(plan, code) expect_verify_failure_at((plan), (code), __LINE__)
 
@@ -2867,8 +2912,31 @@ static void test_immutable_owned_snapshot(void) {
      * 57dd0bc1ba04a29a4b2bcccd26d8f8f317f17dc5e63b39ef0ad38a668991e005.
      * Removing the duplicate sys CPU-count leaf changed the whole-registry
      * component from 2223c318a41b2ca38ded4084ec06aae6a6477dc5e111528fff8e809a6a377e89. */
+    static const char previous_semantic_fingerprint[] =
+        "744f387451b4a17da7cb52f034e3ff24cb6b0f27856f0ec7a3dbdaef66cf6bb5";
+    /* The complete field encoder reproduces the old v49 KAT, then frames
+     * v51 entity keys, external-entry state, and provider/suspension metadata. */
     REQUIRE(strcmp(semantic_hex,
-                   "744f387451b4a17da7cb52f034e3ff24cb6b0f27856f0ec7a3dbdaef66cf6bb5") == 0);
+                   "0b383e254800421c95fd5a678ac2a72252cf44651fae5d820b96448bbbd92a65") == 0);
+    REQUIRE(strcmp(semantic_hex, previous_semantic_fingerprint) != 0);
+    XrFingerprint saved_fingerprint = plan->fingerprint;
+    uint32_t saved_schema = plan->schema;
+    for (unsigned byte = 0; byte < XR_FINGERPRINT_BYTES; byte++) {
+        unsigned value = 0;
+        REQUIRE(sscanf(previous_semantic_fingerprint + byte * 2u, "%2x", &value) == 1);
+        plan->fingerprint.bytes[byte] = (uint8_t) value;
+    }
+    for (uint32_t previous_schema = 49u; previous_schema <= 50u; previous_schema++) {
+        plan->schema = previous_schema;
+        expect_verify_failure(plan, "XR_SEM_0004");
+    }
+    plan->schema = saved_schema;
+    /* The retained certificate binds the current plan premise and rejects
+     * the old fingerprint before the final plan fingerprint comparison. */
+    expect_verify_failure(plan, "XR_OWN_3001");
+    plan->fingerprint = saved_fingerprint;
+    char restored_error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(plan, restored_error, sizeof(restored_error)));
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3177,8 +3245,8 @@ static void test_xsm_roundtrip_and_determinism(void) {
 }
 
 static void test_xsm_program_provenance_roundtrip(void) {
-    REQUIRE(XR_SEMANTIC_SCHEMA_VERSION == UINT32_C(49));
-    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(9));
+    REQUIRE(XR_SEMANTIC_SCHEMA_VERSION == UINT32_C(51));
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(10));
     REQUIRE(XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION == UINT32_C(5));
     XrSemanticPlan *plan = build_xsm_scalar_program_plan();
     const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(plan);
@@ -3717,7 +3785,7 @@ static void test_direct_local_call_target_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "c82178225e60725e31ba52a2f2ec2363") == 0);
+    REQUIRE(strcmp(target_id_hex, "bf9dced252e77c1607f7f1a34ae8a7fb") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -3804,7 +3872,7 @@ static void test_indirect_callable_state_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":kind=4") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "a3e081cd6dce721b370aa03fc5e44e9b") == 0);
+    REQUIRE(strcmp(target_id_hex, "2ab42b55346c3b012970eebedac9a0a4") == 0);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -3832,6 +3900,10 @@ static void test_indirect_callable_state_authority(void) {
     old_schema[8] = 19;
     old_schema[9] = old_schema[10] = old_schema[11] = 0;
     expect_decode_failure(old_schema, size, "XR_ARTIFACT_2000");
+    for (uint8_t previous_schema = 49u; previous_schema <= 50u; previous_schema++) {
+        old_schema[8] = previous_schema;
+        expect_decode_failure(old_schema, size, "XR_ARTIFACT_2000");
+    }
     xr_free(old_schema);
     xr_free(bytes);
 
@@ -3924,30 +3996,21 @@ static void test_source_export_call_target_authority(void) {
     xr_stable_id_hex(plan->dependencies[0].id, dependency_id);
     xr_stable_id_hex(dependency->source_exports[0].id, export_id);
     xr_stable_id_hex(target->id, target_id);
-    /* Re-anchored because these two stable IDs are fingerprint-derived.  A
-     * dependency's canonical key is
-     * "dependency-v1:schema=%u:path=...:module=...:semantic=<fingerprint>"
-     * (xr_semantic_verify.c), so it embeds the imported module's SemanticPlan
-     * fingerprint - and that fingerprint covers the whole stdlib metadata
-     * registry (xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
-     * derived from every .def entry).  Publishing http2, compress, mem, regex and io
-     * from .xr bodies therefore moves dependency_id, and the source-export call
-     * target key "call-target-v4:...:dependency=<dependency-id>:export=..." moves
-     * target_id with it.  export_id is keyed off the export's own shape with no
-     * fingerprint in the key, so it stays put.
-     * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
-     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4.
-     * The canonical-program ownership registry freeze moved the dependency
-     * SemanticPlan fingerprint again without changing the export shape.
-     * Previous dependency_id: 73c067c0bdf9576d461f634c30edcd4f.
-     * Previous target_id:     1f90f19935ed47ff8261f69eaef3cf44.
-     * BorrowOriginSet became part of function type identity, moving the
-     * dependency fingerprint and the target that embeds it.
-     * Previous dependency_id: 9f8c98c148e046642c7b0aefef7549a4.
-     * Previous target_id:     62dd0c02696c9089a81fc8e1b4527e0b. */
-    REQUIRE(strcmp(dependency_id, "657ac4bb60f288bd78fddff0c0a422ed") == 0);
-    REQUIRE(strcmp(export_id, "e6c5f7ae334037299a1f5f282751a948") == 0);
-    REQUIRE(strcmp(target_id, "5c0816e3d1531ed5eccd1d6f7e7184c5") == 0);
+    /* The reference serializes all three dependency operations, both functions,
+     * every entity and the ownership certificate before framing these IDs.
+     * Schema and the complete operation/stdlib registries are fingerprint input. */
+    char dependency_fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
+    xr_fingerprint_hex(xr_semantic_plan_fingerprint(dependency), dependency_fingerprint);
+    REQUIRE(strcmp(dependency_fingerprint,
+                   "2a98bf27c0bd1327c8f7df9627b39277246b173802384f66f38041576f6065a2") == 0);
+    REQUIRE(dependency->type_count == 3 && dependency->function_count == 2 &&
+            dependency->operation_count == 3 && dependency->entity_count == 22);
+    const XrOwnershipCertificate *dependency_ownership = xr_semantic_plan_ownership(dependency);
+    REQUIRE(dependency_ownership != NULL && dependency_ownership->owner_count == 1 &&
+            dependency_ownership->event_count == 2 && dependency_ownership->edge_state_count == 1);
+    REQUIRE(strcmp(dependency_id, "da2ced7bf6ea61fa41abe076c54c0b57") == 0);
+    REQUIRE(strcmp(export_id, "8be35f05081284d969d55f6762ea5930") == 0);
+    REQUIRE(strcmp(target_id, "1f94450a7a8b222f78438ee684b4d87d") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -4310,35 +4373,41 @@ static void test_native_module_pointer_boundary_authority(void) {
     char error[512] = {0};
     const int64_t immediate = NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0);
 
-    /* `mem.pageAlloc(bytes)` -- an i64 in, a `MutPtr<u8>` out.  The result half
-     * of the pointer judgement had no coverage before this: every other member
-     * in the family returns an integer, a float or a bool. */
+    /* Default arguments belong to the Source wrapper. The private native leaf
+     * requires both bytes and protection, and the public name has no leaf
+     * authority at either arity. */
     XrType *bytes_only[] = {&stub_i64};
     XrSemanticPlan *alloc_one = build_native_module_member_call_plan(
         "mem", NULL, "pageAlloc", 1, bytes_only, immediate, &stub_mut_ptr_u8);
     const XrSemanticOperationRecord *alloc_one_call = native_module_call_operation(alloc_one);
-    REQUIRE(alloc_one_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+    REQUIRE(alloc_one_call->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
             alloc_one_call->operand_count == 2 &&
             (alloc_one_call->flags & XI_FLAG_MAY_SUSPEND) == 0);
     expect_exact_raw_pointer_type(alloc_one, alloc_one_call->result_type, 1);
     REQUIRE(xr_semantic_plan_verify(alloc_one, error, sizeof(error)));
     xr_semantic_plan_free(alloc_one);
 
-    /* `mem.pageAlloc(bytes, prot)` is a second registry row, not the first one
-     * tolerating an extra argument: the registry is asked for the member at
-     * this callsite's argument count, and the two rows name two different
-     * shims.  Both arities therefore have to carry call authority on their own,
-     * which is what the shared-core overload fixture states at the source
-     * level and what nothing proved at this layer. */
+    /* The exact native pointer result crosses the two-argument private leaf. */
     XrType *bytes_and_prot[] = {&stub_i64, &stub_i64};
     XrSemanticPlan *alloc_two = build_native_module_member_call_plan(
-        "mem", NULL, "pageAlloc", 2, bytes_and_prot, immediate, &stub_mut_ptr_u8);
+        "mem", NULL, "__pageAlloc", 2, bytes_and_prot, immediate, &stub_mut_ptr_u8);
     const XrSemanticOperationRecord *alloc_two_call = native_module_call_operation(alloc_two);
     REQUIRE(alloc_two_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
             alloc_two_call->operand_count == 3);
     expect_exact_raw_pointer_type(alloc_two, alloc_two_call->result_type, 1);
     REQUIRE(xr_semantic_plan_verify(alloc_two, error, sizeof(error)));
     xr_semantic_plan_free(alloc_two);
+
+    XrSemanticPlan *private_wrong_arity = build_native_module_member_call_plan(
+        "mem", NULL, "__pageAlloc", 1, bytes_only, immediate, &stub_mut_ptr_u8);
+    REQUIRE(native_module_call_operation(private_wrong_arity)->intrinsic_kind ==
+            XR_SEM_INTRINSIC_NONE && private_wrong_arity->call_target_count == 0);
+    xr_semantic_plan_free(private_wrong_arity);
+    XrSemanticPlan *public_name = build_native_module_member_call_plan(
+        "mem", NULL, "pageAlloc", 2, bytes_and_prot, immediate, &stub_mut_ptr_u8);
+    REQUIRE(native_module_call_operation(public_name)->intrinsic_kind ==
+            XR_SEM_INTRINSIC_NONE && public_name->call_target_count == 0);
+    xr_semantic_plan_free(public_name);
 
     /* `mem.pageFree(ptr, bytes)` -- the argument half, and a mixed callsite: a
      * pointer and an integer cross the same boundary in one call, each proved
@@ -4402,9 +4471,9 @@ static void test_native_module_pointer_boundary_authority(void) {
      * Module path, selector and arity stay the baseline's in both, so the
      * registry still names one implementation and this is the pointer judgement
      * refusing on its own rather than the lookup refusing for it. */
-    XrType *nullable_result[] = {&stub_i64};
+    XrType *nullable_result[] = {&stub_i64, &stub_i64};
     expect_no_native_module_scalar_call(build_native_module_member_call_plan(
-        "mem", NULL, "pageAlloc", 1, nullable_result, immediate, &stub_nullable_mut_ptr_u8));
+        "mem", NULL, "__pageAlloc", 2, nullable_result, immediate, &stub_nullable_mut_ptr_u8));
     XrType *nullable_argument[] = {&stub_nullable_mut_ptr_u8, &stub_i64};
     expect_no_native_module_scalar_call(build_native_module_member_call_plan(
         "mem", NULL, "__pageFree", 2, nullable_argument, immediate, &stub_bool));
@@ -4412,7 +4481,7 @@ static void test_native_module_pointer_boundary_authority(void) {
 
 static void test_native_namespace_yieldable_authority(void) {
     XrSemanticPlan *plan =
-        build_native_namespace_yieldable_plan("time", "sleep", true, false, true);
+        build_native_namespace_yieldable_plan("time", "__sleep", true, false, true);
     REQUIRE(plan->call_target_count == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
     REQUIRE(target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE);
@@ -4421,10 +4490,10 @@ static void test_native_namespace_yieldable_authority(void) {
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             target->callable_type == XR_SEMANTIC_INDEX_NONE);
     REQUIRE(strstr(target->canonical_key, "call-target-v5:schema=51:operation=") != NULL);
-    REQUIRE(strstr(target->canonical_key, ":native-namespace=time.sleep:kind=5") != NULL);
+    REQUIRE(strstr(target->canonical_key, ":native-namespace=time.__sleep:kind=5") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "a21ea08f53a086fdb6045813f6b8ab10") == 0);
+    REQUIRE(strcmp(target_id_hex, "cb50353eb7c1debe8eac5b5a39e34b3c") == 0);
     const XrSemanticOperationRecord *import = NULL;
     for (uint32_t i = 0; i < plan->operation_count; i++)
         if (plan->operations[i].opcode == XI_IMPORT_REF)
@@ -4461,6 +4530,7 @@ static void test_native_namespace_yieldable_authority(void) {
     old_schema[9] = old_schema[10] = old_schema[11] = 0;
     expect_decode_failure(old_schema, size, "XR_ARTIFACT_2000");
     xr_free(old_schema);
+    expect_rehashed_selector_failure(plan, target->operation, bytes, size, "__sleeq");
     xr_free(bytes);
 
     uint8_t saved_resolution = ((XrSemanticOperationRecord *) import)->import_resolution;
@@ -4508,13 +4578,17 @@ static void test_native_namespace_yieldable_authority(void) {
     xr_semantic_plan_free(plan);
 
     XrSemanticPlan *unresolved =
-        build_native_namespace_yieldable_plan("time", "sleep", false, false, false);
+        build_native_namespace_yieldable_plan("time", "__sleep", false, false, false);
     REQUIRE(unresolved->call_target_count == 0);
     xr_semantic_plan_free(unresolved);
     XrSemanticPlan *shadowed =
-        build_native_namespace_yieldable_plan("time", "sleep", true, true, false);
+        build_native_namespace_yieldable_plan("time", "__sleep", true, true, false);
     REQUIRE(shadowed->call_target_count == 0);
     xr_semantic_plan_free(shadowed);
+    XrSemanticPlan *retired =
+        build_native_namespace_yieldable_plan("time", "sleep", true, false, false);
+    REQUIRE(retired->call_target_count == 0);
+    xr_semantic_plan_free(retired);
     XrSemanticPlan *non_yieldable =
         build_native_namespace_yieldable_plan("time", "monotonic", true, false, false);
     REQUIRE(non_yieldable->call_target_count == 0);
@@ -4523,7 +4597,7 @@ static void test_native_namespace_yieldable_authority(void) {
 
 static void test_builtin_instance_yieldable_authority(void) {
     XrSemanticPlan *plan =
-        build_builtin_instance_yieldable_plan(&stub_semaphore, "acquire", 0, true, true);
+        build_builtin_instance_yieldable_plan(&stub_bool_channel, "recvOr", 1, true, true);
     REQUIRE(plan->call_target_count == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
     REQUIRE(target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE);
@@ -4531,12 +4605,16 @@ static void test_builtin_instance_yieldable_authority(void) {
             target->dependency == XR_SEMANTIC_INDEX_NONE &&
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             target->callable_type < plan->type_count &&
-            plan->types[target->callable_type].builtin_type == XR_TID_SEMAPHORE);
+            plan->types[target->callable_type].kind == XR_KIND_CHANNEL &&
+            plan->types[target->callable_type].builtin_type == XR_TID_NULL);
     REQUIRE(strstr(target->canonical_key, "call-target-v6:schema=51:operation=") != NULL);
-    REQUIRE(strstr(target->canonical_key, ":builtin-instance=Semaphore.acquire:type=") != NULL);
+    REQUIRE(strstr(target->canonical_key, ":builtin-instance=Channel.recvOr:type=") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "74f7bea0914ede2ff42b0d8057691b82") == 0);
+    REQUIRE(strcmp(target_id_hex, "dfa8cda6985758cabc097d4c3dd49c2e") == 0);
+    const XrSemanticOperationRecord *call = &plan->operations[target->operation];
+    REQUIRE(call->operand_count == 2 && plan->types[call->result_type].kind == XR_KIND_BOOL &&
+            plan->types[plan->operands[call->operand_begin + 1].type].kind == XR_KIND_BOOL);
     uint32_t states = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         states += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -4551,8 +4629,8 @@ static void test_builtin_instance_yieldable_authority(void) {
     REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
     REQUIRE(decoded->call_target_count == 1 &&
             decoded->call_targets[0].kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE &&
-            decoded->types[decoded->call_targets[0].callable_type].builtin_type ==
-                XR_TID_SEMAPHORE);
+            decoded->types[decoded->call_targets[0].callable_type].kind == XR_KIND_CHANNEL &&
+            decoded->types[decoded->call_targets[0].callable_type].builtin_type == XR_TID_NULL);
     uint8_t *roundtrip = NULL;
     size_t roundtrip_size = 0;
     REQUIRE(xr_xsm_encode(decoded, &roundtrip, &roundtrip_size, error, sizeof(error)));
@@ -4564,10 +4642,11 @@ static void test_builtin_instance_yieldable_authority(void) {
     old_schema[9] = old_schema[10] = old_schema[11] = 0;
     expect_decode_failure(old_schema, size, "XR_ARTIFACT_2000");
     xr_free(old_schema);
+    expect_rehashed_selector_failure(plan, target->operation, bytes, size, "recvOx");
     xr_free(bytes);
 
     uint32_t saved_builtin = plan->types[target->callable_type].builtin_type;
-    plan->types[target->callable_type].builtin_type = XR_TID_NULL;
+    plan->types[target->callable_type].builtin_type = XR_TID_CHANNEL;
     expect_verify_failure(plan, "XR_SEM_0002");
     plan->types[target->callable_type].builtin_type = saved_builtin;
     uint8_t saved_kind = target->kind;
@@ -4598,18 +4677,26 @@ static void test_builtin_instance_yieldable_authority(void) {
     xr_semantic_plan_free(plan);
 
     XrSemanticPlan *shadow =
-        build_builtin_instance_yieldable_plan(&stub_shadow_semaphore, "acquire", 0, false, true);
+        build_builtin_instance_yieldable_plan(&stub_shadow_channel, "recvOr", 1, false, true);
     REQUIRE(shadow->call_target_count == 0);
     xr_semantic_plan_free(shadow);
     XrSemanticPlan *wrong_selector =
-        build_builtin_instance_yieldable_plan(&stub_semaphore, "release", 0, false, true);
+        build_builtin_instance_yieldable_plan(&stub_bool_channel, "acquire", 1, false, true);
     REQUIRE(wrong_selector->call_target_count == 0);
     xr_semantic_plan_free(wrong_selector);
     XrSemanticPlan *wrong_arity =
-        build_builtin_instance_yieldable_plan(&stub_semaphore, "acquire", 1, false, true);
+        build_builtin_instance_yieldable_plan(&stub_bool_channel, "recvOr", 0, false, true);
     REQUIRE(wrong_arity->call_target_count == 0);
     xr_semantic_plan_free(wrong_arity);
-    (void) build_builtin_instance_yieldable_plan(&stub_semaphore, "acquire", 0, false, false);
+    XrSemanticPlan *retired =
+        build_builtin_instance_yieldable_plan(&stub_semaphore, "acquire", 0, false, true);
+    REQUIRE(retired->call_target_count == 0);
+    xr_semantic_plan_free(retired);
+    XrSemanticPlan *retired_shadow =
+        build_builtin_instance_yieldable_plan(&stub_shadow_semaphore, "acquire", 0, false, true);
+    REQUIRE(retired_shadow->call_target_count == 0);
+    xr_semantic_plan_free(retired_shadow);
+    (void) build_builtin_instance_yieldable_plan(&stub_bool_channel, "recvOr", 1, false, false);
 }
 
 static void test_source_instance_method_local_authority(void) {
@@ -4991,7 +5078,7 @@ static void test_shared_direct_call_target_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "d82bc974ffe5d9eaeb790d5291e797a3") == 0);
+    REQUIRE(strcmp(target_id_hex, "fbd74e3ce44d120fe5ef14e058a31c04") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;

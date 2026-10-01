@@ -145,8 +145,8 @@ SLOW_QEMU = ("aot_freestanding_qemu_smoke|aot_freestanding_riscv_qemu_smoke|"
 # T0 is an edit-feedback contract, not "every test whose current name happens
 # to start with test_".  The old open-ended regex grew from 255 to 458 CTests
 # and forced 344 executable links.  Keep this inventory explicit and compose
-# it with the canonical Program registry so new source fixtures enter through
-# one machine-owned source of truth.
+# it with the canonical Program edit-feedback projection. Complete source
+# matrices and independent native links remain in canonical and broad tiers.
 T0_EXTRA_CTEST_NAMES = (
     "expected_format_self_test",
     "stdlib_analyzer_builtins_sync",
@@ -156,7 +156,7 @@ T0_EXTRA_CTEST_NAMES = (
     "test_tiered_test_runner",
 )
 T0_CTEST_NAMES = tuple(dict.fromkeys(
-    canonical_profile.CTEST_NAMES + T0_EXTRA_CTEST_NAMES))
+    canonical_profile.T0_CTEST_NAMES + T0_EXTRA_CTEST_NAMES))
 
 
 def exact_ctest_regex(names: Sequence[str]) -> str:
@@ -168,6 +168,7 @@ T0_INCLUDE = exact_ctest_regex(T0_CTEST_NAMES)
 TIERS: Dict[str, Tuple[str, str, str]] = {
     # tier: (include, exclude, not_covered)
     "t0": (T0_INCLUDE, f"{SLOW_EXTERNAL}|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}",
+           "complete canonical source/backend matrices and allocation sweeps, "
            "unselected unit/meta tests, full compile-error corpus, exhaustive Xi "
            "generator mutations, VM/AOT differential, regression corpus, broad "
            "AOT suites and sanitizers"),
@@ -788,7 +789,7 @@ def _run_main(argv: List[str]) -> int:
         allow_no_targets = exact_profile.allow_no_build_targets
     elif tier == "t0" and not focused_selection:
         exact_expected = T0_CTEST_NAMES
-        required_targets = canonical_profile.BUILD_TARGETS
+        required_targets = canonical_profile.T0_BUILD_TARGETS
 
     if exact_expected:
         if not validate_exact_inventory(f"{tier} exact profile", selected,

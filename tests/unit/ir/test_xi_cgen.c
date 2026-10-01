@@ -17231,6 +17231,8 @@ TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
 
 #include "test_xi_cgen_optional.inc.c"
 
+#include "xr_ref_slice_forward_cases.inc.c"
+
 int main(int argc, char **argv) {
     /* Keep the failing case visible when an always-on contract aborts under CTest. */
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -17248,6 +17250,7 @@ int main(int argc, char **argv) {
              strcmp(g_test_case, "cgen_channel_receive_payload_execution") == 0 ||
              strcmp(g_test_case, "cgen_coro_syncs_helper_result_debug_source_vars") == 0 ||
              strcmp(g_test_case, "cgen_task_poll_pending_and_complete") == 0 ||
+             strcmp(g_test_case, "cgen_ref_slice_forward_read_authority") == 0 ||
              strcmp(g_test_case, "cgen_ref_slice_copy_execution") == 0 ||
              strcmp(g_test_case, "cgen_string_copy_execution") == 0 ||
              strcmp(g_test_case, "cgen_nullable_unit_enum_execution") == 0 ||
@@ -17590,6 +17593,7 @@ int main(int argc, char **argv) {
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
     run_cgen_task_poll_pending_and_complete();
+    run_cgen_ref_slice_forward_read_authority();
     run_cgen_ref_slice_copy_execution();
     run_cgen_string_copy_execution();
     run_cgen_nullable_unit_enum_execution();

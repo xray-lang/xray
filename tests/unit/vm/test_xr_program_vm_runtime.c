@@ -33,6 +33,10 @@ static void build_bindings(const XrTargetProfile *profile, RuntimeBindings *bind
 int main(void) {
     XrValidatedProgram *program = NULL;
     XrProgramDiagnostic program_diagnostic;
+    REQUIRE(xr_program_validate(xr_program_vm_embedded_fixture_v3_9,
+                                sizeof(xr_program_vm_embedded_fixture_v3_9), NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+    REQUIRE(program == NULL);
     unsigned char corrupted[sizeof(xr_program_vm_embedded_fixture)];
     memcpy(corrupted, xr_program_vm_embedded_fixture, sizeof(corrupted));
     corrupted[XR_PROGRAM_MAGIC_SIZE + 2u] = UINT8_C(3);

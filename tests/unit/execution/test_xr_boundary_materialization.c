@@ -12,6 +12,7 @@
 #include "../../../src/execution/xr_boundary_materialization.h"
 #include "../../../src/program/xr_program.h"
 #include "../plan/target_profile_test_fixture.h"
+#include "../program/xr_program_identity_vectors.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -127,6 +128,12 @@ static XrValidatedProgram *build_boundary_program(void) {
             XR_PROGRAM_BUILD_OK);
     REQUIRE(xr_program_write(core, &artifact, diagnostic, sizeof(diagnostic)) ==
             XR_PROGRAM_BUILD_OK);
+    REQUIRE(artifact.size == sizeof(xr_identity_boundary_current_wire));
+    REQUIRE(memcmp(artifact.bytes, xr_identity_boundary_current_wire, artifact.size) == 0);
+    REQUIRE(xr_program_validate(xr_identity_boundary_legacy_wire,
+                                sizeof(xr_identity_boundary_legacy_wire), NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+    REQUIRE(program == NULL);
     REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
                                 &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     xr_program_artifact_free(&artifact);
@@ -250,8 +257,8 @@ static void test_profile_bound_layouts(bool ilp32) {
     REQUIRE(u16->cleanup_kind == XR_BOUNDARY_CLEANUP_TRIVIAL);
     REQUIRE(u16->size == 2u && u16->alignment == 2u);
     require_fingerprint(u16->id,
-                        ilp32 ? "e89cdc3a3cec8bd1ec34bddceac088fe0f0e90aa945224a75d32961d7880f673"
-                              : "936b366c0f1cc567edae7fd50028cbf409463a60f1f4dbb1e7e65766ddbb2b1c");
+                        ilp32 ? "7135a674b9d80c135d0578976d243a4328b43e0646984202865be2b5f6ad4306"
+                              : "b8021dafa5010dd163e8d82f69ce98a214b877a887f5bdb085976933e496daaa");
     REQUIRE(xr_fingerprint_equal(aggregate->id, call->arguments[0].type_layout_id));
     REQUIRE(xr_fingerprint_equal(variant->id, call->arguments[1].type_layout_id));
     REQUIRE(xr_fingerprint_equal(u16->id, call->arguments[2].type_layout_id));
@@ -259,14 +266,14 @@ static void test_profile_bound_layouts(bool ilp32) {
     uint16_t aggregate_type_id = aggregate->type_id;
 
     require_fingerprint(aggregate->id,
-                        ilp32 ? "b98225baa3c9a5de1d7b5b96cd88e23ebf1d4073e34628700d4478118a6be067"
-                              : "d1d9fa6ccc28edfadb7acb59c84548b19f6509f1e4646e4dad1b64d74582d3d8");
+                        ilp32 ? "c16a6419a7d0c8921621807662f723e1dd50dc2de9316263d29d1cbfe1e2fd5f"
+                              : "f8f3664a8894a2cddd8ffd78903c830f543915d0f93d3f3d160fe9aaaa96beab");
     require_fingerprint(variant->id,
-                        ilp32 ? "7b6fa36b491c9a0568d743c020bbcbed4f76142689f85e014c53e73fcd83966a"
-                              : "9c85e2ca71233c9ef5876ceb1811463facd825b9cd21d17cbc865c5fe601adf1");
+                        ilp32 ? "309c2ab56064f394fe1f7329a4bb430016953e7204eba3c0067fb1818e77f425"
+                              : "267bc11efe69bde97b1132f1c3b2a31146e60a6492c543ee6c5e9f052ed5740b");
     require_fingerprint(call->id,
-                        ilp32 ? "dbb6ad70e23a6c026d920a1d1b28d6ee290a4143186d9714a28111bba76d4a8b"
-                              : "19e294b70dbe7cd9963f4cf1c8d68f879ca734739ebce81b746a5967011df8d9");
+                        ilp32 ? "20e1bcaa8091cdf70d8ae59f23a5deb8a6645108911cb387f3628f0cc00c5d0f"
+                              : "dde7ce4b04b2ecf9635654a29f13c9b9a1b821fd4a9dd02c558188b558d5d650");
 
     XrBoundaryTypeLayoutId public_id = aggregate->id;
     xr_boundary_type_layout_free(u16);

@@ -11570,6 +11570,43 @@ static bool collect_source_dependency_call_intent(XrTargetBuildContext *builder,
 
 /* Import spelling does not change the suspension or result ownership ABI.
  * Fresh reference results reuse the existing dynamic value storage contract. */
+static const XrStdlibDefEntry *native_yieldable_registry_entry(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!operation || !operands || !metadata || operation->operand_count == 0 ||
+        operation->operand_begin >= operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return NULL;
+    const XrSemanticOperandRecord *head = &operands[operation->operand_begin];
+    const char *module = NULL, *member = NULL;
+    if (operation->opcode == XI_CALL) {
+        const XrSemanticOperationRecord *import = xr_semantic_native_direct_import_for_value(
+            plan, operation->function, head->value);
+        if (!import || head->role != XR_SEM_OPERAND_CALLEE ||
+            import->opcode != XI_IMPORT_REF || import->metadata_count != 2 ||
+            import->metadata_begin >= metadata_count ||
+            metadata_count - import->metadata_begin < 2 ||
+            import->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB)
+            return NULL;
+        module = metadata[import->metadata_begin];
+        member = metadata[import->metadata_begin + 1u];
+    } else if (operation->opcode == XI_CALL_METHOD) {
+        if (head->role != XR_SEM_OPERAND_RECEIVER || operation->metadata_count != 1 ||
+            operation->metadata_begin >= metadata_count || (operation->semantic_immediate & 1) != 0)
+            return NULL;
+        module = xr_semantic_native_module_namespace_path(plan, head->value);
+        member = metadata[operation->metadata_begin];
+    }
+    const XrStdlibDefEntry *entry =
+        module && member ? xr_stdlib_metadata_unique_func(module, member) : NULL;
+    return entry && entry->signature && entry->vm && entry->vm_binding &&
+                   strcmp(entry->vm_binding, "yieldable") == 0 &&
+                   operation->operand_count == (uint16_t) (entry->argc + 1u)
+               ? entry : NULL;
+}
+
 static bool collect_native_yieldable_call_intent(XrTargetBuildContext *builder,
                                                  uint32_t target_index,
                                                  const XrSemanticCallTargetRecord *target,
@@ -11579,8 +11616,9 @@ static bool collect_native_yieldable_call_intent(XrTargetBuildContext *builder,
         target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
     bool namespace_call = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
     bool direct_call = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
+    const XrStdlibDefEntry *entry = native_yieldable_registry_entry(plan, operation);
     bool fresh = xr_semantic_native_yieldable_fresh_result_is_exact(plan, operation, NULL);
-    if (!target || !operation || (!namespace_call && !direct_call) ||
+    if (!target || !operation || !entry || (!namespace_call && !direct_call) ||
         target->function != XR_SEMANTIC_INDEX_NONE ||
         target->dependency != XR_SEMANTIC_INDEX_NONE ||
         target->source_export != XR_SEMANTIC_INDEX_NONE ||
@@ -11597,6 +11635,7 @@ static bool collect_native_yieldable_call_intent(XrTargetBuildContext *builder,
         .callee_function = XR_SEMANTIC_INDEX_NONE,
         .source_dependency = XR_SEMANTIC_INDEX_NONE,
         .source_export = XR_SEMANTIC_INDEX_NONE,
+        .runtime_capabilities = entry->runtime_capabilities,
         .result_value = operation->result_value,
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = 0,
@@ -11608,10 +11647,10 @@ static bool collect_native_yieldable_call_intent(XrTargetBuildContext *builder,
                                       : XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE,
         .suspends = true,
     };
-    const char *domain = namespace_call ? "xray-target-native-namespace-yieldable-v1"
-                                        : "xray-target-native-yieldable-v1";
+    const char *domain = namespace_call ? "xray-target-native-namespace-yieldable-v2"
+                                        : "xray-target-native-yieldable-v2";
     if (!stable_identity_from_pair(domain, target->id, operation->id,
-                                   operation->operand_count - 1u, &call.identity))
+                                   entry->runtime_capabilities, &call.identity))
         return fail(error, error_size, "XR_TARGET_1003",
                     "native yieldable call identity is incomplete");
     return append_call_intent(builder, &call, error, error_size);

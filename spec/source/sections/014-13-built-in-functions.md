@@ -64,10 +64,27 @@ print(x is i64)                 // true
 
 | 函数 | 签名 | 说明 |
 |---|---|---|
-| `assert(cond, msg?)` | `(bool, string?) -> ()` | `cond` 为 false 时抛异常 |
-| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | 同一静态类型的值深相等 |
-| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 typed error |
-| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 panic |
+| `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false 产生 assertion panic |
+| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | 在定义处已获比较权限的同一静态类型域内比较 |
+| `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 typed error |
+| `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 panic |
+
+`msg?` 只表示可以省略，不表示 `string?`；显式 null、可空字符串及非字符串均非法。
+条件/action 表达式和消息按源序各求值一次，成功路径也求值消息；省略使用唯一默认参数机制。
+条件断言失败时，`PanicInfo.message` 精确保存已求值的 `msg` 字节与长度；省略消息得到空字符串。
+错误码、源码位置及显示前缀由诊断层单独呈现，不拼入该消息，不截断或按 C 字符串终止符读取。
+`R` 是 builtin 从已检查 callable 签名取得的精确结果变量，不是普通源码泛型形参或 `any`。
+Unit action 类型写 `fn()`，零 payload，不创建普通结果槽；其它结果须满足已准入的
+可复制、可保存结果合同。正常返回先销毁结果恰好一次，再产生缺失期望的 assertion panic。
+视图及不可复制结果须待各自返回合同准入，不放宽普通泛型 Unit 或存储规则。
+
+保护域只包括 action 调用及清理，action/msg 表达式本身的失败不在域内。typed error/panic
+不同；OOM、LIMIT、取消及 provider/ABI/准入失败不能使断言成功。未知 callable 效应保持未知，
+不凭具体实例函数体补承诺；词法绑定优先于 builtin 名称。assertEqual 的完整能力及类型域
+按定义处约束合同逐族准入，无约束 T 不在特化时获得深比较权限。普通相等与容器键等价保持
+区别；含 NaN 的数组即使共享 backing 也遵守逐元素关系，memcmp 须有额外 bytewise 证明。
+完整相等能力域尚未冻结，本文不新增 Equatable。本节是声明合同，不代表 §17 尚未准入的
+断言执行族已实现。
 
 ### 13.6 容器构造与静态函数
 
@@ -148,10 +165,35 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 
 | Function | Signature | Description |
 |---|---|---|
-| `assert(cond, msg?)` | `(bool, string?) -> ()` | throws when `cond` is false |
-| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | deep equality for one static type |
-| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | expects only a typed error |
-| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | expects only a panic |
+| `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false produces an assertion panic |
+| `assertEqual(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | compares one static type with definition-site comparison authority |
+| `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's typed error |
+| `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's panic |
+
+`msg?` denotes omission, not `string?`; explicit null, nullable strings and other types are invalid.
+The condition/action and message expressions are each evaluated once in source order, including
+success. Omission uses the single parameter-default mechanism. `R` is the builtin's exact result
+variable from the checked callable signature, not an ordinary source generic parameter or `any`.
+A Unit action has type `fn()` with zero payload and no ordinary result slot. Other results require
+the admitted copyable, storable result contract. A normal result is destroyed exactly once before
+the missing expected failure produces an assertion panic. View and noncopyable results require
+their own return contracts; ordinary generic Unit and storage rules are not relaxed.
+
+When a condition assertion fails, `PanicInfo.message` preserves the exact bytes and length of the
+evaluated `msg`; an omitted message is the empty string. Diagnostics render the error code,
+source location and display prefix separately, without adding them to the message, truncating
+its bytes or treating a C string terminator as its boundary.
+
+The protected region covers only the action call and cleanup, not evaluation of action/message
+expressions. Typed errors and panics differ; OOM, LIMIT, cancellation and provider/ABI/admission
+failures cannot satisfy an expectation. Unknown callable effects remain unknown, rather than being
+inferred from a concrete instance's body. Lexical bindings precede builtin names. The complete
+assertEqual capability/type domain is admitted by definition-site constraints, not by granting an
+unconstrained T deep comparison authority during specialization. Ordinary equality differs from
+container key equivalence. Arrays containing NaN preserve element-wise equality even with shared
+backing; memcmp needs an additional bytewise proof. The complete capability domain remains open;
+this section adds no Equatable and does not claim that the assertion execution family missing
+from §17 has been implemented.
 
 ### 13.6 Container Constructors and Static Functions
 

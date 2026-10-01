@@ -840,6 +840,68 @@ typedef enum {
 } CgCoroNetCallKind;
 static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
+static bool cg_coro_net_resolve_call_is_exact(XiCgenCtx *ctx, const XiFunc *function,
+                                               const XiValue *value) {
+    if (!function || !function->semantic_plan || !value || value->op != XI_CALL ||
+        value->nargs != 2 || !value->args)
+        return false;
+    const XrSemanticOperationRecord *operation =
+        cg_semantic_operation_for_value(ctx, function, value);
+    const XrStdlibDefEntry *entry = NULL;
+    if (!operation || !xr_semantic_native_yieldable_fresh_result_is_exact(
+                          function->semantic_plan, operation, &entry) || !entry ||
+        strcmp(entry->module, "net") != 0 || strcmp(entry->name, "__resolveAll") != 0 ||
+        entry->runtime_capabilities != (XR_CAP_COROUTINE | XR_CAP_NETPOLL))
+        return false;
+    uint32_t operand_count = 0, callee = XR_SEMANTIC_INDEX_NONE, argument = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(function->semantic_plan, &operand_count);
+    if (!operands || operation->opcode != XI_CALL || operation->operand_count != 2 ||
+        operation->operand_begin >= operand_count || operand_count - operation->operand_begin < 2 ||
+        !cg_value_semantic_id(ctx, function, value->args[0], &callee) ||
+        !cg_value_semantic_id(ctx, function, value->args[1], &argument) ||
+        operands[operation->operand_begin].value != callee ||
+        operands[operation->operand_begin + 1u].value != argument)
+        return false;
+    const XrTargetPlan *target = cg_function_target_plan(ctx, function);
+    uint32_t caller = XR_SEMANTIC_INDEX_NONE, call_count = 0;
+    if (!target || !xr_target_plan_find_function(target, function->semantic_plan,
+                                                  function->semantic_plan_function_index, &caller))
+        return false;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->caller_function != caller ||
+            xr_semantic_plan_operation(function->semantic_plan, call->semantic_operation) != operation)
+            continue;
+        const XrSemanticCallTargetRecord *semantic_target =
+            xr_semantic_plan_call_target(function->semantic_plan, call->semantic_call_target);
+        if (!semantic_target || semantic_target->kind != XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
+            call->target_kind != XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE ||
+            call->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE ||
+            call->flags != XR_TARGET_CALL_SUSPEND ||
+            call->runtime_capabilities != entry->runtime_capabilities ||
+            call->result_ownership != XR_TARGET_CALL_RETURN_OWNED)
+            return false;
+        matches++;
+    }
+    return matches == 1;
+}
+
+static bool cg_coro_func_has_net_resolve(XiCgenCtx *ctx, const XiFunc *function) {
+    if (!function)
+        return false;
+    for (uint32_t bi = 0; bi < function->nblocks; bi++) {
+        const XiBlock *block = function->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            if (cg_coro_net_resolve_call_is_exact(ctx, function, block->values[vi]))
+                return true;
+        }
+    }
+    return false;
+}
+
 /* CGen consumes only the frozen shared plan.  It may select physical frame
  * representations, but it may not insert suspension points or renumber states. */
 static const XiCoroPlan *cg_coro_plan(XiCgenCtx *ctx, const XiFunc *f) {
@@ -1131,7 +1193,7 @@ static bool cg_coro_func_has_child_frame(XiCgenCtx *ctx, const XiFunc *f) {
 
 static bool cg_coro_func_needs_cancel_cleanup(XiCgenCtx *ctx, const XiFunc *f) {
     return cg_coro_static_cleanup_capacity(f) > 0 || cg_coro_func_has_net_wait(ctx, f) ||
-           cg_coro_func_has_child_frame(ctx, f);
+           cg_coro_func_has_net_resolve(ctx, f) || cg_coro_func_has_child_frame(ctx, f);
 }
 
 static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
@@ -1151,6 +1213,8 @@ static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
         cg_coro_layout_add(&size, &max_align, sizeof(XrValue), _Alignof(XrValue));
         cg_coro_layout_add(&size, &max_align, sizeof(bool), _Alignof(bool));
     }
+    if (cg_coro_func_has_net_resolve(ctx, f))
+        cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
     if (cg_func_frame_needs_cl(f))
         cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++)
@@ -2163,6 +2227,8 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue net_pending_handle;\n");
         fprintf(out, "    bool net_pending_tls_handshake;\n");
     }
+    if (cg_coro_func_has_net_resolve(ctx, f))
+        fprintf(out, "    xrt_net_resolve_request_t *net_pending_resolve;\n");
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_closure_t *_cl;\n");
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++)
@@ -2250,6 +2316,8 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    f->net_pending_handle = XR_NULL_VAL;\n");
         fprintf(out, "    f->net_pending_tls_handshake = false;\n");
     }
+    if (cg_coro_func_has_net_resolve(ctx, f))
+        fprintf(out, "    f->net_pending_resolve = NULL;\n");
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    f->_cl = _cl;\n");
         fprintf(out,
@@ -2938,6 +3006,52 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     return true;
 }
 
+static void emit_coro_net_resolve_release(FILE *out, const char *indent) {
+    fprintf(out, "%sxrt_net_resolve_request_release(f->net_pending_resolve);\n", indent);
+    fprintf(out, "%sf->net_pending_resolve = NULL;\n", indent);
+}
+
+static bool emit_coro_net_resolve_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *function,
+                                            const XiValue *value, int *state_id) {
+    if (!cg_coro_net_resolve_call_is_exact(ctx, function, value))
+        return false;
+    int sid = cg_coro_claim_state(ctx, function, value, state_id);
+    fprintf(out, "    {\n        XrValue _dns_host_%u = ", value->id);
+    emit_value_as_rep_ctx(ctx, out, value->args[1], XR_REP_TAGGED);
+    fprintf(out, ";\n        if (f->net_pending_resolve) return xr_aot_error(XR_NULL_VAL, false);\n");
+    fprintf(out, "        f->net_pending_resolve = xrt_net_resolve_request_new(\n"
+                 "            xr_str_data(_dns_host_%u), xr_str_len(_dns_host_%u));\n",
+            value->id, value->id);
+    fprintf(out, "        if (!f->net_pending_resolve) return xr_aot_error(XR_NULL_VAL, false);\n"
+                 "        xrt_net_resolve_request_retain(f->net_pending_resolve);\n"
+                 "        f->state = %d;\n"
+                 "        XrAotResult _dns_submit_%u = xr_aot_async_submit(ctx,\n"
+                 "            xrt_net_resolve_request_invoke, f->net_pending_resolve,\n"
+                 "            xrt_net_resolve_request_release);\n", sid, value->id);
+    fprintf(out, "        if (_dns_submit_%u.kind == XR_AOT_RUN_BLOCKED) return _dns_submit_%u;\n",
+            value->id, value->id);
+    emit_coro_net_resolve_release(out, "        ");
+    fprintf(out, "        f->state = 0;\n        return _dns_submit_%u;\n    }\n", value->id);
+    fprintf(out, "S%d:;\n    f->state = 0;\n    {\n"
+                 "        XrAotResult _dns_resume_%u = xr_aot_async_resume(ctx);\n", sid, value->id);
+    fprintf(out, "        if (_dns_resume_%u.kind != XR_AOT_RUN_DONE) {\n", value->id);
+    emit_coro_net_resolve_release(out, "            ");
+    fprintf(out, "            return _dns_resume_%u;\n        }\n", value->id);
+    fprintf(out, "        if (!xrt_net_resolve_request_is_complete(f->net_pending_resolve)) {\n");
+    emit_coro_net_resolve_release(out, "            ");
+    fprintf(out, "            return xr_aot_error(XR_NULL_VAL, false);\n        }\n"
+                 "        XrValue _dns_result_%u =\n"
+                 "            xrt_net_resolve_materialize(&f->net_pending_resolve->candidates);\n",
+            value->id);
+    emit_coro_net_resolve_release(out, "        ");
+    char result[48];
+    snprintf(result, sizeof(result), "_dns_result_%u", value->id);
+    emit_assign_from_xrvalue_temp_ctx(ctx, out, value, result);
+    fprintf(out, "    }\n");
+    emit_coro_debug_result_source_var_sync(ctx, out, function, value);
+    return true;
+}
+
 static bool emit_coro_test_yield_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v, int *state_id) {
     uint16_t arg_base = 0;
@@ -3577,6 +3691,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
 
     if (emit_coro_net_io_call_stmt(ctx, out, f, v, state_id))
+        return;
+
+    if (emit_coro_net_resolve_call_stmt(ctx, out, f, v, state_id))
         return;
 
     if (emit_coro_callable_target_switch(ctx, out, f, v, state_id))
@@ -5176,7 +5293,8 @@ static uint32_t cg_coro_plan_frame_releases(XiCgenCtx *ctx, const XiFunc *f,
                                             const XiCoroPlan *plan) {
     uint32_t count = (cg_func_frame_needs_cl(f) ? 1u : 0u) +
                      cg_coro_direct_call_frame_count(ctx, f) +
-                     (cg_coro_func_has_net_wait(ctx, f) ? 1u : 0u);
+                     (cg_coro_func_has_net_wait(ctx, f) ? 1u : 0u) +
+                     (cg_coro_func_has_net_resolve(ctx, f) ? 1u : 0u);
     if (!plan)
         return count;
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
@@ -5360,6 +5478,8 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         fprintf(out, " *)raw_frame;\n");
         fprintf(out, "    if (!f)\n        return;\n");
         emit_coro_direct_call_frame_cleanup(ctx, out, f, prefix);
+        if (cg_coro_func_has_net_resolve(ctx, f))
+            emit_coro_net_resolve_release(out, "    ");
         if (cg_coro_func_has_net_wait(ctx, f)) {
             fprintf(out, "    if (!XR_IS_NULL(f->net_pending_handle)) {\n"
                          "        if (f->net_pending_tls_handshake)\n"
@@ -5421,6 +5541,8 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         fprintf(out, "    }\n");
     }
     emit_coro_direct_call_frame_release(ctx, out, f, prefix);
+    if (cg_coro_func_has_net_resolve(ctx, f))
+        emit_coro_net_resolve_release(out, "    ");
     emit_coro_frame_arc_release(ctx, out, f);
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_release(xr_mkptr(f->_cl, XR_TAG_CLOSURE));\n");

@@ -12,7 +12,6 @@
 #include "../base/xmalloc.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../runtime/abi/xr_runtime_target_authority.h"
-#include "../runtime/abi/xr_runtime_target_profile.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -85,8 +84,17 @@ static bool build_native_profile(const XrTargetPlan *plan,
         return false;
     XrTargetProfile *native_profile = NULL;
     char error[256] = {0};
-    bool built = xr_runtime_target_profile_build_native_hosted(
-        &native_profile, error, sizeof(error));
+    /* This canonical authority was just constructed and validated. Reuse it
+     * instead of nesting another complete authority factory on the stack. */
+    XrTargetProfileBuildInput input = {
+        .machine = authority->machine,
+        .runtime_abi = &authority->runtime_abi,
+        .object_header_materialization = &authority->object_header_materialization,
+        .string_contract = &authority->string_contract,
+        .providers = authority->providers,
+        .provider_count = authority->provider_count,
+    };
+    bool built = xr_target_profile_build(&input, &native_profile, error, sizeof(error));
     bool exact = built && native_profile &&
                  xr_target_profile_require_exact(
                      xr_target_plan_profile(plan), native_profile, error,

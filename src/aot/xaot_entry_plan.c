@@ -9,6 +9,7 @@
 #include "xaot_entry_plan.h"
 #include "xaot_bundle.h"
 #include "../base/xmalloc.h"
+#include "../plan/target/xr_target_verify.h"
 #include <string.h>
 
 static uint32_t xaot_freestanding_core_capabilities(void) {
@@ -93,6 +94,48 @@ static bool entry_root_uses_resumable_frame(const XaotBundle *bundle, XgFuncId r
      * that early plan conservative; prepare refreshes it from the exact root
      * execution shape once all callable plans have converged. */
     return (reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0;
+}
+
+/* Runtime selection follows executable call authority, not the union of every
+ * native dependency imported by a package. Preparation has already frozen the
+ * final reachable function set and independently verified its TargetPlan. */
+static bool entry_native_call_capabilities(const XaotBundle *bundle, uint32_t *capabilities) {
+    if (!bundle || !capabilities)
+        return false;
+    if (!bundle->has_callable_reachability)
+        return true;
+    const XrTargetPlan *target = xaot_bundle_program_target_plan(bundle);
+    char error[256] = {0};
+    if (!target || !xr_target_plan_is_verified(target) ||
+        !xr_target_plan_verify(target, error, sizeof(error)))
+        return false;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    for (uint32_t i = 0; i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->runtime_capabilities == 0)
+            continue;
+        const XrSemanticPlan *semantic = NULL;
+        uint32_t function = XR_SEMANTIC_INDEX_NONE;
+        if (!xr_target_plan_function_semantic_binding(target, call->caller_function,
+                                                       &semantic, &function))
+            return false;
+        uint32_t matches = 0;
+        bool reachable = false;
+        for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+            const XaotFuncPlan *plan = &bundle->func_plans[fi];
+            if (plan->func && plan->func->semantic_plan == semantic &&
+                plan->func->semantic_plan_function_index == function) {
+                matches++;
+                reachable = plan->reachable;
+            }
+        }
+        if (matches != 1)
+            return false;
+        if (reachable)
+            *capabilities |= call->runtime_capabilities;
+    }
+    return true;
 }
 
 bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *evidence,
@@ -258,6 +301,9 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
     if ((out->reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
         out->required_capability_bits |= XG_CAP_COROUTINE;
     xr_free(reachable);
+
+    if (!entry_native_call_capabilities(bundle, &out->required_capability_bits))
+        return false;
 
     /* The parallel capability is not carried by any body's summary bits; the
      * prepared IR is where it is visible.  Record it here so every consumer --

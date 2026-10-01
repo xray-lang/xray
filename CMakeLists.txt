@@ -1733,6 +1733,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/target/xr_target_verify.c
     src/aot/emit_c/xr_c_emission_plan.c
     src/aot/emit_c/xr_c_scalar_ref_projection.c
+    src/aot/refine/xr_aot_scalar_ref_v1.c
     src/aot/xr_target_aggregate_c_projection.c
     src/runtime/abi/xr_runtime_contract.c
     src/runtime/abi/xr_provider_logical_contract.c

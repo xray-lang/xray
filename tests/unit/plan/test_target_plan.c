@@ -13928,7 +13928,20 @@ static void test_plan_fingerprint_canonical_bytes(void) {
     REQUIRE(strcmp(hex, "296bbd89fe4fa31bdb82be182b5a57266dd0686430537cf717d46e0848ab4e0c") == 0);
 }
 
+#include "xr_native_yieldable_capability_cases.inc.c"
+#include "xr_native_resolve_authority_cases.inc.c"
+
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "native-resolve-authority") == 0) {
+        test_native_resolve_call_authority();
+        puts("Native resolve exact authority passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "native-yieldable-capabilities") == 0) {
+        test_native_yieldable_capability_authority();
+        puts("Native yieldable capability authority passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "channel-transfer-freeze") == 0) {
         test_builtin_unit_enum_declaration_identity();
         test_channel_method_transfer_operand_freeze();
@@ -14303,6 +14316,8 @@ int main(int argc, char **argv) {
     test_plan_snapshot_and_determinism();
     test_native_link_define_preserves_call_authority();
     test_native_direct_ref_authority();
+    test_native_yieldable_capability_authority();
+    test_native_resolve_call_authority();
     test_native_storage_constructor_parameter_authority();
     test_native_direct_fresh_result_authority();
     test_builder_materializes_canonical_scalar_intents();

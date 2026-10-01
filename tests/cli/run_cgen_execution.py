@@ -15,6 +15,7 @@ import tempfile
 import time
 
 EXPECTED_STDOUT = {
+    "cgen_ref_slice_forward_read_authority": "9\n",
     "cgen_nullable_unit_enum_compare_execution":
         "false\nfalse\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\n",
     "cgen_nullable_unit_enum_execution": "true\ntrue\n",

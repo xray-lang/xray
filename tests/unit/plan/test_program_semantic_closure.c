@@ -212,7 +212,7 @@ failed:
 }
 
 static void test_deterministic_closed_world_identity(void) {
-    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(9));
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(10));
     char error[256] = {0};
     ClosureFixtureIds first_ids = {0};
     ClosureFixtureIds second_ids = {0};
@@ -276,14 +276,34 @@ static void test_deterministic_closed_world_identity(void) {
         0xa8, 0x5c, 0xbf, 0x5f, 0x7d, 0x47, 0x03, 0x56,
         0x84, 0x99, 0x42, 0xf3, 0x36, 0x1a, 0x5f, 0xb9,
     };
+    /* Only the closure schema frame changed; the complete sorted rows and
+     * stable function/call identities retain their independent fixed oracle. */
+    static const uint8_t v10_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
+        0x6a, 0xa9, 0x56, 0x1f, 0x63, 0x68, 0x80, 0x57, 0x3c, 0x38, 0xea,
+        0xf5, 0x32, 0xc2, 0x9b, 0x1e, 0x96, 0xca, 0x2a, 0xc9, 0x0a, 0x70,
+        0x84, 0xc0, 0xee, 0xa7, 0x0a, 0xc6, 0x06, 0x21, 0x9d, 0x93,
+    };
+    static const uint8_t v10_generation_id[XR_STABLE_ID_BYTES] = {
+        0x85, 0x19, 0x8a, 0xf2, 0x57, 0xc5, 0xc9, 0x7a,
+        0xbc, 0x2c, 0x17, 0xc6, 0x4a, 0x07, 0xcf, 0xbd,
+    };
     REQUIRE(memcmp(first_ids.entry_function.bytes, canonical_entry_function_identity,
                    sizeof(canonical_entry_function_identity)) == 0);
     REQUIRE(memcmp(first_ids.helper_function.bytes, canonical_helper_function_identity,
                    sizeof(canonical_helper_function_identity)) == 0);
-    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes, v9_closure_fingerprint,
-                   sizeof(v9_closure_fingerprint)) == 0);
-    REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes, v9_generation_id,
-                   sizeof(v9_generation_id)) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes, v10_closure_fingerprint,
+                   sizeof(v10_closure_fingerprint)) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes, v10_generation_id,
+                   sizeof(v10_generation_id)) == 0);
+    first->schema = UINT32_C(9);
+    memcpy(first->fingerprint.bytes, v9_closure_fingerprint, sizeof(v9_closure_fingerprint));
+    memcpy(first->generation_id.bytes, v9_generation_id, sizeof(v9_generation_id));
+    REQUIRE(!xr_program_semantic_closure_verify(first, error, sizeof(error)));
+    REQUIRE(strstr(error, "program semantic closure header is incomplete") != NULL);
+    first->schema = UINT32_C(10);
+    memcpy(first->fingerprint.bytes, v10_closure_fingerprint, sizeof(v10_closure_fingerprint));
+    memcpy(first->generation_id.bytes, v10_generation_id, sizeof(v10_generation_id));
+    REQUIRE(xr_program_semantic_closure_verify(first, error, sizeof(error)));
 
     ClosureFixtureIds alternate_locator_ids = {0};
     XrProgramSemanticClosure *alternate_locator = build_fixture(
