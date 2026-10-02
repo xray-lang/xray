@@ -1,468 +1,259 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xsemver.c - Semantic versioning parser (SemVer 2.0.0)
- *
- * KEY CONCEPT:
- *   Parse and compare semantic versions (major.minor.patch-prerelease+build).
- *   Supports version constraints like ^1.2.3, ~1.2.0, >=1.0.0.
+ * xsemver.c - One policy-bearing version and constraint parser
  */
-
 #include "xsemver.h"
-#include "../base/xchecks.h"
-#include "../base/xmalloc.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../base/xio_policy.inc.h"
 #include <ctype.h>
-#include <stdint.h>
 #include <limits.h>
 
-static const char *skip_whitespace(const char *s) {
-    while (*s && isspace(*s))
-        s++;
-    return s;
+static unsigned char character(XrIoContext *io, const char *text) {
+    return io_work(io, 1) ? (unsigned char)*text : 0;
 }
-
-/*
- * Parse a non-negative integer with overflow checking.
- * Returns pointer to first non-digit character.
- * Sets *out to -1 on parse failure or overflow.
- */
-static const char *parse_number(const char *s, int *out) {
-    if (!isdigit(*s)) {
-        *out = -1;
-        return s;
-    }
-
-    // Prevent leading zeros (except for "0" itself)
-    if (*s == '0' && isdigit(*(s + 1))) {
-        *out = -1;  // Invalid: leading zeros not allowed in semver
-        return s;
-    }
-
-    long long val = 0;
-    const long long max_val = INT32_MAX;
-
-    while (isdigit(*s)) {
-        val = val * 10 + (*s - '0');
-        if (val > max_val) {
-            *out = -1;  // Overflow
-            // Skip remaining digits
-            while (isdigit(*s))
-                s++;
-            return s;
-        }
-        s++;
-    }
-
-    *out = (int) val;
-    return s;
+static const char *skip_whitespace(XrIoContext *io, const char *text) {
+    unsigned char c;
+    while ((c = character(io, text)) != 0 && isspace(c)) ++text;
+    return text;
 }
-
-static char *parse_identifier(const char **s, char stop_char) {
-    const char *start = *s;
-
-    // Skip valid characters: letters, digits, dots, hyphens
-    while (**s && **s != stop_char && **s != '+') {
-        if (!isalnum(**s) && **s != '.' && **s != '-') {
-            break;
-        }
-        (*s)++;
+static bool parse_number(XrIoContext *io, const char **text, int *output) {
+    const char *p = *text; unsigned char c = character(io, p);
+    if (!isdigit(c)) return false;
+    if (c == '0' && isdigit(character(io, p + 1))) return false;
+    uint32_t value = 0;
+    while (isdigit(c)) {
+        unsigned digit = c - '0';
+        if (value > ((uint32_t)INT32_MAX - digit) / 10) return false;
+        value = value * 10 + digit; c = character(io, ++p);
     }
-
-    if (*s == start) {
-        return NULL;
-    }
-
-    size_t len = *s - start;
-    char *result = (char *) xr_malloc(len + 1);
-    if (result) {
-        memcpy(result, start, len);
-        result[len] = '\0';
-    }
+    *text = p; *output = (int)value; return io->status == XR_OS_IO_OK;
+}
+static char *parse_identifier(XrIoContext *io, const char **text) {
+    const char *start = *text; unsigned char c;
+    while ((c = character(io, *text)) != 0 && c != '+' && (isalnum(c) || c == '.' || c == '-')) ++*text;
+    if (*text == start || io->status != XR_OS_IO_OK) return NULL;
+    size_t length = (size_t)(*text - start);
+    if (length == SIZE_MAX) { io_status(io, XR_OS_IO_BUDGET); return NULL; }
+    char *result = io_alloc(io, length + 1);
+    if (result && io_copy(io, result, start, length) && io_work(io, 1)) result[length] = 0;
+    if (io->status != XR_OS_IO_OK) { io_free(io, result); return NULL; }
     return result;
 }
-
-/*
- * Compare prerelease identifiers.
- * Rules:
- * - No prerelease > has prerelease
- * - Compare by dot-separated segments
- * - Numeric segments compared numerically, others lexically
- */
-static int compare_prerelease(const char *a, const char *b) {
-    // No prerelease > has prerelease
-    if (!a && !b)
-        return 0;
-    if (!a)
-        return 1;  // a has no prerelease, a > b
-    if (!b)
-        return -1;  // b has no prerelease, b > a
-
-    // Compare segment by segment
-    while (*a && *b) {
-        // Extract current segment
-        const char *a_start = a;
-        const char *b_start = b;
-
-        while (*a && *a != '.')
-            a++;
-        while (*b && *b != '.')
-            b++;
-
-        size_t a_len = a - a_start;
-        size_t b_len = b - b_start;
-
-        // Check if pure numeric
-        bool a_numeric = true, b_numeric = true;
-        for (size_t i = 0; i < a_len; i++) {
-            if (!isdigit(a_start[i])) {
-                a_numeric = false;
-                break;
-            }
-        }
-        for (size_t i = 0; i < b_len; i++) {
-            if (!isdigit(b_start[i])) {
-                b_numeric = false;
-                break;
-            }
-        }
-
-        int cmp;
-        if (a_numeric && b_numeric) {
-            // Numeric comparison
-            int a_num = atoi(a_start);
-            int b_num = atoi(b_start);
-            cmp = a_num - b_num;
-        } else {
-            // Lexicographic comparison
-            size_t min_len = a_len < b_len ? a_len : b_len;
-            cmp = memcmp(a_start, b_start, min_len);
-            if (cmp == 0) {
-                cmp = (int) a_len - (int) b_len;
-            }
-        }
-
-        if (cmp != 0)
-            return cmp;
-
-        // Skip dot
-        if (*a == '.')
-            a++;
-        if (*b == '.')
-            b++;
+XR_FUNC void xr_semver_free_owned(XrSemVer *version) {
+    if (!version) return;
+    XrOsIoPolicy policy = version->policy;
+    if (version->prerelease) policy.free(policy.context, version->prerelease);
+    if (version->build) policy.free(policy.context, version->build);
+    memset(version, 0, sizeof(*version));
+}
+/* The existing accepted grammar includes v/V, abbreviated numeric versions,
+ * optional suffixes, and whitespace. Validation and construction share it. */
+static bool parse_version(XrIoContext *io, const char *text, XrSemVer *version) {
+    if (!io_clear(io, version, sizeof(*version))) return false;
+    version->policy = *io->policy;
+    const char *p = skip_whitespace(io, text); unsigned char c = character(io, p);
+    if (c == 'v' || c == 'V') ++p;
+    if (!parse_number(io, &p, &version->major)) return false;
+    if (character(io, p) != '.') return io->status == XR_OS_IO_OK;
+    ++p;
+    if (!parse_number(io, &p, &version->minor)) return false;
+    if (character(io, p) == '.') {
+        ++p;
+        if (!parse_number(io, &p, &version->patch)) return false;
     }
-
-    // When segment count differs, fewer segments means smaller
-    if (*a)
-        return 1;
-    if (*b)
-        return -1;
+    if (character(io, p) == '-') { ++p; version->prerelease = parse_identifier(io, &p); }
+    if (character(io, p) == '+') { ++p; version->build = parse_identifier(io, &p); }
+    p = skip_whitespace(io, p);
+    return character(io, p) == 0 && io->status == XR_OS_IO_OK;
+}
+XR_FUNC XrOsIoStatus xr_semver_parse_owned(const XrOsIoPolicy *policy, const char *text, XrSemVer *output) {
+    if (!io_policy_valid(policy) || !text || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; XrSemVer pending = {0};
+    bool valid = parse_version(&io, text, &pending);
+    if (valid && io_copy(&io, output, &pending, sizeof(pending))) return XR_OS_IO_OK;
+    xr_semver_free_owned(&pending);
+    return io.status != XR_OS_IO_OK ? io.status : XR_OS_IO_BAD_ARGUMENT;
+}
+XR_FUNC XrOsIoStatus xr_semver_is_valid_owned(const XrOsIoPolicy *policy, const char *text, bool *output) {
+    if (!io_policy_valid(policy) || !text || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; XrSemVer pending = {0};
+    bool valid = parse_version(&io, text, &pending); xr_semver_free_owned(&pending);
+    if (io_work(&io, sizeof(*output))) *output = valid;
+    return io.status;
+}
+static size_t segment_length(XrIoContext *io, const char *text) {
+    size_t length = 0; unsigned char c;
+    while ((c = character(io, text + length)) != 0 && c != '.') ++length;
+    return length;
+}
+static bool numeric_segment(XrIoContext *io, const char *text, size_t length) {
+    for (size_t i = 0; i < length; ++i) if (!isdigit(character(io, text + i))) return false;
+    return io->status == XR_OS_IO_OK;
+}
+static int compare_segment(XrIoContext *io, const char *a, size_t al, const char *b, size_t bl) {
+    bool an = numeric_segment(io, a, al), bn = numeric_segment(io, b, bl);
+    if (an && bn) {
+        /* Arbitrarily long numeric identifiers need no machine-integer parse.
+         * Leading zeros retain the existing numeric-equality behavior. */
+        while (al && character(io, a) == '0') { ++a; --al; }
+        while (bl && character(io, b) == '0') { ++b; --bl; }
+        if (!io_work(io, 1)) return 0;
+        if (al != bl) return al < bl ? -1 : 1;
+    }
+    size_t common = al < bl ? al : bl;
+    for (size_t i = 0; i < common; ++i) {
+        unsigned char av = character(io, a + i), bv = character(io, b + i);
+        if (!io_work(io, 1)) return 0;
+        if (av != bv) return av < bv ? -1 : 1;
+    }
+    if (!io_work(io, 1)) return 0;
+    return (al > bl) - (al < bl);
+}
+static int compare_prerelease(XrIoContext *io, const char *a, const char *b) {
+    if (!io_work(io, 1)) return 0;
+    if (!a || !b) return !a && !b ? 0 : !a ? 1 : -1;
+    while (io->status == XR_OS_IO_OK) {
+        unsigned char ac = character(io, a), bc = character(io, b);
+        if (!ac || !bc) return (ac != 0) - (bc != 0);
+        size_t al = segment_length(io, a), bl = segment_length(io, b);
+        int compared = compare_segment(io, a, al, b, bl);
+        if (compared || io->status != XR_OS_IO_OK) return compared;
+        a += al; b += bl;
+        if (character(io, a) == '.') ++a;
+        if (character(io, b) == '.') ++b;
+    }
     return 0;
 }
-
-/* ========== Version API Implementation ========== */
-
-bool xr_semver_parse(const char *str, XrSemVer *ver) {
-    if (!str || !ver)
-        return false;
-
-    // Initialize
-    memset(ver, 0, sizeof(XrSemVer));
-
-    const char *p = skip_whitespace(str);
-
-    // Skip optional 'v' prefix
-    if (*p == 'v' || *p == 'V') {
-        p++;
-    }
-
-    // Parse major version
-    p = parse_number(p, &ver->major);
-    if (ver->major < 0)
-        return false;
-
-    // Parse minor version
-    if (*p != '.') {
-        // Major only is valid: 1 -> 1.0.0
-        ver->minor = 0;
-        ver->patch = 0;
-        return true;
-    }
-    p++;  // Skip '.'
-
-    p = parse_number(p, &ver->minor);
-    if (ver->minor < 0)
-        return false;
-
-    // Parse patch version
-    if (*p != '.') {
-        // 1.2 -> 1.2.0
-        ver->patch = 0;
-    } else {
-        p++;  // Skip '.'
-        p = parse_number(p, &ver->patch);
-        if (ver->patch < 0)
-            return false;
-    }
-
-    // Parse prerelease identifier
-    if (*p == '-') {
-        p++;
-        ver->prerelease = parse_identifier(&p, '+');
-    }
-
-    // Parse build metadata
-    if (*p == '+') {
-        p++;
-        ver->build = parse_identifier(&p, '\0');
-    }
-
-    // Check if parsing is complete
-    p = skip_whitespace(p);
-    return *p == '\0';
+static int compare_version(XrIoContext *io, const XrSemVer *a, const XrSemVer *b) {
+    if (!io_work(io, 1)) return 0;
+    if (a->major != b->major) return (a->major > b->major) - (a->major < b->major);
+    if (!io_work(io, 1)) return 0;
+    if (a->minor != b->minor) return (a->minor > b->minor) - (a->minor < b->minor);
+    if (!io_work(io, 1)) return 0;
+    if (a->patch != b->patch) return (a->patch > b->patch) - (a->patch < b->patch);
+    return compare_prerelease(io, a->prerelease, b->prerelease);
 }
-
-void xr_semver_free(XrSemVer *ver) {
-    if (!ver)
-        return;
-
-    if (ver->prerelease) {
-        xr_free(ver->prerelease);
-        ver->prerelease = NULL;
-    }
-    if (ver->build) {
-        xr_free(ver->build);
-        ver->build = NULL;
-    }
+XR_FUNC XrOsIoStatus xr_semver_compare_owned(const XrOsIoPolicy *policy, const XrSemVer *a,
+    const XrSemVer *b, int *output) {
+    if (!io_policy_valid(policy) || !a || !b || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; int result = compare_version(&io, a, b);
+    if (io_work(&io, sizeof(*output))) *output = result;
+    return io.status;
 }
-
-int xr_semver_compare(const XrSemVer *a, const XrSemVer *b) {
-    if (!a || !b)
-        return 0;
-
-    // Compare major version first (safe comparison, no overflow)
-    if (a->major != b->major) {
-        return (a->major > b->major) - (a->major < b->major);
-    }
-
-    // Then compare minor version
-    if (a->minor != b->minor) {
-        return (a->minor > b->minor) - (a->minor < b->minor);
-    }
-
-    // Then compare patch version
-    if (a->patch != b->patch) {
-        return (a->patch > b->patch) - (a->patch < b->patch);
-    }
-
-    // Finally compare prerelease identifier
-    return compare_prerelease(a->prerelease, b->prerelease);
+XR_FUNC void xr_constraint_free_owned(XrVersionConstraint *constraint) {
+    if (constraint) xr_semver_free_owned(&constraint->version);
 }
-
-int xr_semver_to_string(const XrSemVer *ver, char *buf, int size) {
-    if (!ver || !buf || size <= 0)
-        return 0;
-
-    int written;
-
-    if (ver->prerelease && ver->build) {
-        written = snprintf(buf, size, "%d.%d.%d-%s+%s", ver->major, ver->minor, ver->patch,
-                           ver->prerelease, ver->build);
-    } else if (ver->prerelease) {
-        written =
-            snprintf(buf, size, "%d.%d.%d-%s", ver->major, ver->minor, ver->patch, ver->prerelease);
-    } else if (ver->build) {
-        written =
-            snprintf(buf, size, "%d.%d.%d+%s", ver->major, ver->minor, ver->patch, ver->build);
-    } else {
-        written = snprintf(buf, size, "%d.%d.%d", ver->major, ver->minor, ver->patch);
-    }
-
-    return written < size ? written : size - 1;
+XR_FUNC XrOsIoStatus xr_constraint_parse_owned(const XrOsIoPolicy *policy, const char *text,
+    XrVersionConstraint *output) {
+    if (!io_policy_valid(policy) || !text || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; XrVersionConstraint pending = {0};
+    const char *p = skip_whitespace(&io, text); unsigned char c = character(&io, p);
+    pending.op = SEMVER_OP_EQ;
+    if (c == '^') { pending.op = SEMVER_OP_CARET; ++p; }
+    else if (c == '~') { pending.op = SEMVER_OP_TILDE; ++p; }
+    else if (c == '>' || c == '<') {
+        bool equal = character(&io, p + 1) == '=';
+        pending.op = c == '>' ? (equal ? SEMVER_OP_GE : SEMVER_OP_GT) : (equal ? SEMVER_OP_LE : SEMVER_OP_LT);
+        p += equal ? 2 : 1;
+    } else if (c == '=') ++p;
+    else if (c == '*') { pending.op = SEMVER_OP_ANY; ++p; }
+    p = skip_whitespace(&io, p);
+    bool valid = pending.op == SEMVER_OP_ANY ? character(&io, p) == 0 : parse_version(&io, p, &pending.version);
+    if (valid && io_copy(&io, output, &pending, sizeof(pending))) return XR_OS_IO_OK;
+    xr_constraint_free_owned(&pending);
+    return io.status == XR_OS_IO_OK ? XR_OS_IO_BAD_ARGUMENT : io.status;
 }
-
-bool xr_semver_is_valid(const char *str) {
-    XR_DCHECK(str != NULL, "semver_is_valid: NULL str");
-    XrSemVer ver;
-    bool valid = xr_semver_parse(str, &ver);
-    xr_semver_free(&ver);
-    return valid;
-}
-
-/* ========== Constraint API Implementation ========== */
-
-bool xr_constraint_parse(const char *str, XrVersionConstraint *constraint) {
-    if (!str || !constraint)
-        return false;
-
-    memset(constraint, 0, sizeof(XrVersionConstraint));
-
-    const char *p = skip_whitespace(str);
-
-    // Parse operator
-    if (*p == '^') {
-        constraint->op = SEMVER_OP_CARET;
-        p++;
-    } else if (*p == '~') {
-        constraint->op = SEMVER_OP_TILDE;
-        p++;
-    } else if (*p == '>' && *(p + 1) == '=') {
-        constraint->op = SEMVER_OP_GE;
-        p += 2;
-    } else if (*p == '<' && *(p + 1) == '=') {
-        constraint->op = SEMVER_OP_LE;
-        p += 2;
-    } else if (*p == '>') {
-        constraint->op = SEMVER_OP_GT;
-        p++;
-    } else if (*p == '<') {
-        constraint->op = SEMVER_OP_LT;
-        p++;
-    } else if (*p == '=') {
-        constraint->op = SEMVER_OP_EQ;
-        p++;
-    } else if (*p == '*') {
-        constraint->op = SEMVER_OP_ANY;
-        p++;
-        p = skip_whitespace(p);
-        return *p == '\0';
-    } else {
-        // No prefix, default to exact match
-        constraint->op = SEMVER_OP_EQ;
-    }
-
-    // Skip possible whitespace
-    p = skip_whitespace(p);
-
-    // Parse version
-    return xr_semver_parse(p, &constraint->version);
-}
-
-void xr_constraint_free(XrVersionConstraint *constraint) {
-    if (!constraint)
-        return;
-    xr_semver_free(&constraint->version);
-}
-
-bool xr_constraint_matches(const XrSemVer *ver, const XrVersionConstraint *constraint) {
-    if (!ver || !constraint)
-        return false;
-
-    int cmp = xr_semver_compare(ver, &constraint->version);
-
+static bool matches_constraint(XrIoContext *io, const XrSemVer *version, const XrVersionConstraint *constraint) {
+    int comparison = compare_version(io, version, &constraint->version);
+    if (!io_work(io, 1)) return false;
+    const XrSemVer *base = &constraint->version;
     switch (constraint->op) {
-        case SEMVER_OP_ANY:
-            return true;
-
-        case SEMVER_OP_EQ:
-            return cmp == 0;
-
-        case SEMVER_OP_GT:
-            return cmp > 0;
-
-        case SEMVER_OP_GE:
-            return cmp >= 0;
-
-        case SEMVER_OP_LT:
-            return cmp < 0;
-
-        case SEMVER_OP_LE:
-            return cmp <= 0;
-
-        case SEMVER_OP_CARET: {
-            // ^1.2.3 means >=1.2.3 and <2.0.0 (major compatible)
-            // ^0.2.3 means >=0.2.3 and <0.3.0 (minor compatible, 0.x special case)
-            // ^0.0.3 means =0.0.3 (exact match, 0.0.x special case)
-            if (cmp < 0)
-                return false;  // Must be >= base version
-
-            const XrSemVer *base = &constraint->version;
-
-            if (base->major == 0) {
-                if (base->minor == 0) {
-                    // ^0.0.x exact match patch
-                    return ver->major == 0 && ver->minor == 0 && ver->patch == base->patch;
-                }
-                // ^0.x.y minor compatible
-                return ver->major == 0 && ver->minor == base->minor;
-            }
-
-            // ^x.y.z major compatible
-            return ver->major == base->major;
-        }
-
-        case SEMVER_OP_TILDE: {
-            // ~1.2.3 means >=1.2.3 and <1.3.0 (patch updates)
-            if (cmp < 0)
-                return false;  // Must be >= base version
-
-            const XrSemVer *base = &constraint->version;
-
-            // Major and minor must be the same
-            return ver->major == base->major && ver->minor == base->minor;
-        }
+    case SEMVER_OP_ANY: return true;
+    case SEMVER_OP_EQ: return comparison == 0;
+    case SEMVER_OP_GT: return comparison > 0;
+    case SEMVER_OP_GE: return comparison >= 0;
+    case SEMVER_OP_LT: return comparison < 0;
+    case SEMVER_OP_LE: return comparison <= 0;
+    case SEMVER_OP_CARET:
+        if (comparison < 0) return false;
+        if (!base->major) return !base->minor ? !version->major && !version->minor && version->patch == base->patch :
+            !version->major && version->minor == base->minor;
+        return version->major == base->major;
+    case SEMVER_OP_TILDE: return comparison >= 0 && version->major == base->major && version->minor == base->minor;
     }
-
-    return false;
+    io_status(io, XR_OS_IO_BAD_ARGUMENT); return false;
 }
-
-int xr_constraint_to_string(const XrVersionConstraint *constraint, char *buf, int size) {
-    if (!constraint || !buf || size <= 0)
-        return 0;
-
-    const char *op_str = "";
-    switch (constraint->op) {
-        case SEMVER_OP_EQ:
-            op_str = "";
-            break;
-        case SEMVER_OP_GT:
-            op_str = ">";
-            break;
-        case SEMVER_OP_GE:
-            op_str = ">=";
-            break;
-        case SEMVER_OP_LT:
-            op_str = "<";
-            break;
-        case SEMVER_OP_LE:
-            op_str = "<=";
-            break;
-        case SEMVER_OP_CARET:
-            op_str = "^";
-            break;
-        case SEMVER_OP_TILDE:
-            op_str = "~";
-            break;
-        case SEMVER_OP_ANY:
-            return snprintf(buf, size, "*");
-    }
-
-    char ver_buf[64];
-    xr_semver_to_string(&constraint->version, ver_buf, sizeof(ver_buf));
-
-    return snprintf(buf, size, "%s%s", op_str, ver_buf);
+XR_FUNC XrOsIoStatus xr_constraint_matches_owned(const XrOsIoPolicy *policy, const XrSemVer *version,
+    const XrVersionConstraint *constraint, bool *output) {
+    if (!io_policy_valid(policy) || !version || !constraint || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; bool result = matches_constraint(&io, version, constraint);
+    if (io_work(&io, sizeof(*output))) *output = result;
+    return io.status;
 }
-
-int xr_semver_select_best(const XrSemVer *versions, int count,
-                          const XrVersionConstraint *constraint) {
-    if (!versions || count <= 0 || !constraint)
-        return -1;
-
-    int best_idx = -1;
-
-    for (int i = 0; i < count; i++) {
-        if (xr_constraint_matches(&versions[i], constraint)) {
-            if (best_idx < 0 || xr_semver_compare(&versions[i], &versions[best_idx]) > 0) {
-                best_idx = i;
-            }
-        }
+XR_FUNC XrOsIoStatus xr_semver_select_best_owned(const XrOsIoPolicy *policy, const XrSemVer *versions,
+    int count, const XrVersionConstraint *constraint, int *output) {
+    if (!io_policy_valid(policy) || count < 0 || (!versions && count) || !constraint || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; int best = -1;
+    for (int i = 0; i < count && io_work(&io, 1); ++i) {
+        if (matches_constraint(&io, &versions[i], constraint) &&
+            (best < 0 || compare_version(&io, &versions[i], &versions[best]) > 0)) best = i;
     }
-
-    return best_idx;
+    if (io_work(&io, sizeof(*output))) *output = best;
+    return io.status;
+}
+static size_t integer_text(XrIoContext *io, int value, char output[12]) {
+    uint32_t magnitude = value < 0 ? (uint32_t)(-(int64_t)value) : (uint32_t)value;
+    char reversed[10]; size_t count = 0, written = 0;
+    do {
+        if (!io_work(io, 1)) return 0;
+        reversed[count++] = (char)('0' + magnitude % 10); magnitude /= 10;
+    } while (magnitude);
+    if (value < 0 && io_work(io, 1)) output[written++] = '-';
+    while (count && io_work(io, 2)) output[written++] = reversed[--count];
+    return written;
+}
+static XrOsIoStatus format_version(const XrOsIoPolicy *policy, const XrSemVer *version, const char *prefix,
+    bool any, char *output, size_t capacity, size_t *written) {
+    if (!io_policy_valid(policy) || !version || !output || !capacity || !written) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; size_t pre = 0, build = 0, pl = 0;
+    if (!io_length(&io, prefix, &pl)) return io.status;
+    char major[12], minor[12], patch[12]; size_t ml = 0, nl = 0, kl = 0;
+    if (!any) {
+        ml = integer_text(&io, version->major, major); nl = integer_text(&io, version->minor, minor);
+        kl = integer_text(&io, version->patch, patch);
+        if (version->prerelease) io_length(&io, version->prerelease, &pre);
+        if (version->build) io_length(&io, version->build, &build);
+    }
+    if (pre > SIZE_MAX - build || pre + build > SIZE_MAX - 48) return XR_OS_IO_BUDGET;
+    size_t size = any ? 1 : pl + ml + nl + kl + 2 + pre + build + (version->prerelease ? 1 : 0) + (version->build ? 1 : 0);
+    if (io.status != XR_OS_IO_OK) return io.status;
+    if (size >= capacity) return XR_OS_IO_BUDGET;
+    char *buffer = io_alloc(&io, size + 1); size_t offset = 0;
+#define APPEND(text, length) do { if (io_copy(&io, buffer + offset, (text), (length))) offset += (length); } while (0)
+    if (buffer) {
+        if (any) APPEND("*", 1);
+        else {
+            APPEND(prefix, pl); APPEND(major, ml); APPEND(".", 1); APPEND(minor, nl); APPEND(".", 1); APPEND(patch, kl);
+            if (version->prerelease) { APPEND("-", 1); APPEND(version->prerelease, pre); }
+            if (version->build) { APPEND("+", 1); APPEND(version->build, build); }
+        }
+        APPEND("", 1);
+        if (io_work(&io, size + 1 + sizeof(*written))) { memcpy(output, buffer, size + 1); *written = size; }
+    }
+#undef APPEND
+    io_free(&io, buffer); return io.status;
+}
+XR_FUNC XrOsIoStatus xr_semver_to_string_owned(const XrOsIoPolicy *policy, const XrSemVer *version,
+    char *buffer, size_t capacity, size_t *written) {
+    return format_version(policy, version, "", false, buffer, capacity, written);
+}
+XR_FUNC XrOsIoStatus xr_constraint_to_string_owned(const XrOsIoPolicy *policy, const XrVersionConstraint *constraint,
+    char *buffer, size_t capacity, size_t *written) {
+    static const char *const prefixes[] = {"", ">", ">=", "<", "<=", "^", "~", "*"};
+    if (!constraint || constraint->op < SEMVER_OP_EQ || constraint->op > SEMVER_OP_ANY) return XR_OS_IO_BAD_ARGUMENT;
+    return format_version(policy, &constraint->version, prefixes[constraint->op], constraint->op == SEMVER_OP_ANY,
+        buffer, capacity, written);
 }

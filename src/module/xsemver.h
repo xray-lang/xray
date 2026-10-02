@@ -22,9 +22,10 @@
 #define XSEMVER_H
 
 #include <stdbool.h>
-#include "../base/xdefs.h"
+#include "../base/xio_policy.h"
 
 typedef struct XrSemVer {
+    XrOsIoPolicy policy;  // Owns optional suffixes; copied by successful parsing.
     int major;
     int minor;
     int patch;
@@ -48,30 +49,26 @@ typedef struct XrVersionConstraint {
     XrSemVer version;
 } XrVersionConstraint;
 
-/* ========== Version API ========== */
-
-XR_FUNC bool xr_semver_parse(const char *str, XrSemVer *ver);
-XR_FUNC void xr_semver_free(XrSemVer *ver);
-
-// Returns <0 if a<b, 0 if a==b, >0 if a>b
-// Prerelease versions are less than release versions
-XR_FUNC int xr_semver_compare(const XrSemVer *a, const XrSemVer *b);
-
-XR_FUNC int xr_semver_to_string(const XrSemVer *ver, char *buf, int size);
-
-/* ========== Constraint API ========== */
-
-XR_FUNC bool xr_constraint_parse(const char *str, XrVersionConstraint *constraint);
-XR_FUNC void xr_constraint_free(XrVersionConstraint *constraint);
-XR_FUNC bool xr_constraint_matches(const XrSemVer *ver, const XrVersionConstraint *constraint);
-XR_FUNC int xr_constraint_to_string(const XrVersionConstraint *constraint, char *buf, int size);
-
-/* ========== Utility ========== */
-
-XR_FUNC bool xr_semver_is_valid(const char *str);
-
-// Returns index of best matching version, or -1 if none match
-XR_FUNC int xr_semver_select_best(const XrSemVer *versions, int count,
-                                  const XrVersionConstraint *constraint);
+/* Parsing has one policy-bearing algorithm. Invalid syntax returns
+ * BAD_ARGUMENT without publishing output; the validator instead publishes
+ * OK/false for invalid syntax. Resource failures never become invalid syntax.
+ * Every destructor releases through the policy that produced the value. */
+XR_FUNC XrOsIoStatus xr_semver_parse_owned(const XrOsIoPolicy *policy, const char *text, XrSemVer *output);
+XR_FUNC void xr_semver_free_owned(XrSemVer *version);
+XR_FUNC XrOsIoStatus xr_semver_compare_owned(const XrOsIoPolicy *policy, const XrSemVer *left,
+    const XrSemVer *right, int *output);
+XR_FUNC XrOsIoStatus xr_semver_to_string_owned(const XrOsIoPolicy *policy, const XrSemVer *version,
+    char *buffer, size_t capacity, size_t *written);
+XR_FUNC XrOsIoStatus xr_constraint_parse_owned(const XrOsIoPolicy *policy, const char *text,
+    XrVersionConstraint *output);
+XR_FUNC void xr_constraint_free_owned(XrVersionConstraint *constraint);
+XR_FUNC XrOsIoStatus xr_constraint_matches_owned(const XrOsIoPolicy *policy, const XrSemVer *version,
+    const XrVersionConstraint *constraint, bool *output);
+XR_FUNC XrOsIoStatus xr_constraint_to_string_owned(const XrOsIoPolicy *policy, const XrVersionConstraint *constraint,
+    char *buffer, size_t capacity, size_t *written);
+XR_FUNC XrOsIoStatus xr_semver_is_valid_owned(const XrOsIoPolicy *policy, const char *text, bool *output);
+/* OK publishes the matching index, or -1 when no version matches. */
+XR_FUNC XrOsIoStatus xr_semver_select_best_owned(const XrOsIoPolicy *policy, const XrSemVer *versions,
+    int count, const XrVersionConstraint *constraint, int *output);
 
 #endif  // XSEMVER_H

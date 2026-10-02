@@ -1,520 +1,400 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlockfile.c - xray.lock file support implementation
- *
- * KEY CONCEPT:
- *   Manages xray.lock file which records exact resolved versions of all
- *   dependencies. Ensures reproducible builds across different environments.
+ * xlockfile.c - Policy-owned lock records, serialization and artifact checksums
  */
-
 #include "xlockfile.h"
-#include "../base/xchecks.h"
-#include "../base/xmalloc.h"
-#include "../base/xfileio.h"
-#if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
-#include "../shared/xr_crypto_core.h"
-#endif
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../base/xio_policy.inc.h"
+#include "../base/xsha256.h"
+#include "../os/os_fs.h"
+#include "../os/os_proc.h"
+#include <stdatomic.h>
 #include <ctype.h>
+#include <limits.h>
 
 #define LOCKFILE_VERSION 1
 #define INITIAL_CAPACITY 16
-
-static const char *skip_whitespace_and_comments(const char *s) {
-    while (*s) {
-        while (*s && isspace(*s))
-            s++;
-        if (*s == '#') {
-            while (*s && *s != '\n')
-                s++;
-            continue;
-        }
-
-        break;
-    }
-    return s;
+XR_FUNC bool xr_lockfile_uses_policy(const XrLockfile *lock, const XrOsIoPolicy *policy) {
+    return lock && io_policy_valid(policy) && lock->policy.context == policy->context &&
+        lock->policy.alloc == policy->alloc && lock->policy.free == policy->free && lock->policy.work == policy->work;
 }
-
-/*
- * Parse a quoted string value.
- * Returns a copied string (caller must free).
- */
-static char *parse_quoted_string(const char **p) {
-    const char *s = *p;
-
-    // Skip whitespace
-    while (*s && isspace(*s))
-        s++;
-
-    if (*s != '"')
-        return NULL;
-    s++;  // Skip opening quote
-
-    const char *start = s;
-    while (*s && *s != '"' && *s != '\n')
-        s++;
-
-    if (*s != '"')
-        return NULL;
-
-    size_t len = s - start;
-    char *result = (char *) xr_malloc(len + 1);
-    if (result) {
-        memcpy(result, start, len);
-        result[len] = '\0';
+static unsigned char lock_character(XrIoContext *io, const char *text) {
+    return io_work(io, 1) ? (unsigned char)*text : 0;
+}
+static bool equal_text(XrIoContext *io, const char *a, const char *b) {
+    if (!a || !b) return a == b;
+    for (;;) {
+        unsigned char ac = lock_character(io, a++), bc = lock_character(io, b++);
+        if (!io_work(io, 1) || ac != bc) return false;
+        if (!ac) return true;
     }
-
-    *p = s + 1;  // Skip closing quote
+}
+static char *copy_text(XrIoContext *io, const char *text) {
+    if (!text) return NULL;
+    size_t length = 0; if (!io_length(io, text, &length)) return NULL;
+    char *result = io_alloc(io, length + 1);
+    if (result && !io_copy(io, result, text, length + 1)) { io_free(io, result); return NULL; }
     return result;
 }
-
-static void free_dependencies(char **deps, int count);
-
-/*
- * Parse array value ["a", "b", "c"].
- * Returns string array (caller must free each element and array itself).
- */
-static char **parse_string_array(const char **p, int *count) {
-    const char *s = *p;
-    *count = 0;
-
-    // Skip whitespace
-    while (*s && isspace(*s))
-        s++;
-
-    if (*s != '[')
-        return NULL;
-    s++;  // Skip '['
-
-    // Estimate capacity
-    int capacity = 8;
-    char **result = (char **) xr_malloc(capacity * sizeof(char *));
-    if (!result)
-        return NULL;
-
-    while (*s) {
-        // Skip whitespace
-        while (*s && isspace(*s))
-            s++;
-
-        if (*s == ']') {
-            s++;
-            break;
+static void free_dependencies(const XrOsIoPolicy *policy, char **dependencies, int count) {
+    for (int i = 0; i < count; ++i) if (dependencies[i]) policy->free(policy->context, dependencies[i]);
+    if (dependencies) policy->free(policy->context, dependencies);
+}
+static void free_package(const XrOsIoPolicy *policy, XrLockedPackage *package) {
+    if (package->name) policy->free(policy->context, package->name);
+    if (package->version) policy->free(policy->context, package->version);
+    if (package->resolved) policy->free(policy->context, package->resolved);
+    if (package->checksum) policy->free(policy->context, package->checksum);
+    free_dependencies(policy, package->dependencies, package->dep_count);
+}
+XR_FUNC void xr_lockfile_free_owned(XrLockfile *lock) {
+    if (!lock) return;
+    XrOsIoPolicy policy = lock->policy;
+    for (int i = 0; i < lock->package_count; ++i) free_package(&policy, &lock->packages[i]);
+    if (lock->packages) policy.free(policy.context, lock->packages);
+    policy.free(policy.context, lock);
+}
+XR_FUNC XrOsIoStatus xr_lockfile_new_owned(const XrOsIoPolicy *policy, XrLockfile **output) {
+    if (!io_policy_valid(policy) || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; XrLockfile *lock = io_alloc(&io, sizeof(*lock));
+    if (!lock) return io.status;
+    if (!io_clear(&io, lock, sizeof(*lock))) { io_free(&io, lock); return io.status; }
+    lock->policy = *policy; lock->version = LOCKFILE_VERSION; lock->package_capacity = INITIAL_CAPACITY;
+    lock->packages = io_alloc(&io, INITIAL_CAPACITY * sizeof(*lock->packages));
+    if (lock->packages) io_clear(&io, lock->packages, INITIAL_CAPACITY * sizeof(*lock->packages));
+    if (io_work(&io, sizeof(*output))) *output = lock;
+    else xr_lockfile_free_owned(lock);
+    return io.status;
+}
+static int find_index(XrIoContext *io, const XrLockfile *lock, const char *name) {
+    for (int i = 0; i < lock->package_count && io_work(io, 1); ++i)
+        if (equal_text(io, lock->packages[i].name, name)) return i;
+    return -1;
+}
+XR_FUNC XrOsIoStatus xr_lockfile_find_owned(const XrOsIoPolicy *policy, const XrLockfile *lock,
+    const char *name, const XrLockedPackage **output) {
+    if (!xr_lockfile_uses_policy(lock, policy) || !name || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; int index = find_index(&io, lock, name);
+    if (io.status != XR_OS_IO_OK) return io.status;
+    if (index < 0) return XR_OS_IO_NOT_FOUND;
+    if (io_work(&io, sizeof(*output))) *output = &lock->packages[index];
+    return io.status;
+}
+XR_FUNC XrOsIoStatus xr_lockfile_has_owned(const XrOsIoPolicy *policy, const XrLockfile *lock,
+    const char *name, bool *output) {
+    if (!xr_lockfile_uses_policy(lock, policy) || !name || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; bool found = find_index(&io, lock, name) >= 0;
+    if (io_work(&io, sizeof(*output))) *output = found;
+    return io.status;
+}
+static void *grow_array(XrIoContext *io, const void *old, int count, int capacity, size_t item_size, int *next) {
+    if (capacity > INT_MAX / 2) { io_status(io, XR_OS_IO_BUDGET); return NULL; }
+    int wanted = capacity < 4 ? 4 : capacity * 2;
+    if ((size_t)wanted > SIZE_MAX / item_size) { io_status(io, XR_OS_IO_BUDGET); return NULL; }
+    void *result = io_alloc(io, (size_t)wanted * item_size);
+    if (result && !io_copy(io, result, old, (size_t)count * item_size)) { io_free(io, result); return NULL; }
+    *next = wanted; return result;
+}
+XR_FUNC XrOsIoStatus xr_lockfile_add_package_owned(XrLockfile *lock, const char *name,
+    const char *version, const char *resolved, const char *checksum) {
+    if (!lock || !io_policy_valid(&lock->policy) || !name) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {&lock->policy, XR_OS_IO_OK}; int index = find_index(&io, lock, name);
+    XrLockedPackage pending = {0};
+    if (index < 0) pending.name = copy_text(&io, name);
+    pending.version = copy_text(&io, version); pending.resolved = copy_text(&io, resolved); pending.checksum = copy_text(&io, checksum);
+    XrLockedPackage *expanded = NULL; int capacity = lock->package_capacity;
+    if (index < 0 && lock->package_count == capacity && io.status == XR_OS_IO_OK)
+        expanded = grow_array(&io, lock->packages, lock->package_count, capacity, sizeof(*expanded), &capacity);
+    if (io_work(&io, sizeof(pending))) {
+        if (index >= 0) {
+            XrLockedPackage *package = &lock->packages[index];
+            io_free(&io, package->version); io_free(&io, package->resolved); io_free(&io, package->checksum);
+            package->version = pending.version; package->resolved = pending.resolved; package->checksum = pending.checksum;
+        } else {
+            if (expanded) { io_free(&io, lock->packages); lock->packages = expanded; lock->package_capacity = capacity; expanded = NULL; }
+            lock->packages[lock->package_count++] = pending;
         }
-
-        if (*s == '"') {
-            char *item = parse_quoted_string(&s);
-            if (item) {
-                if (*count >= capacity) {
-                    capacity *= 2;
-                    char **_new_result = (char **) xr_realloc(result, capacity * sizeof(char *));
-                    if (!_new_result) {
-                        xr_free(item);
-                        free_dependencies(result, *count);
-                        *count = 0;
-                        return NULL;
-                    }
-                    result = _new_result;
-                }
-                result[(*count)++] = item;
-            }
-        }
-
-        // Skip comma
-        while (*s && isspace(*s))
-            s++;
-        if (*s == ',')
-            s++;
+        return XR_OS_IO_OK;
     }
-
-    *p = s;
-    return result;
+    io_free(&io, expanded); free_package(io.policy, &pending); return io.status;
 }
-
-/*
- * Free locked package dependencies array.
- */
-static void free_dependencies(char **deps, int count) {
-    if (!deps)
-        return;
-    for (int i = 0; i < count; i++) {
-        xr_free(deps[i]);
+static bool append_dependency(XrIoContext *io, XrLockedPackage *package, char *owned) {
+    char **expanded = NULL; int capacity = package->dep_capacity;
+    if (package->dep_count == capacity)
+        expanded = grow_array(io, package->dependencies, package->dep_count, capacity, sizeof(*expanded), &capacity);
+    if (!io_work(io, sizeof(owned))) { io_free(io, expanded); return false; }
+    if (expanded) { io_free(io, package->dependencies); package->dependencies = expanded; package->dep_capacity = capacity; }
+    package->dependencies[package->dep_count++] = owned; return true;
+}
+XR_FUNC XrOsIoStatus xr_lockfile_add_dependency_owned(XrLockfile *lock, const char *name, const char *dependency) {
+    if (!lock || !io_policy_valid(&lock->policy) || !name || !dependency) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {&lock->policy, XR_OS_IO_OK}; int index = find_index(&io, lock, name);
+    if (io.status != XR_OS_IO_OK) return io.status;
+    if (index < 0) return XR_OS_IO_NOT_FOUND;
+    char *owned = copy_text(&io, dependency);
+    if (!owned || !append_dependency(&io, &lock->packages[index], owned)) io_free(&io, owned);
+    return io.status;
+}
+XR_FUNC XrOsIoStatus xr_lockfile_remove_owned(XrLockfile *lock, const char *name) {
+    if (!lock || !io_policy_valid(&lock->policy) || !name) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {&lock->policy, XR_OS_IO_OK}; int index = find_index(&io, lock, name);
+    if (io.status != XR_OS_IO_OK) return io.status;
+    if (index < 0) return XR_OS_IO_NOT_FOUND;
+    size_t bytes = (size_t)(lock->package_count - index - 1) * sizeof(*lock->packages);
+    if (io_work(&io, bytes + sizeof(lock->package_count))) {
+        free_package(io.policy, &lock->packages[index]);
+        memmove(&lock->packages[index], &lock->packages[index + 1], bytes); --lock->package_count;
     }
-    xr_free(deps);
+    return io.status;
 }
-
-/*
- * Free a single locked package.
- */
-static void free_locked_package(XrLockedPackage *pkg) {
-    if (!pkg)
-        return;
-    xr_free(pkg->name);
-    xr_free(pkg->version);
-    xr_free(pkg->resolved);
-    xr_free(pkg->checksum);
-    free_dependencies(pkg->dependencies, pkg->dep_count);
+static const char *skip_whitespace(XrIoContext *io, const char *text) {
+    unsigned char c;
+    while ((c = lock_character(io, text)) != 0 && isspace(c)) ++text;
+    return text;
 }
-
-/* ========== Lockfile API Implementation ========== */
-
-XrLockfile *xr_lockfile_new(void) {
-    XrLockfile *lock = (XrLockfile *) xr_malloc(sizeof(XrLockfile));
-    if (!lock)
-        return NULL;
-    memset(lock, 0, sizeof(XrLockfile));
-
-    lock->version = LOCKFILE_VERSION;
-    lock->package_capacity = INITIAL_CAPACITY;
-    lock->packages =
-        (XrLockedPackage *) xr_malloc(lock->package_capacity * sizeof(XrLockedPackage));
-
-    if (!lock->packages) {
-        xr_free(lock);
-        return NULL;
+static const char *skip_comments(XrIoContext *io, const char *text) {
+    while (io->status == XR_OS_IO_OK) {
+        text = skip_whitespace(io, text);
+        if (lock_character(io, text) != '#') break;
+        unsigned char c;
+        while ((c = lock_character(io, text)) != 0 && c != '\n') ++text;
     }
-    memset(lock->packages, 0, lock->package_capacity * sizeof(XrLockedPackage));
-
-    return lock;
+    return text;
 }
-
-XrLockfile *xr_lockfile_load(const char *path) {
-    XR_DCHECK(path != NULL, "lockfile_load: NULL path");
-    char *content = xr_file_read_all(path, "r", NULL);
-    if (!content)
-        return NULL;
-
-    // Create lockfile
-    XrLockfile *lock = xr_lockfile_new();
-    if (!lock) {
-        xr_free(content);
-        return NULL;
+static bool consume_literal(XrIoContext *io, const char **text, const char *literal, size_t length) {
+    for (size_t i = 0; i < length; ++i)
+        if (lock_character(io, *text + i) != (unsigned char)literal[i] || io->status != XR_OS_IO_OK) return false;
+    *text += length; return true;
+}
+static char *parse_string(XrIoContext *io, const char **text) {
+    const char *p = skip_whitespace(io, *text);
+    if (lock_character(io, p) != '"') { io_status(io, XR_OS_IO_BAD_ARGUMENT); return NULL; }
+    const char *start = ++p; unsigned char c;
+    while ((c = lock_character(io, p)) != 0 && c != '"' && c != '\n') ++p;
+    if (c != '"') { io_status(io, XR_OS_IO_BAD_ARGUMENT); return NULL; }
+    size_t length = (size_t)(p - start); char *value = io_alloc(io, length + 1);
+    if (value && io_copy(io, value, start, length) && io_work(io, 1)) value[length] = 0;
+    *text = p + 1;
+    if (io->status != XR_OS_IO_OK) { io_free(io, value); return NULL; }
+    return value;
+}
+static void parse_array(XrIoContext *io, const char **text, XrLockedPackage *package) {
+    const char *p = skip_whitespace(io, *text);
+    if (lock_character(io, p) != '[') { io_status(io, XR_OS_IO_BAD_ARGUMENT); return; }
+    ++p;
+    free_dependencies(io->policy, package->dependencies, package->dep_count);
+    package->dependencies = NULL; package->dep_count = 0; package->dep_capacity = 0;
+    while (io->status == XR_OS_IO_OK) {
+        p = skip_whitespace(io, p); unsigned char c = lock_character(io, p);
+        if (c == ']') { *text = p + 1; return; }
+        if (c != '"') { io_status(io, XR_OS_IO_BAD_ARGUMENT); return; }
+        char *value = parse_string(io, &p);
+        if (!value || !append_dependency(io, package, value)) { io_free(io, value); return; }
+        p = skip_whitespace(io, p); c = lock_character(io, p);
+        if (c == ',') ++p;
+        else if (c != ']' && c != '"') { io_status(io, XR_OS_IO_BAD_ARGUMENT); return; }
     }
-
-    // Parse content
-    const char *p = content;
-    char current_package[256] = {0};
-
-    while (*p) {
-        p = skip_whitespace_and_comments(p);
-        if (!*p)
-            break;
-
-        // Parse section header [package.xxx]
-        if (*p == '[') {
-            p++;
-
-            // Skip "package." prefix
-            if (strncmp(p, "package.", 8) == 0) {
-                p += 8;
-
-                // Extract package name
+}
+static bool parse_lockfile(XrIoContext *io, const char *text, XrLockfile *lock) {
+    const char *p = text; char current[256];
+    if (!io_work(io, 1)) return false;
+    current[0] = 0;
+    while (io->status == XR_OS_IO_OK) {
+        p = skip_comments(io, p); unsigned char c = lock_character(io, p);
+        if (!c) break;
+        if (c == '[') {
+            ++p;
+            if (consume_literal(io, &p, "package.", 8)) {
                 const char *start = p;
-                while (*p && *p != ']' && *p != '\n')
-                    p++;
-
-                size_t len = p - start;
-                if (len < sizeof(current_package)) {
-                    memcpy(current_package, start, len);
-                    current_package[len] = '\0';
-
-                    // Add package
-                    xr_lockfile_add_package(lock, current_package, "0.0.0", "", "");
-                }
-
-                if (*p == ']')
-                    p++;
+                while ((c = lock_character(io, p)) != 0 && c != ']' && c != '\n') ++p;
+                if (c != ']') { io_status(io, XR_OS_IO_BAD_ARGUMENT); break; }
+                size_t length = (size_t)(p - start);
+                if (length >= sizeof(current)) { io_status(io, XR_OS_IO_BUDGET); break; }
+                if (io_copy(io, current, start, length) && io_work(io, 1)) current[length] = 0;
+                if (io->status == XR_OS_IO_OK) io_status(io, xr_lockfile_add_package_owned(lock, current, "0.0.0", "", ""));
+                ++p;
             } else {
-                // Skip other sections
-                while (*p && *p != ']')
-                    p++;
-                if (*p == ']')
-                    p++;
-                current_package[0] = '\0';
+                while ((c = lock_character(io, p)) != 0 && c != ']') ++p;
+                if (c == ']') ++p;
+                if (io_work(io, 1)) current[0] = 0;
             }
             continue;
         }
-
-        // Parse key-value pairs
-        if (current_package[0] && isalpha(*p)) {
-            const char *key_start = p;
-            // Fix: allow alphanumeric and underscore in key names
-            while (*p && (isalnum(*p) || *p == '_'))
-                p++;
-
-            size_t key_len = p - key_start;
-            char key[64];
-            if (key_len < sizeof(key)) {
-                memcpy(key, key_start, key_len);
-                key[key_len] = '\0';
-            } else {
-                key[0] = '\0';
-            }
-
-            // Skip =
-            while (*p && isspace(*p))
-                p++;
-            if (*p == '=')
-                p++;
-            while (*p && isspace(*p))
-                p++;
-
-            // Find package
-            XrLockedPackage *pkg = NULL;
-            for (int i = 0; i < lock->package_count; i++) {
-                if (strcmp(lock->packages[i].name, current_package) == 0) {
-                    pkg = &lock->packages[i];
-                    break;
-                }
-            }
-
-            if (pkg) {
-                if (strcmp(key, "version") == 0) {
-                    xr_free(pkg->version);
-                    pkg->version = parse_quoted_string(&p);
-                } else if (strcmp(key, "resolved") == 0) {
-                    xr_free(pkg->resolved);
-                    pkg->resolved = parse_quoted_string(&p);
-                } else if (strcmp(key, "checksum") == 0) {
-                    xr_free(pkg->checksum);
-                    pkg->checksum = parse_quoted_string(&p);
-                } else if (strcmp(key, "dependencies") == 0) {
-                    free_dependencies(pkg->dependencies, pkg->dep_count);
-                    pkg->dependencies = parse_string_array(&p, &pkg->dep_count);
+        if (lock_character(io, current) && isalpha(c)) {
+            const char *start = p;
+            while ((c = lock_character(io, p)) != 0 && (isalnum(c) || c == '_')) ++p;
+            size_t length = (size_t)(p - start); char field[64];
+            if (length >= sizeof(field)) { io_status(io, XR_OS_IO_BUDGET); break; }
+            if (io_copy(io, field, start, length) && io_work(io, 1)) field[length] = 0;
+            p = skip_whitespace(io, p);
+            if (lock_character(io, p) == '=') ++p;
+            p = skip_whitespace(io, p);
+            int index = find_index(io, lock, current);
+            if (index >= 0) {
+                XrLockedPackage *package = &lock->packages[index]; char **slot = NULL;
+                if (equal_text(io, field, "version")) slot = &package->version;
+                else if (equal_text(io, field, "resolved")) slot = &package->resolved;
+                else if (equal_text(io, field, "checksum")) slot = &package->checksum;
+                else if (equal_text(io, field, "dependencies")) parse_array(io, &p, package);
+                if (slot && io->status == XR_OS_IO_OK) {
+                    char *value = parse_string(io, &p);
+                    if (value && io_work(io, sizeof(*slot))) { io_free(io, *slot); *slot = value; }
+                    else io_free(io, value);
                 }
             }
         }
-
-        // Skip to next line
-        while (*p && *p != '\n')
-            p++;
-        if (*p == '\n')
-            p++;
+        while ((c = lock_character(io, p)) != 0 && c != '\n') ++p;
+        if (c == '\n') ++p;
     }
-
-    xr_free(content);
-    return lock;
+    return io->status == XR_OS_IO_OK;
 }
-
-bool xr_lockfile_save(const XrLockfile *lock, const char *path) {
-    if (!lock || !path)
-        return false;
-
-    FILE *f = fopen(path, "w");
-    if (!f)
-        return false;
-
-    // Write header
-    fprintf(f, "# xray.lock - Auto-generated, do not edit manually\n");
-    fprintf(f, "# Format version: %d\n\n", lock->version);
-
-    // Write each package
-    for (int i = 0; i < lock->package_count; i++) {
-        const XrLockedPackage *pkg = &lock->packages[i];
-
-        fprintf(f, "[package.%s]\n", pkg->name);
-        fprintf(f, "version = \"%s\"\n", pkg->version ? pkg->version : "0.0.0");
-
-        if (pkg->resolved && pkg->resolved[0]) {
-            fprintf(f, "resolved = \"%s\"\n", pkg->resolved);
+XR_FUNC XrOsIoStatus xr_lockfile_load_owned(const XrOsIoPolicy *policy, const char *path, XrLockfile **output) {
+    if (!io_policy_valid(policy) || !path || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; uint8_t *bytes = NULL; size_t length = 0; char *text = NULL; XrLockfile *lock = NULL;
+    io_status(&io, xr_os_io_read_regular_file(policy, path, SIZE_MAX - 1, &bytes, &length));
+    if (io.status == XR_OS_IO_OK) text = io_alloc(&io, length + 1);
+    if (text && io_copy(&io, text, bytes, length) && io_work(&io, 1)) text[length] = 0;
+    io_free(&io, bytes);
+    if (io.status == XR_OS_IO_OK) io_status(&io, xr_lockfile_new_owned(policy, &lock));
+    if (io.status == XR_OS_IO_OK) parse_lockfile(&io, text, lock);
+    io_free(&io, text);
+    if (io_work(&io, sizeof(*output))) *output = lock;
+    else xr_lockfile_free_owned(lock);
+    return io.status;
+}
+typedef struct LockWriter { XrIoContext *io; char *bytes; size_t length, capacity; } LockWriter;
+static bool append_span(LockWriter *writer, const char *text, size_t length) {
+    if (length > SIZE_MAX - writer->length) return io_status(writer->io, XR_OS_IO_BUDGET);
+    size_t need = writer->length + length;
+    if (need > writer->capacity) {
+        size_t capacity = writer->capacity ? writer->capacity : 256;
+        while (capacity < need) {
+            if (!io_work(writer->io, 1)) return false;
+            if (capacity > SIZE_MAX / 2) { capacity = need; break; }
+            capacity *= 2;
         }
-
-        if (pkg->checksum && pkg->checksum[0]) {
-            fprintf(f, "checksum = \"%s\"\n", pkg->checksum);
-        }
-
-        // Write dependencies
-        fprintf(f, "dependencies = [");
-        for (int j = 0; j < pkg->dep_count; j++) {
-            if (j > 0)
-                fprintf(f, ", ");
-            fprintf(f, "\"%s\"", pkg->dependencies[j]);
-        }
-        fprintf(f, "]\n\n");
+        char *expanded = io_alloc(writer->io, capacity);
+        if (!expanded) return false;
+        if (!io_copy(writer->io, expanded, writer->bytes, writer->length)) { io_free(writer->io, expanded); return false; }
+        io_free(writer->io, writer->bytes); writer->bytes = expanded; writer->capacity = capacity;
     }
-
-    fclose(f);
+    if (!io_copy(writer->io, writer->bytes + writer->length, text, length)) return false;
+    writer->length += length; return true;
+}
+static bool append_text(LockWriter *writer, const char *text) {
+    size_t length = 0;
+    return io_length(writer->io, text, &length) && append_span(writer, text, length);
+}
+static bool append_integer(LockWriter *writer, int value) {
+    uint32_t number = value < 0 ? (uint32_t)(-(int64_t)value) : (uint32_t)value;
+    char reversed[10]; size_t length = 0;
+    do {
+        if (!io_work(writer->io, 1)) return false;
+        reversed[length++] = (char)('0' + number % 10); number /= 10;
+    } while (number);
+    if (value < 0 && !append_span(writer, "-", 1)) return false;
+    while (length) if (!append_span(writer, &reversed[--length], 1)) return false;
     return true;
 }
-
-void xr_lockfile_free(XrLockfile *lock) {
-    if (!lock)
-        return;
-
-    for (int i = 0; i < lock->package_count; i++) {
-        free_locked_package(&lock->packages[i]);
-    }
-
-    xr_free(lock->packages);
-    xr_free(lock);
-}
-
-/* ========== Package Operations API Implementation ========== */
-
-bool xr_lockfile_add_package(XrLockfile *lock, const char *name, const char *version,
-                             const char *resolved, const char *checksum) {
-    if (!lock || !name)
-        return false;
-
-    // Check if already exists
-    for (int i = 0; i < lock->package_count; i++) {
-        if (strcmp(lock->packages[i].name, name) == 0) {
-            // Update existing package
-            XrLockedPackage *pkg = &lock->packages[i];
-            xr_free(pkg->version);
-            xr_free(pkg->resolved);
-            xr_free(pkg->checksum);
-            pkg->version = xr_strdup(version);
-            pkg->resolved = xr_strdup(resolved);
-            pkg->checksum = xr_strdup(checksum);
-            return true;
+static void serialize_lockfile(LockWriter *writer, const XrLockfile *lock) {
+    append_text(writer, "# xray.lock - Auto-generated, do not edit manually\n# Format version: ");
+    append_integer(writer, lock->version); append_text(writer, "\n\n");
+    for (int i = 0; i < lock->package_count && io_work(writer->io, 1); ++i) {
+        const XrLockedPackage *package = &lock->packages[i];
+        append_text(writer, "[package."); append_text(writer, package->name); append_text(writer, "]\nversion = \"");
+        append_text(writer, package->version ? package->version : "0.0.0"); append_text(writer, "\"\n");
+        if (package->resolved && lock_character(writer->io, package->resolved)) {
+            append_text(writer, "resolved = \""); append_text(writer, package->resolved); append_text(writer, "\"\n");
         }
-    }
-
-    // Check capacity
-    if (lock->package_count >= lock->package_capacity) {
-        int old_cap = lock->package_capacity;
-        int new_cap = old_cap * 2;
-        XrLockedPackage *new_pkgs =
-            (XrLockedPackage *) xr_realloc(lock->packages, new_cap * sizeof(XrLockedPackage));
-        if (!new_pkgs)
-            return false;
-        lock->packages = new_pkgs;
-        lock->package_capacity = new_cap;
-    }
-
-    // Add new package
-    XrLockedPackage *pkg = &lock->packages[lock->package_count++];
-    memset(pkg, 0, sizeof(XrLockedPackage));
-    pkg->name = xr_strdup(name);
-    pkg->version = xr_strdup(version);
-    pkg->resolved = xr_strdup(resolved);
-    pkg->checksum = xr_strdup(checksum);
-
-    return true;
-}
-
-bool xr_lockfile_add_dependency(XrLockfile *lock, const char *package_name, const char *dep_spec) {
-    if (!lock || !package_name || !dep_spec)
-        return false;
-
-    // Find package
-    XrLockedPackage *pkg = NULL;
-    for (int i = 0; i < lock->package_count; i++) {
-        if (strcmp(lock->packages[i].name, package_name) == 0) {
-            pkg = &lock->packages[i];
-            break;
+        if (package->checksum && lock_character(writer->io, package->checksum)) {
+            append_text(writer, "checksum = \""); append_text(writer, package->checksum); append_text(writer, "\"\n");
         }
-    }
-
-    if (!pkg)
-        return false;
-
-    // Expand dependencies array (doubling strategy)
-    if (pkg->dep_count >= pkg->dep_capacity) {
-        int new_cap = (pkg->dep_capacity < 4) ? 4 : pkg->dep_capacity * 2;
-        char **new_deps = (char **) xr_realloc(pkg->dependencies, new_cap * sizeof(char *));
-        if (!new_deps)
-            return false;
-        pkg->dependencies = new_deps;
-        pkg->dep_capacity = new_cap;
-    }
-
-    pkg->dependencies[pkg->dep_count++] = xr_strdup(dep_spec);
-
-    return true;
-}
-
-const XrLockedPackage *xr_lockfile_find(const XrLockfile *lock, const char *name) {
-    if (!lock || !name)
-        return NULL;
-
-    for (int i = 0; i < lock->package_count; i++) {
-        if (strcmp(lock->packages[i].name, name) == 0) {
-            return &lock->packages[i];
+        append_text(writer, "dependencies = [");
+        for (int j = 0; j < package->dep_count && io_work(writer->io, 1); ++j) {
+            if (j) append_text(writer, ", ");
+            append_text(writer, "\""); append_text(writer, package->dependencies[j]); append_text(writer, "\"");
         }
+        append_text(writer, "]\n\n");
     }
-
-    return NULL;
 }
-
-bool xr_lockfile_has(const XrLockfile *lock, const char *name) {
-    return xr_lockfile_find(lock, name) != NULL;
-}
-
-bool xr_lockfile_remove(XrLockfile *lock, const char *name) {
-    if (!lock || !name)
-        return false;
-
-    for (int i = 0; i < lock->package_count; i++) {
-        if (strcmp(lock->packages[i].name, name) == 0) {
-            // Free package memory
-            free_locked_package(&lock->packages[i]);
-
-            // Move remaining elements
-            for (int j = i; j < lock->package_count - 1; j++) {
-                lock->packages[j] = lock->packages[j + 1];
-            }
-
-            lock->package_count--;
-            return true;
+static atomic_uint_fast64_t temporary_sequence;
+static char *temporary_path(XrIoContext *io, const char *path) {
+    static const char hex[] = "0123456789abcdef";
+    size_t length = 0;
+    if (!io_length(io, path, &length)) return NULL;
+    if (length > SIZE_MAX - 43) { io_status(io, XR_OS_IO_BUDGET); return NULL; }
+    char *temporary = io_alloc(io, length + 43);
+    if (temporary && io_copy(io, temporary, path, length) && io_copy(io, temporary + length, ".tmp-lock-", 10) && io_work(io, 1)) {
+        int64_t pid = xr_proc_self_pid();
+        if (pid <= 0) io_status(io, XR_OS_IO_IO);
+        uint_fast64_t sequence = 0;
+        if (io_work(io, 1)) sequence = atomic_load_explicit(&temporary_sequence, memory_order_relaxed);
+        while (io->status == XR_OS_IO_OK) {
+            if (sequence == UINT64_MAX) { io_status(io, XR_OS_IO_BUDGET); break; }
+            if (!io_work(io, 1)) break;
+            if (atomic_compare_exchange_weak_explicit(&temporary_sequence, &sequence, sequence + 1,
+                    memory_order_relaxed, memory_order_relaxed)) break;
         }
+        /* The name is not a capability or secret. CREATE_NEW alone admits
+         * ownership; PID reuse and collisions never permit overwriting. */
+        uint64_t parts[2] = {(uint64_t)pid, (uint64_t)sequence};
+        for (size_t part = 0; part < 2 && io->status == XR_OS_IO_OK; ++part)
+            for (size_t i = 0; i < 16 && io_work(io, 1); ++i)
+                temporary[length + 10 + part * 16 + i] = hex[(parts[part] >> (60 - i * 4)) & 15];
+        if (io_work(io, 1)) temporary[length + 42] = 0;
     }
-
-    return false;
+    if (io->status != XR_OS_IO_OK) { io_free(io, temporary); return NULL; }
+    return temporary;
 }
-
-/* ========== Checksum API Implementation ========== */
-
-/*
- * Calculate SHA256 checksum using xray built-in crypto library.
- */
-bool xr_lockfile_checksum_file(const char *filepath, char *out_checksum) {
-    if (!filepath || !out_checksum)
-        return false;
-
-    // Read file content via the checked helper so ftell errors and
-    // short reads cannot poison the SHA256 input length.
-    size_t read_bytes = 0;
-    char *data = xr_file_read_all(filepath, "rb", &read_bytes);
-    if (!data)
-        return false;
-
-    // Calculate SHA256
-#if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
-    uint8_t digest[32];
-    xr_sha256((const uint8_t *) data, read_bytes, digest);
-    xr_free(data);
-
-    // Convert to hex string
-    char hex[65];
-    xr_bytes_to_hex(digest, 32, hex);
-
-    // Format output
-    snprintf(out_checksum, 72, "sha256:%s", hex);
-    return true;
-#else
-    xr_free(data);
-    snprintf(out_checksum, 72, "none:disabled");
-    return false;
-#endif
-}
-
-bool xr_lockfile_verify_checksum(const char *filepath, const char *expected) {
-    if (!filepath || !expected)
-        return false;
-
-    char actual[72];
-    if (!xr_lockfile_checksum_file(filepath, actual)) {
-        return false;
+XR_FUNC XrOsIoStatus xr_lockfile_save_owned(const XrOsIoPolicy *policy, const XrLockfile *lock, const char *path) {
+    if (!xr_lockfile_uses_policy(lock, policy) || !path || !path[0]) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; LockWriter writer = {&io, NULL, 0, 0}; serialize_lockfile(&writer, lock);
+    bool published = false;
+    for (unsigned attempt = 0; attempt < 16 && io_work(&io, 1); ++attempt) {
+        char *temporary = temporary_path(&io, path);
+        if (!temporary) break;
+        XrOsIoStatus status = xr_os_io_write_new_file_sync(policy, temporary, (const uint8_t *)writer.bytes, writer.length);
+        if (status == XR_OS_IO_EXISTS) { io_free(&io, temporary); continue; }
+        io_status(&io, status);
+        if (io.status == XR_OS_IO_OK) {
+            io_status(&io, xr_os_io_rename(policy, temporary, path));
+            published = io.status == XR_OS_IO_OK;
+            if (!published && io.status != XR_OS_IO_BUDGET && io.status != XR_OS_IO_OUT_OF_MEMORY)
+                (void)xr_os_io_remove(policy, temporary);
+        }
+        io_free(&io, temporary); break;
     }
-
-    return strcmp(actual, expected) == 0;
+    if (!published && io.status == XR_OS_IO_OK) io_status(&io, XR_OS_IO_EXISTS);
+    io_free(&io, writer.bytes); return io.status;
+}
+XR_FUNC XrOsIoStatus xr_lockfile_checksum_file_owned(const XrOsIoPolicy *policy, const char *path,
+    char *output, size_t capacity) {
+    if (!io_policy_valid(policy) || !path || !output) return XR_OS_IO_BAD_ARGUMENT;
+    if (capacity < XR_LOCKFILE_CHECKSUM_CAPACITY) return XR_OS_IO_BUDGET;
+    XrIoContext io = {policy, XR_OS_IO_OK}; uint8_t *bytes = NULL; size_t size = 0;
+    io_status(&io, xr_os_io_read_regular_file(policy, path, SIZE_MAX, &bytes, &size));
+    uint8_t digest[32]; char result[XR_LOCKFILE_CHECKSUM_CAPACITY]; static const char hex[] = "0123456789abcdef";
+    if (size > UINT64_MAX - sizeof(digest)) io_status(&io, XR_OS_IO_BUDGET);
+    if (io_work(&io, size + sizeof(digest))) xr_sha256(bytes, size, digest);
+    io_free(&io, bytes);
+    if (io_copy(&io, result, "sha256:", 7)) {
+        for (size_t i = 0; i < sizeof(digest) && io_work(&io, 3); ++i) {
+            result[7 + i * 2] = hex[digest[i] >> 4]; result[8 + i * 2] = hex[digest[i] & 15];
+        }
+        if (io_work(&io, 1)) result[71] = 0;
+        io_copy(&io, output, result, sizeof(result));
+    }
+    return io.status;
+}
+XR_FUNC XrOsIoStatus xr_lockfile_verify_checksum_owned(const XrOsIoPolicy *policy, const char *path,
+    const char *expected, bool *output) {
+    if (!io_policy_valid(policy) || !path || !expected || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; char actual[XR_LOCKFILE_CHECKSUM_CAPACITY];
+    io_status(&io, xr_lockfile_checksum_file_owned(policy, path, actual, sizeof(actual)));
+    bool equal = io.status == XR_OS_IO_OK && equal_text(&io, actual, expected);
+    if (io_work(&io, sizeof(*output))) *output = equal;
+    return io.status;
 }
