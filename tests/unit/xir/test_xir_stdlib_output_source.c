@@ -246,6 +246,8 @@ static void publication_source_resolver_faults(const char *root) {
     }
 }
 
+#include "xir_stdlib_output_file_probe.inc.c"
+
 static void publication_module_faults(const XrXirSourceRequest *request) {
     size_t count = 0;
     const XrModuleResourceBinding *resources = xr_xir_library_catalog_resources(request->libraries, &count);
@@ -281,6 +283,7 @@ static void publication_module_faults(const XrXirSourceRequest *request) {
         CHECK(!module_live && !module_bytes);
     }
     printf("stdlib output Source real module allocations=%zu exact OOM/physical zero\n", source_sites);
+    publication_source_path_faults(request);
 }
 
 static void publication_core_module_faults(const XrXirSourceRequest *request) {
@@ -392,6 +395,7 @@ int main(int argc, char **argv) {
     memset(bytes,0,length); xr_free(bytes);
     publication_resolver_cases(catalog,root,entry);
     publication_source_resolver_faults(root);
+    publication_file_probe_cases(root, entry, source);
     CHECK(!remove(source)); publication_resolver_cases(catalog,root,entry);
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};

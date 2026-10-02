@@ -54,11 +54,13 @@ static XrModuleStatus probe_file_import(const char *base_dir, const char *rel_pa
         int length = snprintf(path, sizeof(path), formats[i], base_dir, rel_path);
         if (length < 0) return XR_MODULE_INVALID;
         if ((size_t) length >= sizeof(path)) return XR_MODULE_BUDGET;
-        if (xr_fs_exists(path)) {
+        XrPathStatus probe = xr_file_probe(path, true);
+        if (probe == XR_PATH_OK) {
             XrPathStatus status;
             *output = xr_realpath(path, &status);
             return xr_module_status_from_path(status);
         }
+        if (probe != XR_PATH_NOT_FOUND) return xr_module_status_from_path(probe);
     }
     return XR_MODULE_NOT_FOUND;
 }
@@ -204,7 +206,11 @@ static XrModuleStatus resolve_stdlib(XrModuleResolver *r, const char *name, XrMo
         length = snprintf(path, sizeof(path), "%s/%s", r->config.stdlib_path, logical);
         if (length < 0) { status = XR_MODULE_INVALID; goto failed; }
         if ((size_t) length >= sizeof(path)) { status = XR_MODULE_BUDGET; goto failed; }
-        if (xr_fs_exists(path)) {
+        XrPathStatus probe = xr_file_probe(path, true);
+        if (probe != XR_PATH_OK && probe != XR_PATH_NOT_FOUND) {
+            status = xr_module_status_from_path(probe); goto failed;
+        }
+        if (probe == XR_PATH_OK) {
             XrPathStatus path_status;
             out_id->source_path = xr_realpath(path, &path_status);
             if (!out_id->source_path) { status = xr_module_status_from_path(path_status); goto failed; }
@@ -249,7 +255,8 @@ static XrModuleStatus resolve_stdlib_submodule(XrModuleResolver *r, const char *
     length = snprintf(path, sizeof(path), "%s/%s", r->config.stdlib_path, logical);
     if (length < 0) goto failed;
     if ((size_t) length >= sizeof(path)) { status = XR_MODULE_BUDGET; goto failed; }
-    if (!xr_fs_exists(path)) { status = XR_MODULE_NOT_FOUND; goto failed; }
+    status = xr_module_status_from_path(xr_file_probe(path, true));
+    if (status != XR_MODULE_OK) goto failed;
     XrPathStatus path_status;
     out_id->kind = XR_MOD_STDLIB;
     out_id->source_path = xr_realpath(path, &path_status);
@@ -404,11 +411,12 @@ static XrModuleStatus resolve_package(XrModuleResolver *r, const char *specifier
             *err_buf = make_error("package '%s' checksum authority path is too long", specifier);
         return -1;
     }
-    if (!xr_fs_is_file(archive_path)) {
+    XrPathStatus archive_probe = xr_file_probe(archive_path, false);
+    if (archive_probe != XR_PATH_OK) {
         if (err_buf)
             *err_buf = make_error(
                 "package '%s' exact archive is unavailable for checksum verification", specifier);
-        return -1;
+        return xr_module_status_from_path(archive_probe);
     }
     if (!xr_lockfile_verify_checksum(archive_path, locked->checksum)) {
         if (err_buf)
@@ -455,12 +463,16 @@ static XrModuleStatus resolve_package(XrModuleResolver *r, const char *specifier
         int length = snprintf(path, sizeof(path), "%s/%s", package_root, entries[i]);
         if (length < 0) return XR_MODULE_INVALID;
         if ((size_t) length >= sizeof(path)) return XR_MODULE_BUDGET;
-        if (xr_fs_exists(path)) return resolve_package_source(&authority, path, out_id);
+        XrPathStatus probe = xr_file_probe(path, true);
+        if (probe == XR_PATH_OK) return resolve_package_source(&authority, path, out_id);
+        if (probe != XR_PATH_NOT_FOUND) return xr_module_status_from_path(probe);
     }
     int length = snprintf(path, sizeof(path), "%s/%s.xr", package_root, name);
     if (length < 0) return XR_MODULE_INVALID;
     if ((size_t) length >= sizeof(path)) return XR_MODULE_BUDGET;
-    if (xr_fs_exists(path)) return resolve_package_source(&authority, path, out_id);
+    XrPathStatus probe = xr_file_probe(path, true);
+    if (probe == XR_PATH_OK) return resolve_package_source(&authority, path, out_id);
+    if (probe != XR_PATH_NOT_FOUND) return xr_module_status_from_path(probe);
 
     if (err_buf)
         *err_buf =

@@ -10,8 +10,35 @@
 #include "xir_stdlib_output_module_probe.h"
 #include <stdint.h>
 #include <stdlib.h>
+#ifdef XR_OS_WINDOWS
+#include <windows.h>
+#endif
 size_t module_attempts, module_fail_at = SIZE_MAX, module_live, module_bytes;
 bool module_injecting;
+size_t module_os_attempts[2], module_os_fail_at[2] = {SIZE_MAX, SIZE_MAX};
+unsigned long module_os_error;
+bool module_attributes_override;
+unsigned long module_attributes;
+#ifdef XR_OS_WINDOWS
+static bool module_os_reject(unsigned kind) {
+    if (!module_injecting || module_os_attempts[kind]++ != module_os_fail_at[kind]) return false;
+    SetLastError(module_os_error); return true;
+}
+static BOOL module_get_attributes(const wchar_t *path, GET_FILEEX_INFO_LEVELS level, void *out) {
+    if (module_os_reject(0)) return FALSE;
+    if (module_injecting && module_attributes_override) {
+        WIN32_FILE_ATTRIBUTE_DATA *attributes = out;
+        memset(attributes, 0, sizeof(*attributes)); attributes->dwFileAttributes = module_attributes;
+        return TRUE;
+    }
+    return GetFileAttributesExW(path, level, out);
+}
+/* Inject at the actual API invocation, after the production UTF-16 allocation. */
+#define GetFileAttributesExW(path, level, out) \
+    module_get_attributes(path, level, out)
+#define GetFullPathNameW(path, length, out, part) \
+    (module_os_reject(1) ? 0UL : GetFullPathNameW(path, length, out, part))
+#endif
 typedef struct ModuleAllocation { void *pointer; size_t bytes; } ModuleAllocation;
 static ModuleAllocation module_allocations[4096];
 static size_t module_find(void *p) {

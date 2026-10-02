@@ -55,6 +55,11 @@ XR_FUNC char *xr_path_basename(const char *path);
 typedef enum XrPathStatus {
     XR_PATH_OK, XR_PATH_INVALID, XR_PATH_BUDGET, XR_PATH_IO, XR_PATH_OUT_OF_MEMORY, XR_PATH_NOT_FOUND
 } XrPathStatus;
+/* Probe a non-directory file candidate. Source resolution allows link locators
+ * for its later canonicalization; archive admission requires a regular file.
+ * Only NOT_FOUND permits trying another candidate. Other kinds are INVALID;
+ * conversion/allocation and OS failures retain their exact category. */
+XR_FUNC XrPathStatus xr_file_probe(const char *path, bool allow_links);
 /* Optional status preserves the cause even when no diagnostic can be allocated. */
 XR_FUNC char *xr_realpath(const char *path, XrPathStatus *status);
 

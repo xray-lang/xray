@@ -12,6 +12,10 @@
 #include <stdbool.h>
 extern size_t module_attempts, module_fail_at, module_live, module_bytes;
 extern bool module_injecting;
+extern size_t module_os_attempts[2], module_os_fail_at[2];
+extern unsigned long module_os_error;
+extern bool module_attributes_override;
+extern unsigned long module_attributes;
 void xr_test_stdlib_output_module_forget(void *pointer);
 /* Separate symbols let bootstrap objects coexist with the instrumented real implementations. */
 #define xr_file_read_all xr_test_output_file_read_all
@@ -19,6 +23,7 @@ void xr_test_stdlib_output_module_forget(void *pointer);
 #define xr_path_dirname xr_test_output_path_dirname
 #define xr_path_join xr_test_output_path_join
 #define xr_realpath xr_test_output_realpath
+#define xr_file_probe xr_test_output_file_probe
 #define xr_module_identity_authority_valid xr_test_output_module_identity_authority_valid
 #define xr_module_identity_from_logical xr_test_output_module_identity_from_logical
 #define xr_module_identity_from_source xr_test_output_module_identity_from_source

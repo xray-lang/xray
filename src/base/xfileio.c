@@ -17,7 +17,52 @@
 #include <errno.h>
 #ifdef XR_OS_WINDOWS
 #include "xwindows_utf8.h"
+#else
+#include <sys/stat.h>
 #endif
+
+#ifdef XR_OS_WINDOWS
+static XrPathStatus fileio_windows_status(DWORD error) {
+    switch (error) {
+    case ERROR_FILE_NOT_FOUND: case ERROR_PATH_NOT_FOUND: return XR_PATH_NOT_FOUND;
+    case ERROR_NOT_ENOUGH_MEMORY: case ERROR_OUTOFMEMORY: return XR_PATH_OUT_OF_MEMORY;
+    case ERROR_FILENAME_EXCED_RANGE: case ERROR_BUFFER_OVERFLOW: return XR_PATH_BUDGET;
+    case ERROR_INVALID_NAME: case ERROR_BAD_PATHNAME: case ERROR_INVALID_PARAMETER:
+    case ERROR_NO_UNICODE_TRANSLATION: return XR_PATH_INVALID;
+    default: return XR_PATH_IO;
+    }
+}
+static XrPathStatus fileio_conversion_status(XrWinPathStatus status) {
+    return status == XR_WIN_PATH_OOM ? XR_PATH_OUT_OF_MEMORY :
+        status == XR_WIN_PATH_LIMIT ? XR_PATH_BUDGET : XR_PATH_INVALID;
+}
+#else
+static XrPathStatus fileio_errno_status(int error) {
+    return error == ENOMEM ? XR_PATH_OUT_OF_MEMORY : error == ENAMETOOLONG ? XR_PATH_BUDGET :
+        error == ENOENT || error == ENOTDIR ? XR_PATH_NOT_FOUND :
+        error == EINVAL ? XR_PATH_INVALID : XR_PATH_IO;
+}
+#endif
+
+XR_FUNC XrPathStatus xr_file_probe(const char *path, bool allow_links) {
+    if (!path || !path[0]) return XR_PATH_INVALID;
+#ifdef XR_OS_WINDOWS
+    XrWinPathStatus converted;
+    wchar_t *wide = xr_win_utf8_path(path, &converted);
+    if (!wide) return fileio_conversion_status(converted);
+    WIN32_FILE_ATTRIBUTE_DATA attributes = {0};
+    BOOL found = GetFileAttributesExW(wide, GetFileExInfoStandard, &attributes);
+    DWORD error = found ? ERROR_SUCCESS : GetLastError();
+    xr_free(wide);
+    if (!found) return fileio_windows_status(error);
+    if (attributes.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_DEVICE)) return XR_PATH_INVALID;
+    return !allow_links && (attributes.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ? XR_PATH_INVALID : XR_PATH_OK;
+#else
+    struct stat attributes;
+    if (lstat(path, &attributes)) return fileio_errno_status(errno);
+    return S_ISREG(attributes.st_mode) || (allow_links && S_ISLNK(attributes.st_mode)) ? XR_PATH_OK : XR_PATH_INVALID;
+#endif
+}
 
 char *xr_file_read_all(const char *path, const char *mode, size_t *out_size) {
     if (!path || !mode)
@@ -159,35 +204,32 @@ char *xr_realpath(const char *path, XrPathStatus *status) {
     XrWinPathStatus converted;
     wchar_t *wide = xr_win_utf8_path(path, &converted);
     if (!wide) {
-        *status = converted == XR_WIN_PATH_OOM ? XR_PATH_OUT_OF_MEMORY :
-            converted == XR_WIN_PATH_LIMIT ? XR_PATH_BUDGET : XR_PATH_INVALID;
+        *status = fileio_conversion_status(converted);
         return NULL;
     }
     DWORD units = GetFullPathNameW(wide, 0, NULL, NULL);
     if (!units || units > 32768) {
-        *status = units ? XR_PATH_BUDGET : XR_PATH_IO;
+        *status = units ? XR_PATH_BUDGET : fileio_windows_status(GetLastError());
         xr_free(wide); return NULL;
     }
     wchar_t *resolved = xr_malloc((size_t)units * sizeof(wchar_t));
     if (!resolved) { *status = XR_PATH_OUT_OF_MEMORY; xr_free(wide); return NULL; }
     DWORD length = GetFullPathNameW(wide, units, resolved, NULL);
+    DWORD error = length ? ERROR_SUCCESS : GetLastError();
     xr_free(wide);
     char *result = NULL;
     if (length && length < units) {
         result = xr_win_utf16_text(resolved, &converted);
-        *status = result ? XR_PATH_OK : converted == XR_WIN_PATH_OOM ?
-            XR_PATH_OUT_OF_MEMORY : XR_PATH_INVALID;
+        *status = result ? XR_PATH_OK : fileio_conversion_status(converted);
     } else {
-        *status = length ? XR_PATH_BUDGET : XR_PATH_IO;
+        *status = length ? XR_PATH_BUDGET : fileio_windows_status(error);
     }
     xr_free(resolved);
     return result;
 #else
     char *rp = realpath(path, NULL);
     if (!rp) {
-        *status = errno == ENOMEM ? XR_PATH_OUT_OF_MEMORY :
-            errno == ENAMETOOLONG ? XR_PATH_BUDGET :
-            errno == ENOENT || errno == ENOTDIR ? XR_PATH_NOT_FOUND : XR_PATH_IO;
+        *status = fileio_errno_status(errno);
         return NULL;
     }
 
