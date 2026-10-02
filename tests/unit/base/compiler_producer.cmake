@@ -1,18 +1,10 @@
 get_filename_component(XR_PRODUCER_TEST_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 add_executable(test_compile_state
     "${CMAKE_CURRENT_LIST_DIR}/test_compile_state.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/base/xcompile_state.c"
     "${XR_PRODUCER_TEST_ROOT}/src/base/xsource_cache.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/base/xutf8.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/base/xsimd.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/frontend/lexer/xquoted_literal.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/frontend/lexer/xlex.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/base/xarena.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/toolchain/xcompiler_arena_backing.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/frontend/parser/xcompile_type_format.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/frontend/parser/xstring_pool.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/frontend/parser/xtype_scope.c"
     "${XR_PRODUCER_TEST_ROOT}/src/runtime/value/xtype_pool.c")
+target_link_libraries(test_compile_state PRIVATE xray_compiler_parser)
+
 target_include_directories(test_compile_state PRIVATE "${XR_PRODUCER_TEST_ROOT}/src" "${XR_PRODUCER_TEST_ROOT}/include")
 target_compile_features(test_compile_state PRIVATE c_std_11)
 if(MSVC)

@@ -1,17 +1,7 @@
 get_filename_component(XR_PARSER_OWNER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
-file(GLOB XR_PARSER_OWNER_SOURCES "${XR_PARSER_OWNER_ROOT}/src/frontend/parser/*.c")
-add_executable(test_parser_resources
-    "${CMAKE_CURRENT_LIST_DIR}/test_parser_resources.c"
-    ${XR_PARSER_OWNER_SOURCES}
-    "${XR_PARSER_OWNER_ROOT}/src/frontend/lexer/xlex.c"
-    "${XR_PARSER_OWNER_ROOT}/src/frontend/lexer/xquoted_literal.c"
-    "${XR_PARSER_OWNER_ROOT}/src/base/xcompile_state.c"
-    "${XR_PARSER_OWNER_ROOT}/src/os/win/fd_win.c"
-    "${XR_PARSER_OWNER_ROOT}/src/base/xarena.c"
-    "${XR_PARSER_OWNER_ROOT}/src/base/xutf8.c"
-    "${XR_PARSER_OWNER_ROOT}/src/base/xsimd.c"
-    "${XR_PARSER_OWNER_ROOT}/src/toolchain/xcompiler_arena_backing.c"
-    "${XR_PARSER_OWNER_ROOT}/src/toolchain/xcompiler_session.c")
+add_executable(test_parser_resources "${CMAKE_CURRENT_LIST_DIR}/test_parser_resources.c")
+target_link_libraries(test_parser_resources PRIVATE xray_compiler_parser)
+
 target_include_directories(test_parser_resources PRIVATE "${XR_PARSER_OWNER_ROOT}/src" "${XR_PARSER_OWNER_ROOT}/src/base" "${XR_PARSER_OWNER_ROOT}/include")
 target_compile_features(test_parser_resources PRIVATE c_std_11)
 if(MSVC)

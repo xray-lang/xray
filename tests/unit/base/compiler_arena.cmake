@@ -1,11 +1,8 @@
 # The system executable deliberately has no compiler ledger link dependency.
 get_filename_component(XR_ARENA_TEST_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 add_library(arena_ledger_production OBJECT "${XR_ARENA_TEST_ROOT}/src/base/xcompile_resources.c")
-add_executable(test_compiler_arena
-    "${CMAKE_CURRENT_LIST_DIR}/test_compiler_arena.c"
-    "${XR_ARENA_TEST_ROOT}/src/base/xcompile_state.c"
-    "${XR_ARENA_TEST_ROOT}/src/base/xarena.c"
-    "${XR_ARENA_TEST_ROOT}/src/toolchain/xcompiler_arena_backing.c")
+add_executable(test_compiler_arena "${CMAKE_CURRENT_LIST_DIR}/test_compiler_arena.c")
+target_link_libraries(test_compiler_arena PRIVATE xray_compiler_parser)
 add_executable(test_arena_system_link
     "${CMAKE_CURRENT_LIST_DIR}/test_arena_system_link.c"
     "${XR_ARENA_TEST_ROOT}/src/base/xarena.c"
