@@ -8,17 +8,14 @@
  * xmodule_resolver.h - Unified import specifier → source path resolver
  *
  * KEY CONCEPT:
- *   Single entry point for resolving any import specifier to an absolute
- *   source file path. Used by the bundler, runtime loader, and (future)
- *   module graph builder. Replaces ad-hoc resolution logic scattered
- *   across xmodule.c and xbundle.c.
+ *   Resolve source and immutable Checked imports under one compiler ledger.
+ *   Owning results remain valid after their producing resolver is destroyed.
  *
  * RESOLUTION RULES:
  *   Bare name         -> stdlib native factory registry lookup
  *   "std/name/path"   -> exact stdlib source submodule under an explicit root
  *   "./" or "../"     → relative file (.xr) or directory (index.xr)
  *   "owner/name"      → third-party package under ~/.xray/packages/
- *   other quoted path → project-relative file or directory
  */
 
 #ifndef XMODULE_RESOLVER_H
@@ -30,7 +27,7 @@
 #include "xmodule_identity.h"
 
 /* Forward declarations */
-struct XrVMRuntime;
+struct XrXirLibraryCatalog;
 struct XrProject;
 struct XrLockfile;
 
@@ -57,17 +54,17 @@ typedef enum {
 
 typedef struct {
     XrModuleKind kind;
-    char *canonical;   /* Owned string — caller must xr_free() */
+    char *canonical;   /* Owned string; caller releases through xr_compile_module_id_cleanup */
     char *logical_path; /* Root-relative source path (owned) */
     char *source_path; /* Absolute .xr path, or NULL for native stdlib.
-                          Owned string — caller must xr_free() */
+                          Owned string; caller releases through xr_compile_module_id_cleanup */
     XrModuleIdentityAuthority authority; /* Owned authority coordinate and I/O root */
     XrModuleRepresentation representation;
     const XrModuleResourceBinding *resource;
 } XrModuleId;
 
 /* Free contents of an XrModuleId (does NOT free the struct itself). */
-XR_FUNC void xr_module_id_cleanup(XrModuleId *id);
+XR_FUNC void xr_compile_module_id_cleanup(XrModuleId *id);
 
 /* ========== Resolver Configuration ========== */
 
@@ -81,27 +78,31 @@ typedef struct {
 
     /*
      * Optional lockfile for pinning third-party package versions.
-     * Borrowed pointer; may be NULL.
+     * Borrowed pointer; may be NULL. It must use the same ledger policy and
+     * remain alive until the resolver is destroyed.
      */
     struct XrLockfile *lockfile;
 
-    const XrModuleResourceBinding *resources;
-    size_t resource_count;
+    /* Borrowed immutable catalog; must share resources and outlive the resolver. */
+    const struct XrXirLibraryCatalog *catalog;
 } XrModuleResolverConfig;
 
 /* ========== Resolver Instance ========== */
 
 typedef struct XrModuleResolver {
+    XrCompileResources *resources;
     XrModuleResolverConfig config;
     XrHashMap *cache; /* specifier+importer → XrModuleId (owned) */
 } XrModuleResolver;
 
 /* ========== Lifecycle ========== */
 
-XR_FUNC XrModuleResolver *xr_module_resolver_new(const XrModuleResolverConfig *cfg);
-XR_FUNC void xr_module_resolver_free(XrModuleResolver *r);
+/* Failure preserves output. stdlib_path is copied; lockfile and catalog are borrowed. */
+XR_FUNC XrModuleStatus xr_compile_module_resolver_new(XrCompileResources *resources,
+    const XrModuleResolverConfig *cfg, XrModuleResolver **output);
+XR_FUNC void xr_compile_module_resolver_free(XrModuleResolver *r);
 
-XR_FUNC bool xr_module_resolver_set_lockfile(XrModuleResolver *r, struct XrLockfile *lockfile);
+XR_FUNC XrModuleStatus xr_compile_module_resolver_set_lockfile(XrModuleResolver *r, struct XrLockfile *lockfile);
 
 /* ========== Resolution API ========== */
 
@@ -113,15 +114,16 @@ XR_FUNC bool xr_module_resolver_set_lockfile(XrModuleResolver *r, struct XrLockf
  * @param importer_path Absolute path of the importing file, or NULL for
  *                      entry scripts (uses cwd as base)
  * @param out_id        On success, filled with the resolved module info.
- *                      Caller must call xr_module_id_cleanup() when done.
+ *                      Failure preserves its prior value.
+ *                      Caller must call xr_compile_module_id_cleanup() when done.
  * @param err_buf       On failure, a human-readable error message is
- *                      written here (xr_malloc'd).  Caller must xr_free().
+ *                      written here (ledger-owned). Caller uses xr_compile_resources_free.
  *                      May be NULL if the caller doesn't need the message.
  * @return              XR_MODULE_OK on success, otherwise a typed failure
  */
 /* Resolve with the importing module's exact authority. Package-internal relative
  * imports must use their package authority rather than the entry project root. */
-XR_FUNC XrModuleStatus xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
+XR_FUNC XrModuleStatus xr_compile_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
                                        const char *importer_path,
                                        const XrModuleIdentityAuthority *importer_authority,
                                        XrModuleId *out_id, char **err_buf);

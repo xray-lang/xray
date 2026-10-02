@@ -1,213 +1,179 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xhashmap.c - String hash table implementation
+ * xhashmap.c - Transactional string table with one explicit resource policy
  */
-
 #include "xhashmap.h"
-#include "xmalloc.h"
-#include "xchecks.h"
+#include "xio_policy.inc.h"
 #include "xhash.h"
 #include <string.h>
 
-static uint32_t hash_string(const char *str) {
-    return xr_hash_bytes(str, strlen(str));
+typedef union HashMapOwner {
+    XrOsIoPolicy policy;
+    long double alignment;
+    void *pointer;
+    uint64_t integer;
+} HashMapOwner;
+_Static_assert(sizeof(HashMapOwner) % _Alignof(XrHashMap) == 0, "Map owner preserves payload alignment");
+
+static const XrOsIoPolicy *map_policy(const XrHashMap *map) {
+    return &((const HashMapOwner *)map-1)->policy;
 }
-
-// Empty slot: key==NULL && value!=TOMBSTONE
-// Tombstone:  key==NULL && value==TOMBSTONE
-static inline bool entry_is_empty(const XrHashMapEntry *e) {
-    return e->key == NULL && e->value != XR_HASHMAP_TOMBSTONE;
+static bool empty(const XrHashMapEntry *entry) {
+    return !entry->key && entry->value != XR_HASHMAP_TOMBSTONE;
 }
-
-static inline bool entry_is_tombstone(const XrHashMapEntry *e) {
-    return e->key == NULL && e->value == XR_HASHMAP_TOMBSTONE;
+static bool tombstone(const XrHashMapEntry *entry) {
+    return !entry->key && entry->value == XR_HASHMAP_TOMBSTONE;
 }
-
-static XrHashMapEntry *find_entry(XrHashMap *map, const char *key, uint32_t hash,
-                                  uint32_t *out_index) {
-    if (!map || !key)
-        return NULL;
-
-    uint32_t index = hash & (map->capacity - 1);
-
-    XrHashMapEntry *tombstone = NULL;
-
-    for (uint32_t i = 0; i < map->capacity; i++) {
-        uint32_t probe_index = (index + i) & (map->capacity - 1);
-        XrHashMapEntry *entry = &map->entries[probe_index];
-
-        if (entry_is_empty(entry)) {
-            if (out_index) {
-                *out_index = tombstone ? (uint32_t) (tombstone - map->entries) : probe_index;
-            }
-            return NULL;
-        } else if (entry_is_tombstone(entry)) {
-            if (!tombstone)
-                tombstone = entry;
-        } else if (entry->hash == hash && strcmp(entry->key, key) == 0) {
-            // Fast path: compare cached hash first, strcmp only on match
-            if (out_index)
-                *out_index = probe_index;
-            return entry;
+static bool hash_string(XrIoContext *io, const char *key, uint32_t *output) {
+    size_t length;
+    if (!io_length(io,key,&length) || !io_work(io,length)) return false;
+    *output = xr_hash_bytes(key,length); return true;
+}
+static bool key_equal(XrIoContext *io, const char *first, const char *second) {
+    for (size_t i = 0;; ++i) {
+        if (!io_work(io,2)) return false;
+        char a = first[i], b = second[i];
+        if (a != b) return false;
+        if (!a) return true;
+    }
+}
+/* Only local outputs change during a probe; callers publish after status OK. */
+static XrHashMapEntry *find_entry(XrIoContext *io, const XrHashMap *map,
+    const char *key, uint32_t hash, uint32_t *index_out) {
+    uint32_t start = hash & (map->capacity-1), deleted = UINT32_MAX;
+    for (uint32_t i = 0; i < map->capacity; ++i) {
+        if (!io_work(io,1)) return NULL;
+        uint32_t index = (start+i) & (map->capacity-1);
+        XrHashMapEntry *entry = &map->entries[index];
+        if (empty(entry)) { *index_out = deleted != UINT32_MAX ? deleted : index; return NULL; }
+        if (tombstone(entry)) { if (deleted == UINT32_MAX) deleted = index; }
+        else if (entry->hash == hash && key_equal(io,entry->key,key)) { *index_out = index; return entry; }
+        if (io->status != XR_OS_IO_OK) return NULL;
+    }
+    *index_out = deleted; return NULL;
+}
+static XrHashMapEntry *allocate_entries(XrIoContext *io, uint32_t capacity) {
+    if (capacity && sizeof(XrHashMapEntry) > SIZE_MAX/(size_t)capacity) {
+        io_status(io,XR_OS_IO_BUDGET); return NULL;
+    }
+    size_t bytes = (size_t)capacity*sizeof(XrHashMapEntry);
+    XrHashMapEntry *entries = io_alloc(io,bytes);
+    if (entries && !io_clear(io,entries,bytes)) { io_free(io,entries); return NULL; }
+    return entries;
+}
+/* A private destination can be discarded at any failed work boundary. */
+static bool rehash(XrIoContext *io, const XrHashMap *map, XrHashMapEntry *entries, uint32_t capacity) {
+    for (uint32_t i = 0; i < map->capacity; ++i) {
+        if (!io_work(io,1)) return false;
+        const XrHashMapEntry *entry = &map->entries[i];
+        if (!entry->key) continue;
+        uint32_t index = entry->hash & (capacity-1);
+        for (;;) {
+            if (!io_work(io,1)) return false;
+            if (!entries[index].key) break;
+            index = (index+1) & (capacity-1);
         }
+        if (!io_copy(io,&entries[index],entry,sizeof(*entry))) return false;
     }
-
-    if (out_index && tombstone) {
-        *out_index = (uint32_t) (tombstone - map->entries);
-    }
-    return NULL;
-}
-
-// Grow the table. Returns false on allocation failure, leaving the old
-// table intact: the map keeps working above its load factor (degraded
-// probing), and xr_hashmap_set reports failure only once no free slot
-// is left.
-static bool resize(XrHashMap *map, uint32_t new_capacity) {
-    XR_DCHECK(new_capacity >= map->capacity, "New capacity must be >= current capacity");
-    XR_DCHECK((new_capacity & (new_capacity - 1)) == 0, "hashmap resize: capacity not power-of-2");
-
-    XrHashMapEntry *new_entries =
-        (XrHashMapEntry *) xr_malloc(sizeof(XrHashMapEntry) * new_capacity);
-    if (!new_entries)
-        return false;
-
-    memset(new_entries, 0, sizeof(XrHashMapEntry) * new_capacity);
-
-    XrHashMapEntry *old_entries = map->entries;
-    uint32_t old_capacity = map->capacity;
-
-    map->entries = new_entries;
-    map->capacity = new_capacity;
-    map->count = 0;
-
-    for (uint32_t i = 0; i < old_capacity; i++) {
-        XrHashMapEntry *entry = &old_entries[i];
-        if (entry->key != NULL) {
-            // Reuse cached hash — skip strlen+FNV recomputation
-            uint32_t h = entry->hash & (new_capacity - 1);
-            while (new_entries[h].key != NULL) {
-                h = (h + 1) & (new_capacity - 1);
-            }
-            new_entries[h].key = entry->key;
-            new_entries[h].value = entry->value;
-            new_entries[h].hash = entry->hash;
-            map->count++;
-        }
-    }
-
-    XR_DCHECK(map->count <= map->capacity, "hashmap resize: count > capacity after rehash");
-    xr_free(old_entries);
     return true;
 }
-
-XrHashMap *xr_hashmap_new(void) {
-    XrHashMap *map = (XrHashMap *) xr_malloc(sizeof(XrHashMap));
-    if (!map)
-        return NULL;
-    uint32_t initial_capacity = 16;
-    map->entries = (XrHashMapEntry *) xr_malloc(sizeof(XrHashMapEntry) * initial_capacity);
-    if (!map->entries) {
-        xr_free(map);
-        return NULL;
-    }
-    map->capacity = initial_capacity;
-    map->count = 0;
-
-    memset(map->entries, 0, sizeof(XrHashMapEntry) * initial_capacity);
-    return map;
+XR_FUNC XrOsIoStatus xr_hashmap_owned_new(const XrOsIoPolicy *policy, XrHashMap **output) {
+    if (!io_policy_valid(policy) || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy,XR_OS_IO_OK};
+    HashMapOwner *owner = io_alloc(&io,sizeof(*owner)+sizeof(XrHashMap));
+    if (!owner) return io.status;
+    owner->policy = *policy;
+    XrHashMap *map = (void *)(owner+1);
+    map->entries = allocate_entries(&io,16);
+    if (!map->entries) { io_free(&io,owner); return io.status; }
+    map->capacity = 16; map->count = 0; *output = map; return XR_OS_IO_OK;
 }
-
-void xr_hashmap_free(XrHashMap *map) {
-    if (!map)
-        return;
-    xr_free(map->entries);
-    xr_free(map);
+XR_FUNC void xr_hashmap_owned_dispose(XrHashMap *map, XrHashMapIterFunc cleanup, void *userdata) {
+    if (!map) return;
+    XrOsIoPolicy policy = *map_policy(map);
+    if (cleanup) for (uint32_t i = 0; i < map->capacity; ++i)
+        if (map->entries[i].key) cleanup(map->entries[i].key,map->entries[i].value,userdata);
+    policy.free(policy.context,map->entries);
+    policy.free(policy.context,(HashMapOwner *)map-1);
 }
-
-bool xr_hashmap_set(XrHashMap *map, const char *key, void *value) {
-    XR_DCHECK(map != NULL, "Map must not be NULL");
-    XR_DCHECK(key != NULL, "Key must not be NULL");
-
-    // Load factor 75%: count * 4 >= capacity * 3
-    if (map->count * 4 >= map->capacity * 3) {
-        (void) resize(map, map->capacity * XR_HASHMAP_GROW_FACTOR);
+XR_FUNC void xr_hashmap_owned_free(XrHashMap *map) { xr_hashmap_owned_dispose(map,NULL,NULL); }
+XR_FUNC XrOsIoStatus xr_hashmap_owned_set(XrHashMap *map, const char *key, void *value) {
+    if (!map || !key) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK};
+    uint32_t hash, index = UINT32_MAX;
+    if (!hash_string(&io,key,&hash)) return io.status;
+    XrHashMapEntry *found = find_entry(&io,map,key,hash,&index);
+    if (io.status != XR_OS_IO_OK) return io.status;
+    if (found) {
+        if (!io_work(&io,1)) return io.status;
+        found->value = value; return XR_OS_IO_OK;
     }
-
-    uint32_t hash = hash_string(key);
-    // Sentinel: capacity is a power of two <= 2^31, so UINT32_MAX can
-    // never be a valid slot. find_entry leaves out_index untouched only
-    // when the table is completely full (possible after a failed resize).
-    uint32_t index = UINT32_MAX;
-    XrHashMapEntry *entry = find_entry(map, key, hash, &index);
-
-    if (!entry) {
-        if (index >= map->capacity) {
-            // Table full and key absent: resize already failed under OOM.
-            // Report failure instead of writing through a bogus index.
-            return false;
+    if (map->count >= map->capacity-map->capacity/4 || index == UINT32_MAX) {
+        if (map->capacity >= UINT32_C(0x80000000)) return XR_OS_IO_BUDGET;
+        uint32_t capacity = map->capacity*2;
+        XrHashMapEntry *entries = allocate_entries(&io,capacity);
+        if (!entries) return io.status;
+        if (!rehash(&io,map,entries,capacity)) { io_free(&io,entries); return io.status; }
+        index = hash & (capacity-1);
+        for (;;) {
+            if (!io_work(&io,1)) { io_free(&io,entries); return io.status; }
+            if (!entries[index].key) break;
+            index = (index+1) & (capacity-1);
         }
-        entry = &map->entries[index];
-        entry->key = (char *) key;
-        entry->hash = hash;
-        map->count++;
+        if (!io_work(&io,1)) { io_free(&io,entries); return io.status; }
+        entries[index] = (XrHashMapEntry){(char *)key,value,hash};
+        XrHashMapEntry *previous = map->entries;
+        map->entries = entries; map->capacity = capacity; ++map->count;
+        io_free(&io,previous); return XR_OS_IO_OK;
     }
-    entry->value = value;
-    return true;
+    if (!io_work(&io,1)) return io.status;
+    map->entries[index] = (XrHashMapEntry){(char *)key,value,hash}; ++map->count;
+    return XR_OS_IO_OK;
 }
-
-void *xr_hashmap_get(XrHashMap *map, const char *key) {
-    if (!map || !key)
-        return NULL;
-    uint32_t hash = hash_string(key);
-    uint32_t index;
-    XrHashMapEntry *entry = find_entry(map, key, hash, &index);
-    return entry ? entry->value : NULL;
+XR_FUNC XrOsIoStatus xr_hashmap_owned_get(const XrHashMap *map, const char *key, void **output) {
+    if (!map || !key || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK}; uint32_t hash, index;
+    if (!hash_string(&io,key,&hash)) return io.status;
+    XrHashMapEntry *entry = find_entry(&io,map,key,hash,&index);
+    if (io.status == XR_OS_IO_OK) *output = entry ? entry->value : NULL;
+    return io.status;
 }
-
-bool xr_hashmap_has(XrHashMap *map, const char *key) {
-    if (!map || !key)
-        return false;
-    uint32_t hash = hash_string(key);
-    uint32_t index;
-    XrHashMapEntry *entry = find_entry(map, key, hash, &index);
-    return entry != NULL;
+XR_FUNC XrOsIoStatus xr_hashmap_owned_has(const XrHashMap *map, const char *key, bool *output) {
+    if (!map || !key || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK}; uint32_t hash, index;
+    if (!hash_string(&io,key,&hash)) return io.status;
+    XrHashMapEntry *entry = find_entry(&io,map,key,hash,&index);
+    if (io.status == XR_OS_IO_OK) *output = entry != NULL;
+    return io.status;
 }
-
-bool xr_hashmap_delete(XrHashMap *map, const char *key) {
-    if (!map || !key)
-        return false;
-    uint32_t hash = hash_string(key);
-    uint32_t index;
-    XrHashMapEntry *entry = find_entry(map, key, hash, &index);
-    if (!entry)
-        return false;
-
-    entry->key = NULL;
-    entry->value = XR_HASHMAP_TOMBSTONE;
-    // Keep hash non-zero — tombstone detection uses key==NULL && value==TOMBSTONE
-    map->count--;
-    return true;
-}
-
-void xr_hashmap_clear(XrHashMap *map) {
-    if (!map)
-        return;
-    memset(map->entries, 0, sizeof(XrHashMapEntry) * map->capacity);
-    map->count = 0;
-}
-
-void xr_hashmap_foreach(XrHashMap *map, XrHashMapIterFunc func, void *userdata) {
-    if (!map || !func)
-        return;
-    for (uint32_t i = 0; i < map->capacity; i++) {
-        XrHashMapEntry *entry = &map->entries[i];
-        if (entry->key != NULL) {
-            func(entry->key, entry->value, userdata);
-        }
+XR_FUNC XrOsIoStatus xr_hashmap_owned_delete(XrHashMap *map, const char *key, bool *output) {
+    if (!map || !key || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK}; uint32_t hash, index;
+    if (!hash_string(&io,key,&hash)) return io.status;
+    XrHashMapEntry *entry = find_entry(&io,map,key,hash,&index);
+    if (io.status != XR_OS_IO_OK) return io.status;
+    if (entry) {
+        if (!io_work(&io,1)) return io.status;
+        entry->key = NULL; entry->value = XR_HASHMAP_TOMBSTONE; --map->count;
     }
+    *output = entry != NULL; return XR_OS_IO_OK;
+}
+XR_FUNC XrOsIoStatus xr_hashmap_owned_clear(XrHashMap *map) {
+    if (!map) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK};
+    if (io_clear(&io,map->entries,(size_t)map->capacity*sizeof(*map->entries))) map->count = 0;
+    return io.status;
+}
+XR_FUNC XrOsIoStatus xr_hashmap_owned_foreach(const XrHashMap *map, XrHashMapIterFunc func, void *userdata) {
+    if (!map || !func) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK};
+    for (uint32_t i = 0; i < map->capacity; ++i) {
+        if (!io_work(&io,1)) return io.status;
+        if (map->entries[i].key) func(map->entries[i].key,map->entries[i].value,userdata);
+    }
+    return XR_OS_IO_OK;
 }

@@ -41,17 +41,6 @@ static char *identity_copy(XrCompileResources *owner, XrModuleIdentityWork *work
     if (!xr_module_identity_work(work,length+1)) { xr_compile_resources_free(copy); return NULL; }
     memcpy(copy,text,length+1); return copy;
 }
-static XrModuleStatus identity_io_status(XrOsIoStatus status) {
-    switch (status) {
-    case XR_OS_IO_OK: return XR_MODULE_OK;
-    case XR_OS_IO_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
-    case XR_OS_IO_BUDGET: return XR_MODULE_BUDGET;
-    case XR_OS_IO_NOT_FOUND: return XR_MODULE_NOT_FOUND;
-    case XR_OS_IO_BAD_ARGUMENT: return XR_MODULE_INVALID;
-    default: return XR_MODULE_IO;
-    }
-}
-
 static size_t decimal_digits(XrModuleIdentityWork *work, size_t value) {
     size_t digits = 1;
     while (value >= 10) {
@@ -243,9 +232,9 @@ XR_FUNC XrModuleStatus xr_compile_module_identity_script_authority_from_source(X
     if (!resources || !source_path || !authority || !root_out) return XR_MODULE_INVALID;
     XrOsIoPolicy policy = xr_compile_io_policy(resources);
     char *source = NULL, *root = NULL;
-    XrModuleStatus status = identity_io_status(xr_realpath_owned(&policy,source_path,&source));
+    XrModuleStatus status = xr_module_status_from_io(xr_realpath_owned(&policy,source_path,&source));
     if (status != XR_MODULE_OK) return status;
-    status = identity_io_status(xr_path_dirname_owned(&policy,source,&root));
+    status = xr_module_status_from_io(xr_path_dirname_owned(&policy,source,&root));
     xr_compile_resources_free(source);
     if (status != XR_MODULE_OK) return status;
     XrModuleIdentityWork work = {resources,identity_charge,XR_MODULE_OK};

@@ -28,17 +28,16 @@ typedef enum XrModuleStatus {
     XR_MODULE_NOT_FOUND = -5
 } XrModuleStatus;
 
-static inline XrModuleStatus xr_module_status_from_path(XrPathStatus status) {
+static inline XrModuleStatus xr_module_status_from_io(XrOsIoStatus status) {
     switch (status) {
-        case XR_PATH_OK: return XR_MODULE_OK;
-        case XR_PATH_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
-        case XR_PATH_BUDGET: return XR_MODULE_BUDGET;
-        case XR_PATH_IO: return XR_MODULE_IO;
-        case XR_PATH_NOT_FOUND: return XR_MODULE_NOT_FOUND;
-        default: return XR_MODULE_INVALID;
+        case XR_OS_IO_OK: return XR_MODULE_OK;
+        case XR_OS_IO_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
+        case XR_OS_IO_BUDGET: return XR_MODULE_BUDGET;
+        case XR_OS_IO_NOT_FOUND: return XR_MODULE_NOT_FOUND;
+        case XR_OS_IO_BAD_ARGUMENT: return XR_MODULE_INVALID;
+        default: return XR_MODULE_IO;
     }
 }
-
 typedef enum XrModuleIdentityKind {
     XR_MODULE_IDENTITY_PROJECT = 1,
     XR_MODULE_IDENTITY_SCRIPT,

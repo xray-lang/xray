@@ -1,116 +1,76 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmodule_checked_resource.inc.c - Exact checked resource resolution
- *
- * KEY CONCEPT:
- *   An exact compiler-owned resource binding is checked before source probing.
- *   A matched but inconsistent Checked resource never falls back to source.
+ * xmodule_checked_resource.inc.c - Resolve immutable catalog authority before disk
  */
-static bool resource_optional_equal(const char *a, const char *b) {
-    return (!a && !b) || (a && b && !strcmp(a, b));
-}
-
-/* Takes ownership of canonical and logical even when no binding is selected. */
-static XrModuleStatus checked_resource_select(XrModuleResolver *r, const char *specifier,
+/* Takes ownership of canonical/logical whether or not a binding is selected. */
+static void checked_resource_select(ModuleWork *work, XrModuleResolver *resolver, const char *specifier,
     const XrModuleIdentityAuthority *authority, char *canonical, char *logical,
-    XrModuleId *output, char **error, bool *matched) {
+    XrModuleId *output, bool *matched) {
+    size_t count = 0;
+    const XrModuleResourceBinding *bindings = xr_xir_compile_library_catalog_resources(resolver->config.catalog,&count);
     const XrModuleResourceBinding *selected = NULL;
-    for (size_t i = 0; i < r->config.resource_count; ++i) {
-        const XrModuleResourceBinding *binding = &r->config.resources[i];
-        if (binding->canonical && !strcmp(binding->canonical, canonical)) {
-            if (selected) {
-                xr_free(canonical); xr_free(logical); return XR_MODULE_INVALID;
-            }
-            selected = binding;
+    for (size_t i = 0; i < count && module_work(work,1); ++i) {
+        if (bindings[i].canonical && module_equal(work,bindings[i].canonical,canonical)) {
+            if (selected) { module_status(work,XR_MODULE_INVALID); break; }
+            selected = &bindings[i];
         }
     }
-    if (!selected) { xr_free(canonical); xr_free(logical); return XR_MODULE_OK; }
+    if (!selected || work->status != XR_MODULE_OK) goto release;
     *matched = true;
     if (authority->kind != XR_MODULE_IDENTITY_STDLIB &&
-        (!specifier[2] || strchr(specifier + 2, '/') || strchr(specifier + 2, '\\'))) {
-        xr_free(canonical); xr_free(logical);
-        if (error) *error = xr_strdup("Checked catalog supports only direct relative imports");
-        return XR_MODULE_INVALID;
+        (!specifier[2] || module_find_char(work,specifier+2,'/') || module_find_char(work,specifier+2,'\\'))) {
+        module_status(work,XR_MODULE_INVALID); goto release;
     }
     if (!selected->checked || selected->authority.kind != authority->kind ||
-        !resource_optional_equal(selected->authority.namespace_id, authority->namespace_id) ||
-        !resource_optional_equal(selected->authority.physical_root, authority->physical_root) ||
-        !selected->logical_path || strcmp(selected->logical_path, logical) || !selected->source_locator) {
-        xr_free(canonical); xr_free(logical);
-        if (error) *error = xr_strdup("Checked resource authority binding is inconsistent");
-        return XR_MODULE_INVALID;
+        !module_equal(work,selected->authority.namespace_id,authority->namespace_id) ||
+        !module_equal(work,selected->authority.physical_root,authority->physical_root) ||
+        !selected->logical_path || !module_equal(work,selected->logical_path,logical) || !selected->source_locator) {
+        module_status(work,XR_MODULE_INVALID); goto release;
     }
-    XrModuleId owned = {0};
-    owned.kind = authority->kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB :
+    output->kind = authority->kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB :
         authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE;
-    owned.canonical = canonical;
-    owned.logical_path = logical;
-    owned.source_path = xr_strdup(selected->source_locator);
-    owned.authority.kind = authority->kind;
-    owned.authority.namespace_id = authority->namespace_id ? xr_strdup(authority->namespace_id) : NULL;
-    owned.authority.physical_root = authority->physical_root ? xr_strdup(authority->physical_root) : NULL;
-    owned.representation = XR_MODULE_CHECKED_LIBRARY;
-    owned.resource = selected;
-    if (!owned.source_path || (authority->namespace_id && !owned.authority.namespace_id) ||
-        (authority->physical_root && !owned.authority.physical_root)) {
-        xr_module_id_cleanup(&owned); return XR_MODULE_OUT_OF_MEMORY;
-    }
-    *output = owned;
-    return XR_MODULE_OK;
+    output->canonical = canonical; canonical = NULL; output->logical_path = logical; logical = NULL;
+    output->source_path = module_dup(work,selected->source_locator);
+    copy_authority(work,authority,&output->authority);
+    output->representation = XR_MODULE_CHECKED_LIBRARY; output->resource = selected;
+release:
+    xr_compile_resources_free(canonical); xr_compile_resources_free(logical);
 }
-
-static XrModuleStatus resolve_checked_stdlib(XrModuleResolver *r, const char *specifier,
-    XrModuleId *output, char **error, bool *matched) {
+static void resolve_checked_stdlib(ModuleWork *work, XrModuleResolver *resolver, const char *specifier,
+    XrModuleId *output, bool *matched) {
     char name[256], logical[XR_PATH_MAX];
-    if (!r->config.stdlib_path || !stdlib_submodule_path(specifier + 4, name, sizeof(name)))
-        return XR_MODULE_OK;
-    int length = snprintf(logical, sizeof(logical), "%s.xr", specifier + 4);
-    if (length < 0) return XR_MODULE_INVALID;
-    if ((size_t) length >= sizeof(logical)) return XR_MODULE_BUDGET;
-    /* The configured root supplies authority after the source has been removed. */
-    XrPathStatus path_status;
-    char *root = xr_realpath(r->config.stdlib_path, &path_status);
-    if (!root) return xr_module_status_from_path(path_status);
-    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB, name, root};
-    char *canonical = NULL, *owned_logical = NULL;
-    XrModuleStatus status = xr_module_identity_from_logical(&authority, logical, &canonical);
-    if (status == XR_MODULE_OK) {
-        owned_logical = xr_strdup(logical);
-        if (!owned_logical) status = XR_MODULE_OUT_OF_MEMORY;
-    }
-    if (status != XR_MODULE_OK) { xr_free(canonical); xr_free(root); return status; }
-    status = checked_resource_select(r, specifier, &authority, canonical, owned_logical,
-        output, error, matched);
-    xr_free(root);
-    return status;
+    if (!resolver->config.stdlib_path || !stdlib_submodule_path(work,specifier+4,name,sizeof(name))) return;
+    if (!module_format_buffer(work,logical,sizeof(logical),"%s.xr",specifier+4)) return;
+    char *root = NULL; if (!realpath_into(work,resolver->config.stdlib_path,&root)) return;
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB,name,root};
+    char *canonical = NULL, *copy = NULL;
+    module_status(work,xr_compile_module_identity_from_logical(work->resources,&authority,logical,&canonical));
+    copy = module_dup(work,logical);
+    if (work->status == XR_MODULE_OK) checked_resource_select(work,resolver,specifier,&authority,canonical,copy,output,matched);
+    else { xr_compile_resources_free(canonical); xr_compile_resources_free(copy); }
+    xr_compile_resources_free(root);
 }
-
-static XrModuleStatus resolve_checked_resource(XrModuleResolver *r, const char *specifier,
-    const char *importer, const XrModuleIdentityAuthority *authority,
-    XrModuleId *output, char **error, bool *matched) {
+static void resolve_checked_resource(ModuleWork *work, XrModuleResolver *resolver, const char *specifier,
+    const char *importer, const XrModuleIdentityAuthority *authority, XrModuleId *output, bool *matched) {
     *matched = false;
-    if (!r->config.resource_count) return XR_MODULE_OK;
-    if (!r->config.resources || !authority || !xr_module_identity_authority_valid(authority))
-        return XR_MODULE_INVALID;
-    if (!strncmp(specifier, "std/", 4))
-        return resolve_checked_stdlib(r, specifier, output, error, matched);
-    if (!importer || strncmp(specifier, "./", 2)) return XR_MODULE_OK;
-    char *directory = xr_path_dirname(importer);
-    if (!directory) return XR_MODULE_OUT_OF_MEMORY;
+    if (!resolver->config.catalog) return;
+    if (!module_authority(work,authority)) return;
+    if (module_prefix(work,specifier,"std/")) { resolve_checked_stdlib(work,resolver,specifier,output,matched); return; }
+    if (!importer || !module_prefix(work,specifier,"./")) return;
+    XrOsIoPolicy policy = xr_compile_io_policy(work->resources); char *directory = NULL;
+    if (work->status != XR_MODULE_OK || !module_io(work,xr_path_dirname_owned(&policy,importer,&directory))) return;
+    size_t length = module_length(work,specifier+2);
+    bool extension = length >= 3 && module_equal(work,specifier+2+length-3,".xr");
     char locator[XR_PATH_MAX];
-    size_t name_length = strlen(specifier + 2);
-    bool extension = name_length >= 3 && !strcmp(specifier + 2 + name_length - 3, ".xr");
-    int n = snprintf(locator, sizeof(locator), "%s/%s%s", directory, specifier + 2, extension ? "" : ".xr");
-    xr_free(directory);
-    if (n < 0) return XR_MODULE_INVALID;
-    if ((size_t) n >= sizeof(locator)) return XR_MODULE_BUDGET;
+    module_format_buffer(work,locator,sizeof(locator),"%s/%s%s",directory,specifier+2,extension ? "" : ".xr");
+    xr_compile_resources_free(directory);
     char *canonical = NULL, *logical = NULL;
-    XrModuleStatus status = xr_module_identity_from_source(authority, locator, &canonical, &logical);
-    if (status != XR_MODULE_OK) return status;
-    return checked_resource_select(r, specifier, authority, canonical, logical, output, error, matched);
+    if (work->status == XR_MODULE_OK) module_status(work,xr_compile_module_identity_from_source(
+        work->resources,authority,locator,&canonical,&logical));
+    if (work->status == XR_MODULE_OK) checked_resource_select(work,resolver,specifier,authority,canonical,logical,output,matched);
+    else { xr_compile_resources_free(canonical); xr_compile_resources_free(logical); }
 }

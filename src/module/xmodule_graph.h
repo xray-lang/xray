@@ -46,8 +46,8 @@ typedef enum {
 /* One module in the graph. Owns its AST, durable identity, and
  * the list of edges (import dependencies). */
 typedef struct XrModuleSpec {
-    char *canonical;      /* Canonical module ID (owned, xr_free) */
-    char *logical_path;   /* Authority-root-relative path (owned, xr_free) */
+    char *canonical;      /* Canonical module ID (owned, xr_compile_resources_free) */
+    char *logical_path;   /* Authority-root-relative path (owned, xr_compile_resources_free) */
     char *source_path;    /* Absolute path to source file (owned) */
     XrModuleKind kind;    /* stdlib / file / package */
     XrModuleRepresentation representation;
@@ -81,6 +81,7 @@ typedef struct XrModuleSpec {
 /* ========== Module Graph ========== */
 
 typedef struct XrModuleGraph {
+    XrCompileResources *resources; /* Shared with the borrowed session and resolver. */
     XrModuleSpec *specs; /* Dynamic array of module specs */
     int spec_count;
     int spec_capacity;
@@ -106,7 +107,6 @@ typedef struct XrModuleGraph {
 
     /* The resolver used during build */
     XrModuleResolver *resolver;
-    bool admit_checked_resources; /* Opt-in by the single Checked Source builder. */
 
     /* Compiler session used for parsing graph sources. */
     struct XrCompilerSession *compiler_session;
@@ -123,18 +123,21 @@ typedef struct XrModuleGraph {
 /* ========== API ========== */
 
 /* Create a new empty module graph.  The resolver is borrowed (not freed).
- * The compiler session is borrowed and used for parsing source files. */
-XR_FUNC XrModuleGraph *xr_module_graph_new(struct XrCompilerSession *compiler_session,
-                                           XrModuleResolver *resolver);
+ * Session, resolver and its catalog remain alive until graph destruction.
+ * All three owners must share resources; failure preserves output. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_new(XrCompileResources *resources,
+    struct XrCompilerSession *compiler_session, XrModuleResolver *resolver, XrModuleGraph **output);
 
 /* Free the graph and all owned specs/ASTs. */
-XR_FUNC void xr_module_graph_free(XrModuleGraph *g);
+XR_FUNC void xr_compile_module_graph_free(XrModuleGraph *g);
 
 /* Build an empty graph by BFS from an entry source file.
  * Parses each discovered module and collects its import edges.
  * Returns XR_MODULE_OK on success, otherwise the precise failure status.
- * On error, *out_err is set to a descriptive message (caller frees). */
-XR_FUNC XrModuleStatus xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
+ * An optional diagnostic uses xr_compile_resources_free; its allocation
+ * cannot replace the first typed cause. Failure can leave partial discovery
+ * owned by the graph, which the caller must discard. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_build(XrModuleGraph *g, const char *entry_path,
                                   const XrModuleIdentityAuthority *entry_authority,
                                   char **out_err);
 
@@ -143,28 +146,29 @@ XR_FUNC XrModuleStatus xr_module_graph_build(XrModuleGraph *g, const char *entry
  * authority. New modules invalidate the topological order. This extends the
  * checking graph, not an execution or initialization closure. On error discard
  * the graph; partial discovery is owned by it and freed with it. */
-XR_FUNC XrModuleStatus xr_module_graph_include(XrModuleGraph *g, const char *source_path,
+XR_FUNC XrModuleStatus xr_compile_module_graph_include(XrModuleGraph *g, const char *source_path,
                                     const XrModuleIdentityAuthority *authority, char **out_err);
 
 /* Build the graph from an in-memory entry source.
  * The caller-supplied memory authority is mandatory.
  * Relative imports fail because memory modules have no physical root. */
-XR_FUNC XrModuleStatus xr_module_graph_build_source(XrModuleGraph *g,
+XR_FUNC XrModuleStatus xr_compile_module_graph_build_source(XrModuleGraph *g,
                                          const XrModuleIdentityAuthority *entry_authority,
                                          const char *entry_source, char **out_err);
 
 /* Check the caller's exact bytes under a typed logical source identity.
  * A physical root requires a matching rooted locator. A rootless stdlib source
  * may use a diagnostic locator but cannot resolve relative file imports. */
-XR_FUNC XrModuleStatus xr_module_graph_build_logical_source(XrModuleGraph *g,
+XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGraph *g,
     const XrModuleIdentityAuthority *authority, const char *logical_path,
     const char *source_path, const char *source, char **out_err);
 
 /* Run topological sort (Tarjan SCC).
  * After success, g->topo_order is filled and g->has_cycle indicates cycles.
  * Returns XR_MODULE_OK without cycles, XR_MODULE_INVALID for a cycle, or
- * XR_MODULE_OUT_OF_MEMORY if the sorting metadata cannot be allocated. */
-XR_FUNC XrModuleStatus xr_module_graph_topological_sort(XrModuleGraph *g);
+ * a precise allocation/work failure. Resource failure preserves any prior
+ * complete order and node metadata. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_topological_sort(XrModuleGraph *g);
 
 /* The name this module is imported under at run time.
  *
@@ -179,25 +183,19 @@ XR_FUNC XrModuleStatus xr_module_graph_topological_sort(XrModuleGraph *g);
  * ends up storing an identity where the other stores a name. */
 XR_FUNC const char *xr_module_spec_import_name(const XrModuleSpec *spec);
 
-/* Lookup a module spec by canonical ID.  Returns index or -1. */
-XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical);
+/* Typed lookups publish an index (-1 when absent) only on OK. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_find(const XrModuleGraph *g, const char *canonical, int *output);
 /* Physical-source lookup is local plumbing only; it is never a graph identity key. */
-XR_FUNC int xr_module_graph_find_source(const XrModuleGraph *g, const char *source_path);
+XR_FUNC XrModuleStatus xr_compile_module_graph_find_source(const XrModuleGraph *g, const char *source_path, int *output);
 /* Resolve a named stdlib/package coordinate only through one exact importer
  * edge already admitted by the graph resolver. Returns a spec index or -1. */
-XR_FUNC int xr_module_graph_find_named_dependency(const XrModuleGraph *g, const char *importer_path,
-                                                  const char *specifier);
+XR_FUNC XrModuleStatus xr_compile_module_graph_find_named_dependency(const XrModuleGraph *g, const char *importer_path,
+    const char *specifier, int *output);
 
 /* True only when `decl` is one exact top-level declaration owned by `spec`.
  * Compiler-private
  * bindings use pointer identity here; names are not authority. */
-XR_FUNC bool xr_module_spec_owns_top_level_decl(const XrModuleSpec *spec,
-                                                const struct AstNode *decl);
-
-/* Initialize every dependency exactly once in topological order and return a
- * table indexed by topo position. The caller owns the table, but not its
- * module pointers. A failed dependency aborts the whole preload. */
-XR_FUNC bool xr_module_graph_preload(struct XrVMRuntime *X, const XrModuleGraph *g,
-                                     struct XrModule ***out_table);
+XR_FUNC XrModuleStatus xr_compile_module_graph_owns_top_level_decl(const XrModuleGraph *graph,
+    const XrModuleSpec *spec, const struct AstNode *decl, bool *output);
 
 #endif  // XMODULE_GRAPH_H
