@@ -180,18 +180,22 @@ static bool namespace_expand(XrXirNamespace *owner, NamespaceDirectory *node) {
 }
 static bool namespace_drain(XrXirNamespace *owner, uint32_t wait_ms) {
     ULONGLONG start = GetTickCount64();
+    bool okay = true;
     for (uint32_t i = 0; i < owner->facts.directory_count; ++i) {
         NamespaceDirectory *node = owner->directories[i];
         if (!node->issued || node->completed || node->cancellation_requested) continue;
         if (CancelIoEx(node->handle, &node->overlapped)) node->cancellation_requested = true;
-        else { DWORD error = GetLastError(); if (error != ERROR_NOT_FOUND) namespace_windows_error(owner, error); }
+        else {
+            DWORD error = GetLastError();
+            if (error != ERROR_NOT_FOUND) { namespace_windows_error(owner, error); okay = false; }
+        }
     }
     bool complete = true;
     for (uint32_t i = 0; i < owner->facts.directory_count; ++i) {
         NamespaceDirectory *node = owner->directories[i];
         ULONGLONG elapsed = GetTickCount64() - start;
         DWORD remaining = elapsed >= wait_ms ? 0 : wait_ms - (DWORD)elapsed;
-        (void)namespace_observe(owner, node, remaining, true);
+        if (!namespace_observe(owner, node, remaining, true)) okay = false;
         if (node->issued && !node->completed) complete = false;
     }
     if (!complete) return false;
@@ -206,5 +210,7 @@ static bool namespace_drain(XrXirNamespace *owner, uint32_t wait_ms) {
             else { namespace_windows_error(owner, GetLastError()); complete = false; }
         }
     }
-    return complete;
+    /* Completion permits releasing kernel storage, but this call's errors must
+     * remain observable on the owner before a later successful close frees it. */
+    return complete && okay;
 }

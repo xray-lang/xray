@@ -332,6 +332,20 @@ static void pending_lifetime(void) {
     r=sdk_ledger(&sdk_unlimited);owner=guard(r,tree,XR_XIR_NAMESPACE_DIRECTORY);fail_close=true;
     CHECK(xtc_xir_namespace_close(&owner,100)==XR_XIR_NAMESPACE_PENDING&&owner);
     CHECK(xtc_xir_namespace_diagnostic(owner)->status==XR_XIR_NAMESPACE_IO);close_owner(&owner);xr_compile_resources_release(r);physical_zero();
+    for (unsigned mode=0;mode<2;++mode) {
+        r=sdk_ledger(&sdk_unlimited);owner=guard(r,tree,XR_XIR_NAMESPACE_DIRECTORY);original=owner;
+        char changed[4096];path(changed,tree,"completed-error.h");touch(changed);
+        CHECK(WaitForSingleObject(owner->directories[0]->overlapped.hEvent,1000)==WAIT_OBJECT_0);
+        CHECK(HasOverlappedIoCompleted(&owner->directories[0]->overlapped));
+        before=sdk_stats(r);xr_compile_resources_release(r);
+        fail_cancel=mode==0;unknown_result=mode==1;
+        CHECK(xtc_xir_namespace_close(&owner,0)==XR_XIR_NAMESPACE_PENDING&&owner==original);
+        CHECK(xtc_xir_namespace_diagnostic(owner)->status==XR_XIR_NAMESPACE_IO&&
+            xtc_xir_namespace_diagnostic(owner)->os_error==ERROR_ACCESS_DENIED);
+        CHECK(sdk_stats(r).work==before.work);
+        unknown_result=false;close_owner(&owner);remove_file(changed);physical_zero();
+    }
+    puts("completed requests retain cancellation and observation errors until a later close PASS");
     puts("real pending request survives cancellation/false wake/unknown completion/WAIT_FAILED/cleanup failures; later bounded close frees all storage PASS");
 }
 static void identity_and_missing_race(void) {
