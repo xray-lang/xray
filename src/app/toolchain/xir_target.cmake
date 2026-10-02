@@ -1,4 +1,13 @@
 # Native input observations have one production owner and resource ledger.
+add_library(xray_xir_pe_version STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_pe_version.c)
+target_link_libraries(xray_xir_pe_version PUBLIC xray_compile_resources)
+target_compile_features(xray_xir_pe_version PUBLIC c_std_11)
+set_target_properties(xray_xir_pe_version PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(xray_xir_pe_version PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(xray_xir_pe_version PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
 if(WIN32)
     include("${CMAKE_CURRENT_LIST_DIR}/xir_process.cmake")
     add_library(xray_toolchain_dependencies STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_dependencies.c)
