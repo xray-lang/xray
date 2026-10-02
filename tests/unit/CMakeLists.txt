@@ -162,14 +162,19 @@ add_xray_python_unit_test(test_canonical_program_test_profile
 add_xray_python_unit_test(xr_program_h2_backend_differential_self_test
     test_h2_backend_differential.py)
 
-add_executable(test_xtoml base/test_xtoml.c ${CMAKE_SOURCE_DIR}/src/base/xtoml.c)
+add_executable(test_xtoml base/test_xtoml.c ${CMAKE_SOURCE_DIR}/src/base/xtoml.c
+    ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c ${CMAKE_SOURCE_DIR}/src/base/xcompile_resources.c)
 target_include_directories(test_xtoml PRIVATE ${CMAKE_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(test_xtoml PRIVATE /W4 /WX)
 else()
     target_compile_options(test_xtoml PRIVATE -Wall -Wextra -Werror)
 endif()
-add_executable(test_xtoml_allocations base/test_xtoml_allocations.c)
+add_executable(test_xtoml_allocations base/test_xtoml_allocations.c ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c)
+if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_xtoml PRIVATE /experimental:c11atomics)
+    target_compile_options(test_xtoml_allocations PRIVATE /experimental:c11atomics)
+endif()
 target_include_directories(test_xtoml_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(test_xtoml_allocations PRIVATE /W4 /WX)
