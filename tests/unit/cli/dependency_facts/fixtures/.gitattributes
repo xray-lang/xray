@@ -1,0 +1,5 @@
+*.deps -text
+*.log -text
+*.target -text
+*.expected text eol=lf
+*.json text eol=lf

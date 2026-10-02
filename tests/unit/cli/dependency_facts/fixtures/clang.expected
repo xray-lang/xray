@@ -1,0 +1,182 @@
+0	99	E:\xxl\xray-lang\.worktrees\314-xir-target\build-target\native-probes\input\probe.c
+1	188	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\stdio.h
+1	269	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt.h
+1	352	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime.h
+1	470	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\sal.h
+1	582	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\concurrencysal.h
+1	705	C:\Program Files\LLVM\lib\clang\22\include\vadefs.h
+1	763	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vadefs.h
+1	878	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_wstdio.h
+1	968	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_stdio_config.h
+1	1064	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\stdlib.h
+1	1146	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_malloc.h
+1	1236	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_search.h
+1	1326	C:\Program Files\LLVM\lib\clang\22\include\stddef.h
+1	1384	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\stddef.h
+1	1466	C:\Program Files\LLVM\lib\clang\22\include\__stddef_header_macro.h
+1	1539	C:\Program Files\LLVM\lib\clang\22\include\__stddef_ptrdiff_t.h
+1	1609	C:\Program Files\LLVM\lib\clang\22\include\__stddef_size_t.h
+1	1676	C:\Program Files\LLVM\lib\clang\22\include\__stddef_wchar_t.h
+1	1744	C:\Program Files\LLVM\lib\clang\22\include\__stddef_null.h
+1	1809	C:\Program Files\LLVM\lib\clang\22\include\__stddef_max_align_t.h
+1	1881	C:\Program Files\LLVM\lib\clang\22\include\__stddef_offsetof.h
+1	1950	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_wstdlib.h
+1	2041	C:\Program Files\LLVM\lib\clang\22\include\limits.h
+1	2099	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\limits.h
+1	2214	C:\Program Files\LLVM\lib\clang\22\include\stdint.h
+1	2272	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\stdint.h
+1	2387	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\windows.h
+1	2470	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\winapifamily.h
+1	2562	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\winpackagefamily.h
+1	2658	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\sdkddkver.h
+1	2747	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\excpt.h
+1	2861	C:\Program Files\LLVM\lib\clang\22\include\stdarg.h
+1	2919	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\stdarg.h
+1	3034	C:\Program Files\LLVM\lib\clang\22\include\__stdarg_header_macro.h
+1	3107	C:\Program Files\LLVM\lib\clang\22\include\__stdarg___gnuc_va_list.h
+1	3182	C:\Program Files\LLVM\lib\clang\22\include\__stdarg_va_list.h
+1	3250	C:\Program Files\LLVM\lib\clang\22\include\__stdarg_va_arg.h
+1	3317	C:\Program Files\LLVM\lib\clang\22\include\__stdarg___va_copy.h
+1	3387	C:\Program Files\LLVM\lib\clang\22\include\__stdarg_va_copy.h
+1	3455	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\windef.h
+1	3541	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\minwindef.h
+1	3630	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\specstrings.h
+1	3721	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\specstrings_strict.h
+1	3819	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\specstrings_undef.h
+1	3916	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\driverspecs.h
+1	4007	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\sdv_driverspecs.h
+1	4102	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winnt.h
+1	4183	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\ctype.h
+1	4264	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_wctype.h
+1	4354	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\kernelspecs.h
+1	4445	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\basetsd.h
+1	4532	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\guiddef.h
+1	4619	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\string.h
+1	4701	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_memory.h
+1	4791	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_memcpy_s.h
+1	4883	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\errno.h
+1	4964	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\vcruntime_string.h
+1	5089	C:\Program Files (x86)\Windows Kits\10\include\10.0.22621.0\ucrt\corecrt_wstring.h
+1	5180	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\pshpack4.h
+1	5268	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\poppack.h
+1	5355	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\pshpack2.h
+1	5443	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\pshpack8.h
+1	5531	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\pshpack1.h
+1	5619	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\apiset.h
+1	5705	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\ktmtypes.h
+1	5793	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winbase.h
+1	5876	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\apisetcconv.h
+1	5967	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\minwinbase.h
+1	6053	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\apiquery2.h
+1	6138	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\processenv.h
+1	6224	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\fileapifromapp.h
+1	6314	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\fileapi.h
+1	6397	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\debugapi.h
+1	6481	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\utilapiset.h
+1	6567	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\handleapi.h
+1	6652	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\errhandlingapi.h
+1	6742	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\fibersapi.h
+1	6827	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\namedpipeapi.h
+1	6915	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\profileapi.h
+1	7001	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\heapapi.h
+1	7084	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\ioapiset.h
+1	7168	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\synchapi.h
+1	7252	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\interlockedapi.h
+1	7342	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\processthreadsapi.h
+1	7435	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\sysinfoapi.h
+1	7521	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\memoryapi.h
+1	7606	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\enclaveapi.h
+1	7692	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\threadpoollegacyapiset.h
+1	7790	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\threadpoolapiset.h
+1	7882	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\jobapi.h
+1	7964	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\jobapi2.h
+1	8047	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\wow64apiset.h
+1	8134	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\libloaderapi.h
+1	8222	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\securitybaseapi.h
+1	8313	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\namespaceapi.h
+1	8401	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\systemtopologyapi.h
+1	8494	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\processtopologyapi.h
+1	8588	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\securityappcontainer.h
+1	8684	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\realtimeapiset.h
+1	8774	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\winerror.h
+1	8862	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\timezoneapi.h
+1	8949	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\wingdi.h
+1	9031	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winuser.h
+1	9114	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\tvout.h
+1	9199	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winnls.h
+1	9281	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\datetimeapi.h
+1	9368	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\stringapiset.h
+1	9456	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\wincon.h
+1	9538	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\wincontypes.h
+1	9625	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\consoleapi.h
+1	9711	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\consoleapi2.h
+1	9798	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\consoleapi3.h
+1	9885	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winver.h
+1	9967	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\verrsrc.h
+1	10050	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winreg.h
+1	10132	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\reason.h
+1	10214	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winnetwk.h
+1	10298	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\wnnc.h
+1	10382	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\cderr.h
+1	10467	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\dde.h
+1	10546	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\ddeml.h
+1	10627	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\dlgs.h
+1	10707	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\lzexpand.h
+1	10791	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\mmsystem.h
+1	10875	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\mmsyscom.h
+1	10959	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\mciapi.h
+1	11041	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\mmiscapi.h
+1	11125	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\mmiscapi2.h
+1	11210	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\playsoundapi.h
+1	11298	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\mmeapi.h
+1	11380	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\timeapi.h
+1	11463	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\joystickapi.h
+1	11550	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\nb30.h
+1	11630	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\rpc.h
+1	11713	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\rpcdce.h
+1	11799	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\rpcdcep.h
+1	11886	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\rpcnsi.h
+1	11968	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\rpcnterr.h
+1	12056	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\rpcasync.h
+1	12144	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\shellapi.h
+1	12228	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winperf.h
+1	12311	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winsock.h
+1	12394	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\inaddr.h
+1	12480	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\wincrypt.h
+1	12564	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\bcrypt.h
+1	12650	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\ncrypt.h
+1	12732	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\dpapi.h
+1	12813	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winefs.h
+1	12895	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winscard.h
+1	12979	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\wtypes.h
+1	13065	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\rpcndr.h
+1	13151	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\rpcnsip.h
+1	13234	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\rpcsal.h
+1	13320	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\wtypesbase.h
+1	13410	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winioctl.h
+1	13494	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\winsmcrd.h
+1	13582	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winspool.h
+1	13666	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\prsht.h
+1	13747	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\ole2.h
+1	13827	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\objbase.h
+1	13910	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\combaseapi.h
+1	13996	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\unknwnbase.h
+1	14082	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\objidlbase.h
+1	14168	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\cguid.h
+1	14249	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\coml2api.h
+1	14333	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\objidl.h
+1	14415	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\unknwn.h
+1	14497	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\propidlbase.h
+1	14584	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\oaidl.h
+1	14665	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\urlmon.h
+1	14747	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\oleidl.h
+1	14829	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\servprov.h
+1	14913	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\msxml.h
+1	14994	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\propidl.h
+1	15077	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\oleauto.h
+1	15160	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\commdlg.h
+1	15243	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\shared\stralign.h
+1	15331	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\winsvc.h
+1	15413	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\mcx.h
+1	15492	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\imm.h
+1	15571	C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um\ime_cmodes.h

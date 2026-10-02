@@ -111,8 +111,8 @@ XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_load(const XrXirRuntimeSdkReque
         }
     }
     if (sdk->status==XR_XIR_SDK_OK) {
-        SdkJson json={NULL,NULL,NULL,sdk->resources,XR_XIR_SDK_OK};
-        if (!sdk_identity(&json,&sdk->manifest)) sdk->status=json.status;
+        XrJsonCursor json=xr_json_cursor_make(NULL,0,sdk->resources,sdk_cursor_charge);
+        if (!sdk_identity(&json,&sdk->manifest)) sdk->status=sdk_cursor_status(json.status);
         if (sdk_work(sdk,sizeof(sdk_expected_prefix)) &&
             memcmp(sdk->manifest.prefix,sdk_expected_prefix,sizeof(sdk_expected_prefix))) sdk_fail(sdk,XR_XIR_SDK_INVALID);
         if (sdk_work(sdk,32) && memcmp(sdk->manifest.digest,sdk_expected_identity,32)) sdk_fail(sdk,XR_XIR_SDK_INVALID);
@@ -132,12 +132,12 @@ XR_FUNC const char *xr_xir_runtime_sdk_root(const XrXirRuntimeSdk *sdk) {
 XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_file(const XrXirRuntimeSdk *sdk,
     const char *relative_path,const char **output) {
     if (!sdk || !relative_path || !output || *output) return XR_XIR_SDK_INVALID;
-    SdkJson json={NULL,NULL,NULL,sdk->resources,XR_XIR_SDK_OK};
+    XrJsonCursor json=xr_json_cursor_make(NULL,0,sdk->resources,sdk_cursor_charge);
     for (uint32_t i=0;i<sdk->manifest.file_count;++i) {
-        if (sdk_json_equal(&json,relative_path,sdk->manifest.files[i].path)) {
+        if (xr_json_cursor_equal(&json,relative_path,sdk->manifest.files[i].path)) {
             *output=sdk->manifest.files[i].absolute_path;return XR_XIR_SDK_OK;
         }
-        if (json.status!=XR_XIR_SDK_OK) return json.status;
+        if (json.status!=XR_JSON_CURSOR_OK) return sdk_cursor_status(json.status);
     }
     return XR_XIR_SDK_UNRESOLVED;
 }
