@@ -133,6 +133,21 @@ static bool proc_wlength(ProcBuild *b, const wchar_t *s, size_t *n) {
         ++*n;
     }
 }
+static bool proc_exact_program(ProcBuild *b, const wchar_t *path, bool *exact) {
+    *exact = false;
+    bool drive = ((path[0] >= L'A' && path[0] <= L'Z') || (path[0] >= L'a' && path[0] <= L'z')) &&
+        path[1] == L':' && (path[2] == L'\\' || path[2] == L'/');
+    bool unc = (path[0] == L'\\' || path[0] == L'/') && (path[1] == L'\\' || path[1] == L'/');
+    if (!drive && !unc) return true;
+    /* A complete filename needs neither PATH lookup nor extension expansion.
+     * Single-root and drive-relative names still use runtime resolution. */
+    for (size_t i = 0;; ++i) {
+        if (!proc_work(b, sizeof(wchar_t))) return false;
+        if (!path[i]) return true;
+        if (path[i] == L'\\' || path[i] == L'/') *exact = false;
+        else if (path[i] == L'.') *exact = true;
+    }
+}
 static wchar_t *proc_environment(ProcBuild *b, const XrProcSpawnOptions *o) {
     LPWCH inherited = NULL; wchar_t **entries = NULL, *block = NULL;
     size_t count = 0, cap = o->env_count, bytes = 2 * sizeof(wchar_t);
@@ -233,7 +248,9 @@ XR_FUNC XrProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     si.StartupInfo.cb = sizeof(si); int slot = -1;
     if (!command) goto done;
     program = proc_wide(&b, prog); if (!program) goto done;
-    if (!o->complete_environment) {
+    bool exact_program = false;
+    if (!o->complete_environment && !proc_exact_program(&b, program, &exact_program)) goto done;
+    if (!o->complete_environment && !exact_program) {
         if (!proc_work(&b, 1)) goto done;
         DWORD needed = SearchPathW(NULL, program, L".exe", 0, NULL, NULL);
         if (!needed) { b.status = xr_proc_last_error(); goto done; }

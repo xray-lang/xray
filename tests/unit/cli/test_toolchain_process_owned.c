@@ -77,8 +77,10 @@ static HANDLE test_file(LPCWSTR path, DWORD access, DWORD share, LPSECURITY_ATTR
     if (h != INVALID_HANDLE_VALUE) track_handle(h); return h;
 }
 static DWORD observed_creation_flags;
+static bool reject_program;
 static BOOL test_process(LPCWSTR app, LPWSTR command, LPSECURITY_ATTRIBUTES process_attributes, LPSECURITY_ATTRIBUTES thread_attributes, BOOL inherit, DWORD flags, LPVOID env, LPCWSTR cwd, LPSTARTUPINFOW startup, LPPROCESS_INFORMATION info) {
     if (os_fail()) return FALSE;
+    if (reject_program) { SetLastError(ERROR_READ_FAULT); return FALSE; }
     observed_creation_flags = flags;
     BOOL ok = CreateProcessW(app, command, process_attributes, thread_attributes, inherit, flags, env, cwd, startup, info);
     if (ok) { track_handle(info->hProcess); track_handle(info->hThread); } return ok;
@@ -98,6 +100,13 @@ static BOOL test_attribute_update(LPPROC_THREAD_ATTRIBUTE_LIST list, DWORD flags
 }
 static int test_wide(UINT page, DWORD flags, LPCCH input, int count, LPWSTR output, int capacity) {
     if (os_fail()) return 0; return MultiByteToWideChar(page, flags, input, count, output, capacity);
+}
+static size_t search_calls;
+static bool fail_search;
+static DWORD test_search(LPCWSTR path, LPCWSTR file, LPCWSTR extension, DWORD size, LPWSTR output, LPWSTR *part) {
+    ++search_calls;
+    if (fail_search) { SetLastError(ERROR_FILE_NOT_FOUND); return 0; }
+    return SearchPathW(path, file, extension, size, output, part);
 }
 static size_t environment_blocks;
 static bool fail_environment;
@@ -129,6 +138,7 @@ static BOOL test_exit(HANDLE process, LPDWORD code) {
 #define InitializeProcThreadAttributeList test_attributes
 #define UpdateProcThreadAttribute test_attribute_update
 #define MultiByteToWideChar test_wide
+#define SearchPathW test_search
 #define ReadFile test_read
 #define PeekNamedPipe test_peek
 #define GetExitCodeProcess test_exit
@@ -168,6 +178,7 @@ static DWORD test_wait(HANDLE process, DWORD milliseconds) {
 #undef InitializeProcThreadAttributeList
 #undef UpdateProcThreadAttribute
 #undef MultiByteToWideChar
+#undef SearchPathW
 #undef ReadFile
 #undef PeekNamedPipe
 #undef GetExitCodeProcess
@@ -322,6 +333,45 @@ static void unicode_environment(void) {
     for (unsigned i = 0; i < 2; ++i) CHECK(SetEnvironmentVariableW(names[i], lengths[i] ? previous[i] : NULL));
     CHECK(!live && !physical_bytes && !physical_handles);
 }
+static void check_hidden_drive(const wchar_t *expected) {
+    LPWCH block = GetEnvironmentStringsW(); CHECK(block);
+    unsigned found = 0;
+    for (const wchar_t *entry = block; *entry; entry += wcslen(entry) + 1) {
+        if (wcsncmp(entry, L"=C:=", 4)) continue;
+        CHECK(!wcscmp(entry + 4, expected)); ++found;
+    }
+    CHECK(found == 1); CHECK(FreeEnvironmentStringsW(block));
+}
+static void hidden_environment(void) {
+    /* Whole-block mutation runs only in its own CTest process. The child must
+     * observe fixed values captured before the ambient environment changed. */
+    CHECK(xr_proc_self_exe_path(executable, sizeof(executable)) == 0);
+    CHECK(GetCurrentDirectoryA(sizeof(directory), directory));
+    LPWCH previous = GetEnvironmentStringsW(); CHECK(previous);
+    wchar_t first[] = L"=C:=C:\\xray-drive-A\0XR OWNED SPACE=space-A\0XR_OWNED_测试=unicode-A\0";
+    wchar_t second[] = L"=C:=C:\\xray-drive-B\0XR OWNED SPACE=space-B\0XR_OWNED_测试=unicode-B\0";
+    CHECK(SetEnvironmentStringsW(first)); check_hidden_drive(L"C:\\xray-drive-A");
+    XrCompileResources *r = ledger(unlimited); XrProcessSpec spec; spec_init(&spec, "--hidden-env-read");
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT; spec.cwd = NULL;
+    XrToolchainProcess *process = NULL; CHECK(xtc_process_prepare(r, &spec, &process) == XTC_PROCESS_OK);
+    CHECK(SetEnvironmentStringsW(second)); check_hidden_drive(L"C:\\xray-drive-B");
+    XrProcessResult result = {0}; CHECK(xtc_process_run(process, NULL, NULL, &result) == XTC_PROCESS_OK);
+    CHECK(result.exit_code == 0 && result.stderr_bytes.length == 0);
+    const char expected[] = "hidden|unicode|space";
+    CHECK(result.stdout_bytes.length == sizeof(expected) - 1);
+    CHECK(!memcmp(result.stdout_bytes.data, expected, sizeof(expected) - 1));
+    xtc_process_result_free(&result); xtc_process_free(process); process = NULL;
+    for (unsigned snapshot = 0; snapshot < 2; ++snapshot) {
+        spec_init(&spec, "--exit");
+        spec.environment_source = snapshot ? XTC_PROCESS_ENV_SNAPSHOT : XTC_PROCESS_ENV_EXPLICIT;
+        spec.env_keys[0] = "=C:"; spec.env_values[0] = "C:\\forged"; spec.env_count = 1;
+        CHECK(xtc_process_prepare(r, &spec, &process) == XTC_PROCESS_INVALID && !process);
+    }
+    xr_compile_resources_release(r);
+    CHECK(SetEnvironmentStringsW(previous)); CHECK(FreeEnvironmentStringsW(previous));
+    CHECK(!live && !physical_bytes && !physical_handles && !environment_blocks);
+    puts("hidden drive preserved, Unicode and space names readable, user drive keys rejected");
+}
 static void snapshot_failures(void) {
     XrProcessSpec spec; spec_init(&spec, "--exit"); spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
     spec.cwd = NULL;
@@ -345,12 +395,34 @@ static void detached_group_flag(void) {
     const char *args[] = {executable, "--exit", NULL}; XrProcSpawnOptions options = {0};
     options.memory = xr_proc_system_memory(); options.detached = true;
     XrProcId pid = XR_PROC_INVALID; observed_creation_flags = 0;
+    size_t before_search = search_calls;
     CHECK(xr_proc_spawn(executable, args, &options, &pid) == XR_PROC_OK);
+    CHECK(search_calls == before_search);
     CHECK(observed_creation_flags & CREATE_NEW_PROCESS_GROUP);
     CHECK(!(observed_creation_flags & CREATE_NO_WINDOW));
     HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)pid);
     if (process) { CHECK(WaitForSingleObject(process, 5000) == WAIT_OBJECT_0); CHECK(CloseHandle(process)); }
     CHECK(!live && !physical_bytes && !physical_handles);
+}
+static void runtime_program_paths(void) {
+    const char *exact[] = {"C:\\tools\\app.exe", "c:/tools/app.exe", "\\\\server\\share\\app.exe",
+        "//server/share/app.exe", "\\\\?\\C:\\tools\\app.exe", "\\\\?\\UNC\\server\\share\\app.exe", "\\\\.\\C:\\tools\\app.exe"};
+    const char *resolved[] = {"app.exe", "C:app.exe", "\\app.exe", "/app.exe", "C:\\tools\\app",
+        "\\\\server\\share\\app", "C:\\tools.ext\\app", "\\\\?\\C:\\tools.ext\\app"};
+    XrProcSpawnOptions options = {0}; options.memory = xr_proc_system_memory();
+    fail_search = true; reject_program = true;
+    for (unsigned group = 0; group < 2; ++group) {
+        const char *const *paths = group ? resolved : exact;
+        size_t count = group ? sizeof(resolved) / sizeof(*resolved) : sizeof(exact) / sizeof(*exact);
+        for (size_t i = 0; i < count; ++i) {
+            const char *args[] = {paths[i], NULL}; XrProcId pid = XR_PROC_INVALID;
+            size_t before_search = search_calls;
+            CHECK(xr_proc_spawn(paths[i], args, &options, &pid) == (group ? XR_PROC_UNRESOLVED : XR_PROC_IO));
+            CHECK(pid == XR_PROC_INVALID && search_calls == before_search + group);
+            CHECK(!live && !physical_bytes && !physical_handles && !environment_blocks);
+        }
+    }
+    fail_search = false; reject_program = false;
 }
 typedef struct WaitRace { XrProcId pid; HANDLE start; bool poll; XrProcWaitResult result; int code; } WaitRace;
 static DWORD WINAPI competing_wait(LPVOID input) {
@@ -489,6 +561,14 @@ static void budgets(void) {
 }
 int main(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "--sdk")) {
+        if (!strcmp(argv[1], "--hidden-env-parent")) { hidden_environment(); return 0; }
+        if (!strcmp(argv[1], "--hidden-env-read")) {
+            check_hidden_drive(L"C:\\xray-drive-A");
+            wchar_t value[32];
+            CHECK(GetEnvironmentVariableW(L"XR_OWNED_测试", value, 32) == 9 && !wcscmp(value, L"unicode-A"));
+            CHECK(GetEnvironmentVariableW(L"XR OWNED SPACE", value, 32) == 7 && !wcscmp(value, L"space-A"));
+            fputs("hidden|unicode|space", stdout); return 0;
+        }
         if (!strcmp(argv[1], "--descendant-parent")) {
             wchar_t self[32768], command[32768]; CHECK(GetModuleFileNameW(NULL, self, 32768));
             CHECK(swprintf(command, 32768, L"\"%ls\" %ls", self, argc > 3 ? L"--sleep-close" : L"--sleep") > 0);
@@ -519,7 +599,7 @@ int main(int argc, char **argv) {
     printf("OS handle samples: initial=%lu first-spawn=%lu first-missing-input=%lu\n", initial, after_spawn, before);
     basic(); failures(); descendants(); os_failures(); bad_requests(); missing_inputs();
     capture_idle_work(); budgets(); oom(); unicode_environment(); snapshot_failures();
-    detached_group_flag(); concurrent_waiters(); cumulative_requests();
+    detached_group_flag(); runtime_program_paths(); concurrent_waiters(); cumulative_requests();
 #ifdef XTC_TEST_SDK
     if (argc == 3 && !strcmp(argv[1], "--sdk")) sdk_target_process(argv[2]);
 #endif

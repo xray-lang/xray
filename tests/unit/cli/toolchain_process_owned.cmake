@@ -23,6 +23,8 @@ foreach(t toolchain_process_production test_toolchain_process_owned)
 endforeach()
 add_test(NAME test_toolchain_process_owned COMMAND test_toolchain_process_owned)
 set_tests_properties(test_toolchain_process_owned PROPERTIES LABELS "unit;toolchain;ownership;budget" TIMEOUT 120)
+add_test(NAME test_toolchain_process_hidden_environment COMMAND test_toolchain_process_owned --hidden-env-parent)
+set_tests_properties(test_toolchain_process_hidden_environment PROPERTIES LABELS "unit;toolchain;ownership;environment" TIMEOUT 30)
 
 if(TARGET xir-runtime-sdk-bundle)
     set(XIR_PROCESS_SDK_BUNDLE "${CMAKE_BINARY_DIR}/xir-runtime-sdk")
