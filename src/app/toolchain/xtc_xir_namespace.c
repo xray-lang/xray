@@ -46,7 +46,7 @@ struct XrXirNamespace {
 };
 static bool namespace_fail(XrXirNamespace *owner, XrXirNamespaceStatus status, uint32_t error) {
     if (owner->diagnostic.status == XR_XIR_NAMESPACE_OK) {
-        owner->diagnostic = (XrXirNamespaceDiagnostic){status, error};
+        owner->diagnostic = (XrXirNamespaceDiagnostic){.status=status, .os_error=error};
         owner->facts.armed = false;
         if (owner->phase != XR_XIR_NAMESPACE_CLOSING) owner->phase = XR_XIR_NAMESPACE_FAILED;
     }
@@ -172,7 +172,7 @@ XR_FUNC XrXirNamespaceStatus xtc_xir_namespace_arm(XrXirNamespace *owner) {
         if (!namespace_expand(owner, next)) return owner->diagnostic.status;
     }
     for (uint32_t i = 0; i < owner->facts.directory_count; ++i)
-        if (!namespace_observe(owner, owner->directories[i], 0, false)) return owner->diagnostic.status;
+        if (!namespace_observe(owner, owner->directories[i], i, 0, false)) return owner->diagnostic.status;
     if (namespace_work(owner, sizeof(owner->phase) + sizeof(owner->facts.armed))) {
         owner->phase = XR_XIR_NAMESPACE_ARMED; owner->facts.armed = true;
     }
@@ -187,7 +187,7 @@ XR_FUNC XrXirNamespaceStatus xtc_xir_namespace_check(XrXirNamespace *owner) {
     if (owner->phase != XR_XIR_NAMESPACE_ARMED) return XR_XIR_NAMESPACE_INVALID;
 #ifdef XR_OS_WINDOWS
     for (uint32_t i = 0; i < owner->facts.directory_count; ++i)
-        if (!namespace_observe(owner, owner->directories[i], 0, false)) break;
+        if (!namespace_observe(owner, owner->directories[i], i, 0, false)) break;
 #else
     namespace_fail(owner, XR_XIR_NAMESPACE_UNSUPPORTED, 0);
 #endif

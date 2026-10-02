@@ -38,7 +38,21 @@ typedef struct XrXirNamespaceDirectoryFacts {
     bool recursive;
 } XrXirNamespaceDirectoryFacts;
 typedef struct XrXirNamespaceFacts { uint32_t root_count, directory_count; bool armed; } XrXirNamespaceFacts;
-typedef struct XrXirNamespaceDiagnostic { XrXirNamespaceStatus status; uint32_t os_error; } XrXirNamespaceDiagnostic;
+typedef enum XrXirNamespaceFailureKind {
+    XR_XIR_NAMESPACE_FAILURE_UNKNOWN, XR_XIR_NAMESPACE_OPLOCK_COMPLETED,
+    XR_XIR_NAMESPACE_OPLOCK_IMMEDIATE, XR_XIR_NAMESPACE_DIRECTORY_IDENTITY
+} XrXirNamespaceFailureKind;
+/* A non-UNKNOWN kind identifies the held directory, not the modifying process.
+ * Fixed values survive partial close; directory facts supply the borrowed path
+ * while the owner lives. Copy this record before successful close destroys it. */
+typedef struct XrXirNamespaceDiagnostic {
+    XrXirNamespaceStatus status;
+    uint32_t os_error;
+    XrXirNamespaceFailureKind kind;
+    uint32_t directory_index;
+    uint64_t volume;
+    uint8_t file_id[16];
+} XrXirNamespaceDiagnostic;
 typedef struct XrXirNamespace XrXirNamespace;
 
 /* Copies the complete request on the mandatory original ledger, without I/O.

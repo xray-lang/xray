@@ -169,6 +169,17 @@ static XrXirNamespace *guard(XrCompileResources *r, const char *name, XrXirNames
     CHECK(armed == XR_XIR_NAMESPACE_OK);
     CHECK(xtc_xir_namespace_check(owner) == XR_XIR_NAMESPACE_OK); return owner;
 }
+static XrXirNamespaceDiagnostic directory_failure(XrXirNamespace *owner, XrXirNamespaceFailureKind kind) {
+    XrCompileResourceStats before=sdk_stats(xtc_xir_namespace_resources(owner));
+    XrXirNamespaceDiagnostic saved=*xtc_xir_namespace_diagnostic(owner);
+    CHECK(saved.status==XR_XIR_NAMESPACE_BROKEN&&saved.kind==kind);
+    const XrXirNamespaceDirectoryFacts *directory=xtc_xir_namespace_directory(owner,saved.directory_index);
+    CHECK(directory&&directory->path&&directory->volume==saved.volume&&!memcmp(directory->file_id,saved.file_id,16));
+    CHECK(xtc_xir_namespace_check(owner)==XR_XIR_NAMESPACE_BROKEN);
+    CHECK(!memcmp(&saved,xtc_xir_namespace_diagnostic(owner),sizeof(saved)));
+    CHECK(sdk_stats(xtc_xir_namespace_resources(owner)).work==before.work);
+    return saved;
+}
 static void semantics(void) {
     char tree[4096],nested[4096],file[4096],missing[4096],parent[4096],renamed[4096];
     path(tree,root_path,"tree"); path(nested,tree,"child/deep"); path(file,nested,"toggle.h");
@@ -177,6 +188,13 @@ static void semantics(void) {
     CHECK(xtc_xir_namespace_facts(owner)->directory_count == 3);
     touch(file); remove_file(file);
     CHECK(xtc_xir_namespace_check(owner) == XR_XIR_NAMESPACE_BROKEN);
+    XrXirNamespaceDiagnostic known=directory_failure(owner,XR_XIR_NAMESPACE_OPLOCK_COMPLETED);
+#ifndef NAMESPACE_PRODUCTION
+    fail_close=true;
+    CHECK(xtc_xir_namespace_close(&owner,100)==XR_XIR_NAMESPACE_PENDING&&owner);
+    CHECK(!memcmp(&known,xtc_xir_namespace_diagnostic(owner),sizeof(known)));
+#endif
+    CHECK(known.kind==XR_XIR_NAMESPACE_OPLOCK_COMPLETED);
     CHECK(xtc_xir_namespace_check(owner) == XR_XIR_NAMESPACE_BROKEN);
     CHECK(!xtc_xir_namespace_facts(owner)->armed); close_owner(&owner);
     path(tree,root_path,"direct");path(nested,tree,"child/deep");path(file,nested,"toggle.h");
@@ -340,6 +358,7 @@ static void pending_lifetime(void) {
         before=sdk_stats(r);xr_compile_resources_release(r);
         fail_cancel=mode==0;unknown_result=mode==1;
         CHECK(xtc_xir_namespace_close(&owner,0)==XR_XIR_NAMESPACE_PENDING&&owner==original);
+        CHECK(xtc_xir_namespace_diagnostic(owner)->kind==XR_XIR_NAMESPACE_FAILURE_UNKNOWN);
         CHECK(xtc_xir_namespace_diagnostic(owner)->status==XR_XIR_NAMESPACE_IO&&
             xtc_xir_namespace_diagnostic(owner)->os_error==ERROR_ACCESS_DENIED);
         CHECK(sdk_stats(r).work==before.work);
@@ -354,6 +373,7 @@ static void identity_and_missing_race(void) {
     XrXirNamespaceRoot root={name,XR_XIR_NAMESPACE_DIRECTORY};XrXirNamespaceRequest request={&root,1,shape};
     CHECK(xtc_xir_namespace_new(r,&request,&owner)==XR_XIR_NAMESPACE_OK);wrong_identity=true;identity_calls=0;
     CHECK(xtc_xir_namespace_arm(owner)==XR_XIR_NAMESPACE_BROKEN);wrong_identity=false;
+    (void)directory_failure(owner,XR_XIR_NAMESPACE_DIRECTORY_IDENTITY);
     CHECK(!xtc_xir_namespace_facts(owner)->armed);close_owner(&owner);
     path(name,root_path,"race");path(missing,name,"appeared/still-missing");root.path=missing;
     path(name,root_path,"race/appeared");wide_path(raced_directory,name);

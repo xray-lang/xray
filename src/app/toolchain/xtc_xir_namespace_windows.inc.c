@@ -17,7 +17,20 @@ static bool namespace_windows_error(XrXirNamespace *owner, DWORD error) {
     }
     return namespace_fail(owner, status, error);
 }
-static bool namespace_observe(XrXirNamespace *owner, NamespaceDirectory *node, DWORD wait_ms, bool cleanup) {
+static bool namespace_broken_directory(XrXirNamespace *owner, const NamespaceDirectory *node,
+    uint32_t index, XrXirNamespaceFailureKind kind) {
+    bool first = owner->diagnostic.status == XR_XIR_NAMESPACE_OK;
+    namespace_fail(owner, XR_XIR_NAMESPACE_BROKEN, 0);
+    if (first) {
+        owner->diagnostic.kind = kind;
+        owner->diagnostic.directory_index = index;
+        owner->diagnostic.volume = node->facts.volume;
+        memcpy(owner->diagnostic.file_id, node->facts.file_id, sizeof(node->facts.file_id));
+    }
+    return false;
+}
+static bool namespace_observe(XrXirNamespace *owner, NamespaceDirectory *node,
+    uint32_t index, DWORD wait_ms, bool cleanup) {
     if (!node->issued || node->completed) return true;
     if (cleanup && wait_ms) {
         DWORD waited = WaitForSingleObject(node->overlapped.hEvent, wait_ms);
@@ -33,7 +46,7 @@ static bool namespace_observe(XrXirNamespace *owner, NamespaceDirectory *node, D
     /* An API error alone says nothing about the lifetime of kernel storage. */
     if (complete || (error != ERROR_IO_INCOMPLETE && HasOverlappedIoCompleted(&node->overlapped)))
         node->completed = true;
-    if (complete) return cleanup || namespace_fail(owner, XR_XIR_NAMESPACE_BROKEN, 0);
+    if (complete) return cleanup || namespace_broken_directory(owner, node, index, XR_XIR_NAMESPACE_OPLOCK_COMPLETED);
     if (cleanup && node->completed && error == ERROR_OPERATION_ABORTED) return true;
     return namespace_windows_error(owner, error);
 }
@@ -50,7 +63,7 @@ static bool namespace_start(XrXirNamespace *owner, NamespaceDirectory *node) {
         return namespace_windows_error(owner, GetLastError());
     if (!namespace_work(owner, 2 * (sizeof(identity.VolumeSerialNumber) + sizeof(identity.FileId.Identifier)))) return false;
     if (identity.VolumeSerialNumber != facts->volume || memcmp(identity.FileId.Identifier, facts->file_id, 16))
-        return namespace_fail(owner, XR_XIR_NAMESPACE_BROKEN, 0);
+        return namespace_broken_directory(owner, node, owner->facts.directory_count - 1, XR_XIR_NAMESPACE_DIRECTORY_IDENTITY);
     wchar_t filesystem[16];
     if (!namespace_work(owner, 1 + sizeof(filesystem))) return false;
     if (!GetVolumeInformationByHandleW(node->handle, NULL, 0, NULL, NULL, NULL, filesystem, 16))
@@ -69,7 +82,7 @@ static bool namespace_start(XrXirNamespace *owner, NamespaceDirectory *node) {
     BOOL immediate = DeviceIoControl(node->handle, FSCTL_REQUEST_OPLOCK, &node->input, sizeof(node->input),
         &node->output, sizeof(node->output), NULL, &node->overlapped);
     DWORD error = immediate ? ERROR_SUCCESS : GetLastError();
-    if (immediate) return namespace_fail(owner, XR_XIR_NAMESPACE_BROKEN, 0);
+    if (immediate) return namespace_broken_directory(owner, node, owner->facts.directory_count - 1, XR_XIR_NAMESPACE_OPLOCK_IMMEDIATE);
     if (error != ERROR_IO_PENDING) return namespace_windows_error(owner, error);
     node->issued = true; return true;
 }
@@ -195,7 +208,7 @@ static bool namespace_drain(XrXirNamespace *owner, uint32_t wait_ms) {
         NamespaceDirectory *node = owner->directories[i];
         ULONGLONG elapsed = GetTickCount64() - start;
         DWORD remaining = elapsed >= wait_ms ? 0 : wait_ms - (DWORD)elapsed;
-        if (!namespace_observe(owner, node, remaining, true)) okay = false;
+        if (!namespace_observe(owner, node, i, remaining, true)) okay = false;
         if (node->issued && !node->completed) complete = false;
     }
     if (!complete) return false;
