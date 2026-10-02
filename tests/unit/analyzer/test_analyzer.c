@@ -4440,25 +4440,29 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XrModuleId star_id;
     XrModuleId callback_id;
     char *resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", entry_path, &authority,
-                                      &lib_id, &resolve_err) == 0);
+    char *entry_realpath = xr_test_realpath_alloc(entry_path);
+    ASSERT(entry_realpath != NULL);
+    XrModuleStatus resolved = xr_module_resolver_resolve(resolver, "./effect_export_module",
+        entry_realpath, &authority, &lib_id, &resolve_err);
+    if (resolved != XR_MODULE_OK)
+        fprintf(stderr, "effect module resolution: status=%d root=%s entry=%s: %s\n",
+                resolved, canonical_root, entry_realpath, resolve_err ? resolve_err : "");
+    ASSERT(resolved == XR_MODULE_OK);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_path, &authority,
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_realpath, &authority,
                                       &reexport_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_path, &authority,
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_realpath, &authority,
                                       &star_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_path, &authority,
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_realpath, &authority,
                                       &callback_id, &resolve_err) == 0);
     xr_free(resolve_err);
-    char *entry_realpath = xr_test_realpath_alloc(entry_path);
     char *entry_canonical = NULL;
     char *entry_logical = NULL;
-    ASSERT(entry_realpath != NULL);
     ASSERT((xr_module_identity_from_source(&authority, entry_realpath, &entry_canonical,
                                           &entry_logical) == XR_MODULE_OK));
 
