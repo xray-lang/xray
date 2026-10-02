@@ -55,6 +55,10 @@ XR_FUNC int xr_pipe_close(XrPipeHandle handle);
 XR_FUNC int64_t xr_pipe_read(XrPipeHandle handle, void *buf, size_t len);
 XR_FUNC int64_t xr_pipe_write(XrPipeHandle handle, const void *buf, size_t len);
 
+// Observe readable bytes and EOF without consuming bytes or changing flags.
+// The caller must be the sole reader before relying on this size for a read.
+XR_FUNC XrPipeIoStatus xr_pipe_probe(XrPipeHandle handle, size_t *available, bool *eof);
+
 // Non-blocking one-shot variants for coroutine-friendly wrappers. They preserve
 // the pipe endpoint's original blocking mode before returning.
 XR_FUNC XrPipeIoStatus xr_pipe_try_read(XrPipeHandle handle, void *buf, size_t len, int64_t *out_n);

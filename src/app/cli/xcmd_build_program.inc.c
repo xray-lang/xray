@@ -47,7 +47,10 @@ static bool program_native_command(XrCliProgramNativeBuild *build, XaotCliLinkCo
         xaot_cli_print_command(index == 3u ? "Link command" : "Compile command", command);
     if (build->dry_run)
         return true;
-    XrProcId process = xr_proc_spawn(command->program, command->argv);
+    XrProcId process = XR_PROC_INVALID;
+    XrProcSpawnOptions process_options = {0};
+    process_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(command->program, command->argv, &process_options, &process);
     int code = -1;
     if (process == XR_PROC_INVALID || xr_proc_wait(process, &code) != 0 || code != 0) {
         snprintf(error, error_size, "native toolchain command %u failed (exit %d)", index, code);

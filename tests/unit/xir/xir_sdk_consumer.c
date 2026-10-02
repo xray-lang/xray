@@ -9,7 +9,10 @@
 #include "execution/xr_xir_host_execution.h"
 #include "xir/xxir_output.h"
 #include <stdio.h>
-XR_DATA const XrXirProgramSpec linked_source_program;
+#ifndef XIR_SDK_PROGRAM_SYMBOL
+#error "An actual generated Program symbol is required"
+#endif
+XR_DATA const XrXirProgramSpec XIR_SDK_PROGRAM_SYMBOL;
 static XrXirOutputStatus sdk_consumer_bytes(void *context,XrXirOutputStream stream,const char *bytes,size_t length) {
     (void)context;
     FILE *file=stream==XR_XIR_STDOUT ? stdout : stream==XR_XIR_STDERR ? stderr : NULL;
@@ -17,7 +20,7 @@ static XrXirOutputStatus sdk_consumer_bytes(void *context,XrXirOutputStream stre
     return fwrite(bytes,1,length,file)==length && !fflush(file) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 int main(void) {
-    const XrXirProgramSpec *spec=&linked_source_program;XrXirProgram *program=NULL;
+    const XrXirProgramSpec *spec=&XIR_SDK_PROGRAM_SYMBOL;XrXirProgram *program=NULL;
     const XrCompileResourceLimits limits={16777216,16777216,64000000};
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     if (xr_compile_resources_new(&limits,&context.resources)!=XR_COMPILE_RESOURCE_OK) return 1;

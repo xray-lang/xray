@@ -92,22 +92,38 @@ static XrProcId spawn_exit_code_child(int code) {
     char code_arg[32];
     snprintf(code_arg, sizeof(code_arg), "exit /B %d", code);
     const char *argv[] = {"cmd.exe", "/C", code_arg, NULL};
-    return xr_proc_spawn("cmd.exe", argv);
+    XrProcId child = XR_PROC_INVALID;
+    XrProcSpawnOptions options = {0};
+    options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("cmd.exe", argv, &options, &child);
+    return child;
 #else
     char code_arg[32];
     snprintf(code_arg, sizeof(code_arg), "exit %d", code);
     const char *argv[] = {"sh", "-c", code_arg, NULL};
-    return xr_proc_spawn("sh", argv);
+    XrProcId child = XR_PROC_INVALID;
+    XrProcSpawnOptions options = {0};
+    options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("sh", argv, &options, &child);
+    return child;
 #endif
 }
 
 static XrProcId spawn_sleep_child(void) {
 #ifdef XR_OS_WINDOWS
     const char *argv[] = {"cmd.exe", "/C", "ping -n 6 127.0.0.1 >NUL", NULL};
-    return xr_proc_spawn("cmd.exe", argv);
+    XrProcId child = XR_PROC_INVALID;
+    XrProcSpawnOptions options = {0};
+    options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("cmd.exe", argv, &options, &child);
+    return child;
 #else
     const char *argv[] = {"sh", "-c", "sleep 5", NULL};
-    return xr_proc_spawn("sh", argv);
+    XrProcId child = XR_PROC_INVALID;
+    XrProcSpawnOptions options = {0};
+    options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("sh", argv, &options, &child);
+    return child;
 #endif
 }
 

@@ -470,13 +470,19 @@ TEST(find_missing_executable) {
 
 TEST(windows_auto_discovery_prefers_msvc) {
 #ifdef _WIN32
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
     XrToolchainRequest request = {0};
+    request.process = &process_context;
     XrToolchainCandidates candidates;
     char err[256];
 
     ASSERT_TRUE(xtc_target_parse("native", &request.target, err, sizeof(err)));
     request.selector = XR_TOOLCHAIN_SELECTOR_AUTO;
     ASSERT_TRUE(xtc_discover_candidates(&request, &candidates, err, sizeof(err)));
+    xr_compile_resources_release(process_resources);
     ASSERT_TRUE(candidates.count > 0);
     ASSERT_EQ_INT(candidates.items[0].provider, XR_TOOLCHAIN_PROVIDER_MSVC);
 #endif
@@ -598,13 +604,19 @@ TEST(version_parser_reads_ascii_token_from_arbitrary_bytes) {
 }
 
 TEST(cross_target_rejects_explicit_host_without_fallback) {
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
     XrToolchainRequest request = {0};
+    request.process = &process_context;
     XrToolchainCandidates candidates;
     char err[256];
 
     ASSERT_TRUE(xtc_target_parse("x86_64-linux-musl", &request.target, err, sizeof(err)));
     request.selector = XR_TOOLCHAIN_SELECTOR_HOST;
     ASSERT_FALSE(xtc_discover_candidates(&request, &candidates, err, sizeof(err)));
+    xr_compile_resources_release(process_resources);
 }
 
 #ifndef _WIN32
@@ -622,7 +634,12 @@ TEST(explicit_provider_has_no_fallback) {
     char root_template[] = "/tmp/xray_xtc_explicit_XXXXXX";
     char fake_clang[512];
     char err[256];
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
     XrToolchainRequest request = {0};
+    request.process = &process_context;
     XrToolchainSelection selection;
     char *root = mkdtemp(root_template);
     ASSERT_NOT_NULL(root);
@@ -632,6 +649,7 @@ TEST(explicit_provider_has_no_fallback) {
     request.selector = XR_TOOLCHAIN_SELECTOR_GCC;
     request.cc = fake_clang;
     ASSERT_FALSE(xtc_select_discovered(&request, &selection, err, sizeof(err)));
+    xr_compile_resources_release(process_resources);
     ASSERT_EQ_INT(selection.reason, XR_TOOLCHAIN_REASON_PROVIDER_EXPLICIT_NO_FALLBACK);
     unlink(fake_clang);
     rmdir(root);
@@ -643,7 +661,12 @@ TEST(explicit_clang_is_classified_from_banner) {
     char root_template[] = "/tmp/xray_xtc_clang_XXXXXX";
     char fake_clang[512];
     char err[256];
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
     XrToolchainRequest request = {0};
+    request.process = &process_context;
     XrToolchainSelection selection;
     char canonical[512];
     char *root = mkdtemp(root_template);
@@ -654,6 +677,7 @@ TEST(explicit_clang_is_classified_from_banner) {
     request.selector = XR_TOOLCHAIN_SELECTOR_CLANG;
     request.cc = fake_clang;
     ASSERT_TRUE(xtc_select_discovered(&request, &selection, err, sizeof(err)));
+    xr_compile_resources_release(process_resources);
     ASSERT_EQ_INT(selection.provider, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG);
     ASSERT_EQ_INT(selection.readiness, XR_TOOLCHAIN_RUNNABLE);
     ASSERT_TRUE(xtc_find_executable(fake_clang, canonical, sizeof(canonical)));
@@ -756,7 +780,7 @@ TEST(process_capture_and_output_limit) {
     char shell[1200];
     char err[256];
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
 #ifdef _WIN32
     ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 5000);
@@ -774,7 +798,17 @@ TEST(process_capture_and_output_limit) {
     spec.argv[3] = NULL;
 #endif
     spec.output_limit = 5;
-    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcess *owner = NULL;
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus status = xtc_process_prepare(resources, &spec, &owner);
+    if (status == XTC_PROCESS_OK) status = xtc_process_run(owner, NULL, NULL, &result);
+    xtc_process_free(owner);
+    xr_compile_resources_release(resources);
+    snprintf(err, sizeof(err), "%s", xtc_process_status_name(status));
+    ASSERT_EQ_INT(status, XTC_PROCESS_OK);
     ASSERT_EQ_INT(result.exit_code, 0);
     ASSERT_EQ_UINT(result.stdout_bytes.length, 5);
     ASSERT_EQ_UINT(result.stderr_bytes.length, 5);
@@ -789,7 +823,7 @@ TEST(process_capture_preserves_arbitrary_bytes_and_nul) {
     char shell[1200];
     char err[256];
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
 #ifdef _WIN32
     ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 5000);
@@ -808,7 +842,17 @@ TEST(process_capture_preserves_arbitrary_bytes_and_nul) {
     spec.argv[3] = NULL;
 #endif
     static const uint8_t expected[] = {0x66, 0x6f, 0x80, 0x00, 0xff};
-    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcess *owner = NULL;
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus status = xtc_process_prepare(resources, &spec, &owner);
+    if (status == XTC_PROCESS_OK) status = xtc_process_run(owner, NULL, NULL, &result);
+    xtc_process_free(owner);
+    xr_compile_resources_release(resources);
+    snprintf(err, sizeof(err), "%s", xtc_process_status_name(status));
+    ASSERT_EQ_INT(status, XTC_PROCESS_OK);
     ASSERT_EQ_INT(result.exit_code, 0);
     ASSERT_EQ_UINT(result.stdout_bytes.length, sizeof(expected));
     ASSERT_MEM_EQ(result.stdout_bytes.data, expected, sizeof(expected));
@@ -828,7 +872,7 @@ TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
     char shell[1200];
     char err[256];
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
     DWORD temp_len = GetTempPathW((DWORD) (sizeof(wide_temp) / sizeof(wide_temp[0])), wide_temp);
     ASSERT_TRUE(temp_len > 0 && temp_len < sizeof(wide_temp) / sizeof(wide_temp[0]));
     _snwprintf_s(wide_leaf, sizeof(wide_leaf) / sizeof(wide_leaf[0]), _TRUNCATE,
@@ -855,7 +899,17 @@ TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
                    "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
     spec.argv[6] = NULL;
     snprintf(expected, sizeof(expected), "\u53c2\u6570\u503c|\u73af\u5883\u503c|%s", utf8_leaf);
-    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcess *owner = NULL;
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus status = xtc_process_prepare(resources, &spec, &owner);
+    if (status == XTC_PROCESS_OK) status = xtc_process_run(owner, NULL, NULL, &result);
+    xtc_process_free(owner);
+    xr_compile_resources_release(resources);
+    snprintf(err, sizeof(err), "%s", xtc_process_status_name(status));
+    ASSERT_EQ_INT(status, XTC_PROCESS_OK);
     ASSERT_EQ_INT(result.exit_code, 0);
     ASSERT_EQ_UINT(result.stdout_bytes.length, strlen(expected));
     ASSERT_MEM_EQ(result.stdout_bytes.data, expected, strlen(expected));
@@ -868,13 +922,23 @@ TEST(process_spawn_rejects_invalid_utf8_input) {
     char shell[1200];
     char err[256];
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
     ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 5000);
     spec.argv[1] = invalid_utf8;
     spec.argv[2] = NULL;
-    ASSERT_FALSE(xtc_process_run(&spec, &result, err, sizeof(err)));
-    ASSERT_TRUE(strstr(err, "failed to spawn process") != NULL);
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcess *owner = NULL;
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus status = xtc_process_prepare(resources, &spec, &owner);
+    if (status == XTC_PROCESS_OK) status = xtc_process_run(owner, NULL, NULL, &result);
+    xtc_process_free(owner);
+    xr_compile_resources_release(resources);
+    snprintf(err, sizeof(err), "%s", xtc_process_status_name(status));
+    ASSERT_EQ_INT(status, XTC_PROCESS_INVALID);
+    ASSERT_TRUE(strstr(err, "invalid process request") != NULL);
 }
 #endif
 
@@ -882,7 +946,7 @@ TEST(process_timeout_is_bounded) {
     char shell[1200];
     char err[256];
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
 #ifdef _WIN32
     ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 30);
@@ -899,9 +963,19 @@ TEST(process_timeout_is_bounded) {
     spec.argv[2] = "sleep 5";
     spec.argv[3] = NULL;
 #endif
-    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
-    ASSERT_TRUE(result.timed_out);
-    ASSERT_TRUE(result.duration_ms < 2000);
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrToolchainProcess *owner = NULL;
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus status = xtc_process_prepare(resources, &spec, &owner);
+    if (status == XTC_PROCESS_OK) status = xtc_process_run(owner, NULL, NULL, &result);
+    xtc_process_free(owner);
+    xr_compile_resources_release(resources);
+    snprintf(err, sizeof(err), "%s", xtc_process_status_name(status));
+    ASSERT_EQ_INT(status, XTC_PROCESS_TIMEOUT);
+    ASSERT_NULL(result.stdout_bytes.data);
+    ASSERT_NULL(result.stderr_bytes.data);
     xtc_process_result_free(&result);
 }
 

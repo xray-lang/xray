@@ -7,7 +7,7 @@
 #include "xcli_diag.h"
 #include "xcli_installation.h"
 #include "../toolchain/xtc_discovery.h"
-#include "../toolchain/xtc_process.h"
+#include "../toolchain/xtc_process_internal.h"
 #include "../../os/os_fs.h"
 #include "../../os/os_proc.h"
 #include "../../base/xchecks.h"
@@ -67,12 +67,12 @@ static bool self_find_managed(const char *executable, char *manager, size_t mana
     return false;
 }
 
-static bool self_query(const char *program, const char *const *args, size_t count, char *output,
+static bool self_query(XrToolchainProcessContext *process_context, const char *program, const char *const *args, size_t count, char *output,
                        size_t output_size) {
     char executable[XR_PATH_MAX];
     char err[256];
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
     if (!xtc_find_executable(program, executable, sizeof(executable)))
         return false;
     xtc_process_spec_init(&spec, executable, 5000);
@@ -80,9 +80,11 @@ static bool self_query(const char *program, const char *const *args, size_t coun
         spec.argv[i + 1] = args[i];
     spec.argv[count + 1] = NULL;
     spec.output_limit = 16384;
-    if (!xtc_process_run(&spec, &result, err, sizeof(err)))
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus process_status = xtc_process_request_run(process_context, &spec, &result, err, sizeof(err));
+    if (process_status != XTC_PROCESS_OK)
         return false;
-    bool ok = !result.timed_out && result.exit_code == 0;
+    bool ok = result.exit_code == 0;
     if (ok && output && output_size)
         ok = xtc_process_copy_ascii(&result.stdout_bytes, output, output_size);
     xtc_process_result_free(&result);
@@ -98,7 +100,7 @@ static void self_trim_line(char *text) {
         text[--len] = '\0';
 }
 
-static XrSelfProvider self_detect_provider(const char *executable, char *manager,
+static XrSelfProvider self_detect_provider(XrToolchainProcessContext *process_context, const char *executable, char *manager,
                                            size_t manager_size) {
     char output[512];
     const char *dpkg_args[] = {"-S", executable};
@@ -107,18 +109,18 @@ static XrSelfProvider self_detect_provider(const char *executable, char *manager
     const char *brew_args[] = {"--prefix", "xray-lang"};
     if (self_find_managed(executable, manager, manager_size))
         return XR_SELF_PROVIDER_MANAGED;
-    if (self_query("dpkg-query", dpkg_args, 2, output, sizeof(output)) &&
+    if (self_query(process_context, "dpkg-query", dpkg_args, 2, output, sizeof(output)) &&
         strncmp(output, "xray-lang:", 10) == 0)
         return XR_SELF_PROVIDER_DEB;
-    if (self_query("rpm", rpm_args, 4, output, sizeof(output))) {
+    if (self_query(process_context, "rpm", rpm_args, 4, output, sizeof(output))) {
         self_trim_line(output);
         if (strcmp(output, "xray-lang") == 0)
             return XR_SELF_PROVIDER_RPM;
     }
-    if (self_query("pkgutil", pkg_args, 2, output, sizeof(output)) &&
+    if (self_query(process_context, "pkgutil", pkg_args, 2, output, sizeof(output)) &&
         strstr(output, "pkgid: org.xray-lang."))
         return XR_SELF_PROVIDER_MACOS_PKG;
-    if (self_query("brew", brew_args, 2, output, sizeof(output))) {
+    if (self_query(process_context, "brew", brew_args, 2, output, sizeof(output))) {
         self_trim_line(output);
         size_t prefix_len = strlen(output);
         if (prefix_len > 0 && strncmp(executable, output, prefix_len) == 0 &&
@@ -130,7 +132,10 @@ static XrSelfProvider self_detect_provider(const char *executable, char *manager
 
 static int self_run_manager(const char *manager, const char *action, bool json_output) {
     const char *argv[] = {manager, action, json_output ? "--json" : NULL, NULL};
-    XrProcId pid = xr_proc_spawn(manager, argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options = {0};
+    pid_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(manager, argv, &pid_options, &pid);
     int code = -1;
     if (pid == XR_PROC_INVALID || xr_proc_wait(pid, &code) != 0) {
         xr_cli_error("self", "failed to start managed installer '%s'", manager);
@@ -194,7 +199,20 @@ XR_FUNC int cmd_self(const XrCliInvocation *inv) {
         xr_cli_error("self", "cannot resolve the active Xray executable");
         return XR_CLI_EXIT_FAIL;
     }
-    XrSelfProvider provider = self_detect_provider(executable, manager, sizeof(manager));
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    XrCompileResourceStatus allocation = xr_compile_resources_new(&process_limits, &process_resources);
+    if (allocation != XR_COMPILE_RESOURCE_OK) {
+        xr_cli_error("self", "%s", allocation == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? "process out of memory" : "process budget exhausted");
+        return XR_CLI_EXIT_UNAVAILABLE;
+    }
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
+    XrSelfProvider provider = self_detect_provider(&process_context, executable, manager, sizeof(manager));
+    xr_compile_resources_release(process_resources);
+    if (process_context.status != XTC_PROCESS_OK) {
+        xr_cli_error("self", "%s", xtc_process_status_name(process_context.status));
+        return XR_CLI_EXIT_UNAVAILABLE;
+    }
     bool json_output = inv->ctx->json_output || xr_cli_opt_bool(&inv->options, "json");
     if (provider == XR_SELF_PROVIDER_MANAGED)
         return self_run_manager(manager, inv->positionals[0], json_output);

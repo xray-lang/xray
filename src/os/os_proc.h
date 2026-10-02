@@ -7,28 +7,15 @@
  *
  * os_proc.h - Cross-platform process spawning and introspection.
  *
- * Why a shim:
- *   POSIX fork() + execvp() + waitpid() and Win32 CreateProcess /
- *   WaitForSingleObject / GetExitCodeProcess do not share types,
- *   semantics, or error-reporting conventions. Callers in cli/,
- *   module/ and elsewhere reached for the POSIX side directly,
- *   which would not compile on Windows.
+ * The sole process owner accepts an explicit allocation/work policy and either
+ * a complete environment or an explicit inherited environment with overrides.
+ * Compiler callers freeze inputs before spawning; execution callers choose
+ * their runtime policy. Neither domain silently acquires the other's budget.
  *
- *   This header gives a minimal, opinionated process surface:
- *     - Spawn a child with an argv vector. The child inherits the
- *       parent's stdio and environment by default. Search-PATH semantics
- *       match execvp on POSIX and CreateProcess(lpApplicationName=NULL)
- *       on Windows (the resolver walks PATHEXT for unqualified names).
- *     - Wait for a child, returning its non-negative exit code on a
- *       clean exit or -1 if the child was signaled / terminated
- *       abnormally.
- *     - Send a portable termination signal to a child.
- *     - Query the current process id.
- *     - Detect whether a debugger is attached.
- *
- *   Anything more (signal forwarding, pipe redirection) is intentionally out
- *   of scope until a concrete in-tree caller needs it. Environment overrides
- *   are supported as a small add/update overlay on the inherited environment.
+ * Ordinary waits consume their child. Group waits retain the leader identity
+ * until close terminates remaining descendants and reaps the leader. A caller
+ * serializes group operations. Ordinary runtime IDs permit competing waiters;
+ * at most one waiter consumes the child.
  */
 
 #ifndef XR_OS_OS_PROC_H
@@ -48,8 +35,7 @@ extern "C" {
 // Opaque process handle. Positive on success, -1 on error.
 //
 // On POSIX this is the pid_t value returned by fork(); on Windows
-// it is a small numeric token that maps to an internally-tracked
-// HANDLE. Callers must not assume the int64_t is a Win32 HANDLE
+// the numeric PID maps to internally tracked process and job handles. Callers must not assume the int64_t is a Win32 HANDLE
 // or a pid_t — go through xr_proc_wait / xr_proc_self_pid for
 // cross-platform behaviour.
 typedef int64_t XrProcId;
@@ -62,47 +48,49 @@ typedef enum XrProcWaitResult {
     XR_PROC_WAIT_EXITED = 1,
 } XrProcWaitResult;
 
+typedef enum XrOsProcStatus {
+    XR_PROC_OK, XR_PROC_INVALID_ARGUMENT, XR_PROC_UNRESOLVED, XR_PROC_BUDGET,
+    XR_PROC_OUT_OF_MEMORY, XR_PROC_IO, XR_PROC_UNSUPPORTED
+} XrOsProcStatus;
+
+/* Callbacks are mandatory. The context is borrowed only during spawn.
+ * Compiler callers pass their ledger; execution callers explicitly choose
+ * their allocation policy. No allocation policy is selected implicitly. */
+typedef struct XrProcMemory {
+    void *context;
+    XrOsProcStatus (*alloc)(void *context, size_t bytes, void **output);
+    void (*free)(void *context, void *memory);
+    XrOsProcStatus (*work)(void *context, uint64_t units);
+} XrProcMemory;
+XR_FUNC XrProcMemory xr_proc_system_memory(void);
+XR_FUNC XrOsProcStatus xr_proc_last_error(void);
+
 typedef struct XrProcSpawnOptions {
-    // NULL or empty means inherit the parent's current working directory.
+    XrProcMemory memory;
     const char *cwd;
-    // Optional environment overrides. NULL / count 0 means inherit the
-    // parent's environment unchanged; entries override or add variables.
     const char *const *env_keys;
     const char *const *env_values;
     size_t env_count;
-    // Optional stdio redirection. The handle names describe the end consumed by
-    // the child process; ownership remains with the caller.
+    /* False explicitly chooses the runtime's inherited environment plus
+     * overrides. True supplies the complete environment, including empty. */
+    bool complete_environment;
     bool has_stdin;
     XrPipeHandle stdin_read;
     bool has_stdout;
     XrPipeHandle stdout_write;
     bool has_stderr;
     XrPipeHandle stderr_write;
-    // When true, the child is released from the wait/tryWait lifecycle. The
-    // returned id remains informational; callers must not wait it.
     bool detached;
-    // Start the child as the leader of a new process group. This is used by
-    // bounded compiler/linker probes so timeout cleanup can terminate the
-    // complete subprocess tree without affecting the caller's group.
     bool new_process_group;
 } XrProcSpawnOptions;
 
-// Spawn a child process running `prog`. `argv` is a NULL-terminated
-// array; argv[0] is conventionally the program name. The child
-// inherits the parent's stdin / stdout / stderr and environment. PATH is
-// searched for unqualified program names (POSIX execvp / Win32 CreateProcessW
-// with lpApplicationName=NULL).
-//
-// Returns the child's process id on success, XR_PROC_INVALID on
-// failure (no fork/CreateProcess possible, exec failed, etc.).
-XR_FUNC XrProcId xr_proc_spawn(const char *prog, const char *const argv[]);
-
-// Spawn with structured options. Unsupported / empty fields behave like
-// xr_proc_spawn. The options object is intentionally small and grows only when
-// a general process capability needs it; it must not become a bag of
-// algorithm-specific switches.
-XR_FUNC XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
-                                  const XrProcSpawnOptions *options);
+/* Failure preserves output. Successful waits consume ordinary child owners. Group IDs require close
+ * after wait, including failed waits; close terminates remaining descendants.
+ * Detached IDs are informational and must not be waited or closed. */
+XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
+    const XrProcSpawnOptions *options, XrProcId *output);
+/* Only an owned new_process_group request can be closed. */
+XR_FUNC int xr_proc_close(XrProcId pid);
 
 // Wait for the child identified by `pid` to exit. Blocks until the
 // child terminates. On a clean exit, writes the child's exit status
@@ -118,7 +106,8 @@ XR_FUNC int xr_proc_wait(XrProcId pid, int *exit_code);
 // and XR_PROC_WAIT_ERROR if the wait query failed. When the child has
 // exited cleanly, writes 0..255 to `*exit_code`; if the child was
 // signaled / forcibly terminated, writes -1. A reported EXITED child
-// has been reaped and must not be waited again.
+// must not be waited again. Ordinary children are reaped; group owners retain
+// the leader identity until close terminates descendants and reaps it.
 XR_FUNC XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code);
 
 // Send `signal` to the child identified by `pid`. Returns 0 on success
@@ -128,9 +117,7 @@ XR_FUNC XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code);
 // path.
 XR_FUNC int xr_proc_kill(XrProcId pid, int signal);
 
-// Terminate the process group rooted at pid when the child was spawned with
-// new_process_group. Platforms without group support fall back to killing the
-// direct child until their native job-object implementation is available.
+// Terminate the owned process group or job. No direct-child fallback.
 XR_FUNC int xr_proc_kill_tree(XrProcId pid, int signal);
 
 // Current process id. Always succeeds.

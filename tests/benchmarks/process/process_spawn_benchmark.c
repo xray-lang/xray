@@ -39,7 +39,10 @@ static int spawn_once(void) {
     const char *const argv[] = {"/bin/sh", "-c", "true", NULL};
     const char *program = "/bin/sh";
 #endif
-    XrProcId child = xr_proc_spawn(program, argv);
+    XrProcId child = XR_PROC_INVALID;
+    XrProcSpawnOptions child_options = {0};
+    child_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(program, argv, &child_options, &child);
     int exit_code = -1;
     return child != XR_PROC_INVALID && xr_proc_wait(child, &exit_code) == 0 && exit_code == 0;
 }

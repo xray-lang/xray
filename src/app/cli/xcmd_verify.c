@@ -1094,6 +1094,15 @@ static bool verify_codegen_realize(const XrCliInvocation *inv, const XaotBuildRe
         (*failures)++;
         return false;
     }
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    XrCompileResourceStatus allocation = xr_compile_resources_new(&process_limits, &process_resources);
+    if (allocation != XR_COMPILE_RESOURCE_OK) {
+        xr_cli_error("verify", "%s", allocation == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? "process out of memory" : "process budget exhausted");
+        (*failures)++; return false;
+    }
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
+    options.request.process = &process_context;
     options.request.cc = xr_cli_opt_string(&inv->options, "cc", getenv("CC"));
     options.request.zig = xr_cli_opt_string(&inv->options, "zig", getenv("XRAY_ZIG"));
     options.request.program_hint = inv->ctx ? inv->ctx->program : NULL;
@@ -1106,7 +1115,7 @@ static bool verify_codegen_realize(const XrCliInvocation *inv, const XaotBuildRe
         snprintf(err, sizeof(err), "cannot create the canonical generated-C realization unit");
     bool realized_ok =
         generated_c && xtc_shape_oracle_realize(&options, generated_c, &artifact, err, sizeof(err));
-    if (!realized_ok && options.request.selector == XR_TOOLCHAIN_SELECTOR_AUTO) {
+    if (!realized_ok && process_context.status == XTC_PROCESS_OK && options.request.selector == XR_TOOLCHAIN_SELECTOR_AUTO) {
         char primary_err[1024];
         snprintf(primary_err, sizeof(primary_err), "%s", err);
         xtc_shape_oracle_free(&artifact);
@@ -1120,6 +1129,7 @@ static bool verify_codegen_realize(const XrCliInvocation *inv, const XaotBuildRe
                      primary_err, fallback_err);
         }
     }
+    xr_compile_resources_release(process_resources);
     if (!realized_ok) {
         xr_cli_error("verify", "realized object/assembly oracle failed: %s", err);
         xr_free(generated_c);

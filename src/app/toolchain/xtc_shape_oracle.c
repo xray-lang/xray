@@ -11,7 +11,7 @@
 #include "xtc_shape_oracle.h"
 
 #include "xtc_command.h"
-#include "xtc_process.h"
+#include "xtc_process_internal.h"
 #include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 #include "../../os/os_fs.h"
@@ -100,12 +100,8 @@ static void shape_cleanup(const char *dir, const char *source, const char *assem
 #endif
 }
 
-static void shape_process_error(const XrProcessSpec *spec, const XrProcessResult *process,
+static void shape_process_error(const XrProcessResult *process,
                                 char *err, size_t err_size) {
-    if (process->timed_out) {
-        snprintf(err, err_size, "shape-oracle compiler timed out after %u ms", spec->timeout_ms);
-        return;
-    }
     const XrProcessByteBuffer *output = process->stderr_bytes.length > 0
                                             ? &process->stderr_bytes
                                             : &process->stdout_bytes;
@@ -124,6 +120,7 @@ static void shape_process_error(const XrProcessSpec *spec, const XrProcessResult
 XR_FUNC bool xtc_shape_oracle_realize(const XrToolchainProbeOptions *options,
                                       const char *generated_c, XrToolchainAssemblyArtifact *out,
                                       char *err, size_t err_size) {
+    XrToolchainProcessContext *process_context = options ? options->request.process : NULL;
     XrToolchainProbeResult probe = {0};
     XtcShapeCommand command = {0};
     XrProcessResult process = {0};
@@ -169,12 +166,14 @@ XR_FUNC bool xtc_shape_oracle_realize(const XrToolchainProbeOptions *options,
                                       err, err_size))
         goto cleanup;
     char process_err[512];
-    if (!xtc_process_run(&command.spec, &process, process_err, sizeof(process_err))) {
+    command.spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus process_status = xtc_process_request_run(process_context, &command.spec, &process, process_err, sizeof(process_err));
+    if (process_status != XTC_PROCESS_OK) {
         snprintf(err, err_size, "%s", process_err);
         goto cleanup;
     }
-    if (process.timed_out || process.exit_code != 0) {
-        shape_process_error(&command.spec, &process, err, err_size);
+    if (process.exit_code != 0) {
+        shape_process_error(&process, err, err_size);
         goto cleanup;
     }
     out->text = xr_file_read_all(assembly, "rb", &out->size);

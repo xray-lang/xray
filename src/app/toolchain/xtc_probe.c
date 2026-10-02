@@ -11,7 +11,7 @@
 #include "xtc_probe.h"
 
 #include "xtc_command.h"
-#include "xtc_process.h"
+#include "xtc_process_internal.h"
 #include "xtc_probe_cache.h"
 #include "../../os/os_fs.h"
 #include "../../os/os_random.h"
@@ -343,15 +343,13 @@ static void xtc_probe_select_diagnostic_line(const XrProcessByteBuffer *output,
     }
 }
 
-static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process, char *detail,
+static bool xtc_probe_run_process(XrToolchainProcessContext *process_context, XrProcessSpec *spec, XrProcessResult *process, char *detail,
                                   size_t detail_size) {
     char process_err[256];
-    if (!xtc_process_run(spec, process, process_err, sizeof(process_err))) {
+    spec->environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus process_status = xtc_process_request_run(process_context, spec, process, process_err, sizeof(process_err));
+    if (process_status != XTC_PROCESS_OK) {
         snprintf(detail, detail_size, "%s", process_err);
-        return false;
-    }
-    if (process->timed_out) {
-        snprintf(detail, detail_size, "probe stage timed out after %u ms", spec->timeout_ms);
         return false;
     }
     if (process->exit_code != 0) {
@@ -372,10 +370,10 @@ static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process,
     return true;
 }
 
-static bool xtc_probe_compile(const XrToolchainSelection *selection, const char *source,
+static bool xtc_probe_compile(XrToolchainProcessContext *process_context, const XrToolchainSelection *selection, const char *source,
                               const char *object, const XrRuntimeArtifactSet *sdk, bool include_sdk,
                               bool lto, char *detail, size_t detail_size) {
-    XrProcessResult process;
+    XrProcessResult process = {0};
     XtcProbeCommand command;
     if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
@@ -397,7 +395,7 @@ static bool xtc_probe_compile(const XrToolchainSelection *selection, const char 
     if (!xtc_command_emit_compile_io(selection->provider, source, object, &sink, detail,
                                      detail_size))
         return false;
-    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
+    bool ok = xtc_probe_run_process(process_context, &command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
@@ -445,10 +443,10 @@ static bool xtc_probe_add_build_sanitizer_link_flags(const XrToolchainSelection 
     return true;
 }
 
-static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
+static bool xtc_probe_link_runtime(XrToolchainProcessContext *process_context, const XrToolchainSelection *selection,
                                    const XrRuntimeArtifactSet *runtime, const char *object,
                                    const char *executable, char *detail, size_t detail_size) {
-    XrProcessResult process;
+    XrProcessResult process = {0};
     XtcProbeCommand command;
     if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
@@ -470,14 +468,14 @@ static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
         return false;
     if (!xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
         return false;
-    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
+    bool ok = xtc_probe_run_process(process_context, &command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
 
-static bool xtc_probe_link_minimal(const XrToolchainSelection *selection, const char *source,
+static bool xtc_probe_link_minimal(XrToolchainProcessContext *process_context, const XrToolchainSelection *selection, const char *source,
                                    const char *executable, char *detail, size_t detail_size) {
-    XrProcessResult process;
+    XrProcessResult process = {0};
     XtcProbeCommand command;
     if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
@@ -493,15 +491,15 @@ static bool xtc_probe_link_minimal(const XrToolchainSelection *selection, const 
                                       detail_size) ||
         !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
         return false;
-    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
+    bool ok = xtc_probe_run_process(process_context, &command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
 
-static bool xtc_probe_link_object(const XrToolchainSelection *selection, const char *object,
+static bool xtc_probe_link_object(XrToolchainProcessContext *process_context, const XrToolchainSelection *selection, const char *object,
                                   const char *executable, bool lto, char *detail,
                                   size_t detail_size) {
-    XrProcessResult process;
+    XrProcessResult process = {0};
     XtcProbeCommand command;
     if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
@@ -513,27 +511,27 @@ static bool xtc_probe_link_object(const XrToolchainSelection *selection, const c
                                       detail_size) ||
         !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
         return false;
-    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
+    bool ok = xtc_probe_run_process(process_context, &command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
 
-static bool xtc_probe_run_executable(const char *executable, char *detail, size_t detail_size) {
+static bool xtc_probe_run_executable(XrToolchainProcessContext *process_context, const char *executable, char *detail, size_t detail_size) {
     XrProcessSpec spec;
-    XrProcessResult process;
+    XrProcessResult process = {0};
     xtc_process_spec_init(&spec, executable, xtc_probe_timeout(XTC_PROBE_RUN_TIMEOUT_MS));
     spec.argv[1] = NULL;
-    bool ok = xtc_probe_run_process(&spec, &process, detail, detail_size);
+    bool ok = xtc_probe_run_process(process_context, &spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
 
-static bool xtc_probe_target_matches(const XrToolchainSelection *selection, char *detail,
+static bool xtc_probe_target_matches(XrToolchainProcessContext *process_context, const XrToolchainSelection *selection, char *detail,
                                      size_t detail_size) {
     if (selection && selection->provider == XR_TOOLCHAIN_PROVIDER_MSVC)
         return selection->target.abi == XR_TOOLCHAIN_TARGET_ABI_MSVC;
     XrProcessSpec spec;
-    XrProcessResult process;
+    XrProcessResult process = {0};
     size_t index;
     XtcProbeCommand command;
     if (!xtc_probe_command_init(selection, &command, detail, detail_size))
@@ -543,7 +541,7 @@ static bool xtc_probe_target_matches(const XrToolchainSelection *selection, char
     spec.timeout_ms = xtc_probe_timeout(XTC_PROBE_DUMPMACHINE_TIMEOUT_MS);
     spec.argv[index++] = "-dumpmachine";
     spec.argv[index] = NULL;
-    if (!xtc_probe_run_process(&spec, &process, detail, detail_size)) {
+    if (!xtc_probe_run_process(process_context, &spec, &process, detail, detail_size)) {
         xtc_process_result_free(&process);
         return false;
     }
@@ -706,6 +704,7 @@ static bool xtc_probe_msvc_environment_ready(char *detail, size_t detail_size) {
 static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
                                 XrToolchainCandidate *candidate, size_t candidate_index,
                                 XrToolchainProbeResult *result, char *err, size_t err_size) {
+    XrToolchainProcessContext *process_context = options->request.process;
     char detail[512] = {0};
     char temp_dir[1200] = {0};
     char minimal_source[1300] = {0};
@@ -734,7 +733,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
              candidate->executable);
     result->selection.program = result->selection.program_storage;
 
-    if (!xtc_candidate_read_version(candidate, detail, sizeof(detail))) {
+    if (!xtc_candidate_read_version(process_context, candidate, detail, sizeof(detail))) {
         result->selection.reason = XR_TOOLCHAIN_REASON_TOOLCHAIN_ENV_INCOMPLETE;
         xtc_probe_add_diagnostic(result, result->selection.reason, "version", detail);
         return false;
@@ -743,7 +742,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     snprintf(result->selection.version, sizeof(result->selection.version), "%s",
              candidate->version);
     if (candidate->provider == XR_TOOLCHAIN_PROVIDER_APPLE_CLANG &&
-        !xtc_active_apple_sdk(result->selection.system_sdk, sizeof(result->selection.system_sdk),
+        !xtc_active_apple_sdk(process_context, result->selection.system_sdk, sizeof(result->selection.system_sdk),
                               detail, sizeof(detail))) {
         result->selection.reason = XR_TOOLCHAIN_REASON_TOOLCHAIN_ENV_INCOMPLETE;
         xtc_probe_add_diagnostic(result, result->selection.reason, "discover", detail);
@@ -769,7 +768,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         return false;
     }
     result->selection.readiness = XR_TOOLCHAIN_RUNNABLE;
-    if (!xtc_probe_target_matches(&result->selection, detail, sizeof(detail))) {
+    if (!xtc_probe_target_matches(process_context, &result->selection, detail, sizeof(detail))) {
         result->selection.reason = XR_TOOLCHAIN_REASON_ABI_MISMATCH;
         xtc_probe_add_diagnostic(result, result->selection.reason, "target", detail);
         return false;
@@ -865,7 +864,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         return false;
     }
 
-    if (!xtc_probe_compile(&result->selection, minimal_source, minimal_object, NULL, false, false,
+    if (!xtc_probe_compile(process_context, &result->selection, minimal_source, minimal_object, NULL, false, false,
                            detail, sizeof(detail))) {
         result->c_compile = XR_TOOLCHAIN_CAPABILITY_FAILED;
         result->selection.reason = XR_TOOLCHAIN_REASON_COMPILE_PROBE_FAILED;
@@ -875,7 +874,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     result->c_compile = XR_TOOLCHAIN_CAPABILITY_OK;
     result->selection.readiness = XR_TOOLCHAIN_C_COMPILE_OK;
 
-    if (!xtc_probe_compile(&result->selection, sdk_source, sdk_object, &result->runtime, true,
+    if (!xtc_probe_compile(process_context, &result->selection, sdk_source, sdk_object, &result->runtime, true,
                            false, detail, sizeof(detail))) {
         result->sdk_compile = XR_TOOLCHAIN_CAPABILITY_FAILED;
         result->selection.reason = XR_TOOLCHAIN_REASON_COMPILE_PROBE_FAILED;
@@ -889,12 +888,13 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     do {                                                                                           \
         if (!xtc_probe_write_file(codegen_source, (source_text))) {                                \
             result->field = XR_TOOLCHAIN_CAPABILITY_FAILED;                                        \
-        } else if (xtc_probe_compile(&result->selection, codegen_source, codegen_object, NULL,     \
+        } else if (xtc_probe_compile(process_context, &result->selection, codegen_source, codegen_object, NULL,     \
                                      false, false, detail, sizeof(detail))) {                      \
             result->field = XR_TOOLCHAIN_CAPABILITY_OK;                                            \
         } else {                                                                                   \
             result->field = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;                                   \
         }                                                                                          \
+        if (process_context->status != XTC_PROCESS_OK) goto failed;                                \
         (void) xr_fs_remove(codegen_object);                                                       \
     } while (0)
     XTC_PROBE_CODEGEN_CAP(force_inline, xtc_probe_force_inline_c);
@@ -932,7 +932,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
                                                           : XR_TOOLCHAIN_CAPABILITY_OK;
         result->selection.readiness = XR_TOOLCHAIN_READY;
     } else if (!options->request.target.is_native) {
-        if (!xtc_probe_link_minimal(&result->selection, minimal_source, runtime_executable, detail,
+        if (!xtc_probe_link_minimal(process_context, &result->selection, minimal_source, runtime_executable, detail,
                                     sizeof(detail))) {
             result->runtime_link = XR_TOOLCHAIN_CAPABILITY_FAILED;
             result->cross = XR_TOOLCHAIN_CAPABILITY_FAILED;
@@ -945,9 +945,9 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         result->cross = XR_TOOLCHAIN_CAPABILITY_OK;
         result->selection.readiness = XR_TOOLCHAIN_READY;
     } else {
-        if (!xtc_probe_compile(&result->selection, runtime_source, runtime_object, NULL, false,
+        if (!xtc_probe_compile(process_context, &result->selection, runtime_source, runtime_object, NULL, false,
                                false, detail, sizeof(detail)) ||
-            !xtc_probe_link_runtime(&result->selection, &result->runtime, runtime_object,
+            !xtc_probe_link_runtime(process_context, &result->selection, &result->runtime, runtime_object,
                                     runtime_executable, detail, sizeof(detail))) {
             result->runtime_link = XR_TOOLCHAIN_CAPABILITY_FAILED;
             result->selection.reason = XR_TOOLCHAIN_REASON_LINK_PROBE_FAILED;
@@ -958,7 +958,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         result->selection.readiness = XR_TOOLCHAIN_RUNTIME_LINK_OK;
         if (options->no_run) {
             result->native_run = XR_TOOLCHAIN_CAPABILITY_SKIPPED;
-        } else if (!xtc_probe_run_executable(runtime_executable, detail, sizeof(detail))) {
+        } else if (!xtc_probe_run_executable(process_context, runtime_executable, detail, sizeof(detail))) {
             result->native_run = XR_TOOLCHAIN_CAPABILITY_FAILED;
             result->selection.reason = XR_TOOLCHAIN_REASON_RUN_PROBE_FAILED;
             xtc_probe_add_diagnostic(result, result->selection.reason, "native-run", detail);
@@ -971,15 +971,16 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         result->selection.readiness = XR_TOOLCHAIN_READY;
     }
 
-    if (xtc_probe_compile(&result->selection, minimal_source, lto_object, NULL, false, true, detail,
+    if (xtc_probe_compile(process_context, &result->selection, minimal_source, lto_object, NULL, false, true, detail,
                           sizeof(detail)) &&
-        xtc_probe_link_object(&result->selection, lto_object, runtime_executable, true, detail,
+        xtc_probe_link_object(process_context, &result->selection, lto_object, runtime_executable, true, detail,
                               sizeof(detail)) &&
         (!options->request.target.is_native || options->no_run ||
-         xtc_probe_run_executable(runtime_executable, detail, sizeof(detail))))
+         xtc_probe_run_executable(process_context, runtime_executable, detail, sizeof(detail))))
         result->lto = XR_TOOLCHAIN_CAPABILITY_OK;
     else
         result->lto = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;
+    if (process_context->status != XTC_PROCESS_OK) goto failed;
     result->selection.reason = XR_TOOLCHAIN_REASON_NONE;
     xtc_probe_fingerprint(options, result);
     char cache_err[256];
@@ -1023,6 +1024,17 @@ XR_FUNC bool xtc_probe(const XrToolchainProbeOptions *options, XrToolchainProbeR
         bool ready = xtc_probe_candidate(options, &candidates.items[i], i, &candidate_result,
                                          candidate_err, sizeof(candidate_err));
         candidate_result.duration_ms = xr_time_monotonic_ms() - start_ms;
+        if (options->request.process->status != XTC_PROCESS_OK) {
+            *out = candidate_result;
+            out->selection.program = out->selection.program_storage;
+            out->selection.readiness = XR_TOOLCHAIN_DISCOVERED;
+            if (out->selection.reason == XR_TOOLCHAIN_REASON_NONE)
+                out->selection.reason = XR_TOOLCHAIN_REASON_TOOLCHAIN_ENV_INCOMPLETE;
+            xtc_probe_add_diagnostic(out, out->selection.reason, "process",
+                                     xtc_process_status_name(options->request.process->status));
+            xtc_probe_error(err, err_size, xtc_process_status_name(options->request.process->status), NULL);
+            return false;
+        }
         if (ready) {
             *out = candidate_result;
             out->selection.program = out->selection.program_storage;

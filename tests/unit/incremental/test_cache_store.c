@@ -515,8 +515,14 @@ TEST(cross_process_conflicting_writers_publish_one_complete_object) {
                                 "first-process-payload", NULL};
     const char *second_argv[] = {executable, "--cache-child-publish", root, "process-key",
                                  "second-process-payload", NULL};
-    XrProcId first = xr_proc_spawn(executable, first_argv);
-    XrProcId second = xr_proc_spawn(executable, second_argv);
+    XrProcId first = XR_PROC_INVALID;
+    XrProcSpawnOptions first_options = {0};
+    first_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(executable, first_argv, &first_options, &first);
+    XrProcId second = XR_PROC_INVALID;
+    XrProcSpawnOptions second_options = {0};
+    second_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(executable, second_argv, &second_options, &second);
     int first_exit = -1;
     int second_exit = -1;
     int first_wait = xr_proc_wait(first, &first_exit);
@@ -557,12 +563,17 @@ TEST(cross_process_root_lock_blocks_publish_until_release) {
 
     const char *holder_argv[] = {executable, "--cache-child-hold-lock", root, holder_ready,
                                  release, NULL};
-    XrProcId holder = xr_proc_spawn(executable, holder_argv);
+    XrProcId holder = XR_PROC_INVALID;
+    XrProcSpawnOptions holder_options = {0};
+    holder_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(executable, holder_argv, &holder_options, &holder);
     bool holder_acquired = wait_for_path(holder_ready, 5000u);
     const char *publisher_argv[] = {executable, "--cache-child-publish-signaled", root,
                                     "locked-key", "locked-payload", publisher_started, NULL};
-    XrProcId publisher = holder_acquired ? xr_proc_spawn(executable, publisher_argv)
-                                         : XR_PROC_INVALID;
+    XrProcId publisher = XR_PROC_INVALID;
+    XrProcSpawnOptions publisher_options = {0};
+    publisher_options.memory = xr_proc_system_memory();
+    if (holder_acquired) (void)xr_proc_spawn(executable, publisher_argv, &publisher_options, &publisher);
     bool publisher_entered = wait_for_path(publisher_started, 5000u);
     xr_time_sleep_ms(50u);
     int publisher_exit = -1;
@@ -616,12 +627,17 @@ TEST(cross_process_loaded_blob_survives_cleanup_after_locked_read) {
                                  reader_ready,
                                  reader_release,
                                  NULL};
-    XrProcId reader = xr_proc_spawn(executable, reader_argv);
+    XrProcId reader = XR_PROC_INVALID;
+    XrProcSpawnOptions reader_options = {0};
+    reader_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(executable, reader_argv, &reader_options, &reader);
     bool reader_has_owned_bytes = wait_for_path(reader_ready, 5000u);
     const char *cleaner_argv[] = {executable, "--cache-child-cleanup", root,
                                   "reader-cleanup-key", NULL};
-    XrProcId cleaner = reader_has_owned_bytes ? xr_proc_spawn(executable, cleaner_argv)
-                                              : XR_PROC_INVALID;
+    XrProcId cleaner = XR_PROC_INVALID;
+    XrProcSpawnOptions cleaner_options = {0};
+    cleaner_options.memory = xr_proc_system_memory();
+    if (reader_has_owned_bytes) (void)xr_proc_spawn(executable, cleaner_argv, &cleaner_options, &cleaner);
     int cleaner_exit = -1;
     int cleaner_wait = xr_proc_wait(cleaner, &cleaner_exit);
     bool removed = !xr_fs_exists(entry);
@@ -670,12 +686,17 @@ TEST(cross_process_reject_cleanup_preserves_aba_replacement) {
                                  reader_ready,
                                  reader_release,
                                  NULL};
-    XrProcId reader = xr_proc_spawn(executable, reader_argv);
+    XrProcId reader = XR_PROC_INVALID;
+    XrProcSpawnOptions reader_options = {0};
+    reader_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(executable, reader_argv, &reader_options, &reader);
     bool reader_has_snapshot = wait_for_path(reader_ready, 5000u);
     const char *cleaner_argv[] = {executable, "--cache-child-cleanup", root,
                                   "reject-aba-key", NULL};
-    XrProcId cleaner = reader_has_snapshot ? xr_proc_spawn(executable, cleaner_argv)
-                                           : XR_PROC_INVALID;
+    XrProcId cleaner = XR_PROC_INVALID;
+    XrProcSpawnOptions cleaner_options = {0};
+    cleaner_options.memory = xr_proc_system_memory();
+    if (reader_has_snapshot) (void)xr_proc_spawn(executable, cleaner_argv, &cleaner_options, &cleaner);
     int cleaner_exit = -1;
     int cleaner_wait = xr_proc_wait(cleaner, &cleaner_exit);
     writer = open_store(root, 4096u, 512u, UINT64_C(1000000000));
@@ -811,7 +832,10 @@ TEST(cross_process_crash_temp_is_recovered_after_os_unlock) {
     xr_cache_store_close(initializer);
     const char *child_argv[] = {executable, "--cache-child-leave-synced-temp",
                                 root, NULL};
-    XrProcId child = xr_proc_spawn(executable, child_argv);
+    XrProcId child = XR_PROC_INVALID;
+    XrProcSpawnOptions child_options = {0};
+    child_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(executable, child_argv, &child_options, &child);
     int child_exit = -1;
     ASSERT_EQ_INT(xr_proc_wait(child, &child_exit), 0);
     ASSERT_EQ_INT(child_exit, CHILD_INJECTED_CRASH);

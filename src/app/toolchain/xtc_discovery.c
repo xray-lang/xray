@@ -10,7 +10,7 @@
 
 #include "xtc_discovery.h"
 
-#include "xtc_process.h"
+#include "xtc_process_internal.h"
 #include "../../os/os_fs.h"
 
 #include <ctype.h>
@@ -30,16 +30,20 @@
 
 static void xtc_discovery_error(char *err, size_t err_size, const char *format, const char *arg);
 
-XR_FUNC bool xtc_active_apple_sdk(char *out, size_t out_size, char *err, size_t err_size) {
+XR_FUNC bool xtc_active_apple_sdk(XrToolchainProcessContext *process_context, char *out, size_t out_size, char *err, size_t err_size) {
 #ifdef XR_OS_MACOS
     XrProcessSpec spec;
-    XrProcessResult result;
-    xtc_process_spec_init(&spec, "xcrun", 5000);
+    XrProcessResult result = {0};
+    char executable[1200];
+    if (!xtc_find_executable("xcrun", executable, sizeof(executable))) return false;
+    xtc_process_spec_init(&spec, executable, 5000);
     spec.argv[1] = "--show-sdk-path";
     spec.argv[2] = NULL;
-    if (!xtc_process_run(&spec, &result, err, err_size))
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus process_status = xtc_process_request_run(process_context, &spec, &result, err, err_size);
+    if (process_status != XTC_PROCESS_OK)
         return false;
-    bool ok = !result.timed_out && result.exit_code == 0 &&
+    bool ok = result.exit_code == 0 &&
               xtc_process_copy_utf8_line(&result.stdout_bytes, out, out_size);
     if (ok) {
         ok = xr_fs_is_dir(out);
@@ -49,6 +53,7 @@ XR_FUNC bool xtc_active_apple_sdk(char *out, size_t out_size, char *err, size_t 
         xtc_discovery_error(err, err_size, "active Apple SDK could not be resolved", NULL);
     return ok;
 #else
+    (void) process_context;
     (void) out;
     (void) out_size;
     xtc_discovery_error(err, err_size, "Apple SDK discovery is unavailable on this host", NULL);
@@ -217,21 +222,23 @@ static bool xtc_candidates_add(XrToolchainCandidates *candidates, XrToolchainPro
 }
 
 #ifdef XR_OS_MACOS
-static bool xtc_xcrun_find_clang(char *out, size_t out_size) {
+static bool xtc_xcrun_find_clang(XrToolchainProcessContext *process_context, char *out, size_t out_size) {
     char xcrun[1200];
     char line[1200];
     if (!xtc_find_executable("xcrun", xcrun, sizeof(xcrun)))
         return false;
     /* `xcrun --find` requires the tool as a second argument, so use an explicit spec. */
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
     char err[256];
     xtc_process_spec_init(&spec, xcrun, 5000);
     spec.argv[1] = "--find";
     spec.argv[2] = "clang";
     spec.argv[3] = NULL;
     spec.output_limit = 4096;
-    if (!xtc_process_run(&spec, &result, err, sizeof(err)))
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus process_status = xtc_process_request_run(process_context, &spec, &result, err, sizeof(err));
+    if (process_status != XTC_PROCESS_OK)
         return false;
     bool ok = result.exit_code == 0 &&
               xtc_process_copy_utf8_line(&result.stdout_bytes, line, sizeof(line));
@@ -313,14 +320,14 @@ static bool xtc_windows_apply_msvc_environment(const XrProcessByteBuffer *output
     return path_set && include_set && lib_set;
 }
 
-static bool xtc_windows_activate_latest_msvc(void) {
+static bool xtc_windows_activate_latest_msvc(XrToolchainProcessContext *process_context) {
     char vswhere[1200];
     char cmd[1200];
     char installation[1200];
     char script[1400];
     char err[256];
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
     if (!xtc_windows_find_vswhere(vswhere, sizeof(vswhere)) ||
         !xtc_find_executable("cmd.exe", cmd, sizeof(cmd)))
         return false;
@@ -337,9 +344,11 @@ static bool xtc_windows_activate_latest_msvc(void) {
     spec.argv[9] = "-latest";
     spec.argv[10] = NULL;
     spec.output_limit = 16384;
-    if (!xtc_process_run(&spec, &result, err, sizeof(err)))
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus process_status = xtc_process_request_run(process_context, &spec, &result, err, sizeof(err));
+    if (process_status != XTC_PROCESS_OK)
         return false;
-    bool ok = !result.timed_out && result.exit_code == 0 &&
+    bool ok = result.exit_code == 0 &&
               xtc_process_copy_utf8_line(&result.stdout_bytes, installation, sizeof(installation));
     xtc_process_result_free(&result);
     if (!ok ||
@@ -360,15 +369,17 @@ static bool xtc_windows_activate_latest_msvc(void) {
     spec.argv[11] = "set";
     spec.argv[12] = NULL;
     spec.output_limit = 256 * 1024;
-    if (!xtc_process_run(&spec, &result, err, sizeof(err)))
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    process_status = xtc_process_request_run(process_context, &spec, &result, err, sizeof(err));
+    if (process_status != XTC_PROCESS_OK)
         return false;
-    ok = !result.timed_out && result.exit_code == 0 &&
+    ok = result.exit_code == 0 &&
          xtc_windows_apply_msvc_environment(&result.stdout_bytes);
     xtc_process_result_free(&result);
     return ok;
 }
 
-static void xtc_windows_add_msvc(const char *requested, XrToolchainCandidates *out) {
+static void xtc_windows_add_msvc(XrToolchainProcessContext *process_context, const char *requested, XrToolchainCandidates *out) {
     if (requested && requested[0]) {
         (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC, XR_TOOLCHAIN_OWNERSHIP_EXTERNAL,
                                   requested);
@@ -386,7 +397,7 @@ static void xtc_windows_add_msvc(const char *requested, XrToolchainCandidates *o
     const char *include = getenv("INCLUDE");
     const char *lib = getenv("LIB");
     if (!include || !include[0] || !lib || !lib[0])
-        (void) xtc_windows_activate_latest_msvc();
+        (void) xtc_windows_activate_latest_msvc(process_context);
     (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC, XR_TOOLCHAIN_OWNERSHIP_EXTERNAL,
                               "cl");
 }
@@ -410,12 +421,18 @@ static void xtc_add_zig(const XrToolchainRequest *request, XrToolchainCandidates
                               "zig");
 }
 
+static bool xtc_request_process_ready(const XrToolchainRequest *request, char *err, size_t err_size) {
+    if (request->process->status == XTC_PROCESS_OK) return true;
+    xtc_discovery_error(err, err_size, "%s", xtc_process_status_name(request->process->status)); return false;
+}
+
 XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolchainCandidates *out,
                                      char *err, size_t err_size) {
-    if (!request || !out) {
+    if (!request || !request->process || !request->process->resources || !out) {
         xtc_discovery_error(err, err_size, "missing toolchain request", NULL);
         return false;
     }
+    if (!xtc_request_process_ready(request, err, err_size)) return false;
     memset(out, 0, sizeof(*out));
     bool cross = !request->target.is_native;
     if (cross && request->selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
@@ -427,23 +444,23 @@ XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolch
     }
     if (cross || request->selector == XR_TOOLCHAIN_SELECTOR_ZIG) {
         xtc_add_zig(request, out);
-        return true;
+        return xtc_request_process_ready(request, err, err_size);
     }
 
     if (request->selector == XR_TOOLCHAIN_SELECTOR_MSVC) {
 #ifdef XR_OS_WINDOWS
-        xtc_windows_add_msvc(request->cc, out);
+        xtc_windows_add_msvc(request->process, request->cc, out);
 #else
         xtc_discovery_error(err, err_size, "MSVC provider is only available on Windows", NULL);
         return false;
 #endif
-        return true;
+        return xtc_request_process_ready(request, err, err_size);
     }
 
     if (request->selector == XR_TOOLCHAIN_SELECTOR_GCC) {
         (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_GCC, XR_TOOLCHAIN_OWNERSHIP_EXTERNAL,
                                   request->cc && request->cc[0] ? request->cc : "gcc");
-        return true;
+        return xtc_request_process_ready(request, err, err_size);
     }
     if (request->selector == XR_TOOLCHAIN_SELECTOR_CLANG) {
         (void) xtc_candidates_add(out,
@@ -454,7 +471,7 @@ XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolch
 #endif
                                   XR_TOOLCHAIN_OWNERSHIP_EXTERNAL,
                                   request->cc && request->cc[0] ? request->cc : "clang");
-        return true;
+        return xtc_request_process_ready(request, err, err_size);
     }
 
     if (request->cc && request->cc[0]) {
@@ -469,7 +486,7 @@ XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolch
 
 #ifdef XR_OS_MACOS
     char apple_clang[1200];
-    if (xtc_xcrun_find_clang(apple_clang, sizeof(apple_clang)))
+    if (xtc_xcrun_find_clang(request->process, apple_clang, sizeof(apple_clang)))
         (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_APPLE_CLANG,
                                   XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, apple_clang);
     (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
@@ -482,14 +499,15 @@ XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolch
     (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
                               XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "cc");
 #elif defined(XR_OS_WINDOWS)
-    xtc_windows_add_msvc(NULL, out);
+    xtc_windows_add_msvc(request->process, NULL, out);
+    if (!xtc_request_process_ready(request, err, err_size)) return false;
     (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
                               XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "clang");
 #endif
 
     if (request->selector == XR_TOOLCHAIN_SELECTOR_AUTO)
         xtc_add_zig(request, out);
-    return true;
+    return xtc_request_process_ready(request, err, err_size);
 }
 
 XR_FUNC bool xtc_version_from_banner(const uint8_t *source, size_t source_size, char *version,
@@ -524,14 +542,14 @@ XR_FUNC bool xtc_version_from_banner(const uint8_t *source, size_t source_size, 
     return false;
 }
 
-XR_FUNC bool xtc_candidate_read_version(XrToolchainCandidate *candidate, char *err,
+XR_FUNC bool xtc_candidate_read_version(XrToolchainProcessContext *process_context, XrToolchainCandidate *candidate, char *err,
                                         size_t err_size) {
     if (!candidate || !candidate->executable[0]) {
         xtc_discovery_error(err, err_size, "invalid toolchain candidate", NULL);
         return false;
     }
     XrProcessSpec spec;
-    XrProcessResult result;
+    XrProcessResult result = {0};
     xtc_process_spec_init(&spec, candidate->executable, 5000);
     spec.argv[1] =
         candidate->provider == XR_TOOLCHAIN_PROVIDER_MSVC
@@ -539,11 +557,13 @@ XR_FUNC bool xtc_candidate_read_version(XrToolchainCandidate *candidate, char *e
             : (candidate->provider == XR_TOOLCHAIN_PROVIDER_ZIG ? "version" : "--version");
     spec.argv[2] = NULL;
     spec.output_limit = 16384;
-    if (!xtc_process_run(&spec, &result, err, err_size))
+    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    XrProcessStatus process_status = xtc_process_request_run(process_context, &spec, &result, err, err_size);
+    if (process_status != XTC_PROCESS_OK)
         return false;
     const XrProcessByteBuffer *source =
         result.stdout_bytes.length > 0 ? &result.stdout_bytes : &result.stderr_bytes;
-    bool ok = !result.timed_out &&
+    bool ok =
               (result.exit_code == 0 || candidate->provider == XR_TOOLCHAIN_PROVIDER_MSVC);
     if (ok) {
         if (candidate->provider == XR_TOOLCHAIN_PROVIDER_MSVC) {
@@ -605,8 +625,10 @@ XR_FUNC bool xtc_select_discovered(const XrToolchainRequest *request, XrToolchai
     out->reason = XR_TOOLCHAIN_REASON_TOOLCHAIN_NOT_FOUND;
     for (size_t i = 0; i < candidates.count; i++) {
         char version_err[256];
-        if (!xtc_candidate_read_version(&candidates.items[i], version_err, sizeof(version_err)))
+        if (!xtc_candidate_read_version(request->process, &candidates.items[i], version_err, sizeof(version_err))) {
+            if (request->process->status != XTC_PROCESS_OK) { snprintf(err, err_size, "%s", version_err); return false; }
             continue;
+        }
         if (!xtc_selector_accepts_provider(request->selector, candidates.items[i].provider))
             continue;
         out->provider = candidates.items[i].provider;

@@ -9,9 +9,10 @@ if(WIN32)
     endif()
     add_test(NAME test_xir_host_execution COMMAND test_xir_host_execution)
     set_tests_properties(test_xir_host_execution PROPERTIES LABELS "unit;xir;execution;ownership;sdk;abi" TIMEOUT 180)
-    add_xray_bootstrap_executable(test_xir_sdk_lease ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_sdk_lease.c)
+    add_executable(test_xir_sdk_lease ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_sdk_lease.c)
     target_link_libraries(test_xir_sdk_lease PRIVATE xray_xir_runtime_sdk)
-    add_xray_bootstrap_executable(test_xir_runtime_sdk ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_runtime_sdk.c)
+    add_executable(test_xir_runtime_sdk ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_runtime_sdk.c
+        ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
     add_dependencies(test_xir_runtime_sdk xir-runtime-sdk-bundle)
     target_include_directories(test_xir_runtime_sdk PRIVATE ${CMAKE_BINARY_DIR}/xir-runtime-sdk)
     target_link_libraries(test_xir_runtime_sdk PRIVATE xray_xir_runtime_sdk)
@@ -42,7 +43,8 @@ if(WIN32)
         if(XIR_SDK_${upper})
             add_test(NAME test_xir_runtime_sdk_${provider}_native COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_native_consumers.py
-                --lease $<TARGET_FILE:test_xir_sdk_lease> --generator $<TARGET_FILE:test_xir_source_product>
+                --lease $<TARGET_FILE:test_xir_sdk_lease> --generator $<TARGET_FILE:test_xir_source_product_linked>
+                --original-generator $<TARGET_FILE:test_xir_source_product>
                 --bundle ${CMAKE_BINARY_DIR}/xir-runtime-sdk --stdlib ${PROJECT_SOURCE_DIR}/stdlib
                 --compiler ${XIR_SDK_${upper}} --linker ${XIR_SDK_LINKER} --provider ${provider})
             set_tests_properties(test_xir_runtime_sdk_${provider}_native

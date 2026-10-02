@@ -425,7 +425,7 @@ add_test(NAME test_xir_source_product_allocations COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
     $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib --scan)
 set_tests_properties(test_xir_source_product_allocations PROPERTIES
-    LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 420)
+    LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 80)
 add_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
 target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_source_product)
 if(MSVC)
@@ -3962,6 +3962,7 @@ target_include_directories(test_cli_toolchain PRIVATE
 )
 target_link_libraries(test_cli_toolchain PRIVATE xray_core)
 add_test(NAME test_cli_toolchain COMMAND test_cli_toolchain)
+include(cli/toolchain_process_owned.cmake)
 
 add_xray_unit_test(test_target_profile_authority
     cli/test_target_profile_authority.c
