@@ -630,6 +630,11 @@ static bool tuple_projection(const XrTargetPlan *target_plan, const XrTargetValu
     return true;
 }
 
+/* Projection queries run once per value, argument and use while a stage walks
+ * a verified plan. A frozen, verified plan is immutable: its fingerprint is
+ * fixed when it freezes and re-checked where a plan crosses an ownership
+ * boundary. Re-hashing the whole plan on every query made each walk quadratic
+ * in the program size. */
 bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
                                const XrTargetValueRepRecord *binding, XrCAggregateProjection *out) {
     if (out)
@@ -654,7 +659,7 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
     const XrTargetProfile *profile = xr_target_plan_profile(target_plan);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     if (!target_plan || !binding || !out || !xr_target_plan_is_verified(target_plan) ||
-        !xr_target_plan_fingerprint_is_intact(target_plan) || !register_rep || !memory_rep ||
+        !register_rep || !memory_rep ||
         !layouts || !fields || !machine_reps || !semantic || !machine ||
         slot->semantic_value != binding->semantic_value ||
         slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
@@ -717,7 +722,7 @@ bool xr_c_plain_ref_aggregate_argument_projection(const XrTargetPlan *plan,
     uint32_t callee_function = XR_SEMANTIC_INDEX_NONE, caller_function = XR_SEMANTIC_INDEX_NONE;
     const XrSemanticPlan *caller_semantic = NULL;
     if (!plan || !argument || !out || !call || !caller_slot || !callee_slot ||
-        !xr_target_plan_is_verified(plan) || !xr_target_plan_fingerprint_is_intact(plan) ||
+        !xr_target_plan_is_verified(plan) ||
         !xr_target_plan_function_semantic_binding(plan, call->callee_function, &semantic, &callee_function) ||
         !xr_target_plan_function_semantic_binding(plan, call->caller_function, &caller_semantic, &caller_function) ||
         semantic != caller_semantic || call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||

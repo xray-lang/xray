@@ -6355,7 +6355,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan, const XrSemanticP
     if (out)
         *out = NULL;
     XrCEmissionModuleScope scope = {0};
+    /* The plan's integrity is checked once here; the per-value projection
+     * queries below rely on it instead of re-hashing the plan each time. */
     bool exact = target_plan && semantic_plan && out && xr_target_plan_is_verified(target_plan) &&
+                 xr_target_plan_fingerprint_is_intact(target_plan) &&
                  emission_module_scope(target_plan, semantic_plan, &scope);
     bool valid = exact ? emission_plan_build_scoped(&scope, expected_profile_fingerprint, out,
                                                     error, error_size)

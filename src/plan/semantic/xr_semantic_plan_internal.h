@@ -32,6 +32,9 @@ struct XrSemanticPlan {
     bool frozen;
     bool verified;
     bool module_set_verified;
+    /* Index of the unique module entity, fixed when the plan freezes;
+     * XR_SEMANTIC_INDEX_NONE when there is none or more than one. */
+    uint32_t module_entity;
     XrFingerprint fingerprint;
     XrFingerprint operation_registry_fingerprint;
     XrFingerprint stdlib_registry_fingerprint;

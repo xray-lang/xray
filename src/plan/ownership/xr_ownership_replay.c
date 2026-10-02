@@ -28,6 +28,12 @@ typedef struct XrOwnershipReplay {
     uint8_t *rank;
     uint32_t *owner_by_root;
     uint32_t value_count;
+    /* Certificate events grouped by owner, certificate order kept within an
+     * owner. Replay asks for one owner's events at every operation, edge and
+     * block exit; scanning the whole certificate for each question made the
+     * replay quadratic in the plan size. */
+    uint32_t *owner_event_begin; /* [owner_count + 1] */
+    uint32_t *owner_events;      /* event indices */
     char *error;
     size_t error_size;
 } XrOwnershipReplay;
@@ -98,6 +104,44 @@ static bool build_equivalence(XrOwnershipReplay *replay) {
             union_values(replay, operation->result_value, operand);
     }
     return true;
+}
+
+static bool index_owner_events(XrOwnershipReplay *replay) {
+    const XrOwnershipCertificate *certificate = replay->certificate;
+    uint32_t owners = certificate->owner_count;
+    replay->owner_event_begin = (uint32_t *) xr_calloc((size_t) owners + 1u, sizeof(uint32_t));
+    replay->owner_events = certificate->event_count
+                               ? (uint32_t *) xr_malloc((size_t) certificate->event_count *
+                                                        sizeof(uint32_t))
+                               : NULL;
+    uint32_t *next = owners ? (uint32_t *) xr_malloc((size_t) owners * sizeof(uint32_t)) : NULL;
+    if (!replay->owner_event_begin || (certificate->event_count && !replay->owner_events) ||
+        (owners && !next)) {
+        xr_free(next);
+        return fail(replay, "XR_EXEC_5003", "ownership replay allocation budget exhausted");
+    }
+    /* An event naming no certificate owner matches no owner's question. */
+    for (uint32_t e = 0; e < certificate->event_count; e++) {
+        uint32_t owner = certificate->events[e].owner;
+        if (owner < owners)
+            replay->owner_event_begin[owner + 1u]++;
+    }
+    for (uint32_t owner = 0; owner < owners; owner++) {
+        replay->owner_event_begin[owner + 1u] += replay->owner_event_begin[owner];
+        next[owner] = replay->owner_event_begin[owner];
+    }
+    for (uint32_t e = 0; e < certificate->event_count; e++) {
+        uint32_t owner = certificate->events[e].owner;
+        if (owner < owners)
+            replay->owner_events[next[owner]++] = e;
+    }
+    xr_free(next);
+    return true;
+}
+
+static const XrOwnershipEventRecord *owner_event(const XrOwnershipReplay *replay,
+                                                 uint32_t slot) {
+    return &replay->certificate->events[replay->owner_events[slot]];
 }
 
 static uint32_t owner_for_value(XrOwnershipReplay *replay, uint32_t value) {
@@ -258,10 +302,11 @@ static bool verify_phi_edge_uses(XrOwnershipReplay *replay, uint32_t owner_index
         if (!edge || edge->flags == XR_OWN_EDGE_OUT_OF_SCOPE)
             return fail(replay, "XR_OWN_3003", "PHI use has no in-scope predecessor state");
         int64_t balance = edge->exit_balance;
-        for (uint32_t e = 0; e < replay->certificate->event_count; e++) {
-            const XrOwnershipEventRecord *event = &replay->certificate->events[e];
-            if (event->owner == owner_index && event->block == predecessor &&
-                event->successor == operation->block && event->program_point == XR_OWN_POINT_EDGE)
+        for (uint32_t slot = replay->owner_event_begin[owner_index];
+             slot < replay->owner_event_begin[owner_index + 1u]; slot++) {
+            const XrOwnershipEventRecord *event = owner_event(replay, slot);
+            if (event->block == predecessor && event->successor == operation->block &&
+                event->program_point == XR_OWN_POINT_EDGE)
                 if (!subtract_i64_checked(balance, event->logical_delta, &balance))
                     return fail(replay, "XR_EXEC_5003",
                                 "PHI ownership balance exceeds replay schema");
@@ -279,10 +324,10 @@ static bool apply_events_at_point(XrOwnershipReplay *replay, uint32_t owner_inde
                                   uint32_t operation, uint32_t block, uint8_t program_point,
                                   int64_t *balance, uint8_t *state) {
     const XrOwnershipOwnerRecord *owner = &replay->certificate->owners[owner_index];
-    for (uint32_t e = 0; e < replay->certificate->event_count; e++) {
-        const XrOwnershipEventRecord *event = &replay->certificate->events[e];
-        if (event->owner != owner_index ||
-            (operation != XR_SEMANTIC_INDEX_NONE && event->operation != operation) ||
+    for (uint32_t slot = replay->owner_event_begin[owner_index];
+         slot < replay->owner_event_begin[owner_index + 1u]; slot++) {
+        const XrOwnershipEventRecord *event = owner_event(replay, slot);
+        if ((operation != XR_SEMANTIC_INDEX_NONE && event->operation != operation) ||
             event->block != block || event->program_point != program_point)
             continue;
         if (!add_i64_checked(*balance, event->logical_delta, balance))
@@ -317,10 +362,11 @@ static bool verify_control_use(XrOwnershipReplay *replay, uint32_t owner_index,
 static bool verify_edge_exit(XrOwnershipReplay *replay, uint32_t owner_index,
                              const XrOwnershipEdgeStateRecord *edge, int64_t block_balance) {
     int64_t balance = block_balance;
-    for (uint32_t e = 0; e < replay->certificate->event_count; e++) {
-        const XrOwnershipEventRecord *event = &replay->certificate->events[e];
-        if (event->owner == owner_index && event->block == edge->block &&
-            event->successor == edge->successor && event->program_point == XR_OWN_POINT_EDGE)
+    for (uint32_t slot = replay->owner_event_begin[owner_index];
+         slot < replay->owner_event_begin[owner_index + 1u]; slot++) {
+        const XrOwnershipEventRecord *event = owner_event(replay, slot);
+        if (event->block == edge->block && event->successor == edge->successor &&
+            event->program_point == XR_OWN_POINT_EDGE)
             if (!add_i64_checked(balance, event->logical_delta, &balance))
                 return fail(replay, "XR_EXEC_5003", "ownership edge replay balance exceeds schema");
     }
@@ -405,9 +451,10 @@ static bool verify_single_disposition_postdominates(XrOwnershipReplay *replay,
         return true;
     uint32_t close_block = XR_SEMANTIC_INDEX_NONE;
     uint32_t close_count = 0;
-    for (uint32_t e = 0; e < replay->certificate->event_count; e++) {
-        const XrOwnershipEventRecord *event = &replay->certificate->events[e];
-        if (event->owner != owner_index || event->logical_delta >= 0)
+    for (uint32_t slot = replay->owner_event_begin[owner_index];
+         slot < replay->owner_event_begin[owner_index + 1u]; slot++) {
+        const XrOwnershipEventRecord *event = owner_event(replay, slot);
+        if (event->logical_delta >= 0)
             continue;
         close_count++;
         close_block = event->block;
@@ -477,12 +524,14 @@ bool xr_ownership_replay_check(const XrSemanticPlan *plan, const XrSemanticGraph
         replay.owner_by_root[i] = XR_SEMANTIC_INDEX_NONE;
     }
     bool valid = build_equivalence(&replay) && map_certificate_owners(&replay) &&
-                 replay_ordered_liveness(&replay);
+                 index_owner_events(&replay) && replay_ordered_liveness(&replay);
     for (uint32_t i = 0; valid && i < replay.certificate->owner_count; i++)
         valid = verify_single_disposition_postdominates(&replay, i);
     xr_free(replay.parent);
     xr_free(replay.rank);
     xr_free(replay.owner_by_root);
+    xr_free(replay.owner_event_begin);
+    xr_free(replay.owner_events);
     return valid;
 
 failure:

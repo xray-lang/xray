@@ -5316,11 +5316,20 @@ static bool dependency_method_suspendability(
     return true;
 }
 
+/* An imported construction suspends exactly when the dependency's selected
+ * constructor does. The answer comes from the same verified per-dependency
+ * suspension vector that decides source exports and dependency methods: a
+ * verified dependency's coroutine states are exact at every operation, its
+ * own dependency and builtin calls included. Re-deriving the constructor from
+ * the dependency's call graph alone would call any builtin or cross-module
+ * call in the body unknown and refuse an ordinary synchronous constructor. A
+ * class without a declared constructor allocates only and never suspends. */
 static bool dependency_constructor_suspendability(
     const XrSemanticPlan *plan, const XrSemanticCallTargetRecord *target,
-    const XrSemanticPlan *const *dependencies, uint32_t dependency_count, bool *result) {
+    const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
+    uint8_t *const *suspendable, bool *result) {
     if (!plan || !target || !result || target->dependency >= dependency_count ||
-        target->dependency >= plan->dependency_count || !dependencies ||
+        target->dependency >= plan->dependency_count || !dependencies || !suspendable ||
         !dependencies[target->dependency] || target->operation >= plan->operation_count)
         return false;
     const XrSemanticPlan *dependency = dependencies[target->dependency];
@@ -5336,10 +5345,13 @@ static bool dependency_constructor_suspendability(
     XrStableId zero = {{0}};
     if (!xr_stable_id_equal(target->callee_function, function ? function->id : zero))
         return false;
-    int suspension = function ? xr_semantic_function_frozen_suspendability(dependency, constructor) : 0;
-    if (suspension < 0)
+    if (!function) {
+        *result = false;
+        return true;
+    }
+    if (constructor >= dependency->function_count || !suspendable[target->dependency])
         return false;
-    *result = suspension != 0;
+    *result = suspendable[target->dependency][constructor] != 0;
     return true;
 }
 
@@ -5444,6 +5456,7 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
         if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
             target->dependency != XR_SEMANTIC_INDEX_NONE &&
             !dependency_constructor_suspendability(plan, target, dependencies, dependency_count,
+                                                  dependency_suspendable,
                                                   &directly_suspendable)) {
             coroutine_authority_work_dispose(&work);
             return report(error, error_size, "XR_SEM_0019",
@@ -5512,7 +5525,8 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
             } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
                        target->dependency != XR_SEMANTIC_INDEX_NONE) {
                 if (!dependency_constructor_suspendability(plan, target, dependencies,
-                                                          dependency_count, &dynamic_suspend)) {
+                                                          dependency_count, dependency_suspendable,
+                                                          &dynamic_suspend)) {
                     coroutine_authority_work_dispose(&work);
                     return report(error, error_size, "XR_SEM_0019",
                                   "module-set constructor suspendability is unavailable");

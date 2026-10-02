@@ -802,6 +802,16 @@ bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t error_siz
     }
     if (!xr_semantic_plan_verify_identity_set(plan, error, error_size))
         return false;
+    plan->module_entity = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        if (plan->entities[i].kind != XR_SEM_ENTITY_MODULE)
+            continue;
+        if (plan->module_entity != XR_SEMANTIC_INDEX_NONE) {
+            plan->module_entity = XR_SEMANTIC_INDEX_NONE;
+            break;
+        }
+        plan->module_entity = i;
+    }
     xr_semantic_plan_compute_fingerprint(plan, &plan->fingerprint);
     plan->ownership->semantic_fingerprint = plan->fingerprint;
     plan->ownership->fingerprint = plan->fingerprint;
@@ -938,7 +948,13 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, con
                         constant_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_entity, XrSemanticEntityRecord, entities, entity_count)
 
+/* Verification asks for the module entity once per checked record, so a
+ * frozen plan answers from the index fixed at freeze time instead of scanning
+ * every entity on each call. */
 const XrSemanticEntityRecord *xr_semantic_plan_unique_module_entity(const XrSemanticPlan *plan) {
+    if (plan && plan->frozen)
+        return plan->module_entity < plan->entity_count ? &plan->entities[plan->module_entity]
+                                                        : NULL;
     const XrSemanticEntityRecord *found = NULL;
     for (uint32_t i = 0; plan && i < plan->entity_count; i++) {
         const XrSemanticEntityRecord *entity = &plan->entities[i];

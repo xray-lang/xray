@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
     puts("Real source modules, independent state and output passed in Lowered VM");
     if (runtime_live) {
         fprintf(stderr, "runtime residual: %zu allocations, %zu bytes\n", runtime_live, runtime_bytes);
-        for (size_t i = 0; i < runtime_live; ++i) fprintf(stderr, "residual %zu: %zu bytes\n", i, runtime_owned[i].bytes);
+        runtime_report_residuals(stderr);
     }
     CHECK(!runtime_live && !runtime_bytes);
     return 0;
