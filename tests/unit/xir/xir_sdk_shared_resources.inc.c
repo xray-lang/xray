@@ -11,7 +11,7 @@ static XrXirTargetStatus sdk_target(const XrXirRuntimeSdkRequest *sdk,XrXirTarge
     const char *argv[]={"diagnostic-input-snapshot"};
     XrXirTargetCommand command={sdk->root,argv,1,NULL,0};
     XrXirTargetDependency file={path,XR_XIR_TARGET_HEADER};
-    XrXirTargetRequest request={sdk->resources,"x86_64-windows-msvc",3,2,11,&file,1,&command,1};
+    XrXirTargetRequest request={sdk->resources,"x86_64-windows-msvc",3,2,11,&file,1,&command,1,NULL};
     return xtc_xir_target_capture(&request,output);
 }
 static void sdk_target_faults(const XrXirRuntimeSdkRequest *request) {
@@ -93,15 +93,15 @@ static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original) {
 }
 static void sdk_fixed_work(void) {
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
-    SdkJson json={NULL,NULL,NULL,resources,XR_XIR_SDK_OK};size_t length=0;
+    XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);size_t length=0;
     uint64_t before=sdk_stats(resources).work;
-    CHECK(sdk_json_length(&json,"abc",&length) && length==3);
+    CHECK(xr_json_cursor_length(&json,"abc",&length) && length==3);
     CHECK(sdk_stats(resources).work-before==4);
-    before=sdk_stats(resources).work;CHECK(sdk_json_equal(&json,"a","a"));
+    before=sdk_stats(resources).work;CHECK(xr_json_cursor_equal(&json,"a","a"));
     CHECK(sdk_stats(resources).work-before==4);
     char source[]="\"\\u0061\"";json.begin=json.cursor=source;json.end=source+8;
     const char *text=NULL;before=sdk_stats(resources).work;
-    CHECK(sdk_json_string(&json,1,&text) && !strcmp(text,"a"));
+    CHECK(xr_json_cursor_string(&json,1,&text) && !strcmp(text,"a"));
     CHECK(sdk_stats(resources).work-before==11); /* Eight reads, one peek, two writes. */
     XrXirRuntimeSdk sdk={0};sdk.resources=resources;
     before=sdk_stats(resources).work;CHECK(!strcmp(sdk_utf8(&sdk,L"C:\\a",4),"C:/a"));
@@ -132,11 +132,11 @@ static void sdk_bounded_scanning(void) {
     char *memory=VirtualAlloc(NULL,page*2,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);CHECK(memory);
     DWORD old;CHECK(VirtualProtect(memory+page,page,PAGE_NOACCESS,&old));memory[page-1]='x';
     XrCompileResourceLimits limit={UINT64_MAX,UINT64_MAX,2};
-    XrCompileResources *resources=sdk_ledger(&limit);SdkJson json={NULL,NULL,NULL,resources,XR_XIR_SDK_OK};
-    size_t length=99;CHECK(!sdk_json_length(&json,memory+page-1,&length) && length==99 && json.status==XR_XIR_SDK_BUDGET);
+    XrCompileResources *resources=sdk_ledger(&limit);XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
+    size_t length=99;CHECK(!xr_json_cursor_length(&json,memory+page-1,&length) && length==99 && json.status==XR_JSON_CURSOR_BUDGET);
     CHECK(sdk_stats(resources).work==2);
-    json.status=XR_XIR_SDK_OK;json.cursor=memory+page;json.end=memory+page+1;
-    CHECK(!sdk_json_space(&json) && json.status==XR_XIR_SDK_BUDGET);
+    json.status=XR_JSON_CURSOR_OK;json.cursor=memory+page;json.end=memory+page+1;
+    CHECK(!xr_json_cursor_space(&json) && json.status==XR_JSON_CURSOR_BUDGET);
     XrXirRuntimeSdk sdk={0};sdk.resources=resources;
     sdk.manifest.file_count=1;sdk.manifest.files[0].path=memory+page;
     const char *path=NULL;

@@ -28,6 +28,7 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #define CreateFileW(...) (sdk_io_fault() ? INVALID_HANDLE_VALUE : CreateFileW(__VA_ARGS__))
 #define ReadFile sdk_test_read
 #define GetFileInformationByHandle(...) (sdk_io_fault() ? FALSE : GetFileInformationByHandle(__VA_ARGS__))
+#define GetFileInformationByHandleEx(...) (sdk_io_fault() ? FALSE : GetFileInformationByHandleEx(__VA_ARGS__))
 #define GetFinalPathNameByHandleW(...) (sdk_io_fault() ? 0u : GetFinalPathNameByHandleW(__VA_ARGS__))
 #define GetFileSizeEx(...) (sdk_io_fault() ? FALSE : GetFileSizeEx(__VA_ARGS__))
 #define GetFileType(...) (sdk_io_fault() ? FILE_TYPE_UNKNOWN : GetFileType(__VA_ARGS__))
@@ -36,9 +37,11 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #include "toolchain/xr_xir_runtime_sdk.c"
 #include "app/toolchain/xtc_xir_target.c"
 #include "app/toolchain/xtc_xir_sysroot.c"
+#include "app/toolchain/xtc_xir_images.c"
 #undef CreateFileW
 #undef ReadFile
 #undef GetFileInformationByHandle
+#undef GetFileInformationByHandleEx
 #undef GetFinalPathNameByHandleW
 #undef GetFileSizeEx
 #undef GetFileType
@@ -54,7 +57,7 @@ static void sdk_known_bytes(void) {
     manifest.file_count=1;manifest.files[0]=(XrXirSdkFile){"lib/test.lib",5,2,{0},NULL,NULL};
     memcpy(manifest.files[0].digest,sdk_kat_file_digest,32);
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
-    SdkJson json={NULL,NULL,NULL,resources,XR_XIR_SDK_OK};
+    XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
     CHECK(sdk_identity(&json,&manifest) && !memcmp(manifest.digest,sdk_kat_digest,32));
     uint64_t work=sdk_stats(resources).work;
     const uint64_t encoded_integers=4*(17+3+1+2*(sizeof(sdk_abi_fields)/sizeof(sdk_abi_fields[0]))+1+1+1+1+1)+8;
@@ -65,9 +68,9 @@ static void sdk_known_bytes(void) {
     uint8_t hash[32];xr_sha256(sdk_kat_preimage,sizeof(sdk_kat_preimage),hash);
     CHECK(!memcmp(hash,sdk_kat_digest,32));
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,work-1};
-    resources=sdk_ledger(&limits);json.resources=resources;
+    resources=sdk_ledger(&limits);json.context=resources;
     memset(manifest.digest,0,32);
-    CHECK(!sdk_identity(&json,&manifest) && json.status==XR_XIR_SDK_BUDGET);
+    CHECK(!sdk_identity(&json,&manifest) && json.status==XR_JSON_CURSOR_BUDGET);
     for (size_t i=0;i<32;++i) CHECK(!manifest.digest[i]);
     xr_compile_resources_release(resources);CHECK(!runtime_live && !runtime_bytes);
 }

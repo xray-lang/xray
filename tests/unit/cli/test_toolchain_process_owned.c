@@ -188,6 +188,7 @@ static DWORD test_wait(HANDLE process, DWORD milliseconds) {
 #include "toolchain/xr_xir_runtime_sdk.c"
 #include "app/toolchain/xtc_xir_target.c"
 #include "app/toolchain/xtc_xir_sysroot.c"
+#include "app/toolchain/xtc_xir_images.c"
 #endif
 
 static char executable[32768], directory[32768];
@@ -200,6 +201,31 @@ static void spec_init(XrProcessSpec *s, const char *mode) {
     xtc_process_spec_init(s, executable, 3000); s->cwd = directory; s->argv[1] = mode;
 }
 static bool cancel_now(void *context) { (void)context; return true; }
+static XrProcessView frozen_view(const XrToolchainProcess *process) {
+    XrProcessView view, unchanged;
+    memset(&view, 0xA7, sizeof(view)); unchanged = view;
+    CHECK(!xtc_process_resources(NULL));
+    CHECK(xtc_process_view(NULL, &view) == XTC_PROCESS_INVALID);
+    CHECK(!memcmp(&view, &unchanged, sizeof(view)));
+    CHECK(xtc_process_view(process, NULL) == XTC_PROCESS_INVALID);
+    XrCompileResources *resources = xtc_process_resources(process); CHECK(resources);
+    XrCompileResourceStats before, after;
+    CHECK(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xtc_process_view(process, &view) == XTC_PROCESS_OK);
+    CHECK(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+    CHECK(before.allocation_count == after.allocation_count && before.allocated_bytes == after.allocated_bytes &&
+        before.live_bytes == after.live_bytes && before.peak_bytes == after.peak_bytes && before.work == after.work);
+    CHECK(view.executable && view.cwd && view.argc && view.argc < XTC_PROCESS_MAX_ARGS && !view.argv[view.argc]);
+    return view;
+}
+static void frozen_environment(const XrToolchainProcess *process, const char *key, const char *value) {
+    XrProcessView view = frozen_view(process); unsigned found = 0;
+    for (size_t i = 0; i < view.env_count; ++i) {
+        if (strcmp(view.env_keys[i], key)) continue;
+        CHECK(!strcmp(view.env_values[i], value)); ++found;
+    }
+    CHECK(found == 1);
+}
 static void basic(void) {
     XrCompileResources *r = ledger(unlimited); XrToolchainProcess *p = NULL; XrProcessSpec s;
     spec_init(&s, "--child"); s.argv[2] = "space \\\" value"; s.env_keys[0] = "OWNED_VALUE"; s.env_values[0] = "yes"; s.env_count = 1;
@@ -207,12 +233,20 @@ static void basic(void) {
     CHECK(SetEnvironmentVariableA("FORBIDDEN_PARENT_VALUE", "secret"));
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
     memset(argument, 'x', sizeof(argument)); memset(&s, 0xCD, sizeof(s));
+    CHECK(xtc_process_resources(p) == r); xr_compile_resources_release(r);
+    XrProcessView view = frozen_view(p);
+    CHECK(view.argc == 3 && view.env_count == 1 && !strcmp(view.argv[1], "--child"));
+    CHECK(!strcmp(view.executable, executable) && !strcmp(view.cwd, directory));
+    CHECK(view.executable != executable && view.cwd != directory && view.argv[2] != argument);
+    CHECK(view.timeout_ms == 3000 && view.output_limit == XTC_PROCESS_DEFAULT_OUTPUT_LIMIT &&
+        view.image_mode == XR_PROC_IMAGES_NONE);
+    frozen_environment(p, "OWNED_VALUE", "yes");
     XrProcessResult result = {0}; CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 23);
     CHECK(result.stdout_bytes.length == strlen("out|yes|absent|space \\\" value"));
     CHECK(!memcmp(result.stdout_bytes.data, "out|yes|absent|space \\\" value", result.stdout_bytes.length));
     CHECK(result.stderr_bytes.length == 3 && !memcmp(result.stderr_bytes.data, "err", 3));
-    xtc_process_free(p); xr_compile_resources_release(r);
+    xtc_process_free(p);
     CHECK(!memcmp(result.stderr_bytes.data, "err", 3)); xtc_process_result_free(&result);
     CHECK(!live && !physical_bytes && !physical_handles);
 }
@@ -262,14 +296,18 @@ static void sdk_target_process(const char *root) {
     XrXirRuntimeSdkRequest sdk_request = {root, manifest, (size_t)size, r};
     CHECK(xr_xir_runtime_sdk_load(&sdk_request, &sdk) == XR_XIR_SDK_OK);
     xr_compile_resources_free(manifest); memset(&sdk_request, 0xCD, sizeof(sdk_request));
-    const char *args[] = {executable, "--child"};
-    XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_PROVIDER_SUPPORT};
-    XrXirTargetCommand command = {directory, args, 2, NULL, 0};
-    XrXirTargetRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1};
-    CHECK(xtc_xir_target_capture(&request, &target) == XR_XIR_TARGET_OK);
-    const XrXirTargetCommand *saved = xtc_xir_target_command(target, 0);
-    XrProcessSpec spec; xtc_process_spec_init(&spec, saved->argv[0], 3000); spec.argv[1] = saved->argv[1]; spec.cwd = saved->cwd;
+    XrProcessSpec spec; spec_init(&spec, "--child");
     XrToolchainProcess *owner = NULL; CHECK(xtc_process_prepare(r, &spec, &owner) == XTC_PROCESS_OK);
+    XrProcessView view = frozen_view(owner);
+    CHECK(view.env_count == 0 && xtc_process_resources(owner) == r);
+    XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_PROVIDER_SUPPORT};
+    XrXirTargetCommand command = {view.cwd, view.argv, (uint32_t)view.argc, NULL, 0};
+    XrXirTargetRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
+    CHECK(xtc_xir_target_capture(&request, &target) == XR_XIR_TARGET_OK);
+    xtc_process_free(owner); owner = NULL; memset(&view, 0xCD, sizeof(view));
+    const XrXirTargetCommand *saved = xtc_xir_target_command(target, 0);
+    xtc_process_spec_init(&spec, saved->argv[0], 3000); spec.argv[1] = saved->argv[1]; spec.cwd = saved->cwd;
+    CHECK(xtc_process_prepare(r, &spec, &owner) == XTC_PROCESS_OK);
     XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
     CHECK(stats.live_bytes > xr_xir_runtime_sdk_facts(sdk)->metadata_bytes);
     xr_compile_resources_release(r);
@@ -324,6 +362,7 @@ static void unicode_environment(void) {
     if (prepared != XTC_PROCESS_OK) fprintf(stderr, "Unicode snapshot status=%u\n", prepared);
     CHECK(prepared == XTC_PROCESS_OK);
     for (unsigned i = 0; i < 2; ++i) CHECK(SetEnvironmentVariableW(names[i], L"changed"));
+    frozen_environment(p, "XR_OWNED_测试", "frozen"); frozen_environment(p, "XR OWNED SPACE", "frozen");
     XrProcessResult result = {0}; CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 0 && result.stdout_bytes.length == 13);
     CHECK(!memcmp(result.stdout_bytes.data, "frozen|frozen", 13));
@@ -357,6 +396,11 @@ static void hidden_environment(void) {
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT; spec.cwd = NULL;
     XrToolchainProcess *process = NULL; CHECK(xtc_process_prepare(r, &spec, &process) == XTC_PROCESS_OK);
     CHECK(SetEnvironmentStringsW(second)); check_hidden_value(L"=C:=", L"C:\\xray-drive-B");
+    frozen_environment(process, "=C:", "C:\\xray-drive-A");
+    frozen_environment(process, "=ExitCode", "00000017");
+    frozen_environment(process, "=XR_PRIVATE", "private-A");
+    frozen_environment(process, "XR_OWNED_测试", "unicode-A");
+    frozen_environment(process, "XR OWNED SPACE", "space-A");
     XrProcessResult result = {0}; CHECK(xtc_process_run(process, NULL, NULL, &result) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 0 && result.stderr_bytes.length == 0);
     const char expected[] = "hidden|unicode|space";

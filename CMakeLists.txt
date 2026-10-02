@@ -2688,6 +2688,7 @@ add_subdirectory(src/xir)
 add_subdirectory(src/execution)
 add_subdirectory(src/toolchain)
 include(src/app/cli/xir_compile_source.cmake)
+include(src/app/toolchain/xir_target.cmake)
 
 if(BUILD_TESTS)
     enable_testing()

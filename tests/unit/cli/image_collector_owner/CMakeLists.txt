@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
-project(XirImageCollectorOwner C)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    project(XirImageCollectorOwner C)
+endif()
 if(NOT WIN32 OR NOT CMAKE_GENERATOR STREQUAL "Ninja")
     message(FATAL_ERROR "Image collector qualification requires Windows and Ninja")
 endif()
@@ -16,10 +18,15 @@ add_library(image_process STATIC
 add_library(image_fixture SHARED test_xir_image_collector.c)
 target_compile_definitions(image_fixture PRIVATE IMAGE_HELPER_DLL)
 add_executable(test_xir_image_collector test_xir_image_collector.c)
-add_executable(test_xir_image_collector_production test_xir_image_collector.c
-    "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c"
-    "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
-    "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c")
+add_executable(test_xir_image_collector_production test_xir_image_collector.c)
+if(TARGET xray_xir_target)
+    target_link_libraries(test_xir_image_collector_production PRIVATE xray_xir_target)
+else()
+    target_sources(test_xir_image_collector_production PRIVATE
+        "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c"
+        "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
+        "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c")
+endif()
 target_compile_definitions(test_xir_image_collector_production PRIVATE IMAGE_PRODUCTION)
 foreach(t image_process image_fixture test_xir_image_collector test_xir_image_collector_production)
     target_include_directories(${t} PRIVATE "${XR_ROOT}/src" "${XR_ROOT}/include")
@@ -40,6 +47,10 @@ foreach(t image_process image_fixture test_xir_image_collector test_xir_image_co
         target_link_libraries(${t} PRIVATE "${resource}/lib/windows/clang_rt.asan_dynamic-x86_64.lib")
     endif()
 endforeach()
+if(COMMAND xray_stage_windows_asan_runtime)
+    xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
+    cmake_language(DEFER CALL xray_prepend_windows_asan_runtime_to_directory_tests)
+endif()
 foreach(t test_xir_image_collector test_xir_image_collector_production)
     target_link_libraries(${t} PRIVATE image_process)
 endforeach()

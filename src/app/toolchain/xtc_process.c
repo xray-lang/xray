@@ -188,6 +188,7 @@ XR_FUNC bool xtc_process_bytes_contains_ascii(const XrProcessByteBuffer *bytes,
 struct XrToolchainProcess {
     XrCompileResources *resources;
     XrProcessSpec spec;
+    size_t argc;
     bool overridden[XTC_PROCESS_MAX_ENV];
 #if defined(XR_OS_WINDOWS)
     wchar_t *wide_keys[XTC_PROCESS_MAX_ENV];
@@ -428,9 +429,20 @@ XR_FUNC XrProcessStatus xtc_process_prepare(XrCompileResources *r, const XrProce
         s = process_env_add(p, spec->env_keys[i], spec->env_values[i], spec->environment_source == XTC_PROCESS_ENV_SNAPSHOT, false);
         if (s != XTC_PROCESS_OK) goto fail;
     }
+    p->argc = argc;
     *output = p; return XTC_PROCESS_OK;
  fail:
     xtc_process_free(p); return s;
+}
+XR_FUNC XrCompileResources *xtc_process_resources(const XrToolchainProcess *p) {
+    return p ? p->resources : NULL;
+}
+XR_FUNC XrProcessStatus xtc_process_view(const XrToolchainProcess *p, XrProcessView *output) {
+    if (!p || !output) return XTC_PROCESS_INVALID;
+    *output = (XrProcessView){p->spec.executable, p->spec.cwd, p->spec.argv, p->argc,
+        p->spec.env_keys, p->spec.env_values, p->spec.env_count, p->spec.timeout_ms,
+        p->spec.output_limit, p->spec.image_mode};
+    return XTC_PROCESS_OK;
 }
 static XrProcessStatus process_capture_init(XrCompileResources *r, XtcCapture *c, size_t limit) {
     c->limit = limit; c->cap = limit < 4096 ? limit + 1 : 4096;

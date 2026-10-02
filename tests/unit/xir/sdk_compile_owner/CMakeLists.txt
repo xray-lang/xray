@@ -33,6 +33,7 @@ add_custom_command(OUTPUT "${SDK_OWNER_GENERATED}"
     DEPENDS sdk_owner_generator VERBATIM)
 add_executable(test_sdk_compile_owner "${CMAKE_CURRENT_LIST_DIR}/test_sdk_compile_owner.c"
     "${SDK_OWNER_GENERATED}" "${SDK_OWNER_ROOT}/src/toolchain/xr_xir_runtime_sdk.c"
+    "${SDK_OWNER_ROOT}/src/base/xjson_cursor.c"
     "${XIR_OLD_ABI_DIR}/build/CMakeFiles/old_admission_data.dir/fixtures/old_admission_data.c.obj")
 target_link_libraries(test_sdk_compile_owner PRIVATE ${SDK_OWNER_LIBRARIES} kernel32)
 add_executable(test_sdk_old_data "${CMAKE_CURRENT_LIST_DIR}/../test_xir_compile_old_data.c"

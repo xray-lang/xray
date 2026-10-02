@@ -78,6 +78,7 @@ static BOOL target_read(HANDLE file, LPVOID bytes, DWORD count, LPDWORD actual, 
 #define CreateFileW(...) (target_io_fail() ? INVALID_HANDLE_VALUE : CreateFileW(__VA_ARGS__))
 #define ReadFile target_read
 #define GetFileInformationByHandle(...) (target_io_fail() ? FALSE : GetFileInformationByHandle(__VA_ARGS__))
+#define GetFileInformationByHandleEx(...) (target_io_fail() ? FALSE : GetFileInformationByHandleEx(__VA_ARGS__))
 #define GetFinalPathNameByHandleW(...) (target_io_fail() ? 0u : GetFinalPathNameByHandleW(__VA_ARGS__))
 #define GetFileSizeEx(...) (target_io_fail() ? FALSE : GetFileSizeEx(__VA_ARGS__))
 #define GetFileType(...) (target_io_fail() ? FILE_TYPE_UNKNOWN : GetFileType(__VA_ARGS__))
@@ -91,6 +92,7 @@ static int target_ordinal(LPCWCH a,int alen,LPCWCH b,int blen,BOOL ignore_case) 
 #define CompareStringOrdinal target_ordinal
 #include "app/toolchain/xtc_xir_target.c"
 #include "app/toolchain/xtc_xir_sysroot.c"
+#include "app/toolchain/xtc_xir_images.c"
 #undef CreateFileW
 #undef ReadFile
 #undef GetFileInformationByHandle
@@ -114,7 +116,7 @@ static XrXirTargetEnvironment environment[] = {
 static XrXirTargetCommand command;
 static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
 static XrXirTargetRequest request_for(XrCompileResources *resources) {
-    return (XrXirTargetRequest){resources, "x86_64-windows-msvc", 3, 2, 11, files, 3, &command, 1};
+    return (XrXirTargetRequest){resources, "x86_64-windows-msvc", 3, 2, 11, files, 3, &command, 1, NULL};
 }
 static void write_bytes(const char *path, const char *bytes) {
     FILE *stream = fopen(path, "wb"); CHECK(stream);
@@ -356,7 +358,7 @@ static void fixed_operation_work(void) {
         injected_error = mode == 2 ? ERROR_NOT_ENOUGH_MEMORY : ERROR_READ_FAULT;
         short_read = mode == 3; uint64_t before = stats(resources).work;
         CHECK(sysroot_hash(&snapshot, &lock, &file) == (mode == 0));
-        CHECK(stats(resources).work - before == (mode == 0 ? 3 + 2 * 3 : 2 + 3));
+        CHECK(stats(resources).work - before == (mode == 0 ? 4 + 2 * 3 : 3 + 3));
         CHECK(snapshot.status == (mode == 0 ? XR_XIR_TARGET_OK :
             mode == 2 ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_IO));
     }
@@ -365,7 +367,7 @@ static void fixed_operation_work(void) {
     memcpy(scratch, L"\\\\?\\C:\\a", 9 * sizeof(wchar_t)); snapshot.scratch_length = 8;
     uint64_t before = stats(resources).work;
     CHECK(!strcmp(sysroot_canonical_text(&snapshot), "C:/a"));
-    CHECK(stats(resources).work - before == 2 * 4 * sizeof(wchar_t) + 1 + sizeof(XtcXirMemory) + 5 + 4);
+    CHECK(stats(resources).work - before == 2 * 4 * sizeof(wchar_t) + 3 + sizeof(XtcXirMemory) + 5 + 4);
     while (snapshot.memory) { XtcXirMemory *next = snapshot.memory->next;
         xr_compile_resources_free(snapshot.memory); snapshot.memory = next; }
     XrXirTargetFile sorted[2] = {{"b",0,0,{0}}, {"a",0,0,{0}}}; snapshot.files = sorted;
@@ -425,7 +427,7 @@ static int diagnostic_lease(const char *manifest) {
         }
     }
     XrCompileResources *resources = ledger(&unlimited);
-    XrXirTargetRequest request = {resources, "x86_64-windows-msvc", provider, 2, 11, dependencies, file_count, commands, command_count};
+    XrXirTargetRequest request = {resources, "x86_64-windows-msvc", provider, 2, 11, dependencies, file_count, commands, command_count, NULL};
     XrXirTargetSnapshot *snapshot = NULL; XrXirTargetStatus status = xtc_xir_target_capture(&request, &snapshot);
     printf("STATUS %u\n", (unsigned)status); if (status != XR_XIR_TARGET_OK) { xr_compile_resources_release(resources); return 2; }
     memset(storage, 0, sizeof(storage)); xr_compile_resources_release(resources);

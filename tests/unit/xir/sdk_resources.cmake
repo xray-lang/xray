@@ -10,9 +10,11 @@ if(NOT DEFINED XIR_SDK_BUNDLE_DIR)
 endif()
 add_library(xir_sdk_resources_production STATIC
     "${XIR_TARGET_SOURCE_ROOT}/src/toolchain/xr_xir_runtime_sdk.c"
+    "${XIR_TARGET_SOURCE_ROOT}/src/base/xjson_cursor.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xcompile_resources.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xsha256.c")
 add_executable(test_xir_sdk_resources "${CMAKE_CURRENT_LIST_DIR}/test_xir_runtime_sdk.c"
+    "${XIR_TARGET_SOURCE_ROOT}/src/base/xjson_cursor.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xsha256.c" "${XIR_TARGET_SOURCE_ROOT}/src/base/xutf8.c")
 add_executable(test_xir_sdk_resources_lease "${CMAKE_CURRENT_LIST_DIR}/test_xir_sdk_lease.c")
 target_link_libraries(test_xir_sdk_resources_lease PRIVATE xir_sdk_resources_production)
