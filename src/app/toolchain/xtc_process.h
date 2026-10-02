@@ -91,6 +91,15 @@ XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,
  * captures cwd when omitted. The executable must always be absolute. */
 XR_FUNC XrProcessStatus xtc_process_prepare(XrCompileResources *resources,
     const XrProcessSpec *spec, XrToolchainProcess **output);
+/* Deep-copy an actual prepared owner on its original ledger, including system
+ * environment keys and an executable distinct from argv[0]. Only observation
+ * changes: WINDOWS_TREE uses the new callback/context, borrowed during run and
+ * cleanup. No ambient environment or cwd is captured. Source may then be freed.
+ * Non-Windows returns UNSUPPORTED. Output must be empty; failure preserves it.
+ * Work covers text scans including NUL, copied bytes, copied policy fields and
+ * the ledger's actual allocation/zeroing work. Cleanup consumes no new work. */
+XR_FUNC XrProcessStatus xtc_process_clone_observed(const XrToolchainProcess *source,
+    const XrProcImageObserver *observer, XrToolchainProcess **output);
 /* Borrow the exact frozen inputs used by run until process_free. These queries
  * do not scan text, allocate, capture ambient state or consume work. The view
  * describes a complete environment, including captured system-reserved keys.

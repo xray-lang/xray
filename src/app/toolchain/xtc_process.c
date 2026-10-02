@@ -437,6 +437,79 @@ XR_FUNC XrProcessStatus xtc_process_prepare(XrCompileResources *r, const XrProce
 XR_FUNC XrCompileResources *xtc_process_resources(const XrToolchainProcess *p) {
     return p ? p->resources : NULL;
 }
+#if defined(XR_OS_WINDOWS)
+static XrProcessStatus process_clone_bytes(XrCompileResources *resources,
+    const void *source, size_t bytes, void **output) {
+    void *copy = NULL;
+    XrProcessStatus status = process_resource(xr_compile_resources_alloc(resources, bytes, &copy));
+    if (status != XTC_PROCESS_OK) return status;
+    status = process_work(resources, bytes);
+    if (status != XTC_PROCESS_OK) { xr_compile_resources_free(copy); return status; }
+    memcpy(copy, source, bytes);
+    *output = copy;
+    return XTC_PROCESS_OK;
+}
+static XrProcessStatus process_clone_text(XrCompileResources *resources,
+    const char *source, const char **output) {
+    size_t bytes = 0;
+    for (;;) {
+        XrProcessStatus status = process_work(resources, 1);
+        if (status != XTC_PROCESS_OK) return status;
+        if (!source[bytes++]) break;
+    }
+    void *copy = NULL;
+    XrProcessStatus status = process_clone_bytes(resources, source, bytes, &copy);
+    if (status == XTC_PROCESS_OK) *output = copy;
+    return status;
+}
+#endif
+XR_FUNC XrProcessStatus xtc_process_clone_observed(const XrToolchainProcess *source,
+    const XrProcImageObserver *observer, XrToolchainProcess **output) {
+    if (!source || !observer || !observer->observe || !output || *output) return XTC_PROCESS_INVALID;
+#if !defined(XR_OS_WINDOWS)
+    return XTC_PROCESS_UNSUPPORTED;
+#else
+    XrCompileResources *resources = source->resources;
+    XrToolchainProcess *copy = NULL;
+    XrProcessStatus status = process_resource(xr_compile_resources_calloc(resources, 1, sizeof(*copy), (void **)&copy));
+    if (status != XTC_PROCESS_OK) return status;
+    status = process_work(resources, sizeof(copy->resources) + sizeof(copy->argc) +
+        sizeof(copy->spec.env_count) + sizeof(copy->spec.timeout_ms) + sizeof(copy->spec.output_limit) +
+        sizeof(copy->spec.image_mode) + sizeof(copy->spec.image_observer));
+    if (status != XTC_PROCESS_OK) goto fail;
+    copy->resources = resources; copy->argc = source->argc;
+    copy->spec.env_count = source->spec.env_count;
+    copy->spec.timeout_ms = source->spec.timeout_ms; copy->spec.output_limit = source->spec.output_limit;
+    copy->spec.image_mode = XR_PROC_IMAGES_WINDOWS_TREE; copy->spec.image_observer = *observer;
+    status = process_clone_text(resources, source->spec.executable, &copy->spec.executable);
+    if (status != XTC_PROCESS_OK) goto fail;
+    status = process_clone_text(resources, source->spec.cwd, &copy->spec.cwd);
+    if (status != XTC_PROCESS_OK) goto fail;
+    for (size_t i = 0; i < source->argc; ++i) {
+        status = process_clone_text(resources, source->spec.argv[i], &copy->spec.argv[i]);
+        if (status != XTC_PROCESS_OK) goto fail;
+    }
+    for (size_t i = 0; i < source->spec.env_count; ++i) {
+        status = process_clone_text(resources, source->spec.env_keys[i], &copy->spec.env_keys[i]);
+        if (status != XTC_PROCESS_OK) goto fail;
+        status = process_clone_text(resources, source->spec.env_values[i], &copy->spec.env_values[i]);
+        if (status != XTC_PROCESS_OK) goto fail;
+        status = process_work(resources, sizeof(copy->wide_lengths[i]));
+        if (status != XTC_PROCESS_OK) goto fail;
+        copy->wide_lengths[i] = source->wide_lengths[i];
+        void *wide = NULL;
+        status = process_clone_bytes(resources, source->wide_keys[i],
+            (size_t)source->wide_lengths[i] * sizeof(wchar_t), &wide);
+        if (status != XTC_PROCESS_OK) goto fail;
+        copy->wide_keys[i] = wide;
+    }
+    *output = copy;
+    return XTC_PROCESS_OK;
+fail:
+    xtc_process_free(copy);
+    return status;
+#endif
+}
 XR_FUNC XrProcessStatus xtc_process_view(const XrToolchainProcess *p, XrProcessView *output) {
     if (!p || !output) return XTC_PROCESS_INVALID;
     *output = (XrProcessView){p->spec.executable, p->spec.cwd, p->spec.argv, p->argc,
