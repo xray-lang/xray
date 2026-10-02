@@ -47,7 +47,7 @@ typedef enum XrXirInvocationFileKind {
     XR_XIR_INVOCATION_SDK_ARCHIVE, XR_XIR_INVOCATION_CRT,
     XR_XIR_INVOCATION_SYSTEM, XR_XIR_INVOCATION_REPORT,
     XR_XIR_INVOCATION_OUTPUT, XR_XIR_INVOCATION_HEADER,
-    XR_XIR_INVOCATION_PROVIDER_IMAGE
+    XR_XIR_INVOCATION_PROVIDER_IMAGE, XR_XIR_INVOCATION_PROVIDER_CONFIG
 } XrXirInvocationFileKind;
 typedef struct XrXirInvocationLibrary {
     const char *path;
@@ -63,9 +63,13 @@ typedef struct XrXirInvocationLimits {
     uint64_t artifact_bytes;
     uint32_t files;
 } XrXirInvocationLimits;
+typedef struct XrXirMsvcRecipe {
+    const char *vc_include, *ucrt_include, *shared_include, *um_include, *system_root;
+} XrXirMsvcRecipe;
 typedef struct XrXirInvocationRequest {
     const XrXirNativeProjection *projection;
     const XrXirRuntimeSdk *sdk;
+    XrXirMsvcRecipe msvc;
     XrXirNamespace *namespace_owner;
     XrXirInvocationCompile compile[2];
     const XrToolchainProcess *link;
@@ -96,7 +100,18 @@ typedef struct XrXirInvocationFacts {
 } XrXirInvocationFacts;
 typedef struct XrXirInvocation XrXirInvocation;
 
-/* Windows x64 MSVC C11/MD only. The synchronous request borrows all producers;
+/* Derives the same twelve roots that run validates. Only projection, SDK,
+ * three prepared processes, msvc and input/output directories are consumed.
+ * namespace_owner and *output must both be NULL. This copies a NEW namespace
+ * on the producer ledger without arming it or executing any command. The
+ * caller owns finite close/drain. Failure preserves output. */
+XR_FUNC XrXirInvocationStatus xtc_xir_invocation_namespace_new(const XrXirInvocationRequest *request,
+    const XrXirNamespaceLimits *limits, XrXirNamespace **output, XrXirInvocationDiagnostic *diagnostic);
+
+/* Windows x64 MSVC C11/MD only, with /X and seven ordered include roots.
+ * Every actual prepared environment contains exactly SystemRoot, TEMP and TMP
+ * in that order; no historical environment-source enum is inferred from it.
+ * The synchronous request borrows all producers;
  * their actual ledgers must match before any allocation. The caller supplies
  * two empty, nonoverlapping private directories. Sources are direct children
  * of input_directory; objects, reports and the executable are direct children

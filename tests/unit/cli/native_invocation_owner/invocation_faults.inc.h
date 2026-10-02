@@ -5,6 +5,28 @@
 #include "app/toolchain/xtc_xir_images.h"
 #include "base/xwindows_utf8.h"
 #include "os/os_fs.h"
+#include <appmodel.h>
+static size_t profile_os_calls, profile_os_failure = SIZE_MAX;
+static DWORD profile_os_error = ERROR_ACCESS_DENIED;
+static bool profile_packaged;
+static const char *profile_post_redirect;
+static bool profile_os_enter(void) {
+    if (profile_os_calls++ != profile_os_failure) return true;
+    SetLastError(profile_os_error); return false;
+}
+static UINT WINAPI profile_windows_directory(LPWSTR buffer, UINT size) {
+    return profile_os_enter() ? GetWindowsDirectoryW(buffer, size) : 0;
+}
+static UINT WINAPI profile_system_directory(LPWSTR buffer, UINT size) {
+    return profile_os_enter() ? GetSystemDirectoryW(buffer, size) : 0;
+}
+static DWORD WINAPI profile_dll_directory(DWORD size, LPWSTR buffer) {
+    return profile_os_enter() ? GetDllDirectoryW(size, buffer) : 0;
+}
+static LONG WINAPI profile_package(UINT32 *size, PWSTR buffer) {
+    if (!profile_os_enter()) return (LONG)profile_os_error;
+    return profile_packaged ? ERROR_INSUFFICIENT_BUFFER : GetCurrentPackageFullName(size, buffer);
+}
 /* A retained real pending kernel request exercises the upper owner boundary. */
 static bool guard_hold_cancel, guard_fail_result;
 static unsigned guard_cancel_holds;
@@ -12,16 +34,30 @@ static BOOL WINAPI guard_cancel(HANDLE handle, LPOVERLAPPED overlapped) {
     if (guard_hold_cancel) { ++guard_cancel_holds; SetLastError(ERROR_NOT_FOUND); return FALSE; }
     return CancelIoEx(handle, overlapped);
 }
-static BOOL WINAPI guard_result(HANDLE handle, LPOVERLAPPED overlapped, LPDWORD bytes, BOOL wait) {
-    if (guard_fail_result) { guard_fail_result = false; SetLastError(ERROR_ACCESS_DENIED); return FALSE; }
-    return GetOverlappedResult(handle, overlapped, bytes, wait);
-}
+static BOOL WINAPI guard_result(HANDLE handle, LPOVERLAPPED overlapped, LPDWORD bytes, BOOL wait);
 #define GetOverlappedResult guard_result
 #define CancelIoEx guard_cancel
 #include "app/toolchain/xtc_xir_namespace.c"
 #undef CancelIoEx
 #undef GetOverlappedResult
+static BOOL WINAPI guard_result(HANDLE handle, LPOVERLAPPED overlapped, LPDWORD bytes, BOOL wait) {
+    if (guard_fail_result) { guard_fail_result = false; SetLastError(ERROR_ACCESS_DENIED); return FALSE; }
+    BOOL result = GetOverlappedResult(handle, overlapped, bytes, wait);
+    if (result && !wait) {
+        NamespaceDirectory *node = (NamespaceDirectory *)((char *)overlapped - offsetof(NamespaceDirectory, overlapped));
+        FILETIME now; GetSystemTimeAsFileTime(&now);
+        ULARGE_INTEGER timestamp; timestamp.LowPart = now.dwLowDateTime; timestamp.HighPart = now.dwHighDateTime;
+        fprintf(stderr, "completed namespace utc100ns=%llu bytes=%lu original=%lu new=%lu flags=%lu access=%lu share=%u path=%s\n",
+            (unsigned long long)timestamp.QuadPart, (unsigned long)*bytes,
+            (unsigned long)node->output.OriginalOplockLevel, (unsigned long)node->output.NewOplockLevel,
+            (unsigned long)node->output.Flags, (unsigned long)node->output.AccessMode,
+            (unsigned)node->output.ShareMode, node->facts.path);
+    }
+    return result;
+}
+
 static unsigned guard_checks, guard_break_check;
+static size_t owner_compare_count, owner_prearm_comparisons, owner_compare_fail = SIZE_MAX;
 static bool guard_arm_oom, guard_check_budget, guard_check_io;
 static const char *guard_input_path, *guard_source_paths[2];
 static void guard_change_directory(void) {
@@ -31,6 +67,7 @@ static void guard_change_directory(void) {
     CHECK(file != INVALID_HANDLE_VALUE && CloseHandle(file) && DeleteFileA(path));
 }
 static XrXirNamespaceStatus guard_arm(XrXirNamespace *owner) {
+    owner_prearm_comparisons = owner_compare_count;
     CHECK(xtc_xir_namespace_phase(owner) == XR_XIR_NAMESPACE_NEW);
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(GetFileAttributesA(guard_source_paths[i]) != INVALID_FILE_ATTRIBUTES);
@@ -41,6 +78,10 @@ static XrXirNamespaceStatus guard_arm(XrXirNamespace *owner) {
     if (guard_arm_oom) runtime_fail_at = runtime_attempts;
     XrXirNamespaceStatus status = xtc_xir_namespace_arm(owner);
     runtime_fail_at = SIZE_MAX;
+    if (status == XR_XIR_NAMESPACE_OK && profile_post_redirect) {
+        FILE *file = fopen(profile_post_redirect, "wb"); CHECK(file);
+        CHECK(fputs("redirect", file) >= 0 && !fclose(file));
+    }
     return status;
 }
 static XrXirNamespaceStatus guard_check(XrXirNamespace *owner) {
@@ -56,11 +97,10 @@ static XrXirNamespaceStatus guard_check(XrXirNamespace *owner) {
     return xtc_xir_namespace_check(owner);
 }
 static size_t owner_allocation_count, owner_allocation_fail = SIZE_MAX;
-static size_t owner_compare_count, owner_compare_fail = SIZE_MAX;
 static DWORD owner_compare_error = ERROR_ACCESS_DENIED;
 static unsigned invocation_runs, invocation_process_fail = UINT_MAX;
 static unsigned invocation_tamper;
-static bool invocation_image_difference;
+static bool invocation_image_difference, profile_image_outside;
 static const char *invocation_compiler;
 static const char *invocation_other_source;
 static unsigned owner_writes, owner_tamper_write = UINT_MAX;
@@ -104,7 +144,7 @@ static int WINAPI owner_compare(LPCWCH left, int left_length, LPCWCH right, int 
 static void owner_tamper_report(const XrProcessView *view) {
     /* Replace a successful real replay's dependency report with another actual
      * leased source. This remains valid JSON but is a different source fact. */
-    FILE *file = fopen(view->argv[20], "rb"); CHECK(file && !fseek(file, 0, SEEK_END));
+    FILE *file = fopen(view->argv[25], "rb"); CHECK(file && !fseek(file, 0, SEEK_END));
     long length = ftell(file); CHECK(length > 0 && !fseek(file, 0, SEEK_SET));
     char *text = malloc((size_t)length + 1); CHECK(text);
     CHECK(fread(text, 1, (size_t)length, file) == (size_t)length && !fclose(file)); text[length] = 0;
@@ -118,7 +158,7 @@ static void owner_tamper_report(const XrProcessView *view) {
             if (*end == ']' && !quoted) break;
             ++end;
         }
-        CHECK(*end == ']'); file = fopen(view->argv[20], "wb"); CHECK(file);
+        CHECK(*end == ']'); file = fopen(view->argv[25], "wb"); CHECK(file);
         CHECK(fwrite(text, 1, (size_t)(includes - text), file) == (size_t)(includes - text));
         CHECK(fwrite(end, 1, (size_t)length - (size_t)(end - text), file) == (size_t)length - (size_t)(end - text));
         CHECK(!fclose(file)); free(text); return;
@@ -129,7 +169,7 @@ static void owner_tamper_report(const XrProcessView *view) {
     char *end = source;
     while (*end && *end != '"') { if (*end == '\\' && end[1]) ++end; ++end; }
     CHECK(*end == '"');
-    file = fopen(view->argv[20], "wb"); CHECK(file);
+    file = fopen(view->argv[25], "wb"); CHECK(file);
     CHECK(fwrite(text, 1, (size_t)(source - text), file) == (size_t)(source - text));
     for (const char *p = invocation_other_source; *p; ++p) CHECK(fputc(*p == '\\' ? '/' : *p, file) != EOF);
     CHECK(fwrite(end, 1, (size_t)length - (size_t)(end - text), file) == (size_t)length - (size_t)(end - text));
@@ -186,6 +226,14 @@ static XrXirTargetStatus owner_open(XrCompileResources *resources, const char *p
     return status;
 }
 static XrXirTargetStatus owner_seal(XrXirImageCollector *images) {
+    if (profile_image_outside && invocation_runs == 1) {
+        HANDLE file = CreateFileA(invocation_other_source, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        CHECK(file != INVALID_HANDLE_VALUE);
+        XrProcImageObserver observer = xtc_xir_images_observer(images);
+        XrProcImageEvent event = {GetCurrentProcessId(), XR_PROC_IMAGE_DLL, (intptr_t)file};
+        CHECK(observer.observe(observer.context, &event) == XR_PROC_OK && CloseHandle(file));
+        puts("synthetic out-of-root DLL observation with a real held file, not a loader claim");
+    }
     if (invocation_image_difference && invocation_runs == 2) {
         wchar_t path[32768]; CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, invocation_compiler, -1, path, 32768));
         HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -238,7 +286,15 @@ static XrProcessStatus owner_run(const XrToolchainProcess *process, XrProcessCan
 #define xtc_xir_file_lease_open owner_open
 #define xtc_xir_namespace_arm guard_arm
 #define xtc_xir_namespace_check guard_check
+#define GetWindowsDirectoryW profile_windows_directory
+#define GetSystemDirectoryW profile_system_directory
+#define GetDllDirectoryW profile_dll_directory
+#define GetCurrentPackageFullName profile_package
 #include "app/toolchain/xtc_xir_invocation.c"
+#undef GetWindowsDirectoryW
+#undef GetSystemDirectoryW
+#undef GetDllDirectoryW
+#undef GetCurrentPackageFullName
 #undef xr_compile_resources_alloc
 #undef xr_compile_resources_calloc
 #undef xr_compile_resources_resize

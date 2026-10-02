@@ -17,6 +17,7 @@
 #include "invocation_allocator.h"
 #ifdef INVOCATION_INJECTED
 #include "invocation_faults.inc.h"
+#include "invocation_profile_tests.inc.h"
 #endif
 static bool cancel_immediately(void *context) { (void)context; return true; }
 
@@ -46,10 +47,11 @@ static XrXirNativeProjection *projection(XrCompileResources *resources, const ch
 typedef struct CommandStorage {
     XrProcessSpec spec;
     char source[32768], object[32768], report[32768];
-    char object_argument[32768], include[3][32768];
+    char object_argument[32768], include[7][32768];
 } CommandStorage;
 static XrToolchainProcess *compile(XrCompileResources *resources, const char *compiler,
-    const char *directory, const char *output_directory, const char *sdk, unsigned stage, CommandStorage *storage) {
+    const char *directory, const char *output_directory, const char *sdk, unsigned stage, CommandStorage *storage,
+    const XrXirMsvcRecipe *recipe) {
     static const char *const fixed[] = {"/nologo", "/std:c11", "/utf-8", "/experimental:c11atomics",
         "/MD", "/O2", "/W4", "/WX", "/DNDEBUG", "/DNOMINMAX", "/DWIN32_LEAN_AND_MEAN", "/D_CRT_SECURE_NO_WARNINGS"};
     CHECK(snprintf(storage->source, sizeof(storage->source), "%s/%s.c", directory, stage ? "launcher" : "generated") > 0);
@@ -57,31 +59,45 @@ static XrToolchainProcess *compile(XrCompileResources *resources, const char *co
     CHECK(snprintf(storage->report, sizeof(storage->report), "%s/%s.json", output_directory, stage ? "launcher" : "generated") > 0);
     CHECK(snprintf(storage->object_argument, sizeof(storage->object_argument), "/Fo%s", storage->object) > 0);
     xtc_process_spec_init(&storage->spec, compiler, 30000);
-    storage->spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    storage->spec.environment_source = XTC_PROCESS_ENV_EXPLICIT;
+    storage->spec.env_count = 3;
+    storage->spec.env_keys[0] = "SystemRoot"; storage->spec.env_values[0] = recipe->system_root;
+    storage->spec.env_keys[1] = "TEMP"; storage->spec.env_values[1] = output_directory;
+    storage->spec.env_keys[2] = "TMP"; storage->spec.env_values[2] = output_directory;
     storage->spec.cwd = directory; storage->spec.output_limit = 4 * 1024 * 1024;
     storage->spec.argv[0] = "independent-argv-zero";
     for (unsigned i = 0; i < 12; ++i) storage->spec.argv[i + 1] = fixed[i];
     const char *names[] = {"src", "include", "generated"};
     for (unsigned i = 0; i < 3; ++i) {
         CHECK(snprintf(storage->include[i], sizeof(storage->include[i]), "/I%s/%s", sdk, names[i]) > 0);
-        storage->spec.argv[13 + i] = storage->include[i];
+        storage->spec.argv[14 + i] = storage->include[i];
     }
-    storage->spec.argv[16] = "/c"; storage->spec.argv[17] = storage->source;
-    storage->spec.argv[18] = storage->object_argument; storage->spec.argv[19] = "/sourceDependencies";
-    storage->spec.argv[20] = storage->report;
-    if (stage) storage->spec.argv[21] = "/DXIR_SDK_PROGRAM_SYMBOL=invocation_source_program";
+    storage->spec.argv[13] = "/X";
+    const char *external[] = {recipe->vc_include, recipe->ucrt_include, recipe->shared_include, recipe->um_include};
+    for (unsigned i = 0; i < 4; ++i) {
+        CHECK(snprintf(storage->include[3 + i], sizeof(storage->include[3 + i]), "/I%s", external[i]) > 0);
+        storage->spec.argv[17 + i] = storage->include[3 + i];
+    }
+    storage->spec.argv[21] = "/c"; storage->spec.argv[22] = storage->source;
+    storage->spec.argv[23] = storage->object_argument; storage->spec.argv[24] = "/sourceDependencies";
+    storage->spec.argv[25] = storage->report;
+    if (stage) storage->spec.argv[26] = "/DXIR_SDK_PROGRAM_SYMBOL=invocation_source_program";
     XrToolchainProcess *process = NULL;
     CHECK(xtc_process_prepare(resources, &storage->spec, &process) == XTC_PROCESS_OK);
     return process;
 }
 static int run_test(int argc, char **argv) {
-    CHECK(argc == 16);
+    CHECK(argc == 21);
+    XrXirMsvcRecipe recipe = {argv[16], argv[17], argv[18], argv[19], argv[20]};
     const char *mode = argv[15];
 #ifdef INVOCATION_INJECTED
     if (!strcmp(mode, "positive")) { owner_record_boundaries(argv[2]); owner_image_boundaries(argv[2]); }
 #endif
     DWORD handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &handles));
     XrCompileResourceLimits limits = sdk_unlimited;
+    if (!strncmp(mode, "constructor-work-", 17)) limits.work = strtoull(mode + 17, NULL, 10);
+    if (!strncmp(mode, "constructor-bytes-", 18)) limits.allocated_bytes = strtoull(mode + 18, NULL, 10);
+    if (!strncmp(mode, "constructor-live-", 17)) limits.live_bytes = strtoull(mode + 17, NULL, 10);
     if (!strncmp(mode, "budget-work-", 12)) limits.work = strtoull(mode + 12, NULL, 10);
     if (!strncmp(mode, "budget-bytes-", 13)) limits.allocated_bytes = strtoull(mode + 13, NULL, 10);
     if (!strncmp(mode, "budget-live-", 12)) limits.live_bytes = strtoull(mode + 12, NULL, 10);
@@ -95,16 +111,19 @@ static int run_test(int argc, char **argv) {
     void *manifest = read_input(manifest_path, &manifest_length), *launcher = read_input(argv[8], &launcher_length);
     XrXirRuntimeSdkRequest load = {argv[4], manifest, manifest_length, resources};
     XrXirRuntimeSdk *sdk = NULL; CHECK(xr_xir_runtime_sdk_load(&load, &sdk) == XR_XIR_SDK_OK); free(manifest);
-    CommandStorage commands[2]; memset(commands, 0, sizeof(commands));
+    CommandStorage *commands = calloc(2, sizeof(*commands)); CHECK(commands);
     XrToolchainProcess *processes[3] = {NULL, NULL, NULL};
-    for (unsigned i = 0; i < 2; ++i) processes[i] = compile(resources, argv[5], argv[7], argv[14], xr_xir_runtime_sdk_root(sdk), i, &commands[i]);
+    for (unsigned i = 0; i < 2; ++i) processes[i] = compile(resources, argv[5], argv[7], argv[14], xr_xir_runtime_sdk_root(sdk), i, &commands[i], &recipe);
     char output[32768], report[32768], output_argument[32768], report_argument[32768];
     CHECK(snprintf(output, sizeof(output), "%s/program.exe", argv[14]) > 0);
     CHECK(snprintf(report, sizeof(report), "%s/actual.rsp", argv[14]) > 0);
     CHECK(snprintf(output_argument, sizeof(output_argument), "/out:%s", output) > 0);
     CHECK(snprintf(report_argument, sizeof(report_argument), "/LINKREPROFULLPATHRSP:%s", report) > 0);
     XrProcessSpec spec; xtc_process_spec_init(&spec, argv[6], 30000); spec.cwd = argv[7]; spec.output_limit = 4 * 1024 * 1024;
-    spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    spec.environment_source = XTC_PROCESS_ENV_EXPLICIT; spec.env_count = 3;
+    spec.env_keys[0] = "SystemRoot"; spec.env_values[0] = recipe.system_root;
+    spec.env_keys[1] = "TEMP"; spec.env_values[1] = argv[14];
+    spec.env_keys[2] = "TMP"; spec.env_values[2] = argv[14];
     spec.argv[0] = "independent-link-argv-zero"; spec.argv[1] = "/nologo"; spec.argv[2] = "/incremental:no";
     spec.argv[3] = "/NODEFAULTLIB"; spec.argv[4] = "/verbose:lib"; spec.argv[5] = output_argument; spec.argv[6] = report_argument;
     spec.argv[7] = commands[0].object; spec.argv[8] = commands[1].object;
@@ -117,12 +136,13 @@ static int run_test(int argc, char **argv) {
         spec.argv[14 + i] = libraries[i].path;
     }
     CHECK(xtc_process_prepare(resources, &spec, &processes[2]) == XTC_PROCESS_OK);
-    XrXirInvocationRequest request = {0}; request.projection = project; request.sdk = sdk;
+    XrXirInvocationRequest request = {0}; request.projection = project; request.sdk = sdk; request.msvc = recipe;
     for (unsigned i = 0; i < 2; ++i) request.compile[i] = (XrXirInvocationCompile){processes[i], commands[i].source, commands[i].object, commands[i].report};
     request.link = processes[2]; request.input_directory = argv[7]; request.output_directory = argv[14];
     request.link_report = report; request.output = output;
     request.launcher = launcher; request.launcher_length = launcher_length; request.libraries = libraries; request.library_count = 5;
     request.limits = (XrXirInvocationLimits){{4 * 1024 * 1024, 32768, 4096}, 64 * 1024 * 1024, 4096};
+    XrXirInvocationRequest admission_template = request;
     XrXirInvocationStatus expected = XR_XIR_INVOCATION_OK;
     XrCompileResources *foreign = NULL; XrXirRuntimeSdk *foreign_sdk = NULL; XrToolchainProcess *foreign_process = NULL;
     char alternate_directory[32768] = {0}, collision[32768] = {0};
@@ -138,6 +158,23 @@ static int run_test(int argc, char **argv) {
         large_launcher = malloc(request.launcher_length); CHECK(large_launcher);
         memset(large_launcher, ' ', request.launcher_length); request.launcher = large_launcher;
         expected = XR_XIR_INVOCATION_BUDGET;
+    }
+    if (!strcmp(mode, "profile-legacy")) {
+        commands[0].spec.argv[13] = commands[0].include[0]; commands[0].spec.argv[14] = commands[0].include[1];
+        commands[0].spec.argv[15] = commands[0].include[2]; commands[0].spec.argv[16] = "/c";
+        commands[0].spec.argv[17] = commands[0].source; commands[0].spec.argv[18] = commands[0].object_argument;
+        commands[0].spec.argv[19] = "/sourceDependencies"; commands[0].spec.argv[20] = commands[0].report;
+        commands[0].spec.argv[21] = NULL;
+    } else if (!strcmp(mode, "profile-env-extra")) {
+        commands[0].spec.env_count = 4; commands[0].spec.env_keys[3] = "PATH"; commands[0].spec.env_values[3] = "";
+    } else if (!strcmp(mode, "profile-temp")) commands[0].spec.env_values[1] = request.input_directory;
+    else if (!strcmp(mode, "profile-system-root")) request.msvc.system_root = request.input_directory;
+    else if (!strcmp(mode, "profile-include")) request.msvc.vc_include = request.input_directory;
+    if (!strncmp(mode, "profile-", 8)) expected = XR_XIR_INVOCATION_UNSUPPORTED;
+    if (!strcmp(mode, "profile-legacy") || !strcmp(mode, "profile-env-extra") || !strcmp(mode, "profile-temp")) {
+        xtc_process_free(processes[0]); processes[0] = NULL;
+        CHECK(xtc_process_prepare(resources, &commands[0].spec, &processes[0]) == XTC_PROCESS_OK);
+        request.compile[0].process = processes[0];
     }
     if (!strcmp(mode, "bad-recipe")) {
         commands[0].spec.argv[2] = "/std:c99";
@@ -185,12 +222,25 @@ static int run_test(int argc, char **argv) {
             if (stage < 2) request.compile[stage].process = foreign_process; else request.link = foreign_process;
         }
     }
+    if (!strcmp(mode, "same-directory") || !strcmp(mode, "case-directory") ||
+        !strcmp(mode, "ancestor-directory") || !strcmp(mode, "reverse-ancestor")) {
+        expected = XR_XIR_INVOCATION_UNSUPPORTED;
+        for (unsigned i = 0; i < 3; ++i) {
+            XrProcessSpec *changed = i < 2 ? &commands[i].spec : &spec;
+            changed->env_values[1] = request.output_directory; changed->env_values[2] = request.output_directory;
+            xtc_process_free(processes[i]); processes[i] = NULL;
+            CHECK(xtc_process_prepare(resources, changed, &processes[i]) == XTC_PROCESS_OK);
+            if (i < 2) request.compile[i].process = processes[i]; else request.link = processes[i];
+        }
+    }
 #ifdef INVOCATION_INJECTED
     invocation_other_source = commands[1].source;
-    if (!strncmp(mode, "oom-", 4)) { owner_allocation_fail = strtoull(mode + 4, NULL, 10); expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
+    if (!strcmp(mode, "profile-image")) profile_image_outside = true;
+    if (!strcmp(mode, "profile-post-local")) {
+        CHECK(snprintf(alternate_directory, sizeof(alternate_directory), "%s.local", argv[5]) > 0);
+        profile_post_redirect = alternate_directory;
+    }
     if (!strncmp(mode, "process-oom-", 12)) { invocation_process_fail = (unsigned)strtoul(mode + 12, NULL, 10); expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
-    if (!strncmp(mode, "io-", 3)) { owner_compare_fail = strtoull(mode + 3, NULL, 10); expected = XR_XIR_INVOCATION_IO; }
-    if (!strncmp(mode, "osoom-", 6)) { owner_compare_fail = strtoull(mode + 6, NULL, 10); owner_compare_error = ERROR_NOT_ENOUGH_MEMORY; expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
     if (!strcmp(mode, "replay")) { invocation_tamper = 1; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH; }
     if (!strcmp(mode, "includes-replay")) { invocation_tamper = 2; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH; }
     if (!strcmp(mode, "link-replay")) { invocation_tamper = 3; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH; }
@@ -201,14 +251,87 @@ static int run_test(int argc, char **argv) {
 #endif
     XrCompileResourceStats before_guard;
     CHECK(xr_compile_resources_stats(resources, &before_guard) == XR_COMPILE_RESOURCE_OK);
-    XrXirNamespaceRoot guard_root = {request.input_directory, XR_XIR_NAMESPACE_DIRECTORY};
-    XrXirNamespaceRequest guard_request = {&guard_root, 1, {1, 8, 8, 32768}};
+    XrXirNamespaceLimits guard_limits = {12, 4096, 64, 32768};
     XrXirNamespace *guard = NULL;
-    if (!strcmp(mode, "foreign-guard")) {
-        foreign = sdk_ledger(&sdk_unlimited); expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
+    XrXirInvocationRequest guard_input = admission_template;
+    guard_input.sdk = sdk;
+    for (unsigned i = 0; i < 2; ++i) guard_input.compile[i].process = processes[i];
+    guard_input.link = processes[2];
+    guard_input.input_directory = argv[7]; guard_input.output_directory = argv[14];
+#ifdef INVOCATION_INJECTED
+    if (!strcmp(mode, "positive") || !strcmp(mode, "constructor-admission")) profile_namespace_matrix(&guard_input, &guard_limits);
+    if (foreign) {
+        XrXirInvocationRequest reject = request; reject.namespace_owner = NULL;
+        size_t attempts = runtime_attempts;
+        XrXirNamespace *unchanged = NULL;
+        CHECK(xtc_xir_invocation_namespace_new(&reject, &guard_limits, &unchanged, NULL) == XR_XIR_INVOCATION_INVALID);
+        CHECK(!unchanged && runtime_attempts == attempts);
     }
-    CHECK(xtc_xir_namespace_new(!strcmp(mode, "foreign-guard") ? foreign : resources,
-        &guard_request, &guard) == XR_XIR_NAMESPACE_OK);
+#endif
+    XrXirInvocationDiagnostic guard_diagnostic = {0};
+    XrXirInvocationStatus guard_status = xtc_xir_invocation_namespace_new(&guard_input, &guard_limits, &guard, &guard_diagnostic);
+    printf("profile namespace status=%d domain=%d code=%d\n", guard_status, guard_diagnostic.domain, guard_diagnostic.code);
+    if (!strncmp(mode, "constructor-", 12)) {
+        bool failure = strstr(mode, "-fail") != NULL;
+        CHECK(guard_status == (failure ? XR_XIR_INVOCATION_BUDGET : XR_XIR_INVOCATION_OK));
+        CHECK(failure ? guard == NULL : guard != NULL);
+        XrCompileResourceStats cost; CHECK(xr_compile_resources_stats(resources, &cost) == XR_COMPILE_RESOURCE_OK);
+        printf("constructor costs allocated=%llu peak=%llu work=%llu\n", (unsigned long long)cost.allocated_bytes,
+            (unsigned long long)cost.peak_bytes, (unsigned long long)cost.work);
+#ifdef INVOCATION_INJECTED
+        if (!strcmp(mode, "constructor-interval")) {
+            for (uint32_t i = 0; i < xtc_xir_namespace_facts(guard)->root_count; ++i) {
+                const XrXirNamespaceRootFacts *root = xtc_xir_namespace_root(guard, i);
+                printf("interval-root scope=%u path=%s\n", (unsigned)root->scope, root->requested_path);
+            }
+            XrXirNamespaceStatus armed = xtc_xir_namespace_arm(guard);
+            printf("interval arm=%u phase=%u directories=%u\n", (unsigned)armed,
+                (unsigned)xtc_xir_namespace_phase(guard), xtc_xir_namespace_facts(guard)->directory_count);
+            for (unsigned i = 0; i < 3; ++i) {
+                if (i) Sleep(500);
+                XrXirNamespaceStatus checked = xtc_xir_namespace_check(guard);
+                printf("interval check=%u status=%u phase=%u\n", i, (unsigned)checked, (unsigned)xtc_xir_namespace_phase(guard));
+            }
+        }
+#endif
+        if (failure) CHECK(cost.live_bytes == before_guard.live_bytes);
+        for (unsigned i = 0; i < 3; ++i) xtc_process_free(processes[i]);
+        xr_compile_native_projection_owner_free(project); xr_xir_runtime_sdk_free(sdk);
+        xr_compile_resources_release(resources); free(launcher); free(commands);
+        if (guard) {
+            CHECK(xtc_xir_namespace_facts(guard)->root_count == 12);
+            for (unsigned i = 0; i < 12; ++i) CHECK(xtc_xir_namespace_root(guard, i)->requested_path[0]);
+            XrXirNamespaceStatus closed = XR_XIR_NAMESPACE_PENDING;
+            for (unsigned attempt = 0; guard && attempt < 100; ++attempt) {
+                closed = xtc_xir_namespace_close(&guard, 100);
+                CHECK(closed == XR_XIR_NAMESPACE_OK || closed == XR_XIR_NAMESPACE_PENDING);
+            }
+            CHECK(closed == XR_XIR_NAMESPACE_OK && !guard);
+        }
+        CHECK(!runtime_live && !runtime_bytes);
+        puts("constructor owns roots after all producers; exact resources and physical zero PASS"); return 0;
+    }
+    CHECK(guard_status == XR_XIR_INVOCATION_OK);
+    if (!strcmp(mode, "foreign-guard")) {
+        CHECK(xtc_xir_namespace_close(&guard, 100) == XR_XIR_NAMESPACE_OK);
+        foreign = sdk_ledger(&sdk_unlimited); expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
+        XrXirNamespaceRoot guard_root = {request.input_directory, XR_XIR_NAMESPACE_DIRECTORY};
+        XrXirNamespaceRequest guard_request = {&guard_root, 1, {1, 8, 8, 32768}};
+        CHECK(xtc_xir_namespace_new(foreign, &guard_request, &guard) == XR_XIR_NAMESPACE_OK);
+    }
+    if (!strcmp(mode, "profile-scope") || !strcmp(mode, "profile-missing-root") || !strcmp(mode, "profile-root")) {
+        XrXirNamespaceRoot roots[12];
+        for (unsigned i = 0; i < 12; ++i) {
+            const XrXirNamespaceRootFacts *fact = xtc_xir_namespace_root(guard, i);
+            roots[i] = (XrXirNamespaceRoot){fact->requested_path, fact->scope};
+        }
+        if (!strcmp(mode, "profile-scope")) roots[1].scope = XR_XIR_NAMESPACE_DIRECTORY;
+        if (!strcmp(mode, "profile-root")) roots[1].path = request.output_directory;
+        XrXirNamespaceRequest changed = {roots, !strcmp(mode, "profile-missing-root") ? 11u : 12u, guard_limits};
+        XrXirNamespace *replacement = NULL;
+        CHECK(xtc_xir_namespace_new(resources, &changed, &replacement) == XR_XIR_NAMESPACE_OK);
+        CHECK(xtc_xir_namespace_close(&guard, 0) == XR_XIR_NAMESPACE_OK); guard = replacement;
+    }
     request.namespace_owner = guard;
     if (!strcmp(mode, "null-guard")) {
         request.namespace_owner = NULL; expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
@@ -230,11 +353,17 @@ static int run_test(int argc, char **argv) {
     measure_report = request.link_report; measure_output = request.output;
     guard_input_path = request.input_directory;
     for (unsigned i = 0; i < 2; ++i) guard_source_paths[i] = commands[i].source;
-    if (!strcmp(mode, "guard-break")) { guard_break_check = 2; expected = XR_XIR_INVOCATION_BROKEN; }
-    if (!strcmp(mode, "guard-final-break")) { guard_break_check = 7; expected = XR_XIR_INVOCATION_BROKEN; }
+    if (!strcmp(mode, "guard-break")) { guard_break_check = 3; expected = XR_XIR_INVOCATION_BROKEN; }
+    if (!strcmp(mode, "guard-final-break")) { guard_break_check = 8; expected = XR_XIR_INVOCATION_BROKEN; }
     if (!strcmp(mode, "guard-arm-oom")) { guard_arm_oom = true; expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
     if (!strcmp(mode, "guard-check-budget")) { guard_check_budget = true; expected = XR_XIR_INVOCATION_BUDGET; }
     if (!strcmp(mode, "guard-check-io")) { guard_check_io = true; expected = XR_XIR_INVOCATION_IO; }
+#endif
+#ifdef INVOCATION_INJECTED
+    owner_allocation_count = 0; owner_compare_count = 0;
+    if (!strncmp(mode, "oom-", 4)) { owner_allocation_fail = strtoull(mode + 4, NULL, 10); expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
+    if (!strncmp(mode, "io-", 3)) { owner_compare_fail = strtoull(mode + 3, NULL, 10); expected = XR_XIR_INVOCATION_IO; }
+    if (!strncmp(mode, "osoom-", 6)) { owner_compare_fail = strtoull(mode + 6, NULL, 10); owner_compare_error = ERROR_NOT_ENOUGH_MEMORY; expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
 #endif
     XrXirInvocation *owner = NULL; XrXirInvocationDiagnostic diagnostic = {0};
     if (!strcmp(mode, "occupied-out")) {
@@ -277,12 +406,13 @@ static int run_test(int argc, char **argv) {
         diagnostic.pass, diagnostic.domain, diagnostic.code, diagnostic.exit_code); fflush(stdout);
     CHECK(status == expected);
 #ifdef INVOCATION_INJECTED
-    printf("owner direct allocations=%zu comparisons=%zu attempted-runs=%u\n", owner_allocation_count, owner_compare_count, invocation_runs);
+    printf("owner direct allocations=%zu comparisons=%zu attempted-runs=%u\n", owner_allocation_count, owner_prearm_comparisons, invocation_runs);
+    printf("owner all-stage comparisons=%zu\n", owner_compare_count);
 #endif
     if (preallocation) CHECK(runtime_attempts == allocation_start && !memcmp(&before, &after_run, sizeof(before)));
 #ifdef INVOCATION_INJECTED
     if (!strcmp(mode, "guard-pending")) {
-        CHECK(status == XR_XIR_INVOCATION_OK && owner && guard && guard_checks == 7);
+        CHECK(status == XR_XIR_INVOCATION_OK && owner && guard && guard_checks == 8);
         XrCompileResourceStats retained, pending;
         CHECK(xr_compile_resources_stats(resources, &retained) == XR_COMPILE_RESOURCE_OK);
         guard_hold_cancel = true;
@@ -307,6 +437,17 @@ static int run_test(int argc, char **argv) {
         if (!strcmp(mode, "occupied-out")) { CHECK(owner == (XrXirInvocation *)(uintptr_t)1); owner = NULL; }
         CHECK(!owner && before_guard.live_bytes == after_guard.live_bytes);
 #ifdef INVOCATION_INJECTED
+        if (!strncmp(mode, "profile-", 8)) {
+            if (!strcmp(mode, "profile-header")) {
+                CHECK(invocation_runs == 3 && diagnostic.stage == XR_XIR_INVOCATION_LAUNCHER && diagnostic.pass == XR_XIR_INVOCATION_OBSERVE);
+            } else if (!strcmp(mode, "profile-image")) {
+                CHECK(invocation_runs == 1 && diagnostic.stage == XR_XIR_INVOCATION_GENERATED && diagnostic.pass == XR_XIR_INVOCATION_OBSERVE);
+            } else CHECK(!invocation_runs && diagnostic.pass == XR_XIR_INVOCATION_NO_PASS);
+            if (!strcmp(mode, "profile-config") || !strcmp(mode, "profile-local") || !strcmp(mode, "profile-manifest") ||
+                !strcmp(mode, "profile-local-directory") || !strcmp(mode, "profile-post-local"))
+                CHECK(diagnostic.stage == XR_XIR_INVOCATION_GENERATED);
+            if (!strcmp(mode, "profile-link-config")) CHECK(diagnostic.stage == XR_XIR_INVOCATION_LINK);
+        }
         if (!strcmp(mode, "guard-break") || !strcmp(mode, "guard-final-break")) {
             CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && diagnostic.code == XR_XIR_NAMESPACE_BROKEN);
             CHECK(invocation_runs == (!strcmp(mode, "guard-break") ? 2u : 6u));
@@ -315,11 +456,11 @@ static int run_test(int argc, char **argv) {
             CHECK(diagnostic.pass == (!strcmp(mode, "guard-break") ? XR_XIR_INVOCATION_REPLAY : XR_XIR_INVOCATION_NO_PASS));
         }
         if (!strcmp(mode, "guard-check-budget") || !strcmp(mode, "guard-check-io")) {
-            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && invocation_runs == 1 && guard_checks == 1);
+            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && !invocation_runs && guard_checks == 1);
             CHECK(diagnostic.code == (!strcmp(mode, "guard-check-budget") ? XR_XIR_NAMESPACE_BUDGET : XR_XIR_NAMESPACE_IO));
-            CHECK(diagnostic.stage == XR_XIR_INVOCATION_GENERATED && diagnostic.pass == XR_XIR_INVOCATION_OBSERVE);
+            CHECK(diagnostic.stage == XR_XIR_INVOCATION_NO_STAGE && diagnostic.pass == XR_XIR_INVOCATION_NO_PASS);
         }
-        if (!strcmp(mode, "cancel")) CHECK(!guard_checks && diagnostic.domain == XR_XIR_INVOCATION_PROCESS);
+        if (!strcmp(mode, "cancel")) CHECK(guard_checks == 1 && diagnostic.domain == XR_XIR_INVOCATION_PROCESS);
         if (!strcmp(mode, "guard-arm-oom")) {
             CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && diagnostic.code == XR_XIR_NAMESPACE_OUT_OF_MEMORY);
             CHECK(!invocation_runs && !guard_checks && diagnostic.stage == XR_XIR_INVOCATION_NO_STAGE);
@@ -351,23 +492,23 @@ static int run_test(int argc, char **argv) {
     xr_compile_resources_release(resources);
     const XrXirInvocationFacts *facts = xtc_xir_invocation_facts(owner);
     if (!owner) {
-        CHECK(!runtime_live && !runtime_bytes); printf("typed failure %s; unchanged output/live; physical heap zero PASS\n", mode); return 0;
+        CHECK(!runtime_live && !runtime_bytes); free(commands); printf("typed failure %s; unchanged output/live; physical heap zero PASS\n", mode); return 0;
     }
 #ifdef INVOCATION_INJECTED
-    CHECK(guard_checks == 7 && invocation_runs == 6);
+    CHECK(guard_checks == 8 && invocation_runs == 6);
 #endif
     CHECK(facts && facts->kind == XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS && facts->completed_runs == 6);
     CHECK(xtc_xir_invocation_resources(owner) == resources && !strcmp(facts->projection.prefix, "invocation_source"));
     CHECK(strcmp(xtc_xir_invocation_command(owner, XR_XIR_INVOCATION_GENERATED)->executable,
         xtc_xir_invocation_command(owner, XR_XIR_INVOCATION_GENERATED)->argv[0]));
     uint64_t output_length = 0;
-    unsigned kinds[9] = {0};
+    unsigned kinds[10] = {0};
 #ifdef INVOCATION_INJECTED
     uint32_t image_positions[3] = {0};
 #endif
     for (uint32_t i = 0; i < facts->file_count; ++i) {
         const XrXirInvocationFile *file = xtc_xir_invocation_file(owner, i);
-        CHECK(file && file->kind < 9 && file->path && file->length); ++kinds[file->kind];
+        CHECK(file && file->kind < 10 && file->path && file->length); ++kinds[file->kind];
         if (file->kind == XR_XIR_INVOCATION_OUTPUT) output_length = file->length;
 #ifdef INVOCATION_INJECTED
         if (file->kind == XR_XIR_INVOCATION_PROVIDER_IMAGE) {
@@ -385,7 +526,8 @@ static int run_test(int argc, char **argv) {
     CHECK(kinds[XR_XIR_INVOCATION_SOURCE] == 2 && kinds[XR_XIR_INVOCATION_OBJECT] == 2 &&
         kinds[XR_XIR_INVOCATION_SDK_ARCHIVE] == 5 && kinds[XR_XIR_INVOCATION_CRT] == 4 &&
         kinds[XR_XIR_INVOCATION_SYSTEM] == 1 && kinds[XR_XIR_INVOCATION_REPORT] == 3 && kinds[XR_XIR_INVOCATION_OUTPUT] == 1 &&
-        kinds[XR_XIR_INVOCATION_HEADER] && kinds[XR_XIR_INVOCATION_PROVIDER_IMAGE]);
+        kinds[XR_XIR_INVOCATION_HEADER] && kinds[XR_XIR_INVOCATION_PROVIDER_IMAGE] &&
+        kinds[XR_XIR_INVOCATION_PROVIDER_CONFIG] == 2);
     printf("six calls; %u observed files; dead producers; frozen complete commands PASS\n", facts->file_count);
 #ifdef INVOCATION_INJECTED
     LARGE_INTEGER frequency; CHECK(QueryPerformanceFrequency(&frequency));
@@ -440,7 +582,7 @@ static int run_test(int argc, char **argv) {
     puts("same-handle exact repeated output reads, bothout failure, dead producers/result, physical zero PASS");
     DWORD after = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &after));
     printf("handles initial=%lu after=%lu\n", (unsigned long)handles, (unsigned long)after); fflush(stdout);
-    puts("compiler physical heap zero; disk artifacts remain caller-directory-owned PASS"); return 0;
+    free(commands); puts("compiler physical heap zero; disk artifacts remain caller-directory-owned PASS"); return 0;
 }
 typedef struct InvocationThread { int argc; char **argv; } InvocationThread;
 static DWORD WINAPI invocation_thread(void *context) {

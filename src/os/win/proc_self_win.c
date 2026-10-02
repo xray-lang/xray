@@ -61,7 +61,7 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     }
     wchar_t *key = NULL, *value = NULL;
     char *result = NULL;
-    io_status(&io, xr_win_utf8_path_owned(policy, name, &key));
+    io_status(&io, xr_win_utf8_text_owned(policy, name, &key));
     DWORD capacity = 0;
     if (io_work(&io, 1)) {
         SetLastError(ERROR_SUCCESS);

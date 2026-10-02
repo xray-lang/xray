@@ -57,10 +57,13 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_projection_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_invocation_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_operation_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/namespace_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/workspace_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/source_paths_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/run_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/check_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/windows_path_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/cgen_bytes_owner.cmake)
 
 macro(add_xray_unit_test name source)
@@ -76,6 +79,7 @@ endmacro()
 
 if(WIN32)
     add_executable(test_windows_utf8 base/test_windows_utf8.c)
+    target_link_libraries(test_windows_utf8 PRIVATE xray_compile_resources)
     target_include_directories(test_windows_utf8 PRIVATE ${CMAKE_SOURCE_DIR}/src)
     if(MSVC)
         target_compile_options(test_windows_utf8 PRIVATE /W4 /WX /utf-8)
@@ -88,6 +92,8 @@ if(WIN32)
         ${CMAKE_SOURCE_DIR}/src/base/xfileio.c
         ${CMAKE_SOURCE_DIR}/src/os/win/fs_win.c
         ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c)
+    target_link_libraries(test_windows_paths PRIVATE xray_compile_resources)
+    target_sources(test_windows_paths PRIVATE ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c)
     target_include_directories(test_windows_paths PRIVATE ${CMAKE_SOURCE_DIR}/src)
     if(MSVC)
         target_compile_options(test_windows_paths PRIVATE /W4 /WX /utf-8)
@@ -3953,7 +3959,6 @@ add_executable(test_cli_spec
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_parser.c
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_help.c
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_diag.c
-    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c
 )
 target_include_directories(test_cli_spec PRIVATE
@@ -3961,7 +3966,21 @@ target_include_directories(test_cli_spec PRIVATE
     ${CMAKE_BINARY_DIR}/generated
     ${CMAKE_SOURCE_DIR}/src/app/cli
 )
-target_link_libraries(test_cli_spec PRIVATE xray_core)
+if(WIN32)
+    target_sources(test_cli_spec PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/os/win/fd_win.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/time_win.c)
+else()
+    target_sources(test_cli_spec PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/os/unix/fd_unix.c
+        ${CMAKE_SOURCE_DIR}/src/os/unix/time_unix.c)
+endif()
+set_target_properties(test_cli_spec PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_cli_spec PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_cli_spec PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
 add_test(NAME test_cli_spec COMMAND test_cli_spec)
 
 add_executable(test_cli_toolchain

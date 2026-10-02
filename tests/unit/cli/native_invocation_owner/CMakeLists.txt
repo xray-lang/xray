@@ -64,6 +64,10 @@ add_test(NAME native_invocation_faults COMMAND "${Python3_EXECUTABLE}" -X utf8
 add_test(NAME native_invocation_guard COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
     "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "guard")
+add_test(NAME native_invocation_profile COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
+    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "profile")
 set_tests_properties(native_invocation_owner PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
 set_tests_properties(native_invocation_faults PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
 set_tests_properties(native_invocation_guard PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+set_tests_properties(native_invocation_profile PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)

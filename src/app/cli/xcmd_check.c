@@ -1,369 +1,270 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_check.c - 'xray check' command for syntax checking
- *
- * KEY CONCEPT:
- *   Checks source files for syntax errors without executing code.
- *   Designed for IDE integration and CI/CD pipelines.
+ * xcmd_check.c - Source and single-file syntax checking with one compiler ledger
  */
-
 #include "xcli.h"
-#include "xcli_spec.h"
-#include "xcli_fs.h"
-#include "xcli_graph_authority.h"
-#include "../../api/xisolate_profile.h"
-#include "xray.h"
-#include "xray_vm.h"
+#include "xcli_canonical_source.h"
+#include "xcli_source_paths.h"
+#include "../../base/xio_policy.inc.h"
 #include "../../frontend/parser/xparse.h"
-#include "../../frontend/parser/xast.h"
-#include "../../frontend/analyzer/xanalyzer.h"
-#include "../../frontend/analyzer/xanalyzer_mono.h"
-#include "../../module/xmodule.h"
-#include "../../module/xmodule_graph.h"
-#include "../../module/xmodule_resolver.h"
-#include "../../runtime/xisolate_api.h"
-#include "../../toolchain/xcompiler_session.h"
-#include "../../base/xmalloc.h"
-#include "../../base/xchecks.h"
 #include "../../os/os_dir.h"
-#include <stdio.h>
-#include <string.h>
 #include "../../os/os_fs.h"
+#include <stdio.h>
+#if XR_OS_WINDOWS
+#include <fcntl.h>
+#include <io.h>
+#endif
 
-static const char *diagnostic_severity_name(XrDiagSeverity severity) {
-    switch (severity) {
-        case XR_DIAG_SEV_WARNING:
-            return "warning";
-        case XR_DIAG_SEV_INFO:
-            return "info";
-        case XR_DIAG_SEV_HINT:
-            return "hint";
-        case XR_DIAG_SEV_ERROR:
-            break;
-    }
-    return "error";
+typedef struct CheckWork {
+    XrCompileResources *resources;
+    XrOsIoPolicy policy;
+    size_t total, passed, errors;
+    int result;
+    bool syntax_only, verbose, quiet, stopped;
+} CheckWork;
+typedef struct CheckDirectory {
+    struct CheckDirectory *next;
+    char *path;
+} CheckDirectory;
+
+static void check_failure(CheckWork *work, int result, bool stop) {
+    ++work->errors;
+    if (result > work->result) work->result = result;
+    work->stopped |= stop;
 }
-
-/* The first pass prepares monomorphization.
- * Emit successful diagnostics after reanalysis.
- *
- * This avoids printing warnings twice. */
-static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *path, bool final_pass) {
-    int diagnostic_count = 0;
-    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
-    int errors = 0;
-    for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next)
-        if (diagnostic->severity == XR_DIAG_SEV_ERROR)
-            errors++;
-    if (final_pass || errors > 0) {
-        for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next) {
-            fprintf(stderr, "%s:%d:%d: %s: ", path, diagnostic->location.line,
-                    diagnostic->location.column, diagnostic_severity_name(diagnostic->severity));
-            if (diagnostic->code > 0)
-                fprintf(stderr, "E%04d: ", diagnostic->code);
-            fprintf(stderr, "%s\n", diagnostic->message);
-        }
-    }
-    xa_analyzer_clear_diagnostics(analyzer);
-    return errors;
+static void check_io_failure(CheckWork *work, const char *path, XrOsIoStatus status) {
+    fprintf(stderr, "xray check: %s: I/O status=%u\n", path, (unsigned)status);
+    bool internal = status == XR_OS_IO_OUT_OF_MEMORY || status == XR_OS_IO_BAD_ARGUMENT;
+    check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,
+        internal || status == XR_OS_IO_BUDGET);
 }
-
-// Check single file, returns: 0 = no error, 1 = has error
-static int check_file(XrVMRuntime *X, XaAnalyzer *analyzer, const char *path, int verbose) {
-    char *source = xr_cli_read_file(path);
-    if (!source) {
-        fprintf(stderr, "Error: cannot read file '%s'\n", path);
-        return 1;
+static bool check_path_length(XrIoContext *io, const char *path, size_t *length) {
+    if (!path) return io_status(io, XR_OS_IO_BAD_ARGUMENT);
+    for (size_t i = 0; i < XR_PATH_MAX; ++i) {
+        if (!io_work(io, 1)) return false;
+        if (!path[i]) { *length = i; return true; }
     }
-
-    // Parse source code - NULL result means syntax error
-    AstNode *ast = xr_parse_with_source(xr_compiler_session_current_for_isolate(X), source, path);
-
-    int has_error = (ast == NULL);
-    if (has_error) {
-        // Error message already printed by parser
-    } else if (analyzer) {
-        /* Match compilation: analyze, specialize, reanalyze.
-         * A first-pass-only check can
-         * accept divergent code. */
-        xa_analyzer_analyze(analyzer, path, (XrAstNode *) ast);
-        has_error = report_analyzer_diagnostics(analyzer, path, false) > 0;
-        if (!has_error) {
-            XaMonoBudget mono_budget = xa_mono_default_budget();
-            XaMonoUsage mono_usage = {0};
-            AstNode *mono_roots[1] = {ast};
-            bool mono_ok =
-                xa_mono_graph_pass(mono_roots, 1, X, &mono_budget, &mono_usage, analyzer);
-            int mono_errors = report_analyzer_diagnostics(analyzer, path, true);
-            if (!mono_ok && mono_errors == 0) {
-                fprintf(stderr, "%s:0:0: error: monomorphization failed without a diagnostic\n",
-                        path);
-                mono_errors = 1;
-            }
-            has_error = mono_errors > 0;
-            if (mono_ok && !has_error) {
-                xa_analyzer_analyze(analyzer, path, (XrAstNode *) ast);
-                has_error = report_analyzer_diagnostics(analyzer, path, true) > 0;
-            }
-        }
-        if (!has_error && verbose) {
-            printf("ok %s\n", path);
-        }
-    } else if (verbose) {
-        printf("ok %s\n", path);
-    }
-
-    // Release resources
-    if (ast) {
-        xr_program_destroy(ast);
-    }
-    xr_free(source);
-
-    return has_error;
+    return io_status(io, XR_OS_IO_BUDGET);
 }
-
-// Recursively check directory, returns: error file count
-static int check_directory(XrVMRuntime *X, XaAnalyzer *analyzer, const char *path, int verbose,
-                           int *total, int *passed) {
-    XrDirIter *it = xr_dir_open(path);
-    if (!it) {
-        fprintf(stderr, "Error: cannot open directory '%s'\n", path);
-        return 1;
+static char *check_path_copy(CheckWork *work, const char *path) {
+    XrIoContext io = {&work->policy, XR_OS_IO_OK};
+    size_t length = 0;
+    char *copy = NULL;
+    if (check_path_length(&io, path, &length)) copy = io_alloc(&io, length + 1);
+    if (copy) io_copy(&io, copy, path, length + 1);
+    if (io.status != XR_OS_IO_OK) {
+        io_free(&io, copy);
+        check_io_failure(work, "input path", io.status);
+        return NULL;
     }
-
-    int errors = 0;
-    char filepath[1024];
-    XrDirEntry e;
-
-    while (xr_dir_next(it, &e)) {
-        snprintf(filepath, sizeof(filepath), "%s/%s", path, e.name);
-
-        if (e.is_dir) {
-            // Recursively check subdirectory
-            errors += check_directory(X, analyzer, filepath, verbose, total, passed);
-        } else if (xr_cli_is_xr_file(e.name)) {
-            // Check .xr file
-            (*total)++;
-            if (check_file(X, analyzer, filepath, verbose) == 0) {
-                (*passed)++;
-            } else {
-                errors++;
+    return copy;
+}
+static char *check_path_join(CheckWork *work, const char *directory, const char *name) {
+    XrIoContext io = {&work->policy, XR_OS_IO_OK};
+    size_t parent = 0, child = 0;
+    char *path = NULL;
+    if (check_path_length(&io, directory, &parent) && check_path_length(&io, name, &child)) {
+        if (parent > XR_PATH_MAX - 2 || child > XR_PATH_MAX - parent - 2)
+            io_status(&io, XR_OS_IO_BUDGET);
+        else path = io_alloc(&io, parent + child + 2);
+    }
+    if (path && io_copy(&io, path, directory, parent) && io_work(&io, 1)) {
+        path[parent] = '/';
+        io_copy(&io, path + parent + 1, name, child + 1);
+    }
+    if (io.status != XR_OS_IO_OK) {
+        io_free(&io, path);
+        check_io_failure(work, directory, io.status);
+        return NULL;
+    }
+    return path;
+}
+static bool check_source_name(CheckWork *work, const char *name) {
+    XrIoContext io = {&work->policy, XR_OS_IO_OK};
+    size_t length = 0;
+    bool result = false;
+    if (check_path_length(&io, name, &length) && length > 3 && io_work(&io, 3))
+        result = memcmp(name + length - 3, ".xr", 3) == 0;
+    if (io.status != XR_OS_IO_OK) check_io_failure(work, "directory entry", io.status);
+    return result;
+}
+static void check_syntax(CheckWork *work, const char *path) {
+    uint8_t *bytes = NULL;
+    size_t length = 0;
+    XrOsIoStatus status = xr_os_io_read_regular_file(&work->policy, path, SIZE_MAX - 1, &bytes, &length);
+    XrIoContext io = {&work->policy, status};
+    bool nul = false;
+    for (size_t i = 0; i < length && io_work(&io, 1); ++i) {
+        if (!bytes[i]) { nul = true; break; }
+    }
+    if (nul) {
+        fprintf(stderr, "%s: error: source contains a NUL byte\n", path);
+        check_failure(work, XR_CLI_EXIT_FAIL, false);
+    } else if (io.status == XR_OS_IO_OK) {
+        void *terminated = bytes;
+        XrCompileResourceStatus resized = xr_compile_resources_resize(work->resources, &terminated, length + 1);
+        bytes = terminated;
+        if (resized != XR_COMPILE_RESOURCE_OK)
+            io_status(&io, resized == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET :
+                resized == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_BAD_ARGUMENT);
+        if (io_work(&io, 1)) bytes[length] = 0;
+        if (io.status == XR_OS_IO_OK) {
+            XrCompilerSession *session = NULL;
+            XrCompilerSessionStatus opened = xr_compile_session_new(work->resources, &session);
+            AstNode *ast = NULL;
+            XrParseStatus parsed = opened == XR_COMPILER_SESSION_OK ?
+                xr_compile_parse_with_source(session, (const char *)bytes, path, &ast) :
+                opened == XR_COMPILER_SESSION_BUDGET ? XR_PARSE_BUDGET :
+                opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY : XR_PARSE_BAD_ARGUMENT;
+            /* The AST owns its arena independently of the producing session. */
+            xr_compile_session_free(session);
+            xr_program_destroy(ast);
+            if (parsed != XR_PARSE_OK) {
+                if (parsed != XR_PARSE_SYNTAX)
+                    fprintf(stderr, "%s: error: parser status=%u\n", path, (unsigned)parsed);
+                bool internal = parsed == XR_PARSE_OUT_OF_MEMORY || parsed == XR_PARSE_BAD_ARGUMENT;
+                check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,
+                    internal || parsed == XR_PARSE_BUDGET);
             }
         }
     }
-
-    xr_dir_close(it);
-    return errors;
+    xr_compile_resources_free(bytes);
+    if (io.status != XR_OS_IO_OK) check_io_failure(work, path, io.status);
 }
-
-/* Graph-based check: build module graph from entry file, then analyze
- * all reachable modules in topological order.  Returns error count. */
-static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *entry_path,
-                            int verbose) {
-    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
-    XrCliGraphAuthority graph_authority = {0};
-    char authority_error[512] = {0};
-    if (!xr_cli_graph_authority_open(&graph_authority, registry, entry_path, authority_error,
-                                     sizeof(authority_error))) {
-        fprintf(stderr, "Error: %s\n",
-                authority_error[0] ? authority_error : "cannot establish module authority");
-        return 1;
-    }
-
-    XrModuleGraph *graph =
-        xr_module_graph_new(xr_compiler_session_current_for_isolate(X), graph_authority.resolver);
-    if (!graph) {
-        fprintf(stderr, "Error: cannot create module graph\n");
-        xr_cli_graph_authority_close(&graph_authority);
-        return 1;
-    }
-
-    char *err = NULL;
-    int rc = xr_module_graph_build(graph, entry_path, &graph_authority.entry_authority, &err);
-    if (rc != 0) {
-        fprintf(stderr, "Error: %s\n", err ? err : "graph build failed");
-        xr_free(err);
-        xr_module_graph_free(graph);
-        xr_cli_graph_authority_close(&graph_authority);
-        return 1;
-    }
-
-    rc = xr_module_graph_topological_sort(graph);
-    if (graph->has_cycle) {
-        fprintf(stderr, "Error: %s\n",
-                graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
-        xr_module_graph_free(graph);
-        xr_cli_graph_authority_close(&graph_authority);
-        return 1;
-    }
-
-    int errors = 0;
-    int total = graph->topo_count;
-
-    /* Set graph on analyzer for cross-module type resolution */
-    if (analyzer)
-        xa_analyzer_set_graph(analyzer, graph);
-
-    /* Analyze each module in topological order (leaves first) */
-    for (int ti = 0; ti < graph->topo_count; ti++) {
-        int idx = graph->topo_order[ti];
-        XrModuleSpec *spec = &graph->specs[idx];
-        if (!spec->ast || !spec->source_path)
-            continue;
-
-        if (analyzer) {
-            xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
-
-            /* Collect exports so downstream modules can resolve import types */
-            spec->export_symbols =
-                xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
-
-            int file_errs = report_analyzer_diagnostics(analyzer, spec->source_path, false);
-            errors += file_errs;
-            if (file_errs == 0) {
-                spec->status = XR_MODSPEC_ANALYZED;
-            }
-        } else {
-            /* Parse-only mode: AST already parsed during graph build */
-            if (verbose)
-                printf("ok %s\n", spec->source_path);
-        }
-    }
-
-    if (analyzer && errors == 0) {
-        XrModuleSpec *entry = &graph->specs[graph->entry_index];
-        AstNode **mono_roots =
-            (AstNode **) xr_calloc((size_t) graph->topo_count, sizeof(*mono_roots));
-        XaMonoBudget mono_budget = xa_mono_default_budget();
-        XaMonoUsage mono_usage = {0};
-        for (int topo = 0; mono_roots && topo < graph->topo_count; ++topo)
-            mono_roots[topo] = graph->specs[graph->topo_order[topo]].ast;
-        bool mono_ok = mono_roots && xa_mono_graph_pass(mono_roots, graph->topo_count, X,
-                                                        &mono_budget, &mono_usage, analyzer);
-        int mono_errors = report_analyzer_diagnostics(analyzer, entry->source_path, true);
-        if (!mono_ok && mono_errors == 0) {
-            fprintf(stderr, "%s:0:0: error: monomorphization failed without a diagnostic\n",
-                    entry->source_path);
-            mono_errors = 1;
-        }
-        errors += mono_errors;
-        if (mono_ok && errors == 0) {
-            for (int topo = 0; topo < graph->topo_count; ++topo) {
-                XrModuleSpec *spec = &graph->specs[graph->topo_order[topo]];
-                xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
-                if (spec->export_symbols)
-                    xr_hashmap_free(spec->export_symbols);
-                spec->export_symbols =
-                    xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
-                errors += report_analyzer_diagnostics(analyzer, spec->source_path, true);
-            }
-        }
-        xr_free(mono_roots);
-    }
-
-    if (analyzer && errors == 0 && verbose)
-        for (int topo = 0; topo < graph->topo_count; ++topo)
-            printf("ok %s\n", graph->specs[graph->topo_order[topo]].source_path);
-
-    if (analyzer)
-        xa_analyzer_set_graph(analyzer, NULL);
-
-    if (verbose && total > 1)
-        printf("\nChecked %d modules in dependency order\n", total);
-
-    xr_module_graph_free(graph);
-    xr_cli_graph_authority_close(&graph_authority);
-    return errors;
-}
-
-XR_FUNC int cmd_check(const XrCliInvocation *inv) {
-    XR_DCHECK(inv != NULL, "inv is NULL");
-
-    bool verbose = xr_cli_opt_bool(&inv->options, "verbose");
-    bool quiet = xr_cli_opt_bool(&inv->options, "quiet");
-    bool syntax_only = xr_cli_opt_bool(&inv->options, "syntax-only");
-    bool strict = xr_cli_opt_bool(&inv->options, "strict");
-
-    /* Create shared isolate for all checks */
-    XrVMRuntime *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
-    if (!X) {
-        xr_cli_error("check", "failed to create isolate");
-        return XR_CLI_EXIT_INTERNAL;
-    }
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-
-    /* Default: run the analyzer so semantic errors (e.g. throw on a
-     * non-enum error value, type mismatches) are caught alongside syntax
-     * errors. --syntax-only opts out for fast pre-flight checks; --strict
-     * additionally enables stricter analyzer modes. */
-    XaAnalyzer *analyzer = NULL;
-    if (!syntax_only) {
-        analyzer = xa_analyzer_new(session);
-        if (strict)
-            xa_analyzer_set_strict_mode(analyzer, true);
-    }
-
-    int total_files = 0;
-    int passed_files = 0;
-    int total_errors = 0;
-
-    /* No positionals -> check current directory */
-    if (inv->positional_count == 0) {
-        if (xr_fs_is_dir(".")) {
-            total_errors = check_directory(X, analyzer, ".", verbose, &total_files, &passed_files);
+static void check_semantic(CheckWork *work, const char *path) {
+#if defined(XR_ARCH_X86_64)
+    XrCliSourcePaths paths = {0};
+    XrCliSourcePathsDiagnostic path_diagnostic = {0};
+    XrCliCompileSourceDiagnostic diagnostic = {0};
+    XrXirSourceProduct *product = NULL;
+    XrXirCompileContext context = {work->resources, xr_xir_compile_default_limits()};
+    XrCliCompileSourceStatus status = xr_cli_compile_source_paths(work->resources, path, &paths, &path_diagnostic);
+    if (status == XR_CLI_COMPILE_SOURCE_OK) {
+        XrCliCompileSourceRequest request = {&context, paths.entry, paths.stdlib, NULL,
+            xr_cli_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        status = xr_cli_compile_source_build(&request, &product, &diagnostic);
+        if (status != XR_CLI_COMPILE_SOURCE_OK) {
+            const XrXirSourceDiagnostic *source = &diagnostic.source.source;
+            const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic.source.snapshot);
+            const char *failed_path = diagnostic.source.source_path;
+            if (!failed_path && view && view->modules && source->module < view->module_count)
+                failed_path = view->modules[source->module].path;
+            if (failed_path && source->line > 0)
+                fprintf(stderr, "%s:%d:%d: error: %s\n", failed_path, source->line, source->column,
+                    source->message[0] ? source->message : xr_cli_compile_source_status_name(status));
+            else
+                fprintf(stderr, "xray check: %s: source build failed (stage=%u status=%s): %s\n",
+                    path, (unsigned)diagnostic.stage, xr_cli_compile_source_status_name(status), source->message);
         }
     } else {
-        /* Check specified files or directories */
-        for (int i = 0; i < inv->positional_count; i++) {
-            const char *path = inv->positionals[i];
-            XrFsStat st;
-
-            if (xr_fs_stat(path, &st) != 0) {
-                xr_cli_error("check", "path does not exist '%s'", path);
-                total_errors++;
-                continue;
-            }
-
-            if (st.kind == XR_FS_DIR) {
-                total_errors +=
-                    check_directory(X, analyzer, path, verbose, &total_files, &passed_files);
-            } else if (st.kind == XR_FS_FILE) {
-                /* Single .xr file: use graph to discover + check all deps.
-                 *
-                 * --syntax-only stops at the file itself. Building the graph
-                 * resolves every import, which is not a syntax question and
-                 * cannot succeed for a snippet read out of its project --
-                 * documentation fences import `"alice/utils"` and `"./user"`
-                 * to show the forms, and asking whether those exist is exactly
-                 * what this flag opts out of. */
-                int errs = syntax_only ? check_file(X, NULL, path, verbose)
-                                       : check_with_graph(X, analyzer, path, verbose);
-                total_files++;
-                if (errs == 0)
-                    passed_files++;
-                else
-                    total_errors += errs;
+        fprintf(stderr, "xray check: %s: path lookup failed (stage=%u status=%s io=%u)\n", path,
+            (unsigned)path_diagnostic.stage, xr_cli_compile_source_status_name(status), (unsigned)path_diagnostic.io_status);
+    }
+    xr_xir_compile_source_product_free(product);
+    xr_cli_compile_source_diagnostic_free(&diagnostic);
+    xr_cli_compile_source_paths_free(&paths);
+    if (status != XR_CLI_COMPILE_SOURCE_OK) {
+        bool internal = status == XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY || status == XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT;
+        check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,
+            internal || status == XR_CLI_COMPILE_SOURCE_BUDGET);
+    }
+#else
+    fprintf(stderr, "xray check: %s: unsupported Source target architecture\n", path);
+    check_failure(work, XR_CLI_EXIT_FAIL, true);
+#endif
+}
+static void check_file(CheckWork *work, const char *path) {
+    size_t errors = work->errors;
+    ++work->total;
+    if (work->syntax_only) check_syntax(work, path);
+    else check_semantic(work, path);
+    if (errors == work->errors) {
+        ++work->passed;
+        if (work->verbose && !work->quiet && printf("ok %s\n", path) < 0)
+            check_io_failure(work, "stdout", XR_OS_IO_IO);
+    }
+}
+/* Every queued path is owned. No recursive C frames or directory handles
+ * accumulate with tree depth. Final reparse points are never descended into. */
+static void check_path(CheckWork *work, char *path, CheckDirectory **pending) {
+    XrFsStat stat = {0};
+    XrOsIoStatus status = xr_os_io_stat(&work->policy, path, &stat);
+    if (status != XR_OS_IO_OK) check_io_failure(work, path, status);
+    else if (stat.kind == XR_FS_FILE) check_file(work, path);
+    else if (stat.kind == XR_FS_DIR) {
+        XrIoContext io = {&work->policy, XR_OS_IO_OK};
+        CheckDirectory *item = io_alloc(&io, sizeof(*item));
+        if (item) {
+            item->path = path; item->next = *pending; *pending = item;
+            return;
+        }
+        check_io_failure(work, path, io.status);
+    } else check_io_failure(work, path, XR_OS_IO_UNSUPPORTED);
+    xr_compile_resources_free(path);
+}
+static void check_directories(CheckWork *work, CheckDirectory **pending) {
+    while (*pending && !work->stopped) {
+        CheckDirectory *item = *pending;
+        *pending = item->next;
+        XrDirIter *iterator = NULL;
+        XrOsIoStatus status = xr_os_io_dir_open(&work->policy, item->path, &iterator);
+        if (status != XR_OS_IO_OK) check_io_failure(work, item->path, status);
+        while (status == XR_OS_IO_OK && !work->stopped) {
+            XrDirEntry entry;
+            status = xr_os_io_dir_next(iterator, &entry);
+            if (status == XR_OS_IO_END) break;
+            if (status != XR_OS_IO_OK) { check_io_failure(work, item->path, status); break; }
+            if (entry.is_dir || check_source_name(work, entry.name)) {
+                char *path = check_path_join(work, item->path, entry.name);
+                if (path) check_path(work, path, pending);
             }
         }
+        xr_os_io_dir_close(iterator);
+        xr_compile_resources_free(item->path);
+        xr_compile_resources_free(item);
     }
-
-    /* Output statistics */
-    if (!quiet && total_files > 1) {
-        printf("\n");
-        if (total_errors == 0) {
-            printf("OK: %d files checked, no errors\n", total_files);
-        } else {
-            printf("FAIL: %d files checked, %d errors\n", total_files, total_errors);
-        }
+    while (*pending) {
+        CheckDirectory *item = *pending;
+        *pending = item->next;
+        xr_compile_resources_free(item->path);
+        xr_compile_resources_free(item);
     }
-
-    if (analyzer)
-        xa_analyzer_free(analyzer);
-    xray_vm_delete(X);
-    return total_errors > 0 ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+}
+XR_FUNC int cmd_check(const XrCliInvocation *inv) {
+    if (!inv || inv->positional_count < 0 || (inv->positional_count && !inv->positionals))
+        return XR_CLI_EXIT_INTERNAL;
+#if XR_OS_WINDOWS
+    if (_setmode(_fileno(stdout), _O_BINARY) == -1 || _setmode(_fileno(stderr), _O_BINARY) == -1)
+        return XR_CLI_EXIT_INTERNAL;
+#endif
+    CheckWork work = {0};
+    work.syntax_only = xr_cli_opt_bool(&inv->options, "syntax-only");
+    work.verbose = xr_cli_opt_bool(&inv->options, "verbose");
+    work.quiet = xr_cli_opt_bool(&inv->options, "quiet");
+    XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
+    XrCompileResourceStatus status = xr_compile_resources_new(&limits, &work.resources);
+    if (status != XR_COMPILE_RESOURCE_OK) {
+        fprintf(stderr, "xray check: cannot initialize compiler resources\n");
+        return status == XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+    }
+    work.policy = xr_compile_io_policy(work.resources);
+    for (int i = 0; i < (inv->positional_count ? inv->positional_count : 1) && !work.stopped; ++i) {
+        const char *spelling = inv->positional_count ? inv->positionals[i] : ".";
+        char *path = check_path_copy(&work, spelling);
+        CheckDirectory *pending = NULL;
+        if (path) check_path(&work, path, &pending);
+        check_directories(&work, &pending);
+    }
+    if (!work.quiet && work.total > 1) {
+        int printed = work.errors ? printf("\nFAIL: %zu files checked, %zu errors\n", work.total, work.errors) :
+            printf("\nOK: %zu files checked, no errors\n", work.total);
+        if (printed < 0) check_io_failure(&work, "stdout", XR_OS_IO_IO);
+    }
+    if (fflush(stdout) || ferror(stderr)) check_failure(&work, XR_CLI_EXIT_FAIL, false);
+    xr_compile_resources_release(work.resources);
+    return work.result;
 }

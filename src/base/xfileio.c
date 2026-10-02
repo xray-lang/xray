@@ -54,7 +54,7 @@ char *xr_file_read_all(const char *path, const char *mode, size_t *out_size) {
     XrOsIoPolicy policy = xr_os_io_system_policy();
     wchar_t *wide_path = NULL, *wide_mode = NULL;
     (void)xr_win_utf8_path_owned(&policy, path, &wide_path);
-    if (wide_path) (void)xr_win_utf8_path_owned(&policy, mode, &wide_mode);
+    if (wide_path) (void)xr_win_utf8_text_owned(&policy, mode, &wide_mode);
     FILE *f = wide_path && wide_mode ? _wfopen(wide_path, wide_mode) : NULL;
     xr_free(wide_mode); xr_free(wide_path);
 #else
@@ -195,7 +195,7 @@ XR_FUNC XrOsIoStatus xr_realpath_owned(const XrOsIoPolicy *policy, const char *p
     XrIoContext io = {policy, XR_OS_IO_OK};
 #ifdef XR_OS_WINDOWS
     wchar_t *wide = NULL, *resolved = NULL;
-    io_status(&io, xr_win_utf8_path_owned(policy, path, &wide));
+    io_status(&io, xr_win_utf8_text_owned(policy, path, &wide));
     DWORD units = 0;
     if (io_work(&io, 1)) {
         units = GetFullPathNameW(wide, 0, NULL, NULL);

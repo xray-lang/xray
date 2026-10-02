@@ -43,11 +43,6 @@ static bool logical_path_valid(XrIoContext *io, const char *path) {
     }
     return false;
 }
-static wchar_t *wide_path(XrIoContext *io, const char *text) {
-    wchar_t *wide = NULL;
-    io_status(io, xr_win_utf8_path_owned(io->policy, text, &wide));
-    return wide;
-}
 static bool wide_length(XrIoContext *io, const wchar_t *text, size_t *length) {
     size_t n = 0;
     while (io_work(io, sizeof(wchar_t))) {
@@ -183,7 +178,7 @@ XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
     wchar_t *directory = NULL, *relative = NULL, *combined = NULL;
     HANDLE root_handle = INVALID_HANDLE_VALUE, file = INVALID_HANDLE_VALUE;
     if (!logical_path_valid(&io, logical_path)) goto done;
-    directory = wide_path(&io, root);
+    io_status(&io, xr_win_utf8_text_owned(policy, root, &directory));
     if (!directory) goto done;
     size_t root_length = 0, logical_length = 0;
     if (!wide_length(&io, directory, &root_length)) goto done;
@@ -192,7 +187,7 @@ XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
         (directory[2] == L'/' || directory[2] == L'\\')) ||
         (directory[0] == L'\\' && directory[1] == L'\\'));
     if (!absolute) goto done;
-    relative = wide_path(&io, logical_path);
+    io_status(&io, xr_win_utf8_text_owned(policy, logical_path, &relative));
     if (!relative || !wide_length(&io, relative, &logical_length)) goto done;
     size_t units = root_length + logical_length + 2;
     if (units > FILE_PATH_UNITS) { status = XR_FILE_READ_LIMIT; goto done; }
@@ -209,6 +204,12 @@ XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
             combined[n] = L'\\';
         }
     }
+    if (!io_status(&io, xr_win_path_locator_owned(policy, &combined, units - 1))) goto done;
+    size_t combined_length = 0;
+    if (!wide_length(&io, combined, &combined_length)) goto done;
+    units = combined_length + 1;
+    if (!io_status(&io, xr_win_path_locator_owned(policy, &directory, root_length)) ||
+        !wide_length(&io, directory, &root_length)) goto done;
     root_handle = open_directory(&io, directory, root_length);
     if (root_handle == INVALID_HANDLE_VALUE) { status = XR_FILE_READ_IO; goto done; }
     BY_HANDLE_FILE_INFORMATION root_info, file_info;
