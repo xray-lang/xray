@@ -1,0 +1,47 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xtc_xir_sysroot_internal.h - Private resource and handle ownership
+ */
+#ifndef XTC_XIR_SYSROOT_INTERNAL_H
+#define XTC_XIR_SYSROOT_INTERNAL_H
+#include "xtc_xir_target.h"
+#include <wchar.h>
+#define XTC_XIR_TARGET_PATH_LIMIT 32768u
+#define XTC_XIR_TARGET_FILE_LIMIT 4096u
+#define XTC_XIR_TARGET_COMMAND_LIMIT 64u
+#define XTC_XIR_TARGET_ARGUMENT_LIMIT 4096u
+#define XTC_XIR_TARGET_TEXT_LIMIT (1024u * 1024u)
+typedef struct XtcXirMemory {
+    struct XtcXirMemory *next;
+    uint64_t alignment;
+} XtcXirMemory;
+typedef struct XtcXirLock {
+    struct XtcXirLock *next;
+    void *handle;
+    wchar_t *path;
+    size_t length;
+} XtcXirLock;
+struct XrXirTargetSnapshot {
+    XrCompileResources *resources;
+    XrXirTargetStatus status;
+    XrXirTargetFacts facts;
+    XrXirTargetFile *files;
+    XrXirTargetCommand *commands;
+    XtcXirMemory *memory;
+    XtcXirLock *locks;
+    wchar_t *scratch;
+    size_t scratch_length;
+};
+XR_FUNC bool xtc_xir_target_fail(XrXirTargetSnapshot *snapshot, XrXirTargetStatus status);
+XR_FUNC bool xtc_xir_target_work(XrXirTargetSnapshot *snapshot, uint64_t work);
+XR_FUNC void *xtc_xir_target_allocate(XrXirTargetSnapshot *snapshot, size_t bytes);
+XR_FUNC char *xtc_xir_target_text(XrXirTargetSnapshot *snapshot, const char *text);
+XR_FUNC bool xtc_xir_target_length(XrXirTargetSnapshot *snapshot, const char *text, size_t *length);
+XR_FUNC bool xtc_xir_target_compare(XrXirTargetSnapshot *snapshot, const char *a, const char *b, int *order);
+XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetRequest *request);
+XR_FUNC void xtc_xir_sysroot_close(XrXirTargetSnapshot *snapshot);
+#endif // XTC_XIR_SYSROOT_INTERNAL_H
