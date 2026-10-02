@@ -101,6 +101,8 @@ typedef enum XrTomlParseStatus {
 XR_FUNC XrTomlParseStatus xtoml_parse_owned(const XrOsIoPolicy *policy,
     const char *data, size_t len, const XrTomlParseLimits *limits, XrTomlValue **output);
 XR_FUNC void xtoml_owned_free(XrTomlValue *value);
+/* Only accepts an owned DOM node; compares its actual allocation policy. */
+XR_FUNC bool xtoml_owned_uses_policy(const XrTomlValue *value, const XrOsIoPolicy *policy);
 
 /* Key scanning and candidate comparisons use the table's allocation policy.
  * A missing key returns OK with NULL. Failure preserves output. */

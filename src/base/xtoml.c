@@ -58,6 +58,13 @@ typedef union TomlAllocation {
 _Static_assert(sizeof(TomlAllocation) % _Alignof(XrTomlValue) == 0,
     "TOML payloads preserve node alignment");
 
+XR_FUNC bool xtoml_owned_uses_policy(const XrTomlValue *value, const XrOsIoPolicy *policy) {
+    if (!value || !io_policy_valid(policy)) return false;
+    const XrOsIoPolicy *held = &((const TomlAllocation *)value-1)->owner.policy;
+    return held->context == policy->context && held->alloc == policy->alloc &&
+        held->free == policy->free && held->work == policy->work;
+}
+
 static bool toml_status(TomlCtx *p, XrOsIoStatus status) {
     if (p->error) return false;
     if (status == XR_OS_IO_OK) return true;
