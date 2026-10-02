@@ -52,6 +52,7 @@ typedef struct VerifyContext {
 } VerifyContext;
 
 typedef struct Graph {
+    void *storage;
     uint32_t *owner;
     uint32_t *queue;
     uint32_t *head;
@@ -365,15 +366,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
 }
 
 static void graph_free(Graph *graph) {
-    xr_free(graph->owner);
-    xr_free(graph->queue);
-    xr_free(graph->head);
-    xr_free(graph->fault_head);
-    xr_free(graph->predecessor);
-    xr_free(graph->next);
-    xr_free(graph->reachable);
-    xr_free(graph->dominators);
-    xr_free(graph->meet);
+    xr_free(graph->storage);
 }
 
 static XrXirStatus graph_allocate(Graph *graph, const XrXirFunction *function,
@@ -385,18 +378,19 @@ static XrXirStatus graph_allocate(Graph *graph, const XrXirFunction *function,
         (blocks + 1) * graph->words * sizeof(uint64_t);
     if (bytes > context->remaining.scratch_bytes || bytes > SIZE_MAX || blocks > UINT32_MAX / 3)
         return XR_XIR_BUDGET;
-    graph->owner = xr_calloc(function->instruction_count, sizeof(uint32_t));
-    graph->queue = xr_calloc((size_t) blocks, sizeof(uint32_t));
-    graph->head = xr_calloc((size_t) blocks, sizeof(uint32_t));
-    graph->fault_head = xr_calloc((size_t) blocks, sizeof(uint32_t));
-    graph->predecessor = xr_calloc((size_t) blocks * 3, sizeof(uint32_t));
-    graph->next = xr_calloc((size_t) blocks * 3, sizeof(uint32_t));
-    graph->reachable = xr_calloc((size_t) blocks, sizeof(uint8_t));
-    graph->dominators = xr_calloc((size_t) blocks * graph->words, sizeof(uint64_t));
-    graph->meet = xr_calloc(graph->words, sizeof(uint64_t));
-    if (!graph->owner || !graph->queue || !graph->head || !graph->fault_head || !graph->predecessor ||
-        !graph->next || !graph->reachable || !graph->dominators || !graph->meet)
-        return XR_XIR_OUT_OF_MEMORY;
+    /* Graph arrays have one lifetime. Put wider arrays first so one exact,
+       zeroed allocation preserves alignment without padding or extra budget. */
+    graph->storage = xr_calloc(1, (size_t) bytes);
+    if (!graph->storage) return XR_XIR_OUT_OF_MEMORY;
+    graph->dominators = graph->storage;
+    graph->meet = graph->dominators + (size_t) blocks * graph->words;
+    graph->owner = (uint32_t *) (graph->meet + graph->words);
+    graph->queue = graph->owner + function->instruction_count;
+    graph->head = graph->queue + blocks;
+    graph->fault_head = graph->head + blocks;
+    graph->predecessor = graph->fault_head + blocks;
+    graph->next = graph->predecessor + blocks * 3;
+    graph->reachable = (uint8_t *) (graph->next + blocks * 3);
     return XR_XIR_OK;
 }
 
