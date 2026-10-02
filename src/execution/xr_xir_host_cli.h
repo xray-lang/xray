@@ -24,6 +24,11 @@ typedef enum XrXirHostReportStatus {
  * already-written bytes; callers must not mistake a partial line for success. */
 XR_FUNC XrXirHostReportStatus xr_xir_host_report_result(const XrXirCallResult *result,
     XrValueFormatSink sink, bool color);
+/* Consumes the supplied Program reference on every return path, including
+ * stream/configuration failure. NULL returns internal failure without running.
+ * The entry is the admitted module initializer; no new admission ledger is made.
+ * Program destruction precedes terminal rendering; the owned result dies last. */
+XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry);
 /* A module initializer must return the admitted I64 zero control value.
  * The generated executable supplies its actual immutable ProgramSpec. */
 XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec);

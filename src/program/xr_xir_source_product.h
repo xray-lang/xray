@@ -50,8 +50,10 @@ typedef struct XrXirSourceProductDiagnostic {
     XrXirSourceDiagnostic source;
     XrXirDiagnostic xir;
     XrXirSourceSnapshot *snapshot;
+    char *source_path;
 } XrXirSourceProductDiagnostic;
-/* Failure preserves output. Diagnostics own any partial query snapshot. */
+/* Failure preserves output. Diagnostics own their semantic failure path and
+ * any complete query snapshot retained after a later projection failure. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);

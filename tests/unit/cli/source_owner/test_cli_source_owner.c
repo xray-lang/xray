@@ -11,6 +11,7 @@
 #include "xir/xxir_output.h"
 #include "base/xfileio.h"
 #include "base/xsha256.h"
+#include "base/xwindows_utf8.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -84,7 +85,7 @@ static XrXirLibraryCatalog *catalog(const XrCliCompileSourceRequest *request) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(request->context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrXirSourceRequest source={session,path,&authority,request->context,request->absolute_stdlib_path,NULL,XR_XIR_LIBRARY,NULL};
     XrXirSourceResult checked={0};XrXirSourceDiagnostic diagnostic={0};
-    CHECK(xr_xir_compile_source_check(&source,&checked,&diagnostic)==XR_XIR_OK);
+    CHECK(xr_xir_compile_source_check(&source,&checked,&diagnostic,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked.checked,&packet,NULL)==XR_XIR_OK);
     XrXirLibraryInput input={authority,"library.xr",packet.bytes,packet.length,{0}};
     xr_sha256(packet.bytes,packet.length,input.sha256);
@@ -169,9 +170,75 @@ static void fault_scan(const char *entry,const char *stdlib) {
     CHECK(snapshots);
     printf("CLI Source %zu actual malloc failures, %zu owned diagnostic snapshots; allocated/peak/work exact-minus1 and physical zero PASS\n",sites,snapshots);
 }
-int main(int argc,char **argv) {
+typedef struct FailureObservation {
+    XrCompileResourceStats stats;
+    size_t attempts;
+    XrXirStatus status;
+    bool has_path;
+} FailureObservation;
+static FailureObservation source_failure(const char *entry,const char *stdlib,
+    const XrCompileResourceLimits *limits,bool want_path,size_t fail_at) {
+    DWORD baseline=handles();
+    XrCompileResources *resources=sdk_ledger(limits);
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    XrModuleIdentityAuthority authority={0};char *root=NULL;
+    CHECK(xr_compile_module_identity_script_authority_from_source(resources,entry,&authority,&root)==XR_MODULE_OK);
+    XrCompilerSession *session=NULL;
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    XrXirSourceRequest request={session,entry,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceResult result={0},empty=result;
+    XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
+    char *sentinel=(char *)(uintptr_t)1;
+    XrCompileResourceStats before=sdk_stats(resources);
+    size_t before_attempts=runtime_attempts;
+    CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,&sentinel)==XR_XIR_BAD_STRUCTURE);
+    CHECK(sentinel==(char *)(uintptr_t)1 && !memcmp(&result,&empty,sizeof(result)));
+    CHECK(runtime_attempts==before_attempts && sdk_stats(resources).work==before.work);
+    result.checked=(XrXirArtifact *)(uintptr_t)1;
+    XrXirSourceResult saved=result;
+    CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,&path)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!path && !memcmp(&result,&saved,sizeof(result)));
+    result=empty;
+    runtime_attempts=0;runtime_fail_at=fail_at;
+    XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,want_path?&path:NULL);
+    runtime_fail_at=SIZE_MAX;
+    FailureObservation observation={sdk_stats(resources),runtime_attempts,status,path!=NULL};
+    CHECK(status!=XR_XIR_OK && !memcmp(&result,&empty,sizeof(result)) && diagnostic.status==status);
+    xr_compile_session_free(session);xr_compile_resources_free(root);
+    xr_compile_resources_release(resources);
+    memset(&context,0xcc,sizeof(context));memset(&request,0xcc,sizeof(request));
+    memset(&authority,0xcc,sizeof(authority));
+    if(path) {
+        /* The first path read occurs after every producer and external ledger
+         * reference has died. This fixture's independent source is line 1. */
+        CHECK(!strcmp(path,entry) && diagnostic.line>0);
+        if(status!=XR_XIR_OUT_OF_MEMORY) CHECK(diagnostic.line==1 && diagnostic.column==13);
+    }
+    xr_compile_resources_free(path);
+    CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
+    return observation;
+}
+static void failure_path_scan(const char *entry,const char *stdlib) {
+    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    FailureObservation absent=source_failure(entry,stdlib,&limits,false,SIZE_MAX);
+    FailureObservation owned=source_failure(entry,stdlib,&limits,true,SIZE_MAX);
+    CHECK(owned.status==XR_XIR_BAD_VALUE && owned.has_path && !absent.has_path);
+    CHECK(absent.attempts==owned.attempts && absent.stats.work==owned.stats.work &&
+        absent.stats.allocated_bytes==owned.stats.allocated_bytes && absent.stats.peak_bytes==owned.stats.peak_bytes);
+    limits.work=owned.stats.work-1;
+    FailureObservation budget=source_failure(entry,stdlib,&limits,true,SIZE_MAX);
+    CHECK(budget.status==XR_XIR_BUDGET && budget.has_path && budget.attempts==owned.attempts);
+    CHECK(budget.stats.work<=limits.work);
+    limits=xr_cli_compile_default_resource_limits();
+    for(size_t point=0;point<owned.attempts;++point) {
+        FailureObservation failed=source_failure(entry,stdlib,&limits,true,point);
+        CHECK(failed.status==XR_XIR_OUT_OF_MEMORY && failed.attempts>point);
+    }
+    printf("SOURCE failure path: %zu real OOM points; identical optional-path allocations/work, exhausted-work transfer and physical zero PASS\n",owned.attempts);
+}
+static int source_owner_main(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;
-    CHECK(argc==4);DWORD baseline=handles();
+    CHECK(argc==4 || argc==5);DWORD baseline=handles();
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrCliCompileSourceRequest request={&context,argv[1],argv[2],NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
@@ -185,7 +252,9 @@ int main(int argc,char **argv) {
         xr_cli_compile_source_status_name(status),(unsigned)diagnostic.stage,(unsigned)diagnostic.source.status,
         (unsigned)diagnostic.authority_status,diagnostic.source.source.message,diagnostic.authority.message);
     XrCliCompileSourceStatus expected=XR_CLI_COMPILE_SOURCE_OK;
-    if(!strcmp(argv[3],"reject"))expected=XR_CLI_COMPILE_SOURCE_REJECTED;
+    bool semantic=!strcmp(argv[3],"reject") || !strcmp(argv[3],"failure-path");
+    if(semantic || !strcmp(argv[3],"parse-reject"))expected=XR_CLI_COMPILE_SOURCE_REJECTED;
+    if(!strcmp(argv[3],"graph-reject"))expected=XR_CLI_COMPILE_SOURCE_NOT_FOUND;
     if(!strcmp(argv[3],"not-found"))expected=XR_CLI_COMPILE_SOURCE_NOT_FOUND;
     if(!strcmp(argv[3],"invalid"))expected=XR_CLI_COMPILE_SOURCE_INVALID;
     if(!strcmp(argv[3],"limit"))expected=XR_CLI_COMPILE_SOURCE_LIMIT;
@@ -194,12 +263,29 @@ int main(int argc,char **argv) {
     memset(&context,0xcc,sizeof(context));memset(&request,0xcc,sizeof(request));
     if(status==XR_CLI_COMPILE_SOURCE_OK)execute(product,library?"cli-owner 42\n":"cli-owner 41\n");
     else CHECK(!product);
-    if(!strcmp(argv[3],"reject")) {
+    if(semantic) {
         CHECK(!diagnostic.source.snapshot);
+        CHECK(diagnostic.source.source_path && !strcmp(diagnostic.source.source_path,argc==5?argv[4]:argv[1]));
+        CHECK(diagnostic.source.source.line==1 && diagnostic.source.source.column==13);
         CHECK(!strcmp(diagnostic.source.source.message,"name is not an initialized value"));
+        if(argc==5) CHECK(diagnostic.source.source.module!=0);
+        XrCliCompileSourceDiagnostic saved=diagnostic;
+        CHECK(xr_cli_compile_source_build(NULL,&product,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT);
+        CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
+        CHECK(xr_xir_compile_source_product_build(NULL,&product,&diagnostic.source)==XR_XIR_BAD_STRUCTURE);
+        CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
     }
+    if(!strcmp(argv[3],"parse-reject") || !strcmp(argv[3],"graph-reject"))
+        CHECK(!diagnostic.source.source_path && !diagnostic.source.snapshot && !diagnostic.source.source.line);
     xr_cli_compile_source_diagnostic_free(&diagnostic);xr_cli_compile_source_diagnostic_free(&diagnostic);
     CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     if(!strcmp(argv[3],"scan"))fault_scan(argv[1],argv[2]);
+    if(!strcmp(argv[3],"reject"))failure_path_scan(argv[1],argv[2]);
     puts("CLI Source producer/result/diagnostic lifetime and two-instance independent expectation PASS");return 0;
+}
+int wmain(int argc,wchar_t **wide_argv) {
+    XrWinPathStatus status;
+    char **argv=xr_win_utf16_arguments(argc,wide_argv,&status);CHECK(argv);
+    int result=source_owner_main(argc,argv);
+    xr_win_utf8_arguments_free(argc,argv);return result;
 }

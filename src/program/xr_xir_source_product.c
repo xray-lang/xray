@@ -25,7 +25,7 @@ struct XrXirSourceProduct {
     XrXirSourceProductFacts facts;
 };
 static bool source_diagnostic_empty(const XrXirSourceProductDiagnostic *diagnostic) {
-    return !diagnostic || !diagnostic->snapshot;
+    return !diagnostic || (!diagnostic->snapshot && !diagnostic->source_path);
 }
 static XrXirStatus source_product_reject(XrXirSourceProductDiagnostic *diagnostic,
                                        XrXirSourceProductStage stage,XrXirStatus status) {
@@ -102,7 +102,8 @@ static XrXirStatus source_product_compare(const XrXirCompileContext *context,
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic) {
-    if (!request || !output || *output || !source_diagnostic_empty(diagnostic) ||
+    if (!source_diagnostic_empty(diagnostic)) return XR_XIR_BAD_STRUCTURE;
+    if (!request || !output || *output ||
         !xir_compile_context_valid(request->source.context) ||
         request->source.linkage_kind!=XR_XIR_PROGRAM ||
         request->target.architecture!=XR_XIR_ARCH_X86_64 ||
@@ -113,7 +114,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
     XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;
     XrXirCheckedPacket source_packet={0},closed_packet={0};
     XrXirStatus status=xr_xir_compile_source_check(&request->source,&source,
-        diagnostic ? &diagnostic->source : NULL);
+        diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL);
     XrXirSourceProductStage stage=XR_XIR_SOURCE_PRODUCT_CHECK;
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_SOURCE_PACKET;
@@ -176,7 +177,8 @@ XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product) {
 }
 XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic) {
     if (!diagnostic) return;
-    xr_xir_compile_source_snapshot_free(diagnostic->snapshot);memset(diagnostic,0,sizeof(*diagnostic));
+    xr_xir_compile_source_snapshot_free(diagnostic->snapshot);
+    xr_compile_resources_free(diagnostic->source_path);memset(diagnostic,0,sizeof(*diagnostic));
 }
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product) {
     return product ? &product->facts : NULL;

@@ -2,8 +2,10 @@ from pathlib import Path
 import subprocess,sys,tempfile
 
 exe,stdlib=map(Path,sys.argv[1:3])
-def run(path,mode):
-    p=subprocess.run([str(exe),str(path.resolve()),str(stdlib.resolve()),mode],capture_output=True,timeout=180)
+def run(path,mode,expected=None):
+    args=[str(exe),str(path.resolve()),str(stdlib.resolve()),mode]
+    if expected is not None: args.append(str(expected.resolve()))
+    p=subprocess.run(args,capture_output=True,timeout=180)
     sys.stdout.buffer.write(p.stdout);sys.stderr.buffer.write(p.stderr)
     assert p.returncode==0,(mode,p.returncode)
 with tempfile.TemporaryDirectory(prefix='xray-cli-source-owner-') as temporary:
@@ -19,6 +21,17 @@ with tempfile.TemporaryDirectory(prefix='xray-cli-source-owner-') as temporary:
     run(project/'main.xr','scan')
     (script/'bad.xr').write_text('var value = missing_symbol\n',encoding='utf8')
     run(script/'bad.xr','reject')
+    nested=script/('子'*65);nested.mkdir()
+    child=nested/'child.xr'
+    child.write_text('const bad = missing_symbol\nexport fn answer() -> i64 { return 42 }\n',encoding='utf8')
+    imported=script/'入口.xr'
+    imported.write_text('import { answer } from "./'+nested.name+'/child"\nprint(answer())\n',encoding='utf8')
+    assert len(str(child.resolve()).encode('utf8'))>192
+    run(imported,'failure-path',child)
+    (script/'parse.xr').write_text('var value = (\n',encoding='utf8')
+    run(script/'parse.xr','parse-reject')
+    (script/'graph.xr').write_text('import { value } from "./absent"\n',encoding='utf8')
+    run(script/'graph.xr','graph-reject')
     run(script/'absent.xr','not-found')
     (project/'xray.toml').write_text('[project]\nname=42\n',encoding='utf8')
     run(project/'main.xr','invalid')

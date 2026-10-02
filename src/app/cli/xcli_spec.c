@@ -21,7 +21,7 @@
 
 /* ========== Option Specs per Command ========== */
 
-static const XrCliOptionSpec run_options[] = {XR_CLI_XI_OPT_SPEC, XR_CLI_OPT_END};
+static const XrCliOptionSpec run_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec repl_options[] = {
     {"module-id", 0, XR_CLI_VALUE_STRING, true, false, "ID",

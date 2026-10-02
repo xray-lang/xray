@@ -104,8 +104,9 @@ XR_FUNC void xr_cli_compile_source_diagnostic_free(XrCliCompileSourceDiagnostic 
 XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
     const XrCliCompileSourceRequest *request, XrXirSourceProduct **output,
     XrCliCompileSourceDiagnostic *diagnostic) {
-    /* Never overwrite a caller's still-owned diagnostic snapshot. */
-    if (diagnostic && diagnostic->source.snapshot) return XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT;
+    /* Never overwrite a caller's still-owned diagnostic storage. */
+    if (diagnostic && (diagnostic->source.snapshot || diagnostic->source.source_path))
+        return XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT;
     XrCliCompileSourceDiagnostic detail = {0};
     XrCliCompileSourceStatus status = XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT;
     if (!request || !request->context || !request->context->resources || !output || *output ||

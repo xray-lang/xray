@@ -974,10 +974,16 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
 }
 
 static void emit_bytes(CBuffer *buffer, const char *bytes, uint32_t length) {
-    append(buffer, "\"");
-    for (uint32_t i = 0; i < length && emit_work(buffer, 1); ++i)
-        append(buffer, "\\x%02x", (unsigned int) (unsigned char) bytes[i]);
-    append(buffer, "\"");
+    /* Every call initializes a file-scope table, so the compound array has
+     * static storage. Unsigned elements preserve all bytes without narrowing
+     * warnings or the C11 minimum limit on concatenated string literals. */
+    append(buffer, "(const char *)(const unsigned char[]){");
+    for (uint32_t i = 0; i < length && emit_work(buffer, 1); ++i) {
+        unsigned int byte = (unsigned char) bytes[i];
+        if (i % 16 == 0) append(buffer, "\n    ");
+        append(buffer, "0x%02x,", byte);
+    }
+    append(buffer, "\n    0}");
 }
 static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *table, const char *prefix) {
     if (!table) return;

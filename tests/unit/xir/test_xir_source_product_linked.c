@@ -45,7 +45,7 @@ static void reject_foreign_lockfile(const XrXirSourceRequest *request) {
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(request->context->resources,&before)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_xir_compile_source_check(&wrong,&result,&diagnostic)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_source_check(&wrong,&result,&diagnostic,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!result.checked && !result.snapshot && diagnostic.status==XR_XIR_BAD_STRUCTURE);
     CHECK(xr_compile_resources_stats(request->context->resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(before.allocation_count==after.allocation_count && before.live_bytes==after.live_bytes);

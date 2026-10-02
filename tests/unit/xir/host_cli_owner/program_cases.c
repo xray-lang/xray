@@ -17,9 +17,11 @@
 #include "xir/xxir_format.c"
 #include "execution/xr_xir_host_execution.c"
 static unsigned io_failure, mode_calls;
-static bool policy_budget;
+static bool policy_budget, config_failure;
+static unsigned resource_calls;
 static XrCompileResourceStatus observed_resources_new(const XrCompileResourceLimits *limits,
     XrCompileResources **output) {
+    ++resource_calls;
     CHECK(limits->allocated_bytes==(UINT64_C(64)<<20) && limits->live_bytes==(UINT64_C(16)<<20) &&
         limits->work==(UINT64_C(1)<<30));
     XrCompileResourceLimits reduced=*limits;
@@ -35,7 +37,11 @@ static size_t observed_write(const void *bytes,size_t size,size_t count,FILE *fi
     return io_failure==3 ? 0 : fwrite(bytes,size,count,file);
 }
 static int observed_flush(FILE *file) {return io_failure==4 ? EOF : fflush(file);}
+static XrXirCallStatus observed_config(XrXirInstanceConfig *config,size_t size) {
+    return config_failure ? XR_XIR_CALL_BAD_ABI : xr_xir_instance_config_init(config,size);
+}
 #define xr_compile_resources_new observed_resources_new
+#define xr_xir_instance_config_init observed_config
 #define _setmode observed_setmode
 #define fwrite observed_write
 #define fflush observed_flush
@@ -44,7 +50,42 @@ static int observed_flush(FILE *file) {return io_failure==4 ? EOF : fflush(file)
 #undef fwrite
 #undef fflush
 #undef xr_compile_resources_new
+#undef xr_xir_instance_config_init
 XR_DATA const XrXirProgramSpec host_fixture_program;
+static XrXirProgram *owned_program(void) {
+    const XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    XrXirProgram *program=NULL;
+    CHECK(xr_xir_compile_program_seal(&context,&host_fixture_program,&program)==XR_XIR_OK);
+    xr_compile_resources_release(context.resources);
+    return program;
+}
+static void program_owner(void) {
+    uint32_t entry=host_fixture_program.declarations->entry_function;
+    size_t attempts=runtime_attempts;mode_calls=0;resource_calls=0;
+    CHECK(xr_xir_host_program_main(NULL,entry)==4 && runtime_attempts==attempts && !mode_calls);
+    for(io_failure=1;io_failure<=4;++io_failure) {
+        XrXirProgram *program=owned_program();attempts=runtime_attempts;mode_calls=0;
+        CHECK(xr_xir_host_program_main(program,entry)==(io_failure<=2 ? 4 : 1));
+        CHECK(!runtime_live && !runtime_bytes && !resource_calls);
+        if(io_failure<=2)CHECK(runtime_attempts==attempts);
+    }
+    io_failure=0;config_failure=true;
+    CHECK(xr_xir_host_program_main(owned_program(),entry)==4 && !runtime_live && !runtime_bytes);
+    config_failure=false;
+    CHECK(xr_xir_host_program_main(owned_program(),UINT32_MAX)==4 && !runtime_live && !runtime_bytes);
+    XrXirProgram *program=owned_program();runtime_attempts=0;
+    CHECK(xr_xir_host_program_main(program,entry)==0 && !runtime_live && !runtime_bytes);
+    size_t sites=runtime_attempts;
+    for(size_t i=0;i<sites;++i) {
+        program=owned_program();runtime_attempts=0;runtime_fail_at=i;
+        CHECK(xr_xir_host_program_main(program,entry)==4 && runtime_attempts>i);
+        runtime_fail_at=SIZE_MAX;
+        CHECK(!runtime_live && !runtime_bytes && !resource_calls);
+    }
+    printf("Owned Program: null/streams/config/entry and %zu OOM points consume with no new ledger, physical zero PASS\n",sites);
+}
 typedef struct Trace {uint32_t begins,ready,published,released,stack[32],outputs;} Trace;
 static XrXirOutputStatus trace_output(void *context,const XrXirOutputGroup *group) {
     Trace *trace=context;
@@ -96,6 +137,7 @@ static void initialization(void) {
 int main(int argc,char **argv) {
     CHECK(argc==2);
     if(!strcmp(argv[1],"init")){initialization();return 0;}
+    if(!strcmp(argv[1],"owner")){program_owner();return 0;}
     if(!strcmp(argv[1],"oom")) {
         runtime_attempts=0;CHECK(xr_xir_host_main(&host_fixture_program)==0);
         size_t sites=runtime_attempts;CHECK(sites && !runtime_live && !runtime_bytes);

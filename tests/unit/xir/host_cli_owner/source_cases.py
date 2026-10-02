@@ -33,6 +33,13 @@ def main():
                   b'E0443: error escaped a defer body: E0445: cleanup\n'
                   b'  a defer body must not let errors escape (spec 8.3.1); this is not catchable\n', 70),
     }
+    long_message = 'long-owned-' + 'x' * 5003
+    programs['long_error'] = (
+        'enum Failure { Failed { text:string } }\nfn fail() { throw Failure.Failed { text:"' +
+        long_message + '" } }\nfail()\n', b'',
+        b'[Uncaught Error] Failure.Failed("' + long_message.encode() + b'")\n', 1)
+    programs['long_panic'] = ('assert(false, "' + long_message + '")\n', b'',
+        b'[Uncaught Panic] E0445: ' + long_message.encode() + b'\n', 1)
     for name, (source, stdout, stderr, status) in programs.items():
         directory = output/'fixtures'/name
         directory.mkdir(parents=True, exist_ok=True)
@@ -54,7 +61,24 @@ def main():
         records.append(row)
         (output/'vm-record.json').write_text(json.dumps(records, indent=2)+'\n', encoding='utf-8')
         assert (result.returncode, result.stdout, result.stderr) == (status, stdout, stderr), row
-    print('Six actual Source products: independent byte-exact VM outcomes PASS')
+    failure_records = []
+    entry = root/'tests/fixtures/xir_compile_owner/root.xr'
+    for failure in range(1, 5):
+        command = [str(args.emitter), str(entry.parent), str(entry), str(root/'stdlib'),
+                   str(output/('stream-failure-' + str(failure) + '.c')), str(failure)]
+        result = subprocess.run(command, capture_output=True, timeout=60)
+        (output/('stream-failure-' + str(failure) + '.stdout')).write_bytes(result.stdout)
+        (output/('stream-failure-' + str(failure) + '.stderr')).write_bytes(result.stderr)
+        row = dict(command=command, returncode=result.returncode, stdout=result.stdout.hex(),
+                   stderr=result.stderr.hex(), expected_returncode=4 if failure <= 2 else 1)
+        failure_records.append(row)
+        (output/'stream-failure-record.json').write_text(json.dumps(failure_records, indent=2)+'\n', encoding='utf-8')
+        assert result.returncode == row['expected_returncode'], row
+        if failure <= 2:
+            assert result.stdout == b'' and result.stderr == b'', row
+        else:
+            assert result.stderr == b'XR_RUN_6002: canonical output failed\n', row
+    print('Eight actual Source products: owned Program, byte-exact VM outcomes and stream-failure consumption PASS')
 
 
 if __name__ == '__main__':

@@ -2628,13 +2628,15 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 }
 #include "xxir_core_source.inc.c"
 XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
-    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic) {
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
     SourceContext ctx = {0};
     XrXirSourceResult result = {0};
     XrModuleResolver *resolver = NULL;
     char *error = NULL;
+    bool semantic_started = false;
     if (!request || !xir_compile_context_valid(request->context) || !request->session ||
-        !request->entry_path || !request->authority || !output || output->checked || output->snapshot) {
+        !request->entry_path || !request->authority || !output || output->checked || output->snapshot ||
+        (failure_path && *failure_path)) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
     ctx.compile = *request->context;
@@ -2673,9 +2675,17 @@ XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
     if (ctx.graph->has_cycle || ctx.graph->entry_index < 0) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
+    semantic_started = true;
     source_construct(&ctx, &result);
 done:
     source_query_publish(&ctx, &result);
+    if (failure_path && semantic_started && ctx.diagnostic.status != XR_XIR_OK &&
+        ctx.diagnostic.line > 0 && ctx.graph &&
+        ctx.diagnostic.module < (uint32_t)ctx.graph->spec_count) {
+        XrModuleSpec *module = &ctx.graph->specs[ctx.diagnostic.module];
+        *failure_path = module->source_path;
+        module->source_path = NULL;
+    }
     xr_compile_resources_free(error);
     for (SourceManifest *manifest = ctx.manifests; manifest; manifest = manifest->next)
         xr_compile_declaration_manifest_free(manifest->declarations);
