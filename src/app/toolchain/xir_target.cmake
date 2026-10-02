@@ -28,7 +28,7 @@ if(WIN32)
     add_library(xray_xir_invocation STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_invocation.c)
     target_link_libraries(xray_xir_invocation PUBLIC
         xray_toolchain_process xray_toolchain_dependencies xray_xir_target
-        xray_xir_native_projection xray_xir_runtime_sdk)
+        xray_xir_native_projection xray_xir_runtime_sdk xray_xir_namespace)
     target_compile_features(xray_xir_invocation PUBLIC c_std_11)
     set_target_properties(xray_xir_invocation PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_compile_definitions(xray_xir_invocation PRIVATE

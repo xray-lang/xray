@@ -11,6 +11,7 @@
 #define XTC_XIR_INVOCATION_H
 #include "xtc_process.h"
 #include "xtc_dependencies.h"
+#include "xtc_xir_namespace.h"
 #include "../../aot/program/xr_xir_native_projection.h"
 #include "../../toolchain/xr_xir_runtime_sdk.h"
 
@@ -20,7 +21,7 @@ typedef enum XrXirInvocationStatus {
     XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_OUT_OF_MEMORY,
     XR_XIR_INVOCATION_IO, XR_XIR_INVOCATION_TIMEOUT,
     XR_XIR_INVOCATION_CANCELLED, XR_XIR_INVOCATION_CHILD_FAILED,
-    XR_XIR_INVOCATION_REPLAY_MISMATCH
+    XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_BROKEN
 } XrXirInvocationStatus;
 typedef enum XrXirInvocationStage {
     XR_XIR_INVOCATION_GENERATED, XR_XIR_INVOCATION_LAUNCHER,
@@ -33,7 +34,7 @@ typedef enum XrXirInvocationPass {
 typedef enum XrXirInvocationFailureDomain {
     XR_XIR_INVOCATION_SELF, XR_XIR_INVOCATION_RESOURCE,
     XR_XIR_INVOCATION_FILESYSTEM, XR_XIR_INVOCATION_TARGET,
-    XR_XIR_INVOCATION_PROCESS, XR_XIR_INVOCATION_SDK
+    XR_XIR_INVOCATION_PROCESS, XR_XIR_INVOCATION_SDK, XR_XIR_INVOCATION_NAMESPACE
 } XrXirInvocationFailureDomain;
 typedef struct XrXirInvocationDiagnostic {
     XrXirInvocationStage stage;
@@ -65,6 +66,7 @@ typedef struct XrXirInvocationLimits {
 typedef struct XrXirInvocationRequest {
     const XrXirNativeProjection *projection;
     const XrXirRuntimeSdk *sdk;
+    XrXirNamespace *namespace_owner;
     XrXirInvocationCompile compile[2];
     const XrToolchainProcess *link;
     const char *input_directory, *output_directory, *link_report, *output;
@@ -99,8 +101,11 @@ typedef struct XrXirInvocation XrXirInvocation;
  * two empty, nonoverlapping private directories. Sources are direct children
  * of input_directory; objects, reports and the executable are direct children
  * of output_directory. All commands use input_directory as their frozen cwd.
- * Every
- * artifact is initially CREATE_NEW; existing paths are never overwritten.
+ * The mandatory same-ledger namespace owner must be NEW and is borrowed. It
+ * is armed after source creation and checked after each successful run and
+ * before publication. The caller must close/drain it, retaining the surrounding
+ * operation and directories while close is PENDING, before public publication.
+ * Every artifact is initially CREATE_NEW; existing paths are never overwritten.
  * The caller owns both directories and must later reclaim disk artifacts even
  * on failure. Free releases only this owner's memory and file/image leases.
  * Success records six completed runs and equal observed inputs under positive
@@ -117,5 +122,11 @@ XR_FUNC const XrProcessView *xtc_xir_invocation_command(const XrXirInvocation *o
     XrXirInvocationStage stage);
 XR_FUNC const XrXirInvocationFile *xtc_xir_invocation_file(const XrXirInvocation *owner,
     uint32_t index);
+/* Reads the held final OUTPUT lease; no path reopen or second hash. Both outputs
+ * must be empty and are preserved on failure. Calls and free are serial.
+ * Returned bytes independently retain the original ledger and are released by
+ * xr_compile_resources_free, even after all producers and this owner die. */
+XR_FUNC XrXirInvocationStatus xtc_xir_invocation_read_output(XrXirInvocation *owner,
+    uint64_t limit, void **bytes, size_t *length);
 XR_FUNC void xtc_xir_invocation_free(XrXirInvocation *owner);
 #endif // XTC_XIR_INVOCATION_H

@@ -5,6 +5,56 @@
 #include "app/toolchain/xtc_xir_images.h"
 #include "base/xwindows_utf8.h"
 #include "os/os_fs.h"
+/* A retained real pending kernel request exercises the upper owner boundary. */
+static bool guard_hold_cancel, guard_fail_result;
+static unsigned guard_cancel_holds;
+static BOOL WINAPI guard_cancel(HANDLE handle, LPOVERLAPPED overlapped) {
+    if (guard_hold_cancel) { ++guard_cancel_holds; SetLastError(ERROR_NOT_FOUND); return FALSE; }
+    return CancelIoEx(handle, overlapped);
+}
+static BOOL WINAPI guard_result(HANDLE handle, LPOVERLAPPED overlapped, LPDWORD bytes, BOOL wait) {
+    if (guard_fail_result) { guard_fail_result = false; SetLastError(ERROR_ACCESS_DENIED); return FALSE; }
+    return GetOverlappedResult(handle, overlapped, bytes, wait);
+}
+#define GetOverlappedResult guard_result
+#define CancelIoEx guard_cancel
+#include "app/toolchain/xtc_xir_namespace.c"
+#undef CancelIoEx
+#undef GetOverlappedResult
+static unsigned guard_checks, guard_break_check;
+static bool guard_arm_oom, guard_check_budget, guard_check_io;
+static const char *guard_input_path, *guard_source_paths[2];
+static void guard_change_directory(void) {
+    char path[32768]; CHECK(snprintf(path, sizeof(path), "%s/actual-namespace-change", guard_input_path) > 0);
+    HANDLE file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    CHECK(file != INVALID_HANDLE_VALUE && CloseHandle(file) && DeleteFileA(path));
+}
+static XrXirNamespaceStatus guard_arm(XrXirNamespace *owner) {
+    CHECK(xtc_xir_namespace_phase(owner) == XR_XIR_NAMESPACE_NEW);
+    for (unsigned i = 0; i < 2; ++i) {
+        CHECK(GetFileAttributesA(guard_source_paths[i]) != INVALID_FILE_ATTRIBUTES);
+        HANDLE file = CreateFileA(guard_source_paths[i], GENERIC_WRITE, FILE_SHARE_READ,
+            NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        CHECK(file == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
+    }
+    if (guard_arm_oom) runtime_fail_at = runtime_attempts;
+    XrXirNamespaceStatus status = xtc_xir_namespace_arm(owner);
+    runtime_fail_at = SIZE_MAX;
+    return status;
+}
+static XrXirNamespaceStatus guard_check(XrXirNamespace *owner) {
+    ++guard_checks;
+    if (guard_check_budget) {
+        XrCompileResourceStats stats;
+        XrCompileResources *resources = xtc_xir_namespace_resources(owner);
+        CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_compile_resources_work(resources, UINT64_MAX - stats.work) == XR_COMPILE_RESOURCE_OK);
+    }
+    if (guard_check_io) guard_fail_result = true;
+    if (guard_checks == guard_break_check) guard_change_directory();
+    return xtc_xir_namespace_check(owner);
+}
 static size_t owner_allocation_count, owner_allocation_fail = SIZE_MAX;
 static size_t owner_compare_count, owner_compare_fail = SIZE_MAX;
 static DWORD owner_compare_error = ERROR_ACCESS_DENIED;
@@ -147,6 +197,8 @@ static XrProcessStatus owner_run(const XrToolchainProcess *process, XrProcessCan
 #define xtc_process_run owner_run
 #define xr_os_io_write_new_file_sync owner_write
 #define xtc_xir_images_seal owner_seal
+#define xtc_xir_namespace_arm guard_arm
+#define xtc_xir_namespace_check guard_check
 #include "app/toolchain/xtc_xir_invocation.c"
 #undef xr_compile_resources_alloc
 #undef xr_compile_resources_calloc
@@ -155,6 +207,8 @@ static XrProcessStatus owner_run(const XrToolchainProcess *process, XrProcessCan
 #undef xtc_process_run
 #undef xr_os_io_write_new_file_sync
 #undef xtc_xir_images_seal
+#undef xtc_xir_namespace_arm
+#undef xtc_xir_namespace_check
 
 static bool owner_record_transaction(const char *path, const XrCompileResourceLimits *limits,
     XrCompileResourceStats *stats) {

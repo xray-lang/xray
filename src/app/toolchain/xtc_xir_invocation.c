@@ -43,6 +43,7 @@ struct XrXirInvocation {
     uint32_t capacity;
     char *prefix;
     XtcXirFileLease *directories[2];
+    XtcXirFileLease *output_lease; /* Borrowed from the owned file table. */
 };
 static bool invocation_fail(XrXirInvocation *owner, XrXirInvocationStatus status,
     XrXirInvocationFailureDomain domain, int code) {
@@ -76,8 +77,8 @@ static bool invocation_io(XrXirInvocation *owner, XrOsIoStatus status) {
     }
     return invocation_fail(owner, mapped, XR_XIR_INVOCATION_FILESYSTEM, status);
 }
-static bool invocation_target(XrXirInvocation *owner, XrXirTargetStatus status) {
-    if (status == XR_XIR_TARGET_OK) return true;
+static XrXirInvocationStatus invocation_target_status(XrXirTargetStatus status) {
+    if (status == XR_XIR_TARGET_OK) return XR_XIR_INVOCATION_OK;
     XrXirInvocationStatus mapped;
     switch (status) {
     case XR_XIR_TARGET_UNRESOLVED: mapped = XR_XIR_INVOCATION_UNRESOLVED; break;
@@ -87,7 +88,25 @@ static bool invocation_target(XrXirInvocation *owner, XrXirTargetStatus status) 
     case XR_XIR_TARGET_IO: mapped = XR_XIR_INVOCATION_IO; break;
     default: mapped = XR_XIR_INVOCATION_INVALID; break;
     }
-    return invocation_fail(owner, mapped, XR_XIR_INVOCATION_TARGET, status);
+    return mapped;
+}
+static bool invocation_target(XrXirInvocation *owner, XrXirTargetStatus status) {
+    return status == XR_XIR_TARGET_OK ||
+        invocation_fail(owner, invocation_target_status(status), XR_XIR_INVOCATION_TARGET, status);
+}
+static bool invocation_namespace(XrXirInvocation *owner, XrXirNamespaceStatus status) {
+    if (status == XR_XIR_NAMESPACE_OK) return true;
+    XrXirInvocationStatus mapped;
+    switch (status) {
+    case XR_XIR_NAMESPACE_UNRESOLVED: mapped = XR_XIR_INVOCATION_UNRESOLVED; break;
+    case XR_XIR_NAMESPACE_UNSUPPORTED: mapped = XR_XIR_INVOCATION_UNSUPPORTED; break;
+    case XR_XIR_NAMESPACE_BUDGET: mapped = XR_XIR_INVOCATION_BUDGET; break;
+    case XR_XIR_NAMESPACE_OUT_OF_MEMORY: mapped = XR_XIR_INVOCATION_OUT_OF_MEMORY; break;
+    case XR_XIR_NAMESPACE_IO: mapped = XR_XIR_INVOCATION_IO; break;
+    case XR_XIR_NAMESPACE_BROKEN: mapped = XR_XIR_INVOCATION_BROKEN; break;
+    default: mapped = XR_XIR_INVOCATION_INVALID; break;
+    }
+    return invocation_fail(owner, mapped, XR_XIR_INVOCATION_NAMESPACE, status);
 }
 static bool invocation_process(XrXirInvocation *owner, XrProcessStatus status) {
     if (status == XTC_PROCESS_OK) return true;
@@ -173,6 +192,7 @@ static bool invocation_file_add(XrXirInvocation *owner, XrXirInvocationStage sta
     InvocationFile *file = &owner->files[owner->facts.file_count];
     *file = (InvocationFile){{stage, kind, facts->path, facts->length, {0}}, *lease};
     memcpy(file->facts.digest, facts->digest, sizeof(facts->digest));
+    if (kind == XR_XIR_INVOCATION_OUTPUT) owner->output_lease = *lease;
     *lease = NULL; ++owner->facts.file_count;
     return true;
 }
@@ -581,6 +601,7 @@ static bool invocation_run_process(XrXirInvocation *owner, const XrXirInvocation
     if (okay && (result.stdout_bytes.truncated || result.stderr_bytes.truncated))
         okay = invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_PROCESS, XTC_PROCESS_BUDGET);
     xtc_process_result_free(&result);
+    if (okay) okay = invocation_namespace(owner, xtc_xir_namespace_check(request->namespace_owner));
     if (okay) okay = invocation_target(owner, xtc_xir_images_seal(images));
     if (okay && invocation_work(owner, 1)) ++owner->facts.completed_runs;
     return okay && owner->status == XR_XIR_INVOCATION_OK;
@@ -678,6 +699,10 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     const XrXirCompileContext *context = request ? xr_compile_native_projection_context(request->projection) : NULL;
     if (!request || !output || *output || !context || !context->resources || !request->sdk ||
         xr_xir_runtime_sdk_resources(request->sdk) != context->resources ||
+        !request->namespace_owner ||
+        xtc_xir_namespace_resources(request->namespace_owner) != context->resources ||
+        xtc_xir_namespace_phase(request->namespace_owner) != XR_XIR_NAMESPACE_NEW ||
+        xtc_xir_namespace_status(request->namespace_owner) != XR_XIR_NAMESPACE_OK ||
         xtc_process_resources(request->compile[0].process) != context->resources ||
         xtc_process_resources(request->compile[1].process) != context->resources ||
         xtc_process_resources(request->link) != context->resources ||
@@ -722,9 +747,19 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     for (uint32_t i = 0; okay && i < request->library_count; ++i)
         okay = invocation_open_add(owner, request->libraries[i].path, XR_XIR_INVOCATION_LINK, request->libraries[i].kind);
     if (okay) okay = invocation_create(owner, request);
+    if (okay) {
+        owner->diagnostic.stage = XR_XIR_INVOCATION_NO_STAGE;
+        owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
+        okay = invocation_namespace(owner, xtc_xir_namespace_arm(request->namespace_owner));
+    }
     for (unsigned stage = 0; okay && stage < 2; ++stage) okay = invocation_stage(owner, request, stage);
     if (okay) okay = invocation_stage(owner, request, 2);
     if (okay) okay = invocation_finish(owner);
+    if (okay) {
+        owner->diagnostic.stage = XR_XIR_INVOCATION_NO_STAGE;
+        owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
+        okay = invocation_namespace(owner, xtc_xir_namespace_check(request->namespace_owner));
+    }
     if (okay) okay = invocation_work(owner, sizeof(owner));
     XrXirInvocationStatus status = owner->status;
     if (diagnostic) *diagnostic = owner->diagnostic;
@@ -745,6 +780,13 @@ XR_FUNC const XrProcessView *xtc_xir_invocation_command(const XrXirInvocation *o
 }
 XR_FUNC const XrXirInvocationFile *xtc_xir_invocation_file(const XrXirInvocation *owner, uint32_t index) {
     return owner && index < owner->facts.file_count ? &owner->files[index].facts : NULL;
+}
+XR_FUNC XrXirInvocationStatus xtc_xir_invocation_read_output(XrXirInvocation *owner,
+    uint64_t limit, void **bytes, size_t *length) {
+    if (!owner || !owner->output_lease || !limit || !bytes || *bytes || !length || *length)
+        return XR_XIR_INVOCATION_INVALID;
+    size_t bounded = limit > SIZE_MAX ? SIZE_MAX : (size_t)limit;
+    return invocation_target_status(xtc_xir_file_lease_read(owner->output_lease, bounded, bytes, length));
 }
 XR_FUNC void xtc_xir_invocation_free(XrXirInvocation *owner) {
     if (!owner) return;

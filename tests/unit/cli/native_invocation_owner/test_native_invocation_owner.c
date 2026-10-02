@@ -169,7 +169,7 @@ static int run_test(int argc, char **argv) {
         expected = XR_XIR_INVOCATION_INVALID;
     } else if (!strcmp(mode, "reverse-ancestor")) {
         request.output_directory = argv[1]; expected = XR_XIR_INVOCATION_INVALID;
-    } else if (!strncmp(mode, "foreign-", 8)) {
+    } else if (!strncmp(mode, "foreign-", 8) && strcmp(mode, "foreign-guard")) {
         foreign = sdk_ledger(&sdk_unlimited); preallocation = true; expected = XR_XIR_INVOCATION_INVALID;
         if (!strcmp(mode, "foreign-sdk")) {
             manifest = read_input(manifest_path, &manifest_length);
@@ -195,6 +195,42 @@ static int run_test(int argc, char **argv) {
     if (!strcmp(mode, "launcher-race") || !strcmp(mode, "source-race")) {
         owner_tamper_write = !strcmp(mode, "launcher-race") ? 1 : 0; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH;
     }
+#endif
+    XrCompileResourceStats before_guard;
+    CHECK(xr_compile_resources_stats(resources, &before_guard) == XR_COMPILE_RESOURCE_OK);
+    XrXirNamespaceRoot guard_root = {request.input_directory, XR_XIR_NAMESPACE_DIRECTORY};
+    XrXirNamespaceRequest guard_request = {&guard_root, 1, {1, 8, 8, 32768}};
+    XrXirNamespace *guard = NULL;
+    if (!strcmp(mode, "foreign-guard")) {
+        foreign = sdk_ledger(&sdk_unlimited); expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
+    }
+    CHECK(xtc_xir_namespace_new(!strcmp(mode, "foreign-guard") ? foreign : resources,
+        &guard_request, &guard) == XR_XIR_NAMESPACE_OK);
+    request.namespace_owner = guard;
+    if (!strcmp(mode, "null-guard")) {
+        request.namespace_owner = NULL; expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
+    } else if (!strcmp(mode, "armed-guard") || !strcmp(mode, "closing-guard") || !strcmp(mode, "failed-guard")) {
+        CHECK(xtc_xir_namespace_arm(guard) == XR_XIR_NAMESPACE_OK);
+        expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
+#ifdef INVOCATION_INJECTED
+        if (!strcmp(mode, "failed-guard")) {
+            guard_input_path = request.input_directory; guard_change_directory();
+            CHECK(xtc_xir_namespace_check(guard) == XR_XIR_NAMESPACE_BROKEN);
+        }
+        if (!strcmp(mode, "closing-guard")) {
+            guard_hold_cancel = true;
+            CHECK(xtc_xir_namespace_close(&guard, 0) == XR_XIR_NAMESPACE_PENDING && guard && guard_cancel_holds);
+        }
+#endif
+    }
+#ifdef INVOCATION_INJECTED
+    guard_input_path = request.input_directory;
+    for (unsigned i = 0; i < 2; ++i) guard_source_paths[i] = commands[i].source;
+    if (!strcmp(mode, "guard-break")) { guard_break_check = 2; expected = XR_XIR_INVOCATION_BROKEN; }
+    if (!strcmp(mode, "guard-final-break")) { guard_break_check = 7; expected = XR_XIR_INVOCATION_BROKEN; }
+    if (!strcmp(mode, "guard-arm-oom")) { guard_arm_oom = true; expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
+    if (!strcmp(mode, "guard-check-budget")) { guard_check_budget = true; expected = XR_XIR_INVOCATION_BUDGET; }
+    if (!strcmp(mode, "guard-check-io")) { guard_check_io = true; expected = XR_XIR_INVOCATION_IO; }
 #endif
     XrXirInvocation *owner = NULL; XrXirInvocationDiagnostic diagnostic = {0};
     if (!strcmp(mode, "occupied-out")) {
@@ -240,9 +276,51 @@ static int run_test(int argc, char **argv) {
     printf("owner direct allocations=%zu comparisons=%zu attempted-runs=%u\n", owner_allocation_count, owner_compare_count, invocation_runs);
 #endif
     if (preallocation) CHECK(runtime_attempts == allocation_start && !memcmp(&before, &after_run, sizeof(before)));
+#ifdef INVOCATION_INJECTED
+    if (!strcmp(mode, "guard-pending")) {
+        CHECK(status == XR_XIR_INVOCATION_OK && owner && guard && guard_checks == 7);
+        XrCompileResourceStats retained, pending;
+        CHECK(xr_compile_resources_stats(resources, &retained) == XR_COMPILE_RESOURCE_OK);
+        guard_hold_cancel = true;
+        CHECK(xtc_xir_namespace_close(&guard, 0) == XR_XIR_NAMESPACE_PENDING && guard && guard_cancel_holds);
+        CHECK(xr_compile_resources_stats(resources, &pending) == XR_COMPILE_RESOURCE_OK);
+        CHECK(!memcmp(&retained, &pending, sizeof(retained)));
+        CHECK(xtc_xir_invocation_facts(owner)->completed_runs == 6);
+        CHECK(GetFileAttributesA(request.output) != INVALID_FILE_ATTRIBUTES);
+        puts("upper operation, output lease and directory retained through real PENDING PASS");
+    }
+    guard_hold_cancel = false;
+#endif
+    XrXirNamespaceStatus closed = XR_XIR_NAMESPACE_PENDING;
+    for (unsigned attempt = 0; guard && attempt < 100; ++attempt) {
+        closed = xtc_xir_namespace_close(&guard, 100);
+        CHECK(closed == XR_XIR_NAMESPACE_OK || closed == XR_XIR_NAMESPACE_PENDING);
+    }
+    CHECK(closed == XR_XIR_NAMESPACE_OK && !guard);
+    XrCompileResourceStats after_guard;
+    CHECK(xr_compile_resources_stats(resources, &after_guard) == XR_COMPILE_RESOURCE_OK);
     if (expected != XR_XIR_INVOCATION_OK) {
         if (!strcmp(mode, "occupied-out")) { CHECK(owner == (XrXirInvocation *)(uintptr_t)1); owner = NULL; }
-        CHECK(!owner && before.live_bytes == after_run.live_bytes);
+        CHECK(!owner && before_guard.live_bytes == after_guard.live_bytes);
+#ifdef INVOCATION_INJECTED
+        if (!strcmp(mode, "guard-break") || !strcmp(mode, "guard-final-break")) {
+            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && diagnostic.code == XR_XIR_NAMESPACE_BROKEN);
+            CHECK(invocation_runs == (!strcmp(mode, "guard-break") ? 2u : 6u));
+            CHECK(guard_checks == guard_break_check);
+            CHECK(diagnostic.stage == (!strcmp(mode, "guard-break") ? XR_XIR_INVOCATION_GENERATED : XR_XIR_INVOCATION_NO_STAGE));
+            CHECK(diagnostic.pass == (!strcmp(mode, "guard-break") ? XR_XIR_INVOCATION_REPLAY : XR_XIR_INVOCATION_NO_PASS));
+        }
+        if (!strcmp(mode, "guard-check-budget") || !strcmp(mode, "guard-check-io")) {
+            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && invocation_runs == 1 && guard_checks == 1);
+            CHECK(diagnostic.code == (!strcmp(mode, "guard-check-budget") ? XR_XIR_NAMESPACE_BUDGET : XR_XIR_NAMESPACE_IO));
+            CHECK(diagnostic.stage == XR_XIR_INVOCATION_GENERATED && diagnostic.pass == XR_XIR_INVOCATION_OBSERVE);
+        }
+        if (!strcmp(mode, "cancel")) CHECK(!guard_checks && diagnostic.domain == XR_XIR_INVOCATION_PROCESS);
+        if (!strcmp(mode, "guard-arm-oom")) {
+            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && diagnostic.code == XR_XIR_NAMESPACE_OUT_OF_MEMORY);
+            CHECK(!invocation_runs && !guard_checks && diagnostic.stage == XR_XIR_INVOCATION_NO_STAGE);
+        }
+#endif
         if (!strcmp(mode, "bad-recipe")) CHECK(diagnostic.stage == XR_XIR_INVOCATION_GENERATED && diagnostic.pass == XR_XIR_INVOCATION_NO_PASS);
         if (!strcmp(mode, "child")) CHECK(diagnostic.stage == XR_XIR_INVOCATION_LAUNCHER && diagnostic.pass == XR_XIR_INVOCATION_OBSERVE && diagnostic.exit_code);
         if (!strcmp(mode, "timeout") || !strcmp(mode, "cancel"))
@@ -271,21 +349,58 @@ static int run_test(int argc, char **argv) {
     if (!owner) {
         CHECK(!runtime_live && !runtime_bytes); printf("typed failure %s; unchanged output/live; physical heap zero PASS\n", mode); return 0;
     }
+#ifdef INVOCATION_INJECTED
+    CHECK(guard_checks == 7 && invocation_runs == 6);
+#endif
     CHECK(facts && facts->kind == XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS && facts->completed_runs == 6);
     CHECK(xtc_xir_invocation_resources(owner) == resources && !strcmp(facts->projection.prefix, "invocation_source"));
     CHECK(strcmp(xtc_xir_invocation_command(owner, XR_XIR_INVOCATION_GENERATED)->executable,
         xtc_xir_invocation_command(owner, XR_XIR_INVOCATION_GENERATED)->argv[0]));
+    uint64_t output_length = 0;
     unsigned kinds[9] = {0};
     for (uint32_t i = 0; i < facts->file_count; ++i) {
         const XrXirInvocationFile *file = xtc_xir_invocation_file(owner, i);
         CHECK(file && file->kind < 9 && file->path && file->length); ++kinds[file->kind];
+        if (file->kind == XR_XIR_INVOCATION_OUTPUT) output_length = file->length;
     }
     CHECK(kinds[XR_XIR_INVOCATION_SOURCE] == 2 && kinds[XR_XIR_INVOCATION_OBJECT] == 2 &&
         kinds[XR_XIR_INVOCATION_SDK_ARCHIVE] == 5 && kinds[XR_XIR_INVOCATION_CRT] == 4 &&
         kinds[XR_XIR_INVOCATION_SYSTEM] == 1 && kinds[XR_XIR_INVOCATION_REPORT] == 3 && kinds[XR_XIR_INVOCATION_OUTPUT] == 1 &&
         kinds[XR_XIR_INVOCATION_HEADER] && kinds[XR_XIR_INVOCATION_PROVIDER_IMAGE]);
     printf("six calls; %u observed files; dead producers; frozen complete commands PASS\n", facts->file_count);
-    xtc_xir_invocation_free(owner); CHECK(!runtime_live && !runtime_bytes);
+    void *bytes = NULL; size_t length = 0;
+    CHECK(output_length && output_length <= SIZE_MAX);
+    size_t expected_length = 0; void *expected_output = read_input(output, &expected_length);
+    CHECK(expected_length == output_length);
+    HANDLE write = CreateFileA(output, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    CHECK(write == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
+    CHECK(xtc_xir_invocation_read_output(owner, output_length, &bytes, &length) == XR_XIR_INVOCATION_OK);
+    CHECK(bytes && length == output_length && length > 2 && !memcmp(bytes, expected_output, length));
+    void *again = NULL; size_t again_length = 0;
+    CHECK(xtc_xir_invocation_read_output(owner, output_length, &again, &again_length) == XR_XIR_INVOCATION_OK);
+    CHECK(again_length == length && !memcmp(bytes, again, length)); xr_compile_resources_free(again);
+    void *sentinel = (void *)(uintptr_t)1; size_t occupied_length = 0;
+    size_t attempts = runtime_attempts;
+    CHECK(xtc_xir_invocation_read_output(owner, output_length, &sentinel, &occupied_length) == XR_XIR_INVOCATION_INVALID);
+    CHECK(sentinel == (void *)(uintptr_t)1 && !occupied_length);
+    sentinel = NULL; occupied_length = 1;
+    CHECK(xtc_xir_invocation_read_output(owner, output_length, &sentinel, &occupied_length) == XR_XIR_INVOCATION_INVALID);
+    CHECK(!sentinel && occupied_length == 1 && runtime_attempts == attempts);
+    again = NULL; again_length = 0;
+    if (!strcmp(mode, "read-oom")) {
+        runtime_fail_at = runtime_attempts;
+        CHECK(xtc_xir_invocation_read_output(owner, output_length, &again, &again_length) == XR_XIR_INVOCATION_OUT_OF_MEMORY);
+        runtime_fail_at = SIZE_MAX; CHECK(runtime_attempts == attempts + 1);
+    } else {
+        CHECK(xtc_xir_invocation_read_output(owner, output_length - 1, &again, &again_length) == XR_XIR_INVOCATION_BUDGET);
+        CHECK(runtime_attempts == attempts);
+    }
+    CHECK(!again && !again_length);
+    xtc_xir_invocation_free(owner);
+    CHECK(length == output_length && !memcmp(bytes, expected_output, length) && runtime_live);
+    free(expected_output);
+    xr_compile_resources_free(bytes); CHECK(!runtime_live && !runtime_bytes);
+    puts("same-handle exact repeated output reads, bothout failure, dead producers/result, physical zero PASS");
     DWORD after = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &after));
     printf("handles initial=%lu after=%lu\n", (unsigned long)handles, (unsigned long)after); fflush(stdout);
     puts("compiler physical heap zero; disk artifacts remain caller-directory-owned PASS"); return 0;

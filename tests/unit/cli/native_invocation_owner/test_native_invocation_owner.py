@@ -4,6 +4,7 @@ import hashlib, os, re, subprocess, sys, tempfile, time
 
 exe, root, compiler, linker, sdk = map(lambda value: Path(value).resolve(), sys.argv[1:6])
 faults = sys.argv[6:] == ['faults']
+guard = sys.argv[6:] == ['guard']
 vc = Path(os.environ['VCToolsInstallDir']) / 'lib/x64'
 kit = Path(os.environ['WindowsSdkDir']) / 'Lib' / os.environ['WindowsSDKVersion'].strip('/\\')
 libraries = [vc / name for name in ('msvcrt.lib', 'oldnames.lib', 'vcruntime.lib')]
@@ -35,8 +36,13 @@ def run(mode):
         return result.stdout.decode('utf-8', 'replace')
 
 positive = run('positive')
-if not faults:
+if not faults and not guard:
     run('full-program')
+if guard:
+    for mode in ['null-guard', 'foreign-guard', 'armed-guard', 'failed-guard', 'closing-guard', 'guard-arm-oom',
+                 'guard-check-budget', 'guard-check-io',
+                 'guard-break', 'guard-final-break', 'guard-pending', 'read-oom', 'cancel']:
+        run(mode)
 if faults:
     allocations, comparisons, runs = map(int, re.search(
         r'owner direct allocations=(\d+) comparisons=(\d+) attempted-runs=(\d+)', positive).groups())
