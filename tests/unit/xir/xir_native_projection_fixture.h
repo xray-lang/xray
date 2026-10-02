@@ -14,7 +14,7 @@
 static XrToolchainBinding projection_fixture_binding(const XrXirSourceProduct *product) {
     const XrXirCompileContext *context = xr_xir_compile_source_product_context(product);
     CHECK(context && context->resources);
-    XrToolchainInput input = {XR_TOOLCHAIN_BINDING_SCHEMA_VERSION, XR_TOOLCHAIN_PROVIDER_MSVC,
+    XrToolchainInput input = {XR_TOOLCHAIN_BINDING_SCHEMA_VERSION, XR_TOOLCHAIN_BINDING_PROVIDER_MSVC,
         {0}, "fixture-cl", "fixture-windows-x86_64", "fixture-opt=2", {{1}}, {{2}}, {{3}}};
     XrToolchainBinding binding;
     CHECK(xr_compile_toolchain_binding_build(context->resources, &input, &binding) == XR_TOOLCHAIN_BINDING_OK);

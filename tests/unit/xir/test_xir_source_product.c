@@ -107,7 +107,7 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     }
     xr_compile_session_free(session);
     if (stop==4 && status==XR_XIR_OK) {
-        XrToolchainInput input={XR_TOOLCHAIN_BINDING_SCHEMA_VERSION,XR_TOOLCHAIN_PROVIDER_MSVC,{0},
+        XrToolchainInput input={XR_TOOLCHAIN_BINDING_SCHEMA_VERSION,XR_TOOLCHAIN_BINDING_PROVIDER_MSVC,{0},
             "fixture-cl","fixture-windows-x86_64","fixture-opt=2",{{1}},{{2}},{{3}}};
         XrToolchainBinding binding;
         XrToolchainBindingStatus built=xr_compile_toolchain_binding_build(resources,&input,&binding);
