@@ -232,9 +232,14 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
     xr_sha256_final(&hash, facts->identity); return true;
 }
 XR_FUNC XrXirTargetStatus xtc_xir_target_capture(const XrXirTargetRequest *request, XrXirTargetSnapshot **output) {
-    if (!request || !output || *output || !request->resources || !request->triple || !request->files || !request->file_count ||
+    if (!request || !output || *output || !request->resources || !request->triple ||
+        (request->file_count && !request->files) || (!request->file_count && !request->images) ||
         !request->commands || !request->command_count) return XR_XIR_TARGET_INVALID;
+    if (request->images && (!request->images->sealed ||
+        request->images->storage.resources != request->resources)) return XR_XIR_TARGET_INVALID;
     if (request->file_count > XTC_XIR_TARGET_FILE_LIMIT || request->command_count > XTC_XIR_TARGET_COMMAND_LIMIT)
+        return XR_XIR_TARGET_BUDGET;
+    if (request->images && request->images->count > XTC_XIR_TARGET_FILE_LIMIT - request->file_count)
         return XR_XIR_TARGET_BUDGET;
     if (request->provider < 1 || request->provider > 4 ||
         request->provider == 2 || (request->crt != 1 && request->crt != 2) || request->dialect != 11)

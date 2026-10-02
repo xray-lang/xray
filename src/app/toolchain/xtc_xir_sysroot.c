@@ -22,4 +22,10 @@ XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirT
     return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_UNSUPPORTED);
 }
 XR_FUNC void xtc_xir_sysroot_close(XrXirTargetSnapshot *snapshot) { (void)snapshot; }
+XR_FUNC bool xtc_xir_sysroot_observe(XrXirImageCollector *images, const XrProcImageEvent *event) {
+    (void)event; return xtc_xir_target_fail(&images->storage, XR_XIR_TARGET_UNSUPPORTED);
+}
+XR_FUNC bool xtc_xir_sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirTargetFile *file) {
+    (void)lock; (void)file; return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_UNSUPPORTED);
+}
 #endif

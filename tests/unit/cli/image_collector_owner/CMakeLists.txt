@@ -1,0 +1,52 @@
+cmake_minimum_required(VERSION 3.25)
+project(XirImageCollectorOwner C)
+if(NOT WIN32 OR NOT CMAKE_GENERATOR STREQUAL "Ninja")
+    message(FATAL_ERROR "Image collector qualification requires Windows and Ninja")
+endif()
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+get_filename_component(XR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
+option(IMAGE_OWNER_SANITIZE "Enable Clang ASan and UBSan" OFF)
+add_library(image_process STATIC
+    "${XR_ROOT}/src/app/toolchain/xtc_process.c"
+    "${XR_ROOT}/src/os/win/proc_win.c" "${XR_ROOT}/src/os/win/proc_self_win.c"
+    "${XR_ROOT}/src/os/win/pipe_win.c" "${XR_ROOT}/src/os/win/time_win.c"
+    "${XR_ROOT}/src/base/xutf8.c" "${XR_ROOT}/src/base/xsha256.c")
+add_library(image_fixture SHARED test_xir_image_collector.c)
+target_compile_definitions(image_fixture PRIVATE IMAGE_HELPER_DLL)
+add_executable(test_xir_image_collector test_xir_image_collector.c)
+add_executable(test_xir_image_collector_production test_xir_image_collector.c
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c"
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c")
+target_compile_definitions(test_xir_image_collector_production PRIVATE IMAGE_PRODUCTION)
+foreach(t image_process image_fixture test_xir_image_collector test_xir_image_collector_production)
+    target_include_directories(${t} PRIVATE "${XR_ROOT}/src" "${XR_ROOT}/include")
+    target_compile_definitions(${t} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(${t} PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(${t} PRIVATE /experimental:c11atomics)
+    endif()
+    if(IMAGE_OWNER_SANITIZE)
+        if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+            message(FATAL_ERROR "Image collector sanitizers require clang-cl")
+        endif()
+        execute_process(COMMAND "${CMAKE_C_COMPILER}" /clang:-print-resource-dir
+            OUTPUT_VARIABLE resource OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+        target_compile_options(${t} PRIVATE /fsanitize=address /Oy- /clang:-fsanitize=undefined /clang:-fno-sanitize=function)
+        target_link_options(${t} PRIVATE /INCREMENTAL:NO /INCLUDE:__asan_seh_interceptor
+            "/WHOLEARCHIVE:${resource}/lib/windows/clang_rt.asan_dynamic_runtime_thunk-x86_64.lib")
+        target_link_libraries(${t} PRIVATE "${resource}/lib/windows/clang_rt.asan_dynamic-x86_64.lib")
+    endif()
+endforeach()
+foreach(t test_xir_image_collector test_xir_image_collector_production)
+    target_link_libraries(${t} PRIVATE image_process)
+endforeach()
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+enable_testing()
+foreach(t test_xir_image_collector test_xir_image_collector_production)
+    add_test(NAME ${t} COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_xir_image_collector.py" $<TARGET_FILE:${t}> $<TARGET_FILE:image_fixture>)
+    set_tests_properties(${t} PROPERTIES TIMEOUT 180 COST 20 RUN_SERIAL TRUE LABELS "unit;toolchain;ownership;budget")
+endforeach()

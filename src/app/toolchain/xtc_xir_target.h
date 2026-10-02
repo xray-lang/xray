@@ -37,6 +37,7 @@ typedef struct XrXirTargetCommand {
     const XrXirTargetEnvironment *environment;
     uint32_t environment_count;
 } XrXirTargetCommand;
+struct XrXirImageCollector;
 typedef struct XrXirTargetRequest {
     XrCompileResources *resources;
     const char *triple;
@@ -46,6 +47,7 @@ typedef struct XrXirTargetRequest {
     uint32_t file_count;
     const XrXirTargetCommand *commands;
     uint32_t command_count;
+    const struct XrXirImageCollector *images;
 } XrXirTargetRequest;
 typedef struct XrXirTargetFile {
     const char *path;
