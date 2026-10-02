@@ -1311,6 +1311,7 @@ function(xray_exclude_include_fragments source_list_name)
 endfunction()
 
 file(GLOB BASE_SRC CONFIGURE_DEPENDS "src/base/*.c")
+list(REMOVE_ITEM BASE_SRC "${CMAKE_SOURCE_DIR}/src/base/xcompile_resources.c")
 list(APPEND BASE_SRC
     "src/shared/xr_crypto_core.c"
     "src/shared/xr_unicode_grapheme_data.c"
@@ -2673,6 +2674,8 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 # Unit Tests
 # ============================================================================
 
+add_subdirectory(src/base)
+target_link_libraries(xray PRIVATE xray_compile_resources)
 add_subdirectory(src/xir)
 add_subdirectory(src/execution)
 add_subdirectory(src/toolchain)
