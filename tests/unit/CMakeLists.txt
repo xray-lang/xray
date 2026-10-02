@@ -83,7 +83,15 @@ if(WIN32)
         target_compile_options(test_file_read_windows PRIVATE /experimental:c11atomics)
     endif()
     target_include_directories(test_file_read_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    add_executable(test_declaration_file_windows base/test_declaration_file_windows.c)
+    add_executable(test_declaration_file_windows base/test_declaration_file_windows.c
+        ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c
+        ${CMAKE_SOURCE_DIR}/src/base/xtoml.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c
+        ${CMAKE_SOURCE_DIR}/src/module/xdeclaration_manifest.c
+        ${CMAKE_SOURCE_DIR}/src/module/xdeclaration_load.c)
+    if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_declaration_file_windows PRIVATE /experimental:c11atomics)
+    endif()
     target_include_directories(test_declaration_file_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
     foreach(file_test test_file_read_windows test_declaration_file_windows)
         if(MSVC)
@@ -173,7 +181,13 @@ set_tests_properties(test_xtoml_allocations PROPERTIES LABELS "unit;metadata;own
 add_test(NAME test_xtoml COMMAND test_xtoml)
 set_tests_properties(test_xtoml PROPERTIES LABELS "unit;metadata;ownership")
 
-add_executable(test_declaration_manifest module/test_declaration_manifest.c)
+add_executable(test_declaration_manifest module/test_declaration_manifest.c
+    ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c
+    ${CMAKE_SOURCE_DIR}/src/base/xtoml.c
+    ${CMAKE_SOURCE_DIR}/src/module/xdeclaration_manifest.c)
+if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_declaration_manifest PRIVATE /experimental:c11atomics)
+endif()
 target_include_directories(test_declaration_manifest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(test_declaration_manifest PRIVATE /W4 /WX)

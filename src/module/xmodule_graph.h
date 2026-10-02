@@ -20,6 +20,7 @@
 #include "../base/xhashmap.h"
 #include "../base/xstable_id.h"
 #include "xmodule_resolver.h"
+#include "xmodule_fingerprint.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -125,10 +126,6 @@ typedef struct XrModuleGraph {
  * The compiler session is borrowed and used for parsing source files. */
 XR_FUNC XrModuleGraph *xr_module_graph_new(struct XrCompilerSession *compiler_session,
                                            XrModuleResolver *resolver);
-
-/* Single source-content identity owner. The digest is domain-framed and
- * length-framed; callers must not substitute a plain content hash. */
-XR_FUNC void xr_module_source_fingerprint(const char *source, XrFingerprint *out);
 
 /* Free the graph and all owned specs/ASTs. */
 XR_FUNC void xr_module_graph_free(XrModuleGraph *g);
