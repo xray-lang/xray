@@ -115,12 +115,12 @@ static XtcXirLock *sysroot_lock(XrXirTargetSnapshot *snapshot, const wchar_t *pa
 static const char *sysroot_canonical_text(XrXirTargetSnapshot *snapshot) {
     const wchar_t *path = snapshot->scratch + 4;
     size_t length = snapshot->scratch_length - 4;
-    if (!xtc_xir_target_work(snapshot, length)) return NULL;
+    if (!xtc_xir_target_work(snapshot, length * sizeof(*path))) return NULL;
     int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, (int)length, NULL, 0, NULL, NULL);
     if (bytes <= 0) { sysroot_error(snapshot, GetLastError()); return NULL; }
     char *output = xtc_xir_target_allocate(snapshot, (size_t)bytes + 1);
     if (!output) return NULL;
-    if (!xtc_xir_target_work(snapshot, length)) return NULL;
+    if (!xtc_xir_target_work(snapshot, length * sizeof(*path))) return NULL;
     if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, (int)length, output, bytes, NULL, NULL) != bytes) {
         sysroot_error(snapshot, GetLastError()); return NULL;
     }
@@ -136,13 +136,15 @@ static bool sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirT
     if (!GetFileSizeEx(lock->handle, &size)) return sysroot_error(snapshot, GetLastError());
     if (size.QuadPart < 0) return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
     file->length = (uint64_t)size.QuadPart;
+    if (!xtc_xir_target_work(snapshot, 1)) return false;
     XrSHA256Context hash; xr_sha256_init(&hash);
     uint64_t left = file->length;
     while (left) {
         DWORD amount = (DWORD)(left > 65536 ? 65536 : left), actual = 0;
-        if (!xtc_xir_target_work(snapshot, (uint64_t)amount * 2)) return false;
+        if (!xtc_xir_target_work(snapshot, amount)) return false;
         if (!ReadFile(lock->handle, snapshot->scratch, amount, &actual, NULL)) return sysroot_error(snapshot, GetLastError());
         if (actual != amount) return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_IO);
+        if (!xtc_xir_target_work(snapshot, actual)) return false;
         xr_sha256_update(&hash, (const uint8_t *)snapshot->scratch, actual); left -= actual;
     }
     if (!xtc_xir_target_work(snapshot, 1)) return false;
@@ -171,19 +173,24 @@ static bool sysroot_file(XrXirTargetSnapshot *snapshot, const XrXirTargetDepende
     if (!file->path || !sysroot_hash(snapshot, lock, file)) return false;
     return true;
 }
+static bool sysroot_sort_last(XrXirTargetSnapshot *snapshot, uint32_t index) {
+    for (uint32_t at = index; at; --at) {
+        XrXirTargetFile *a = &snapshot->files[at - 1], *b = &snapshot->files[at];
+        int order;
+        if (!xtc_xir_target_compare(snapshot, a->path, b->path, &order)) return false;
+        if (order <= 0) break;
+        if (!xtc_xir_target_work(snapshot, 3 * sizeof(*a))) return false;
+        XrXirTargetFile temporary = *a; *a = *b; *b = temporary;
+    }
+    return true;
+}
 XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetRequest *request) {
     snapshot->scratch = xtc_xir_target_allocate(snapshot, XTC_XIR_TARGET_PATH_LIMIT * sizeof(wchar_t));
     snapshot->files = xtc_xir_target_allocate(snapshot, request->file_count * sizeof(*snapshot->files));
     if (!snapshot->scratch || !snapshot->files) return false;
     for (uint32_t i = 0; i < request->file_count; ++i) {
         if (!sysroot_file(snapshot, &request->files[i], &snapshot->files[i])) return false;
-        for (uint32_t at = i; at; --at) {
-            XrXirTargetFile *a = &snapshot->files[at - 1], *b = &snapshot->files[at];
-            int order;
-            if (!xtc_xir_target_compare(snapshot, a->path, b->path, &order)) return false;
-            if (order <= 0) break;
-            XrXirTargetFile temporary = *a; *a = *b; *b = temporary;
-        }
+        if (!sysroot_sort_last(snapshot, i)) return false;
     }
     return true;
 }

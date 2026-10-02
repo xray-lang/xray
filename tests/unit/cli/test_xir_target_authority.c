@@ -40,12 +40,14 @@ static void target_test_free(void *pointer) {
 #include "app/toolchain/xtc_xir_target.c"
 static size_t io_attempts, io_fail_at = SIZE_MAX;
 static DWORD injected_error = ERROR_READ_FAULT;
+static bool short_read;
 static bool target_io_fail(void) {
     if (io_attempts++ != io_fail_at) return false;
     SetLastError(injected_error); return true;
 }
 static BOOL target_read(HANDLE file, LPVOID bytes, DWORD count, LPDWORD actual, LPOVERLAPPED over) {
     if (target_io_fail()) return FALSE;
+    if (short_read) { *actual = 0; return TRUE; }
     return ReadFile(file, bytes, count, actual, over);
 }
 #define CreateFileW(...) (target_io_fail() ? INVALID_HANDLE_VALUE : CreateFileW(__VA_ARGS__))
@@ -241,6 +243,39 @@ static void io_failures(void) {
     io_fail_at = SIZE_MAX; xr_compile_resources_release(resources); CHECK(!live && !live_bytes);
     printf("typed I/O failure points: %zu\n", count);
 }
+static void fixed_operation_work(void) {
+    XrCompileResources *resources = ledger(&unlimited);
+    XrXirTargetSnapshot snapshot = {0}; snapshot.resources = resources;
+    wchar_t scratch[32768]; snapshot.scratch = scratch;
+    HANDLE handle = CreateFileA(header_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    CHECK(handle != INVALID_HANDLE_VALUE); XtcXirLock lock = {0}; lock.handle = handle;
+    XrXirTargetFile file = {0};
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        LARGE_INTEGER zero = {0}; CHECK(SetFilePointerEx(handle, zero, NULL, FILE_BEGIN));
+        snapshot.status = XR_XIR_TARGET_OK; io_attempts = 0;
+        io_fail_at = mode == 1 || mode == 2 ? 1 : SIZE_MAX;
+        injected_error = mode == 2 ? ERROR_NOT_ENOUGH_MEMORY : ERROR_READ_FAULT;
+        short_read = mode == 3; uint64_t before = stats(resources).work;
+        CHECK(sysroot_hash(&snapshot, &lock, &file) == (mode == 0));
+        CHECK(stats(resources).work - before == (mode == 0 ? 3 + 2 * 3 : 2 + 3));
+        CHECK(snapshot.status == (mode == 0 ? XR_XIR_TARGET_OK :
+            mode == 2 ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_IO));
+    }
+    CHECK(CloseHandle(handle)); short_read = false; io_fail_at = SIZE_MAX; injected_error = ERROR_READ_FAULT;
+    snapshot.status = XR_XIR_TARGET_OK;
+    memcpy(scratch, L"\\\\?\\C:\\a", 9 * sizeof(wchar_t)); snapshot.scratch_length = 8;
+    uint64_t before = stats(resources).work;
+    CHECK(!strcmp(sysroot_canonical_text(&snapshot), "C:/a"));
+    CHECK(stats(resources).work - before == 2 * 4 * sizeof(wchar_t) + 1 + sizeof(XtcXirMemory) + 5 + 4);
+    while (snapshot.memory) { XtcXirMemory *next = snapshot.memory->next;
+        xr_compile_resources_free(snapshot.memory); snapshot.memory = next; }
+    XrXirTargetFile sorted[2] = {{"b",0,0,{0}}, {"a",0,0,{0}}}; snapshot.files = sorted;
+    before = stats(resources).work; CHECK(sysroot_sort_last(&snapshot, 1));
+    CHECK(stats(resources).work - before == 2 + 3 * sizeof(XrXirTargetFile));
+    CHECK(!strcmp(sorted[0].path, "a"));
+    xr_compile_resources_release(resources); CHECK(!live && !live_bytes);
+    puts("fixed work: UTF-16 bytes, read failure/short-read, actual hash, three-copy swap PASS");
+}
 static void bounded_scanning(void) {
     SYSTEM_INFO info; GetSystemInfo(&info); size_t page = info.dwPageSize;
     unsigned char *memory = VirtualAlloc(NULL, page * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); CHECK(memory);
@@ -309,6 +344,6 @@ int main(int argc, char **argv) {
     if (argc == 3 && !strcmp(argv[1], "--diagnostic-lease")) return diagnostic_lease(argv[2]);
     CHECK(argc == 1);
     setup(); identity_and_lifetime(); invalid_inputs(); reparse_rejection(); resource_limits();
-    allocation_failures(); io_failures(); bounded_scanning(); teardown();
+    allocation_failures(); io_failures(); fixed_operation_work(); bounded_scanning(); teardown();
     puts("xir target snapshots: PASS"); return 0;
 }
