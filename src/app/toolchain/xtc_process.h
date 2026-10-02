@@ -13,6 +13,7 @@
 
 #include "../../base/xdefs.h"
 #include "../../base/xcompile_resources.h"
+#include "../../os/os_proc.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -50,6 +51,12 @@ typedef struct XrProcessSpec {
     const char *cwd;
     uint32_t timeout_ms;
     size_t output_limit;
+    XrProcImageMode image_mode;
+    /* Copied by prepare; context is borrowed only throughout each run and
+     * its cleanup. Callback work and retained records use this process ledger.
+     * Observations are provisional until run succeeds; the callback owns its
+     * rollback. No image callback occurs during failure cleanup. */
+    XrProcImageObserver image_observer;
 } XrProcessSpec;
 
 typedef struct XrProcessByteBuffer {

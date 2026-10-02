@@ -23,12 +23,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#if defined(XR_OS_MACOS)
-#include <limits.h>
-#include <mach-o/dyld.h>
-#include <stdlib.h>
-#include <sys/sysctl.h>
-#endif
 
 #define PROC_GROUP_CAPACITY 64
 static atomic_int proc_groups[PROC_GROUP_CAPACITY];
@@ -130,6 +124,10 @@ static bool proc_read_i64(int fd, int64_t *out) {
 
 XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
+    if (o && o->image_mode != XR_PROC_IMAGES_NONE)
+        return o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE ? XR_PROC_UNSUPPORTED : XR_PROC_INVALID_ARGUMENT;
+    if (o && o->image_observer.observe) return XR_PROC_INVALID_ARGUMENT;
+
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free || !o->memory.work ||
         (o->detached && o->new_process_group)) return XR_PROC_INVALID_ARGUMENT;
@@ -314,4 +312,8 @@ int xr_proc_kill_tree(XrProcId pid, int signal) {
         return -1;
     if (proc_group_slot(pid) < 0) { errno = EINVAL; return -1; }
     return kill((pid_t) -pid, signal) == 0 ? 0 : -1;
+}
+
+XR_FUNC XrOsProcStatus xr_proc_pump_images(XrProcId pid, XrProcImagePumpResult *output) {
+    (void)pid; (void)output; return XR_PROC_UNSUPPORTED;
 }
