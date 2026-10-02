@@ -302,6 +302,64 @@ static bool dependency_libraries(DependencyParser *p) {
     }
     return (!searching && blocks) || dependency_fail(p, XR_JSON_CURSOR_INVALID);
 }
+static bool dependency_rsp_unit(DependencyParser *p, uint32_t *unit) {
+    uint8_t low, high;
+    if (!xr_json_cursor_byte(&p->json, &low) || !xr_json_cursor_byte(&p->json, &high)) return false;
+    *unit = (uint32_t)low | ((uint32_t)high << 8); return true;
+}
+static bool dependency_rsp_take(DependencyParser *p, uint32_t expected) {
+    uint32_t unit;
+    if (!dependency_rsp_unit(p, &unit)) return false;
+    return unit == expected || dependency_fail(p, XR_JSON_CURSOR_INVALID);
+}
+static bool dependency_rsp_scalar(DependencyParser *p, uint32_t scalar, size_t begin) {
+    if (scalar >= 0xd800 && scalar <= 0xdbff) {
+        uint32_t low;
+        if (!dependency_rsp_unit(p, &low)) return false;
+        if (low < 0xdc00 || low > 0xdfff) return dependency_fail(p, XR_JSON_CURSOR_INVALID);
+        scalar = 0x10000 + ((scalar - 0xd800) << 10) + low - 0xdc00;
+    } else if (scalar >= 0xdc00 && scalar <= 0xdfff) return dependency_fail(p, XR_JSON_CURSOR_INVALID);
+    if (scalar < 32 || (scalar >= 0x7f && scalar <= 0x9f))
+        return dependency_fail(p, XR_JSON_CURSOR_INVALID);
+    if (scalar == '@') return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
+    size_t count = scalar < 0x80 ? 1 : scalar < 0x800 ? 2 : scalar < 0x10000 ? 3 : 4;
+    if (count > p->limits.path_bytes || p->text_used - begin > p->limits.path_bytes - count)
+        return dependency_fail(p, XR_JSON_CURSOR_BUDGET);
+    if (count == 1) return dependency_put(p, (uint8_t)scalar);
+    uint8_t lead = count == 2 ? 0xc0 : count == 3 ? 0xe0 : 0xf0;
+    if (!dependency_put(p, (uint8_t)(lead | (scalar >> (6 * (count - 1)))))) return false;
+    for (size_t remaining = count - 1; remaining; --remaining)
+        if (!dependency_put(p, (uint8_t)(0x80 | ((scalar >> (6 * (remaining - 1))) & 0x3f)))) return false;
+    return true;
+}
+static bool dependency_rsp(DependencyParser *p) {
+    uint32_t bom;
+    if (!dependency_rsp_unit(p, &bom)) return false;
+    if (bom == 0xfffe) return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
+    if (bom != 0xfeff || ((size_t)(p->json.end - p->json.begin) & 1))
+        return dependency_fail(p, XR_JSON_CURSOR_INVALID);
+    while (p->json.cursor != p->json.end) {
+        if (!dependency_rsp_take(p, '"')) return false;
+        size_t offset = (size_t)(p->json.cursor - p->json.begin), begin = p->text_used;
+        for (;;) {
+            uint32_t scalar;
+            if (!dependency_rsp_unit(p, &scalar)) return false;
+            if (scalar == '"') break;
+            if (!dependency_rsp_scalar(p, scalar, begin)) return false;
+        }
+        if (!dependency_put(p, 0) || !dependency_rsp_take(p, '\r') || !dependency_rsp_take(p, '\n')) return false;
+        const char *path = p->facts->text + begin;
+        if (!xr_json_cursor_work(&p->json, 1)) return false;
+        char first = path[0];
+        if (first == '-') return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
+        if (first == '/') {
+            if (!xr_json_cursor_work(&p->json, 1)) return false;
+            if (path[1] != '/') return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
+        }
+        if (!dependency_append(p, path, offset, XR_DEPENDENCY_LINK_INPUT)) return false;
+    }
+    return p->facts->count != 0 || dependency_fail(p, XR_JSON_CURSOR_INVALID);
+}
 static bool dependency_arguments(DependencyParser *p, const XrDependencyInput *input) {
     for (uint32_t i = 0; i < input->argc; ++i) {
         if (!xr_json_cursor_work(&p->json, 1)) return false;
@@ -325,7 +383,7 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
     if (!resources || !input || !input->bytes || !input->length || !input->argv ||
         !input->argc || !output || *output || !limits.frame_bytes || !limits.path_bytes || !limits.records)
         return XR_XIR_TARGET_INVALID;
-    if (input->format < XR_DEPENDENCY_MSVC_SOURCE_1_2 || input->format > XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN)
+    if (input->format < XR_DEPENDENCY_MSVC_SOURCE_1_2 || input->format > XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE)
         return XR_XIR_TARGET_UNSUPPORTED;
     if (input->length > limits.frame_bytes || input->length > PTRDIFF_MAX) return XR_XIR_TARGET_BUDGET;
     DependencyParser p = {0}; p.limits = limits;
@@ -340,15 +398,23 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
     if (p.json.status == XR_JSON_CURSOR_OK && xr_json_cursor_work(&p.json, input->length + 1)) {
         memcpy(p.facts->bytes, input->bytes, input->length); p.facts->bytes[input->length] = 0;
         p.json.begin = p.json.cursor = p.facts->bytes; p.json.end = p.json.begin + input->length;
-        if (input->format == XR_DEPENDENCY_WINDOWS_MAKE) {
+        if (input->format == XR_DEPENDENCY_WINDOWS_MAKE || input->format == XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) {
             p.text_capacity = input->length + 1;
-            status = xr_compile_resources_alloc(resources, p.text_capacity, (void **)&p.facts->text);
+            /* A UTF-16 code unit needs at most three UTF-8 bytes. Quotes and
+             * CRLF leave more room than the terminating byte for each path. */
+            if (input->format == XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) {
+                if (input->length / 2 > (SIZE_MAX - 1) / 3) dependency_fail(&p, XR_JSON_CURSOR_BUDGET);
+                else p.text_capacity = (input->length / 2) * 3 + 1;
+            }
+            status = p.json.status == XR_JSON_CURSOR_OK ? xr_compile_resources_alloc(resources,
+                p.text_capacity, (void **)&p.facts->text) : XR_COMPILE_RESOURCE_BUDGET;
             if (status != XR_COMPILE_RESOURCE_OK) dependency_fail(&p, dependency_resource(status));
         }
         if (p.json.status == XR_JSON_CURSOR_OK) {
             if (input->format == XR_DEPENDENCY_MSVC_SOURCE_1_2) dependency_json(&p);
             else if (input->format == XR_DEPENDENCY_WINDOWS_MAKE) dependency_make(&p);
-            else dependency_libraries(&p);
+            else if (input->format == XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN) dependency_libraries(&p);
+            else dependency_rsp(&p);
         }
     }
     if (p.json.status != XR_JSON_CURSOR_OK) {

@@ -87,6 +87,7 @@ static void stats(XrCompileResources *r, XrCompileResourceStats *s) {
 }
 static XrXirTargetStatus trial(const XrDependencyInput *input, XrDependencyLimits limits,
     const XrCompileResourceLimits *budget, XrCompileResourceStats *measured) {
+    *measured=(XrCompileResourceStats){0};
     XrCompileResources *r=NULL; XrDependencyFacts *f=NULL;
     XrCompileResourceStatus rs=xr_compile_resources_new(budget,&r);
     if (rs!=XR_COMPILE_RESOURCE_OK) return rs==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_BUDGET;
@@ -125,18 +126,22 @@ static void boundaries(const XrDependencyInput *input, bool every_work) {
             reset(); CHECK(trial(input,shape,&budget,&used)==(minus ? XR_XIR_TARGET_BUDGET : XR_XIR_TARGET_OK));
         }
     }
-    uint64_t step=every_work ? 1 : baseline.work/100+1;
-    for (uint64_t cut=0;cut<baseline.work;cut+=step) {
+    uint64_t step=baseline.work/100+1;
+    for (uint64_t cut=every_work ? baseline.work : 0;
+        every_work ? cut!=0 : cut<baseline.work;) {
         XrCompileResourceLimits budget=unlimited; budget.work=cut; reset();
+        if(every_work) --budget.work;
         CHECK(trial(input,shape,&budget,&used)==XR_XIR_TARGET_BUDGET); ++all_work;
+        if(every_work) {CHECK(used.work<cut);cut=used.work;} else cut+=step;
     }
     printf("format=%d work=%llu allocated=%llu peak=%llu work-cut-step=%llu\n",input->format,
         (unsigned long long)baseline.work,(unsigned long long)baseline.allocated_bytes,
-        (unsigned long long)baseline.peak_bytes,(unsigned long long)step);
+        (unsigned long long)baseline.peak_bytes,(unsigned long long)(every_work ? 0 : step));
 }
 static void captured(const char *directory, const char *name, XrDependencyFormat format, uint32_t count) {
     char rawname[64], expectname[64];
-    CHECK(snprintf(rawname,sizeof(rawname),"%s.%s",name,format==XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN ? "log" : "deps")>0);
+    CHECK(snprintf(rawname,sizeof(rawname),"%s.%s",name,format==XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN ? "log" :
+        format==XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE ? "rsp" : "deps")>0);
     CHECK(snprintf(expectname,sizeof(expectname),"%s.expected",name)>0);
     size_t length, expected_length; char *bytes=read_file(directory,rawname,&length);
     char *expected=read_file(directory,expectname,&expected_length); (void)expected_length;
@@ -162,7 +167,17 @@ static void captured(const char *directory, const char *name, XrDependencyFormat
     } else CHECK(!xtc_dependencies_target(f));
     xtc_dependencies_free(f);
     bytes=read_file(directory,rawname,&length); input.bytes=(uint8_t *)bytes;
-    boundaries(&input,false); fixture_release(bytes);
+    boundaries(&input,format==XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE);
+    if(format==XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) {
+        for(size_t n=0;n<length;++n) {
+            input.length=n;XrCompileResourceStats used;reset();
+            /* Complete earlier lines form a valid shorter explicit list.
+             * All other prefixes truncate the mandatory UTF-16 framing. */
+            bool complete=n>=6&&!(n&1)&&bytes[n-4]=='\r'&&!bytes[n-3]&&bytes[n-2]=='\n'&&!bytes[n-1];
+            CHECK(trial(&input,shape,&unlimited,&used)==(complete?XR_XIR_TARGET_OK:XR_XIR_TARGET_INVALID));
+        }
+    }
+    fixture_release(bytes);
 }
 static void expect(XrDependencyFormat format, const char *bytes, XrXirTargetStatus expected) {
     XrDependencyInput input={format,(const uint8_t *)bytes,strlen(bytes),arguments,3};
@@ -258,6 +273,104 @@ static void rejection_and_work(void) {
     CHECK(xtc_dependencies_parse(r,&input,shape,&second)==XR_XIR_TARGET_BUDGET && !second);
     xr_compile_resources_release(r);
 }
+static size_t rsp_ascii(const char *text, uint8_t *bytes) {
+    bytes[0]=0xff;bytes[1]=0xfe;size_t length=2;
+    for(size_t i=0;text[i];++i) {bytes[length++]=(uint8_t)text[i];bytes[length++]=0;}
+    return length;
+}
+static XrCompileResourceStats rsp_expect(const uint8_t *bytes,size_t length,
+    XrDependencyLimits limits,XrXirTargetStatus expected) {
+    XrDependencyInput input={XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,bytes,length,arguments,3};
+    XrCompileResourceStats used={0};reset();
+    XrXirTargetStatus actual=trial(&input,limits,&unlimited,&used);
+    if(actual!=expected)fprintf(stderr,"RSP expected %d got %d, length=%zu\n",expected,actual,length);
+    CHECK(actual==expected);return used;
+}
+static void rsp_rejections(const char *directory) {
+    size_t length;char *old=read_file(directory,"msvc-defaultlib.rsp",&length);
+    rsp_expect((const uint8_t *)old,length,shape,XR_XIR_TARGET_UNSUPPORTED);fixture_release(old);
+    const char *invalid[]={"", "\"\"\r\n", "C:/a.lib\r\n", "\"relative.lib\"\r\n", "\"C:a.lib\"\r\n",
+        "\"\\root.lib\"\r\n", "\"C:/a.lib\"", "\"C:/a.lib\"\r", "\"C:/a.lib\"\n",
+        " \"C:/a.lib\"\r\n", "\"C:/a.lib\" \r\n", "\r\n\"C:/a.lib\"\r\n",
+        "\"C:/a.lib\"\r\n\r\n", "\"C:/a.lib\"\r\nx", "\"C:/a\"b.lib\"\r\n",
+        "\"C:/a\t.lib\"\r\n", "\"\\\\server\\\"\r\n"};
+    uint8_t bytes[512];
+    for(size_t i=0;i<sizeof(invalid)/sizeof(*invalid);++i) {
+        length=rsp_ascii(invalid[i],bytes);rsp_expect(bytes,length,shape,XR_XIR_TARGET_INVALID);
+    }
+    const char *unsupported[]={"\"/defaultlib:C:/a.lib\"\r\n","\"/LIBPATH:C:/libs\"\r\n",
+        "\"-flag\"\r\n","\"@C:/a.rsp\"\r\n","\"C:/x@y.lib\"\r\n"};
+    for(size_t i=0;i<sizeof(unsupported)/sizeof(*unsupported);++i) {
+        length=rsp_ascii(unsupported[i],bytes);rsp_expect(bytes,length,shape,XR_XIR_TARGET_UNSUPPORTED);
+    }
+    length=rsp_ascii("\"C:/a.lib\"\r\n",bytes);
+    for(size_t n=0;n<length;++n)rsp_expect(bytes,n,shape,XR_XIR_TARGET_INVALID);
+    bytes[0]=0xfe;bytes[1]=0xff;rsp_expect(bytes,length,shape,XR_XIR_TARGET_UNSUPPORTED);
+    bytes[0]=0;bytes[1]=0;rsp_expect(bytes,length,shape,XR_XIR_TARGET_INVALID);
+    length=rsp_ascii("\"C:/a.lib\"\r\n",bytes);bytes[length]=0;
+    rsp_expect(bytes,length+1,shape,XR_XIR_TARGET_INVALID);
+    const uint16_t bad[]={0,1,0x7f,0x85,0xd800,0xdbff,0xdc00,0xdfff};
+    for(size_t i=0;i<sizeof(bad)/sizeof(*bad);++i) {
+        length=rsp_ascii("\"C:/a.lib\"\r\n",bytes);bytes[10]=(uint8_t)bad[i];bytes[11]=(uint8_t)(bad[i]>>8);
+        rsp_expect(bytes,length,shape,XR_XIR_TARGET_INVALID);
+    }
+    length=rsp_ascii("\"C:/a.lib\"\r\n",bytes);
+    XrDependencyLimits exact={length,8,1},small=exact;
+    rsp_expect(bytes,length,exact,XR_XIR_TARGET_OK);
+    --small.frame_bytes;rsp_expect(bytes,length,small,XR_XIR_TARGET_BUDGET);
+    small=exact;--small.path_bytes;rsp_expect(bytes,length,small,XR_XIR_TARGET_BUDGET);
+    length=rsp_ascii("\"C:/a.lib\"\r\n\"C:/b.lib\"\r\n",bytes);
+    small=shape;small.records=1;rsp_expect(bytes,length,small,XR_XIR_TARGET_BUDGET);
+    XrDependencyInput input={XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,bytes,length,arguments,3};
+    const char *response[]={"link.exe","@C:/args.rsp"};input.argv=response;input.argc=2;
+    XrCompileResourceStats used;reset();CHECK(trial(&input,shape,&unlimited,&used)==XR_XIR_TARGET_UNSUPPORTED);
+    input.argv=arguments;input.argc=3;
+    XrCompileResourceLimits zero=unlimited;zero.work=0;bytes[0]=0;
+    reset();CHECK(trial(&input,shape,&zero,&used)==XR_XIR_TARGET_BUDGET);
+    reset();XrCompileResources *r=NULL;CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
+    XrDependencyFacts *sentinel=(XrDependencyFacts *)(uintptr_t)1;
+    CHECK(xtc_dependencies_parse(r,&input,shape,&sentinel)==XR_XIR_TARGET_INVALID&&sentinel==(XrDependencyFacts *)(uintptr_t)1);
+    xr_compile_resources_release(r);
+}
+static void rsp_work_and_lifetime(void) {
+    uint8_t bytes[128];size_t length=rsp_ascii("\"C:/a\"\r\n",bytes);
+    XrCompileResourceStats base=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);
+    length=rsp_ascii("\"C:/aa\"\r\n",bytes);
+    XrCompileResourceStats longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);
+    /* One extra ASCII unit adds two copied/read UTF-16 bytes and one UTF-8
+     * byte written, counted, validated and checked as a path character. */
+    CHECK(longer.work-base.work==8);
+    length=rsp_ascii("\"C:/a\"\r\n",bytes);bytes[10]=0xe9;
+    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.work-base.work==4);
+    bytes[10]=0x2d;bytes[11]=0x4e;
+    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.work-base.work==8);
+    length=rsp_ascii("\"C:/aa\"\r\n",bytes);bytes[10]=0x3d;bytes[11]=0xd8;bytes[12]=0;bytes[13]=0xde;
+    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.work-base.work==16);
+    XrDependencyLimits unicode_limit={length,7,1};rsp_expect(bytes,length,unicode_limit,XR_XIR_TARGET_OK);
+    --unicode_limit.path_bytes;rsp_expect(bytes,length,unicode_limit,XR_XIR_TARGET_BUDGET);
+    XrDependencyInput input={XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,bytes,length,arguments,3};
+    boundaries(&input,true);
+    char executable[]="C:/tools/link.exe",option[]="/NODEFAULTLIB";
+    const char *argv[]={executable,option};input.argv=argv;input.argc=2;
+    reset();XrCompileResources *r=NULL;CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
+    XrDependencyFacts *owner=NULL;CHECK(xtc_dependencies_parse(r,&input,shape,&owner)==XR_XIR_TARGET_OK);
+    XrCompileResourceStats before,after;stats(r,&before);
+    memset(executable,0xcd,sizeof(executable));memset(option,0xcd,sizeof(option));memset(bytes,0xcd,sizeof(bytes));
+    xr_compile_resources_release(r);
+    CHECK(!strcmp(xtc_dependencies_record(owner,0)->path,"C:/\xf0\x9f\x98\x80"));
+    CHECK(xtc_dependencies_record(owner,0)->offset==4&&xtc_dependencies_count(owner)==1&&!xtc_dependencies_target(owner));
+    stats(xtc_dependencies_resources(owner),&after);CHECK(before.work==after.work);
+    xtc_dependencies_free(owner);reset();
+    length=rsp_ascii("\"C:/a\"\r\n",bytes);
+    input=(XrDependencyInput){XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,bytes,length,arguments,3};
+    XrCompileResourceLimits once=unlimited;once.allocated_bytes=base.allocated_bytes;
+    r=NULL;CHECK(xr_compile_resources_new(&once,&r)==XR_COMPILE_RESOURCE_OK);
+    owner=NULL;CHECK(xtc_dependencies_parse(r,&input,shape,&owner)==XR_XIR_TARGET_OK);
+    xtc_dependencies_free(owner);owner=NULL;
+    CHECK(xtc_dependencies_parse(r,&input,shape,&owner)==XR_XIR_TARGET_BUDGET&&!owner);
+    xr_compile_resources_release(r);reset();
+    printf("RSP independent UTF-16/UTF-8 work deltas, producer lifetime and malformed frames PASS\n");
+}
 int main(int argc,char **argv) {
     CHECK(argc==2);
     cursor_fixed_work();
@@ -265,6 +378,11 @@ int main(int argc,char **argv) {
     captured(argv[1],"clang",XR_DEPENDENCY_WINDOWS_MAKE,182);
     captured(argv[1],"zig",XR_DEPENDENCY_WINDOWS_MAKE,182);
     captured(argv[1],"msvc-link",XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN,35);
+    captured(argv[1],"msvc-fullpath",XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,12);
+    captured(argv[1],"clang-fullpath",XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,12);
+    captured(argv[1],"zig-fullpath",XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,12);
+    captured(argv[1],"unicode-fullpath",XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,6);
+    rsp_rejections(argv[1]);rsp_work_and_lifetime();
     rejection_and_work(); reset();
     printf("dependency facts passed; actual OOM=%zu; work cutoffs=%zu\n",all_oom,all_work);
     return 0;

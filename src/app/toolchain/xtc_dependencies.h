@@ -13,10 +13,12 @@
 typedef enum XrDependencyFormat {
     XR_DEPENDENCY_MSVC_SOURCE_1_2,
     XR_DEPENDENCY_WINDOWS_MAKE,
-    XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN
+    XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN,
+    XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE
 } XrDependencyFormat;
 typedef enum XrDependencyKind {
-    XR_DEPENDENCY_SOURCE, XR_DEPENDENCY_HEADER, XR_DEPENDENCY_LIBRARY_SEARCH
+    XR_DEPENDENCY_SOURCE, XR_DEPENDENCY_HEADER, XR_DEPENDENCY_LIBRARY_SEARCH,
+    XR_DEPENDENCY_LINK_INPUT
 } XrDependencyKind;
 typedef enum XrDependencyResponseFacts {
     XR_DEPENDENCY_NO_REFERENCE_IN_CAPTURED_ARGV
@@ -43,6 +45,10 @@ typedef struct XrDependencyFacts XrDependencyFacts;
  * Inputs are copied; paths preserve spelling and occurrence order. Any '@'
  * in captured argv is unsupported. This says nothing about internal response
  * files. Limits constrain shape; all actual allocation and work use resources.
+ * FULLPATH_RSP accepts a UTF-16LE BOM and quoted absolute paths, each followed
+ * by CRLF. Options and response references are unsupported. LINK_INPUT offsets
+ * refer to the first path code unit in the original byte frame. This explicit
+ * list does not establish transitive dependencies or linker command policy.
  * Output must be empty and is unchanged on every failure. */
 XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
     const XrDependencyInput *input, XrDependencyLimits limits,

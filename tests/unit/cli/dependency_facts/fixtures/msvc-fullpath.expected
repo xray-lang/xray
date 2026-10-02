@@ -1,0 +1,12 @@
+3	4	E:\xxl\xray-lang\.worktrees\314-compile-resources\build-image-collector-owner\invocation-diagnostic\r2\msvc\generated\program.obj
+3	270	E:\xxl\xray-lang\.worktrees\314-compile-resources\build-image-collector-owner\invocation-diagnostic\r2\msvc\launcher\program.obj
+3	534	E:\xxl\xray-lang\.worktrees\314-compile-resources\build\xir-runtime-sdk\lib\xray_compile_resources.lib
+3	746	E:\xxl\xray-lang\.worktrees\314-compile-resources\build\xir-runtime-sdk\lib\xray_xir_admission.lib
+3	950	E:\xxl\xray-lang\.worktrees\314-compile-resources\build\xir-runtime-sdk\lib\xray_xir_declarations.lib
+3	1160	E:\xxl\xray-lang\.worktrees\314-compile-resources\build\xir-runtime-sdk\lib\xray_xir_scalar.lib
+3	1358	E:\xxl\xray-lang\.worktrees\314-compile-resources\build\xir-runtime-sdk\lib\xray_xir_runtime_host.lib
+3	1568	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\lib\x64\msvcrt.lib
+3	1790	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\lib\x64\oldnames.lib
+3	2016	C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\lib\x64\vcruntime.lib
+3	2244	C:\Program Files (x86)\Windows Kits\10\Lib\10.0.22621.0\ucrt\x64\ucrt.lib
+3	2398	C:\Program Files (x86)\Windows Kits\10\Lib\10.0.22621.0\um\x64\kernel32.Lib
