@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Single-pass recursive descent parser producing an XrTomlValue DOM.
- *   No runtime dependency — uses only xr_malloc/xr_free from xmalloc.h.
+ *   No runtime dependency; every owned block carries its explicit policy.
  *   Supports: basic/multiline/literal strings, integers (dec/hex/oct/bin
  *   with underscores), floats (inf/nan), booleans, datetimes (as strings),
  *   arrays, inline tables, standard tables [t], array tables [[t]],
@@ -17,7 +17,8 @@
  */
 
 #include "xtoml.h"
-#include "xmalloc.h"
+#include "xio_policy.inc.h"
+#include "../shared/xr_decimal_float.h"
 #include "../shared/xr_utf8_core.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,11 +35,9 @@ typedef struct {
     const char *data;
     size_t len;
     size_t pos;
-    int line;
-    int col;
+    size_t line, col;
     bool error;
-    size_t allocation_remaining;
-    size_t work_remaining;
+    XrOsIoPolicy policy;
     uint32_t depth, depth_limit;
     XrTomlParseStatus status;
 
@@ -50,37 +49,84 @@ typedef struct {
 
 /* ========== Allocators ========== */
 
-static bool reserve_allocation(TomlCtx *p, size_t bytes) {
+typedef union TomlAllocation {
+    struct { XrOsIoPolicy policy; size_t bytes; } owner;
+    long double floating;
+    uint64_t integer;
+    void *pointer;
+} TomlAllocation;
+_Static_assert(sizeof(TomlAllocation) % _Alignof(XrTomlValue) == 0,
+    "TOML payloads preserve node alignment");
+
+static bool toml_status(TomlCtx *p, XrOsIoStatus status) {
     if (p->error) return false;
-    if (bytes > p->allocation_remaining) {
-        p->error = true; p->status = XR_TOML_PARSE_LIMIT; return false;
+    if (status == XR_OS_IO_OK) return true;
+    p->error = true;
+    switch (status) {
+    case XR_OS_IO_OUT_OF_MEMORY: p->status = XR_TOML_PARSE_OUT_OF_MEMORY; break;
+    case XR_OS_IO_BUDGET: p->status = XR_TOML_PARSE_BUDGET; break;
+    case XR_OS_IO_BAD_ARGUMENT: p->status = XR_TOML_PARSE_BAD_ARGUMENT; break;
+    default: p->status = XR_TOML_PARSE_IO; break;
     }
-    p->allocation_remaining -= bytes;
-    return true;
+    return false;
+}
+static bool toml_work(TomlCtx *p, uint64_t units) {
+    return !p->error && toml_status(p,p->policy.work(p->policy.context,units));
+}
+static bool toml_charge(void *context, uint64_t units) { return toml_work(context,units); }
+static bool parse_limit(TomlCtx *p) {
+    if (!p->error) { p->error = true; p->status = XR_TOML_PARSE_LIMIT; }
+    return false;
+}
+static void toml_release(void *memory) {
+    if (!memory) return;
+    TomlAllocation *header = (TomlAllocation *)memory-1;
+    XrOsIoPolicy policy = header->owner.policy;
+    policy.free(policy.context,header);
 }
 static void *toml_allocate(TomlCtx *p, size_t bytes, bool zero) {
-    if (!reserve_allocation(p, bytes)) return NULL;
-    void *result = zero ? xr_calloc(1, bytes) : xr_malloc(bytes);
-    if (!result) { p->error = true; p->status = XR_TOML_PARSE_OUT_OF_MEMORY; }
+    if (p->error) return NULL;
+    if (bytes > SIZE_MAX-sizeof(TomlAllocation)) { toml_status(p,XR_OS_IO_BUDGET); return NULL; }
+    void *memory = NULL;
+    if (!toml_status(p,p->policy.alloc(p->policy.context,bytes+sizeof(TomlAllocation),&memory))) return NULL;
+    TomlAllocation *header = memory;
+    header->owner.policy = p->policy; header->owner.bytes = bytes;
+    void *result = header+1;
+    if (zero) {
+        if (!toml_work(p,bytes)) { toml_release(result); return NULL; }
+        memset(result,0,bytes);
+    }
     return result;
 }
 static void *toml_resize(TomlCtx *p, void *pointer, size_t bytes) {
-    if (!reserve_allocation(p, bytes)) return NULL;
-    void *result = xr_realloc(pointer, bytes);
-    if (!result) { p->error = true; p->status = XR_TOML_PARSE_OUT_OF_MEMORY; }
+    void *result = toml_allocate(p,bytes,false);
+    if (!result) return NULL;
+    if (pointer) {
+        size_t previous = ((TomlAllocation *)pointer-1)->owner.bytes;
+        size_t copied = previous < bytes ? previous : bytes;
+        if (!toml_work(p,copied)) { toml_release(result); return NULL; }
+        memcpy(result,pointer,copied);
+        toml_release(pointer);
+    }
     return result;
+}
+static bool toml_length(TomlCtx *p, const char *text, size_t *length) {
+    for (size_t i = 0;; ++i) {
+        if (!toml_work(p,1)) return false;
+        if (!text[i]) { *length = i; return true; }
+        if (i == SIZE_MAX-1) return toml_status(p,XR_OS_IO_BUDGET);
+    }
+}
+static bool toml_copy(TomlCtx *p, void *target, const void *source, size_t bytes) {
+    if (!toml_work(p,bytes)) return false;
+    memcpy(target,source,bytes); return true;
 }
 static char *toml_duplicate(TomlCtx *p, const char *text) {
-    if (!reserve_allocation(p, strlen(text) + 1)) return NULL;
-    char *result = xr_strdup(text);
-    if (!result) { p->error = true; p->status = XR_TOML_PARSE_OUT_OF_MEMORY; }
+    size_t length;
+    if (!toml_length(p,text,&length)) return NULL;
+    char *result = toml_allocate(p,length+1,false);
+    if (result && !toml_copy(p,result,text,length+1)) { toml_release(result); return NULL; }
     return result;
-}
-
-
-
-static bool parse_limit(TomlCtx *p) {
-    p->error = true; p->status = XR_TOML_PARSE_LIMIT; return false;
 }
 
 static int grown_capacity(TomlCtx *p, int capacity, size_t item_size) {
@@ -98,30 +144,30 @@ static XrTomlValue *alloc_value(TomlCtx *p, XrTomlType type) {
     return v;
 }
 
-XR_FUNC void xtoml_free(XrTomlValue *v) {
+XR_FUNC void xtoml_owned_free(XrTomlValue *v) {
     if (!v)
         return;
     switch (v->type) {
         case XR_TOML_STRING:
         case XR_TOML_DATETIME:
-            xr_free(v->as.string);
+            toml_release(v->as.string);
             break;
         case XR_TOML_ARRAY:
             for (int i = 0; i < v->as.array.count; i++)
-                xtoml_free(v->as.array.items[i]);
-            xr_free(v->as.array.items);
+                xtoml_owned_free(v->as.array.items[i]);
+            toml_release(v->as.array.items);
             break;
         case XR_TOML_TABLE:
             for (int i = 0; i < v->as.table.count; i++) {
-                xr_free(v->as.table.members[i].key);
-                xtoml_free(v->as.table.members[i].value);
+                toml_release(v->as.table.members[i].key);
+                xtoml_owned_free(v->as.table.members[i].value);
             }
-            xr_free(v->as.table.members);
+            toml_release(v->as.table.members);
             break;
         default:
             break;
     }
-    xr_free(v);
+    toml_release(v);
 }
 
 /* Consume owned text, including when node allocation fails. */
@@ -130,7 +176,7 @@ static XrTomlValue *new_string(TomlCtx *p, char *text, size_t length) {
         return NULL;
     XrTomlValue *value = alloc_value(p, XR_TOML_STRING);
     if (!value) {
-        xr_free(text);
+        toml_release(text);
         return NULL;
     }
     value->as.string = text;
@@ -148,7 +194,7 @@ static XrTomlValue *new_table(TomlCtx *p) {
     t->as.table.members =
         (XrTomlMember *) toml_allocate(p, (size_t) t->as.table.capacity * sizeof(XrTomlMember), true);
     if (!t->as.table.members) {
-        xr_free(t);
+        toml_release(t);
         return NULL;
     }
     return t;
@@ -159,13 +205,8 @@ static int table_find(TomlCtx *p, XrTomlValue *t, const char *key, size_t length
     if (!t || t->type != XR_TOML_TABLE)
         return -1;
     for (int i = 0; i < t->as.table.count; i++) {
-        if (p) {
-            if (p->error || length == SIZE_MAX || length + 1 > p->work_remaining) {
-                if (!p->error) parse_limit(p);
-                return -1;
-            }
-            p->work_remaining -= length + 1;
-        }
+        if (!toml_work(p,1)) return -1;
+        if (t->as.table.members[i].key_length == length && !toml_work(p,length)) return -1;
         if (t->as.table.members[i].key_length == length &&
             memcmp(t->as.table.members[i].key, key, length) == 0)
             return i;
@@ -195,7 +236,8 @@ static bool table_set(TomlCtx *p, XrTomlValue *t, const char *key, size_t length
     char *copy = toml_allocate(p, length + 1, false);
     if (!copy)
         return false;
-    memcpy(copy, key, length); copy[length] = '\0';
+    if (!toml_copy(p,copy,key,length) || !toml_work(p,1)) { toml_release(copy); return false; }
+    copy[length] = '\0';
     t->as.table.members[t->as.table.count].key = copy;
     t->as.table.members[t->as.table.count].key_length = length;
     t->as.table.members[t->as.table.count].value = val;
@@ -213,7 +255,7 @@ static XrTomlValue *new_array(TomlCtx *p) {
     a->as.array.items =
         (XrTomlValue **) toml_allocate(p, (size_t) a->as.array.capacity * sizeof(XrTomlValue *), true);
     if (!a->as.array.items) {
-        xr_free(a);
+        toml_release(a);
         return NULL;
     }
     return a;
@@ -238,13 +280,16 @@ static bool array_push(TomlCtx *p, XrTomlValue *a, XrTomlValue *val) {
 
 /* ========== Parser Context ========== */
 
-#define PEEK(p) ((p)->pos < (p)->len ? (p)->data[(p)->pos] : '\0')
-#define AT_END(p) ((p)->pos >= (p)->len)
-#define ADV(p)                                                                                     \
-    do {                                                                                           \
-        (p)->pos++;                                                                                \
-        (p)->col++;                                                                                \
-    } while (0)
+static char toml_read(TomlCtx *p, size_t at) {
+    if (at >= p->len || !toml_work(p,1)) return 0;
+    return p->data[at];
+}
+static void toml_advance(TomlCtx *p, size_t count) {
+    if (toml_work(p,1)) { p->pos += count; p->col += count; }
+}
+#define PEEK(p) toml_read((p),(p)->pos)
+#define AT_END(p) ((p)->error || (p)->pos >= (p)->len)
+#define ADV(p) toml_advance((p),1)
 
 static void ctx_init(TomlCtx *p, const char *data, size_t len) {
     memset(p, 0, sizeof(TomlCtx));
@@ -255,7 +300,7 @@ static void ctx_init(TomlCtx *p, const char *data, size_t len) {
 }
 
 static void ctx_cleanup(TomlCtx *p) {
-    xr_free(p->buf);
+    toml_release(p->buf);
     p->buf = NULL;
 }
 
@@ -266,6 +311,7 @@ static void buf_ensure(TomlCtx *p, size_t needed) {
         return;
     size_t new_cap = p->buf_cap ? p->buf_cap : 64;
     while (new_cap < needed) {
+        if (!toml_work(p,1)) return;
         if (new_cap > SIZE_MAX / 2) { new_cap = needed; break; }
         new_cap *= 2;
     }
@@ -283,20 +329,21 @@ static void buf_reset(TomlCtx *p) {
 }
 
 static void buf_char(TomlCtx *p, char c) {
-    if (p->buf_len > SIZE_MAX - 2) { parse_limit(p); return; }
+    if (p->buf_len > SIZE_MAX - 2) { toml_status(p,XR_OS_IO_BUDGET); return; }
     buf_ensure(p, p->buf_len + 2);
-    if (!p->error)
+    if (toml_work(p,1))
         p->buf[p->buf_len++] = c;
 }
 
 static char *buf_dup(TomlCtx *p) {
-    if (p->buf_len == SIZE_MAX) { parse_limit(p); return NULL; }
+    if (p->buf_len == SIZE_MAX) { toml_status(p,XR_OS_IO_BUDGET); return NULL; }
     buf_ensure(p, p->buf_len + 1);
     if (p->error)
         return NULL;
+    if (!toml_work(p,1)) return NULL;
     p->buf[p->buf_len] = '\0';
     char *copy = toml_allocate(p, p->buf_len + 1, false);
-    if (copy) memcpy(copy, p->buf, p->buf_len + 1);
+    if (copy && !toml_copy(p,copy,p->buf,p->buf_len+1)) { toml_release(copy); return NULL; }
     return copy;
 }
 
@@ -384,7 +431,11 @@ static bool parse_escape(TomlCtx *p, bool multiline) {
     ADV(p);
     const char *codes = "btnfr\"\\";
     const char decoded[] = {'\b', '\t', '\n', '\f', '\r', '"', '\\'};
-    const char *match = c ? strchr(codes, c) : NULL;
+    const char *match = NULL;
+    for (size_t i = 0; c && i < sizeof(decoded); ++i) {
+        if (!toml_work(p,1)) return false;
+        if (codes[i] == c) { match = codes+i; break; }
+    }
     if (match) {
         buf_char(p, decoded[match - codes]);
         return !p->error;
@@ -465,10 +516,9 @@ static XrTomlValue *parse_basic_string(TomlCtx *p) {
 
     while (!AT_END(p)) {
         if (multiline) {
-            if (PEEK(p) == '"' && p->pos + 2 < p->len && p->data[p->pos + 1] == '"' &&
-                p->data[p->pos + 2] == '"') {
-                p->pos += 3;
-                p->col += 3;
+            if (PEEK(p) == '"' && p->len - p->pos > 2 && toml_read(p,p->pos + 1) == '"' &&
+                toml_read(p,p->pos + 2) == '"') {
+                toml_advance(p,3);
                 for (unsigned quotes = 0; quotes < 2 && !AT_END(p) && PEEK(p) == '"'; ++quotes) {
                     buf_char(p, '"');
                     ADV(p);
@@ -541,10 +591,9 @@ static XrTomlValue *parse_literal_string(TomlCtx *p) {
 
     while (!AT_END(p)) {
         if (multiline) {
-            if (PEEK(p) == '\'' && p->pos + 2 < p->len && p->data[p->pos + 1] == '\'' &&
-                p->data[p->pos + 2] == '\'') {
-                p->pos += 3;
-                p->col += 3;
+            if (PEEK(p) == '\'' && p->len - p->pos > 2 && toml_read(p,p->pos + 1) == '\'' &&
+                toml_read(p,p->pos + 2) == '\'') {
+                toml_advance(p,3);
                 for (unsigned quotes = 0; quotes < 2 && !AT_END(p) && PEEK(p) == '\''; ++quotes) {
                     ++slen;
                     ADV(p);
@@ -577,10 +626,10 @@ lit_done: {
         return NULL;
     v->as.string = (char *) toml_allocate(p, slen + 1, false);
     if (!v->as.string) {
-        xr_free(v);
+        toml_release(v);
         return NULL;
     }
-    memcpy(v->as.string, start, slen);
+    if (!toml_copy(p,v->as.string,start,slen) || !toml_work(p,1)) { xtoml_owned_free(v); return NULL; }
     v->as.string[slen] = '\0';
     v->string_length = slen;
     return v;
@@ -596,12 +645,15 @@ static unsigned number_digit(char c) {
     return 16;
 }
 
-static bool number_digits(const char *text, size_t length, size_t *pos, unsigned base) {
+static bool number_digits(TomlCtx *p, const char *text, size_t length, size_t *pos, unsigned base) {
+    if (!toml_work(p,1)) return false;
     if (*pos == length || number_digit(text[*pos]) >= base) return false;
     do {
+        if (!toml_work(p,1)) return false;
         ++*pos;
         if (*pos < length && text[*pos] == '_') {
             ++*pos;
+            if (!toml_work(p,1)) return false;
             if (*pos == length || number_digit(text[*pos]) >= base) return false;
         }
     } while (*pos < length && number_digit(text[*pos]) < base);
@@ -609,7 +661,8 @@ static bool number_digits(const char *text, size_t length, size_t *pos, unsigned
 }
 
 /* Check grammar before removing separators or invoking numeric conversion. */
-static bool valid_number(const char *text, size_t length) {
+static bool valid_number(TomlCtx *p, const char *text, size_t length) {
+    if (!toml_work(p,1)) return false;
     size_t pos = 0;
     if (length && (text[0] == '+' || text[0] == '-')) ++pos;
     if (pos == length) return false;
@@ -617,22 +670,43 @@ static bool valid_number(const char *text, size_t length) {
         unsigned base = text[1] == 'x' ? 16 : text[1] == 'o' ? 8 : text[1] == 'b' ? 2 : 0;
         if (base) {
             pos = 2;
-            return number_digits(text, length, &pos, base) && pos == length;
+            return number_digits(p,text, length, &pos, base) && pos == length;
         }
     }
     size_t first = pos;
-    if (!number_digits(text, length, &pos, 10)) return false;
+    if (!number_digits(p,text, length, &pos, 10)) return false;
     if (text[first] == '0' && pos - first > 1) return false;
     if (pos < length && text[pos] == '.') {
         ++pos;
-        if (!number_digits(text, length, &pos, 10)) return false;
+        if (!number_digits(p,text, length, &pos, 10)) return false;
     }
     if (pos < length && (text[pos] == 'e' || text[pos] == 'E')) {
         ++pos;
         if (pos < length && (text[pos] == '+' || text[pos] == '-')) ++pos;
-        if (!number_digits(text, length, &pos, 10)) return false;
+        if (!number_digits(p,text, length, &pos, 10)) return false;
     }
     return pos == length;
+}
+
+static bool integer_value(TomlCtx *p, const char *text, size_t length, unsigned base, int64_t *output) {
+    size_t at = 0; bool negative = false;
+    if (!toml_work(p,1)) return false;
+    if (length && (text[0] == '+' || text[0] == '-')) { negative = text[0] == '-'; ++at; }
+    uint64_t value = 0, limit = negative ? (uint64_t)INT64_MAX+1 : INT64_MAX;
+    for (; at < length; ++at) {
+        if (!toml_work(p,1)) return false;
+        unsigned digit = number_digit(text[at]);
+        if (digit >= base || value > (limit-digit)/base) { p->error = true; return false; }
+        value = value*base+digit;
+    }
+    *output = negative && value ? -(int64_t)(value-1)-1 : (int64_t)value;
+    return true;
+}
+static bool toml_matches(TomlCtx *p, const char *text, const char *word, size_t length) {
+    for (size_t i = 0; i < length; ++i) {
+        if (!toml_work(p,1) || text[i] != word[i]) return false;
+    }
+    return true;
 }
 
 static XrTomlValue *parse_number(TomlCtx *p) {
@@ -647,20 +721,18 @@ static XrTomlValue *parse_number(TomlCtx *p) {
     }
 
     /* inf / nan */
-    if (p->pos + 3 <= p->len) {
-        if (strncmp(p->data + p->pos, "inf", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
-            p->pos += 3;
-            p->col += 3;
+    if (p->len - p->pos >= 3) {
+        if (toml_matches(p,p->data+p->pos,"inf",3) &&
+            (p->len - p->pos <= 3 || !isalnum((unsigned char) toml_read(p,p->pos + 3)))) {
+            toml_advance(p,3);
             XrTomlValue *v = alloc_value(p, XR_TOML_FLOAT);
             if (v)
                 v->as.number = negative ? -INFINITY : INFINITY;
             return v;
         }
-        if (strncmp(p->data + p->pos, "nan", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
-            p->pos += 3;
-            p->col += 3;
+        if (toml_matches(p,p->data+p->pos,"nan",3) &&
+            (p->len - p->pos <= 3 || !isalnum((unsigned char) toml_read(p,p->pos + 3)))) {
+            toml_advance(p,3);
             XrTomlValue *v = alloc_value(p, XR_TOML_FLOAT);
             if (v)
                 v->as.number = NAN;
@@ -669,20 +741,17 @@ static XrTomlValue *parse_number(TomlCtx *p) {
     }
 
     /* Prefix: 0x, 0o, 0b */
-    if (p->pos + 1 < p->len && p->data[p->pos] == '0') {
-        char nx = p->data[p->pos + 1];
+    if (p->len - p->pos > 1 && toml_read(p,p->pos) == '0') {
+        char nx = toml_read(p,p->pos + 1);
         if (nx == 'x') {
             is_hex = true;
-            p->pos += 2;
-            p->col += 2;
+            toml_advance(p,2);
         } else if (nx == 'o') {
             is_oct = true;
-            p->pos += 2;
-            p->col += 2;
+            toml_advance(p,2);
         } else if (nx == 'b') {
             is_bin = true;
-            p->pos += 2;
-            p->col += 2;
+            toml_advance(p,2);
         }
     }
 
@@ -714,9 +783,10 @@ static XrTomlValue *parse_number(TomlCtx *p) {
 
     /* Strip underscores into temp buf */
     size_t raw_len = (size_t) ((p->data + p->pos) - start);
-    if (!valid_number(start, raw_len)) { p->error = true; return NULL; }
+    if (!valid_number(p,start, raw_len)) { p->error = true; return NULL; }
     buf_reset(p);
     for (size_t i = 0; i < raw_len; i++) {
+        if (!toml_work(p,1)) return NULL;
         if (start[i] != '_')
             buf_char(p, start[i]);
     }
@@ -727,15 +797,11 @@ static XrTomlValue *parse_number(TomlCtx *p) {
     (void) p->buf_len; /* num is NUL-terminated in buf */
 
     if (is_hex || is_oct || is_bin) {
-        int base = is_hex ? 16 : (is_oct ? 8 : 2);
+        unsigned base = is_hex ? 16u : (is_oct ? 8u : 2u);
         /* Nondecimal integers have no sign in TOML. */
         const char *digits = num + 2;
-        errno = 0;
-        int64_t val = strtoll(digits, NULL, base);
-        if (errno == ERANGE) {
-            p->error = true;
-            return NULL;
-        }
+        int64_t val;
+        if (!integer_value(p,digits,p->buf_len-3,base,&val)) return NULL;
         XrTomlValue *v = alloc_value(p, XR_TOML_INTEGER);
         if (v)
             v->as.integer = val;
@@ -743,9 +809,12 @@ static XrTomlValue *parse_number(TomlCtx *p) {
     }
 
     if (is_float) {
-        char *end = NULL;
-        double number = strtod(num, &end);
-        if (!end || *end) { p->error = true; return NULL; }
+        XrDecimalWork work = {p,toml_charge,false};
+        uint64_t bits;
+        XrDecimalStatus status = xr_decimal_float_parse_work(&work,num,p->buf_len-1,64,&bits);
+        if (status != XR_DECIMAL_OK) { p->error = true; return NULL; }
+        double number;
+        if (!toml_copy(p,&number,&bits,sizeof(number))) return NULL;
         XrTomlValue *v = alloc_value(p, XR_TOML_FLOAT);
         if (v)
             v->as.number = number;
@@ -753,12 +822,8 @@ static XrTomlValue *parse_number(TomlCtx *p) {
     }
 
     /* Decimal integer */
-    errno = 0;
-    int64_t ival = strtoll(num, NULL, 10);
-    if (errno == ERANGE) {
-        p->error = true;
-        return NULL;
-    }
+    int64_t ival;
+    if (!integer_value(p,num,p->buf_len-1,10,&ival)) return NULL;
     XrTomlValue *v = alloc_value(p, XR_TOML_INTEGER);
     if (v)
         v->as.integer = ival;
@@ -767,17 +832,19 @@ static XrTomlValue *parse_number(TomlCtx *p) {
 
 /* ========== Datetime Parsing ========== */
 
-static int date_digits(const char *text, size_t count) {
+static int date_digits(TomlCtx *p, const char *text, size_t count) {
     int value = 0;
     for (size_t i = 0; i < count; ++i) {
+        if (!toml_work(p,1)) return -1;
         if (text[i] < '0' || text[i] > '9') return -1;
         value = value * 10 + text[i] - '0';
     }
     return value;
 }
 
-static bool valid_date(const char *text) {
-    int year = date_digits(text, 4), month = date_digits(text + 5, 2), day = date_digits(text + 8, 2);
+static bool valid_date(TomlCtx *p, const char *text) {
+    if (!toml_work(p,1)) return false;
+    int year = date_digits(p,text, 4), month = date_digits(p,text + 5, 2), day = date_digits(p,text + 8, 2);
     if (year < 0 || month < 1 || month > 12 || day < 1 || text[4] != '-' || text[7] != '-')
         return false;
     const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -785,25 +852,30 @@ static bool valid_date(const char *text) {
     return day <= days[month - 1] + (month == 2 && leap);
 }
 
-static bool valid_datetime(const char *text, size_t length) {
+static bool valid_datetime(TomlCtx *p, const char *text, size_t length) {
+    if (!toml_work(p,1)) return false;
     size_t pos = 0;
     bool dated = length >= 10 && text[4] == '-';
     if (dated) {
-        if (!valid_date(text)) return false;
+        if (!valid_date(p,text)) return false;
         pos = 10;
         if (pos == length) return true;
         if (text[pos] != 'T' && text[pos] != 't' && text[pos] != ' ') return false;
         ++pos;
     }
     if (length - pos < 8 || text[pos + 2] != ':' || text[pos + 5] != ':') return false;
-    int hour = date_digits(text + pos, 2), minute = date_digits(text + pos + 3, 2);
-    int second = date_digits(text + pos + 6, 2);
+    int hour = date_digits(p,text + pos, 2), minute = date_digits(p,text + pos + 3, 2);
+    int second = date_digits(p,text + pos + 6, 2);
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 60)
         return false;
     pos += 8;
     if (pos < length && text[pos] == '.') {
         size_t first = ++pos;
-        while (pos < length && text[pos] >= '0' && text[pos] <= '9') ++pos;
+        while (pos < length) {
+            if (!toml_work(p,1)) return false;
+            if (text[pos] < '0' || text[pos] > '9') break;
+            ++pos;
+        }
         if (pos == first) return false;
     }
     if (pos == length) return true;
@@ -811,8 +883,8 @@ static bool valid_datetime(const char *text, size_t length) {
     if (text[pos] == 'Z' || text[pos] == 'z') return pos + 1 == length;
     if (length - pos != 6 || (text[pos] != '+' && text[pos] != '-') || text[pos + 3] != ':')
         return false;
-    hour = date_digits(text + pos + 1, 2);
-    minute = date_digits(text + pos + 4, 2);
+    hour = date_digits(p,text + pos + 1, 2);
+    minute = date_digits(p,text + pos + 4, 2);
     return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
@@ -831,7 +903,7 @@ static XrTomlValue *parse_datetime(TomlCtx *p) {
         } else if (c == ' ' && !found_t) {
             /* TOML v1.0: space can replace T */
             size_t ahead = p->pos + 1;
-            if (ahead < p->len && isdigit((unsigned char) p->data[ahead])) {
+            if (ahead < p->len && isdigit((unsigned char) toml_read(p,ahead))) {
                 found_t = true;
                 ADV(p);
             } else {
@@ -843,16 +915,16 @@ static XrTomlValue *parse_datetime(TomlCtx *p) {
     }
 
     size_t slen = (size_t) ((p->data + p->pos) - start);
-    if (!valid_datetime(start, slen)) { p->error = true; return NULL; }
+    if (!valid_datetime(p,start, slen)) { p->error = true; return NULL; }
     XrTomlValue *v = alloc_value(p, XR_TOML_DATETIME);
     if (!v)
         return NULL;
     v->as.string = (char *) toml_allocate(p, slen + 1, false);
     if (!v->as.string) {
-        xr_free(v);
+        toml_release(v);
         return NULL;
     }
-    memcpy(v->as.string, start, slen);
+    if (!toml_copy(p,v->as.string,start,slen) || !toml_work(p,1)) { xtoml_owned_free(v); return NULL; }
     v->as.string[slen] = '\0';
     v->string_length = slen;
     return v;
@@ -882,12 +954,12 @@ static XrTomlValue *parse_array_value(TomlCtx *p) {
         skip_ws_nl(p);
         XrTomlValue *val = parse_value(p, arr->depth + 1);
         if (!val) {
-            xtoml_free(arr);
+            xtoml_owned_free(arr);
             return NULL;
         }
         if (!array_push(p, arr, val)) {
-            xtoml_free(val);
-            xtoml_free(arr);
+            xtoml_owned_free(val);
+            xtoml_owned_free(arr);
             p->error = true;
             return NULL;
         }
@@ -911,12 +983,12 @@ static XrTomlValue *parse_array_value(TomlCtx *p) {
             continue;
         }
         p->error = true;
-        xtoml_free(arr);
+        xtoml_owned_free(arr);
         return NULL;
     }
 
     /* Unterminated array */
-    xtoml_free(arr);
+    xtoml_owned_free(arr);
     p->error = true;
     return NULL;
 }
@@ -954,7 +1026,7 @@ static XrTomlValue *parse_inline_table(TomlCtx *p) {
         TomlKey *keys = parse_key_path(p, &nkeys);
         if (!keys || nkeys == 0) {
             p->error = true;
-            xtoml_free(tbl);
+            xtoml_owned_free(tbl);
             return NULL;
         }
 
@@ -962,7 +1034,7 @@ static XrTomlValue *parse_inline_table(TomlCtx *p) {
         if (AT_END(p) || PEEK(p) != '=') {
             free_keys(keys, nkeys);
             p->error = true;
-            xtoml_free(tbl);
+            xtoml_owned_free(tbl);
             return NULL;
         }
         ADV(p);
@@ -971,13 +1043,13 @@ static XrTomlValue *parse_inline_table(TomlCtx *p) {
         XrTomlValue *val = parse_value(p, tbl->depth + (uint32_t) nkeys);
         if (!val) {
             free_keys(keys, nkeys);
-            xtoml_free(tbl);
+            xtoml_owned_free(tbl);
             return NULL;
         }
         set_nested(p, tbl, keys, nkeys, val);
         free_keys(keys, nkeys);
         if (p->error) {
-            xtoml_free(tbl);
+            xtoml_owned_free(tbl);
             return NULL;
         }
 
@@ -994,11 +1066,11 @@ static XrTomlValue *parse_inline_table(TomlCtx *p) {
             continue;
         }
         p->error = true;
-        xtoml_free(tbl);
+        xtoml_owned_free(tbl);
         return NULL;
     }
 
-    xtoml_free(tbl);
+    xtoml_owned_free(tbl);
     p->error = true;
     return NULL;
 }
@@ -1020,19 +1092,17 @@ static XrTomlValue *parse_value_body(TomlCtx *p) {
         return parse_literal_string(p);
 
     /* true / false */
-    if (p->pos + 4 <= p->len && strncmp(p->data + p->pos, "true", 4) == 0 &&
-        (p->pos + 4 >= p->len || !isalnum((unsigned char) p->data[p->pos + 4]))) {
-        p->pos += 4;
-        p->col += 4;
+    if (p->len - p->pos >= 4 && toml_matches(p,p->data+p->pos,"true",4) &&
+        (p->len - p->pos <= 4 || !isalnum((unsigned char) toml_read(p,p->pos + 4)))) {
+        toml_advance(p,4);
         XrTomlValue *v = alloc_value(p, XR_TOML_BOOL);
         if (v)
             v->as.boolean = true;
         return v;
     }
-    if (p->pos + 5 <= p->len && strncmp(p->data + p->pos, "false", 5) == 0 &&
-        (p->pos + 5 >= p->len || !isalnum((unsigned char) p->data[p->pos + 5]))) {
-        p->pos += 5;
-        p->col += 5;
+    if (p->len - p->pos >= 5 && toml_matches(p,p->data+p->pos,"false",5) &&
+        (p->len - p->pos <= 5 || !isalnum((unsigned char) toml_read(p,p->pos + 5)))) {
+        toml_advance(p,5);
         XrTomlValue *v = alloc_value(p, XR_TOML_BOOL);
         if (v)
             v->as.boolean = false;
@@ -1045,20 +1115,18 @@ static XrTomlValue *parse_value_body(TomlCtx *p) {
         return parse_inline_table(p);
 
     /* Bare inf/nan */
-    if (p->pos + 3 <= p->len) {
-        if (strncmp(p->data + p->pos, "inf", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
-            p->pos += 3;
-            p->col += 3;
+    if (p->len - p->pos >= 3) {
+        if (toml_matches(p,p->data+p->pos,"inf",3) &&
+            (p->len - p->pos <= 3 || !isalnum((unsigned char) toml_read(p,p->pos + 3)))) {
+            toml_advance(p,3);
             XrTomlValue *v = alloc_value(p, XR_TOML_FLOAT);
             if (v)
                 v->as.number = INFINITY;
             return v;
         }
-        if (strncmp(p->data + p->pos, "nan", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
-            p->pos += 3;
-            p->col += 3;
+        if (toml_matches(p,p->data+p->pos,"nan",3) &&
+            (p->len - p->pos <= 3 || !isalnum((unsigned char) toml_read(p,p->pos + 3)))) {
+            toml_advance(p,3);
             XrTomlValue *v = alloc_value(p, XR_TOML_FLOAT);
             if (v)
                 v->as.number = NAN;
@@ -1067,10 +1135,11 @@ static XrTomlValue *parse_value_body(TomlCtx *p) {
     }
 
     /* Date and local-time prefixes select the same validated textual representation. */
-    if (c >= '0' && c <= '9' && p->len - p->pos >= 3 && p->data[p->pos + 2] == ':')
+    if (c >= '0' && c <= '9' && p->len - p->pos >= 3 && toml_read(p,p->pos + 2) == ':')
         return parse_datetime(p);
-    if (isdigit((unsigned char) c) && p->pos + 10 <= p->len) {
+    if (isdigit((unsigned char) c) && p->len - p->pos >= 10) {
         const char *d = p->data + p->pos;
+        if (!toml_work(p,5)) return NULL;
         if (isdigit(d[0]) && isdigit(d[1]) && isdigit(d[2]) && isdigit(d[3]) && d[4] == '-') {
             return parse_datetime(p);
         }
@@ -1098,7 +1167,7 @@ static XrTomlValue *parse_value(TomlCtx *p, uint32_t depth) {
 
 static char *parse_key_seg(TomlCtx *p, size_t *length) {
     if (p->len - p->pos >= 3 && (PEEK(p) == '\"' || PEEK(p) == '\'') &&
-        p->data[p->pos + 1] == PEEK(p) && p->data[p->pos + 2] == PEEK(p)) {
+        toml_read(p,p->pos + 1) == PEEK(p) && toml_read(p,p->pos + 2) == PEEK(p)) {
         p->error = true;
         return NULL;
     }
@@ -1109,7 +1178,7 @@ static char *parse_key_seg(TomlCtx *p, size_t *length) {
         *length = sv->string_length;
         char *k = sv->as.string;
         sv->as.string = NULL;
-        xr_free(sv);
+        toml_release(sv);
         return k;
     }
     if (PEEK(p) == '\'') {
@@ -1119,7 +1188,7 @@ static char *parse_key_seg(TomlCtx *p, size_t *length) {
         *length = sv->string_length;
         char *k = sv->as.string;
         sv->as.string = NULL;
-        xr_free(sv);
+        toml_release(sv);
         return k;
     }
 
@@ -1137,7 +1206,7 @@ static char *parse_key_seg(TomlCtx *p, size_t *length) {
     char *k = (char *) toml_allocate(p, klen + 1, false);
     if (!k)
         return NULL;
-    memcpy(k, start, klen);
+    if (!toml_copy(p,k,start,klen) || !toml_work(p,1)) { toml_release(k); return NULL; }
     k[klen] = '\0';
     *length = klen;
     return k;
@@ -1147,8 +1216,8 @@ static void free_keys(TomlKey *keys, int n) {
     if (!keys)
         return;
     for (int i = 0; i < n; i++)
-        xr_free(keys[i].text);
-    xr_free(keys);
+        toml_release(keys[i].text);
+    toml_release(keys);
 }
 
 static TomlKey *parse_key_path(TomlCtx *p, int *nkeys) {
@@ -1173,11 +1242,11 @@ static TomlKey *parse_key_path(TomlCtx *p, int *nkeys) {
         if (*nkeys >= cap) {
             cap = grown_capacity(p, cap, sizeof(TomlKey));
             if (!cap) {
-                xr_free(seg); free_keys(keys, *nkeys); return NULL;
+                toml_release(seg); free_keys(keys, *nkeys); return NULL;
             }
             TomlKey *tmp = (TomlKey *) toml_resize(p, keys, (size_t) cap * sizeof(TomlKey));
             if (!tmp) {
-                xr_free(seg);
+                toml_release(seg);
                 free_keys(keys, *nkeys);
                 return NULL;
             }
@@ -1199,6 +1268,7 @@ static TomlKey *parse_key_path(TomlCtx *p, int *nkeys) {
 static void set_nested(TomlCtx *p, XrTomlValue *root, TomlKey *keys, int nkeys, XrTomlValue *val) {
     XrTomlValue *cur = root;
     for (int i = 0; i < nkeys - 1; i++) {
+        if (!toml_work(p,1)) goto fail;
         int idx = table_find(p, cur, keys[i].text, keys[i].length);
         if (idx >= 0) {
             XrTomlValue *existing = cur->as.table.members[idx].value;
@@ -1215,7 +1285,7 @@ static void set_nested(TomlCtx *p, XrTomlValue *root, TomlKey *keys, int nkeys, 
                 goto fail;
             nt->as.table.origin = XR_TOML_TABLE_DOTTED;
             if (!table_set(p, cur, keys[i].text, keys[i].length, nt)) {
-                xtoml_free(nt);
+                xtoml_owned_free(nt);
                 goto fail;
             }
             cur = nt;
@@ -1224,7 +1294,7 @@ static void set_nested(TomlCtx *p, XrTomlValue *root, TomlKey *keys, int nkeys, 
     if (nkeys > 0 && table_set(p, cur, keys[nkeys - 1].text, keys[nkeys - 1].length, val))
         return;
 fail:
-    xtoml_free(val);
+    xtoml_owned_free(val);
     p->error = true;
 }
 
@@ -1235,6 +1305,7 @@ fail:
 static XrTomlValue *get_or_create_table(TomlCtx *p, XrTomlValue *root, TomlKey *keys, int nkeys) {
     XrTomlValue *cur = root;
     for (int i = 0; i < nkeys; i++) {
+        if (!toml_work(p,1)) return NULL;
         int idx = table_find(p, cur, keys[i].text, keys[i].length);
         if (idx >= 0) {
             XrTomlValue *existing = cur->as.table.members[idx].value;
@@ -1261,7 +1332,7 @@ static XrTomlValue *get_or_create_table(TomlCtx *p, XrTomlValue *root, TomlKey *
             if (!nt)
                 return NULL;
             if (!table_set(p, cur, keys[i].text, keys[i].length, nt)) {
-                xtoml_free(nt);
+                xtoml_owned_free(nt);
                 return NULL;
             }
             cur = nt;
@@ -1278,6 +1349,7 @@ static XrTomlValue *get_or_create_array_table(TomlCtx *p, XrTomlValue *root, Tom
 
     /* Navigate intermediate path */
     for (int i = 0; i < nkeys - 1; i++) {
+        if (!toml_work(p,1)) return NULL;
         int idx = table_find(p, cur, keys[i].text, keys[i].length);
         if (idx >= 0) {
             XrTomlValue *existing = cur->as.table.members[idx].value;
@@ -1301,7 +1373,7 @@ static XrTomlValue *get_or_create_array_table(TomlCtx *p, XrTomlValue *root, Tom
             if (!nt)
                 return NULL;
             if (!table_set(p, cur, keys[i].text, keys[i].length, nt)) {
-                xtoml_free(nt);
+                xtoml_owned_free(nt);
                 return NULL;
             }
             cur = nt;
@@ -1326,7 +1398,7 @@ static XrTomlValue *get_or_create_array_table(TomlCtx *p, XrTomlValue *root, Tom
             return NULL;
         arr->as.array.table_sequence = true;
         if (!table_set(p, cur, last_key.text, last_key.length, arr)) {
-            xtoml_free(arr);
+            xtoml_owned_free(arr);
             return NULL;
         }
     }
@@ -1337,7 +1409,7 @@ static XrTomlValue *get_or_create_array_table(TomlCtx *p, XrTomlValue *root, Tom
         return NULL;
     nt->as.table.origin = XR_TOML_TABLE_HEADER;
     if (!array_push(p, arr, nt)) {
-        xtoml_free(nt);
+        xtoml_owned_free(nt);
         return NULL;
     }
     return nt;
@@ -1346,13 +1418,19 @@ static XrTomlValue *get_or_create_array_table(TomlCtx *p, XrTomlValue *root, Tom
 /* ========== Main Parse Function ========== */
 
 /* Validate raw text before decoding escapes; escaped control scalars remain valid. */
-static bool valid_document_text(const char *data, size_t len) {
-    if (xr_utf8_core_scan_strict((const uint8_t *) data, len).error != XR_UTF8_OK)
-        return false;
+static int toml_utf8_read(void *context, const uint8_t *address, uint8_t *output) {
+    if (!toml_work(context,1)) return 0;
+    *output = *address; return 1;
+}
+static bool valid_document_text(TomlCtx *p, const char *data, size_t len) {
+    XrUtf8ScanResult result;
+    if (!xr_utf8_core_scan_strict_read((const uint8_t *)data,len,toml_utf8_read,p,&result) ||
+        result.error != XR_UTF8_OK) return false;
     for (size_t i = 0; i < len; ++i) {
+        if (!toml_work(p,1)) return false;
         unsigned char c = (unsigned char) data[i];
         if (c == '\r') {
-            if (i + 1 == len || data[i + 1] != '\n') return false;
+            if (i+1 == len || !toml_work(p,1) || data[i+1] != '\n') return false;
         } else if ((c < 0x20 && c != '\t' && c != '\n') || c == 0x7F) {
             return false;
         }
@@ -1361,7 +1439,7 @@ static bool valid_document_text(const char *data, size_t len) {
 }
 
 static XrTomlValue *parse_document(TomlCtx *p, const char *data, size_t len) {
-    if (!data || !valid_document_text(data, len))
+    if (!data || !valid_document_text(p,data, len))
         return NULL;
 
     XrTomlValue *root = new_table(p);
@@ -1464,85 +1542,34 @@ static XrTomlValue *parse_document(TomlCtx *p, const char *data, size_t len) {
     ctx_cleanup(p);
 
     if (p->error) {
-        xtoml_free(root);
+        xtoml_owned_free(root);
         return NULL;
     }
     return root;
 }
 
-XR_FUNC XrTomlValue *xtoml_parse_limited(const char *data, size_t len,
-    XrTomlParseBudget budget, XrTomlParseStatus *status, size_t *work_used) {
-    if (work_used) *work_used = 0;
-    if (status) *status = XR_TOML_PARSE_INVALID;
-    if (!data) return NULL;
-    if (len > budget.input_bytes || len > budget.work) {
-        if (status) *status = XR_TOML_PARSE_LIMIT;
-        return NULL;
-    }
+XR_FUNC XrTomlParseStatus xtoml_parse_owned(const XrOsIoPolicy *policy,
+    const char *data, size_t len, const XrTomlParseLimits *limits, XrTomlValue **output) {
+    if (!io_policy_valid(policy) || !data || !limits || !output) return XR_TOML_PARSE_BAD_ARGUMENT;
+    if (len > limits->input_bytes || len == SIZE_MAX) return XR_TOML_PARSE_LIMIT;
     TomlCtx context;
-    ctx_init(&context, data, len);
-    context.allocation_remaining = budget.allocation_bytes;
-    context.work_remaining = budget.work - len;
-    context.depth_limit = budget.depth < 128 ? budget.depth : 128;
-    context.status = XR_TOML_PARSE_INVALID;
-    XrTomlValue *root = parse_document(&context, data, len);
-    if (work_used) *work_used = budget.work - context.work_remaining;
-    if (status) *status = root ? XR_TOML_PARSE_OK : context.status;
-    return root;
+    ctx_init(&context,data,len); context.policy = *policy;
+    context.depth_limit = limits->depth < 128 ? limits->depth : 128;
+    XrTomlValue *root = parse_document(&context,data,len);
+    if (!root) return context.status == XR_TOML_PARSE_OK ? XR_TOML_PARSE_INVALID : context.status;
+    *output = root; return XR_TOML_PARSE_OK;
 }
 
-XR_FUNC XrTomlValue *xtoml_parse(const char *data, size_t len) {
-    XrTomlParseBudget budget = {16u * 1024u * 1024u, 64u * 1024u * 1024u, 64u * 1024u * 1024u, 128};
-    return xtoml_parse_limited(data, len, budget, NULL, NULL);
-}
-
-/* ========== Accessors ========== */
-
-XR_FUNC XrTomlValue *xtoml_get(XrTomlValue *table, const char *key) {
-    if (!table || table->type != XR_TOML_TABLE || !key)
-        return NULL;
-    int idx = table_find(NULL, table, key, strlen(key));
-    return idx >= 0 ? table->as.table.members[idx].value : NULL;
-}
-
-XR_FUNC const char *xtoml_get_string(XrTomlValue *table, const char *key) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_STRING) ? v->as.string : NULL;
-}
-
-XR_FUNC int64_t xtoml_get_int(XrTomlValue *table, const char *key) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_INTEGER) ? v->as.integer : 0;
-}
-
-XR_FUNC int64_t xtoml_get_int_or(XrTomlValue *table, const char *key, int64_t default_val) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_INTEGER) ? v->as.integer : default_val;
-}
-
-XR_FUNC double xtoml_get_float(XrTomlValue *table, const char *key) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_FLOAT) ? v->as.number : 0.0;
-}
-
-XR_FUNC bool xtoml_get_bool(XrTomlValue *table, const char *key) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_BOOL) ? v->as.boolean : false;
-}
-
-XR_FUNC bool xtoml_get_bool_or(XrTomlValue *table, const char *key, bool default_val) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_BOOL) ? v->as.boolean : default_val;
-}
-
-XR_FUNC XrTomlValue *xtoml_get_table(XrTomlValue *table, const char *key) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_TABLE) ? v : NULL;
-}
-
-XR_FUNC XrTomlValue *xtoml_get_array(XrTomlValue *table, const char *key) {
-    XrTomlValue *v = xtoml_get(table, key);
-    return (v && v->type == XR_TOML_ARRAY) ? v : NULL;
+XR_FUNC XrTomlParseStatus xtoml_owned_get(XrTomlValue *table, const char *key, XrTomlValue **output) {
+    if (!table || table->type != XR_TOML_TABLE || !key || !output) return XR_TOML_PARSE_BAD_ARGUMENT;
+    TomlCtx context = {0};
+    context.policy = ((TomlAllocation *)table-1)->owner.policy;
+    size_t length;
+    if (!toml_length(&context,key,&length)) return context.status;
+    int index = table_find(&context,table,key,length);
+    if (context.error) return context.status;
+    *output = index >= 0 ? table->as.table.members[index].value : NULL;
+    return XR_TOML_PARSE_OK;
 }
 
 XR_FUNC int xtoml_array_len(XrTomlValue *arr) {
