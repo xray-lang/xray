@@ -12,7 +12,7 @@
 static XrXirValueStatus class_receiver_admit(const XrXirValue *receiver,
     XrXirValueAdmission *admission) {
     if (!receiver || !admission ||
-        !xr_xir_type_is_class(xr_xir_type_arena_types(admission->arena),(XrXirType)receiver->type) ||
+        !xr_xir_type_is_class(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)receiver->type) ||
         !xr_xir_value_valid(receiver)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirObject *object=object_pointer(receiver);
     if (!class_body_layout(object) || admission->arena != object->arena ||
@@ -24,9 +24,9 @@ XR_FUNC XrXirValueStatus xr_xir_class_new(XrXirType type, const XrXirValue *fiel
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||
         ((count != 0) != (fields != NULL))) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypes *types=xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
-    const XrXirStorageLayout *layout=xr_xir_type_arena_storage(admission->arena,type);
+    const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(admission->arena,type);
     if (!node || !xr_xir_type_is_class(types,type) || node->parameter_span ||
         node->nominal.field_count != count || !layout || layout->field_count != count ||
         !layout->body.alignment || layout->body.alignment > _Alignof(XirClassObject))
@@ -73,7 +73,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_get(const XrXirValue *receiver, uint32_t f
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
     --admission->work;
-    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena),object->type);
     const unsigned char *body=(const unsigned char *)((const XirClassObject *)object+1);
     StorageSpan span={node->nominal.fields[field],body+layout->field_offsets[field]};
     return storage_unpack(span,admission,output);
@@ -83,7 +83,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t f
     XrXirValueStatus status=class_receiver_admit(receiver,admission);
     if (status != XR_XIR_VALUE_OK) return status;
     XirObject *object=object_pointer(receiver);
-    const XrXirTypes *types=xr_xir_type_arena_types(object->arena);
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(object->arena);
     const XrXirTypeNode *node=xr_xir_type_node(types,object->type);
     if (field >= node->nominal.field_count ||
         !(types->nominals->identities[node->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))
@@ -91,7 +91,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t f
     status=xr_xir_value_admit(replacement,node->nominal.fields[field],admission);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirLayout physical={0};
-    if (!xr_xir_type_arena_layout(object->arena,node->nominal.fields[field],&physical))
+    if (!xr_xir_compile_type_arena_layout(object->arena,node->nominal.fields[field],&physical))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     StoragePrepared prepared={0};
     status=storage_prepared_begin(&prepared,replacement,physical.size,admission);

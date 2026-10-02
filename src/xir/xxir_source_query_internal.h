@@ -7,11 +7,11 @@
  * xxir_source_query_internal.h - Source-owner snapshot publication boundary
  *
  * KEY CONCEPT:
- *   Publication copies only semantic facts, under the source owner's budget.
+ *   Publication copies only semantic facts, using the source owner's resource context.
  */
 #ifndef XXIR_SOURCE_QUERY_INTERNAL_H
 #define XXIR_SOURCE_QUERY_INTERNAL_H
 #include "xxir_source_query.h"
-XR_FUNC XrXirStatus xr_xir_source_snapshot_copy(const XrXirSourceView *view,
-    XrXirBudget *remaining, XrXirSourceSnapshot **output);
+XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy(const XrXirCompileContext *context,
+    const XrXirSourceView *view, XrXirSourceSnapshot **output);
 #endif // XXIR_SOURCE_QUERY_INTERNAL_H

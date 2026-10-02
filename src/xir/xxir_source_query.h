@@ -85,7 +85,7 @@ typedef struct XrXirSourceResult {
     XrXirArtifact *checked;
     XrXirSourceSnapshot *snapshot;
 } XrXirSourceResult;
-XR_FUNC const XrXirSourceView *xr_xir_source_snapshot_view(const XrXirSourceSnapshot *snapshot);
-XR_FUNC void xr_xir_source_snapshot_free(XrXirSourceSnapshot *snapshot);
-XR_FUNC void xr_xir_source_result_free(XrXirSourceResult *result);
+XR_FUNC const XrXirSourceView *xr_xir_compile_source_snapshot_view(const XrXirSourceSnapshot *snapshot);
+XR_FUNC void xr_xir_compile_source_snapshot_free(XrXirSourceSnapshot *snapshot);
+XR_FUNC void xr_xir_compile_source_result_free(XrXirSourceResult *result);
 #endif // XXIR_SOURCE_QUERY_H

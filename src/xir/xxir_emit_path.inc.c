@@ -19,14 +19,15 @@ static void emit_path_receiver(CBuffer *buffer, const XrXirFunction *function,
     const uint32_t *args = op->op == XR_XIR_ARRAY_SET ? &function->operands[op->args[0]] : op->args;
     uint32_t id = args[0], begin = layout->path_count;
     if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET) {
-        if (!begin) { buffer->status = XR_XIR_BAD_LAYOUT; return; }
+        if (!begin) { emit_reject(buffer, XR_XIR_BAD_LAYOUT); return; }
         emit_path_component(buffer, layout, --begin, xr_xir_operand_type(function, id),
             op->op == XR_XIR_STRUCT_SET, op->op == XR_XIR_STRUCT_SET ? op->immediate : args[1]);
     }
     for (;;) {
+        if (!emit_work(buffer, 1)) return;
         XrXirPlaceKind kind = xr_xir_place_kind(function, id);
         if (kind != XR_XIR_PLACE_FIELD && kind != XR_XIR_PLACE_INDEX) break;
-        if (!begin) { buffer->status = XR_XIR_BAD_LAYOUT; return; }
+        if (!begin) { emit_reject(buffer, XR_XIR_BAD_LAYOUT); return; }
         const XrXirInstruction *projection = &function->instructions[id - function->parameter_count];
         emit_path_component(buffer, layout, --begin, xr_xir_operand_type(function, projection->args[0]),
             kind == XR_XIR_PLACE_FIELD,

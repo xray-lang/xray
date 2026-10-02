@@ -13,42 +13,62 @@
 #include "xxir_nominal.h"
 #include "xxir_interface.h"
 #include "xxir_implementation.h"
-#include "../base/xmalloc.h"
+#include "xxir_compile_memory.h"
 #include <string.h>
 typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
 struct XrXirSourceSnapshot {
+    XrXirCompileContext context;
     XrXirSourceView view;
     SourceQueryMemory *memory;
 };
 typedef struct SourceQueryCopy {
     XrXirSourceSnapshot *snapshot;
-    XrXirBudget *remaining;
     XrXirStatus status;
 } SourceQueryCopy;
-static void *query_copy(SourceQueryCopy *copy, const void *source, size_t count, size_t size) {
+static bool query_work(SourceQueryCopy *copy, uint64_t work) {
+    if (copy->status != XR_XIR_OK) return false;
+    if (!xir_compile_work(&copy->snapshot->context, work)) copy->status = XR_XIR_BUDGET;
+    return copy->status == XR_XIR_OK;
+}
+static size_t query_length(SourceQueryCopy *copy, const char *text) {
+    size_t length = 0;
+    if (!text) return 0;
+    while (query_work(copy, 1)) {
+        if (!text[length]) return length + 1;
+        if (length == SIZE_MAX - 1) { copy->status = XR_XIR_BUDGET; return 0; }
+        ++length;
+    }
+    return 0;
+}
+static void *query_allocate(SourceQueryCopy *copy, size_t count, size_t size) {
     if (copy->status != XR_XIR_OK || !count) return NULL;
-    if (!size || count > (SIZE_MAX - sizeof(SourceQueryMemory)) / size ||
-        count > copy->remaining->work ||
-        sizeof(SourceQueryMemory) + count * size > copy->remaining->metadata_bytes) {
+    if (!size || count > (SIZE_MAX - sizeof(SourceQueryMemory)) / size) {
         copy->status = XR_XIR_BUDGET; return NULL;
     }
     size_t bytes = sizeof(SourceQueryMemory) + count * size;
-    SourceQueryMemory *memory = xr_calloc(1, bytes);
-    if (!memory) { copy->status = XR_XIR_OUT_OF_MEMORY; return NULL; }
-    copy->remaining->metadata_bytes -= bytes; copy->remaining->work -= count;
+    SourceQueryMemory *memory = xir_compile_calloc(&copy->snapshot->context, 1, bytes, &copy->status);
+    if (!memory) return NULL;
     memory->next = copy->snapshot->memory; copy->snapshot->memory = memory;
-    if (source) memcpy(memory + 1, source, count * size);
     return memory + 1;
 }
+static void *query_copy(SourceQueryCopy *copy, const void *source, size_t count, size_t size) {
+    if (copy->status != XR_XIR_OK || !count) return NULL;
+    if (!source) { copy->status = XR_XIR_BAD_STRUCTURE; return NULL; }
+    void *memory = query_allocate(copy, count, size);
+    if (!memory || !query_work(copy, count * size)) return NULL;
+    memcpy(memory, source, count * size);
+    return memory;
+}
 static const char *query_string(SourceQueryCopy *copy, const char *source) {
-    return source ? query_copy(copy, source, strlen(source) + 1, 1) : NULL;
+    size_t bytes = query_length(copy, source);
+    return bytes ? query_copy(copy, source, bytes, 1) : NULL;
 }
 static XrXirInterfaceApplication *query_applications(SourceQueryCopy *copy,
     const XrXirInterfaceApplication *source, uint32_t count) {
     if (copy->status != XR_XIR_OK) return NULL;
     if (!!source != !!count) { copy->status = XR_XIR_BAD_STRUCTURE; return NULL; }
     XrXirInterfaceApplication *applications = query_copy(copy, source, count, sizeof(*applications));
-    for (uint32_t i = 0; applications && i < count && copy->status == XR_XIR_OK; ++i) {
+    for (uint32_t i = 0; applications && i < count && query_work(copy, 1); ++i) {
         if (!!source[i].arguments != !!source[i].argument_count) { copy->status = XR_XIR_BAD_STRUCTURE; break; }
         applications[i].arguments = query_copy(copy, source[i].arguments,
             source[i].argument_count, sizeof(*source[i].arguments));
@@ -60,11 +80,12 @@ static XrXirConstraint *query_constraints(SourceQueryCopy *copy,
     if (copy->status != XR_XIR_OK) return NULL;
     if (!!source != !!count) { copy->status = XR_XIR_BAD_STRUCTURE; return NULL; }
     XrXirConstraint *constraints = query_copy(copy, source, count, sizeof(*constraints));
-    for (uint32_t i = 0; constraints && i < count && copy->status == XR_XIR_OK; ++i)
+    for (uint32_t i = 0; constraints && i < count && query_work(copy, 1); ++i)
         constraints[i].interfaces = query_applications(copy, source[i].interfaces, source[i].interface_count);
     return constraints;
 }
 static void query_application(SourceQueryCopy *copy, XrXirInterfaceApplication *app) {
+    if (copy->status != XR_XIR_OK) return;
     if (!!app->arguments != !!app->argument_count) { copy->status = XR_XIR_BAD_STRUCTURE; return; }
     app->arguments = query_copy(copy, app->arguments, app->argument_count, sizeof(*app->arguments));
 }
@@ -77,13 +98,14 @@ static void query_implementations(SourceQueryCopy *copy, const XrXirImplementati
     if (!table) return;
     XrXirImplementation *records = query_copy(copy, source->records, source->count, sizeof(*records));
     table->records = records;
-    for (uint32_t i = 0; records && i < source->count && copy->status == XR_XIR_OK; ++i) {
+    for (uint32_t i = 0; records && i < source->count && query_work(copy, 1); ++i) {
         query_application(copy, &records[i].interface);
+        if (copy->status != XR_XIR_OK) break;
         if (!!records[i].bindings != !!records[i].binding_count) { copy->status = XR_XIR_BAD_STRUCTURE; break; }
         XrXirImplementationBinding *bindings = query_copy(copy, records[i].bindings,
             records[i].binding_count, sizeof(*bindings));
         records[i].bindings = bindings;
-        for (uint32_t b = 0; bindings && b < records[i].binding_count && copy->status == XR_XIR_OK; ++b)
+        for (uint32_t b = 0; bindings && b < records[i].binding_count && query_work(copy, 1); ++b)
             query_application(copy, &bindings[b].requirement);
     }
 }
@@ -91,83 +113,72 @@ static void query_modules(SourceQueryCopy *copy, const XrXirSourceView *source) 
     XrXirSourceQueryModule *modules = query_copy(copy, source->modules, source->module_count, sizeof(*modules));
     copy->snapshot->view.modules = modules;
     if (!modules) return;
-    for (uint32_t i = 0; i < source->module_count && copy->status == XR_XIR_OK; ++i) {
+    for (uint32_t i = 0; i < source->module_count && query_work(copy, 1); ++i) {
         modules[i].identity = query_string(copy, source->modules[i].identity);
         modules[i].path = query_string(copy, source->modules[i].path);
     }
 }
-typedef struct SourceQueryDeclarationLayout {
-    size_t bytes;
-    uint64_t work;
-} SourceQueryDeclarationLayout;
 _Static_assert(_Alignof(SourceQueryMemory) >= _Alignof(XrXirSourceDeclaration) &&
     sizeof(SourceQueryMemory) % _Alignof(XrXirSourceDeclaration) == 0 &&
     _Alignof(SourceQueryMemory) >= _Alignof(XrXirSourceType), "query table alignment");
-static bool query_declaration_extent(const XrXirSourceDeclaration *source,
-    SourceQueryDeclarationLayout *layout) {
+static bool query_declaration_extent(SourceQueryCopy *copy, const XrXirSourceDeclaration *source,
+    size_t *extent) {
+    if (source->parameter_count && !source->parameters) {
+        copy->status = XR_XIR_BAD_STRUCTURE; return false;
+    }
     size_t alignment = _Alignof(XrXirSourceType);
-    size_t padding = source->parameter_count ? (alignment - layout->bytes % alignment) % alignment : 0;
-    if (padding > SIZE_MAX - layout->bytes) return false;
-    size_t bytes = layout->bytes + padding;
+    size_t padding = source->parameter_count ? (alignment - *extent % alignment) % alignment : 0;
+    if (padding > SIZE_MAX - *extent) return false;
+    size_t bytes = *extent + padding;
     if (source->parameter_count > (SIZE_MAX - bytes) / sizeof(XrXirSourceType)) return false;
     bytes += (size_t)source->parameter_count * sizeof(XrXirSourceType);
-    size_t names = source->name ? strlen(source->name) + 1 : 0;
-    size_t signatures = source->signature ? strlen(source->signature) + 1 : 0;
+    size_t names = query_length(copy, source->name);
+    size_t signatures = query_length(copy, source->signature);
+    if (copy->status != XR_XIR_OK) return false;
     if (names > SIZE_MAX - bytes || signatures > SIZE_MAX - bytes - names) return false;
-    if (names > UINT64_MAX - layout->work || signatures > UINT64_MAX - layout->work - names ||
-        source->parameter_count > UINT64_MAX - layout->work - names - signatures) return false;
-    layout->bytes = bytes + names + signatures;
-    layout->work += names + signatures + source->parameter_count;
-    return layout->bytes <= SIZE_MAX - sizeof(SourceQueryMemory);
+    *extent = bytes + names + signatures;
+    return *extent <= SIZE_MAX - sizeof(SourceQueryMemory);
 }
-static void query_declaration_place(unsigned char *storage, size_t *offset,
+static void query_declaration_place(SourceQueryCopy *copy, unsigned char *storage, size_t *offset,
     const XrXirSourceDeclaration *source, XrXirSourceDeclaration *output) {
     size_t alignment = _Alignof(XrXirSourceType);
     if (source->parameter_count) *offset += (alignment - *offset % alignment) % alignment;
     size_t bytes = (size_t)source->parameter_count * sizeof(XrXirSourceType);
     output->parameters = source->parameter_count ? (const XrXirSourceType *)(storage + *offset) : NULL;
-    if (bytes && source->parameters) memcpy(storage + *offset, source->parameters, bytes);
+    if (bytes && source->parameters && query_work(copy, bytes))
+        memcpy(storage + *offset, source->parameters, bytes);
     *offset += bytes;
-    size_t names = source->name ? strlen(source->name) + 1 : 0;
+    size_t names = query_length(copy, source->name);
     output->name = names ? (const char *)(storage + *offset) : NULL;
-    if (names) memcpy(storage + *offset, source->name, names);
+    if (names && query_work(copy, names)) memcpy(storage + *offset, source->name, names);
     *offset += names;
-    size_t signatures = source->signature ? strlen(source->signature) + 1 : 0;
+    size_t signatures = query_length(copy, source->signature);
     output->signature = signatures ? (const char *)(storage + *offset) : NULL;
-    if (signatures) memcpy(storage + *offset, source->signature, signatures);
+    if (signatures && query_work(copy, signatures)) memcpy(storage + *offset, source->signature, signatures);
     *offset += signatures;
 }
 static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *source) {
     copy->snapshot->view.declarations = NULL;
     if (copy->status != XR_XIR_OK || !source->declaration_count) return;
     size_t count = source->declaration_count;
-    if (count > (SIZE_MAX - sizeof(SourceQueryMemory)) / sizeof(XrXirSourceDeclaration) ||
-        count > copy->remaining->work) { copy->status = XR_XIR_BUDGET; return; }
-    size_t table_bytes = count * sizeof(XrXirSourceDeclaration);
-    if (sizeof(SourceQueryMemory) + table_bytes > copy->remaining->metadata_bytes ||
-        count == copy->remaining->work) { copy->status = XR_XIR_BUDGET; return; }
-    SourceQueryDeclarationLayout layout = {table_bytes, count};
-    for (size_t i = 0; i < count; ++i) {
-        if (layout.work >= copy->remaining->work) { copy->status = XR_XIR_BUDGET; return; }
-        --copy->remaining->work; /* Charge the row actually inspected, even on failure. */
-        if (!query_declaration_extent(&source->declarations[i], &layout) ||
-            layout.work > copy->remaining->work ||
-            sizeof(SourceQueryMemory) + layout.bytes > copy->remaining->metadata_bytes) {
-            copy->status = XR_XIR_BUDGET; return;
+    if (count > (SIZE_MAX - sizeof(SourceQueryMemory)) / sizeof(XrXirSourceDeclaration)) {
+        copy->status = XR_XIR_BUDGET; return;
+    }
+    size_t table_bytes = count * sizeof(XrXirSourceDeclaration), extent = table_bytes;
+    for (size_t i = 0; i < count && query_work(copy, 1); ++i) {
+        if (!query_declaration_extent(copy, &source->declarations[i], &extent)) {
+            if (copy->status == XR_XIR_OK) copy->status = XR_XIR_BUDGET;
+            return;
         }
     }
-    SourceQueryMemory *memory = xr_calloc(1, sizeof(*memory) + layout.bytes);
-    if (!memory) { copy->status = XR_XIR_OUT_OF_MEMORY; return; }
-    copy->remaining->metadata_bytes -= sizeof(*memory) + layout.bytes;
-    copy->remaining->work -= layout.work;
-    memory->next = copy->snapshot->memory; copy->snapshot->memory = memory;
-    unsigned char *storage = (unsigned char *)(memory + 1);
+    unsigned char *storage = query_allocate(copy, extent, 1);
+    if (!storage || !query_work(copy, table_bytes)) return;
     XrXirSourceDeclaration *declarations = (XrXirSourceDeclaration *)storage;
     memcpy(declarations, source->declarations, table_bytes);
     copy->snapshot->view.declarations = declarations;
     size_t offset = table_bytes;
-    for (size_t i = 0; i < count && copy->status == XR_XIR_OK; ++i) {
-        query_declaration_place(storage, &offset, &source->declarations[i], &declarations[i]);
+    for (size_t i = 0; i < count && query_work(copy, 1); ++i) {
+        query_declaration_place(copy, storage, &offset, &source->declarations[i], &declarations[i]);
         declarations[i].generic_constraints = query_constraints(copy,
             source->declarations[i].generic_constraints, declarations[i].generic_parameter_count);
         declarations[i].type_parameter_kinds = query_copy(copy,
@@ -188,16 +199,16 @@ static void query_nominals(SourceQueryCopy *copy, XrXirTypes *types) {
     XrXirNominalDeclaration *decls = query_copy(copy, source->declarations, source->count, sizeof(*decls));
     table->declarations = decls;
     if (!decls) return;
-    for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i) {
+    for (uint32_t i = 0; i < source->count && query_work(copy, 1); ++i) {
         query_literal(copy, &decls[i].module); query_literal(copy, &decls[i].name);
         decls[i].constraints = query_constraints(copy, decls[i].constraints, decls[i].parameter_count);
         XrXirNominalField *fields = query_copy(copy, decls[i].fields, decls[i].field_count, sizeof(*fields));
         decls[i].fields = fields;
-        for (uint32_t j = 0; fields && j < decls[i].field_count && copy->status == XR_XIR_OK; ++j)
+        for (uint32_t j = 0; fields && j < decls[i].field_count && query_work(copy, 1); ++j)
             query_literal(copy, &fields[j].name);
         XrXirNominalVariant *variants = query_copy(copy, decls[i].variants, decls[i].variant_count, sizeof(*variants));
         decls[i].variants = variants;
-        for (uint32_t j = 0; variants && j < decls[i].variant_count && copy->status == XR_XIR_OK; ++j)
+        for (uint32_t j = 0; variants && j < decls[i].variant_count && query_work(copy, 1); ++j)
             query_literal(copy, &variants[j].name);
     }
 }
@@ -209,13 +220,13 @@ static void query_interfaces(SourceQueryCopy *copy, XrXirTypes *types) {
     if (!table) return;
     XrXirInterfaceDeclaration *decls = query_copy(copy, source->declarations, source->count, sizeof(*decls));
     table->declarations = decls;
-    for (uint32_t i = 0; decls && i < source->count && copy->status == XR_XIR_OK; ++i) {
+    for (uint32_t i = 0; decls && i < source->count && query_work(copy, 1); ++i) {
         query_literal(copy, &decls[i].module); query_literal(copy, &decls[i].name);
         decls[i].constraints = query_constraints(copy, decls[i].constraints, decls[i].parameter_count);
         decls[i].parents = query_applications(copy, decls[i].parents, decls[i].parent_count);
         XrXirInterfaceMethod *methods = query_copy(copy, decls[i].methods, decls[i].method_count, sizeof(*methods));
         decls[i].methods = methods;
-        for (uint32_t m = 0; methods && m < decls[i].method_count && copy->status == XR_XIR_OK; ++m) {
+        for (uint32_t m = 0; methods && m < decls[i].method_count && query_work(copy, 1); ++m) {
             query_literal(copy, &methods[m].name);
             methods[m].constraints = query_constraints(copy,methods[m].constraints,
                 methods[m].own_parameter_count);
@@ -232,7 +243,7 @@ static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {
     XrXirTypeNode *nodes = query_copy(copy, source->nodes, source->count, sizeof(*nodes));
     types->nodes = nodes;
     if (!nodes) return;
-    for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i) {
+    for (uint32_t i = 0; i < source->count && query_work(copy, 1); ++i) {
         nodes[i].parameters = query_copy(copy, source->nodes[i].parameters,
             nodes[i].parameter_count, sizeof(*nodes[i].parameters));
         nodes[i].nominal.arguments = query_copy(copy, source->nodes[i].nominal.arguments,
@@ -241,37 +252,40 @@ static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {
             nodes[i].nominal.field_count, sizeof(*nodes[i].nominal.fields));
     }
 }
-XrXirStatus xr_xir_source_snapshot_copy(const XrXirSourceView *view,
-    XrXirBudget *remaining, XrXirSourceSnapshot **output) {
-    if (output) *output = NULL;
-    if (!view || !remaining || !output) return XR_XIR_BAD_STRUCTURE;
+XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy(const XrXirCompileContext *context,
+    const XrXirSourceView *view, XrXirSourceSnapshot **output) {
+    if (!view || !xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+    if ((view->module_count && !view->modules) || (view->declaration_count && !view->declarations) ||
+        (view->reference_count && !view->references) || (view->expression_count && !view->expressions) ||
+        (view->types && view->types->count && !view->types->nodes)) return XR_XIR_BAD_STRUCTURE;
     if (view->types && view->types->nominals && view->types->nominals->identities) return XR_XIR_BAD_STAGE;
-    if (remaining->metadata_bytes < sizeof(XrXirSourceSnapshot) || !remaining->work) return XR_XIR_BUDGET;
-    XrXirSourceSnapshot *snapshot = xr_calloc(1, sizeof(*snapshot));
-    if (!snapshot) return XR_XIR_OUT_OF_MEMORY;
-    remaining->metadata_bytes -= sizeof(*snapshot); --remaining->work;
-    snapshot->view = *view;
-    SourceQueryCopy copy = {snapshot, remaining, XR_XIR_OK};
+    XrXirStatus status = XR_XIR_OK;
+    XrXirSourceSnapshot *snapshot = xir_compile_calloc(context, 1, sizeof(*snapshot), &status);
+    if (!snapshot) return status;
+    snapshot->context = *context;
+    SourceQueryCopy copy = {snapshot, XR_XIR_OK};
+    if (query_work(&copy, sizeof(*view))) snapshot->view = *view;
     query_modules(&copy, view); query_declarations(&copy, view); query_types(&copy, view->types);
     query_implementations(&copy, view->implementations);
     snapshot->view.references = query_copy(&copy, view->references, view->reference_count, sizeof(*view->references));
     snapshot->view.expressions = query_copy(&copy, view->expressions, view->expression_count, sizeof(*view->expressions));
-    if (copy.status != XR_XIR_OK) { xr_xir_source_snapshot_free(snapshot); return copy.status; }
+    if (copy.status != XR_XIR_OK) { xr_xir_compile_source_snapshot_free(snapshot); return copy.status; }
     *output = snapshot; return XR_XIR_OK;
 }
-const XrXirSourceView *xr_xir_source_snapshot_view(const XrXirSourceSnapshot *snapshot) {
+XR_FUNC const XrXirSourceView *xr_xir_compile_source_snapshot_view(const XrXirSourceSnapshot *snapshot) {
     return snapshot ? &snapshot->view : NULL;
 }
-void xr_xir_source_snapshot_free(XrXirSourceSnapshot *snapshot) {
+XR_FUNC void xr_xir_compile_source_snapshot_free(XrXirSourceSnapshot *snapshot) {
     if (!snapshot) return;
     while (snapshot->memory) {
         SourceQueryMemory *next = snapshot->memory->next;
-        xr_free(snapshot->memory); snapshot->memory = next;
+        xr_compile_resources_free(snapshot->memory); snapshot->memory = next;
     }
-    xr_free(snapshot);
+    xr_compile_resources_free(snapshot);
 }
-void xr_xir_source_result_free(XrXirSourceResult *result) {
+XR_FUNC void xr_xir_compile_source_result_free(XrXirSourceResult *result) {
     if (!result) return;
-    xr_xir_artifact_free(result->checked); xr_xir_source_snapshot_free(result->snapshot);
+    xr_xir_compile_artifact_free(result->checked); xr_xir_compile_source_snapshot_free(result->snapshot);
     memset(result, 0, sizeof(*result));
 }

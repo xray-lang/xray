@@ -31,6 +31,7 @@ if(ENABLE_ASAN AND (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC"))
 endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compile_resources.cmake)
+add_subdirectory(xir/compile_owner)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 
 macro(add_xray_unit_test name source)

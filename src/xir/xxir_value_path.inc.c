@@ -45,7 +45,7 @@ static XrXirValueStatus path_array_clone(const XrXirValue *value,
  * inside that private subtree, whose retained children preserve original data. */
 static XrXirValueStatus path_unique(ValuePathSlot *slot,
     ValuePathWrite *write, XrXirValueAdmission *admission) {
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     bool array = xr_xir_type_is_array(types, slot->type);
     if (!array && slot->inline_storage) return XR_XIR_VALUE_OK;
     XrXirValue current = path_handle(*slot);
@@ -75,7 +75,7 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
     --admission->work;
     if (slot->type != step->container) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, slot->type);
     if (step->kind == XR_XIR_PATH_FIELD) {
         if (!node || !xr_xir_type_is_struct(types, slot->type) || step->selector < 0 ||
@@ -88,7 +88,7 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,
             if (status != XR_XIR_VALUE_OK) return status;
         }
         if (slot->inline_storage) {
-            const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, slot->type);
+            const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, slot->type);
             if (slot->bytes) slot->bytes += layout->field_offsets[field];
         } else {
             XrXirValue value = path_handle(*slot);
@@ -136,7 +136,7 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
         xr_xir_value_drop(&previous); return XR_XIR_VALUE_OK;
     }
     XrXirLayout layout = {0};
-    if (!xr_xir_type_arena_layout(admission->arena, slot.type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_compile_type_arena_layout(admission->arena, slot.type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
     StoragePrepared prepared = {0};
     status = storage_prepared_begin(&prepared, value, layout.size, admission);
     if (status != XR_XIR_VALUE_OK) return status;

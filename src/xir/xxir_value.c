@@ -105,11 +105,11 @@ static bool owned_carrier_type(XrXirType type) {
 }
 static bool array_layout(const XrXirTypeArena *arena, XrXirType type,
                          XrXirType *element, uint32_t *stride) {
-    const XrXirTypes *types = xr_xir_type_arena_types(arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     XrXirLayout layout = {0};
     if (!node || node->kind != XR_XIR_TYPE_ARRAY || node->parameter_span ||
-        !xr_xir_type_arena_layout(arena, node->element, &layout) ||
+        !xr_xir_compile_type_arena_layout(arena, node->element, &layout) ||
         layout.alignment > _Alignof(int64_t)) return false;
     *element = node->element; *stride = layout.size;
     return true;
@@ -141,10 +141,16 @@ static bool value_header_valid(const XrXirValue *value) {
         (type == XR_XIR_BOOL && (value->payload == 0 || value->payload == 1))) return true;
     if (!owned_carrier_type(type)) return false;
     XirObject *object = object_pointer(value);
-    if (!object || (type != XR_XIR_ERROR && object->type != type) || !object->domain ||
+    if (!object || (type != XR_XIR_ERROR && object->type != type) ||
         !atomic_load_explicit(&object->references, memory_order_relaxed)) return false;
+    if (!object->domain) {
+        if (object->kind != XR_XIR_TYPE_NOMINAL || object->release_next) return false;
+        const XirNominalValue *record = (const XirNominalValue *)object;
+        return !record->count && !record->fields &&
+            record == xr_xir_compile_type_arena_empty_variant(object->arena, object->type, record->variant);
+    }
     if (type == XR_XIR_ERROR) {
-        if (!xr_xir_type_is_enum(xr_xir_type_arena_types(object->arena), object->type)) return false;
+        if (!xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena), object->type)) return false;
         type = object->type;
     }
     if (type == XR_XIR_PANIC_INFO)
@@ -152,9 +158,9 @@ static bool value_header_valid(const XrXirValue *value) {
             !xr_xir_panic_empty(&((XirPanicInfo *) object)->panic);
     if (arena_free_carrier(type))
         return !object->arena && !object->kind;
-    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(object->arena), type);
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena), type);
     if (object->kind == XIR_OBJECT_CLASS)
-        return node && !node->parameter_span && xr_xir_type_is_class(xr_xir_type_arena_types(object->arena),type);
+        return node && !node->parameter_span && xr_xir_type_is_class(xr_xir_compile_type_arena_types(object->arena),type);
     return node && !node->parameter_span && node->kind == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE);
@@ -165,14 +171,14 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     XirObject *object = object_pointer(value);
     if (object->kind == XIR_OBJECT_CLASS) {
         const XrXirStorageLayout *layout=class_body_layout(object);
-        const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
+        const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena),object->type);
         if (!layout || !node || layout->field_count != node->nominal.field_count) return false;
         if (!class_allocation_valid(object)) return false;
         return true;
     }
     if (object->kind == XR_XIR_TYPE_NULLABLE) {
         const XirNominalValue *record = (const XirNominalValue *)object;
-        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(object->arena), object->type);
+        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena), object->type);
         return record->variant <= 1 && record->count == record->variant &&
             (record->count ? record->fields == (const XrXirValue *)(record + 1) &&
                 record->fields[0].type == (uint32_t)node->element && value_header_valid(&record->fields[0]) :
@@ -180,7 +186,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     }
     if (object->kind == XR_XIR_TYPE_NOMINAL) {
         const XirNominalValue *record = (const XirNominalValue *) object;
-        const XrXirTypes *types = xr_xir_type_arena_types(object->arena);
+        const XrXirTypes *types = xr_xir_compile_type_arena_types(object->arena);
         const XrXirTypeNode *node = xr_xir_type_node(types, object->type);
         const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
         uint32_t begin = 0, count = node->nominal.field_count;
@@ -189,7 +195,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
             begin = identity->variants[record->variant].field_begin;
             count = identity->variants[record->variant].field_count;
             if (!count) return !record->count && !record->fields &&
-                record == xr_xir_type_arena_empty_variant(object->arena, object->type, record->variant);
+                record == xr_xir_compile_type_arena_empty_variant(object->arena, object->type, record->variant);
         } else if (identity->kind != XR_XIR_NOMINAL_STRUCT || record->variant) return false;
         if (record->count != count || record->fields != (const XrXirValue *) (record + 1)) return false;
         for (uint32_t i = 0; i < count; ++i)
@@ -204,7 +210,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     }
     if (object->kind == XR_XIR_TYPE_CELL) {
         const XrXirValue *content = &((XirCell *) object)->value;
-        XrXirType element = xr_xir_cell_element(xr_xir_type_arena_types(object->arena), object->type);
+        XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), object->type);
         if (!element || content->type != (uint32_t) element || !value_header_valid(content)) return false;
         if (owned_carrier_type(element) && !arena_free_carrier(element)) {
             XirObject *child = object_pointer(content);
@@ -349,7 +355,7 @@ XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *byte
 static bool empty_enum_object(const XirObject *object) {
     return object->kind == XR_XIR_TYPE_NOMINAL &&
         !((const XirNominalValue *) object)->count &&
-        xr_xir_type_is_enum(xr_xir_type_arena_types(object->arena), object->type);
+        xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena), object->type);
 }
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output) {
     if (!unit_value(output) || !source ||
@@ -357,7 +363,7 @@ XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue 
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (owned_carrier_type((XrXirType) source->type)) {
         XirObject *object = object_pointer(source);
-        if (!(empty_enum_object(object) ? xr_xir_type_arena_retain(object->arena) :
+        if (!(empty_enum_object(object) ? xr_xir_compile_type_arena_retain(object->arena) :
             xr_xir_reference_retain(&object->references))) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     }
     *output = *source;
@@ -367,15 +373,15 @@ static void queue_release(const XrXirValue *value, XirObject **pending) {
     XR_CHECK(xr_xir_value_valid(value), "invalid nested owned value release");
     if (!owned_carrier_type((XrXirType) value->type)) return;
     XirObject *object = object_pointer(value);
-    if (empty_enum_object(object)) { xr_xir_type_arena_drop(object->arena); return; }
+    if (empty_enum_object(object)) { xr_xir_compile_type_arena_drop(object->arena); return; }
     if (xr_xir_reference_release(&object->references)) {
         object->release_next = *pending; *pending = object;
     }
 }
 #include "xxir_storage_cursor.inc.c"
 static uint32_t array_release_depth(const XrXirTypeArena *arena, XrXirType element) {
-    if (!inline_nominal_type(xr_xir_type_arena_types(arena), element)) return 0;
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, element);
+    if (!inline_nominal_type(xr_xir_compile_type_arena_types(arena), element)) return 0;
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(arena, element);
     return layout ? layout->owned_depth : 0;
 }
 static uint64_t array_header_bytes(const XrXirTypeArena *arena, XrXirType element) {
@@ -383,7 +389,7 @@ static uint64_t array_header_bytes(const XrXirTypeArena *arena, XrXirType elemen
     return sizeof(XirArray) + (uint64_t)array_release_depth(arena, element) * sizeof(StorageFrame);
 }
 static bool array_owned_elements(const XirArray *array) {
-    if (inline_nominal_type(xr_xir_type_arena_types(array->object.arena), array->element))
+    if (inline_nominal_type(xr_xir_compile_type_arena_types(array->object.arena), array->element))
         return array_release_depth(array->object.arena, array->element) != 0;
     return owned_carrier_type(array->element);
 }
@@ -393,8 +399,8 @@ typedef struct ClassAllocation {
 } ClassAllocation;
 static XrXirValueStatus class_allocation_layout(XrXirValueAdmission *admission,
     XrXirType type, ClassAllocation *output) {
-    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(admission->arena),type);
-    const XrXirStorageLayout *layout=xr_xir_type_arena_storage(admission->arena,type);
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),type);
+    const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(admission->arena,type);
     if (!node || !layout || node->nominal.field_count > admission->work) return XR_XIR_VALUE_LIMIT;
     admission->work-=node->nominal.field_count;
     uint32_t depth=0;
@@ -424,7 +430,7 @@ static bool class_allocation_valid(const XirObject *object) {
 }
 static void class_release_fields(XirObject *object, uint32_t count, XirObject **pending) {
     XirClassObject *instance=(XirClassObject *)object;
-    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_type_arena_types(object->arena),object->type);
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena),object->type);
     const XrXirStorageLayout *layout=class_body_layout(object);
     StorageFrame *frames=instance->release_capacity ?
         (StorageFrame *)((unsigned char *)object+instance->release_offset) : NULL;
@@ -488,7 +494,7 @@ static void release_pending(XirObject *pending) {
             XR_CHECK(object->type == XR_XIR_ATOMIC_I64, "unknown owned value kind");
             xr_xir_domain_deallocate(domain, object, sizeof(XirAtomicI64));
         }
-        xr_xir_type_arena_drop(arena);
+        xr_xir_compile_type_arena_drop(arena);
         xr_xir_domain_drop(domain);
     }
 }
@@ -624,7 +630,7 @@ XR_FUNC void xr_xir_owned_slot_clear(void *frame, uint32_t offset) {
     memset((char *) frame + offset, 0, sizeof(old.payload));
 }
 XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, const XrXirTypeArena *arena, XrXirType type, int64_t payload) {
-    if (!xr_xir_type_is_owned(xr_xir_type_arena_types(arena), type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_type_is_owned(xr_xir_compile_type_arena_types(arena), type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue borrowed = {(uint32_t) type, 0, payload}, owned = {0};
     if (!xr_xir_value_argument(&borrowed, arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = xr_xir_value_copy(&borrowed, &owned);
@@ -685,14 +691,14 @@ XR_FUNC void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *ow
 static XirObject *constructed_allocate(XrXirDomain *domain, XrXirTypeArena *arena,
     XrXirType type, size_t bytes, XrXirValueStatus *status) {
     if (!xr_xir_domain_retain(domain)) { *status = XR_XIR_VALUE_REFCOUNT_LIMIT; return NULL; }
-    if (!xr_xir_type_arena_retain(arena)) {
+    if (!xr_xir_compile_type_arena_retain(arena)) {
         xr_xir_domain_drop(domain); *status = XR_XIR_VALUE_REFCOUNT_LIMIT; return NULL;
     }
     XirObject *object = xr_xir_domain_allocate(domain, bytes, status);
     if (!object) {
-        xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); return NULL;
+        xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); return NULL;
     }
-    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(arena), type);
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), type);
     XR_CHECK(node, "constructed allocation requires an exact runtime descriptor");
     atomic_init(&object->references, 1);
     object->domain = domain; object->arena = arena; object->type = type; object->kind = node->kind;
@@ -703,7 +709,7 @@ static void constructed_discard(XirObject *object, size_t bytes) {
     XrXirDomain *domain = object->domain;
     XrXirTypeArena *arena = object->arena;
     xr_xir_domain_deallocate(domain, object, bytes);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
 }
 static bool admission_owner(const XrXirValueAdmission *admission,
                              const XrXirTypeArena *arena, XrXirDomain *domain) {
@@ -715,7 +721,7 @@ XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirTypeArena
     XrXirType type, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission,
     XrXirValue *output) {
     if (!admission_owner(admission, arena, domain) || !unit_value(output) ||
-        !xr_xir_type_is_callable(xr_xir_type_arena_types(arena), type) ||
+        !xr_xir_type_is_callable(xr_xir_compile_type_arena_types(arena), type) ||
         !binding || !binding->owner || !binding->release || binding->capture_count > 65536 ||
         (binding->capture_count && !binding->captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
@@ -756,8 +762,8 @@ XR_FUNC XrXirValueStatus xr_xir_cell_new(XrXirDomain *domain, XrXirTypeArena *ar
     XrXirType type, const XrXirValue *initial, XrXirValueAdmission *admission,
     XrXirValue *output) {
     if (!admission_owner(admission, arena, domain) || !unit_value(output) ||
-        !xr_xir_type_is_cell(xr_xir_type_arena_types(arena), type)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirType element = xr_xir_cell_element(xr_xir_type_arena_types(arena), type);
+        !xr_xir_type_is_cell(xr_xir_compile_type_arena_types(arena), type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(arena), type);
     XrXirValueStatus status = xr_xir_value_admit(initial, element, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     XirCell *cell = (XirCell *) constructed_allocate(domain, arena, type, sizeof(*cell), &status);
@@ -785,7 +791,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_write(const XrXirValue *cell, const XrXirVa
         object_pointer(cell)->kind != XR_XIR_TYPE_CELL) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *target = (XirCell *) object_pointer(cell);
     if (!admission_owner(admission, target->object.arena, target->object.domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirType element = xr_xir_cell_element(xr_xir_type_arena_types(target->object.arena), target->object.type);
+    XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(target->object.arena), target->object.type);
     XrXirValueStatus status = xr_xir_value_admit(value, element, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirValue replacement = {0};
@@ -878,7 +884,7 @@ XR_FUNC XrXirValueStatus xr_xir_array_len(const XrXirValue *array,
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
     --admission->work;
     if (!xr_xir_value_argument(array, admission->arena, (XrXirType) array->type) ||
-        !xr_xir_type_is_array(xr_xir_type_arena_types(admission->arena), (XrXirType) array->type))
+        !xr_xir_type_is_array(xr_xir_compile_type_arena_types(admission->arena), (XrXirType) array->type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     *output = (int64_t) ((XirArray *) object_pointer(array))->length;
     return XR_XIR_VALUE_OK;
@@ -888,7 +894,7 @@ XR_FUNC XrXirValueStatus xr_xir_array_get(const XrXirValue *value, int64_t index
     XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
     if (fault) *fault = (XrXirFaultDetail) {0};
     if (!value || !fault || !unit_value(output) || !admission ||
-        !xr_xir_type_is_array(xr_xir_type_arena_types(admission->arena), (XrXirType) value->type))
+        !xr_xir_type_is_array(xr_xir_compile_type_arena_types(admission->arena), (XrXirType) value->type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = xr_xir_value_admit(value, (XrXirType) value->type, admission);
     if (status != XR_XIR_VALUE_OK) return status;
@@ -931,7 +937,7 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
     const XrXirValue *element, bool append, XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
     if (fault) *fault = (XrXirFaultDetail) {0};
     if (!place || !place->payload || !admission || !admission->domain || (!append && !fault) ||
-        !xr_xir_type_is_array(xr_xir_type_arena_types(admission->arena), place->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        !xr_xir_type_is_array(xr_xir_compile_type_arena_types(admission->arena), place->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue current = {(uint32_t) place->type, 0, 0};
     memcpy(&current.payload, place->payload, sizeof(current.payload));
     XrXirValueStatus status = xr_xir_value_admit(&current, place->type, admission);
@@ -1020,7 +1026,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
         !xr_xir_cell_in_domain(cell, admission->domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *holder = (XirCell *) object_pointer(cell);
     XrXirType type = (XrXirType) holder->value.type;
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     if (!xr_xir_type_is_array(types, type) && !xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output = (XrXirValuePlace) {type, &holder->value.payload};
     return XR_XIR_VALUE_OK;

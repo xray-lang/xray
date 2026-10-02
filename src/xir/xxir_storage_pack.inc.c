@@ -27,7 +27,7 @@ typedef struct StoragePack {
 static XrXirValueStatus storage_pack_leaf(StoragePack *pack,
     const XrXirValue *value, unsigned char *bytes) {
     XrXirLayout layout = {0};
-    if (!xr_xir_type_arena_layout(pack->admission->arena, (XrXirType)value->type, &layout) ||
+    if (!xr_xir_compile_type_arena_layout(pack->admission->arena, (XrXirType)value->type, &layout) ||
         layout.size > sizeof(value->payload) || (layout.size && !bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue owned = {0};
     XrXirValueStatus status = xr_xir_value_copy(value, &owned);
@@ -40,9 +40,9 @@ static XrXirValueStatus storage_pack_enter(StoragePack *pack,
     const XrXirValue *value, unsigned char *bytes) {
     XrXirType type = (XrXirType) value->type;
     if (!xr_xir_value_argument(value, pack->admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypes *types = xr_xir_type_arena_types(pack->admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(pack->admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(pack->admission->arena, type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(pack->admission->arena, type);
     const XirNominalValue *record = (const XirNominalValue *) object_pointer(value);
     const XrXirNominalIdentity *identity = node->kind == XR_XIR_TYPE_NOMINAL ?
         &types->nominals->identities[node->nominal.declaration] : NULL;
@@ -57,7 +57,7 @@ static XrXirValueStatus storage_pack_enter(StoragePack *pack,
 }
 static XrXirValueStatus storage_pack_walk(StoragePack *pack,
     const XrXirValue *value, unsigned char *bytes) {
-    const XrXirTypes *types = xr_xir_type_arena_types(pack->admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(pack->admission->arena);
     bool pending = true;
     while (pending || pack->depth) {
         if (!pack->admission->work) return XR_XIR_VALUE_LIMIT;
@@ -84,9 +84,9 @@ static XrXirValueStatus storage_pack_begin(XrXirValueAdmission *admission,
     XrXirType type, StoragePack *pack) {
     if (!admission || !admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     *pack = (StoragePack){admission, NULL, 0, 0, 0, type};
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     if (!inline_nominal_type(types, type)) return XR_XIR_VALUE_OK;
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, type);
     if (!layout) return XR_XIR_VALUE_BAD_ARGUMENT;
     uint64_t scratch = (uint64_t)layout->depth * sizeof(StoragePackFrame);
     if (scratch > SIZE_MAX || scratch > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
@@ -113,7 +113,7 @@ static XrXirValueStatus storage_pack_value(StoragePack *pack,
     pack->depth = 0; pack->owners = 0;
     if (!pack->frames) return storage_pack_leaf(pack, value, bytes);
     XrXirValueAdmission *admission = pack->admission;
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, pack->type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, pack->type);
     if (layout->value.size && !bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (layout->value.size) memset(bytes, 0, layout->value.size);
     XrXirValueStatus status = storage_pack_walk(pack, value, bytes);
@@ -139,7 +139,7 @@ static void storage_pack_release(StoragePack *pack, unsigned char *bytes, uint64
 static XrXirValueStatus storage_pack_copy(StoragePack *pack,
     const unsigned char *source, unsigned char *destination) {
     XrXirLayout layout = {0};
-    if (!xr_xir_type_arena_layout(pack->admission->arena, pack->type, &layout) ||
+    if (!xr_xir_compile_type_arena_layout(pack->admission->arena, pack->type, &layout) ||
         (layout.size && (!source || !destination))) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (layout.size) memcpy(destination, source, layout.size);
     StorageCursor cursor = {0};

@@ -22,7 +22,7 @@ typedef struct StorageUnpack {
 static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
     XrXirValueAdmission *admission, XrXirValue *output) {
     XrXirLayout layout = {0};
-    if (!xr_xir_type_arena_layout(admission->arena, span.type, &layout) ||
+    if (!xr_xir_compile_type_arena_layout(admission->arena, span.type, &layout) ||
         !layout.size || layout.size > sizeof(uint64_t) || !span.bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue value = storage_leaf_value(span.type, span.bytes, layout.size);
     if (!xr_xir_value_argument(&value, admission->arena, span.type)) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -30,10 +30,10 @@ static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
 }
 static XrXirValueStatus storage_unpack_enter(StorageUnpack *unpack,
     StorageSpan span, XrXirValue *ready) {
-    const XrXirTypes *types = xr_xir_type_arena_types(unpack->admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(unpack->admission->arena);
     if (!inline_nominal_type(types, span.type)) return storage_unpack_leaf(span, unpack->admission, ready);
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(unpack->admission->arena, span.type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(unpack->admission->arena, span.type);
     const XrXirNominalIdentity *identity = node->kind == XR_XIR_TYPE_NOMINAL ?
         &types->nominals->identities[node->nominal.declaration] : NULL;
     uint32_t variant = 0, begin = 0, count = node->nominal.field_count;
@@ -46,9 +46,9 @@ static XrXirValueStatus storage_unpack_enter(StorageUnpack *unpack,
         if (variant >= identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
         begin = identity->variants[variant].field_begin; count = identity->variants[variant].field_count;
         if (!count) {
-            const XirNominalValue *record = xr_xir_type_arena_empty_variant(unpack->admission->arena, span.type, variant);
+            const XirNominalValue *record = xr_xir_compile_type_arena_empty_variant(unpack->admission->arena, span.type, variant);
             if (!record) return XR_XIR_VALUE_BAD_ARGUMENT;
-            if (!xr_xir_type_arena_retain((XrXirTypeArena *)unpack->admission->arena)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+            if (!xr_xir_compile_type_arena_retain((XrXirTypeArena *)unpack->admission->arena)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
             *ready = (XrXirValue){(uint32_t)span.type, 0, 0};
             memcpy(&ready->payload, &record, sizeof(record)); return XR_XIR_VALUE_OK;
         }
@@ -114,10 +114,10 @@ static void storage_unpack_discard(StorageUnpack *unpack) {
 static XrXirValueStatus storage_unpack(StorageSpan span,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!inline_nominal_type(xr_xir_type_arena_types(admission->arena), span.type))
+    if (!inline_nominal_type(xr_xir_compile_type_arena_types(admission->arena), span.type))
         return storage_unpack_leaf(span, admission, output);
     if (!admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, span.type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, span.type);
     uint64_t scratch = (uint64_t)layout->depth * sizeof(StorageUnpackFrame);
     if (scratch > SIZE_MAX || scratch > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;

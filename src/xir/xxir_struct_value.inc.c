@@ -32,8 +32,8 @@ XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fie
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||
         (count != 0) != (fields != NULL)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(admission->arena), type);
-    if (!node || !xr_xir_type_is_struct(xr_xir_type_arena_types(admission->arena), type) ||
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena), type);
+    if (!node || !xr_xir_type_is_struct(xr_xir_compile_type_arena_types(admission->arena), type) ||
         node->parameter_span || node->nominal.field_count != count)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (count > admission->work) return XR_XIR_VALUE_LIMIT;
@@ -47,8 +47,8 @@ XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fie
 XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!value || !unit_value(output) || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(admission->arena), (XrXirType) value->type);
-    if (!node || !xr_xir_type_is_struct(xr_xir_type_arena_types(admission->arena), (XrXirType) value->type) ||
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena), (XrXirType) value->type);
+    if (!node || !xr_xir_type_is_struct(xr_xir_compile_type_arena_types(admission->arena), (XrXirType) value->type) ||
         field >= node->nominal.field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = xr_xir_value_admit(value, (XrXirType) value->type, admission);
     if (status != XR_XIR_VALUE_OK) return status;
@@ -59,7 +59,7 @@ XR_FUNC XrXirValueStatus xr_xir_struct_set(const XrXirValuePlace *place, uint32_
     if (!place || !place->payload || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue destination = {(uint32_t) place->type, 0, 0};
     memcpy(&destination.payload, place->payload, sizeof(destination.payload));
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, (XrXirType) destination.type);
     if (!node || !xr_xir_type_is_struct(types, (XrXirType) destination.type) || field >= node->nominal.field_count ||
         !(types->nominals->identities[node->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))

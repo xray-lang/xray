@@ -24,7 +24,7 @@ XR_FUNCDEF bool xr_xir_call_result_valid(const XrXirCallResult *result) {
     if (result->status == XR_XIR_CALL_THROWN) {
         const XrXirTypeArena *arena = xr_xir_value_arena(&result->value);
         return !result->wake && (result->value.type == XR_XIR_ERROR ||
-            xr_xir_type_is_enum(xr_xir_type_arena_types(arena), (XrXirType)result->value.type));
+            xr_xir_type_is_enum(xr_xir_compile_type_arena_types(arena), (XrXirType)result->value.type));
     }
     return boundary_value(result->value, XR_XIR_UNIT) &&
         (result->status == XR_XIR_CALL_SUSPENDED ? result->wake != 0 : result->wake == 0);

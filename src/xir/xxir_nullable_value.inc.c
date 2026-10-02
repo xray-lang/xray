@@ -10,7 +10,7 @@ XR_FUNC XrXirValueStatus xr_xir_nullable_new(XrXirType type,
     const XrXirValue *payload, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(admission->arena), type);
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena), type);
     if (!node || node->kind != XR_XIR_TYPE_NULLABLE || node->parameter_span)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
@@ -35,7 +35,7 @@ XR_FUNC XrXirValueStatus xr_xir_nullable_new(XrXirType type,
 XR_FUNC bool xr_xir_nullable_view(const XrXirValue *value, bool *some,
     const XrXirValue **payload) {
     if (!some || !payload || !xr_xir_value_valid(value) ||
-        !xr_xir_type_is_nullable(xr_xir_type_arena_types(xr_xir_value_arena(value)), (XrXirType)value->type))
+        !xr_xir_type_is_nullable(xr_xir_compile_type_arena_types(xr_xir_value_arena(value)), (XrXirType)value->type))
         return false;
     const XirNominalValue *record = (const XirNominalValue *)object_pointer(value);
     *some = record->variant != 0; *payload = record->count ? record->fields : NULL;

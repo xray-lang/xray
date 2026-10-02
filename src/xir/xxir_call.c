@@ -353,7 +353,7 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
     *bytes = sizeof(XrXirCall) + (uint64_t) config->entry_count * sizeof(XrXirCallEntry);
     if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
         return XR_XIR_CALL_LIMIT;
-    const XrXirTypes *types = xr_xir_type_arena_types(config->admission.arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(config->admission.arena);
     for (uint32_t i = 0; i < config->entry_count; ++i) {
         const XrXirCallEntry *entry = &config->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION)
@@ -395,10 +395,10 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     status = entry_arguments(&config->entries[entry], arguments, count, NULL, &admission);
     if (status != XR_XIR_CALL_READY) return status;
     XrXirTypeArena *arena = (XrXirTypeArena *) admission.arena;
-    if (arena && !xr_xir_type_arena_retain(arena)) return XR_XIR_CALL_LIMIT;
+    if (arena && !xr_xir_compile_type_arena_retain(arena)) return XR_XIR_CALL_LIMIT;
     XrXirCall *call = call_allocate(config, bytes, &status);
     if (!call) {
-        xr_xir_type_arena_drop(arena);
+        xr_xir_compile_type_arena_drop(arena);
         return status;
     }
     call->config = *config;
@@ -419,7 +419,7 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     }
     status = push_frame(call, entry, arguments, count, NULL, true);
     if (status != XR_XIR_CALL_READY) {
-        xr_xir_type_arena_drop(arena);
+        xr_xir_compile_type_arena_drop(arena);
         call_deallocate(config->accounting, call, bytes);
         return status;
     }
@@ -582,7 +582,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         return;
     }
     XrXirType result_type = returning ? call->top->entry->result : (XrXirType) action.value.type;
-    if (!returning && !xr_xir_type_is_enum(xr_xir_type_arena_types(call->config.admission.arena), result_type)) {
+    if (!returning && !xr_xir_type_is_enum(xr_xir_compile_type_arena_types(call->config.admission.arena), result_type)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
@@ -680,7 +680,7 @@ XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
     }
     call->driving = true;
     xr_xir_call_result_drop(&call->result);
-    xr_xir_type_arena_drop((XrXirTypeArena *) call->config.admission.arena);
+    xr_xir_compile_type_arena_drop((XrXirTypeArena *) call->config.admission.arena);
     call_deallocate(call->config.accounting, call, call->allocation_bytes);
     return status;
 }

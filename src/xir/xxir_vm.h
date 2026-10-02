@@ -23,14 +23,15 @@ typedef struct XrXirVmBinding {
 } XrXirVmBinding;
 
 /* Bindings and their artifacts outlive activations. Table indices preserve the
- * artifact's function IDs; sealed image integration owns that correspondence. */
-XR_FUNC XrXirStatus xr_xir_vm_bind(const XrXirArtifact *artifact, uint32_t function,
+ * artifact's function IDs; sealed image integration owns that correspondence.
+ * Validation consumes the artifact ledger and failure preserves both outputs. */
+XR_FUNC XrXirStatus xr_xir_compile_vm_bind(const XrXirArtifact *artifact, uint32_t function,
                                   XrXirVmBinding *binding, XrXirCallEntry *entry);
 /* Success consumes and clears the Lowered artifact; failure preserves it. */
-XR_FUNC XrXirStatus xr_xir_vm_program_take(XrXirArtifact **artifact, XrXirProgramBudget budget,
+XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
                                           XrXirProgram **output);
 
-XR_FUNC XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
+XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint32_t function,
                                    XrXirRunContext *context, const XrXirValue *arguments,
                                    uint32_t argument_count, XrXirValue *result);
 

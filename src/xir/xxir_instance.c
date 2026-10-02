@@ -28,7 +28,7 @@ static void function_gate_drop(void *owner) {
     FunctionGate *gate = owner;
     uint32_t before = atomic_fetch_sub_explicit(&gate->references, 1, memory_order_acq_rel);
     XR_CHECK(before, "function gate reference underflow");
-    if (before == 1) { xr_xir_program_drop(gate->program); xr_free(gate); }
+    if (before == 1) { xr_xir_compile_program_drop(gate->program); xr_free(gate); }
 }
 static bool function_gate_retain(FunctionGate *gate) {
     uint32_t count = atomic_load_explicit(&gate->references, memory_order_relaxed);
@@ -182,7 +182,7 @@ static void instance_dispose(XrXirInstance *instance) {
         function_gate_drop(instance->function_gate);
     }
     xr_xir_domain_drop(instance->domain);
-    xr_xir_program_drop(instance->program);
+    xr_xir_compile_program_drop(instance->program);
     xr_free(instance);
 }
 XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceConfig *config,
@@ -197,9 +197,9 @@ XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceCo
     uint64_t bytes = sizeof(XrXirInstance) + (uint64_t) d->slot_count * (sizeof(XrXirValue) + 5) +
         (uint64_t) d->module_count * 5 + ((uint64_t) program->entry_count + 1) * sizeof(XrXirCallEntry);
     if (bytes > config->metadata_limit || bytes > SIZE_MAX) return XR_XIR_CALL_LIMIT;
-    if (!xr_xir_program_retain(program)) return XR_XIR_CALL_LIMIT;
+    if (!xr_xir_compile_program_retain(program)) return XR_XIR_CALL_LIMIT;
     XrXirInstance *instance = xr_calloc(1, sizeof(*instance));
-    if (!instance) { xr_xir_program_drop(program); return XR_XIR_CALL_OOM; }
+    if (!instance) { xr_xir_compile_program_drop(program); return XR_XIR_CALL_OOM; }
     instance->program = program;
     instance->config = *config;
     instance->metadata_bytes = bytes;
@@ -570,15 +570,21 @@ XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXi
     XrXirInstance *instance = view_instance(view);
     return instance ? resolve_function(instance, function, entry, xr_xir_call_admission(view)) : XR_XIR_CALL_BAD_STATE;
 }
-XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
+static bool instance_admission_work(void *owner, uint64_t units) {
+    uint64_t *remaining = owner;
+    if (units > *remaining) return false;
+    *remaining -= units;
+    return true;
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     XrXirType type, const XrXirValue *input, XrXirValue *output) {
     XrXirInstance *instance = view_instance(view);
     if (!instance || !input) return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     XrXirCallStatus status = admit_instance_value(admission, input, (XrXirType)input->type);
     if (status != XR_XIR_CALL_READY) return status;
-    XrXirStatus match = xr_xir_callable_weakening(instance->program->types,
-        (XrXirType)input->type, type, &admission->work);
+    XrXirStatus match = xr_xir_callable_weakening_admit(instance->program->types,
+        (XrXirType)input->type, type, &admission->work, instance_admission_work);
     if (match != XR_XIR_OK) return match == XR_XIR_BUDGET ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
     if (!binding || !function_gate_retain(instance->function_gate)) return XR_XIR_CALL_LIMIT;
@@ -593,7 +599,7 @@ static XrXirCallStatus prepare_function_gate(XrXirInstance *instance) {
         return XR_XIR_CALL_LIMIT;
     FunctionGate *gate = xr_malloc(sizeof(*gate));
     if (!gate) return XR_XIR_CALL_OOM;
-    if (!xr_xir_program_retain(instance->program)) { xr_free(gate); return XR_XIR_CALL_LIMIT; }
+    if (!xr_xir_compile_program_retain(instance->program)) { xr_free(gate); return XR_XIR_CALL_LIMIT; }
     atomic_init(&gate->references, 1);
     gate->program = instance->program; gate->instance = instance->stopping ? NULL : instance;
     instance->function_gate = gate; instance->metadata_bytes += sizeof(*gate);

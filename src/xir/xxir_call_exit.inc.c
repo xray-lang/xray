@@ -86,7 +86,7 @@ static void accept_scope_exit(XrXirCall *call, XrXirAction action, bool panic) {
         }
     } else if (action.flags == XR_XIR_ACTION_LEAVE_ERROR) {
         XrXirType type = (XrXirType)action.value.type;
-        if (!xr_xir_type_is_enum(xr_xir_type_arena_types(call->config.admission.arena), type)) {
+        if (!xr_xir_type_is_enum(xr_xir_compile_type_arena_types(call->config.admission.arena), type)) {
             abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
         }
         call->admitting = true;
