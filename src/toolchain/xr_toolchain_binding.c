@@ -21,7 +21,7 @@ static bool binding_header(XrIdentityWork *work, const void *input) {
     struct { uint32_t schema; uint8_t provider, reserved[3]; } header;
     if (!identity_copy(work, &header, input, sizeof(header))) return false;
     return header.schema == XR_TOOLCHAIN_BINDING_SCHEMA_VERSION &&
-        header.provider >= XR_TOOLCHAIN_PROVIDER_CLANG && header.provider <= XR_TOOLCHAIN_PROVIDER_ZIG &&
+        header.provider >= XR_TOOLCHAIN_BINDING_PROVIDER_CLANG && header.provider <= XR_TOOLCHAIN_BINDING_PROVIDER_ZIG &&
         !header.reserved[0] && !header.reserved[1] && !header.reserved[2];
 }
 static bool binding_text(XrIdentityWork *work, const char *domain, size_t domain_length,

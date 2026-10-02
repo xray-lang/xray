@@ -1,5 +1,9 @@
 /* Independent identity and physical-allocation tests for the compiler owners. */
 #include "toolchain/xr_toolchain_binding.h"
+#include "app/toolchain/xtc_model.h"
+
+_Static_assert(XR_TOOLCHAIN_BINDING_PROVIDER_MSVC == 3 && XR_TOOLCHAIN_PROVIDER_MSVC == 4,
+    "Binding wire values and discovery provider IDs are independent domains");
 #include "aot/program/xr_xir_native_artifact.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
@@ -63,7 +67,7 @@ static XrFingerprint digest(const char *text) {
 }
 static XrToolchainInput request(void) {
     XrToolchainInput result = {0};
-    result.schema_version = 2; result.provider = XR_TOOLCHAIN_PROVIDER_MSVC;
+    result.schema_version = 2; result.provider = XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
     result.provider_version = "cl-19.44"; result.target_triple = "windows-x86_64";
     result.codegen_options = "opt=2;debug=0";
     result.sysroot_id = digest("sysroot"); result.runtime_sdk_id = digest("sdk");
@@ -354,7 +358,7 @@ static void native_rejections(void) {
             ids[field-3]->bytes[0]^=1;
         } else {
             XrToolchainInput changed=tc;
-            if (field==8) changed.provider=XR_TOOLCHAIN_PROVIDER_CLANG;
+            if (field==8) changed.provider=XR_TOOLCHAIN_BINDING_PROVIDER_CLANG;
             if (field==9) changed.provider_version="another";
             if (field==10) changed.target_triple="another";
             if (field==11) changed.codegen_options="another";

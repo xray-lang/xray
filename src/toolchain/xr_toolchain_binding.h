@@ -13,13 +13,13 @@
 
 #define XR_TOOLCHAIN_BINDING_SCHEMA_VERSION 2u
 #define XR_TOOLCHAIN_TEXT_LIMIT 4096u
-typedef enum XrToolchainProvider {
-    XR_TOOLCHAIN_PROVIDER_INVALID = 0,
-    XR_TOOLCHAIN_PROVIDER_CLANG = 1,
-    XR_TOOLCHAIN_PROVIDER_GCC = 2,
-    XR_TOOLCHAIN_PROVIDER_MSVC = 3,
-    XR_TOOLCHAIN_PROVIDER_ZIG = 4
-} XrToolchainProvider;
+typedef enum XrToolchainBindingProvider {
+    XR_TOOLCHAIN_BINDING_PROVIDER_INVALID = 0,
+    XR_TOOLCHAIN_BINDING_PROVIDER_CLANG = 1,
+    XR_TOOLCHAIN_BINDING_PROVIDER_GCC = 2,
+    XR_TOOLCHAIN_BINDING_PROVIDER_MSVC = 3,
+    XR_TOOLCHAIN_BINDING_PROVIDER_ZIG = 4
+} XrToolchainBindingProvider;
 typedef struct XrToolchainInput {
     uint32_t schema_version;
     uint8_t provider, reserved8[3];
