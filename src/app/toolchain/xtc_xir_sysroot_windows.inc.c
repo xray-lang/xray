@@ -140,7 +140,7 @@ static XtcXirLock *sysroot_lock(XrXirTargetSnapshot *snapshot, const wchar_t *pa
     memcpy(lock->path, path, (length + 1) * sizeof(*path));
     if (!xtc_xir_target_work(snapshot, (length + 1) * sizeof(wchar_t) + 1)) return NULL;
     HANDLE handle = CreateFileW(path, directory ? FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY : GENERIC_READ,
-        FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS |
+        FILE_SHARE_READ | (directory ? FILE_SHARE_WRITE : 0), NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS |
         (directory ? 0 : FILE_FLAG_SEQUENTIAL_SCAN), NULL);
     if (handle == INVALID_HANDLE_VALUE) { sysroot_error(snapshot, GetLastError()); return NULL; }
     lock->handle = handle; lock->next = snapshot->locks; snapshot->locks = lock;

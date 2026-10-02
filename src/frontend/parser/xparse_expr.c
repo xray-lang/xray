@@ -383,15 +383,6 @@ AstNode *xr_parse_literal(Parser *parser) {
                 } while (0);
                 return NULL;
             }
-            if (xr_parser_find_byte(parser, payload.bytes, '\0', payload.length) != NULL) {
-
-                do {
-                    xr_parser_error_at_previous(
-                    parser, "string literals cannot contain byte escapes; use b\"...\"");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return NULL;
-            }
             if (!xr_parser_utf8_validate(parser, (const char *) payload.bytes, payload.length)) {
 
                 do {
@@ -712,15 +703,10 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
             } while (0);
             return NULL;
         }
-        if (xr_parser_find_byte(parser, buf, '\0', out_len) != NULL) {
-
-            do {
-                xr_parser_error_at_previous(
-                parser, "string literals cannot contain byte escapes; use b\"...\"");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
+    }
+    if (!xr_parser_utf8_validate(parser, buf, out_len)) {
+        xr_parser_error_at_previous(parser, "template string must be valid UTF-8");
+        return NULL;
     }
     do { if (!ast_work(parser->compiler_session, 1)) return NULL; buf[out_len] = '\0'; } while (0);
     AstNode *node = xr_ast_literal_string(parser->compiler_session, buf, out_len,

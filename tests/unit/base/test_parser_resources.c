@@ -58,6 +58,10 @@ static void observed_free(void *memory) {
 
 static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
 static const char source[] = "// retained trivia\ntype Thing = { value: i64 }\nconst answer = 42\nconst text = \"value ${answer}\"\n";
+static const char nul_source[] =
+    "const escaped = \"a\\0b\"\n"
+    "const unicode = \"a\\u{0}b\"\n"
+    "const template = \"a\\u{0}b${1}c\\0d\"\n";
 
 static void reset(void) {
     CHECK(!physical_live && !allocation_count);
@@ -299,18 +303,83 @@ static XrParseStatus fixture(const char *text, const XrCompileResourceLimits *li
     return status;
 }
 
+static void check_nul_literals(const AstNode *program) {
+    CHECK(program && program->type == AST_PROGRAM && program->as.program.count == 3);
+    for (unsigned i = 0; i < 2; ++i) {
+        const AstNode *literal = program->as.program.statements[i]->as.var_decl.initializer;
+        CHECK(literal && literal->type == AST_LITERAL_STRING);
+        CHECK(literal->as.literal.string_length == 3);
+        CHECK(!memcmp(literal->as.literal.raw_value.string_val, "a\0b", 3));
+    }
+    const AstNode *template = program->as.program.statements[2]->as.var_decl.initializer;
+    CHECK(template && template->type == AST_TEMPLATE_STRING && template->as.template_str.part_count == 3);
+    const AstNode *first = template->as.template_str.parts[0], *last = template->as.template_str.parts[2];
+    CHECK(first->type == AST_LITERAL_STRING && last->type == AST_LITERAL_STRING);
+    CHECK(first->as.literal.string_length == 3 && last->as.literal.string_length == 3);
+    CHECK(!memcmp(first->as.literal.raw_value.string_val, "a\0b", 3));
+    CHECK(!memcmp(last->as.literal.raw_value.string_val, "c\0d", 3));
+    CHECK(template->as.template_str.parts[1]->type == AST_LITERAL_INT);
+}
+
+static void nul_literal_lifetime(void) {
+    reset();
+    XrCompileResources *resources = NULL;
+    XrCompilerSession *session = NULL;
+    AstNode *program = NULL;
+    char input[sizeof(nul_source)];
+    memcpy(input, nul_source, sizeof(input));
+    OK(xr_compile_resources_new(&unlimited, &resources));
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_parse(session, input, &program) == XR_PARSE_OK);
+    check_nul_literals(program);
+    memset(input, '?', sizeof(input));
+    xr_compile_session_free(session);
+    xr_compile_resources_release(resources);
+    check_nul_literals(program);
+    xr_program_destroy(program);
+    CHECK(!physical_live && !allocation_count);
+
+    static const char *const rejected[] = {
+        "const invalid = \"a\\xFFb\"\n",
+        "const invalid = \"a\\xFF${1}b\"\n",
+        "const invalid = c\"a\\u{0}b\"\n",
+        "const invalid = c\"a\\0b\"\n",
+        "const invalid = {\"a\\u{0}b\": 1}\n",
+        "import { value } from \"./a\\u{0}b\"\n",
+    };
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(*rejected); ++i) {
+        reset(); XrCompileResourceStats observed = {0};
+        CHECK(fixture(rejected[i], &unlimited, &observed) == XR_PARSE_SYNTAX);
+    }
+    reset(); XrCompileResourceStats observed = {0};
+    CHECK(fixture("const raw_c = cr\"a\\0b\"\n", &unlimited, &observed) == XR_PARSE_OK);
+    puts("NUL plain/template AST bytes survive source, Session and producer destruction; UTF8/C/field/import boundaries PASS");
+}
+
 static void syntax_boundaries(void) {
     static const char *const fixtures[] = {
         "@test(timeout: 0x20)\nfn test_value() { assert(true) }\n",
         "struct Word align(0x10) {\n  @deprecated(\"use rotateLeft\")\n  rotate(n: i64) -> u32 { return 0 }\n}\n",
         "fn id<T>(value: T) -> T { return value }\nconst n = id<i64>(42)\n",
-        "const fraction = 0.125\nconst code = '\\u{41}'\nconst pattern = /a+/i\n"
+        "const fraction = 0.125\nconst code = '\\u{41}'\nconst pattern = /a+/i\n",
+        nul_source
     };
     for (size_t index = 0; index < sizeof(fixtures) / sizeof(*fixtures); ++index) {
         reset(); XrCompileResourceStats exact = {0}, observed = {0};
         CHECK(fixture(fixtures[index], &unlimited, &exact) == XR_PARSE_OK);
         printf("fixture %zu: allocations=%zu work=%llu\n", index, attempt_count, (unsigned long long) exact.work);
         size_t points = attempt_count;
+        if (fixtures[index] == nul_source) {
+            XrCompileResourceLimits limits = {exact.allocated_bytes, exact.peak_bytes, exact.work};
+            reset(); CHECK(fixture(nul_source, &limits, &observed) == XR_PARSE_OK);
+            for (unsigned axis = 0; axis < 3; ++axis) {
+                XrCompileResourceLimits smaller = limits;
+                if (!axis) --smaller.allocated_bytes;
+                else if (axis == 1) --smaller.live_bytes;
+                else --smaller.work;
+                reset(); CHECK(fixture(nul_source, &smaller, &observed) == XR_PARSE_BUDGET);
+            }
+        }
         for (size_t point = 0; point < points; ++point) {
             reset(); fail_at = point;
             CHECK(fixture(fixtures[index], &unlimited, &observed) == XR_PARSE_OUT_OF_MEMORY);
@@ -378,6 +447,7 @@ int main(void) {
     scopes();
     parser_scope_lifetime();
     diagnostic_io();
+    nul_literal_lifetime();
     syntax_boundaries();
     growth_and_arguments();
     puts("production parser: typed failures, rollback, actual arena lifetime and physical zero passed");

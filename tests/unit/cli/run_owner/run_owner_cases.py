@@ -49,6 +49,8 @@ def main():
     run('unicode', [unicode/'root.xr'], oracle)
     programs = {
         'declaration': ('fn value() -> i64 { return 7 }\n', (0, b'', b'')),
+        'embedded-nul': ('print("before\\0after")\nprint("before\\u{0}after")\n',
+                         (0, b'before\x00after\nbefore\x00after\n', b'')),
         'error': ('enum Failure { Failed { text:string, code:i64, real:f64 } }\n'
                   'fn fail() { throw Failure.Failed { text:"owned"+"-error", code:-7, real:1.5 } }\n'
                   'print("before")\nfail()\n',

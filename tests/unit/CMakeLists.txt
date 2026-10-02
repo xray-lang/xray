@@ -64,6 +64,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cli/workspace_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/source_paths_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/run_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/check_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/build_source_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/windows_path_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/cgen_bytes_owner.cmake)
 
