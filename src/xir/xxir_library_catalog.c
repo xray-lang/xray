@@ -53,38 +53,64 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m, const char *ident
     for(uint32_t f=0;f<m->function_count;++f){
         if (!budget->work) return XR_XIR_BUDGET; --budget->work;
         const XrXirFunction *fn=&m->functions[f];
-        if((fn->result!=XR_XIR_UNIT&&fn->result!=XR_XIR_I64&&fn->result!=XR_XIR_STRING) ||
+        if((fn->result!=XR_XIR_UNIT&&fn->result!=XR_XIR_I64&&fn->result!=XR_XIR_STRING&&fn->result!=XR_XIR_BOOL) ||
             (m->generics&&m->generics[f].parameter_count) || d->functions[f].nominal_owner ||
             d->functions[f].cleanup_owner || d->functions[f].method_kind!=XR_XIR_NON_MEMBER)
             return XR_XIR_BAD_STAGE;
         for (uint32_t p = 0; p < fn->parameter_count; ++p) {
             if (!budget->work) return XR_XIR_BUDGET;
             --budget->work;
-            if (fn->parameters[p] != XR_XIR_I64 && fn->parameters[p] != XR_XIR_STRING)
+            if (fn->parameters[p] != XR_XIR_I64 && fn->parameters[p] != XR_XIR_STRING &&
+                fn->parameters[p] != XR_XIR_BOOL)
                 return XR_XIR_BAD_STAGE;
         }
         for(uint32_t i=0;i<fn->instruction_count;++i){
             if (!budget->work) return XR_XIR_BUDGET; --budget->work;
             const XrXirInstruction *op=&fn->instructions[i];
             if(op->op!=XR_XIR_CALL&&op->op!=XR_XIR_CALL_DEFAULT&&op->op!=XR_XIR_RETURN&&op->op!=XR_XIR_CONST_INT&&op->op!=XR_XIR_ADD_INT&&
-                op->op!=XR_XIR_CONST_STRING&&op->op!=XR_XIR_CONCAT_STRING)
+                op->op!=XR_XIR_CONST_STRING&&op->op!=XR_XIR_CONCAT_STRING&&
+                op->op!=XR_XIR_CONST_BOOL&&op->op!=XR_XIR_WRITE_STREAM)
                 return XR_XIR_BAD_STAGE;
         }
     }
     return XR_XIR_OK;
 }
+static bool library_catalog_path(const XrXirLibraryInput *input, size_t length) {
+    const char *path = input->logical_path;
+    if (!length || length >= XR_PATH_MAX || strchr(path, '\\')) return false;
+    if (input->authority.kind == XR_MODULE_IDENTITY_SCRIPT)
+        return !strchr(path, '/') && strcmp(path, ".") && strcmp(path, "..");
+    const char *name = input->authority.namespace_id;
+    size_t prefix = strlen(name);
+    if (length < prefix + 5 || strncmp(path, name, prefix) || path[prefix] != '/' ||
+        strcmp(path + length - 3, ".xr")) return false;
+    bool first = true;
+    for (size_t i = prefix + 1; i < length - 3; ++i) {
+        char c = path[i];
+        if (c == '/') { if (first) return false; first = true; continue; }
+        bool letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+        if (!letter && (first || c < '0' || c > '9')) return false;
+        first = false;
+    }
+    return !first;
+}
 static XrXirStatus library_catalog_item(XrXirLibraryCatalog *catalog, size_t index,
     const XrXirLibraryInput *input, XrXirBudget *limits) {
     if (!input->packet || !input->logical_path || !input->authority.physical_root ||
         !xr_module_identity_authority_valid(&input->authority)) return XR_XIR_BAD_STRUCTURE;
-    if (input->authority.kind != XR_MODULE_IDENTITY_SCRIPT) return XR_XIR_BAD_STAGE;
+    if (input->authority.kind != XR_MODULE_IDENTITY_SCRIPT &&
+        input->authority.kind != XR_MODULE_IDENTITY_STDLIB) return XR_XIR_BAD_STAGE;
     size_t logical = strlen(input->logical_path), root = strlen(input->authority.physical_root);
-    if (!logical || logical >= XR_PATH_MAX || root >= XR_PATH_MAX || strchr(input->logical_path,'/') ||
-        strchr(input->logical_path,'\\') || !strcmp(input->logical_path,".") || !strcmp(input->logical_path,".."))
+    if (!root || root >= XR_PATH_MAX || !library_catalog_path(input, logical))
         return XR_XIR_BAD_STRUCTURE;
-    int canonical = snprintf(NULL,0,"module-id-v1:kind=6:script:namespace=0::path=%zu:%s",logical,input->logical_path);
+    size_t name = input->authority.namespace_id ? strlen(input->authority.namespace_id) : 0;
+    int canonical = input->authority.kind == XR_MODULE_IDENTITY_STDLIB ?
+        snprintf(NULL,0,"stdlib-module-v1:module=%zu:%s:path=%zu:%s",name,
+            input->authority.namespace_id,logical,input->logical_path) :
+        snprintf(NULL,0,"module-id-v1:kind=6:script:namespace=0::path=%zu:%s",logical,input->logical_path);
     if (canonical < 0) return XR_XIR_BAD_STRUCTURE;
-    size_t text_bytes = (size_t)canonical+1+logical+1+root+1+root+logical+2+(input->authority.namespace_id?1:0);
+    size_t text_bytes = (size_t)canonical+1+logical+1+root+1+root+logical+2+
+        (input->authority.namespace_id?name+1:0);
     if (text_bytes > limits->metadata_bytes || text_bytes > limits->work) return XR_XIR_BUDGET;
     limits->metadata_bytes -= text_bytes; limits->work -= text_bytes;
     if (input->length > limits->work) return XR_XIR_BUDGET;

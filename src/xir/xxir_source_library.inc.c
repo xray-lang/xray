@@ -92,6 +92,7 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
         result.immediate += map->literal_begin;
         break;
     case XR_XIR_RETURN: case XR_XIR_CONST_INT: case XR_XIR_ADD_INT: case XR_XIR_CONCAT_STRING:
+    case XR_XIR_CONST_BOOL: case XR_XIR_WRITE_STREAM:
         break;
     default:
         return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library instruction remapping is not admitted");

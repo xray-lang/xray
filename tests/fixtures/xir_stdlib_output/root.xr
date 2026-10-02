@@ -1,0 +1,4 @@
+import "std/io/output" as output
+
+export fn stdoutText(data: string) -> bool { return output.writeStdout(data) }
+export fn stderrText(data: string) -> bool { return output.writeStderr(data) }
