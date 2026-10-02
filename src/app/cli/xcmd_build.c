@@ -911,7 +911,10 @@ static int invoke_target_objcopy(const XrTargetConfig *config, const char *input
     if (dry_run_objcopy)
         return 0;
 
-    XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_1 = {0};
+    pid_options_1.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(cmd.program, cmd.argv, &pid_options_1, &pid);
     if (pid == XR_PROC_INVALID) {
         fprintf(stderr, "Error: failed to start objcopy tool '%s'\n", cmd.program);
         return 1;
@@ -1011,7 +1014,10 @@ static int invoke_aot_manifest_compile(const XrToolchainSelection *plan,
     if (dump_command)
         xaot_cli_print_command("Compile command", &cmd);
 
-    XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_2 = {0};
+    pid_options_2.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(cmd.program, cmd.argv, &pid_options_2, &pid);
     if (pid == XR_PROC_INVALID) {
         fprintf(stderr, "Error: failed to start toolchain '%s'\n", cmd.program);
         if (plan && plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG)
@@ -1209,7 +1215,10 @@ static int invoke_aot_manifest_link(const XrToolchainSelection *plan,
     if (dry_run_link)
         return 0;
 
-    XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_3 = {0};
+    pid_options_3.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(cmd.program, cmd.argv, &pid_options_3, &pid);
     if (pid == XR_PROC_INVALID) {
         fprintf(stderr, "Error: failed to start toolchain '%s'\n", cmd.program);
         if (plan && plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG)
@@ -1258,7 +1267,10 @@ static int invoke_dsymutil(const char *output_file, bool dump_command) {
     if (dump_command)
         printf("Debug info command: dsymutil %s\n", output_file);
 
-    pid = xr_proc_spawn("dsymutil", spawn_argv);
+    pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_4 = {0};
+    pid_options_4.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("dsymutil", spawn_argv, &pid_options_4, &pid);
     if (pid == XR_PROC_INVALID) {
         fprintf(stderr, "Error: failed to start dsymutil for native debug build\n");
         return 1;
@@ -1770,7 +1782,18 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                                     : XR_TOOLCHAIN_PROFILE_HOSTED;
         probe_options.required_codegen_capabilities = XR_TOOLCHAIN_CODEGEN_ALL;
         memset(&toolchain_probe, 0, sizeof(toolchain_probe));
-        if (!xtc_probe(&probe_options, &toolchain_probe, parse_err, sizeof(parse_err))) {
+        XrCompileResources *process_resources = NULL;
+        XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+        XrCompileResourceStatus allocation = xr_compile_resources_new(&process_limits, &process_resources);
+        if (allocation != XR_COMPILE_RESOURCE_OK) {
+            fprintf(stderr, "Error: %s\n", allocation == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? "process out of memory" : "process budget exhausted");
+            CMD_BUILD_RETURN(3);
+        }
+        XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
+        probe_options.request.process = &process_context;
+        bool probe_ok = xtc_probe(&probe_options, &toolchain_probe, parse_err, sizeof(parse_err));
+        xr_compile_resources_release(process_resources);
+        if (!probe_ok) {
             fprintf(stderr, "Error: %s\n", parse_err);
             for (size_t i = 0; i < toolchain_probe.diagnostic_count; i++)
                 fprintf(stderr, "  [%s] %s: %s\n",
@@ -2278,7 +2301,10 @@ static int xaot_invoke_native_unit_compile(const XrToolchainSelection *plan,
         xaot_cli_print_command("Native compile command", &cmd);
     if (dry_run)
         return 0;
-    XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_5 = {0};
+    pid_options_5.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(cmd.program, cmd.argv, &pid_options_5, &pid);
     int code = -1;
     if (pid == XR_PROC_INVALID || xr_proc_wait(pid, &code) != 0 || code != 0) {
         fprintf(stderr, "Error: native unit '%s' compilation failed for '%s'\n",

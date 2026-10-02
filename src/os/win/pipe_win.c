@@ -46,8 +46,10 @@ int xr_pipe_create(XrPipe *out, const XrPipeOptions *options) {
 
     if (set_inheritable(read_handle, read_inheritable) != 0 ||
         set_inheritable(write_handle, write_inheritable) != 0) {
+        DWORD error = GetLastError();
         CloseHandle(read_handle);
         CloseHandle(write_handle);
+        SetLastError(error);
         return -1;
     }
 
@@ -75,25 +77,27 @@ int64_t xr_pipe_read(XrPipeHandle handle, void *buf, size_t len) {
     return (int64_t) read_bytes;
 }
 
-XrPipeIoStatus xr_pipe_try_read(XrPipeHandle handle, void *buf, size_t len, int64_t *out_n) {
-    if (out_n)
-        *out_n = -1;
-    if (handle == XR_PIPE_INVALID || (!buf && len > 0) || !out_n)
-        return XR_PIPE_IO_ERROR;
-
-    DWORD available = 0;
-    if (!PeekNamedPipe(pipe_handle(handle), NULL, 0, NULL, &available, NULL)) {
-        if (GetLastError() == ERROR_BROKEN_PIPE) {
-            *out_n = 0;
-            return XR_PIPE_IO_OK;
-        }
-        return XR_PIPE_IO_ERROR;
+XR_FUNC XrPipeIoStatus xr_pipe_probe(XrPipeHandle handle, size_t *available, bool *eof) {
+    if (handle == XR_PIPE_INVALID || !available || !eof) {
+        SetLastError(ERROR_INVALID_PARAMETER); return XR_PIPE_IO_ERROR;
     }
-    if (available == 0)
-        return XR_PIPE_IO_WOULD_BLOCK;
+    DWORD bytes = 0;
+    if (!PeekNamedPipe(pipe_handle(handle), NULL, 0, NULL, &bytes, NULL)) {
+        if (GetLastError() != ERROR_BROKEN_PIPE) return XR_PIPE_IO_ERROR;
+        *available = 0; *eof = true; return XR_PIPE_IO_OK;
+    }
+    *available = bytes; *eof = false;
+    return bytes ? XR_PIPE_IO_OK : XR_PIPE_IO_WOULD_BLOCK;
+}
 
-    size_t readable = len < (size_t) available ? len : (size_t) available;
-    *out_n = xr_pipe_read(handle, buf, readable);
+XrPipeIoStatus xr_pipe_try_read(XrPipeHandle handle, void *buf, size_t len, int64_t *out_n) {
+    if (out_n) *out_n = -1;
+    if ((!buf && len > 0) || !out_n) { SetLastError(ERROR_INVALID_PARAMETER); return XR_PIPE_IO_ERROR; }
+    size_t available = 0; bool eof = false;
+    XrPipeIoStatus status = xr_pipe_probe(handle, &available, &eof);
+    if (status != XR_PIPE_IO_OK) return status;
+    if (eof) { *out_n = 0; return XR_PIPE_IO_OK; }
+    *out_n = xr_pipe_read(handle, buf, len < available ? len : available);
     return *out_n < 0 ? XR_PIPE_IO_ERROR : XR_PIPE_IO_OK;
 }
 

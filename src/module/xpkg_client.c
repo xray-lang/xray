@@ -106,7 +106,10 @@ static bool mkdir_recursive(const char *path) {
  * Routed through xr_proc_* so the call site is portable.
  */
 static int exec_command(const char *prog, char *const argv[]) {
-    XrProcId pid = xr_proc_spawn(prog, (const char *const *) argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options = {0};
+    pid_options.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn(prog, (const char *const *) argv, &pid_options, &pid);
     if (pid == XR_PROC_INVALID) {
         return -1;
     }

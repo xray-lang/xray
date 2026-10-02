@@ -1,0 +1,38 @@
+# Include after the existing test_cli_toolchain target in the full build.
+if(TARGET test_cli_toolchain)
+    target_link_libraries(test_cli_toolchain PRIVATE xray_compile_resources)
+endif()
+if(NOT WIN32)
+    return()
+endif()
+get_filename_component(PROCESS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+add_library(toolchain_process_production OBJECT
+    "${PROCESS_ROOT}/src/app/toolchain/xtc_process.c"
+    "${PROCESS_ROOT}/src/os/win/proc_win.c")
+add_executable(test_toolchain_process_owned
+    "${CMAKE_CURRENT_LIST_DIR}/test_toolchain_process_owned.c"
+    "${PROCESS_ROOT}/src/base/xutf8.c"
+    "${PROCESS_ROOT}/src/os/win/time_win.c")
+foreach(t toolchain_process_production test_toolchain_process_owned)
+    target_include_directories(${t} PRIVATE "${PROCESS_ROOT}/src")
+    target_compile_features(${t} PRIVATE c_std_11)
+    target_compile_definitions(${t} PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+    if(MSVC)
+        target_compile_options(${t} PRIVATE /W4 /WX /utf-8)
+    endif()
+endforeach()
+add_test(NAME test_toolchain_process_owned COMMAND test_toolchain_process_owned)
+set_tests_properties(test_toolchain_process_owned PROPERTIES LABELS "unit;toolchain;ownership;budget" TIMEOUT 120)
+
+if(TARGET xir-runtime-sdk-bundle)
+    set(XIR_PROCESS_SDK_BUNDLE "${CMAKE_BINARY_DIR}/xir-runtime-sdk")
+    set(XIR_PROCESS_SDK_RECIPE "${CMAKE_BINARY_DIR}/xir-runtime-sdk")
+    add_dependencies(test_toolchain_process_owned xir-runtime-sdk-bundle)
+endif()
+if(DEFINED XIR_PROCESS_SDK_BUNDLE)
+    target_compile_definitions(test_toolchain_process_owned PRIVATE XTC_TEST_SDK=1)
+    target_include_directories(test_toolchain_process_owned PRIVATE "${XIR_PROCESS_SDK_BUNDLE}" "${XIR_PROCESS_SDK_RECIPE}")
+    target_sources(test_toolchain_process_owned PRIVATE "${PROCESS_ROOT}/src/base/xsha256.c")
+    add_test(NAME test_toolchain_process_sdk_target COMMAND test_toolchain_process_owned --sdk "${XIR_PROCESS_SDK_BUNDLE}")
+    set_tests_properties(test_toolchain_process_sdk_target PROPERTIES LABELS "unit;toolchain;sdk;ownership;budget" TIMEOUT 120 RUN_SERIAL TRUE)
+endif()

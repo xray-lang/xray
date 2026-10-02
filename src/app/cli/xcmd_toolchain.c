@@ -144,8 +144,18 @@ static int xcmd_toolchain_probe_or_doctor(const XrCliInvocation *inv) {
         xr_cli_error("toolchain", "%s", err);
         return XR_CLI_EXIT_USAGE;
     }
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    XrCompileResourceStatus allocation = xr_compile_resources_new(&process_limits, &process_resources);
+    if (allocation != XR_COMPILE_RESOURCE_OK) {
+        xr_cli_error("toolchain", "%s", allocation == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? "process out of memory" : "process budget exhausted");
+        return XR_CLI_EXIT_UNAVAILABLE;
+    }
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
+    options.request.process = &process_context;
     memset(&result, 0, sizeof(result));
     bool ready = xtc_probe(&options, &result, err, sizeof(err));
+    xr_compile_resources_release(process_resources);
     if (xcmd_toolchain_json(inv))
         (void) xtc_probe_json_write(stdout, requested, &options, &result, ready,
                                     XRAY_VERSION_STRING, XRAY_BUILD_COMMIT);
@@ -238,14 +248,30 @@ static int xcmd_toolchain_detect(const XrCliInvocation *inv) {
         xr_cli_error("toolchain", "%s", err);
         return XR_CLI_EXIT_USAGE;
     }
+    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResources *process_resources = NULL;
+    XrCompileResourceStatus allocation = xr_compile_resources_new(&process_limits, &process_resources);
+    if (allocation != XR_COMPILE_RESOURCE_OK) {
+        xr_cli_error("toolchain", "%s", allocation == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? "process out of memory" : "process budget exhausted");
+        return XR_CLI_EXIT_UNAVAILABLE;
+    }
+    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
+    options.request.process = &process_context;
     XrToolchainCandidates candidates;
     if (!xtc_discover_candidates(&options.request, &candidates, err, sizeof(err))) {
+        xr_compile_resources_release(process_resources);
         xr_cli_error("toolchain", "%s", err);
         return XR_CLI_EXIT_UNAVAILABLE;
     }
     for (size_t i = 0; i < candidates.count; i++) {
         char version_err[256];
-        (void) xtc_candidate_read_version(&candidates.items[i], version_err, sizeof(version_err));
+        (void) xtc_candidate_read_version(&process_context, &candidates.items[i], version_err, sizeof(version_err));
+        if (process_context.status != XTC_PROCESS_OK) break;
+    }
+    xr_compile_resources_release(process_resources);
+    if (process_context.status != XTC_PROCESS_OK) {
+        xr_cli_error("toolchain", "%s", xtc_process_status_name(process_context.status));
+        return XR_CLI_EXIT_UNAVAILABLE;
     }
     if (xcmd_toolchain_json(inv)) {
         printf("{\"schema\":1,\"target\":");

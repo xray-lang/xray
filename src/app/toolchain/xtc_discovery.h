@@ -12,10 +12,12 @@
 #define XTC_DISCOVERY_H
 
 #include "xtc_model.h"
+#include "xtc_process.h"
 
 #define XTC_MAX_CANDIDATES 16
 
 typedef struct XrToolchainRequest {
+    XrToolchainProcessContext *process;
     XrToolchainSelector selector;
     XrToolchainTarget target;
     const char *cc;
@@ -38,12 +40,12 @@ typedef struct XrToolchainCandidates {
 
 XR_FUNC bool xtc_find_executable(const char *program, char *out, size_t out_size);
 XR_FUNC bool xtc_find_bundled_zig(const char *program_hint, char *out, size_t out_size);
-XR_FUNC bool xtc_active_apple_sdk(char *out, size_t out_size, char *err, size_t err_size);
+XR_FUNC bool xtc_active_apple_sdk(XrToolchainProcessContext *process_context, char *out, size_t out_size, char *err, size_t err_size);
 XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolchainCandidates *out,
                                      char *err, size_t err_size);
 XR_FUNC bool xtc_version_from_banner(const uint8_t *source, size_t source_size, char *version,
                                      size_t version_size);
-XR_FUNC bool xtc_candidate_read_version(XrToolchainCandidate *candidate, char *err,
+XR_FUNC bool xtc_candidate_read_version(XrToolchainProcessContext *process_context, XrToolchainCandidate *candidate, char *err,
                                         size_t err_size);
 XR_FUNC bool xtc_selector_accepts_provider(XrToolchainSelector selector,
                                            XrToolchainProviderId provider);

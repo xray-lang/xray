@@ -218,6 +218,7 @@ XrValue xr_sys_provider_process_spawn(XrVMRuntime *isolate, XrValue *args, int a
     }
 
     XrProcSpawnOptions options = {
+        .memory = xr_proc_system_memory(),
         .cwd = cwd,
         .env_keys = env_keys,
         .env_values = env_values,
@@ -230,7 +231,8 @@ XrValue xr_sys_provider_process_spawn(XrVMRuntime *isolate, XrValue *args, int a
         .stderr_write = stderr_write,
         .detached = XR_TO_BOOL(args[8]),
     };
-    XrProcId pid = xr_proc_spawn_ex(program, argv, &options);
+    XrProcId pid = XR_PROC_INVALID;
+    (void)xr_proc_spawn(program, argv, &options, &pid);
     sys_process_env_free(env_keys, env_values);
     xr_free(argv);
     return xr_int((int64_t) pid);

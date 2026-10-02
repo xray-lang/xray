@@ -91,7 +91,10 @@ static bool create_tarball(const char *output_path) {
     const char *const argv[] = {
         "tar", "-czf", output_path, "--exclude=.git", "--exclude=node_modules", ".", NULL,
     };
-    XrProcId pid = xr_proc_spawn("tar", argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_1 = {0};
+    pid_options_1.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("tar", argv, &pid_options_1, &pid);
     if (pid == XR_PROC_INVALID)
         return false;
     int code = -1;
@@ -399,7 +402,10 @@ static bool pkg_build_native(const char *pkg_dir, bool verbose) {
 
     const char *const cmake_argv[] = {
         "cmake", "-B", build_dir, "-S", pkg_dir, "-DCMAKE_BUILD_TYPE=Release", NULL};
-    XrProcId pid = xr_proc_spawn("cmake", cmake_argv);
+    XrProcId pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_2 = {0};
+    pid_options_2.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("cmake", cmake_argv, &pid_options_2, &pid);
     if (pid == XR_PROC_INVALID)
         return false;
     int code = -1;
@@ -410,7 +416,10 @@ static bool pkg_build_native(const char *pkg_dir, bool verbose) {
 
     /* cmake --build build */
     const char *const build_argv[] = {"cmake", "--build", build_dir, "--parallel", "4", NULL};
-    pid = xr_proc_spawn("cmake", build_argv);
+    pid = XR_PROC_INVALID;
+    XrProcSpawnOptions pid_options_3 = {0};
+    pid_options_3.memory = xr_proc_system_memory();
+    (void)xr_proc_spawn("cmake", build_argv, &pid_options_3, &pid);
     if (pid == XR_PROC_INVALID)
         return false;
     code = -1;
