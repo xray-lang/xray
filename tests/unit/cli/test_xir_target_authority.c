@@ -9,6 +9,7 @@
 #include "base/xmalloc.h"
 #include "app/toolchain/xtc_xir_target.h"
 #include <windows.h>
+#include <winioctl.h>
 #include <stdio.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s (Windows %lu)\n", __LINE__, #c, GetLastError()); exit(1); } } while (0)

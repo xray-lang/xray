@@ -30,6 +30,9 @@ if(ENABLE_ASAN AND (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC"))
     add_link_options("LINKER:/STACK:16777216")
 endif()
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/compile_resources.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
+
 macro(add_xray_unit_test name source)
     add_executable(${name} ${source} ${ARGN})
     target_compile_definitions(${name} PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
