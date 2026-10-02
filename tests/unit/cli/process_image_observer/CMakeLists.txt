@@ -10,7 +10,7 @@ add_library(image_observer_dll SHARED image_observer_dll.c)
 add_executable(test_process_image_observer test_process_image_observer.c
     "${OBSERVER_ROOT}/src/base/xutf8.c" "${OBSERVER_ROOT}/src/os/win/time_win.c"
     "${OBSERVER_ROOT}/src/os/win/proc_self_win.c")
-if(NOT TARGET toolchain_process_production)
+if(NOT TARGET test_toolchain_process_owned)
     include("${CMAKE_CURRENT_LIST_DIR}/../toolchain_process_owned.cmake")
 endif()
 foreach(t image_observer_dll test_process_image_observer)

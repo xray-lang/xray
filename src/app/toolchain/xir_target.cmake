@@ -1,5 +1,6 @@
 # Native input observations have one production owner and resource ledger.
 if(WIN32)
+    include("${CMAKE_CURRENT_LIST_DIR}/xir_process.cmake")
     add_library(xray_toolchain_dependencies STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_dependencies.c)
     target_link_libraries(xray_toolchain_dependencies PUBLIC xray_json_cursor xray_compile_resources)
     target_compile_features(xray_toolchain_dependencies PUBLIC c_std_11)

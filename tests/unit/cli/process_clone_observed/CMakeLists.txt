@@ -6,24 +6,12 @@ if(NOT CMAKE_GENERATOR STREQUAL "Ninja" OR NOT WIN32)
     message(FATAL_ERROR "This independent gate requires Windows Ninja")
 endif()
 get_filename_component(CLONE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
-set(CLONE_COMMON
-    "${CLONE_ROOT}/src/base/xutf8.c"
-    "${CLONE_ROOT}/src/os/win/proc_win.c"
-    "${CLONE_ROOT}/src/os/win/proc_self_win.c"
-    "${CLONE_ROOT}/src/os/win/pipe_win.c"
-    "${CLONE_ROOT}/src/os/win/time_win.c")
+include("${CLONE_ROOT}/src/app/toolchain/xir_process.cmake")
 add_executable(test_process_clone_observed test_process_clone_observed.c)
 target_compile_definitions(test_process_clone_observed PRIVATE CLONE_INJECTED=1)
 add_executable(test_process_clone_production test_process_clone_observed.c)
-if(TARGET image_process AND TARGET xray_compile_resources)
-    target_link_libraries(test_process_clone_observed PRIVATE image_process)
-    target_link_libraries(test_process_clone_production PRIVATE image_process xray_compile_resources)
-else()
-    target_sources(test_process_clone_observed PRIVATE ${CLONE_COMMON})
-    target_sources(test_process_clone_production PRIVATE ${CLONE_COMMON}
-        "${CLONE_ROOT}/src/base/xcompile_resources.c"
-        "${CLONE_ROOT}/src/app/toolchain/xtc_process.c")
-endif()
+target_link_libraries(test_process_clone_observed PRIVATE xray_toolchain_process)
+target_link_libraries(test_process_clone_production PRIVATE xray_toolchain_process)
 foreach(t test_process_clone_observed test_process_clone_production)
     set_target_properties(${t} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_include_directories(${t} PRIVATE "${CLONE_ROOT}/src")
