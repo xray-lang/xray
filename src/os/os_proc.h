@@ -26,6 +26,7 @@
 #include <stdint.h>
 
 #include "../base/xdefs.h"
+#include "../base/xio_policy.h"
 #include "os_pipe.h"
 
 #ifdef __cplusplus
@@ -167,6 +168,15 @@ XR_FUNC int64_t xr_proc_self_pid(void);
 // /proc/self/exe). Callers use this to locate resources shipped
 // alongside the binary (e.g. the stdlib directory).
 XR_FUNC int xr_proc_self_exe_path(char *buf, size_t size);
+
+/* Owned UTF-8 process queries use the caller's mandatory I/O policy. Output
+ * must be NULL and changes only on OK. Free through that same policy. Empty
+ * environment values are owned empty strings; an absent key is NOT_FOUND.
+ * The OS environment is observed during this call, not retained or frozen as
+ * a whole. OS/libc internal storage is outside the caller allocation domain. */
+XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **output);
+XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
+    const char *name, char **output);
 
 // Returns true if a debugger (lldb / gdb / Visual Studio) is
 // attached to the current process at the time of the call. Best

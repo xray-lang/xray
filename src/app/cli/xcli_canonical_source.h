@@ -54,6 +54,11 @@ typedef struct XrCliCompileSourceDiagnostic {
     XrXirSourceProductDiagnostic source;
 } XrCliCompileSourceDiagnostic;
 
+/* One outer operation creates a ledger from these defaults. Stage adapters
+ * keep that ledger; they do not create a new allowance for each stage. */
+XR_FUNC XrCompileResourceLimits xr_cli_compile_default_resource_limits(void);
+XR_FUNC XrTomlParseLimits xr_cli_compile_default_manifest_limits(void);
+
 /* Inputs are borrowed synchronously. NULL libraries means no published input.
  * Output must be empty and is preserved on failure. Initialize diagnostics to
  * zero; free their owned partial snapshot before reusing them. Neither products

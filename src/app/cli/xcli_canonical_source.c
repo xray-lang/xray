@@ -17,6 +17,13 @@
 #include "../../os/os_fs.h"
 #include "../../xir/xxir_library_catalog.h"
 
+XR_FUNC XrCompileResourceLimits xr_cli_compile_default_resource_limits(void) {
+    return (XrCompileResourceLimits){UINT64_C(1) << 30, UINT64_C(256) << 20, UINT64_C(8) << 30};
+}
+XR_FUNC XrTomlParseLimits xr_cli_compile_default_manifest_limits(void) {
+    return (XrTomlParseLimits){UINT64_C(1) << 20, 64};
+}
+
 static XrCliCompileSourceStatus source_io_status(XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_OK: return XR_CLI_COMPILE_SOURCE_OK;

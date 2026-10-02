@@ -1,6 +1,7 @@
 # CLI admission shares the production Source owner and its resource ledger.
 add_library(xray_cli_source STATIC
     ${CMAKE_CURRENT_LIST_DIR}/xcli_canonical_source.c
+    ${CMAKE_CURRENT_LIST_DIR}/xcli_source_paths.c
     ${CMAKE_CURRENT_LIST_DIR}/xcli_graph_authority.c
     ${CMAKE_CURRENT_LIST_DIR}/../../module/xproject.c
     ${CMAKE_CURRENT_LIST_DIR}/../../module/xnative_package.c)
