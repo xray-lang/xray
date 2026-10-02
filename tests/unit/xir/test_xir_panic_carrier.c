@@ -15,6 +15,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
+#include "base/xcompile_resources.c"
 
 static const char expected_bytes[] = "a\0\xe4\xb8\xad" "z";
 static void expect_bytes(const XrXirValue *value, const char *expected, size_t size) {

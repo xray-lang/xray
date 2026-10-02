@@ -62,18 +62,23 @@ static void program_fixture(PanicProgramFixture *f) {
     const XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, &literal, 1, 0, 1, NULL};
     const XrXirModule built = {XR_XIR_BUILT, functions, 2, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *closed = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
+    XrCompileResources *resources = NULL;
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    const XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
+    CHECK(xr_xir_compile_check(&context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed, &target, NULL, &f->lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked); xr_xir_artifact_free(closed);
-    const XrXirModule *owned = xr_xir_artifact_module(f->lowered);
+    CHECK(xr_xir_compile_lower(closed, &target, &f->lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(closed);
+    xr_compile_resources_release(resources);
+    const XrXirModule *owned = xr_xir_compile_artifact_module(f->lowered);
     f->entries[0] = (XrXirCallEntry){XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
         sizeof(CarrierFrame), program_initialize, program_release, f, 0, 0};
     f->entries[1] = (XrXirCallEntry){XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_I64,
         sizeof(CarrierFrame), program_entry, program_release, f, 0, 0};
     f->spec = (XrXirProgramSpec){XR_XIR_PROGRAM_ABI_VERSION, target, f->entries, 2,
-        owned->declarations, {0}, NULL, xr_xir_program_proof(f->lowered)};
+        owned->declarations, {0}, NULL, xr_xir_compile_program_proof(f->lowered)};
 }
 static void abi_cases(void) {
     PanicProgramFixture fixture; program_fixture(&fixture);
@@ -84,7 +89,7 @@ static void abi_cases(void) {
         if (i == 1) invalid.target.abi_version = 15;
         if (i == 2) fixture.entries[0].abi_version = 19;
         runtime_attempts = 0;
-        CHECK(xr_xir_program_seal(&invalid, (XrXirProgramBudget){16777216, 64000000}, &program) == XR_XIR_BAD_LAYOUT);
+        CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(fixture.lowered), &invalid, &program) == XR_XIR_BAD_LAYOUT);
         CHECK(!program && !runtime_attempts && !fixture.callbacks && !fixture.releases);
         CHECK(runtime_live == baseline_count && runtime_bytes == baseline_bytes);
         fixture.entries[0].abi_version = XR_XIR_CALL_ABI_VERSION;
@@ -102,7 +107,7 @@ static void abi_cases(void) {
     CHECK(xr_xir_call_new(&old_config, 0, NULL, 0, &call) == XR_XIR_CALL_BAD_ABI && !call && !runtime_attempts);
     XrXirCallEntry saved = fixture.entries[0]; fixture.entries[0] = old_provider_entry;
     XrXirProgram *refused = NULL; runtime_attempts = 0;
-    CHECK(xr_xir_program_seal(&fixture.spec, (XrXirProgramBudget){16777216, 64000000}, &refused) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(fixture.lowered), &fixture.spec, &refused) == XR_XIR_BAD_LAYOUT);
     CHECK(!refused && !runtime_attempts && !old_provider_callbacks()); fixture.entries[0] = saved;
     const XrXirProgramProof proof = fixture.spec.proof;
     CHECK(proof.length >= 64);
@@ -111,13 +116,13 @@ static void abi_cases(void) {
     uint8_t digest[32]; checked_digest(old, proof.length, digest); memcpy(old + 32, digest, 32);
     /* Even a correctly rehashed old contract rejects before body allocation. */
     XrXirArtifact *output = NULL; runtime_attempts = 0;
-    CHECK(xr_xir_checked_read(old, proof.length, NULL, &output, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_checked_read(xr_xir_compile_artifact_context(fixture.lowered), old, proof.length, &output, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!output && !runtime_attempts); xr_free(old);
-    xr_xir_artifact_free(fixture.lowered); physical_empty();
+    xr_xir_compile_artifact_free(fixture.lowered); physical_empty();
 }
 static XrXirCallStatus instance_once(PanicProgramFixture *f, size_t fault_index, size_t *sites) {
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f->spec, (XrXirProgramBudget){16777216, 64000000}, &program) == XR_XIR_OK);
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f->lowered), &f->spec, &program) == XR_XIR_OK);
     size_t baseline_count = runtime_live, baseline_bytes = runtime_bytes;
     runtime_attempts = 0; runtime_fail_at = fault_index;
     XrXirInstance *instance = NULL;
@@ -153,7 +158,7 @@ static XrXirCallStatus instance_once(PanicProgramFixture *f, size_t fault_index,
     CHECK(runtime_live == baseline_count && runtime_bytes == baseline_bytes);
     if (sites) *sites = runtime_attempts;
     runtime_fail_at = SIZE_MAX;
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     return status;
 }
 static void instance_cases(void) {
@@ -164,11 +169,11 @@ static void instance_cases(void) {
         CHECK(status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
     }
     printf("Sticky failure owner-independent copies and OOM physical gates PASS; instance sites=%zu\n", sites);
-    xr_xir_artifact_free(f.lowered); physical_empty();
+    xr_xir_compile_artifact_free(f.lowered); physical_empty();
 }
 static XrXirCallStatus handler_once(PanicProgramFixture *f, size_t point, size_t *sites) {
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f->spec, (XrXirProgramBudget){16777216, 64000000}, &program) == XR_XIR_OK);
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f->lowered), &f->spec, &program) == XR_XIR_OK);
     size_t baseline_count = runtime_live, baseline_bytes = runtime_bytes;
     runtime_attempts = 0; runtime_fail_at = point;
     XrXirInstance *instance = NULL;
@@ -188,7 +193,7 @@ static XrXirCallStatus handler_once(PanicProgramFixture *f, size_t point, size_t
     xr_xir_value_drop(&f->caught_message);
     CHECK(runtime_live == baseline_count && runtime_bytes == baseline_bytes);
     if (sites) *sites = runtime_attempts;
-    runtime_fail_at = SIZE_MAX; xr_xir_program_drop(program);
+    runtime_fail_at = SIZE_MAX; xr_xir_compile_program_drop(program);
     return status;
 }
 static void handler_cases(void) {
@@ -199,5 +204,5 @@ static void handler_cases(void) {
         CHECK(status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
     }
     printf("Typed assertion PanicInfo handler and OOM physical gates PASS; handler sites=%zu\n", sites);
-    xr_xir_artifact_free(f.lowered); physical_empty();
+    xr_xir_compile_artifact_free(f.lowered); physical_empty();
 }
