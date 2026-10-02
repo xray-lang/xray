@@ -61,7 +61,9 @@ typedef struct XrXirTargetFacts {
 typedef struct XrXirTargetSnapshot XrXirTargetSnapshot;
 /* Output must be empty and remains unchanged on failure. No executable target
  * authority is issued. Commands describe explicit inputs, without inheriting
- * this process's environment; environment keys are printable ASCII except '='. */
+ * this process's environment. Keys are nonempty UTF-8; '=' is allowed only as
+ * a leading system-reserved marker followed by a nonempty key. Windows keys
+ * are unique under UTF-16 ordinal case-insensitive comparison. */
 XR_FUNC XrXirTargetStatus xtc_xir_target_capture(const XrXirTargetRequest *request,
     XrXirTargetSnapshot **output);
 XR_FUNC const XrXirTargetFacts *xtc_xir_target_facts(const XrXirTargetSnapshot *snapshot);

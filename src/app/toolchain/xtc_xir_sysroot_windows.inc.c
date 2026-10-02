@@ -65,6 +65,16 @@ static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input) {
     }
     return path;
 }
+static bool sysroot_same_path(XrXirTargetSnapshot *snapshot, const wchar_t *left,
+    const wchar_t *right, bool *same) {
+    int comparison=CompareStringOrdinal(left,-1,right,-1,TRUE);
+    if (!comparison) {
+        DWORD error=GetLastError();
+        return xtc_xir_target_fail(snapshot,error==ERROR_NOT_ENOUGH_MEMORY||error==ERROR_OUTOFMEMORY?
+            XR_XIR_TARGET_OUT_OF_MEMORY:XR_XIR_TARGET_IO);
+    }
+    *same=comparison==CSTR_EQUAL;return true;
+}
 static bool sysroot_check_handle(XrXirTargetSnapshot *snapshot, HANDLE handle,
     const wchar_t *expected, size_t length, bool directory) {
     if (!xtc_xir_target_work(snapshot, 1)) return false;
@@ -87,14 +97,18 @@ static bool sysroot_check_handle(XrXirTargetSnapshot *snapshot, HANDLE handle,
     if (count >= capacity) return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_BUDGET);
     snapshot->scratch_length = count;
     if (!xtc_xir_target_work(snapshot, length + count + 2)) return false;
-    if (CompareStringOrdinal(expected, -1, snapshot->scratch, -1, TRUE) != CSTR_EQUAL)
+    bool same=false;
+    if (!sysroot_same_path(snapshot,expected,snapshot->scratch,&same))return false;
+    if (!same)
         return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
     return true;
 }
 static XtcXirLock *sysroot_lock(XrXirTargetSnapshot *snapshot, const wchar_t *path, size_t length, bool directory) {
     for (XtcXirLock *p = snapshot->locks; p; p = p->next) {
         if (!xtc_xir_target_work(snapshot, length + p->length + 2)) return NULL;
-        if (CompareStringOrdinal(path, -1, p->path, -1, TRUE) != CSTR_EQUAL) continue;
+        bool same=false;
+        if (!sysroot_same_path(snapshot,path,p->path,&same))return NULL;
+        if (!same)continue;
         if (!directory) xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
         return directory ? p : NULL;
     }

@@ -15,13 +15,15 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s (Windows %lu)\n", __LINE__, #c, GetLastError()); exit(1); } } while (0)
 typedef struct Allocation { void *pointer; size_t bytes; } Allocation;
 static Allocation allocations[65536];
-static size_t attempts, fail_at = SIZE_MAX, live, live_bytes;
+static size_t attempts, fail_at = SIZE_MAX, live, live_bytes,allocated_bytes,peak_bytes;
 static void *target_test_malloc(size_t bytes) {
     if (attempts++ == fail_at) return NULL;
     void *pointer = xr_malloc(bytes); if (!pointer) return NULL;
     for (size_t i = 0; i < sizeof(allocations) / sizeof(allocations[0]); ++i) {
         if (allocations[i].pointer) continue;
-        allocations[i] = (Allocation){pointer, bytes}; ++live; live_bytes += bytes; return pointer;
+        if(!live)allocated_bytes=peak_bytes=0;
+        allocations[i] = (Allocation){pointer, bytes}; ++live; live_bytes += bytes;allocated_bytes+=bytes;
+        if(live_bytes>peak_bytes)peak_bytes=live_bytes;return pointer;
     }
     CHECK(false); return NULL;
 }
@@ -37,9 +39,31 @@ static void target_test_free(void *pointer) {
 #undef xr_free
 #define xr_malloc target_test_malloc
 #define xr_free target_test_free
+#define xr_compile_resources_work target_real_work
+#define xr_compile_resources_calloc target_real_calloc
 #include "base/xcompile_resources.c"
-#include "app/toolchain/xtc_xir_target.c"
+#undef xr_compile_resources_work
+#undef xr_compile_resources_calloc
+static bool record_work;
+static uint64_t work_boundaries[32768];static size_t work_count;
+static XrCompileResourceStatus remember_work(XrCompileResources *owner,XrCompileResourceStatus status) {
+    if(record_work&&status==XR_COMPILE_RESOURCE_OK) {
+        XrCompileResourceStats result;CHECK(xr_compile_resources_stats(owner,&result)==XR_COMPILE_RESOURCE_OK);
+        if(!work_count||work_boundaries[work_count-1]!=result.work) {
+            CHECK(work_count<32768);work_boundaries[work_count++]=result.work;
+        }
+    }
+    return status;
+}
+XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *r,uint64_t n) {
+    return remember_work(r,target_real_work(r,n));
+}
+XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(XrCompileResources *r,size_t n,size_t size,void **out) {
+    return remember_work(r,target_real_calloc(r,n,size,out));
+}
+#ifndef XIR_TARGET_PRODUCTION_TEST
 static size_t io_attempts, io_fail_at = SIZE_MAX;
+static size_t conversion_calls,environment_comparisons,path_comparisons;
 static DWORD injected_error = ERROR_READ_FAULT;
 static bool short_read;
 static bool target_io_fail(void) {
@@ -57,8 +81,15 @@ static BOOL target_read(HANDLE file, LPVOID bytes, DWORD count, LPDWORD actual, 
 #define GetFinalPathNameByHandleW(...) (target_io_fail() ? 0u : GetFinalPathNameByHandleW(__VA_ARGS__))
 #define GetFileSizeEx(...) (target_io_fail() ? FALSE : GetFileSizeEx(__VA_ARGS__))
 #define GetFileType(...) (target_io_fail() ? FILE_TYPE_UNKNOWN : GetFileType(__VA_ARGS__))
-#define MultiByteToWideChar(...) (target_io_fail() ? 0 : MultiByteToWideChar(__VA_ARGS__))
+#define MultiByteToWideChar(...) (++conversion_calls, target_io_fail() ? 0 : MultiByteToWideChar(__VA_ARGS__))
 #define WideCharToMultiByte(...) (target_io_fail() ? 0 : WideCharToMultiByte(__VA_ARGS__))
+static int target_ordinal(LPCWCH a,int alen,LPCWCH b,int blen,BOOL ignore_case) {
+    if(alen<0)++path_comparisons;else ++environment_comparisons;
+    CHECK(ignore_case==TRUE);
+    return target_io_fail()?0:CompareStringOrdinal(a,alen,b,blen,ignore_case);
+}
+#define CompareStringOrdinal target_ordinal
+#include "app/toolchain/xtc_xir_target.c"
 #include "app/toolchain/xtc_xir_sysroot.c"
 #undef CreateFileW
 #undef ReadFile
@@ -68,12 +99,18 @@ static BOOL target_read(HANDLE file, LPVOID bytes, DWORD count, LPDWORD actual, 
 #undef GetFileType
 #undef MultiByteToWideChar
 #undef WideCharToMultiByte
+#undef CompareStringOrdinal
+#endif
 
 static char directory[4096], source_path[4096], header_path[4096], compiler_path[4096];
 static XrXirTargetDependency files[3];
 static char argument_text[64] = "/std:c11", environment_text[64] = "captured value";
 static const char *arguments[] = {"observed-compiler", argument_text, "source.c"};
-static XrXirTargetEnvironment environment[] = {{"INCLUDE", environment_text}};
+static char unicode_key[64]="ÄNAME", unicode_value[64]="原始值";
+static XrXirTargetEnvironment environment[] = {
+    {"INCLUDE", environment_text},{unicode_key,unicode_value},{"with space","spaced value"},
+    {"=C:","C:/captured"},{"=ExitCode","0"},{"中文","值"},{"emoji 😄",""}
+};
 static XrXirTargetCommand command;
 static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
 static XrXirTargetRequest request_for(XrCompileResources *resources) {
@@ -94,7 +131,7 @@ static void setup(void) {
     files[0] = (XrXirTargetDependency){source_path, XR_XIR_TARGET_SOURCE};
     files[1] = (XrXirTargetDependency){header_path, XR_XIR_TARGET_HEADER};
     files[2] = (XrXirTargetDependency){compiler_path, XR_XIR_TARGET_COMPILER};
-    command = (XrXirTargetCommand){directory, arguments, 3, environment, 1};
+    command = (XrXirTargetCommand){directory, arguments, 3, environment, (uint32_t)(sizeof(environment)/sizeof(environment[0]))};
 }
 static void teardown(void) {
     CHECK(DeleteFileA(source_path)); CHECK(DeleteFileA(header_path)); CHECK(DeleteFileA(compiler_path));
@@ -105,7 +142,8 @@ static XrCompileResources *ledger(const XrCompileResourceLimits *limits) {
     CHECK(xr_compile_resources_new(limits, &resources) == XR_COMPILE_RESOURCE_OK); return resources;
 }
 static XrCompileResourceStats stats(XrCompileResources *resources) {
-    XrCompileResourceStats result; CHECK(xr_compile_resources_stats(resources, &result) == XR_COMPILE_RESOURCE_OK); return result;
+    XrCompileResourceStats result; CHECK(xr_compile_resources_stats(resources, &result) == XR_COMPILE_RESOURCE_OK);
+    CHECK(result.live_bytes==live_bytes&&result.allocated_bytes==allocated_bytes&&result.peak_bytes==peak_bytes);return result;
 }
 static XrXirTargetSnapshot *capture(XrCompileResources *resources) {
     XrXirTargetRequest request = request_for(resources); XrXirTargetSnapshot *snapshot = NULL;
@@ -133,8 +171,11 @@ static void identity_and_lifetime(void) {
     char renamed[4096]; CHECK(snprintf(renamed, sizeof(renamed), "%s-renamed", directory) > 0);
     CHECK(!MoveFileA(directory, renamed));
     strcpy(argument_text, "/changed"); strcpy(environment_text, "changed");
+    strcpy(unicode_key,"changed");strcpy(unicode_value,"changed");
     const XrXirTargetCommand *saved = xtc_xir_target_command(snapshot, 0);
     CHECK(!strcmp(saved->argv[1], "/std:c11") && !strcmp(saved->environment[0].value, "captured value"));
+    CHECK(!strcmp(saved->environment[1].key,"ÄNAME")&&!strcmp(saved->environment[1].value,"原始值"));
+    strcpy(unicode_key,"ÄNAME");strcpy(unicode_value,"原始值");
     strcpy(argument_text, "/std:c11"); strcpy(environment_text, "captured value");
     xtc_xir_target_free(snapshot); CHECK(stats(resources).live_bytes == baseline);
     XrXirTargetDependency swap = files[0]; files[0] = files[2]; files[2] = swap;
@@ -154,8 +195,10 @@ static void identity_and_lifetime(void) {
 static void expected_failure(XrXirTargetRequest *request, XrXirTargetStatus expected) {
     XrXirTargetSnapshot *output = NULL;
     uint64_t before = stats(request->resources).live_bytes;
+    DWORD handles_before,handles_after;CHECK(GetProcessHandleCount(GetCurrentProcess(),&handles_before));
     CHECK(xtc_xir_target_capture(request, &output) == expected);
     CHECK(!output && stats(request->resources).live_bytes == before);
+    CHECK(GetProcessHandleCount(GetCurrentProcess(),&handles_after)&&handles_before==handles_after);
 }
 static void invalid_inputs(void) {
     XrCompileResources *resources = ledger(&unlimited); XrXirTargetRequest request = request_for(resources);
@@ -231,19 +274,74 @@ static void allocation_failures(void) {
     }
     printf("allocation failure points: %zu\n", count);
 }
+#ifndef XIR_TARGET_PRODUCTION_TEST
 static void io_failures(void) {
     XrCompileResources *resources = ledger(&unlimited); io_attempts = 0;
+    environment_comparisons=path_comparisons=0;
     XrXirTargetSnapshot *snapshot = capture(resources); size_t count = io_attempts; xtc_xir_target_free(snapshot);
+    size_t environment_sites=environment_comparisons,path_sites=path_comparisons;
+    CHECK(environment_sites&&path_sites);
     for (size_t i = 0; i < count; ++i) {
-        for (int mode = 0; mode < 2; ++mode) {
-            io_attempts = 0; io_fail_at = i; injected_error = mode ? ERROR_NOT_ENOUGH_MEMORY : ERROR_READ_FAULT;
+        for (int mode = 0; mode < 3; ++mode) {
+            io_attempts = 0; io_fail_at = i; injected_error = mode==2?ERROR_OUTOFMEMORY:mode?ERROR_NOT_ENOUGH_MEMORY:ERROR_READ_FAULT;
             XrXirTargetRequest request = request_for(resources);
             expected_failure(&request, mode ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_IO);
+            CHECK(io_attempts==i+1);
         }
     }
     io_fail_at = SIZE_MAX; xr_compile_resources_release(resources); CHECK(!live && !live_bytes);
-    printf("typed I/O failure points: %zu\n", count);
+    printf("typed I/O failure points: %zu, each IO/two OOM codes; environment ordinal %zu, path ordinal %zu\n",count,environment_sites,path_sites);
 }
+#endif
+static void environment_contract(void) {
+    XrCompileResources *resources=ledger(&unlimited);XrXirTargetRequest request=request_for(resources);
+    const XrXirTargetEnvironment *saved=command.environment;uint32_t count=command.environment_count;
+    const char *invalid[]={"","=","bad=key","==C:","=C:=bad","\xc3\x28","\xed\xa0\x80"};
+    for(size_t i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i) {
+        XrXirTargetEnvironment entry={invalid[i],"value"};command.environment=&entry;command.environment_count=1;
+        expected_failure(&request,XR_XIR_TARGET_INVALID);
+    }
+    XrXirTargetEnvironment invalid_value={"normal","\xc0\x80"};command.environment=&invalid_value;
+    expected_failure(&request,XR_XIR_TARGET_INVALID);
+    XrXirTargetEnvironment duplicate[][2]={{{"ÄNAME","a"},{"äname","b"}},{{"=ExitCode","a"},{"=exitcode","b"}},{{"With Space","a"},{"with space","b"}}};
+    command.environment_count=2;
+    for(size_t i=0;i<sizeof(duplicate)/sizeof(duplicate[0]);++i) {
+        command.environment=duplicate[i];expected_failure(&request,XR_XIR_TARGET_INVALID);
+    }
+    XrXirTargetEnvironment legal[]={{" ",""},{"= ","system fact"},{"\x01","control key"}};
+    command.environment=legal;command.environment_count=3;XrXirTargetSnapshot *snapshot=capture(resources);
+    CHECK(!strcmp(xtc_xir_target_command(snapshot,0)->environment[1].key,"= "));
+    xtc_xir_target_free(snapshot);command.environment=saved;command.environment_count=count;
+#ifndef XIR_TARGET_PRODUCTION_TEST
+    XrXirTargetSnapshot local={0};local.resources=resources;conversion_calls=environment_comparisons=0;
+    CHECK(target_commands(&local,&request));
+    CHECK(conversion_calls==count&&environment_comparisons==(size_t)count*(count-1)/2);
+    while(local.memory){XtcXirMemory *next=local.memory->next;xr_compile_resources_free(local.memory);local.memory=next;}
+#endif
+    xr_compile_resources_release(resources);CHECK(!live&&!live_bytes);
+#ifdef XIR_TARGET_PRODUCTION_TEST
+    puts("production TU: Unicode ordinal duplicates, spaces/reserved keys and UTF8/equals rejection PASS");
+#else
+    puts("Unicode ordinal duplicates, spaces/reserved keys, UTF8/equals rejection, one conversion per key PASS");
+#endif
+}
+static void work_failures(void) {
+    XrCompileResources *resources=ledger(&unlimited);record_work=true;work_count=0;
+    XrXirTargetSnapshot *snapshot=capture(resources);record_work=false;
+    xtc_xir_target_free(snapshot);xr_compile_resources_release(resources);
+    size_t count=work_count;
+    for(size_t i=0;i<count;++i) {
+        XrCompileResourceLimits limit=unlimited;limit.work=work_boundaries[i]-1;resources=NULL;
+        XrCompileResourceStatus status=xr_compile_resources_new(&limit,&resources);
+        if(status==XR_COMPILE_RESOURCE_OK) {
+            XrXirTargetRequest request=request_for(resources);expected_failure(&request,XR_XIR_TARGET_BUDGET);
+            xr_compile_resources_release(resources);
+        } else CHECK(status==XR_COMPILE_RESOURCE_BUDGET&&!resources);
+        CHECK(!live&&!live_bytes);
+    }
+    printf("actual work cutoff points: %zu; physical/handle zero PASS\n",count);
+}
+#ifndef XIR_TARGET_PRODUCTION_TEST
 static void fixed_operation_work(void) {
     XrCompileResources *resources = ledger(&unlimited);
     XrXirTargetSnapshot snapshot = {0}; snapshot.resources = resources;
@@ -290,6 +388,7 @@ static void bounded_scanning(void) {
     CHECK(!target_identity(&snapshot) && snapshot.status == XR_XIR_TARGET_BUDGET);
     xr_compile_resources_release(resources); CHECK(VirtualFree(memory, 0, MEM_RELEASE)); CHECK(!live);
 }
+#endif
 /* Diagnostic transport only: the caller still owns complete dependency tracing
  * and replay auditing. This protocol never constructs executable authority. */
 static int diagnostic_lease(const char *manifest) {
@@ -344,7 +443,11 @@ static int diagnostic_lease(const char *manifest) {
 int main(int argc, char **argv) {
     if (argc == 3 && !strcmp(argv[1], "--diagnostic-lease")) return diagnostic_lease(argv[2]);
     CHECK(argc == 1);
-    setup(); identity_and_lifetime(); invalid_inputs(); reparse_rejection(); resource_limits();
-    allocation_failures(); io_failures(); fixed_operation_work(); bounded_scanning(); teardown();
+    setup(); identity_and_lifetime(); invalid_inputs(); environment_contract(); reparse_rejection(); resource_limits();
+    allocation_failures();work_failures();
+#ifndef XIR_TARGET_PRODUCTION_TEST
+    io_failures();fixed_operation_work();bounded_scanning();
+#endif
+    teardown();
     puts("xir target snapshots: PASS"); return 0;
 }
