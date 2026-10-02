@@ -48,7 +48,7 @@ def build(root: Path, output: Path, compiler: str, crt: str, jobs: int) -> None:
     with tempfile.TemporaryDirectory(prefix='xir-sdk-abi-',dir=output.parent) as temporary:
         proof=Path(temporary)/'independent';prepare(proof)
         expected=json.loads((proof/'EXPECTED.json').read_text(encoding='utf-8'))['rows']
-        assert len(expected)==197
+        assert len(expected)==220
         shutil.copy2(proof/'abi_probe.c',output/'abi_probe.c')
         (output/'abi-expected.json').write_text(json.dumps(expected,indent=2)+'\n',encoding='utf-8')
     lines=['cmake_minimum_required(VERSION 3.25)','project(XirRuntimeSdk C)',

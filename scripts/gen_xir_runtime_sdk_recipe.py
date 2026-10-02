@@ -7,6 +7,7 @@ from pathlib import Path
 
 INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"\n]+)"', re.MULTILINE)
 OWNERS = {
+    'src/base/CMakeLists.txt': ['xray_compile_resources'],
     'src/xir/CMakeLists.txt': ['xray_xir_admission', 'xray_xir_declarations', 'xray_xir_scalar'],
     'src/execution/xir_runtime_host.cmake': ['xray_xir_runtime_host'],
 }

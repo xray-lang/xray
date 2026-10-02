@@ -42,6 +42,12 @@ STRUCTURES = [
  (2000, 'XrXirOutputGroup', [('stream','enum'),('values','ptr'),('count','u32'),('line','bool')]),
  (2100, 'XrXirHostExecutionRequest', [('program','ptr'),('config','ptr'),('entry','u32'),('arguments','ptr'),('argument_count','u32')]),
  (2200, 'XrErrorCoreMessageView', [('code','i32'),('message','ptr'),('message_len','u64'),('has_code','bool')]),
+ (2300, 'XrXirCompileLimits', [('functions','u32'),('parameters','u32'),('blocks','u32'),
+                            ('instructions','u32'),('frame_bytes','u64')]),
+ (2400, 'XrXirCompileContext', [('resources','ptr'),('limits','XrXirCompileLimits')]),
+ (2500, 'XrCompileResourceLimits', [('allocated_bytes','u64'),('live_bytes','u64'),('work','u64')]),
+ (2600, 'XrCompileResourceStats', [('allocation_count','u64'),('allocated_bytes','u64'),
+                                ('live_bytes','u64'),('peak_bytes','u64'),('work','u64')]),
 ]
 SCALARS = [
  (1,'pointer.size',8,'sizeof(void *)'),(2,'pointer.align',8,'_Alignof(void *)'),

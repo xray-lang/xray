@@ -30,9 +30,9 @@ int main(int argc,char **argv) {
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
     printf("READY %u %u %u\n",facts->value_abi,facts->crt,facts->file_count);
     puts(xr_xir_runtime_sdk_root(sdk));
-    const char *libraries[]={"lib/xray_xir_admission.lib","lib/xray_xir_declarations.lib",
+    const char *libraries[]={"lib/xray_compile_resources.lib","lib/xray_xir_admission.lib","lib/xray_xir_declarations.lib",
         "lib/xray_xir_scalar.lib","lib/xray_xir_runtime_host.lib"};
-    for (size_t i=0;i<4;++i) {
+    for (size_t i=0;i<sizeof(libraries)/sizeof(libraries[0]);++i) {
         const char *path=NULL;
         if (xr_xir_runtime_sdk_file(sdk,libraries[i],&path)!=XR_XIR_SDK_OK) {
             xr_xir_runtime_sdk_free(sdk);return 20;

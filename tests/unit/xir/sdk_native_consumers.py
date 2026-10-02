@@ -39,8 +39,8 @@ def main():
     lease=subprocess.Popen([args.lease,str(bundle),str(bundle/'sdk_manifest.json')],
                            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
     try:
-        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['17','2'],ready
-        sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(4)]
+        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['18','2'],ready
+        sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(5)]
         assert sdk.is_dir() and all(Path(name).is_file() for name in libraries)
         with tempfile.TemporaryDirectory(prefix='xir-sdk-native-') as temporary:
             work=Path(temporary);consumer=root/'tests/unit/xir/xir_sdk_consumer.c'
@@ -51,14 +51,13 @@ def main():
             link(args,probe_exe,[str(probe_object)],libraries)
             expected=json.loads((proof/'EXPECTED.json').read_text())['rows']
             actual=json.loads(checked([str(probe_exe)]))
-            assert actual==[dict(id=row['id'],value=row['value']) for row in expected] and len(actual)==197
-            print(args.provider+': fresh admitted-header 197-field independent ABI PASS',flush=True)
+            assert actual==[dict(id=row['id'],value=row['value']) for row in expected] and len(actual)==220
+            print(args.provider+': fresh admitted-header 220-field independent ABI PASS',flush=True)
             for name,path,expected in (
-                ('retired',root/'tests/unit/fixtures/assertion/retired_names_are_ordinary.xr',b''),
-                ('array',root/'tests/unit/fixtures/runtime/array_growth_accounting.xr',b'array-growth-accounting-ok\n')):
+                ('multi',root/'tests/fixtures/xir_compile_owner/root.xr',b'owner\xe4\xb8\xad-ok 42 true\n'),):
                 generated=work/(name+'.c')
                 checked([args.generator,str(path.parent),str(path),args.stdlib,'accept',str(generated),
-                         'array' if name=='array' else 'empty','normal'])
+                         name,'normal'])
                 assert not re.search(r'\(\s*\{',generated.read_text(encoding='utf-8'))
                 objects=[]
                 for source in (generated,consumer):
@@ -67,7 +66,7 @@ def main():
                 executable=work/(name+'.exe')
                 link(args,executable,objects,libraries)
                 output=checked([str(executable)]).replace(b'\r\n',b'\n');assert output==expected,(name,output,expected)
-                print(args.provider+' '+name+': actual C11 + admitted four archives + owned host result PASS',flush=True)
+                print(args.provider+' '+name+': actual C11 + admitted five archives + owned host result PASS',flush=True)
     finally:
         lease.stdin.write('q');lease.stdin.flush()
         _,error=lease.communicate(timeout=10);assert not lease.returncode,error
