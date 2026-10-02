@@ -34,7 +34,12 @@ typedef struct XrCompileResourceStats {
 } XrCompileResourceStats;
 
 /* Zero limits grant no resources. The ledger allocation itself is charged.
- * Calls sharing a ledger must be serialized by the caller. */
+ * Concurrent calls require a live reference throughout each call, including
+ * while waiting. Publish references with caller synchronization; retain cannot
+ * revive a pointer racing its final release. Blocks also retain their ledger.
+ * Payload access, a block's resize/free, and output slots require caller exclusion.
+ * Accounting and physical allocation/free are serialized internally; allocator
+ * callbacks must not re-enter this ledger. No fairness or lock-free guarantee. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
     const XrCompileResourceLimits *limits, XrCompileResources **output);
 XR_FUNC XrCompileResourceStatus xr_compile_resources_retain(XrCompileResources *resources);
