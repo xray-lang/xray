@@ -408,25 +408,3 @@ XR_FUNC int xr_proc_close(XrProcId pid) {
     if (!CloseHandle(owner.process)) ok = false;
     return ok ? 0 : -1;
 }
-
-int64_t xr_proc_self_pid(void) {
-    return (int64_t) GetCurrentProcessId();
-}
-
-int xr_proc_self_exe_path(char *buf, size_t size) {
-    if (buf == NULL || size == 0) {
-        return -1;
-    }
-    wchar_t wide[32768];
-    DWORD n = GetModuleFileNameW(NULL, wide, (DWORD) (sizeof(wide) / sizeof(wide[0])));
-    /* n == 0 means failure; n == capacity means truncation. */
-    if (n == 0 || (size_t) n >= sizeof(wide) / sizeof(wide[0]) ||
-        !xr_win_utf16_to_utf8(wide, (size_t) n, buf, size)) {
-        return -1;
-    }
-    return 0;
-}
-
-bool xr_proc_debugger_attached(void) {
-    return IsDebuggerPresent() ? true : false;
-}

@@ -2687,6 +2687,7 @@ target_link_libraries(xray PRIVATE xray_compile_resources)
 add_subdirectory(src/xir)
 add_subdirectory(src/execution)
 add_subdirectory(src/toolchain)
+include(src/app/cli/xir_compile_source.cmake)
 
 if(BUILD_TESTS)
     enable_testing()

@@ -25,9 +25,9 @@ target_sources(xray_xir_source PRIVATE
     ../base/xhashmap.c ../base/xfileio.c ../base/xio_policy.c ../base/xtoml.c
     ../shared/xr_core_intrinsic_registry.c)
 if(WIN32)
-    target_sources(xray_xir_source PRIVATE ../os/win/fs_win.c ../os/win/dir_win.c ../os/win/file_read_win.c ../os/win/proc_win.c)
+    target_sources(xray_xir_source PRIVATE ../os/win/fs_win.c ../os/win/dir_win.c ../os/win/file_read_win.c ../os/win/proc_self_win.c)
 else()
-    target_sources(xray_xir_source PRIVATE ../os/unix/fs_unix.c ../os/unix/dir_unix.c ../os/unix/file_read_unix.c ../os/unix/proc_unix.c)
+    target_sources(xray_xir_source PRIVATE ../os/unix/fs_unix.c ../os/unix/dir_unix.c ../os/unix/file_read_unix.c ../os/unix/proc_self_unix.c)
 endif()
 add_dependencies(xray_xir_source gen-stdlib-embedded-sources)
 target_include_directories(xray_xir_source PRIVATE "${CMAKE_BINARY_DIR}/generated")

@@ -8,10 +8,12 @@ endif()
 get_filename_component(PROCESS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 add_library(toolchain_process_production OBJECT
     "${PROCESS_ROOT}/src/app/toolchain/xtc_process.c"
+    "${PROCESS_ROOT}/src/os/win/proc_self_win.c"
     "${PROCESS_ROOT}/src/os/win/proc_win.c")
 add_executable(test_toolchain_process_owned
     "${CMAKE_CURRENT_LIST_DIR}/test_toolchain_process_owned.c"
     "${PROCESS_ROOT}/src/base/xutf8.c"
+    "${PROCESS_ROOT}/src/os/win/proc_self_win.c"
     "${PROCESS_ROOT}/src/os/win/time_win.c")
 foreach(t toolchain_process_production test_toolchain_process_owned)
     target_include_directories(${t} PRIVATE "${PROCESS_ROOT}/src")

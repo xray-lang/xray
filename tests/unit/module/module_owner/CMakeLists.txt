@@ -30,7 +30,7 @@ add_executable(test_module_owner test_module_owner.c "${generated}"
     "${XR_ROOT}/src/xir/xxir_library_catalog.c" "${XR_ROOT}/src/base/xhashmap.c"
     "${XR_ROOT}/src/base/xio_policy.c" "${XR_ROOT}/src/base/xfileio.c"
     "${XR_ROOT}/src/os/win/fs_win.c" "${XR_ROOT}/src/os/win/dir_win.c"
-    "${XR_ROOT}/src/os/win/file_read_win.c" "${XR_ROOT}/src/os/win/proc_win.c")
+    "${XR_ROOT}/src/os/win/file_read_win.c" "${XR_ROOT}/src/os/win/proc_self_win.c")
 target_link_libraries(test_module_owner PRIVATE xray_compiler_parser compile_owner_core bcrypt)
 target_include_directories(test_module_owner PRIVATE "${XR_ROOT}/src" "${XR_ROOT}/include" "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_compile_definitions(test_module_owner PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)

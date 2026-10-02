@@ -50,7 +50,7 @@ add_executable(test_lockfile_compile_resources
     "${PACKAGE_RESOURCE_ROOT}/src/base/xfileio.c"
     "${PACKAGE_RESOURCE_ROOT}/src/base/xsha256.c"
     "${PACKAGE_RESOURCE_ROOT}/src/os/${PACKAGE_RESOURCE_PLATFORM}/dir_${PACKAGE_RESOURCE_PLATFORM}.c"
-    "${PACKAGE_RESOURCE_ROOT}/src/os/${PACKAGE_RESOURCE_PLATFORM}/proc_${PACKAGE_RESOURCE_PLATFORM}.c"
+    "${PACKAGE_RESOURCE_ROOT}/src/os/${PACKAGE_RESOURCE_PLATFORM}/proc_self_${PACKAGE_RESOURCE_PLATFORM}.c"
     ${PACKAGE_RESOURCE_COMMON})
 add_library(package_resource_production OBJECT
     "${PACKAGE_RESOURCE_ROOT}/src/module/xlockfile.c"

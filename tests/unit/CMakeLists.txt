@@ -44,6 +44,15 @@ add_subdirectory(module/declaration_owner)
 add_subdirectory(module/stdlib_source_owner)
 if(WIN32)
     add_subdirectory(module/module_owner)
+    add_subdirectory(module/project_owner)
+    add_executable(test_cli_source_owner cli/source_owner/test_cli_source_owner.c)
+    target_link_libraries(test_cli_source_owner PRIVATE xray_cli_source bcrypt)
+    target_compile_options(test_cli_source_owner PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_cli_source_owner COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/cli/source_owner/test_cli_source_owner.py
+        $<TARGET_FILE:test_cli_source_owner> ${PROJECT_SOURCE_DIR}/stdlib)
+    set_tests_properties(test_cli_source_owner PROPERTIES TIMEOUT 300 COST 40
+        RUN_SERIAL TRUE LABELS "unit;cli;xir;ownership;budget")
 endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 
