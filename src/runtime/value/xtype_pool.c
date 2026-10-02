@@ -13,87 +13,76 @@
  */
 
 #include "xtype_pool.h"
-#include "../../base/xchecks.h"
-#include "../../base/xmalloc.h"
-#include <string.h>
+#include "../../toolchain/xcompiler_arena_backing.h"
 
-// Allocate from pool arena
-static void *pool_alloc(XrTypePool *pool, size_t size) {
-    XR_DCHECK(pool != NULL, "pool_alloc: NULL pool");
-    XR_DCHECK(size > 0, "pool_alloc: zero size");
-    return xr_arena_alloc(&pool->arena, size);
+static bool pool_ready(XrTypePool *pool) {
+    return pool && pool->initialized && xr_compile_state_status(pool->state) == XR_COMPILE_RESOURCE_OK;
 }
 
-static char *pool_strdup(XrTypePool *pool, const char *str) {
-    XR_DCHECK(pool != NULL, "pool_strdup: NULL pool");
-    XR_DCHECK(str != NULL, "pool_strdup: NULL string");
-    return xr_arena_strdup(&pool->arena, str);
-}
-
-// Create a type within pool
-static XrType *pool_type_new(XrTypePool *pool, XrTypeKind kind) {
-    XR_DCHECK(pool != NULL, "pool_type_new: NULL pool");
-    XrType *type = pool_alloc(pool, sizeof(XrType));
-    if (!type)
-        return NULL;
-    memset(type, 0, sizeof(XrType));
-    type->kind = kind;
-    return type;
-}
-
-XrTypePool *xr_type_pool_new(void) {
-    XrTypePool *pool = xr_calloc(1, sizeof(XrTypePool));
-    if (!pool)
-        return NULL;
-
-    xr_arena_init(&pool->arena, XR_ARENA_SEGMENT_SIZE);
+XrCompileResourceStatus xr_compile_type_pool_open(XrCompileState *state, XrTypePool **output) {
+    XrCompileResourceStatus status = xr_compile_state_status(state);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
+    if (!output || *output) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    void *memory = NULL;
+    status = xr_compile_state_calloc(state, 1, sizeof(XrTypePool), &memory);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
+    XrTypePool *pool = memory;
+    pool->state = state;
+    XrArenaBacking backing;
+    (void) xr_compiler_arena_state_backing(state, &backing);
+    (void) xr_arena_open(&pool->arena, XR_ARENA_SEGMENT_SIZE, &backing);
+    status = xr_compiler_arena_capture_status(&pool->arena, state);
+    if (status != XR_COMPILE_RESOURCE_OK) {
+        xr_arena_destroy(&pool->arena);
+        xr_compile_state_free(pool);
+        return status;
+    }
     pool->next_type_id = 1;
     pool->initialized = true;
-
-    return pool;
+    *output = pool;
+    return XR_COMPILE_RESOURCE_OK;
 }
 
 void xr_type_pool_free(XrTypePool *pool) {
-    if (!pool)
-        return;
+    if (!pool) return;
     xr_arena_destroy(&pool->arena);
-    xr_free(pool);
+    xr_compile_state_free(pool);
 }
 
 void xr_type_pool_reset(XrTypePool *pool) {
-    if (!pool)
-        return;
+    if (!pool_ready(pool)) return;
     xr_arena_reset(&pool->arena);
-    pool->next_type_id = 1;
+    if (xr_compiler_arena_capture_status(&pool->arena, pool->state) == XR_COMPILE_RESOURCE_OK)
+        pool->next_type_id = 1;
 }
 
-// Allocate a type from pool arena (public API for xanalyzer_types.c)
-XrType *xr_pool_alloc_type(XrTypePool *pool, XrTypeKind kind) {
-    if (!pool)
-        return NULL;
-    XrType *type = pool_type_new(pool, kind);
-    if (type) {
-        type->id = pool->next_type_id++;
-    }
-    return type;
-}
-
-// Allocate memory from pool arena (public API for type internal fields)
 void *xr_pool_alloc(XrTypePool *pool, size_t size) {
-    if (!pool)
-        return NULL;
-    return pool_alloc(pool, size);
+    if (!pool_ready(pool)) return NULL;
+    void *memory = xr_arena_alloc(&pool->arena, size);
+    return xr_compiler_arena_capture_status(&pool->arena, pool->state) == XR_COMPILE_RESOURCE_OK ? memory : NULL;
 }
 
 void *xr_pool_alloc_array(XrTypePool *pool, size_t elem_size, size_t count) {
-    if (!pool)
-        return NULL;
-    return xr_arena_alloc_array(&pool->arena, elem_size, count);
+    if (!pool_ready(pool)) return NULL;
+    void *memory = xr_arena_alloc_array(&pool->arena, elem_size, count);
+    return xr_compiler_arena_capture_status(&pool->arena, pool->state) == XR_COMPILE_RESOURCE_OK ? memory : NULL;
 }
 
-// Duplicate string in pool arena
 char *xr_pool_strdup(XrTypePool *pool, const char *str) {
-    if (!pool)
+    if (!pool_ready(pool)) return NULL;
+    char *copy = xr_arena_strdup(&pool->arena, str);
+    return xr_compiler_arena_capture_status(&pool->arena, pool->state) == XR_COMPILE_RESOURCE_OK ? copy : NULL;
+}
+
+XrType *xr_pool_alloc_type(XrTypePool *pool, XrTypeKind kind) {
+    if (!pool_ready(pool)) return NULL;
+    if (pool->next_type_id == UINT32_MAX) {
+        xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_BUDGET);
         return NULL;
-    return pool_strdup(pool, str);
+    }
+    XrType *type = xr_pool_alloc(pool, sizeof(XrType));
+    if (!type) return NULL;
+    type->kind = kind;
+    type->id = pool->next_type_id++;
+    return type;
 }

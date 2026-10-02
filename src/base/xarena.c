@@ -5,438 +5,270 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xarena.c - Arena memory allocator implementation
+ * xarena.c - One segment algorithm for explicitly owned storage domains
  */
-
 #include "xarena.h"
-#include "xchecks.h"
-#include "xlog.h"
-#include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include "./xmalloc.h"
-
-// Thread-local segment cache for multi-Isolate support (no lock needed).
-// Exempt from "no mutable file-scope globals" rule:
-// XR_THREAD_LOCAL gives per-thread isolation with no shared mutable state.
-
-#define XR_ARENA_MAX_CACHED_SEGMENTS 8
 
 struct XrArenaSegment {
     struct XrArenaSegment *next;
     size_t size;
     size_t capacity;
-    char data[];
+    uint64_t serial;
 };
 
-typedef struct {
-    XrArenaSegment *segments;
-    int count;
-} XrArenaSegmentCache;
+_Static_assert(sizeof(XrArenaSegment) % XR_ARENA_ALIGNMENT == 0,
+    "Segment data must preserve arena alignment");
+_Static_assert(sizeof(size_t) <= sizeof(uint64_t), "Work bytes must fit the backing counter");
 
-/* Thread-exit cleanup for the segment cache. Without it, every exiting
- * thread leaks up to XR_ARENA_MAX_CACHED_SEGMENTS * 64KB (512KB) of
- * cached segments — harmless for long-lived workers, but a steady leak
- * for short-lived threads (LSP sessions, test runners, embedders).
- * POSIX uses a TSD destructor; Windows uses an FLS callback (FLS
- * callbacks run on plain thread exit, not just fiber deletion).
- * The main thread's cache is reclaimed by the OS at process exit. */
-
-static void arena_cache_flush(XrArenaSegmentCache *cache) {
-    XrArenaSegment *seg = cache->segments;
-    while (seg) {
-        XrArenaSegment *next = seg->next;
-        xr_free(seg);
-        seg = next;
-    }
-    cache->segments = NULL;
-    cache->count = 0;
+static char *arena_segment_data(XrArenaSegment *segment) {
+    return (char *) (segment + 1);
 }
 
-#if defined(XR_OS_WINDOWS)
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
-static DWORD arena_cache_fls_index = FLS_OUT_OF_INDEXES;
-static INIT_ONCE arena_cache_once = INIT_ONCE_STATIC_INIT;
-
-static void WINAPI arena_cache_fls_destructor(void *data) {
-    if (data) {
-        arena_cache_flush((XrArenaSegmentCache *) data);
-        xr_free(data);
-    }
+static XrArenaStatus arena_fail(XrArena *arena, XrArenaStatus status) {
+    if (!arena) return XR_ARENA_BAD_ARGUMENT;
+    if (arena->status == XR_ARENA_OK) arena->status = status;
+    return arena->status;
 }
 
-static BOOL CALLBACK arena_cache_once_init(PINIT_ONCE once, PVOID param, PVOID *ctx) {
-    (void) once;
-    (void) param;
-    (void) ctx;
-    arena_cache_fls_index = FlsAlloc(arena_cache_fls_destructor);
-    return TRUE;
-}
-
-static XrArenaSegmentCache *arena_cache_current(bool create) {
-    if (!InitOnceExecuteOnce(&arena_cache_once, arena_cache_once_init, NULL, NULL))
-        return NULL;
-    if (arena_cache_fls_index == FLS_OUT_OF_INDEXES)
-        return NULL;
-    XrArenaSegmentCache *cache = (XrArenaSegmentCache *) FlsGetValue(arena_cache_fls_index);
-    if (!cache && create) {
-        cache = (XrArenaSegmentCache *) xr_calloc(1, sizeof(*cache));
-        if (!cache)
-            return NULL;
-        if (!FlsSetValue(arena_cache_fls_index, cache)) {
-            xr_free(cache);
-            return NULL;
-        }
-    }
-    return cache;
-}
-
-#else  // POSIX
-
-#include <pthread.h>
-
-static pthread_key_t arena_cache_key;
-static pthread_once_t arena_cache_once = PTHREAD_ONCE_INIT;
-static bool arena_cache_key_ready = false;
-
-static void arena_cache_key_destructor(void *data) {
-    if (data) {
-        arena_cache_flush((XrArenaSegmentCache *) data);
-        xr_free(data);
-    }
-}
-
-static void arena_cache_key_init(void) {
-    arena_cache_key_ready = pthread_key_create(&arena_cache_key, arena_cache_key_destructor) == 0;
-}
-
-static XrArenaSegmentCache *arena_cache_current(bool create) {
-    pthread_once(&arena_cache_once, arena_cache_key_init);
-    if (!arena_cache_key_ready)
-        return NULL;
-    XrArenaSegmentCache *cache = (XrArenaSegmentCache *) pthread_getspecific(arena_cache_key);
-    if (!cache && create) {
-        cache = (XrArenaSegmentCache *) xr_calloc(1, sizeof(*cache));
-        if (!cache)
-            return NULL;
-        if (pthread_setspecific(arena_cache_key, cache) != 0) {
-            xr_free(cache);
-            return NULL;
-        }
-    }
-    return cache;
-}
-
-#endif  // XR_OS_WINDOWS
-
-// Align to 8-byte boundary
-static inline bool align_size(size_t size, size_t *aligned_size) {
-    if (!aligned_size)
+static bool arena_ready(XrArena *arena) {
+    if (!arena || arena->status != XR_ARENA_OK) return false;
+    if (!arena->retained || !arena->head) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
         return false;
-    if (size > SIZE_MAX - (XR_ARENA_ALIGNMENT - 1))
+    }
+    /* An explicit state backing may have failed through another owner. Query
+     * before raw bump/save/reset too; zero units perform no ledger refund. */
+    return arena_fail(arena, arena->backing.work(arena->backing.context, 0)) == XR_ARENA_OK;
+}
+
+static bool arena_work(XrArena *arena, size_t units) {
+    XrArenaStatus status = arena->backing.work(arena->backing.context, (uint64_t) units);
+    return arena_fail(arena, status) == XR_ARENA_OK;
+}
+
+static bool arena_align(XrArena *arena, size_t size, size_t *aligned) {
+    if (size > SIZE_MAX - (XR_ARENA_ALIGNMENT - 1)) {
+        arena_fail(arena, XR_ARENA_BUDGET);
         return false;
-    *aligned_size = (size + XR_ARENA_ALIGNMENT - 1) & ~((size_t) XR_ARENA_ALIGNMENT - 1);
+    }
+    *aligned = (size + XR_ARENA_ALIGNMENT - 1) & ~((size_t) XR_ARENA_ALIGNMENT - 1);
     return true;
 }
 
-static XrArenaSegment *cache_get_segment(size_t capacity) {
-    if (capacity != XR_ARENA_SEGMENT_SIZE) {
+static XrArenaSegment *arena_segment(XrArena *arena, size_t capacity) {
+    if (capacity > SIZE_MAX - sizeof(XrArenaSegment) ||
+        capacity > SIZE_MAX - arena->total_capacity ||
+        arena->segment_count == SIZE_MAX || arena->segment_serial == UINT64_MAX) {
+        arena_fail(arena, XR_ARENA_BUDGET);
         return NULL;
     }
-
-    XrArenaSegmentCache *cache = arena_cache_current(false);
-    if (!cache)
-        return NULL;
-
-    XrArenaSegment *seg = cache->segments;
-    if (seg) {
-        cache->segments = seg->next;
-        cache->count--;
-        seg->next = NULL;
-        seg->size = 0;
-    }
-    return seg;
+    void *memory = NULL;
+    XrArenaStatus status = arena->backing.alloc(arena->backing.context,
+        sizeof(XrArenaSegment) + capacity, &memory);
+    if (arena_fail(arena, status) != XR_ARENA_OK) return NULL;
+    XrArenaSegment *segment = memory;
+    segment->next = arena->head;
+    segment->size = 0;
+    segment->capacity = capacity;
+    segment->serial = ++arena->segment_serial;
+    ++arena->segment_count;
+    arena->total_capacity += capacity;
+    arena->head = segment;
+    arena->position = arena_segment_data(segment);
+    arena->limit = arena->position + capacity;
+    return segment;
 }
 
-static bool cache_put_segment(XrArenaSegment *seg) {
-    if (!seg || seg->capacity != XR_ARENA_SEGMENT_SIZE) {
-        return false;
-    }
-
-    XrArenaSegmentCache *cache = arena_cache_current(true);
-    if (!cache)
-        return false;
-
-    if (cache->count >= XR_ARENA_MAX_CACHED_SEGMENTS) {
-        return false;
-    }
-    seg->next = cache->segments;
-    cache->segments = seg;
-    cache->count++;
-    XR_DCHECK(cache->count <= XR_ARENA_MAX_CACHED_SEGMENTS, "arena cache: count > max");
-    return true;
+XR_FUNC XrArenaStatus xr_arena_open(XrArena *arena, size_t initial_size, const XrArenaBacking *backing) {
+    if (!arena) return XR_ARENA_BAD_ARGUMENT;
+    if (arena->status != XR_ARENA_OK) return arena->status;
+    if (arena->retained || !backing || !backing->alloc || !backing->free ||
+        !backing->work || !backing->retain || !backing->release)
+        return arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
+    arena->backing = *backing;
+    XrArenaStatus status = arena->backing.retain(arena->backing.context);
+    if (arena_fail(arena, status) != XR_ARENA_OK) return arena->status;
+    arena->retained = true;
+    if (!initial_size) initial_size = XR_ARENA_SEGMENT_SIZE;
+    if (arena_align(arena, initial_size, &initial_size)) arena_segment(arena, initial_size);
+    return arena->status;
 }
 
-static XrArenaSegment *allocate_segment(size_t capacity) {
-    if (capacity > SIZE_MAX - sizeof(XrArenaSegment)) {
-        return NULL;
-    }
-
-    // Try cache first
-    XrArenaSegment *seg = cache_get_segment(capacity);
-    if (seg) {
-        return seg;
-    }
-
-    seg = (XrArenaSegment *) xr_malloc(sizeof(XrArenaSegment) + capacity);
-    if (!seg) {
-        xr_log_warning("arena", "failed to allocate segment of size %zu", capacity);
-        return NULL;
-    }
-
-    seg->next = NULL;
-    seg->size = 0;
-    seg->capacity = capacity;
-
-    return seg;
+XR_FUNC XrArenaStatus xr_arena_status(const XrArena *arena) {
+    return arena ? arena->status : XR_ARENA_BAD_ARGUMENT;
 }
 
-void xr_arena_init(XrArena *arena, size_t initial_size) {
-    if (!arena)
-        return;
-
-    if (initial_size == 0) {
-        initial_size = XR_ARENA_SEGMENT_SIZE;
+static void *arena_bump(XrArena *arena, size_t size) {
+    if (!arena_ready(arena)) return NULL;
+    if (!size) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
+        return NULL;
     }
-
-    if (!align_size(initial_size, &initial_size)) {
-        arena->head = NULL;
-        arena->position = NULL;
-        arena->limit = NULL;
-        arena->total_allocated = 0;
-        return;
+    if (!arena_align(arena, size, &size)) return NULL;
+    if (size > SIZE_MAX - arena->total_allocated) {
+        arena_fail(arena, XR_ARENA_BUDGET);
+        return NULL;
     }
-
-    XrArenaSegment *seg = allocate_segment(initial_size);
-    if (!seg) {
-        arena->head = NULL;
-        arena->position = NULL;
-        arena->limit = NULL;
-        arena->total_allocated = 0;
-        return;
+    if (size > (size_t) (arena->limit - arena->position)) {
+        size_t capacity = size > XR_ARENA_SEGMENT_SIZE ? size : XR_ARENA_SEGMENT_SIZE;
+        if (!arena_segment(arena, capacity)) return NULL;
     }
-
-    arena->head = seg;
-    arena->position = seg->data;
-    arena->limit = seg->data + seg->capacity;
-    arena->total_allocated = 0;
-}
-
-// Internal bump allocator (no zeroing)
-static void *bump_alloc(XrArena *arena, size_t size) {
-    if (!arena || size == 0)
-        return NULL;
-
-    // Align to 8 bytes
-    if (!align_size(size, &size))
-        return NULL;
-    if (!arena->position || !arena->limit || !arena->head)
-        return NULL;
-
-    // Need new segment?
-    size_t available = (size_t) (arena->limit - arena->position);
-    if (size > available) {
-        size_t new_capacity = size > XR_ARENA_SEGMENT_SIZE ? size : XR_ARENA_SEGMENT_SIZE;
-
-        XrArenaSegment *new_seg = allocate_segment(new_capacity);
-        if (!new_seg) {
-            return NULL;
-        }
-
-        new_seg->next = arena->head;
-        arena->head = new_seg;
-
-        arena->position = new_seg->data;
-        arena->limit = new_seg->data + new_seg->capacity;
-    }
-
-    if (arena->total_allocated > SIZE_MAX - size)
-        return NULL;
-    if (arena->head->size > SIZE_MAX - size)
-        return NULL;
-
-    void *result = arena->position;
+    void *memory = arena->position;
     arena->position += size;
-    arena->total_allocated += size;
-    XR_DCHECK(arena->position <= arena->limit, "arena_alloc: position > limit");
-
     arena->head->size += size;
-    return result;
+    arena->total_allocated += size;
+    return memory;
 }
 
-void *xr_arena_alloc(XrArena *arena, size_t size) {
-    void *result = bump_alloc(arena, size);
-    if (result)
-        memset(result, 0, size);
-    return result;
+XR_FUNC void *xr_arena_alloc_raw(XrArena *arena, size_t size) {
+    return arena_bump(arena, size);
 }
 
-XR_FUNCDEF void *xr_arena_alloc_array(XrArena *arena, size_t elem_size, size_t count) {
-    if (elem_size == 0 || count == 0)
+XR_FUNC void *xr_arena_alloc(XrArena *arena, size_t size) {
+    void *memory = arena_bump(arena, size);
+    if (!memory || !arena_work(arena, size)) return NULL;
+    memset(memory, 0, size);
+    return memory;
+}
+
+XR_FUNC void *xr_arena_alloc_array(XrArena *arena, size_t elem_size, size_t count) {
+    if (!arena_ready(arena)) return NULL;
+    if (!elem_size || !count) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
         return NULL;
-    if (count > SIZE_MAX / elem_size)
+    }
+    if (count > SIZE_MAX / elem_size) {
+        arena_fail(arena, XR_ARENA_BUDGET);
         return NULL;
+    }
     return xr_arena_alloc(arena, elem_size * count);
 }
 
-void *xr_arena_alloc_raw(XrArena *arena, size_t size) {
-    return bump_alloc(arena, size);
+static void arena_free_head(XrArena *arena) {
+    XrArenaSegment *segment = arena->head;
+    arena->head = segment->next;
+    --arena->segment_count;
+    arena->total_capacity -= segment->capacity;
+    arena->total_allocated -= segment->size;
+    arena->backing.free(arena->backing.context, segment);
 }
 
-void xr_arena_destroy(XrArena *arena) {
-    if (!arena)
+XR_FUNC void xr_arena_destroy(XrArena *arena) {
+    if (!arena) return;
+    while (arena->head) arena_free_head(arena);
+    XrArenaBacking backing = arena->backing;
+    bool retained = arena->retained;
+    uint64_t serial = arena->segment_serial;
+    *arena = (XrArena) {0};
+    arena->segment_serial = serial;
+    /* The context may contain the arena itself; do not touch it after release. */
+    if (retained) backing.release(backing.context);
+}
+
+XR_FUNC void xr_arena_reset(XrArena *arena) {
+    if (!arena_ready(arena)) return;
+    if (arena->segment_serial == UINT64_MAX) {
+        arena_fail(arena, XR_ARENA_BUDGET);
         return;
-
-    XrArenaSegment *seg = arena->head;
-    while (seg) {
-        XrArenaSegment *next = seg->next;
-        if (!cache_put_segment(seg)) {
-            xr_free(seg);
-        }
-        seg = next;
     }
-
-    arena->head = NULL;
-    arena->position = NULL;
-    arena->limit = NULL;
+    XrArenaSegment *head = arena->head;
+    arena->head = head->next;
+    while (arena->head) arena_free_head(arena);
+    arena->head = head;
+    head->next = NULL;
+    head->size = 0;
+    head->serial = ++arena->segment_serial;
+    arena->position = arena_segment_data(head);
+    arena->limit = arena->position + head->capacity;
     arena->total_allocated = 0;
 }
 
-void xr_arena_reset(XrArena *arena) {
-    if (!arena || !arena->head)
-        return;
-
-    // Release non-head segments back to cache or free
-    XrArenaSegment *seg = arena->head->next;
-    while (seg) {
-        XrArenaSegment *next = seg->next;
-        if (!cache_put_segment(seg)) {
-            xr_free(seg);
+XR_FUNC char *xr_arena_strdup(XrArena *arena, const char *str) {
+    if (!arena_ready(arena)) return NULL;
+    if (!str) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
+        return NULL;
+    }
+    size_t length = 0;
+    for (;;) {
+        if (!arena_work(arena, 1)) return NULL;
+        if (!str[length]) break;
+        if (length == SIZE_MAX - 1) {
+            arena_fail(arena, XR_ARENA_BUDGET);
+            return NULL;
         }
-        seg = next;
+        ++length;
     }
-
-    // Reset head segment only
-    arena->head->next = NULL;
-    arena->head->size = 0;
-    arena->position = arena->head->data;
-    arena->limit = arena->head->data + arena->head->capacity;
-    arena->total_allocated = 0;
-}
-
-char *xr_arena_strdup(XrArena *arena, const char *str) {
-    if (!arena || !str)
-        return NULL;
-
-    size_t len = strlen(str) + 1;
-    char *copy = (char *) xr_arena_alloc(arena, len);
-
-    if (copy) {
-        memcpy(copy, str, len);
-    }
-
+    char *copy = arena_bump(arena, length + 1);
+    if (!copy || !arena_work(arena, length + 1)) return NULL;
+    memcpy(copy, str, length + 1);
     return copy;
 }
 
-char *xr_arena_strndup(XrArena *arena, const char *str, size_t len) {
-    if (!arena || !str)
+XR_FUNC char *xr_arena_strndup(XrArena *arena, const char *str, size_t len) {
+    if (!arena_ready(arena)) return NULL;
+    if (!str) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
         return NULL;
-    if (len == SIZE_MAX)
-        return NULL;
-
-    char *copy = (char *) xr_arena_alloc(arena, len + 1);
-
-    if (copy) {
-        memcpy(copy, str, len);
-        copy[len] = '\0';
     }
-
+    if (len == SIZE_MAX) {
+        arena_fail(arena, XR_ARENA_BUDGET);
+        return NULL;
+    }
+    char *copy = arena_bump(arena, len + 1);
+    if (!copy || !arena_work(arena, len)) return NULL;
+    if (len) memcpy(copy, str, len);
+    if (!arena_work(arena, 1)) return NULL;
+    copy[len] = '\0';
     return copy;
 }
 
-size_t xr_arena_get_allocated_size(XrArena *arena) {
+XR_FUNC size_t xr_arena_get_allocated_size(XrArena *arena) {
     return arena ? arena->total_allocated : 0;
 }
 
-XrArenaState xr_arena_save(XrArena *arena) {
-    XR_DCHECK(arena != NULL, "arena_save: NULL arena");
-    XrArenaState state = {
-        .head = arena->head,
-        .position = arena->position,
-        .total_allocated = arena->total_allocated,
-    };
-    return state;
+XR_FUNC XrArenaState xr_arena_save(XrArena *arena) {
+    if (!arena_ready(arena)) return (XrArenaState) {0};
+    return (XrArenaState) {arena, arena->head, arena->position,
+        arena->total_allocated, arena->head->serial};
 }
 
-void xr_arena_restore(XrArena *arena, XrArenaState state) {
-    XR_DCHECK(arena != NULL, "arena_restore: NULL arena");
-    if (arena->head != state.head) {
-        // Segments were allocated since the savepoint. New segments are
-        // always prepended, so the saved head is further down the chain:
-        // release the newer segments, then restore limit for the saved
-        // head. (Previously this case only DCHECKed — in release builds
-        // position was rewound while limit still pointed into the newer
-        // segment, making `limit - position` garbage and enabling
-        // out-of-bounds writes.)
-        XrArenaSegment *seg = arena->head;
-        while (seg && seg != state.head) {
-            XrArenaSegment *next = seg->next;
-            if (!cache_put_segment(seg)) {
-                xr_free(seg);
-            }
-            seg = next;
-        }
-        XR_DCHECK(seg == state.head, "arena_restore: saved head not in segment chain");
-        if (!seg) {
-            // Foreign savepoint (not from this arena). Nothing sane to
-            // restore; leave the arena empty but consistent.
-            arena->head = NULL;
-            arena->position = NULL;
-            arena->limit = NULL;
-            arena->total_allocated = 0;
-            return;
-        }
-        arena->head = seg;
-        arena->limit = seg->data + seg->capacity;
+XR_FUNC void xr_arena_restore(XrArena *arena, XrArenaState state) {
+    if (!arena_ready(arena)) return;
+    if (state.owner != arena || !state.head) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
+        return;
     }
+    XrArenaSegment *segment = arena->head;
+    size_t newer_used = 0;
+    while (segment) {
+        if (!arena_work(arena, 1)) return;
+        if (segment == state.head) break;
+        newer_used += segment->size;
+        segment = segment->next;
+    }
+    if (!segment || segment->serial != state.segment_serial ||
+        (uintptr_t) state.position < (uintptr_t) arena_segment_data(segment) ||
+        (uintptr_t) state.position > (uintptr_t) (arena_segment_data(segment) + segment->size)) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
+        return;
+    }
+    size_t used = (size_t) ((uintptr_t) state.position - (uintptr_t) arena_segment_data(segment));
+    size_t total = arena->total_allocated - newer_used - segment->size + used;
+    if (used % XR_ARENA_ALIGNMENT || total != state.total_allocated) {
+        arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
+        return;
+    }
+    while (arena->head != segment) arena_free_head(arena);
     arena->position = state.position;
-    arena->total_allocated = state.total_allocated;
-    arena->head->size = (size_t) (state.position - arena->head->data);
+    arena->limit = arena_segment_data(segment) + segment->capacity;
+    arena->total_allocated = total;
+    segment->size = used;
 }
 
-void xr_arena_get_stats(XrArena *arena, XrArenaStats *stats) {
-    if (!stats)
-        return;
-
-    stats->segment_count = 0;
-    stats->total_capacity = 0;
-    stats->total_used = 0;
-
-    if (!arena)
-        return;
-
-    XrArenaSegment *seg = arena->head;
-    while (seg) {
-        stats->segment_count++;
-        stats->total_capacity += seg->capacity;
-        stats->total_used += seg->size;
-        seg = seg->next;
-    }
+XR_FUNC void xr_arena_get_stats(XrArena *arena, XrArenaStats *stats) {
+    if (!stats) return;
+    *stats = arena ? (XrArenaStats) {arena->segment_count, arena->total_capacity, arena->total_allocated}
+                   : (XrArenaStats) {0};
 }

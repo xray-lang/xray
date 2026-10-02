@@ -26,6 +26,7 @@
 #include "../lexer/xquoted_literal.h"
 
 static bool current_can_start_top_level_after_recovery(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return false;
     return xr_parser_check(parser, TK_AT) || xr_parser_check(parser, TK_CLASS) ||
            xr_parser_check(parser, TK_STRUCT) || xr_parser_check(parser, TK_UNION) ||
            xr_parser_check(parser, TK_PACKED) || xr_parser_check(parser, TK_INTERFACE) ||
@@ -37,12 +38,16 @@ static bool current_can_start_top_level_after_recovery(Parser *parser) {
 }
 
 static bool current_starts_removed_binding_declaration(Parser *parser, const char *spelling) {
+    if (!xr_parser_healthy(parser)) return false;
     Scanner scanner;
     Token next;
     if (!xr_parser_check_name(parser, spelling))
         return false;
-    scanner = parser->scanner;
-    next = xr_scanner_scan(&scanner);
+    if (xr_compile_state_copy(parser->state, &scanner, &parser->scanner, sizeof(scanner)) != XR_COMPILE_RESOURCE_OK) return false;
+    do {
+        next = xr_scanner_scan(&scanner);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     return next.type == TK_NAME;
 }
 
@@ -52,32 +57,43 @@ static bool current_starts_removed_binding_declaration(Parser *parser, const cha
 // stripped) into an arena-allocated, NUL-terminated string. Used for
 // string arguments carried by internal attributes synthesized from extern blocks.
 static const char *xr_attr_string_arg(Parser *parser) {
-    XrQuotedPayload payload = {0};
+    if (!xr_parser_healthy(parser)) return NULL;
+    XrParsedQuoted payload = {0};
     const char *error = NULL;
     bool decode_escapes = parser->previous.escape_mode == XR_LITERAL_ESCAPED;
-    if (!xr_quoted_payload_decode(&parser->previous, decode_escapes, &payload, &error)) {
-        xr_parser_error_at_previous(parser, error ? error : "invalid attribute string literal");
+    if (xr_parser_decode_quoted(parser, &parser->previous, decode_escapes, &payload, &error) != XR_QUOTED_OK) {
+        do {
+            xr_parser_error_at_previous(parser, error ? error : "invalid attribute string literal");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
-    if (memchr(payload.bytes, '\0', payload.length) != NULL ||
-        !xr_utf8_validate((const char *) payload.bytes, payload.length)) {
-        xr_quoted_payload_free(&payload);
-        xr_parser_error_at_previous(parser,
+    if (xr_parser_find_byte(parser, payload.bytes, '\0', payload.length) != NULL ||
+        !xr_parser_utf8_validate(parser, (const char *) payload.bytes, payload.length)) {
+
+        do {
+            xr_parser_error_at_previous(parser,
                                     "attribute string must be valid UTF-8 without NUL bytes");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
     char *s = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
-    memcpy(s, payload.bytes, payload.length);
-    s[payload.length] = '\0';
-    xr_quoted_payload_free(&payload);
+    if (!xr_parser_healthy(parser)) return NULL;
+    do { if (!ast_copy(parser->compiler_session, s, payload.bytes, payload.length)) return NULL; } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; s[payload.length] = '\0'; } while (0);
+
     return s;
 }
 
 static bool xr_is_global_asm_start(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return false;
     if (!xr_parser_check_name(parser, "asm"))
         return false;
-    Scanner saved = parser->scanner;
+    Scanner saved;
+    if (xr_compile_state_copy(parser->state, &saved, &parser->scanner, sizeof(saved)) != XR_COMPILE_RESOURCE_OK) return false;
     Token next = xr_scanner_scan(&saved);
+    if (!xr_parser_healthy(parser)) return false;
     return next.type == TK_LBRACE;
 }
 
@@ -87,102 +103,143 @@ typedef struct XrParsedGlobalAsmFragment {
 } XrParsedGlobalAsmFragment;
 
 static XrParsedGlobalAsmFragment xr_decode_previous_string_literal(Parser *parser) {
-    XrQuotedPayload payload = {0};
+    if (!xr_parser_healthy(parser)) return (XrParsedGlobalAsmFragment){0};
+    XrParsedQuoted payload = {0};
     const char *error = NULL;
     bool decode_escapes = parser->previous.escape_mode == XR_LITERAL_ESCAPED;
-    if (!xr_quoted_payload_decode(&parser->previous, decode_escapes, &payload, &error)) {
-        xr_parser_error_at_previous(parser, error ? error : "invalid global asm literal");
+    if (xr_parser_decode_quoted(parser, &parser->previous, decode_escapes, &payload, &error) != XR_QUOTED_OK) {
+        do {
+            xr_parser_error_at_previous(parser, error ? error : "invalid global asm literal");
+            if (!xr_parser_healthy(parser)) return (XrParsedGlobalAsmFragment){0};
+        } while (0);
         return (XrParsedGlobalAsmFragment) {0};
     }
     char *text = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
-    memcpy(text, payload.bytes, payload.length);
-    text[payload.length] = '\0';
+    if (!xr_parser_healthy(parser)) return (XrParsedGlobalAsmFragment){0};
+    do { if (!ast_copy(parser->compiler_session, text, payload.bytes, payload.length)) return (XrParsedGlobalAsmFragment){0}; } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return (XrParsedGlobalAsmFragment){0}; text[payload.length] = '\0'; } while (0);
     size_t len = payload.length;
-    xr_quoted_payload_free(&payload);
+
     return (XrParsedGlobalAsmFragment) {.text = text, .len = len};
 }
 
 static AstNode *xr_parse_global_asm_declaration(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = parser->previous.line;
     int column = parser->previous.column;
     if (parser->scope_depth > 0) {
-        xr_parser_error(parser, "global asm must appear at module top level");
+        do {
+            xr_parser_error(parser, "global asm must appear at module top level");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
-    xr_parser_consume(parser, TK_LBRACE, "expected '{' after asm");
+    do {
+        xr_parser_consume(parser, TK_LBRACE, "expected '{' after asm");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     XrParsedGlobalAsmFragment *fragments = NULL;
     int fragment_count = 0;
     int fragment_capacity = 0;
-    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         if (!xr_parser_check(parser, TK_LITERAL_STRING)) {
-            xr_parser_error_at_current(parser, "global asm expects string literal fragments");
+            do {
+                xr_parser_error_at_current(parser, "global asm expects string literal fragments");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         XrParsedGlobalAsmFragment fragment = xr_decode_previous_string_literal(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!fragment.text)
             return NULL;
-        XR_PARSE_PUSH(parser, fragments, fragment_count, fragment_capacity, fragment);
+        do {
+            XR_PARSE_PUSH(parser, fragments, fragment_count, fragment_capacity, fragment);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     if (fragment_count == 0) {
-        xr_parser_error(parser, "global asm block requires at least one string literal");
+        do {
+            xr_parser_error(parser, "global asm block requires at least one string literal");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
-    xr_parser_consume(parser, TK_RBRACE, "expected '}' after global asm block");
+    do {
+        xr_parser_consume(parser, TK_RBRACE, "expected '}' after global asm block");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     Token close = parser->previous;
 
     size_t total = 0;
-    for (int i = 0; i < fragment_count; i++) {
+    for (int i = 0; xr_parser_step(parser) && (i < fragment_count); i++) {
+        if (!ast_work(parser->compiler_session, 1)) return NULL;
+        if (fragments[i].len >= SIZE_MAX - total) {
+            xr_compile_state_fail(parser->state, XR_COMPILE_RESOURCE_BUDGET);
+            return NULL;
+        }
         total += fragments[i].len;
         if (i + 1 < fragment_count &&
-            (fragments[i].len == 0 || fragments[i].text[fragments[i].len - 1] != '\n')) {
+            (fragments[i].len == 0 || xr_parser_read_byte(parser, fragments[i].text + fragments[i].len - 1) != '\n')) {
+            if (!xr_parser_healthy(parser)) return NULL;
+            if (total == SIZE_MAX - 1) {
+                xr_compile_state_fail(parser->state, XR_COMPILE_RESOURCE_BUDGET);
+                return NULL;
+            }
             total++;
         }
     }
 
     char *text = (char *) ast_alloc(parser->compiler_session, total + 1);
+    if (!xr_parser_healthy(parser)) return NULL;
     size_t pos = 0;
-    for (int i = 0; i < fragment_count; i++) {
+    for (int i = 0; xr_parser_step(parser) && (i < fragment_count); i++) {
         if (fragments[i].len > 0) {
-            memcpy(text + pos, fragments[i].text, fragments[i].len);
+            do { if (!ast_copy(parser->compiler_session, text + pos, fragments[i].text, fragments[i].len)) return NULL; } while (0);
             pos += fragments[i].len;
         }
         if (i + 1 < fragment_count &&
-            (fragments[i].len == 0 || fragments[i].text[fragments[i].len - 1] != '\n')) {
+            (fragments[i].len == 0 || xr_parser_read_byte(parser, fragments[i].text + fragments[i].len - 1) != '\n')) {
+            if (!ast_work(parser->compiler_session, 1)) return NULL;
             text[pos++] = '\n';
         }
     }
-    text[pos] = '\0';
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; text[pos] = '\0'; } while (0);
 
     AstNode *node = xr_ast_global_asm(parser->compiler_session, text, line);
+    if (!xr_parser_healthy(parser)) return NULL;
     node->column = column;
     node->end_line = close.line;
     node->end_column = close.column + 1;
     return node;
 }
 
-static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
-    if (token.length == 7 && memcmp(token.start, "Inspect", 7) == 0) {
+static bool xr_derive_target_bit(Parser *parser, Token token, uint32_t *bit_out) {
+    if (token.length == 7 && xr_parser_compare_bytes(parser, token.start, "Inspect", 7) == 0) {
         *bit_out = XR_DERIVE_INSPECT;
         return true;
     }
-    if (token.length == 4 && memcmp(token.start, "JSON", 4) == 0) {
+    if (token.length == 4 && xr_parser_compare_bytes(parser, token.start, "JSON", 4) == 0) {
         *bit_out = XR_DERIVE_JSON;
         return true;
     }
-    if (token.length == 2 && memcmp(token.start, "Eq", 2) == 0) {
+    if (token.length == 2 && xr_parser_compare_bytes(parser, token.start, "Eq", 2) == 0) {
         *bit_out = XR_DERIVE_EQ;
         return true;
     }
-    if (token.length == 4 && memcmp(token.start, "Hash", 4) == 0) {
+    if (token.length == 4 && xr_parser_compare_bytes(parser, token.start, "Hash", 4) == 0) {
         *bit_out = XR_DERIVE_HASH;
         return true;
     }
-    if (token.length == 5 && memcmp(token.start, "Clone", 5) == 0) {
+    if (token.length == 5 && xr_parser_compare_bytes(parser, token.start, "Clone", 5) == 0) {
         *bit_out = XR_DERIVE_CLONE;
         return true;
     }
@@ -191,21 +248,33 @@ static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
 
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
 XrAttribute *xr_parse_single_attribute(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_single_attribute: NULL parser");
-    xr_parser_advance(parser);  // Consume @
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);  // Consume @
 
-    xr_parser_consume(parser, TK_NAME, "expected attribute name");
+    do {
+        xr_parser_consume(parser, TK_NAME, "expected attribute name");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     Token name_token = parser->previous;
 
     XrAttribute *attr = (XrAttribute *) ast_alloc(parser->compiler_session, sizeof(XrAttribute));
+    if (!xr_parser_healthy(parser)) return NULL;
     attr->kind = ATTR_NONE;
     attr->timeout = 0;
     attr->str_arg = NULL;
     attr->derive_flags = 0;
     const XrPublicAttributeInfo *info =
-        xr_public_attribute_by_name(name_token.start, (size_t) name_token.length);
+        xr_compile_public_attribute_by_name(parser->state, name_token.start, (size_t) name_token.length);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (!info) {
-        xr_parser_error(parser, "unknown attribute name");
+        do {
+            xr_parser_error(parser, "unknown attribute name");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
     attr->kind = info->kind;
@@ -215,77 +284,121 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
         if (xr_parser_match(parser, TK_LPAREN)) {
             if (xr_parser_check(parser, TK_NAME)) {
                 Token param = parser->current;
-                xr_parser_advance(parser);
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
 
-                if (param.length == 4 && memcmp(param.start, "skip", 4) == 0) {
+                if (param.length == 4 && xr_parser_compare_bytes(parser, param.start, "skip", 4) == 0) {
                     attr->kind = ATTR_TEST_SKIP;
-                } else if (param.length == 7 && memcmp(param.start, "timeout", 7) == 0) {
+                } else if (param.length == 7 && xr_parser_compare_bytes(parser, param.start, "timeout", 7) == 0) {
                     attr->kind = ATTR_TEST_TIMEOUT;
-                    xr_parser_consume(parser, TK_COLON, "expected ':' after timeout");
-                    xr_parser_consume(parser, TK_LITERAL_INT, "expected timeout seconds");
+                    do {
+                        xr_parser_consume(parser, TK_COLON, "expected ':' after timeout");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
+                    do {
+                        xr_parser_consume(parser, TK_LITERAL_INT, "expected timeout seconds");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     Token timeout_token = parser->previous;
-                    char buf[32];
-                    int len = timeout_token.length < 31 ? timeout_token.length : 31;
-                    memcpy(buf, timeout_token.start, len);
-                    buf[len] = '\0';
-                    attr->timeout = atoi(buf);
+                    ParsedIntLiteral timeout = xr_parser_integer_literal(parser, timeout_token.start, timeout_token.length);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                    if (timeout.overflows_u64 || timeout.bits > INT_MAX) {
+                        xr_parser_error(parser, "timeout value is too large");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } else attr->timeout = (int) timeout.bits;
                 }
             }
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close attribute params");
+            do {
+                xr_parser_consume(parser, TK_RPAREN, "expected ')' to close attribute params");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
     } else if (attr->kind == ATTR_DEPRECATED) {
         // Optional message: @deprecated("use X instead")
         if (xr_parser_match(parser, TK_LPAREN)) {
             if (xr_parser_check(parser, TK_LITERAL_STRING)) {
-                xr_parser_advance(parser);
-                attr->str_arg = xr_attr_string_arg(parser);
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                do {
+                    attr->str_arg = xr_attr_string_arg(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             } else {
-                xr_parser_error(parser, "@deprecated requires a message string when parenthesized");
+                do {
+                    xr_parser_error(parser, "@deprecated requires a message string when parenthesized");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             }
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @deprecated");
+            do {
+                xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @deprecated");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
     } else if (attr->kind == ATTR_DERIVE) {
-        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");
+        do {
+            xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         if (xr_parser_check(parser, TK_RPAREN)) {
-            xr_parser_error(
+            do {
+                xr_parser_error(
                 parser, "@derive requires at least one target: Inspect, JSON, Eq, Hash, or Clone");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         } else {
             uint32_t seen_flags = 0;
             do {
-                xr_parser_consume(parser, TK_NAME, "expected derive target name");
+                do {
+                    xr_parser_consume(parser, TK_NAME, "expected derive target name");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 Token target = parser->previous;
                 uint32_t bit = 0;
                 char name_buf[64];
                 int n = target.length < (int) sizeof(name_buf) - 1 ? target.length
                                                                    : (int) sizeof(name_buf) - 1;
-                memcpy(name_buf, target.start, (size_t) n);
-                name_buf[n] = '\0';
-                if (!xr_derive_target_bit(target, &bit)) {
+                if (!xr_parser_healthy(parser)) return NULL;
+                do { if (!ast_copy(parser->compiler_session, name_buf, target.start, (size_t) n)) return NULL; } while (0);
+                do { if (!ast_work(parser->compiler_session, 1)) return NULL; name_buf[n] = '\0'; } while (0);
+                if (!xr_derive_target_bit(parser, target, &bit)) {
                     char msg[160];
-                    snprintf(msg, sizeof(msg),
+                    xr_parser_format(parser, msg, sizeof(msg),
                              "unknown derive target '%s'; expected Inspect, JSON, "
                              "Eq, Hash, or Clone",
                              name_buf);
-                    xr_parser_error(parser, msg);
+                    do {
+                        xr_parser_error(parser, msg);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 } else if ((seen_flags & bit) != 0) {
                     char msg[160];
-                    snprintf(msg, sizeof(msg), "duplicate derive target '%s'", name_buf);
-                    xr_parser_error(parser, msg);
+                    xr_parser_format(parser, msg, sizeof(msg), "duplicate derive target '%s'", name_buf);
+                    do {
+                        xr_parser_error(parser, msg);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 } else {
                     seen_flags |= bit;
                     attr->derive_flags |= bit;
                 }
-            } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+            } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
         }
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @derive");
+        do {
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @derive");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     return attr;
 }
 
-static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
+static uint32_t attrs_derive_flags(Parser *parser, XrAttribute **attrs, int count) {
     uint32_t flags = 0;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; xr_parser_step(parser) && i < count; i++) {
         if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
             flags |= attrs[i]->derive_flags;
     }
@@ -302,7 +415,8 @@ typedef enum XrAttributeTarget {
 
 static bool validate_attribute_target(Parser *parser, XrAttribute **attrs, int count,
                                       XrAttributeTarget target) {
-    for (int i = 0; i < count; i++) {
+    if (!xr_parser_healthy(parser)) return false;
+    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
         XrAttribute *attr = attrs[i];
         if (!attr)
             continue;
@@ -314,19 +428,27 @@ static bool validate_attribute_target(Parser *parser, XrAttribute **attrs, int c
             allowed = target == XR_ATTR_TARGET_FUNCTION;
         if (allowed)
             continue;
-        const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attr->kind);
+        const XrPublicAttributeInfo *info = xr_compile_public_attribute_by_kind(parser->state, attr->kind);
+        if (!xr_parser_healthy(parser)) return false;
         char message[160];
-        snprintf(message, sizeof(message), "@%s cannot annotate this declaration; targets: %s",
+        xr_parser_format(parser, message, sizeof(message), "@%s cannot annotate this declaration; targets: %s",
                  info ? info->spelling : "unknown", info ? info->targets : "none");
-        xr_parser_error(parser, message);
+        do {
+            xr_parser_error(parser, message);
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return false;
     }
     return true;
 }
 
 static void validate_decl_derive_contract(Parser *parser, uint32_t derive_flags) {
+    if (!xr_parser_healthy(parser)) return;
     if ((derive_flags & XR_DERIVE_HASH) != 0 && (derive_flags & XR_DERIVE_EQ) == 0)
-        xr_parser_error_at_previous(parser, "@derive(Hash) requires Eq in the same @derive(...)");
+        do {
+            xr_parser_error_at_previous(parser, "@derive(Hash) requires Eq in the same @derive(...)");
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
 }
 
 static AstNode *mark_direct_visibility(AstNode *declaration, bool is_exported) {
@@ -338,26 +460,34 @@ static AstNode *mark_direct_visibility(AstNode *declaration, bool is_exported) {
 /* Kept as a parser-internal ABI name for the OOP parser. It now rejects any
  * repeated public attribute; removed assertion attributes never reach AST. */
 bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **attrs, int count) {
+    if (!xr_parser_healthy(parser)) return false;
     bool has_inline = false;
     bool has_noinline = false;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
         if (!attrs[i])
             continue;
         has_inline = has_inline || attrs[i]->kind == ATTR_INLINE;
         has_noinline = has_noinline || attrs[i]->kind == ATTR_NOINLINE;
-        for (int j = 0; j < i; j++) {
+        for (int j = 0; xr_parser_step(parser) && (j < i); j++) {
             if (attrs[j] && attrs[j]->kind == attrs[i]->kind) {
-                const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attrs[i]->kind);
+                const XrPublicAttributeInfo *info = xr_compile_public_attribute_by_kind(parser->state, attrs[i]->kind);
+                if (!xr_parser_healthy(parser)) return false;
                 char msg[96];
-                snprintf(msg, sizeof(msg), "duplicate @%s attribute",
+                xr_parser_format(parser, msg, sizeof(msg), "duplicate @%s attribute",
                          info ? info->spelling : "unknown");
-                xr_parser_error(parser, msg);
+                do {
+                    xr_parser_error(parser, msg);
+                    if (!xr_parser_healthy(parser)) return false;
+                } while (0);
                 return false;
             }
         }
     }
     if (has_inline && has_noinline) {
-        xr_parser_error(parser, "@inline and @noinline cannot annotate the same declaration");
+        do {
+            xr_parser_error(parser, "@inline and @noinline cannot annotate the same declaration");
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return false;
     }
     return true;
@@ -366,15 +496,20 @@ bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **at
 /* Declaration-site validation for the final public registry. */
 bool xr_parser_reject_invalid_assertion_attrs(Parser *parser, XrAttribute **attrs, int count,
                                               bool target_is_fn) {
-    for (int i = 0; i < count; i++) {
+    if (!xr_parser_healthy(parser)) return false;
+    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
         if (!attrs[i])
             continue;
         if (!target_is_fn || attrs[i]->kind == ATTR_DERIVE) {
-            const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attrs[i]->kind);
+            const XrPublicAttributeInfo *info = xr_compile_public_attribute_by_kind(parser->state, attrs[i]->kind);
+            if (!xr_parser_healthy(parser)) return false;
             char msg[96];
-            snprintf(msg, sizeof(msg), "@%s cannot annotate this declaration",
+            xr_parser_format(parser, msg, sizeof(msg), "@%s cannot annotate this declaration",
                      info ? info->spelling : "unknown");
-            xr_parser_error(parser, msg);
+            do {
+                xr_parser_error(parser, msg);
+                if (!xr_parser_healthy(parser)) return false;
+            } while (0);
             return false;
         }
     }
@@ -383,39 +518,54 @@ bool xr_parser_reject_invalid_assertion_attrs(Parser *parser, XrAttribute **attr
 
 /* Member-position validation shared by class/struct methods and fields. */
 bool xr_parser_validate_member_attr(Parser *parser, XrAttribute *attr) {
+    if (!xr_parser_healthy(parser)) return false;
     if (!attr)
         return true;
     if (attr->kind != ATTR_DERIVE)
         return true;
-    xr_parser_error(parser, "@derive cannot annotate a method");
+    do {
+        xr_parser_error(parser, "@derive cannot annotate a method");
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     return false;
 }
 
 /* Enum methods accept the same function metadata as class methods. */
 bool xr_parser_validate_enum_method_attr(Parser *parser, XrAttribute *attr) {
+    if (!xr_parser_healthy(parser)) return false;
     return xr_parser_validate_member_attr(parser, attr);
 }
 
 // Parse a declaration carrying one of the seven public attribute spellings.
 static AstNode *xr_parse_attributed_declaration(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XrAttribute **attributes = NULL;
     int attr_count = 0;
     int attr_capacity = 0;
 
-    while (xr_parser_check(parser, TK_AT)) {
+    while (xr_parser_healthy(parser) && xr_parser_check(parser, TK_AT)) {
         XrAttribute *attr = xr_parse_single_attribute(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!attr)
             return NULL;
-        XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attr);
+        do {
+            XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attr);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     bool is_exported = xr_parser_match(parser, TK_EXPORT);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (is_exported && parser->scope_depth > 0) {
-        xr_parser_error(parser, "'export' must appear at module top level");
+        do {
+            xr_parser_error(parser, "'export' must appear at module top level");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
-    uint32_t derive_flags = attrs_derive_flags(attributes, attr_count);
+    uint32_t derive_flags = attrs_derive_flags(parser, attributes, attr_count);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
         return NULL;
 
@@ -424,15 +574,23 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         if (!validate_attribute_target(parser, attributes, attr_count, XR_ATTR_TARGET_CLASS))
             return NULL;
         bool explicit_final = xr_parser_match(parser, TK_FINAL);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (explicit_final) {
             if (!xr_parser_match(parser, TK_CLASS)) {
-                xr_parser_error_at_current(parser, "expected 'class' after 'final'");
+                do {
+                    xr_parser_error_at_current(parser, "expected 'class' after 'final'");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return NULL;
             }
         } else {
-            xr_parser_advance(parser);  // consume TK_CLASS
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);  // consume TK_CLASS
         }
         AstNode *cls = xr_parse_class_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!cls)
             return NULL;
         cls->as.class_decl.explicit_final = explicit_final;
@@ -446,12 +604,16 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     bool is_packed_struct = false;
     if (xr_parser_match(parser, TK_PACKED)) {
         is_packed_struct = true;
-        xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
+        do {
+            xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
     if (is_packed_struct || xr_parser_match(parser, TK_STRUCT)) {
         if (!validate_attribute_target(parser, attributes, attr_count, XR_ATTR_TARGET_STRUCT))
             return NULL;
         AstNode *st = xr_parse_struct_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!st)
             return NULL;
         st->as.struct_decl.is_packed = is_packed_struct;
@@ -465,10 +627,14 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         if (!validate_attribute_target(parser, attributes, attr_count, XR_ATTR_TARGET_UNION))
             return NULL;
         if (derive_flags != 0) {
-            xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
+            do {
+                xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         AstNode *un = xr_parse_union_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!un)
             return NULL;
         un->as.union_decl.attributes = attributes;
@@ -480,6 +646,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         if (!validate_attribute_target(parser, attributes, attr_count, XR_ATTR_TARGET_ENUM))
             return NULL;
         AstNode *en = xr_parse_enum_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!en)
             return NULL;
         en->as.enum_decl.attributes = attributes;
@@ -493,10 +660,14 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         if (!validate_attribute_target(parser, attributes, attr_count, XR_ATTR_TARGET_FUNCTION))
             return NULL;
         if (derive_flags != 0) {
-            xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
+            do {
+                xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         AstNode *func = xr_parse_function_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!func)
             return NULL;
         func->as.function_decl.attributes = attributes;
@@ -504,10 +675,13 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return mark_direct_visibility(func, is_exported);
     }
 
-    xr_parser_error_at_current(
+    do {
+        xr_parser_error_at_current(
         parser,
         "attributes can only annotate declaration items; use 'fn name(...)' for function item "
         "attributes");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     return NULL;
 }
 
@@ -521,50 +695,81 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
  * in NativePackagePlan.  The transient AST_PROGRAM is flattened by
  * xr_ast_program_add. */
 static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = parser->previous.line;
     if (parser->scope_depth > 0) {
-        xr_parser_error(parser, "extern blocks must appear at module top level");
+        do {
+            xr_parser_error(parser, "extern blocks must appear at module top level");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
-    xr_parser_consume(parser, TK_LITERAL_STRING,
+    do {
+        xr_parser_consume(parser, TK_LITERAL_STRING,
                       "expected ABI string after extern, e.g. extern \"C\"");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     const char *abi = xr_attr_string_arg(parser);
-    if (strcmp(abi, "C") != 0)
-        xr_parser_error(parser, "only extern \"C\" is supported");
+    if (!xr_parser_healthy(parser)) return NULL;
+    if (xr_parser_compare_string(parser, abi, "C") != 0)
+        do {
+            xr_parser_error(parser, "only extern \"C\" is supported");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
     if (xr_parser_check_name(parser, "dylib") || xr_parser_check_name(parser, "link")) {
-        xr_parser_error_at_current(
+        do {
+            xr_parser_error_at_current(
             parser,
             "extern dylib/link clauses were removed; declare the library and symbol mapping in "
             "the native package manifest");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
-    xr_parser_consume(parser, TK_LBRACE, "expected '{' to open extern block");
+    do {
+        xr_parser_consume(parser, TK_LBRACE, "expected '{' to open extern block");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     AstNode *group = xr_ast_program(parser->compiler_session);
+    if (!xr_parser_healthy(parser)) return NULL;
 
-    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         bool saved_extern_context = parser->parsing_extern_fn;
         parser->parsing_extern_fn = true;
 
         AstNode *decl = NULL;
         bool is_exported = xr_parser_match(parser, TK_EXPORT);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (is_exported && xr_parser_check(parser, TK_AT)) {
-            xr_parser_error_at_current(parser,
+            do {
+                xr_parser_error_at_current(parser,
                                        "attributes must appear before 'export' in a declaration");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         if (xr_parser_check(parser, TK_AT)) {
-            xr_parser_error_at_current(
+            do {
+                xr_parser_error_at_current(
                 parser,
                 "extern declarations do not accept source attributes; use NativePackagePlan");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         } else if (xr_parser_match(parser, TK_FN)) {
-            decl = xr_parse_function_declaration(parser);
+            do {
+                decl = xr_parse_function_declaration(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         } else {
-            xr_parser_error_at_current(
+            do {
+                xr_parser_error_at_current(
                 parser, "extern blocks contain only bodyless fn declarations; use ordinary Xray "
                         "aggregates plus native manifest layout assertions");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
         parser->parsing_extern_fn = saved_extern_context;
 
@@ -574,24 +779,39 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
             decl->is_exported = true;
         if (decl->type == AST_FUNCTION_DECL) {
             if (xr_parser_check(parser, TK_LBRACE)) {
-                xr_parser_error_at_current(
+                do {
+                    xr_parser_error_at_current(
                     parser, "extern function declarations cannot have a function body");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return NULL;
             }
             decl->as.function_decl.is_extern = true;
             decl->as.function_decl.extern_abi = abi;
         } else {
-            xr_parser_error_at_current(parser,
+            do {
+                xr_parser_error_at_current(parser,
                                        "extern blocks contain only bodyless fn declarations");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         xr_ast_program_add(parser->compiler_session, group, decl);
-        xr_parser_match(parser, TK_SEMICOLON);
+        do {
+            xr_parser_match(parser, TK_SEMICOLON);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
-    xr_parser_consume(parser, TK_RBRACE, "expected '}' to close extern block");
+    do {
+        xr_parser_consume(parser, TK_RBRACE, "expected '}' to close extern block");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     if (group->as.program.count == 0)
-        xr_parser_error(parser, "extern block requires at least one declaration");
+        do {
+            xr_parser_error(parser, "extern block requires at least one declaration");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     group->line = line;
     group->end_line = parser->previous.line;
     group->end_column = parser->previous.column + 1;
@@ -600,25 +820,34 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
 
 // Parse function declaration: fn add(a, b) { return a + b }
 AstNode *xr_parse_function_declaration(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_function_declaration: NULL parser");
 
-    xr_parser_consume(parser, TK_NAME, "expected function name");
+    do {
+        xr_parser_consume(parser, TK_NAME, "expected function name");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     Token name_token = parser->previous;
     int line = name_token.line;
     int name_column = name_token.column;
 
     char *func_name = (char *) ast_alloc(parser->compiler_session, (size_t) name_token.length + 1);
-    memcpy(func_name, name_token.start, name_token.length);
-    func_name[name_token.length] = '\0';
+    if (!xr_parser_healthy(parser)) return NULL;
+    do { if (!ast_copy(parser->compiler_session, func_name, name_token.start, name_token.length)) return NULL; } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; func_name[name_token.length] = '\0'; } while (0);
 
     /* Parse generic type params <T: Constraint, U = int>. The helper installs a
      * scope holding them so `T` resolves in the signature and body below. */
     XrTypeScope *saved_scope = parser->type_scope;
     int type_param_count = 0;
     XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    if (!xr_parser_healthy(parser)) return NULL;
     XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
-    xr_parser_consume(parser, TK_LPAREN, "expected '(' after function name");
+    do {
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after function name");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     XrParamNode **params = NULL;
     int param_count = 0;
@@ -630,12 +859,16 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         do {
             if (param_count >= param_capacity) {
                 int _old_cap_param_capacity = (int) param_capacity;
-                param_capacity = _old_cap_param_capacity == 0 ? 4 : _old_cap_param_capacity * 2;
+                do {
+                    param_capacity = xr_parser_grow_capacity(parser, _old_cap_param_capacity);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 XrParamNode **_new_params = (XrParamNode **) ast_alloc_array(
                     parser->compiler_session, sizeof(XrParamNode *), (size_t) param_capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (_old_cap_param_capacity > 0 && params)
-                    memcpy(_new_params, params,
-                           sizeof(XrParamNode *) * (size_t) _old_cap_param_capacity);
+                    do { if (!ast_copy(parser->compiler_session, _new_params, params,
+                           sizeof(XrParamNode *) * (size_t) _old_cap_param_capacity)) return NULL; } while (0);
                 params = _new_params;
             }
 
@@ -644,13 +877,17 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                                                            XR_PARSE_PARAMETER_ALLOW_REST |
                                                            XR_PARSE_PARAMETER_ALLOW_DESTRUCTURE,
                                                        param_count);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (!param)
                 goto fail;
 
             if (param->is_rest) {
                 params[param_count++] = param;
                 if (xr_parser_check(parser, TK_COMMA)) {
-                    xr_parser_error(parser, "rest parameter must be last");
+                    do {
+                        xr_parser_error(parser, "rest parameter must be last");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     goto fail;
                 }
                 break;
@@ -662,8 +899,14 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             } else {
                 // Parse optional default value
                 if (xr_parser_match(parser, TK_ASSIGN)) {
-                    xr_parse_reject_ref_out_default_param(parser, param);
-                    param->default_value = xr_parse_expression(parser);
+                    do {
+                        xr_parse_reject_ref_out_default_param(parser, param);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
+                    do {
+                        param->default_value = xr_parse_expression(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     seen_default = true;
 
                     // Infer type from default value if no explicit type annotation
@@ -671,39 +914,66 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                         AstNode *dv = param->default_value;
                         switch (dv->type) {
                             case AST_LITERAL_INT:
-                                param->type = xr_tref_i64(parser->compiler_session);
+                                do {
+                                    param->type = xr_tref_i64(parser->compiler_session);
+                                    if (!xr_parser_healthy(parser)) return NULL;
+                                } while (0);
                                 break;
                             case AST_LITERAL_FLOAT:
-                                param->type = xr_tref_f64(parser->compiler_session);
+                                do {
+                                    param->type = xr_tref_f64(parser->compiler_session);
+                                    if (!xr_parser_healthy(parser)) return NULL;
+                                } while (0);
                                 break;
                             case AST_LITERAL_STRING:
                             case AST_TEMPLATE_STRING:
-                                param->type = xr_tref_string(parser->compiler_session);
+                                do {
+                                    param->type = xr_tref_string(parser->compiler_session);
+                                    if (!xr_parser_healthy(parser)) return NULL;
+                                } while (0);
                                 break;
                             case AST_LITERAL_TRUE:
                             case AST_LITERAL_FALSE:
-                                param->type = xr_tref_bool(parser->compiler_session);
+                                do {
+                                    param->type = xr_tref_bool(parser->compiler_session);
+                                    if (!xr_parser_healthy(parser)) return NULL;
+                                } while (0);
                                 break;
                             case AST_ARRAY_LITERAL:
-                                param->type = xr_tref_named(parser->compiler_session, "Array");
+                                do {
+                                    param->type = xr_tref_named(parser->compiler_session, "Array");
+                                    if (!xr_parser_healthy(parser)) return NULL;
+                                } while (0);
                                 break;
                             case AST_MAP_LITERAL:
-                                param->type = xr_tref_named(parser->compiler_session, "Map");
+                                do {
+                                    param->type = xr_tref_named(parser->compiler_session, "Map");
+                                    if (!xr_parser_healthy(parser)) return NULL;
+                                } while (0);
                                 break;
                             case AST_SET_LITERAL:
-                                param->type = xr_tref_named(parser->compiler_session, "Set");
+                                do {
+                                    param->type = xr_tref_named(parser->compiler_session, "Set");
+                                    if (!xr_parser_healthy(parser)) return NULL;
+                                } while (0);
                                 break;
                             case AST_OBJECT_LITERAL:
                                 if (dv->as.object_literal.count == 0)
-                                    param->type = xr_tref_object(parser->compiler_session, NULL,
+                                    do {
+                                        param->type = xr_tref_object(parser->compiler_session, NULL,
                                                                  NULL, NULL, 0);
+                                        if (!xr_parser_healthy(parser)) return NULL;
+                                    } while (0);
                                 break;
                             default:
                                 break;
                         }
                     }
                 } else if (seen_default) {
-                    xr_parser_error(parser, "required parameter cannot follow optional parameter");
+                    do {
+                        xr_parser_error(parser, "required parameter cannot follow optional parameter");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     params[param_count++] = param;
                     goto fail;
                 } else {
@@ -713,10 +983,13 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 params[param_count++] = param;
             }
 
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
-    xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
+    do {
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     // Parse optional return type annotation: `fn foo(...) -> T { ... }`.
     // The unified arrow `->` is the only legal separator.
@@ -725,62 +998,95 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
     if (xr_parser_match(parser, TK_ARROW)) {
-        return_type = xr_parse_type_annotation(parser);
-        xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+        do {
+            return_type = xr_parse_type_annotation(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
                                    &borrow_origin_count);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     } else if (xr_parser_check(parser, TK_COLON)) {
         // Legacy syntax `fn foo(): T` is no longer accepted. Emit a clear
         // migration hint and recover by parsing the type so the rest of
         // the function still parses.
-        xr_parser_advance(parser);  // consume ':'
-        xr_parser_error(parser, "use '->' instead of ':' for function return type, "
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // consume ':'
+        do {
+            xr_parser_error(parser, "use '->' instead of ':' for function return type, "
                                 "e.g. fn foo() -> i64");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         parser->panic_mode = 0;
-        return_type = xr_parse_type_annotation(parser);
+        do {
+            return_type = xr_parse_type_annotation(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     /* `fn f<T>(x: T) -> T where T: Comparable { ... }` — after the signature so
      * long constraint lists do not push the parameters off the line. */
-    xr_parse_where_clause(parser, type_params, type_param_count);
+    do {
+        xr_parse_where_clause(parser, type_params, type_param_count);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     // Parse function body. Functions declared in an extern block are bodyless: the implementation
     // lives in a foreign C library, so the signature stands alone (optionally
     // followed by a `;`). All other functions require a `{ }` block.
     AstNode *body = NULL;
     if (parser->parsing_extern_fn) {
-        xr_parser_match(parser, TK_SEMICOLON);  // optional trailing ';'
+        do {
+            xr_parser_match(parser, TK_SEMICOLON);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // optional trailing ';'
     } else {
-        xr_parser_consume(parser, TK_LBRACE, "function body must use braces { }");
+        do {
+            xr_parser_consume(parser, TK_LBRACE, "function body must use braces { }");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         parser->scope_depth++;
-        body = xr_parse_block(parser);
+        do {
+            body = xr_parse_block(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         parser->scope_depth--;
     }
 
     // If has destructure params, insert destructure code at function body start
-    for (int i = 0; body && i < param_count; i++) {
+    for (int i = 0; xr_parser_step(parser) && (body && i < param_count); i++) {
         if (params[i] && params[i]->pattern != NULL) {
             AstNode *param_var = xr_ast_variable(parser->compiler_session, params[i]->name, line);
+            if (!xr_parser_healthy(parser)) return NULL;
 
             // Create destructure decl: var [x, y] = __param0
             AstNode *destructure_decl = xr_ast_destructure_decl(
                 parser->compiler_session, params[i]->pattern, param_var, false, line);
+            if (!xr_parser_healthy(parser)) return NULL;
             // Don't free pattern here, it's now owned by destructure_decl
             params[i]->pattern = NULL;
 
             BlockNode *block = &body->as.block;
             if (block->count >= block->capacity) {
                 int _old_cap_block__capacity = (int) block->capacity;
-                block->capacity = _old_cap_block__capacity == 0 ? 4 : _old_cap_block__capacity * 2;
+                do {
+                    block->capacity = xr_parser_grow_capacity(parser, _old_cap_block__capacity);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 AstNode **_new_block_statements = (AstNode **) ast_alloc_array(
                     parser->compiler_session, sizeof(AstNode *), (size_t) block->capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (_old_cap_block__capacity > 0 && block->statements)
-                    memcpy(_new_block_statements, block->statements,
-                           sizeof(AstNode *) * (size_t) _old_cap_block__capacity);
+                    do { if (!ast_copy(parser->compiler_session, _new_block_statements, block->statements,
+                           sizeof(AstNode *) * (size_t) _old_cap_block__capacity)) return NULL; } while (0);
                 block->statements = _new_block_statements;
             }
 
             // Shift existing statements back
-            for (int j = block->count; j > 0; j--) {
+            for (int j = block->count; xr_parser_step(parser) && (j > 0); j--) {
                 block->statements[j] = block->statements[j - 1];
             }
 
@@ -791,6 +1097,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
 
     AstNode *func_decl =
         xr_ast_function_decl(parser->compiler_session, func_name, params, param_count, body, line);
+    if (!xr_parser_healthy(parser)) return NULL;
     func_decl->column = name_column;
     if (body) {
         func_decl->end_line = body->end_line;
@@ -811,7 +1118,10 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     // Restore original type_scope after parsing generic function
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
-        xr_type_scope_free(generic_scope);
+        do {
+            xr_parser_type_scope_free(parser, generic_scope);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     return func_decl;
@@ -820,7 +1130,10 @@ fail:
     // Local parser allocations are arena-owned and released at parse end.
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
-        xr_type_scope_free(generic_scope);
+        do {
+            xr_parser_type_scope_free(parser, generic_scope);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
     return NULL;
 }
@@ -834,6 +1147,7 @@ fail:
 // position the analyzer rejects it.
 static bool xr_parse_call_argument_access_marker_starts(Parser *parser,
                                                         XrCallArgAccess *out_access) {
+    if (!xr_parser_healthy(parser)) return false;
     if (!parser)
         return false;
     XrCallArgAccess access = XR_CALL_ARG_PLAIN;
@@ -844,30 +1158,44 @@ static bool xr_parse_call_argument_access_marker_starts(Parser *parser,
     }
 
     XrParserStreamState saved = xr_parser_stream_save(parser);
-    xr_parser_advance(parser);
+    if (!xr_parser_healthy(parser)) return false;
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     bool marker = xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_THIS);
-    xr_parser_stream_restore(parser, &saved);
+    if (!xr_parser_healthy(parser)) return false;
+    do {
+        xr_parser_stream_restore(parser, &saved);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     if (marker && out_access)
         *out_access = access;
     return marker;
 }
 
 AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out_access) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (out_access)
         *out_access = XR_CALL_ARG_PLAIN;
     int line = parser->current.line;
     XrCallArgAccess marker_access = XR_CALL_ARG_PLAIN;
     if (xr_parse_call_argument_access_marker_starts(parser, &marker_access)) {
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         if (out_access)
             *out_access = marker_access;
         AstNode *place = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!place)
             return NULL;
         return place;
     }
     if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
         AstNode *inner = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!inner)
             return NULL;
         return xr_ast_spread_expr(parser->compiler_session, inner, line);
@@ -876,12 +1204,14 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
         return xr_ast_variable(parser->compiler_session, "_", line);
     }
     AstNode *argument = xr_parse_expression(parser);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (argument && argument->type == AST_MOVE_EXPR && out_access)
         *out_access = XR_CALL_ARG_MOVE;
     return argument;
 }
 
 AstNode *xr_parse_call_argument(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     return xr_parse_call_argument_with_access(parser, NULL);
 }
 
@@ -890,18 +1220,19 @@ AstNode *xr_parse_call_argument(Parser *parser) {
 // have no callable function binding, so a call on them is a construction.
 // User classes/structs already construct through the normal call path; only
 // these built-ins need to be re-targeted to the new-expr construction node.
-bool xr_is_construct_only_type_name(const char *name) {
+bool xr_is_construct_only_type_name(Parser *parser, const char *name) {
     if (!name)
         return false;
     static const char *const names[] = {"Map", "Array", "Set", "Channel", "StringBuilder", NULL};
-    for (const char *const *p = names; *p; p++) {
-        if (strcmp(name, *p) == 0)
+    for (const char *const *p = names; xr_parser_step(parser) && (xr_parser_healthy(parser) && *p); p++) {
+        if (xr_parser_compare_string(parser, name, *p) == 0)
             return true;
     }
     return false;
 }
 
 AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
     int line = callee && callee->line > 0 ? callee->line : parser->previous.line;
     int column = callee && callee->column > 0 ? callee->column : parser->previous.column;
@@ -925,24 +1256,35 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
         do {
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
             AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
-            XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+            if (!xr_parser_healthy(parser)) return NULL;
+            do {
+                XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            do {
+                XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
-    xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+    do {
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     int end_line = parser->previous.line;
     int end_column = parser->previous.column + parser->previous.length;
 
     // `Map()` / `Array()` / `Channel(n)` etc. construct built-in heap types.
     if (callee && callee->type == AST_VARIABLE &&
-        xr_is_construct_only_type_name(callee->as.variable.name)) {
+        xr_is_construct_only_type_name(parser, callee->as.variable.name)) {
         return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
                                arg_accesses, arg_count, NULL, 0, line);
     }
 
     AstNode *call = xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses,
                                      arg_count, line);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (call) {
         call->column = column;
         call->end_line = end_line;
@@ -957,10 +1299,15 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
 // Spread elements splice an array's contents into the surrounding literal at
 // runtime (`[...a, x]`), mirroring tuple-literal spread.
 static AstNode *parse_array_element(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
         int elem_line = parser->current.line;
-        xr_parser_advance(parser);  // consume '...'
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // consume '...'
         AstNode *inner = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!inner)
             return NULL;
         return xr_ast_spread_expr(parser->compiler_session, inner, elem_line);
@@ -971,6 +1318,7 @@ static AstNode *parse_array_element(Parser *parser) {
 // Parse array literal or Map literal (smart detection)
 // [1, 2, 3] -> array, ["key": value, ...] -> Map, [...a, x] -> array spread
 AstNode *xr_parse_array_literal(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_array_literal: NULL parser");
     int line = parser->previous.line;
 
@@ -984,21 +1332,35 @@ AstNode *xr_parse_array_literal(Parser *parser) {
         AstNode **elements = NULL;
         int count = 0;
         int capacity = 0;
-        XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
-        while (xr_parser_match(parser, TK_COMMA)) {
+        do {
+            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA)) {
             if (xr_parser_check(parser, TK_RBRACKET))
                 break;
-            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+            do {
+                XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
-        xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
+        do {
+            xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_ast_array_literal(parser->compiler_session, elements, count, line);
     }
 
     // Parse first expression, then check ':' for Map or ',' for array
     AstNode *first_expr = xr_parse_expression(parser);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (xr_parser_match(parser, TK_SEMICOLON)) {
         AstNode *repeat_count = xr_parse_expression(parser);
-        xr_parser_consume(parser, TK_RBRACKET, "expected ']' after array repeat count");
+        if (!xr_parser_healthy(parser)) return NULL;
+        do {
+            xr_parser_consume(parser, TK_RBRACKET, "expected ']' after array repeat count");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_ast_array_repeat_literal(parser->compiler_session, first_expr, repeat_count,
                                            line);
     }
@@ -1010,45 +1372,68 @@ AstNode *xr_parse_array_literal(Parser *parser) {
         int count = 0;
         int capacity = 4;
 
-        keys = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+        do {
+            keys = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
                                             (size_t) capacity);
-        values = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            values = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
                                               (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         keys[0] = first_expr;
-        values[0] = xr_parse_expression(parser);
+        do {
+            values[0] = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         count = 1;
 
-        while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACKET)) {
+        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACKET)) {
             if (count >= capacity) {
                 int old_capacity = capacity;
                 capacity *= 2;
 
                 AstNode **_new_keys = (AstNode **) ast_alloc_array(
                     parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (old_capacity > 0 && keys)
-                    memcpy(_new_keys, keys, sizeof(AstNode *) * (size_t) old_capacity);
+                    do { if (!ast_copy(parser->compiler_session, _new_keys, keys, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
                 keys = _new_keys;
 
                 AstNode **_new_values = (AstNode **) ast_alloc_array(
                     parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (old_capacity > 0 && values)
-                    memcpy(_new_values, values, sizeof(AstNode *) * (size_t) old_capacity);
+                    do { if (!ast_copy(parser->compiler_session, _new_values, values, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
                 values = _new_values;
             }
 
-            keys[count] = xr_parse_expression(parser);
+            do {
+                keys[count] = xr_parse_expression(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
 
             if (!xr_parser_match(parser, TK_COLON)) {
-                xr_parser_error(parser, "expected ':' after Map key");
+                do {
+                    xr_parser_error(parser, "expected ':' after Map key");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return xr_ast_map_literal(parser->compiler_session, NULL, NULL, 0, line);
             }
 
-            values[count] = xr_parse_expression(parser);
+            do {
+                values[count] = xr_parse_expression(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             count++;
         }
 
-        xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Map literal");
+        do {
+            xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Map literal");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         return xr_ast_map_literal(parser->compiler_session, keys, values, count, line);
 
@@ -1058,21 +1443,30 @@ AstNode *xr_parse_array_literal(Parser *parser) {
         int count = 0;
         int capacity = 4;
 
-        elements = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+        do {
+            elements = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
                                                 (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         elements[0] = first_expr;
         count = 1;
 
-        while (xr_parser_match(parser, TK_COMMA)) {
+        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA)) {
             if (xr_parser_check(parser, TK_RBRACKET)) {
                 break;
             }
 
-            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+            do {
+                XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
 
-        xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
+        do {
+            xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         return xr_ast_array_literal(parser->compiler_session, elements, count, line);
     }
@@ -1083,6 +1477,7 @@ AstNode *xr_parse_array_literal(Parser *parser) {
  * Map literals use the prefixed `#{ key: value }` form.
  */
 AstNode *xr_parse_object_literal(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_object_literal: NULL parser");
     int line = parser->previous.line;
 
@@ -1103,17 +1498,22 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         // Expand capacity
         if (count >= capacity) {
             int _old_cap_capacity = (int) capacity;
-            capacity = _old_cap_capacity == 0 ? 4 : _old_cap_capacity * 2;
+            do {
+                capacity = xr_parser_grow_capacity(parser, _old_cap_capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             AstNode **_new_keys = (AstNode **) ast_alloc_array(
                 parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (_old_cap_capacity > 0 && keys)
-                memcpy(_new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity);
+                do { if (!ast_copy(parser->compiler_session, _new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
             keys = _new_keys;
 
             AstNode **_new_values = (AstNode **) ast_alloc_array(
                 parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (_old_cap_capacity > 0 && values)
-                memcpy(_new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity);
+                do { if (!ast_copy(parser->compiler_session, _new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
             values = _new_values;
         }
 
@@ -1122,12 +1522,19 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         // entries override earlier ones at merge time.
         if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
             int spread_line = parser->current.line;
-            xr_parser_advance(parser);  // consume '...'
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);  // consume '...'
             AstNode *src = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (!src)
                 return xr_ast_literal_null(parser->compiler_session, line);
             keys[count] = NULL;
-            values[count] = xr_ast_spread_expr(parser->compiler_session, src, spread_line);
+            do {
+                values[count] = xr_ast_spread_expr(parser->compiler_session, src, spread_line);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             count++;
             continue;
         }
@@ -1138,42 +1545,61 @@ AstNode *xr_parse_object_literal(Parser *parser) {
 
         // Computed keys belong to Map literals, never structural objects.
         if (xr_parser_match(parser, TK_LBRACKET)) {
-            xr_parser_error(
+            do {
+                xr_parser_error(
                 parser, "structural object keys must be static; use `#{ [key]: value }` for Map");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_ast_literal_null(parser->compiler_session, line);
         }
         // String literal as key
         else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
             Token key_token = parser->current;
-            xr_parser_advance(parser);
-            XrQuotedPayload payload = {0};
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            XrParsedQuoted payload = {0};
             const char *error = NULL;
             bool decode_escapes = key_token.escape_mode == XR_LITERAL_ESCAPED;
-            if (!xr_quoted_payload_decode(&key_token, decode_escapes, &payload, &error)) {
-                xr_parser_error_at_previous(parser, error ? error : "invalid object key literal");
+            if (xr_parser_decode_quoted(parser, &key_token, decode_escapes, &payload, &error) != XR_QUOTED_OK) {
+                do {
+                    xr_parser_error_at_previous(parser, error ? error : "invalid object key literal");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return xr_ast_literal_null(parser->compiler_session, line);
             }
-            if (memchr(payload.bytes, '\0', payload.length) != NULL ||
-                !xr_utf8_validate((const char *) payload.bytes, payload.length)) {
-                xr_quoted_payload_free(&payload);
-                xr_parser_error_at_previous(parser,
+            if (xr_parser_find_byte(parser, payload.bytes, '\0', payload.length) != NULL ||
+                !xr_parser_utf8_validate(parser, (const char *) payload.bytes, payload.length)) {
+
+                do {
+                    xr_parser_error_at_previous(parser,
                                             "object key must be valid UTF-8 without NUL bytes");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return xr_ast_literal_null(parser->compiler_session, line);
             }
             char *key_str = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
-            memcpy(key_str, payload.bytes, payload.length);
-            key_str[payload.length] = '\0';
-            key = xr_ast_literal_string(parser->compiler_session, key_str, payload.length, key_token.escape_mode,
+            if (!xr_parser_healthy(parser)) return NULL;
+            do { if (!ast_copy(parser->compiler_session, key_str, payload.bytes, payload.length)) return NULL; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; key_str[payload.length] = '\0'; } while (0);
+            do {
+                key = xr_ast_literal_string(parser->compiler_session, key_str, payload.length, key_token.escape_mode,
                                         key_token.source_form, line);
-            xr_quoted_payload_free(&payload);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+
         }
         // Numeric literal as key: only Map allows this, and Map literals must
         // use the `#{ ... }` prefix form.
         else if (xr_parser_check(parser, TK_LITERAL_INT) ||
                  xr_parser_check(parser, TK_LITERAL_FLOAT)) {
-            xr_parser_error(
+            do {
+                xr_parser_error(
                 parser,
                 "structural object does not support numeric keys; use `#{ key: value }` for Map");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_ast_literal_null(parser->compiler_session, line);
         }
         // Identifier or keyword as key (allow keywords like 'type', 'int', etc.)
@@ -1187,20 +1613,30 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                  xr_parser_check(parser, TK_STATIC) || xr_parser_check(parser, TK_AS) ||
                  xr_parser_check(parser, TK_IN) || xr_parser_check(parser, TK_IS)) {
             Token key_token = parser->current;
-            xr_parser_advance(parser);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
 
             char *key_str =
                 (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length + 1);
-            memcpy(key_str, key_token.start, key_token.length);
-            key_str[key_token.length] = '\0';
-            key = xr_ast_literal_string(parser->compiler_session, key_str, (size_t) key_token.length, XR_LITERAL_ESCAPED,
+            if (!xr_parser_healthy(parser)) return NULL;
+            do { if (!ast_copy(parser->compiler_session, key_str, key_token.start, key_token.length)) return NULL; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; key_str[key_token.length] = '\0'; } while (0);
+            do {
+                key = xr_ast_literal_string(parser->compiler_session, key_str, (size_t) key_token.length, XR_LITERAL_ESCAPED,
                                         XR_LITERAL_INLINE, line);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             if (key_token.type == TK_NAME)
                 shorthand_name = key_str;
         } else {
-            xr_parser_error(
+            do {
+                xr_parser_error(
                 parser,
                 "literal key must be identifier, string, number or [expr] computed property");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_ast_literal_null(parser->compiler_session, line);
         }
 
@@ -1212,30 +1648,46 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         // for function / branch arrows and is rejected here with a hint.
         if (xr_parser_match(parser, TK_COLON)) {
         } else if (xr_parser_check(parser, TK_ARROW)) {
-            xr_parser_error(
+            do {
+                xr_parser_error(
                 parser,
                 "`->` is not a valid separator in object literal; use `#{ key: value }` for Map");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_ast_literal_null(parser->compiler_session, line);
         } else if (shorthand_name &&
                    (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE))) {
-            values[count] = xr_ast_variable(parser->compiler_session, shorthand_name, line);
+            do {
+                values[count] = xr_ast_variable(parser->compiler_session, shorthand_name, line);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             count++;
             continue;
         } else {
-            xr_parser_error(parser, "expected ':' after key in object literal");
+            do {
+                xr_parser_error(parser, "expected ':' after key in object literal");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_ast_literal_null(parser->compiler_session, line);
         }
 
         // Parse value expression
-        values[count] = xr_parse_expression(parser);
+        do {
+            values[count] = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         count++;
 
-    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
 
     // Expect closing brace
-    xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of literal");
+    do {
+        xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of literal");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     AstNode *result = xr_ast_object_literal(parser->compiler_session, keys, values, count, line);
+    if (!xr_parser_healthy(parser)) return NULL;
 
     // Free temporary array
 
@@ -1247,6 +1699,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
  * Syntax: #{} or #{"key": value, ...}
  */
 AstNode *xr_parse_empty_map_literal(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = parser->previous.line;
 
     // '#{' already consumed
@@ -1266,35 +1719,52 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
         // Expand capacity
         if (count >= capacity) {
             int _old_cap_capacity = (int) capacity;
-            capacity = _old_cap_capacity == 0 ? 4 : _old_cap_capacity * 2;
+            do {
+                capacity = xr_parser_grow_capacity(parser, _old_cap_capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             AstNode **_new_keys = (AstNode **) ast_alloc_array(
                 parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (_old_cap_capacity > 0 && keys)
-                memcpy(_new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity);
+                do { if (!ast_copy(parser->compiler_session, _new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
             keys = _new_keys;
 
             AstNode **_new_values = (AstNode **) ast_alloc_array(
                 parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (_old_cap_capacity > 0 && values)
-                memcpy(_new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity);
+                do { if (!ast_copy(parser->compiler_session, _new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
             values = _new_values;
         }
 
         // Parse key expression
-        keys[count] = xr_parse_expression(parser);
+        do {
+            keys[count] = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         // Expect ':' as the key-value separator inside `#{ ... }` Map literal.
         // The `#` prefix disambiguates a Map from a structural-object literal.
-        xr_parser_consume(parser, TK_COLON, "expected ':' after Map key in #{...}");
+        do {
+            xr_parser_consume(parser, TK_COLON, "expected ':' after Map key in #{...}");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         // Parse value expression
-        values[count] = xr_parse_expression(parser);
+        do {
+            values[count] = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         count++;
 
-    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
 
     // Expect '}'
-    xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of Map literal");
+    do {
+        xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of Map literal");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     // Create Map literal node
     return xr_ast_map_literal(parser->compiler_session, keys, values, count, line);
@@ -1305,6 +1775,7 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
  * Syntax: #[] or #[element, ...]
  */
 AstNode *xr_parse_set_literal_new(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = parser->previous.line;
 
     // '#[' already consumed
@@ -1324,21 +1795,31 @@ AstNode *xr_parse_set_literal_new(Parser *parser) {
         // Expand capacity
         if (count >= capacity) {
             int _old_cap_capacity = (int) capacity;
-            capacity = _old_cap_capacity == 0 ? 4 : _old_cap_capacity * 2;
+            do {
+                capacity = xr_parser_grow_capacity(parser, _old_cap_capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             AstNode **_new_elements = (AstNode **) ast_alloc_array(
                 parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (_old_cap_capacity > 0 && elements)
-                memcpy(_new_elements, elements, sizeof(AstNode *) * (size_t) _old_cap_capacity);
+                do { if (!ast_copy(parser->compiler_session, _new_elements, elements, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
             elements = _new_elements;
         }
 
         // Parse element expression
-        elements[count++] = xr_parse_expression(parser);
+        do {
+            elements[count++] = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
-    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACKET));
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACKET));
 
     // Expect ']'
-    xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Set literal");
+    do {
+        xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Set literal");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     // Create Set literal node
     return xr_ast_set_literal(parser->compiler_session, elements, count, line);
@@ -1350,6 +1831,7 @@ AstNode *xr_parse_set_literal_new(Parser *parser) {
  * Slice syntax: arr[start:end], arr[:end], arr[start:], arr[:]
  */
 AstNode *xr_parse_index_access(Parser *parser, AstNode *array) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_index_access: NULL parser");
     int line = parser->previous.line;
 
@@ -1362,30 +1844,48 @@ AstNode *xr_parse_index_access(Parser *parser, AstNode *array) {
     // Check if [:...] form (omitted start index)
     if (parser->current.type == TK_COLON) {
         is_slice = true;
-        xr_parser_advance(parser);  // Consume ':'
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // Consume ':'
 
         // Check if there's an end index
         if (parser->current.type != TK_RBRACKET) {
-            end = xr_parse_expression(parser);
+            do {
+                end = xr_parse_expression(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
     } else {
         // Parse start index or regular index
-        start = xr_parse_expression(parser);
+        do {
+            start = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         // Check if slice syntax
         if (parser->current.type == TK_COLON) {
             is_slice = true;
-            xr_parser_advance(parser);  // Consume ':'
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);  // Consume ':'
 
             // Check if there's an end index
             if (parser->current.type != TK_RBRACKET) {
-                end = xr_parse_expression(parser);
+                do {
+                    end = xr_parse_expression(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             }
         }
     }
 
     // Expect ']'
-    xr_parser_consume(parser, TK_RBRACKET, "expected ']' after index or slice");
+    do {
+        xr_parser_consume(parser, TK_RBRACKET, "expected ']' after index or slice");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     if (is_slice) {
         // Create slice expression node
@@ -1396,6 +1896,7 @@ AstNode *xr_parse_index_access(Parser *parser, AstNode *array) {
     if (array && array->type == AST_OPTIONAL_CHAIN) {
         AstNode *node =
             xr_ast_optional_chain(parser->compiler_session, array, NULL, start, 1, line);
+        if (!xr_parser_healthy(parser)) return NULL;
         node->as.optional_chain.implicit_link = true;
         return node;
     }
@@ -1410,6 +1911,7 @@ AstNode *xr_parse_index_access(Parser *parser, AstNode *array) {
  * Note: Keywords are allowed as member names in member access (e.g. .get, .set, .new)
  */
 AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_member_access: NULL parser");
     int line = parser->previous.line;
 
@@ -1427,18 +1929,28 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
     // The integer text is stored verbatim as the member name; the analyzer
     // recognises digit-only names on tuple-typed receivers.
     if (t == TK_NAME || t == TK_LITERAL_INT || (t >= TK_FIRST_KEYWORD && t <= TK_LAST_KEYWORD)) {
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         name = parser->previous.start;
         name_len = parser->previous.length;
     } else {
-        xr_parser_error(parser, "expected member name");
+        do {
+            xr_parser_error(parser, "expected member name");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
     // Copy member name (xr_ast_member_access deep-copies, so release our copy)
     char *member_name = (char *) ast_alloc(parser->compiler_session, (size_t) name_len + 1);
-    strncpy(member_name, name, name_len);
-    member_name[name_len] = '\0';
+    if (!xr_parser_healthy(parser)) return NULL;
+    do {
+        xr_parser_copy_string_n(parser, member_name, name, name_len);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; member_name[name_len] = '\0'; } while (0);
 
     /* A plain `.` that continues an optional chain keeps the chain's
      * short-circuit: `a?.b.c` is null when `a` is null, without evaluating
@@ -1447,10 +1959,16 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
      * this link's own member must be non-null. */
     AstNode *node;
     if (object && object->type == AST_OPTIONAL_CHAIN) {
-        node = xr_ast_optional_chain(parser->compiler_session, object, member_name, NULL, 0, line);
+        do {
+            node = xr_ast_optional_chain(parser->compiler_session, object, member_name, NULL, 0, line);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         node->as.optional_chain.implicit_link = true;
     } else {
-        node = xr_ast_member_access(parser->compiler_session, object, member_name, line);
+        do {
+            node = xr_ast_member_access(parser->compiler_session, object, member_name, line);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
     node->column = parser->previous.column;
 
@@ -1461,31 +1979,45 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
         int field_count = 0;
         int field_capacity = 0;
 
-        while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
-            xr_parser_consume(parser, TK_NAME, "expected field name in payload enum constructor");
+        while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+            do {
+                xr_parser_consume(parser, TK_NAME, "expected field name in payload enum constructor");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             Token field_token = parser->previous;
             char *field_name =
                 (char *) ast_alloc(parser->compiler_session, (size_t) field_token.length + 1);
-            memcpy(field_name, field_token.start, (size_t) field_token.length);
-            field_name[field_token.length] = '\0';
-            xr_parser_consume(parser, TK_COLON,
+            if (!xr_parser_healthy(parser)) return NULL;
+            do { if (!ast_copy(parser->compiler_session, field_name, field_token.start, (size_t) field_token.length)) return NULL; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; field_name[field_token.length] = '\0'; } while (0);
+            do {
+                xr_parser_consume(parser, TK_COLON,
                               "payload enum constructors require 'field: expression'");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             AstNode *field_value = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
 
             if (field_count >= field_capacity) {
                 int old_capacity = field_capacity;
-                field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
+                do {
+                    field_capacity = xr_parser_grow_capacity(parser, field_capacity);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 char **new_names = (char **) ast_alloc_array(
                     parser->compiler_session, sizeof(char *), (size_t) field_capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
                 XrNameSpan *new_name_spans = (XrNameSpan *) ast_alloc_array(
                     parser->compiler_session, sizeof(XrNameSpan), (size_t) field_capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
                 AstNode **new_values = (AstNode **) ast_alloc_array(
                     parser->compiler_session, sizeof(AstNode *), (size_t) field_capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (old_capacity > 0) {
-                    memcpy(new_names, field_names, sizeof(char *) * (size_t) old_capacity);
-                    memcpy(new_name_spans, field_name_spans,
-                           sizeof(XrNameSpan) * (size_t) old_capacity);
-                    memcpy(new_values, field_values, sizeof(AstNode *) * (size_t) old_capacity);
+                    do { if (!ast_copy(parser->compiler_session, new_names, field_names, sizeof(char *) * (size_t) old_capacity)) return NULL; } while (0);
+                    do { if (!ast_copy(parser->compiler_session, new_name_spans, field_name_spans,
+                           sizeof(XrNameSpan) * (size_t) old_capacity)) return NULL; } while (0);
+                    do { if (!ast_copy(parser->compiler_session, new_values, field_values, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
                 }
                 field_names = new_names;
                 field_name_spans = new_name_spans;
@@ -1498,14 +2030,21 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
             field_count++;
 
             if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_match(parser, TK_COMMA)) {
-                xr_parser_error(parser, "expected ',' or '}' in payload enum constructor");
+                do {
+                    xr_parser_error(parser, "expected ',' or '}' in payload enum constructor");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 break;
             }
         }
-        xr_parser_consume(parser, TK_RBRACE, "expected '}' after payload enum constructor");
+        do {
+            xr_parser_consume(parser, TK_RBRACE, "expected '}' after payload enum constructor");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         AstNode *construct =
             xr_ast_enum_construct(parser->compiler_session, node, field_names, field_name_spans,
                                   field_values, field_count, line);
+        if (!xr_parser_healthy(parser)) return NULL;
         construct->column = node->column;
         construct->end_line = parser->previous.line;
         construct->end_column = parser->previous.column + parser->previous.length;
@@ -1521,9 +2060,13 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
  * are needed.
  */
 AstNode *xr_parse_return_statement(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_return_statement: NULL parser");
     int line = parser->current.line;
-    xr_parser_advance(parser);  // Consume 'return'
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);  // Consume 'return'
 
     // Bare `return` or `return` followed by block-close: void return.
     if (parser->current.type == TK_RBRACE ||  // Block end
@@ -1532,16 +2075,21 @@ AstNode *xr_parse_return_statement(Parser *parser) {
     }
 
     AstNode *value = xr_parse_expression(parser);
+    if (!xr_parser_healthy(parser)) return NULL;
 
     // Comma after the return expression is the obsolete multi-value
     // form. Redirect users to the tuple equivalent.
     if (xr_parser_check(parser, TK_COMMA)) {
-        xr_parser_error(parser, "[E0801] multi-value return is not supported; "
+        do {
+            xr_parser_error(parser, "[E0801] multi-value return is not supported; "
                                 "use a tuple: `return (a, b)`");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
     AstNode **values = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), 1);
+    if (!xr_parser_healthy(parser)) return NULL;
     values[0] = value;
     return xr_ast_return_stmt(parser->compiler_session, values, 1, line);
 }
@@ -1556,11 +2104,16 @@ AstNode *xr_parse_return_statement(Parser *parser) {
  * Also generates AST_TYPE_ALIAS node so analyzer/LSP can see the declaration.
  */
 AstNode *xr_parse_type_alias_declaration(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = parser->previous.line;
 
     // Parse alias name
-    xr_parser_consume(parser, TK_NAME, "expected type name after 'type'");
-    char *alias_name = xr_strndup(parser->previous.start, parser->previous.length);
+    do {
+        xr_parser_consume(parser, TK_NAME, "expected type name after 'type'");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
+    char *alias_name = ast_strndup(parser->compiler_session, parser->previous.start, parser->previous.length);
+    if (!xr_parser_healthy(parser)) return NULL;
 
     XrGenericParam **type_params = NULL;
     int type_param_count = 0;
@@ -1568,55 +2121,83 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
 
     if (xr_parser_match(parser, TK_LT)) {
         do {
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            do {
+                xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             Token param_token = parser->previous;
 
             char *param_name =
                 (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
-            memcpy(param_name, param_token.start, (size_t) param_token.length);
-            param_name[param_token.length] = '\0';
+            if (!xr_parser_healthy(parser)) return NULL;
+            do { if (!ast_copy(parser->compiler_session, param_name, param_token.start, (size_t) param_token.length)) return NULL; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; param_name[param_token.length] = '\0'; } while (0);
 
-            for (int i = 0; i < type_param_count; i++) {
+            for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++) {
                 if (type_params[i] && type_params[i]->name &&
-                    strcmp(type_params[i]->name, param_name) == 0) {
-                    xr_parser_error(parser, "duplicate type parameter name in type alias");
+                    xr_parser_compare_string(parser, type_params[i]->name, param_name) == 0) {
+                    do {
+                        xr_parser_error(parser, "duplicate type parameter name in type alias");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 }
             }
 
             XrTypeRef **constraints = NULL;
             int constraint_count = 0;
             if (xr_parser_match(parser, TK_COLON)) {
-                xr_parser_error(parser, "type alias type parameters do not support constraints");
-                constraints = xr_parse_constraint_list(parser, &constraint_count);
+                do {
+                    xr_parser_error(parser, "type alias type parameters do not support constraints");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                do {
+                    constraints = xr_parse_constraint_list(parser, &constraint_count);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             }
 
             XrGenericParam *gp =
                 (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
+            if (!xr_parser_healthy(parser)) return NULL;
             gp->name = param_name;
             gp->constraints = constraints;
             gp->constraint_count = constraint_count;
-            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+            do {
+                XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
-        xr_parser_consume(parser, TK_GT, "expected '>' to close type alias parameters");
+        do {
+            xr_parser_consume(parser, TK_GT, "expected '>' to close type alias parameters");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     // Expect '='
-    xr_parser_consume(parser, TK_ASSIGN, "expected '=' in type alias definition");
+    do {
+        xr_parser_consume(parser, TK_ASSIGN, "expected '=' in type alias definition");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     // Pre-register with NULL to block recursive self-reference (type A = A).
     // We retain the entry pointer so we can patch its `type` field below
     // once the RHS is fully parsed.
-    XrTypeAlias *alias_entry = xr_type_scope_define(parser->type_scope, alias_name, NULL);
+    XrTypeAlias *alias_entry = xr_parser_type_scope_define(parser, parser->type_scope, alias_name, NULL);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (!alias_entry) {
-        xr_parser_error(parser, "duplicate type alias definition");
-        xr_free(alias_name);
+        do {
+            xr_parser_error(parser, "duplicate type alias definition");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+
         return NULL;
     }
     if (type_param_count > 0) {
         const char **param_names = (const char **) ast_alloc_array(
             parser->compiler_session, sizeof(const char *), (size_t) type_param_count);
-        for (int i = 0; i < type_param_count; i++)
+        if (!xr_parser_healthy(parser)) return NULL;
+        for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++)
             param_names[i] = type_params[i]->name;
         alias_entry->type_param_names = param_names;
         alias_entry->type_param_count = type_param_count;
@@ -1625,11 +2206,18 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     XrTypeScope *saved_scope = parser->type_scope;
     XrTypeScope *generic_scope = NULL;
     if (type_param_count > 0) {
-        generic_scope = xr_type_scope_new(parser->type_scope);
-        for (int i = 0; i < type_param_count; i++) {
+        do {
+            generic_scope = xr_parser_type_scope_new(parser, parser->type_scope);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++) {
             XrTypeRef *type_param =
                 xr_tref_type_param(parser->compiler_session, type_params[i]->name);
-            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
+            if (!xr_parser_healthy(parser)) return NULL;
+            do {
+                xr_parser_type_scope_define(parser, generic_scope, type_params[i]->name, type_param);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
         parser->type_scope = generic_scope;
     }
@@ -1637,21 +2225,32 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Parse type definition; alias expansion catches recursive aliases while
     // the placeholder is still unresolved.
     XrTypeRef *type_definition = xr_parse_type_annotation(parser);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
-        xr_type_scope_free(generic_scope);
+        do {
+            xr_parser_type_scope_free(parser, generic_scope);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
     if (!type_definition) {
-        xr_parser_error(parser, "invalid type definition");
-        xr_free(alias_name);
+        do {
+            xr_parser_error(parser, "invalid type definition");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+
         return NULL;
     }
 
     // Patch the placeholder with the actual type definition.
     alias_entry->type_ref = type_definition;
     if (type_definition->kind == XR_TREF_OBJECT) {
-        char *type_name = (char *) ast_alloc(parser->compiler_session, strlen(alias_name) + 1);
-        strcpy(type_name, alias_name);
+        char *type_name = (char *) ast_alloc(parser->compiler_session, xr_parser_string_length(parser, alias_name) + 1);
+        if (!xr_parser_healthy(parser)) return NULL;
+        do {
+            xr_parser_copy_string(parser, type_name, alias_name);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         type_definition->name = type_name;
     }
 
@@ -1660,7 +2259,8 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // the analyzer can read it without going through any backchannel
     // on AstNode itself.
     AstNode *node = xr_ast_type_alias(parser->compiler_session, alias_name, NULL, NULL, 0, line);
-    xr_free(alias_name);  // xr_ast_type_alias copies the name, so we can free the original
+    if (!xr_parser_healthy(parser)) return NULL;
+
     if (!node) {
         return NULL;
     }
@@ -1675,11 +2275,15 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
  * Parse declaration (variable declaration, constant declaration, class declaration or statement)
  */
 AstNode *xr_parse_declaration(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_declaration: NULL parser");
     // Module system (only allowed at top level)
     if (xr_parser_match(parser, TK_IMPORT)) {
         if (parser->scope_depth > 0) {
-            xr_parser_error(parser, "'import' must appear at module top level");
+            do {
+                xr_parser_error(parser, "'import' must appear at module top level");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         return xr_parse_import_declaration(parser);
@@ -1687,14 +2291,20 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
     if (xr_parser_match(parser, TK_EXPORT)) {
         if (parser->scope_depth > 0) {
-            xr_parser_error(parser, "'export' must appear at module top level");
+            do {
+                xr_parser_error(parser, "'export' must appear at module top level");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         return xr_parse_export_declaration(parser);
     }
 
     if (xr_parser_check_name(parser, "extern")) {
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_parse_extern_block_declaration(parser);
     }
 
@@ -1703,55 +2313,91 @@ AstNode *xr_parse_declaration(Parser *parser) {
         Token removed = parser->current;
         const char *spelling =
             current_starts_removed_binding_declaration(parser, "owned") ? "owned" : "shared";
+        if (!xr_parser_healthy(parser)) return NULL;
         char title[128];
-        snprintf(title, sizeof(title), "'%s' binding syntax was removed; use var or const",
+        xr_parser_format(parser, title, sizeof(title), "'%s' binding syntax was removed; use var or const",
                  spelling);
-        xr_parser_error_coded_note(
+        do {
+            xr_parser_error_coded_note(
             parser, &removed, XR_ERR_SYN_BINDING_CAPABILITY_REMOVED, title,
             "ownership, sharing, and storage are inferred from value capability and explicit "
             "copy/move boundaries");
-        xr_parser_advance(parser);
-        xr_parser_skip_invalid_construct(parser, removed.line,
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parser_skip_invalid_construct(parser, removed.line,
                                          current_can_start_top_level_after_recovery, false);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
     if (xr_is_global_asm_start(parser)) {
-        xr_parser_advance(parser);  // consume asm
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // consume asm
         return xr_parse_global_asm_declaration(parser);
     }
 
     if (xr_parser_check_name(parser, "abstract")) {
         int modifier_line = parser->current.line;
-        xr_parser_error_at_current(parser,
+        do {
+            xr_parser_error_at_current(parser,
                                    "'abstract' was removed; use an interface for contracts");
-        xr_parser_advance(parser);
-        xr_parser_skip_invalid_construct(parser, modifier_line,
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parser_skip_invalid_construct(parser, modifier_line,
                                          current_can_start_top_level_after_recovery, false);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
     if (xr_parser_check_name(parser, "open") || xr_parser_check_name(parser, "virtual")) {
         int modifier_line = parser->current.line;
         const char *modifier = xr_parser_check_name(parser, "open") ? "open" : "virtual";
+        if (!xr_parser_healthy(parser)) return NULL;
         char msg[128];
-        snprintf(msg, sizeof(msg), "'%s' was removed; class dispatch strategy is inferred",
+        xr_parser_format(parser, msg, sizeof(msg), "'%s' was removed; class dispatch strategy is inferred",
                  modifier);
-        xr_parser_error_at_current(parser, msg);
-        xr_parser_advance(parser);
-        xr_parser_skip_invalid_construct(parser, modifier_line,
+        do {
+            xr_parser_error_at_current(parser, msg);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parser_skip_invalid_construct(parser, modifier_line,
                                          current_can_start_top_level_after_recovery, false);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
     // Class declaration (with optional 'final' prefix)
     if (xr_parser_match(parser, TK_FINAL)) {
         if (!xr_parser_match(parser, TK_CLASS)) {
-            xr_parser_error_at_current(parser,
+            do {
+                xr_parser_error_at_current(parser,
                                        "'final' can only be used before 'class' at top level");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         AstNode *cls = xr_parse_class_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (cls)
             cls->as.class_decl.explicit_final = true;
         return cls;
@@ -1765,10 +2411,14 @@ AstNode *xr_parse_declaration(Parser *parser) {
     bool is_packed_struct = false;
     if (xr_parser_match(parser, TK_PACKED)) {
         is_packed_struct = true;
-        xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
+        do {
+            xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
     if (is_packed_struct || xr_parser_match(parser, TK_STRUCT)) {
         AstNode *st = xr_parse_struct_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (st)
             st->as.struct_decl.is_packed = is_packed_struct;
         return st;
@@ -1816,12 +2466,16 @@ AstNode *xr_parse_declaration(Parser *parser) {
         int line = parser->previous.line;
         if (xr_parser_check(parser, TK_SEMICOLON) || xr_parser_check(parser, TK_RBRACE) ||
             xr_parser_check(parser, TK_EOF)) {
-            xr_parser_error_at_current(
+            do {
+                xr_parser_error_at_current(
                 parser, "`yield` requires a value (generator value production); use `Coro.yield()` "
                         "for cooperative scheduling");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         AstNode *value = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!value)
             return NULL;
         return xr_ast_yield_stmt(parser->compiler_session, value, line);
@@ -1844,17 +2498,31 @@ AstNode *xr_parse_declaration(Parser *parser) {
         Token name_token = parser->current;
 
         // "linked" go ... | "linked" scope ...
-        if (name_token.length == 6 && memcmp(name_token.start, "linked", 6) == 0) {
-            Scanner saved = parser->scanner;
+        if (name_token.length == 6 && xr_parser_compare_bytes(parser, name_token.start, "linked", 6) == 0) {
+            Scanner saved;
+            if (xr_compile_state_copy(parser->state, &saved, &parser->scanner, sizeof(saved)) != XR_COMPILE_RESOURCE_OK) return NULL;
             Token peek = xr_scanner_scan(&saved);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (peek.type == TK_GO) {
-                xr_parser_advance(parser);  // consume "linked"
-                xr_parser_advance(parser);  // consume "go"
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);  // consume "linked"
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);  // consume "go"
                 return xr_parse_go_expr_with_link(parser, XR_LINK_LINKED);
             }
             if (peek.type == TK_SCOPE) {
-                xr_parser_advance(parser);  // consume "linked"
-                xr_parser_advance(parser);  // consume "scope"
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);  // consume "linked"
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);  // consume "scope"
                 return xr_parse_scope_block_with_mode(parser, XR_SCOPE_LINKED);
             }
         }
@@ -1862,8 +2530,11 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
     // Detect unsupported 'from ... import' syntax
     if (xr_parser_check_name(parser, "from")) {
-        xr_parser_error_at_current(parser, "Python-style 'from ... import' is not supported. "
+        do {
+            xr_parser_error_at_current(parser, "Python-style 'from ... import' is not supported. "
                                            "Use 'import { name } from \"module\"' in Xray");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
@@ -1874,61 +2545,95 @@ AstNode *xr_parse_declaration(Parser *parser) {
         Token name_token = parser->current;
         // Detect walrus-style short declaration: x := 1
         {
-            Parser checkpoint = *parser;
-            xr_parser_advance(parser);
-            if (xr_parser_check(parser, TK_COLON)) {
+            Parser checkpoint;
+            if (xr_compile_state_copy(parser->state, &checkpoint, parser, sizeof(checkpoint)) != XR_COMPILE_RESOURCE_OK) return NULL;
+            do {
                 xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            if (xr_parser_check(parser, TK_COLON)) {
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 if (xr_parser_check(parser, TK_ASSIGN)) {
-                    *parser = checkpoint;
+                    if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
                     char buf[128];
-                    snprintf(
+                    xr_parser_format(parser,
                         buf, sizeof(buf),
                         "':=' is not supported. Use 'var %.*s = ...' to declare variables in Xray",
                         name_token.length, name_token.start);
-                    xr_parser_error_at_current(parser, buf);
+                    do {
+                        xr_parser_error_at_current(parser, buf);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     return NULL;
                 }
             }
-            *parser = checkpoint;
+            if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
         }
-        if (name_token.length == 8 && memcmp(name_token.start, "function", 8) == 0) {
-            xr_parser_error_at_current(
+        if (name_token.length == 8 && xr_parser_compare_bytes(parser, name_token.start, "function", 8) == 0) {
+            do {
+                xr_parser_error_at_current(
                 parser, "unknown keyword 'function'. Use 'fn' to define functions in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        if (name_token.length == 3 && memcmp(name_token.start, "def", 3) == 0) {
-            xr_parser_error_at_current(
+        if (name_token.length == 3 && xr_parser_compare_bytes(parser, name_token.start, "def", 3) == 0) {
+            do {
+                xr_parser_error_at_current(
                 parser, "unknown keyword 'def'. Use 'fn' to define functions in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        if (name_token.length == 4 && memcmp(name_token.start, "func", 4) == 0) {
-            xr_parser_error_at_current(
+        if (name_token.length == 4 && xr_parser_compare_bytes(parser, name_token.start, "func", 4) == 0) {
+            do {
+                xr_parser_error_at_current(
                 parser, "unknown keyword 'func'. Use 'fn' to define functions in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        if (name_token.length == 4 && memcmp(name_token.start, "elif", 4) == 0) {
-            xr_parser_error_at_current(parser, "unknown keyword 'elif'. Use 'else if' in Xray");
+        if (name_token.length == 4 && xr_parser_compare_bytes(parser, name_token.start, "elif", 4) == 0) {
+            do {
+                xr_parser_error_at_current(parser, "unknown keyword 'elif'. Use 'else if' in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        if (name_token.length == 6 && memcmp(name_token.start, "switch", 6) == 0) {
-            xr_parser_error_at_current(
+        if (name_token.length == 6 && xr_parser_compare_bytes(parser, name_token.start, "switch", 6) == 0) {
+            do {
+                xr_parser_error_at_current(
                 parser, "unknown keyword 'switch'. Use 'match' for pattern matching in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        if (name_token.length == 7 && memcmp(name_token.start, "foreach", 7) == 0) {
-            xr_parser_error_at_current(
+        if (name_token.length == 7 && xr_parser_compare_bytes(parser, name_token.start, "foreach", 7) == 0) {
+            do {
+                xr_parser_error_at_current(
                 parser, "unknown keyword 'foreach'. Use 'for (x in collection) { }' in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        if (name_token.length == 2 && memcmp(name_token.start, "do", 2) == 0) {
-            xr_parser_error_at_current(
+        if (name_token.length == 2 && xr_parser_compare_bytes(parser, name_token.start, "do", 2) == 0) {
+            do {
+                xr_parser_error_at_current(
                 parser, "'do...while' is not supported. Use 'while (condition) { }' in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        if (name_token.length == 6 && memcmp(name_token.start, "lambda", 6) == 0) {
-            xr_parser_error_at_current(
+        if (name_token.length == 6 && xr_parser_compare_bytes(parser, name_token.start, "lambda", 6) == 0) {
+            do {
+                xr_parser_error_at_current(
                 parser,
                 "'lambda' is not supported. Use 'fn(params) { }' or '(params) -> expr' in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
     }
@@ -1940,18 +2645,25 @@ AstNode *xr_parse_declaration(Parser *parser) {
         if ((t >= TK_I8 && t <= TK_USIZE) || t == TK_STRING || t == TK_BOOL || t == TK_RUNE) {
             // Peek ahead: if next token is TK_NAME, this is a C-style declaration
             Token saved = parser->current;
-            Parser checkpoint = *parser;
-            xr_parser_advance(parser);
+            Parser checkpoint;
+            if (xr_compile_state_copy(parser->state, &checkpoint, parser, sizeof(checkpoint)) != XR_COMPILE_RESOURCE_OK) return NULL;
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             if (xr_parser_check(parser, TK_NAME)) {
                 char buf[128];
-                snprintf(buf, sizeof(buf),
+                xr_parser_format(parser, buf, sizeof(buf),
                          "C-style declaration not supported. Use 'var %.*s: %.*s = ...' in Xray",
                          parser->current.length, parser->current.start, saved.length, saved.start);
-                *parser = checkpoint;
-                xr_parser_error_at_current(parser, buf);
+                if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
+                do {
+                    xr_parser_error_at_current(parser, buf);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return NULL;
             }
-            *parser = checkpoint;
+            if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
         }
     }
 
@@ -1978,47 +2690,67 @@ AstNode *xr_parse_declaration(Parser *parser) {
             // Copy first identifier name
             char *first_name =
                 (char *) ast_alloc(parser->compiler_session, (size_t) parser->current.length + 1);
-            memcpy(first_name, parser->current.start, parser->current.length);
-            first_name[parser->current.length] = '\0';
-            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+            do { if (!ast_copy(parser->compiler_session, first_name, parser->current.start, parser->current.length)) return NULL; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; first_name[parser->current.length] = '\0'; } while (0);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
 
             // `var a, b = ...` (bare multi-variable) is the obsolete
             // multi-value form. Tuple destructure `var (a, b) = ...`
             // is the canonical replacement.
             if (xr_parser_check(parser, TK_COMMA)) {
-                xr_parser_error(parser, "multi-variable declaration is not supported; "
+                do {
+                    xr_parser_error(parser, "multi-variable declaration is not supported; "
                                         "use tuple destructure: `var (a, b) = ...`");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return NULL;
             }
             {
                 // Single variable declaration: var a or var a = expr or var a: Type = expr
                 XrTypeRef *var_type = NULL;
                 if (xr_parser_match(parser, TK_COLON)) {
-                    var_type = xr_parse_type_annotation(parser);
+                    do {
+                        var_type = xr_parse_type_annotation(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 }
 
                 // Optional initialization expression
                 AstNode *initializer = NULL;
                 if (xr_parser_match(parser, TK_ASSIGN)) {
-                    initializer = xr_parse_expression(parser);
+                    do {
+                        initializer = xr_parse_expression(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 }
 
                 AstNode *decl = xr_ast_var_decl(parser->compiler_session, first_name, initializer,
                                                 false, saved_line);
+                if (!xr_parser_healthy(parser)) return NULL;
                 decl->column = saved_column;
                 if (initializer && initializer->end_line > 0) {
                     decl->end_line = initializer->end_line;
                     decl->end_column = initializer->end_column;
                 } else {
                     decl->end_line = saved_line;
-                    decl->end_column = saved_column + (int) strlen(first_name);
+                    do {
+                        decl->end_column = saved_column + (int) xr_parser_string_length(parser, first_name);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 }
                 decl->as.var_decl.type_annotation = var_type;  // Set type annotation
                 return decl;
             }
         }
 
-        xr_parser_error_expected_name(parser, "expected variable name");
+        do {
+            xr_parser_error_expected_name(parser, "expected variable name");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
@@ -2035,12 +2767,16 @@ AstNode *xr_parse_declaration(Parser *parser) {
             return xr_parse_destructure_declaration(parser, true);
         }
 
-        AstNode *first_decl = xr_parse_single_var_declaration(parser, 1);  // 1 means constant
+        AstNode *first_decl = xr_parse_single_var_declaration(parser, 1);
+        if (!xr_parser_healthy(parser)) return NULL;  // 1 means constant
 
         if (xr_parser_check(parser, TK_COMMA)) {
-            xr_parser_error(parser,
+            do {
+                xr_parser_error(parser,
                             "multi-const declaration is not supported; write separate const "
                             "declarations or use tuple destructure: `const (a, b) = ...`");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
 
@@ -2058,319 +2794,3 @@ AstNode *xr_parse_declaration(Parser *parser) {
     // Otherwise parse as statement
     return xr_parse_statement(parser);
 }
-
-// ========== Exception handling parse functions ==========
-
-/* Simple enum head of a variant pattern, used only as the analyzer's type
- * hint. Module-qualified and explicitly instantiated heads yield NULL; the
- * XIR source owner resolves every pattern root from the pattern path itself. */
-static const char *catch_pattern_enum_head_name(AstNode *pattern) {
-    if (!pattern)
-        return NULL;
-    AstNode *path = NULL;
-    if (pattern->type == AST_PATTERN_ADT)
-        path = pattern->as.pattern_adt.variant;
-    else if (pattern->type == AST_PATTERN_LITERAL)
-        path = pattern->as.pattern_literal.value;
-    if (!path)
-        return NULL;
-    if (path->type == AST_ENUM_ACCESS)
-        return path->as.enum_access.enum_name;
-    if (path->type == AST_MEMBER_ACCESS && path->as.member_access.object &&
-        path->as.member_access.object->type == AST_VARIABLE)
-        return path->as.member_access.object->as.variable.name;
-    return NULL;
-}
-
-/* A catch pattern names enum variants: every alternative is a qualified
- * variant path, optionally followed by its named payload pattern. Bare names
- * inside the parentheses are bindings, so literals, ranges, wildcards and
- * structural patterns cannot stand in for a catch-all or a type filter. */
-static bool catch_pattern_names_variants(AstNode *pattern) {
-    if (!pattern)
-        return false;
-    int count = 1;
-    AstNode **alternatives = &pattern;
-    if (pattern->type == AST_PATTERN_MULTI) {
-        count = pattern->as.pattern_multi.count;
-        alternatives = pattern->as.pattern_multi.patterns;
-    }
-    if (count <= 0 || !alternatives)
-        return false;
-    for (int i = 0; i < count; i++) {
-        AstNode *alternative = alternatives[i];
-        if (!alternative)
-            return false;
-        if (alternative->type == AST_PATTERN_ADT)
-            continue;
-        AstNode *path = alternative->type == AST_PATTERN_LITERAL
-                            ? alternative->as.pattern_literal.value
-                            : NULL;
-        if (!path || (path->type != AST_MEMBER_ACCESS && path->type != AST_ENUM_ACCESS))
-            return false;
-    }
-    return true;
-}
-
-/*
- * Parse try-catch statement.
- * Every ordinary catch header is parenthesized; only a panic clause may omit
- * its header:
- *   try { ... }
- *   catch (e: NetErr)                   { ... }   // typed binding
- *   catch (DbErr.QueryFailed { query }) { ... }   // enum variant pattern
- *   catch (NetErr.Timeout, NetErr.Lost) { ... }   // same-enum alternatives
- *   catch (e)                           { ... }   // catch-all binding
- *   catch panic (p)                     { ... }   // recoverable-fault boundary
- *   catch panic                         { ... }
- * Inside the parentheses a name followed by ':' or ')' is a binding; anything
- * else is a pattern. There is no `finally`; use `defer` for cleanup.
- */
-AstNode *xr_parse_try_statement(Parser *parser) {
-    XR_DCHECK(parser != NULL, "parse_try_statement: NULL parser");
-    int line = parser->current.line;
-
-    // Consume 'try'
-    xr_parser_advance(parser);
-
-    // Parse try block
-    xr_parser_consume(parser, TK_LBRACE, "expected '{' after try");
-    AstNode *try_body = xr_parse_block(parser);
-
-    // Parse zero or more catch clauses
-    XrCatchClause **clauses = NULL;
-    int catch_count = 0;
-    int catch_cap = 0;
-
-    while (xr_parser_check(parser, TK_CATCH)) {
-        xr_parser_advance(parser);  // consume 'catch'
-
-        /* `catch panic` optionally binds its panic value with `(p)`.
-         * `panic` is a contextual keyword here, not a reserved word. */
-        bool is_panic = false;
-        if (parser->current.type == TK_NAME && parser->current.length == 5 &&
-            memcmp(parser->current.start, "panic", 5) == 0) {
-            is_panic = true;
-            xr_parser_advance(parser);  // consume 'panic'
-        }
-
-        char *var_name = NULL;
-        int var_line = parser->current.line;
-        int var_column = parser->current.column;
-        XrTypeRef *type_ann = NULL;
-        AstNode *pattern = NULL;
-
-        if (!is_panic && !xr_parser_check(parser, TK_LPAREN)) {
-            xr_parser_error(parser, "expected '(' after catch");
-            return NULL;
-        }
-        if (xr_parser_match(parser, TK_LPAREN)) {
-            XrParserStreamState saved = xr_parser_stream_save(parser);
-            bool is_binding_header = false;
-            if (xr_parser_check(parser, TK_NAME)) {
-                xr_parser_advance(parser);
-                is_binding_header =
-                    xr_parser_check(parser, TK_COLON) || xr_parser_check(parser, TK_RPAREN);
-            }
-            xr_parser_stream_restore(parser, &saved);
-
-            if (is_binding_header) {
-                var_name = (char *) ast_alloc(parser->compiler_session,
-                                              (size_t) parser->current.length + 1);
-                memcpy(var_name, parser->current.start, parser->current.length);
-                var_name[parser->current.length] = '\0';
-                var_line = parser->current.line;
-                var_column = parser->current.column;
-                xr_parser_advance(parser);
-                if (xr_parser_match(parser, TK_COLON))
-                    type_ann = xr_parse_type_annotation(parser);
-            } else {
-                if (is_panic) {
-                    xr_parser_error(parser, "catch panic requires a variable binding");
-                    return NULL;
-                }
-                pattern = xr_parse_match_pattern(parser);
-                if (!pattern) {
-                    xr_parser_error(parser, "expected catch pattern");
-                    return NULL;
-                }
-                if (!catch_pattern_names_variants(pattern)) {
-                    xr_parser_error(parser, "catch pattern must name enum variants");
-                    return NULL;
-                }
-                var_line = pattern->line;
-                var_column = pattern->column;
-                const char *head = catch_pattern_enum_head_name(pattern);
-                if (head)
-                    type_ann = xr_tref_named(parser->compiler_session, head);
-            }
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch header");
-        }
-
-        // Parse catch body
-        xr_parser_consume(parser, TK_LBRACE, "expected '{' after catch");
-        AstNode *body = xr_parse_block(parser);
-
-        XrCatchClause *clause = xr_ast_catch_clause(parser->compiler_session, var_name, var_line,
-                                                    var_column, type_ann, body);
-        clause->pattern = pattern;
-        clause->is_panic = is_panic;
-        XR_PARSE_PUSH(parser, clauses, catch_count, catch_cap, clause);
-    }
-
-    // Need at least one catch clause
-    if (catch_count == 0) {
-        xr_parser_error(parser, "try statement requires a catch block");
-        return NULL;
-    }
-
-    AstNode *node =
-        xr_ast_try_catch(parser->compiler_session, try_body, clauses, catch_count, line);
-    // Slice ends at the last block present (last catch > try).
-    AstNode *last_block = clauses[catch_count - 1]->body;
-    if (!last_block)
-        last_block = try_body;
-    if (last_block) {
-        node->end_line = last_block->end_line;
-        node->end_column = last_block->end_column;
-    }
-    return node;
-}
-
-/*
- * Parse throw statement
- * throw expr
- */
-AstNode *xr_parse_throw_statement(Parser *parser) {
-    XR_DCHECK(parser != NULL, "parse_throw_statement: NULL parser");
-    int line = parser->current.line;
-    int column = parser->current.column;
-
-    // Consume 'throw'
-    xr_parser_advance(parser);
-
-    // Parse expression to throw
-    AstNode *expression = xr_parse_expression(parser);
-
-    if (!expression) {
-        xr_parser_error(parser, "throw statement requires an expression");
-        return NULL;
-    }
-
-    return xr_ast_throw_stmt(parser->compiler_session, expression, line, column);
-}
-
-// ========== Destructuring assignment helpers ==========
-
-/*
- * Convert array literal to destructure pattern (for destructuring assignment)
- * [a, b, c] -> destructure pattern
- * Can only convert when all elements are variable references
- */
-XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *X,
-                                                       AstNode *array_literal) {
-    if (array_literal->type != AST_ARRAY_LITERAL) {
-        return NULL;
-    }
-    if (array_literal->as.array_literal.is_repeat)
-        return NULL;
-
-    int count = array_literal->as.array_literal.count;
-    XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(
-        X, sizeof(XrDestructurePattern *), (size_t) count);
-
-    for (int i = 0; i < count; i++) {
-        AstNode *element = array_literal->as.array_literal.elements[i];
-
-        // Check if element is variable reference
-        if (element->type == AST_VARIABLE) {
-            // Create identifier pattern
-            elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
-        } else {
-            // Not a variable reference, cannot convert to destructure pattern
-            return NULL;
-        }
-    }
-
-    return xr_pattern_array(X, elements, count);
-}
-
-/*
- * Convert tuple literal to destructure pattern (for destructuring assignment)
- * (a, b, c) -> tuple destructure pattern
- * Mirrors convert_array_literal_to_pattern; only succeeds when every element
- * is a bare variable reference, since assignment targets cannot evaluate
- * sub-expressions.
- */
-XrDestructurePattern *convert_tuple_literal_to_pattern(XrCompilerSession *X,
-                                                       AstNode *tuple_literal) {
-    if (tuple_literal->type != AST_TUPLE_LITERAL) {
-        return NULL;
-    }
-
-    int count = tuple_literal->as.tuple_literal.count;
-    XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(
-        X, sizeof(XrDestructurePattern *), (size_t) count);
-
-    for (int i = 0; i < count; i++) {
-        AstNode *element = tuple_literal->as.tuple_literal.elements[i];
-        if (element->type == AST_VARIABLE) {
-            elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
-        } else {
-            return NULL;
-        }
-    }
-
-    return xr_pattern_tuple(X, elements, count);
-}
-
-/*
- * Convert object literal to destructure pattern (for destructuring assignment).
- * `{a, b}` and `{a: local}` both become object patterns. Field keys drive
- * extraction; values must be bare variable references so assignment targets
- * never evaluate arbitrary expressions.
- */
-XrDestructurePattern *convert_object_literal_to_pattern(XrCompilerSession *X,
-                                                        AstNode *object_literal) {
-    if (object_literal->type != AST_OBJECT_LITERAL) {
-        return NULL;
-    }
-
-    int count = object_literal->as.object_literal.count;
-    char **field_names = (char **) ast_alloc_array(X, sizeof(char *), (size_t) count);
-    XrDestructurePattern **patterns = (XrDestructurePattern **) ast_alloc_array(
-        X, sizeof(XrDestructurePattern *), (size_t) count);
-    bool all_shorthand = true;
-
-    for (int i = 0; i < count; i++) {
-        AstNode *key_node = object_literal->as.object_literal.keys[i];
-        AstNode *value_node = object_literal->as.object_literal.values[i];
-
-        // Check if key is string literal or variable reference
-        char *field_name = NULL;
-        if (key_node->type == AST_LITERAL_STRING) {
-            // Key is string literal
-            field_name = ast_strdup(X, key_node->as.literal.raw_value.string_val);
-        } else if (key_node->type == AST_VARIABLE) {
-            // Key is variable reference (shorthand syntax: {x, y})
-            field_name = ast_strdup(X, key_node->as.variable.name);
-        } else {
-            // Key is not string or variable, cannot convert
-            return NULL;
-        }
-
-        if (value_node->type == AST_VARIABLE) {
-            if (strcmp(field_name, value_node->as.variable.name) != 0)
-                all_shorthand = false;
-            field_names[i] = field_name;
-            patterns[i] = xr_pattern_identifier(X, value_node->as.variable.name, NULL);
-        } else {
-            // Value is not variable reference, cannot convert to destructure pattern
-            return NULL;
-        }
-    }
-
-    return xr_pattern_object(X, field_names, patterns, count, all_shorthand);
-}
-
-// Destructuring declaration/pattern parsing moved to xparse_destructure.c

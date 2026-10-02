@@ -8,6 +8,7 @@
 
 #include "xast_types.h"
 #include "../../base/xdefs.h"
+#include "../../base/xcompile_state.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -27,5 +28,7 @@ XR_FUNC size_t xr_public_attribute_count(void);
 XR_FUNC const XrPublicAttributeInfo *xr_public_attribute_at(size_t index);
 XR_FUNC const XrPublicAttributeInfo *xr_public_attribute_by_kind(AttributeKind kind);
 XR_FUNC const XrPublicAttributeInfo *xr_public_attribute_by_name(const char *name, size_t length);
+XR_FUNC const XrPublicAttributeInfo *xr_compile_public_attribute_by_name(XrCompileState *state, const char *name, size_t length);
+XR_FUNC const XrPublicAttributeInfo *xr_compile_public_attribute_by_kind(XrCompileState *state, AttributeKind kind);
 
 #endif /* XATTRIBUTE_REGISTRY_H */

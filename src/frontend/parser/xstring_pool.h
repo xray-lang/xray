@@ -21,6 +21,7 @@
 #define XSTRING_POOL_H
 
 #include "../../base/xdefs.h"
+#include "../../base/xcompile_state.h"
 #include <stddef.h>
 
 struct XrArena;
@@ -30,7 +31,10 @@ typedef struct XrCompileStringPool XrCompileStringPool;
 
 /* Create a new pool. All internal storage is arena-allocated.
  * |arena| must outlive every returned string pointer. */
-XR_FUNC XrCompileStringPool *xr_string_pool_new(struct XrArena *arena);
+XR_FUNC XrCompileResourceStatus xr_compile_string_pool_open(
+    XrCompileState *state, struct XrArena *arena, XrCompileStringPool **output);
+XR_FUNC bool xr_string_pool_matches(const XrCompileStringPool *pool,
+                                    XrCompileState *state, const struct XrArena *arena);
 
 /* Intern a NUL-terminated string. Returns the canonical pointer:
  *   - If the string is already in the pool, returns the existing pointer.

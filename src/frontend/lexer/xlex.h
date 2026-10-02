@@ -17,6 +17,8 @@
 
 #include <stdbool.h>
 #include "../../base/xdefs.h"
+#include "../../base/xcompile_state.h"
+#include "../../base/xarena.h"
 
 // ============================================================================
 // Trivia System - Comment Preservation
@@ -269,7 +271,10 @@ typedef struct Token {
 } Token;
 
 // Scanner state
+// All tokens and trivia borrow this exact arena; copies borrow the same owner.
 typedef struct Scanner {
+    XrCompileState *state;
+    XrArena *arena;
     const char *source;            // source code string
     const char *start;             // current token start position
     const char *current;           // current scan position
@@ -286,8 +291,8 @@ typedef struct Scanner {
 } Scanner;
 
 // Scanner functions
-XR_FUNC void xr_scanner_init(Scanner *scanner, const char *source);
-XR_FUNC void xr_scanner_init_with_trivia(Scanner *scanner, const char *source, bool collect_trivia);
+XR_FUNC XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source);
+XR_FUNC XrCompileResourceStatus xr_compile_scanner_open_with_trivia(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source, bool collect_trivia);
 XR_FUNC Token xr_scanner_scan(Scanner *scanner);
 
 // Try to scan regex literal when expecting expression
@@ -295,9 +300,6 @@ XR_FUNC Token xr_scanner_try_regex(Scanner *scanner);
 
 XR_FUNC const char *xr_token_name(XrTokenType type);
 
-// Trivia functions
-XR_FUNC XrTrivia *xr_trivia_new(XrTriviaType type, const char *start, int length, int line);
-XR_FUNC void xr_trivia_free(XrTrivia *trivia);
-XR_FUNC void xr_trivia_free_chain(XrTrivia *head);
+// Trivia belongs to the scanner arena and is never individually freed.
 
 #endif  // XLEX_H

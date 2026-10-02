@@ -26,15 +26,6 @@
 
 /* ========== Forward Declarations ========== */
 
-// Internal parser init with trivia collection option
-static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, const char *source,
-                                    const char *source_file, struct XrArena *arena,
-                                    bool collect_trivia);
-
-// Shared program-parsing body behind xr_parse_with_source / xr_parse_repl_unit.
-static AstNode *xr_parse_program(XrCompilerSession *session, const char *source,
-                                 const char *source_file, bool expr_value_observed);
-
 // Declarations now in xparse_internal.h; definitions in xparse_expr.c and xparse_decl.c
 
 /* ========== Parse Rules Table ========== */
@@ -279,6 +270,7 @@ bool xr_token_can_end_expr(XrTokenType type) {
 
 // (1) + (2) + (3): does the line break before `current` end the expression?
 static bool line_break_ends_expr(const Parser *parser) {
+    if (!xr_parser_healthy(parser)) return false;
     if (parser->current.line <= parser->previous.line)
         return false;
     if (!xr_token_can_end_expr(parser->previous.type))
@@ -302,6 +294,7 @@ static bool line_break_ends_expr(const Parser *parser) {
 // `{` `#{` open a brace scope (bit 0: statements do begin inside, so line
 // breaks terminate normally).
 static void track_bracket(Parser *parser, XrTokenType type) {
+    if (!xr_parser_healthy(parser)) return;
     switch (type) {
         case TK_LPAREN:
         case TK_LBRACKET:
@@ -331,6 +324,7 @@ static void track_bracket(Parser *parser, XrTokenType type) {
 // True when the innermost still-open bracket is `(` or `[`, i.e. the parser is
 // inside a grouped expression where a statement cannot start.
 bool xr_parser_in_group(const Parser *parser) {
+    if (!xr_parser_healthy(parser)) return false;
     XR_DCHECK(parser != NULL, "parser_in_group: NULL parser");
     if (parser->bracket_depth <= 0 || parser->bracket_depth > XR_PARSER_MAX_BRACKET_BITS)
         return false;
@@ -338,7 +332,11 @@ bool xr_parser_in_group(const Parser *parser) {
 }
 
 XrParserStreamState xr_parser_stream_save(const Parser *parser) {
+    if (!xr_parser_healthy(parser)) return (XrParserStreamState){0};
     XR_DCHECK(parser != NULL, "parser_stream_save: NULL parser");
+    if (xr_compile_state_work(parser->state, sizeof(Scanner) + 2 * sizeof(Token) +
+            sizeof(parser->bracket_bits) + sizeof(parser->bracket_depth)) != XR_COMPILE_RESOURCE_OK)
+        return (XrParserStreamState) {0};
     XrParserStreamState saved = {
         .scanner = parser->scanner,
         .current = parser->current,
@@ -350,8 +348,11 @@ XrParserStreamState xr_parser_stream_save(const Parser *parser) {
 }
 
 void xr_parser_stream_restore(Parser *parser, const XrParserStreamState *saved) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parser_stream_restore: NULL parser");
     XR_DCHECK(saved != NULL, "parser_stream_restore: NULL state");
+    if (xr_compile_state_work(parser->state, sizeof(Scanner) + 2 * sizeof(Token) +
+            sizeof(parser->bracket_bits) + sizeof(parser->bracket_depth)) != XR_COMPILE_RESOURCE_OK) return;
     parser->scanner = saved->scanner;
     parser->current = saved->current;
     parser->previous = saved->previous;
@@ -361,83 +362,119 @@ void xr_parser_stream_restore(Parser *parser, const XrParserStreamState *saved) 
 
 // Advance to next token
 void xr_parser_advance(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parser_advance: NULL parser");
-    parser->previous = parser->current;
+    if (xr_compile_state_copy(parser->state, &parser->previous, &parser->current,
+                              sizeof(Token)) != XR_COMPILE_RESOURCE_OK) return;
     track_bracket(parser, parser->previous.type);
 
     // Skip error tokens until valid token found
-    while (1) {
-        parser->current = xr_scanner_scan(&parser->scanner);
+    while (xr_parser_healthy(parser) && 1) {
+        do {
+            parser->current = xr_scanner_scan(&parser->scanner);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         if (parser->current.type != TK_ERROR)
             break;
 
         // TK_ERROR carries diagnostic text in error_message (L-03 contract).
         const char *msg = parser->current.error_message;
-        xr_parser_error_at_current(parser, msg ? msg : "lexical error");
+        do {
+            xr_parser_error_at_current(parser, msg ? msg : "lexical error");
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
     }
 }
 
 // Check if current token is of specified type
 int xr_parser_check(Parser *parser, XrTokenType type) {
+    if (!xr_parser_healthy(parser)) return type == TK_EOF;
     XR_DCHECK(parser != NULL, "parser_check: NULL parser");
     return parser->current.type == type;
 }
 
 // If current token matches, consume it and return true
 int xr_parser_match(Parser *parser, XrTokenType type) {
+    if (!xr_parser_healthy(parser)) return 0;
     if (!xr_parser_check(parser, type))
         return 0;
-    xr_parser_advance(parser);
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return 0;
+    } while (0);
     return 1;
 }
 
 // Consume token of specified type, or report error
 void xr_parser_consume(Parser *parser, XrTokenType type, const char *message) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parser_consume: NULL parser");
     if (parser->current.type == type) {
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         return;
     }
 
     // Better error when a keyword is used where an identifier is expected
     if (type == TK_NAME && parser->current.type >= TK_FIRST_KEYWORD &&
         parser->current.type <= TK_LAST_KEYWORD) {
-        xr_parser_error_expected_name(parser, message);
+        do {
+            xr_parser_error_expected_name(parser, message);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         return;
     }
 
-    xr_parser_error_at_current(parser, message);
+    do {
+        xr_parser_error_at_current(parser, message);
+        if (!xr_parser_healthy(parser)) return;
+    } while (0);
 }
 
 // Contextual keyword check: current token is TK_NAME with specific string content.
 bool xr_parser_check_name(Parser *parser, const char *name) {
+    if (!xr_parser_healthy(parser)) return false;
     if (parser->current.type != TK_NAME)
         return false;
-    int len = (int) strlen(name);
-    return parser->current.length == len && memcmp(parser->current.start, name, len) == 0;
+    int len = (int) xr_parser_string_length(parser, name);
+    if (!xr_parser_healthy(parser)) return false;
+    return parser->current.length == len && xr_parser_compare_bytes(parser, parser->current.start, name, len) == 0;
 }
 
 // Contextual keyword match: if current is TK_NAME matching name, consume and return true.
 bool xr_parser_match_name(Parser *parser, const char *name) {
+    if (!xr_parser_healthy(parser)) return false;
     if (!xr_parser_check_name(parser, name))
         return false;
-    xr_parser_advance(parser);
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     return true;
 }
 
 // Unified keyword-as-identifier error reporting.
 // context examples: "expected variable name", "expected field name", etc.
 void xr_parser_error_expected_name(Parser *parser, const char *context) {
+    if (!xr_parser_healthy(parser)) return;
     if (parser->current.type >= TK_FIRST_KEYWORD && parser->current.type <= TK_LAST_KEYWORD) {
         char buf[128];
         int len = parser->current.length;
         if (len > 60)
             len = 60;
-        snprintf(buf, sizeof(buf), "'%.*s' is a keyword and cannot be used as an identifier", len,
+        xr_parser_format(parser, buf, sizeof(buf), "'%.*s' is a keyword and cannot be used as an identifier", len,
                  parser->current.start);
-        xr_parser_error_at_current(parser, buf);
+        do {
+            xr_parser_error_at_current(parser, buf);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
     } else {
-        xr_parser_error_at_current(parser, context);
+        do {
+            xr_parser_error_at_current(parser, context);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
     }
 }
 
@@ -445,30 +482,43 @@ void xr_parser_error_expected_name(Parser *parser, const char *context) {
 // When a statement ends but the next token on the same line isn't a semicolon,
 // check if it's a known cross-language keyword before reporting generic ASI error.
 bool xr_parser_check_asi_hint(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return false;
     if (parser->current.type != TK_NAME)
         return false;
 
     const char *s = parser->current.start;
     int len = parser->current.length;
 
-    if (len == 3 && memcmp(s, "and", 3) == 0) {
-        xr_parser_error_at_current(parser,
+    if (len == 3 && xr_parser_compare_bytes(parser, s, "and", 3) == 0) {
+        do {
+            xr_parser_error_at_current(parser,
                                    "'and' is not an operator. Use '&&' for logical AND in Xray");
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return true;
     }
-    if (len == 2 && memcmp(s, "or", 2) == 0) {
-        xr_parser_error_at_current(parser,
+    if (len == 2 && xr_parser_compare_bytes(parser, s, "or", 2) == 0) {
+        do {
+            xr_parser_error_at_current(parser,
                                    "'or' is not an operator. Use '||' for logical OR in Xray");
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return true;
     }
-    if (len == 3 && memcmp(s, "not", 3) == 0) {
-        xr_parser_error_at_current(parser,
+    if (len == 3 && xr_parser_compare_bytes(parser, s, "not", 3) == 0) {
+        do {
+            xr_parser_error_at_current(parser,
                                    "'not' is not an operator. Use '!' for logical NOT in Xray");
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return true;
     }
-    if (len == 2 && memcmp(s, "do", 2) == 0) {
-        xr_parser_error_at_current(
+    if (len == 2 && xr_parser_compare_bytes(parser, s, "do", 2) == 0) {
+        do {
+            xr_parser_error_at_current(
             parser, "'do...while' is not supported. Use 'while (condition) { }' in Xray");
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return true;
     }
     return false;
@@ -479,6 +529,7 @@ bool xr_parser_check_asi_hint(Parser *parser) {
 // Set error callback for LSP integration
 void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback, void *user_data,
                                   int max_errors) {
+    if (!xr_parser_healthy(parser)) return;
     parser->error_callback = callback;
     parser->error_callback_data = user_data;
     parser->max_errors = max_errors;
@@ -487,6 +538,7 @@ void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
 
 // Report error at a specific token (shared implementation)
 static void xr_parser_error_at(Parser *parser, Token *token, const char *message) {
+    if (!xr_parser_healthy(parser)) return;
     if (parser->panic_mode)
         return;  // Avoid error cascade
 
@@ -501,25 +553,37 @@ static void xr_parser_error_at(Parser *parser, Token *token, const char *message
         return;
     }
 
-    xr_diag_print(XR_DIAG_ERROR, 0, message, parser->source_file, token->line, token->column,
-                  token->type == TK_EOF ? 0 : token->length, parser->scanner.source, token->start);
+    xr_parser_diagnostic_print(parser, XR_DIAG_ERROR, 0, message, token->line, token->column,
+                               token->type == TK_EOF ? 0 : token->length, token->start);
 }
 
 // Report error at current token
 void xr_parser_error_at_current(Parser *parser, const char *message) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "error_at_current: NULL parser");
-    xr_parser_error_at(parser, &parser->current, message);
+    do {
+        xr_parser_error_at(parser, &parser->current, message);
+        if (!xr_parser_healthy(parser)) return;
+    } while (0);
 }
 
 // Report error at previous token
 void xr_parser_error_at_previous(Parser *parser, const char *message) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "error_at_previous: NULL parser");
-    xr_parser_error_at(parser, &parser->previous, message);
+    do {
+        xr_parser_error_at(parser, &parser->previous, message);
+        if (!xr_parser_healthy(parser)) return;
+    } while (0);
 }
 
 // Report error at current position
 void xr_parser_error(Parser *parser, const char *message) {
-    xr_parser_error_at_current(parser, message);
+    if (!xr_parser_healthy(parser)) return;
+    do {
+        xr_parser_error_at_current(parser, message);
+        if (!xr_parser_healthy(parser)) return;
+    } while (0);
 }
 
 // Emit a "removed syntax" diagnostic with help and explanatory note.
@@ -531,6 +595,7 @@ void xr_parser_error(Parser *parser, const char *message) {
 // `note`  is the help/explanation that follows the underline.
 void xr_parser_error_coded_note(Parser *parser, Token *token, int code, const char *title,
                                 const char *note) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "error_coded_note: NULL parser");
     XR_DCHECK(token != NULL, "error_coded_note: NULL token");
     XR_DCHECK(title != NULL, "error_coded_note: NULL title");
@@ -549,11 +614,11 @@ void xr_parser_error_coded_note(Parser *parser, Token *token, int code, const ch
     }
 
     int tok_len = token->type == TK_EOF ? 0 : token->length;
-    xr_diag_print(XR_DIAG_ERROR, code, title, parser->source_file, token->line, token->column,
-                  tok_len, parser->scanner.source, token->start);
+    xr_parser_diagnostic_print(parser, XR_DIAG_ERROR, code, title, token->line, token->column,
+                               tok_len, token->start);
     if (note) {
-        xr_diag_print(XR_DIAG_NOTE, 0, note, parser->source_file, token->line, token->column,
-                      tok_len, parser->scanner.source, token->start);
+        xr_parser_diagnostic_print(parser, XR_DIAG_NOTE, 0, note, token->line, token->column,
+                                   tok_len, token->start);
     }
 }
 
@@ -569,6 +634,7 @@ void xr_parser_error_coded_note(Parser *parser, Token *token, int code, const ch
  * 3. Track bracket depth to avoid over-skipping
  */
 void xr_parser_synchronize(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parser_synchronize: NULL parser");
     parser->panic_mode = 0;
 
@@ -577,7 +643,7 @@ void xr_parser_synchronize(Parser *parser) {
     int paren_depth = 0;    // ( )
     int bracket_depth = 0;  // [ ]
 
-    while (parser->current.type != TK_EOF) {
+    while (xr_parser_healthy(parser) && parser->current.type != TK_EOF) {
         // Check if previous was semicolon
         if (parser->previous.type == TK_SEMICOLON) {
             return;
@@ -651,13 +717,17 @@ void xr_parser_synchronize(Parser *parser) {
             }
         }
 
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
     }
 }
 
 void xr_parser_skip_invalid_construct(Parser *parser, int start_line,
                                       XrParserRecoveryBoundaryFn is_recovery_boundary,
                                       bool stop_at_rbrace) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "skip_invalid_construct: NULL parser");
 
     int brace_depth = 0;
@@ -666,12 +736,15 @@ void xr_parser_skip_invalid_construct(Parser *parser, int start_line,
     bool saw_body = false;
     bool consumed = false;
 
-    while (!xr_parser_check(parser, TK_EOF)) {
+    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_EOF)) {
         if (!saw_body && brace_depth == 0 && paren_depth == 0 && bracket_depth == 0) {
             if (stop_at_rbrace && xr_parser_check(parser, TK_RBRACE))
                 break;
             if (xr_parser_check(parser, TK_SEMICOLON)) {
-                xr_parser_advance(parser);
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return;
+                } while (0);
                 break;
             }
             if (consumed && parser->current.line > start_line && is_recovery_boundary &&
@@ -681,7 +754,10 @@ void xr_parser_skip_invalid_construct(Parser *parser, int start_line,
         }
 
         XrTokenType type = parser->current.type;
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         consumed = true;
 
         switch (type) {
@@ -723,11 +799,12 @@ void xr_parser_skip_invalid_construct(Parser *parser, int start_line,
 /* ========== Expression Parsing ========== */
 
 static void skip_invalid_inline_attribute_tail(Parser *parser, int start_line) {
+    if (!xr_parser_healthy(parser)) return;
     int brace_depth = 0;
     int paren_depth = 0;
     int bracket_depth = 0;
 
-    while (!xr_parser_check(parser, TK_EOF)) {
+    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_EOF)) {
         if (brace_depth == 0 && paren_depth == 0 && bracket_depth == 0) {
             if (xr_parser_check(parser, TK_SEMICOLON) || parser->current.line > start_line) {
                 return;
@@ -744,7 +821,10 @@ static void skip_invalid_inline_attribute_tail(Parser *parser, int start_line) {
                     return;
                 }
                 brace_depth--;
-                xr_parser_advance(parser);
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return;
+                } while (0);
                 if (brace_depth == 0 && paren_depth == 0 && bracket_depth == 0) {
                     return;
                 }
@@ -771,20 +851,29 @@ static void skip_invalid_inline_attribute_tail(Parser *parser, int start_line) {
                 break;
         }
 
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
     }
 }
 
 // Keep speculative state out of ordinary expression recursion frames. A full
 // Parser snapshot is needed only when the token stream can start type arguments.
 static AstNode *try_generic_suffix(Parser *parser, AstNode *left) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "try_generic_suffix: NULL parser");
-    Parser checkpoint = *parser;
+    Parser checkpoint;
+    if (xr_compile_state_copy(parser->state, &checkpoint, parser, sizeof(checkpoint)) != XR_COMPILE_RESOURCE_OK) return NULL;
     int error_count = parser->error_count;
-    xr_parser_advance(parser);
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     AstNode *result = xr_parse_try_generic_call_after_lt(parser, left);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (!result && parser->error_count == error_count)
-        *parser = checkpoint;
+        if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
     return result;
 }
 
@@ -792,6 +881,7 @@ static AstNode *try_generic_suffix(Parser *parser, AstNode *left) {
 // Inner implementation; the public xr_parse_precedence wraps this with the
 // recursion-depth guard.
 static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_precedence: NULL parser");
     // Special handling for regex literals starting with escape sequences like /\d+/
     // When current is TK_SLASH, try regex scanning first to avoid TK_ERROR from backslash
@@ -799,40 +889,55 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
         const char *slash_pos = parser->current.start;
         parser->scanner.current = slash_pos;
         Token regex_token = xr_scanner_try_regex(&parser->scanner);
+        if (!xr_parser_healthy(parser)) return NULL;
 
         if (regex_token.type == TK_LITERAL_REGEX) {
             parser->previous = regex_token;
-            parser->current = xr_scanner_scan(&parser->scanner);
+            do {
+                parser->current = xr_scanner_scan(&parser->scanner);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_parse_regex_literal(parser);
         }
         // Not a regex, restore scanner and continue normal parsing
         parser->scanner.current = slash_pos;
     }
 
-    xr_parser_advance(parser);
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     PrefixParseFn prefix_rule = xr_get_rule(parser->previous.type)->prefix;
+    if (!xr_parser_healthy(parser)) return NULL;
     if (prefix_rule == NULL) {
         if (parser->previous.type == TK_AT) {
-            xr_parser_error_at_previous(
+            do {
+                xr_parser_error_at_previous(
                 parser,
                 "attributes can only annotate declaration items; use 'fn name(...)' for function "
                 "item attributes");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             skip_invalid_inline_attribute_tail(parser, parser->previous.line);
         } else {
-            xr_parser_error(parser, "expected expression");
+            do {
+                xr_parser_error(parser, "expected expression");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
         return NULL;
     }
 
     AstNode *left = prefix_rule(parser);
+    if (!xr_parser_healthy(parser)) return NULL;
 
     if (left == NULL) {
         return NULL;
     }
 
     // Process infix expressions by precedence
-    for (;;) {
+    for (; xr_parser_step(parser) && (true);) {
         // L-04 statement boundary: a line break ends the expression when the
         // new line could just as well start a statement. Checked before the
         // generic-call probe below because `<` has no prefix role and is
@@ -844,6 +949,7 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
             precedence <= PREC_CALL) {
             int before_error_count = parser->error_count;
             AstNode *generic_call = try_generic_suffix(parser, left);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (generic_call) {
                 left = generic_call;
                 continue;
@@ -857,12 +963,19 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
             break;
 
         const ParseRule *rule = xr_get_rule(parser->current.type);
+        if (!xr_parser_healthy(parser)) return NULL;
 
         if (rule->infix == NULL) {
             break;
         }
-        xr_parser_advance(parser);
-        left = rule->infix(parser, left);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            left = rule->infix(parser, left);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     return left;
@@ -872,19 +985,25 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
 // All expression recursion (parens, unary, binary, ternary, member/index
 // chains) funnels through here, so one guard covers the whole expression grammar.
 AstNode *xr_parse_precedence(Parser *parser, Precedence precedence) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_precedence: NULL parser");
     if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
         parser->recursion_depth--;
-        xr_parser_error(parser, "expression nesting too deep (max 1000 levels)");
+        do {
+            xr_parser_error(parser, "expression nesting too deep (max 1000 levels)");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
     AstNode *result = parse_precedence_inner(parser, precedence);
+    if (!xr_parser_healthy(parser)) return NULL;
     parser->recursion_depth--;
     return result;
 }
 
 // Parse expression (entry point)
 AstNode *xr_parse_expression(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_expression: NULL parser");
     return xr_parse_precedence(parser, PREC_ASSIGNMENT);  // Start from lowest precedence
 }
@@ -896,7 +1015,9 @@ AstNode *xr_parse_expression(Parser *parser) {
 // destructure-assignment `(a, b) = (b, a)` is the canonical form and
 // is handled by xr_parse_assignment via the AST_TUPLE_LITERAL branch.
 AstNode *xr_parse_expr_statement(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     AstNode *inc_dec = xr_parse_standalone_inc_dec(parser, false);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (inc_dec)
         return inc_dec;
 
@@ -906,6 +1027,7 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
 
     // Use PREC_TERNARY to avoid parsing assignment
     AstNode *first_expr = xr_parse_precedence(parser, PREC_TERNARY);
+    if (!xr_parser_healthy(parser)) return NULL;
 
     // Recoverable parsing may reject the prefix expression while leaving an
     // assignment-like token (for example the removed `=>` match arm syntax)
@@ -918,18 +1040,28 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     // form. Point users at the tuple destructure equivalent instead
     // of letting it fall through with a generic error.
     if (xr_parser_check(parser, TK_COMMA)) {
-        xr_parser_error(parser, "bare multi-value assignment is not supported; "
+        do {
+            xr_parser_error(parser, "bare multi-value assignment is not supported; "
                                 "use tuple destructure: (a, b) = (b, a)");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
     // Regular expression statement, check for assignment operators
     if (xr_get_rule(parser->current.type)->precedence == PREC_ASSIGNMENT) {
-        while (xr_get_rule(parser->current.type)->precedence >= PREC_ASSIGNMENT) {
-            xr_parser_advance(parser);
+        while (xr_parser_healthy(parser) && xr_get_rule(parser->current.type)->precedence >= PREC_ASSIGNMENT) {
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             InfixParseFn infix_rule = xr_get_rule(parser->previous.type)->infix;
+            if (!xr_parser_healthy(parser)) return NULL;
             if (infix_rule) {
-                first_expr = infix_rule(parser, first_expr);
+                do {
+                    first_expr = infix_rule(parser, first_expr);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             }
         }
     }
@@ -946,40 +1078,58 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     // L-04's loud half: an expression that cannot do anything is never a
     // statement the author meant to write — most often it is a continuation
     // line that the statement-boundary rule correctly refused to glue on.
-    xr_parser_reject_effectless_expr_stmt(parser, first_expr, &stmt_start);
+    do {
+        xr_parser_reject_effectless_expr_stmt(parser, first_expr, &stmt_start);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     return xr_ast_expr_stmt(parser->compiler_session, first_expr, parser->previous.line);
 }
 
 AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (!xr_parser_check(parser, TK_NAME))
         return NULL;
 
-    Parser checkpoint = *parser;
-    xr_parser_advance(parser);
+    Parser checkpoint;
+    if (xr_compile_state_copy(parser->state, &checkpoint, parser, sizeof(checkpoint)) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     Token name = parser->previous;
     if (!xr_parser_check(parser, TK_INC) && !xr_parser_check(parser, TK_DEC)) {
-        *parser = checkpoint;
+        if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
         return NULL;
     }
 
     XrTokenType op = parser->current.type;
     Token op_token = parser->current;
     char *var_name = (char *) ast_alloc(parser->compiler_session, (size_t) name.length + 1);
-    memcpy(var_name, name.start, (size_t) name.length);
-    var_name[name.length] = '\0';
+    if (!xr_parser_healthy(parser)) return NULL;
+    do { if (!ast_copy(parser->compiler_session, var_name, name.start, (size_t) name.length)) return NULL; } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; var_name[name.length] = '\0'; } while (0);
 
-    xr_parser_advance(parser);
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     if (for_step) {
         if (!xr_parser_check(parser, TK_RPAREN)) {
-            xr_parser_error_at_current(parser,
+            do {
+                xr_parser_error_at_current(parser,
                                        "postfix ++/-- for-step must be the entire step expression");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
     } else if (!xr_parser_check(parser, TK_SEMICOLON) && !xr_parser_check(parser, TK_RBRACE) &&
                !xr_parser_check(parser, TK_EOF) && parser->current.line == op_token.line &&
                !xr_parser_check_asi_hint(parser)) {
-        xr_parser_error_at_current(parser, "postfix ++/-- must be a complete standalone statement");
+        do {
+            xr_parser_error_at_current(parser, "postfix ++/-- must be a complete standalone statement");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     return op == TK_INC ? xr_ast_inc(parser->compiler_session, var_name, name.line)
@@ -987,21 +1137,29 @@ AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step) {
 }
 
 bool xr_lbrace_starts_destructure_assignment(Parser *parser) {
-    Parser probe = *parser;
+    if (!xr_parser_healthy(parser)) return false;
+    Parser probe;
+    if (xr_compile_state_copy(parser->state, &probe, parser, sizeof(probe)) != XR_COMPILE_RESOURCE_OK) return false;
     int depth = 0;
 
-    while (!xr_parser_check(&probe, TK_EOF)) {
+    while (xr_parser_healthy(parser) && !xr_parser_check(&probe, TK_EOF)) {
         if (xr_parser_check(&probe, TK_LBRACE)) {
             depth++;
         } else if (xr_parser_check(&probe, TK_RBRACE)) {
             depth--;
-            xr_parser_advance(&probe);
+            do {
+                xr_parser_advance(&probe);
+                if (!xr_parser_healthy(parser)) return false;
+            } while (0);
             if (depth == 0)
                 return xr_parser_check(&probe, TK_ASSIGN);
             continue;
         }
 
-        xr_parser_advance(&probe);
+        do {
+            xr_parser_advance(&probe);
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
     }
 
     return false;
@@ -1009,18 +1167,25 @@ bool xr_lbrace_starts_destructure_assignment(Parser *parser) {
 
 // Parse statement
 AstNode *xr_parse_statement(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (parser->current.type == TK_NAME) {
-        Parser checkpoint = *parser;
+        Parser checkpoint;
+        if (xr_compile_state_copy(parser->state, &checkpoint, parser, sizeof(checkpoint)) != XR_COMPILE_RESOURCE_OK) return NULL;
         Token label_tok = parser->current;
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         if (xr_parser_match(parser, TK_COLON)) {
             if (parser->current.type == TK_FOR || parser->current.type == TK_WHILE) {
                 char *label =
                     (char *) ast_alloc(parser->compiler_session, (size_t) label_tok.length + 1);
-                memcpy(label, label_tok.start, (size_t) label_tok.length);
-                label[label_tok.length] = '\0';
+                if (!xr_parser_healthy(parser)) return NULL;
+                do { if (!ast_copy(parser->compiler_session, label, label_tok.start, (size_t) label_tok.length)) return NULL; } while (0);
+                do { if (!ast_work(parser->compiler_session, 1)) return NULL; label[label_tok.length] = '\0'; } while (0);
 
                 AstNode *stmt = xr_parse_statement(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (!stmt)
                     return NULL;
                 switch (stmt->type) {
@@ -1034,7 +1199,10 @@ AstNode *xr_parse_statement(Parser *parser) {
                         stmt->as.for_in_stmt.label = label;
                         return stmt;
                     default:
-                        xr_parser_error_at_current(parser, "loop labels can only annotate loops");
+                        do {
+                            xr_parser_error_at_current(parser, "loop labels can only annotate loops");
+                            if (!xr_parser_healthy(parser)) return NULL;
+                        } while (0);
                         return NULL;
                 }
             }
@@ -1042,11 +1210,14 @@ AstNode *xr_parse_statement(Parser *parser) {
                 // The name and ':' are already known to form an invalid loop
                 // label. Keep them consumed so recoverable parsing cannot
                 // revisit the same token pair indefinitely.
-                xr_parser_error_at_current(parser, "loop labels can only annotate loops");
+                do {
+                    xr_parser_error_at_current(parser, "loop labels can only annotate loops");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return NULL;
             }
         }
-        *parser = checkpoint;
+        if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
     }
 
     // Control flow
@@ -1058,12 +1229,19 @@ AstNode *xr_parse_statement(Parser *parser) {
     }
     if (parser->current.type == TK_FOR) {
         // Lookahead: for-in vs traditional for
-        Parser checkpoint = *parser;
+        Parser checkpoint;
+        if (xr_compile_state_copy(parser->state, &checkpoint, parser, sizeof(checkpoint)) != XR_COMPILE_RESOURCE_OK) return NULL;
 
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         if (xr_parser_check(parser, TK_LPAREN)) {
-            xr_parser_advance(parser);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
 
             // Try to identify for-in pattern (support _ as blank
             // identifier and `(...)` tuple destructuring heads).
@@ -1071,6 +1249,7 @@ AstNode *xr_parse_statement(Parser *parser) {
             // better errors.
             bool might_be_forin =
                 xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_UNDERSCORE);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (!might_be_forin && parser->current.type >= TK_FIRST_KEYWORD &&
                 parser->current.type <= TK_LAST_KEYWORD) {
                 // Keyword used as loop variable — route to for-in for proper error
@@ -1082,54 +1261,78 @@ AstNode *xr_parse_statement(Parser *parser) {
                  * token after `)`. We do not interpret the contents;
                  * any malformed pattern is reported by the destructure
                  * parser when we re-enter from xr_parse_for_in_statement. */
-                xr_parser_advance(parser);
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 int depth = 1;
-                while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
+                while (xr_parser_healthy(parser) && depth > 0 && !xr_parser_check(parser, TK_EOF)) {
                     if (xr_parser_check(parser, TK_LPAREN))
                         depth++;
                     else if (xr_parser_check(parser, TK_RPAREN))
                         depth--;
                     if (depth == 0) {
-                        xr_parser_advance(parser);
+                        do {
+                            xr_parser_advance(parser);
+                            if (!xr_parser_healthy(parser)) return NULL;
+                        } while (0);
                         break;
                     }
-                    xr_parser_advance(parser);
+                    do {
+                        xr_parser_advance(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 }
                 if (xr_parser_check(parser, TK_IN)) {
-                    *parser = checkpoint;
+                    if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
                     return xr_parse_for_in_statement(parser);
                 }
             } else if (might_be_forin) {
-                xr_parser_advance(parser);
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
 
                 // Check for comma (key-value pattern)
                 if (xr_parser_check(parser, TK_COMMA)) {
-                    xr_parser_advance(parser);
+                    do {
+                        xr_parser_advance(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     if (xr_parser_check(parser, TK_NAME) ||
                         xr_parser_check(parser, TK_UNDERSCORE)) {
-                        xr_parser_advance(parser);
+                        do {
+                            xr_parser_advance(parser);
+                            if (!xr_parser_healthy(parser)) return NULL;
+                        } while (0);
                     }
                 }
 
                 // Skip optional type annotation
                 if (xr_parser_check(parser, TK_COLON)) {
-                    xr_parser_advance(parser);
-                    while (!xr_parser_check(parser, TK_IN) && !xr_parser_check(parser, TK_RPAREN) &&
-                           !xr_parser_check(parser, TK_EOF)) {
+                    do {
                         xr_parser_advance(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
+                    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_IN) && !xr_parser_check(parser, TK_RPAREN) &&
+                           !xr_parser_check(parser, TK_EOF)) {
+                        do {
+                            xr_parser_advance(parser);
+                            if (!xr_parser_healthy(parser)) return NULL;
+                        } while (0);
                     }
                 }
 
                 // Check for 'in'
                 if (xr_parser_check(parser, TK_IN)) {
-                    *parser = checkpoint;
+                    if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
                     return xr_parse_for_in_statement(parser);
                 }
             }
         }
 
         // Otherwise traditional for loop
-        *parser = checkpoint;
+        if (xr_compile_state_copy(parser->state, parser, &checkpoint, sizeof(*parser)) != XR_COMPILE_RESOURCE_OK) return NULL;
         return xr_parse_for_statement(parser);
     }
     if (parser->current.type == TK_BREAK) {
@@ -1159,409 +1362,19 @@ AstNode *xr_parse_statement(Parser *parser) {
 
     // Prefix increment/decrement not supported (use postfix x++, x--)
     if (parser->current.type == TK_INC || parser->current.type == TK_DEC) {
-        xr_parser_error_at_current(parser,
+        do {
+            xr_parser_error_at_current(parser,
                                    "prefix ++/-- not supported, use postfix form (x++, x--)");
-        xr_parser_advance(parser); /* consume ++/-- so the parser can recover */
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0); /* consume ++/-- so the parser can recover */
         return NULL;
     }
 
     return xr_parse_expr_statement(parser);
-}
-
-/* ========== Parser Main Interface ========== */
-
-// Initialize parser
-// arena: optional arena for AST allocation (NULL = use malloc)
-void xr_parser_init(Parser *parser, XrCompilerSession *session, const char *source,
-                    const char *source_file, XrArena *arena) {
-    XR_DCHECK(parser != NULL, "parser_init: NULL parser");
-    XR_DCHECK(session != NULL, "parser_init: NULL compiler session");
-    XR_DCHECK(source != NULL, "parser_init: NULL source");
-    xr_parser_init_internal(parser, session, source, source_file, arena, false);
-}
-
-// Internal init with trivia collection option
-static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, const char *source,
-                                    const char *source_file, XrArena *arena, bool collect_trivia) {
-    XR_CHECK(session != NULL, "xr_parser_init: NULL compiler session");
-    parser->compiler_session = session;
-    if (parser->compiler_session && arena) {
-        xr_compiler_session_set_current_arena(parser->compiler_session, arena);
-        if (!xr_compiler_session_string_pool(parser->compiler_session)) {
-            XrCompileStringPool *pool = xr_string_pool_new(arena);
-            xr_compiler_session_set_string_pool(parser->compiler_session, pool);
-        }
-    }
-    parser->arena = arena;
-    parser->had_error = 0;
-    parser->panic_mode = 0;
-    parser->source_file = source_file;
-
-    xr_scanner_init_with_trivia(&parser->scanner, source, collect_trivia);
-
-    memset(&parser->current, 0, sizeof(parser->current));
-    parser->current.type = TK_ERROR;
-    memset(&parser->previous, 0, sizeof(parser->previous));
-    parser->previous.type = TK_ERROR;
-
-    parser->type_scope = xr_type_scope_new(NULL);
-
-    // Initialize error callback fields
-    parser->error_callback = NULL;
-    parser->error_callback_data = NULL;
-    parser->error_count = 0;
-    parser->max_errors = 0;
-
-    parser->parsing_extern_fn = false;
-    parser->scope_depth = 0;
-    parser->recursion_depth = 0;
-    parser->bracket_bits = 0;
-    parser->bracket_depth = 0;
-    parser->match_arm_body_depth = 0;
-    parser->expr_value_observed = false;
-    parser->match_value_block_pending = false;
-    parser->block_tail_value_observed = false;
-    parser->parsing_pattern = false;
-    parser->tuple_head_sequence = 0;
-}
-
-// Allocate and install a new arena on a toolchain compiler session.
-// The returned arena pointer is heap-allocated (xr_malloc) so it outlives
-// the stack frame; its memory is reclaimed by xr_program_destroy.
-static XrArena *xr_parse_setup_arena(XrCompilerSession *session, const char *source_file,
-                                     XrCompilerSessionScope *scope) {
-    XrArena *arena = (XrArena *) xr_malloc(sizeof(XrArena));
-    XR_CHECK(arena != NULL, "xr_parse: failed to allocate parse arena");
-    xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
-    XR_CHECK(xr_compiler_session_push_arena(session, arena, source_file, scope),
-             "xr_parse: failed to enter compiler session arena");
-    return arena;
-}
-
-// Restore previous arena on failure, destroying the owned arena.
-static void xr_parse_restore_session(XrCompilerSessionScope *scope) {
-    xr_compiler_session_pop_arena(scope);
-}
-
-static void xr_parse_discard_arena(XrArena *owned, XrCompilerSessionScope *scope) {
-    xr_parse_restore_session(scope);
-    xr_arena_destroy(owned);
-    xr_free(owned);
-}
-
-// Parse source code, return AST (main entry)
-AstNode *xr_parse(XrCompilerSession *session, const char *source) {
-    XR_DCHECK(source != NULL, "xr_parse: NULL source");
-    return xr_parse_with_source(session, source, NULL);
-}
-
-// Parse one REPL input unit: identical to xr_parse except that expression
-// statements are value-observing, so E0208 stays silent. See the field comment
-// on Parser::expr_value_observed.
-AstNode *xr_parse_repl_unit(XrCompilerSession *session, const char *source) {
-    XR_DCHECK(source != NULL, "xr_parse_repl_unit: NULL source");
-    return xr_parse_program(session, source, "<repl>", /*expr_value_observed=*/true);
-}
-
-// Parse source code with filename, return AST.
-// Creates and owns a dedicated arena; ownership is transferred to the returned
-// program node. xr_program_destroy on the returned node releases all memory.
-AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
-                              const char *source_file) {
-    return xr_parse_program(session, source, source_file, /*expr_value_observed=*/false);
-}
-
-// Shared body of xr_parse_with_source / xr_parse_repl_unit. `expr_value_observed`
-// selects whether a bare expression statement is dead code (scripts, modules) or
-// the unit's reported result (REPL).
-static AstNode *xr_parse_program(XrCompilerSession *session, const char *source,
-                                 const char *source_file, bool expr_value_observed) {
-    XR_DCHECK(session != NULL, "xr_parse_program: NULL compiler session");
-    XR_DCHECK(source != NULL, "xr_parse_program: NULL source");
-
-    XrCompilerSessionScope parse_scope;
-    XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
-
-    Parser parser;
-    xr_parser_init(&parser, session, source, source_file, arena);
-    parser.expr_value_observed = expr_value_observed;
-
-// Default max errors for normal compilation
-#define XR_PARSE_MAX_ERRORS 20
-
-    AstNode *program = xr_ast_program(session);
-
-    xr_parser_advance(&parser);
-
-    // Parse declarations until EOF
-    while (!xr_parser_check(&parser, TK_EOF)) {
-        // Stop if too many errors
-        if (parser.error_count >= XR_PARSE_MAX_ERRORS) {
-            break;
-        }
-
-        // Recover from panic mode to continue parsing
-        if (parser.panic_mode) {
-            xr_parser_synchronize(&parser);
-            if (xr_parser_check(&parser, TK_EOF))
-                break;
-        }
-
-        int stmt_line = parser.current.line;
-
-        AstNode *decl = xr_parse_declaration(&parser);
-        if (decl != NULL) {
-            xr_ast_program_add(session, program, decl);
-        }
-
-        // Smart semicolon handling
-        if (xr_parser_check(&parser, TK_SEMICOLON)) {
-            xr_parser_advance(&parser);
-        } else {
-            // TK_QUESTION and TK_COLON may be part of ternary, not statement separator
-            if (!xr_parser_check(&parser, TK_EOF) && parser.current.line == stmt_line &&
-                parser.current.type != TK_QUESTION && parser.current.type != TK_COLON) {
-                if (!xr_parser_check_asi_hint(&parser)) {
-                    xr_parser_error_at_current(
-                        &parser, "multiple statements on same line must be separated by semicolon");
-                }
-            }
-        }
-    }
-
-    // Print error summary
-    if (parser.error_count > 0) {
-        xr_diag_print_summary(source_file, parser.error_count, 0,
-                              parser.error_count >= XR_PARSE_MAX_ERRORS);
-    }
-
-    xr_type_scope_free(parser.type_scope);
-
-    if (parser.had_error) {
-        xr_parse_discard_arena(arena, &parse_scope);
-        return NULL;
-    }
-
-    // Transfer arena ownership to the program node.
-    program->as.program.arena = arena;
-    program->as.program.owns_arena = true;
-    xr_parse_restore_session(&parse_scope);
-    return program;
-}
-
-// Parse source code with trivia collection (for formatter)
-AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
-                              const char *source_file) {
-    XR_DCHECK(session != NULL, "xr_parse_with_trivia: NULL compiler session");
-    XrCompilerSessionScope parse_scope;
-    XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
-
-    Parser parser;
-    xr_parser_init_internal(&parser, session, source, source_file, arena, true);
-
-    AstNode *program = xr_ast_program(session);
-
-    xr_parser_advance(&parser);
-
-    // Attach file-level leading trivia to the program node
-    if (parser.current.leading_trivia) {
-        program->leading_comments = parser.current.leading_trivia;
-        parser.current.leading_trivia = NULL;
-    }
-
-    // Parse declarations until EOF
-    while (!xr_parser_check(&parser, TK_EOF)) {
-        // Stop if too many errors
-        if (parser.error_count >= XR_PARSE_MAX_ERRORS) {
-            break;
-        }
-
-        // Recover from panic mode to continue parsing
-        if (parser.panic_mode) {
-            xr_parser_synchronize(&parser);
-            if (xr_parser_check(&parser, TK_EOF))
-                break;
-        }
-
-        int stmt_line = parser.current.line;
-
-        // Capture leading trivia before parsing declaration
-        XrTrivia *leading_trivia = parser.current.leading_trivia;
-        parser.current.leading_trivia = NULL;
-
-        AstNode *decl = xr_parse_declaration(&parser);
-        if (decl != NULL) {
-            // Attach leading trivia to the declaration
-            if (leading_trivia) {
-                decl->leading_comments = leading_trivia;
-            }
-        } else if (leading_trivia) {
-            // Free trivia if declaration failed
-            xr_trivia_free_chain(leading_trivia);
-        }
-
-        // Smart semicolon handling
-        if (xr_parser_check(&parser, TK_SEMICOLON)) {
-            xr_parser_advance(&parser);
-        } else {
-            if (!xr_parser_check(&parser, TK_EOF) && parser.current.line == stmt_line &&
-                parser.current.type != TK_QUESTION && parser.current.type != TK_COLON) {
-                if (!xr_parser_check_asi_hint(&parser)) {
-                    xr_parser_error_at_current(
-                        &parser, "multiple statements on same line must be separated by semicolon");
-                }
-            }
-        }
-
-        // L-06: capture trailing AFTER smart-semicolon handling. The
-        // inline comment overwhelmingly lives on the trailing `;` (or
-        // closing `}` for block-bodied decls); waiting until parser
-        // .previous reflects that final token captures it correctly.
-        if (decl != NULL && parser.previous.trailing_trivia) {
-            decl->trailing_comments = parser.previous.trailing_trivia;
-            parser.previous.trailing_trivia = NULL;
-        }
-        if (decl != NULL) {
-            xr_ast_program_add(session, program, decl);
-        }
-    }
-
-    xr_type_scope_free(parser.type_scope);
-
-    if (parser.had_error) {
-        xr_parse_discard_arena(arena, &parse_scope);
-        return NULL;
-    }
-
-    // Transfer arena ownership to the program node.
-    program->as.program.arena = arena;
-    program->as.program.owns_arena = true;
-    xr_parse_restore_session(&parse_scope);
-    return program;
-}
-
-// Parse a single expression as a self-contained translation unit (REPL/DAP).
-//
-// Returns an AST_PROGRAM node whose first child is the parsed expression,
-// so that callers release everything uniformly via xr_program_destroy().
-// Returns NULL on parse error (arena is auto-discarded).
-//
-// Example:
-//   AstNode *prog = xr_parse_expression_string(session, "a + b * 2", "dap-expression");
-//   if (!prog) { /* report error */ return; }
-//   AstNode *expr = prog->as.program.statements[0];
-//   ... evaluate expr ...
-//   xr_program_destroy(prog);
-AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *source,
-                                    const char *source_file) {
-    XR_DCHECK(session != NULL, "xr_parse_expression_string: NULL compiler session");
-    XR_DCHECK(source != NULL, "xr_parse_expression_string: NULL source");
-
-    XrCompilerSessionScope parse_scope;
-    XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
-
-    Parser parser;
-    xr_parser_init(&parser, session, source, source_file, arena);
-
-    AstNode *program = xr_ast_program(session);
-
-    xr_parser_advance(&parser);
-
-    AstNode *expr = xr_parse_expression(&parser);
-    if (expr != NULL) {
-        xr_ast_program_add(session, program, expr);
-    }
-
-    xr_type_scope_free(parser.type_scope);
-    parser.type_scope = NULL;
-
-    if (parser.had_error || expr == NULL) {
-        xr_parse_discard_arena(arena, &parse_scope);
-        return NULL;
-    }
-
-    // Transfer arena ownership to the program node.
-    program->as.program.arena = arena;
-    program->as.program.owns_arena = true;
-    xr_parse_restore_session(&parse_scope);
-    return program;
-}
-
-// Parse with error recovery (for LSP)
-// Returns partial AST even if there are errors
-// Errors are reported via callback
-AstNode *xr_parse_recoverable(Parser *parser) {
-    if (!parser || !parser->compiler_session) {
-        xr_log_warning("parser", "parse_recoverable: invalid parser");
-        return NULL;
-    }
-
-    if (parser->compiler_session && parser->arena)
-        xr_compiler_session_set_current_arena(parser->compiler_session, parser->arena);
-
-    AstNode *program = xr_ast_program(parser->compiler_session);
-    if (!program) {
-        xr_log_warning("parser", "parse_recoverable: failed to create program node");
-        return NULL;
-    }
-
-    xr_parser_advance(parser);
-
-    int iteration = 0;
-    (void) iteration;
-    // Parse declarations until EOF or max errors reached
-    while (!xr_parser_check(parser, TK_EOF)) {
-        iteration++;
-        // Check max errors
-        if (parser->max_errors > 0 && parser->error_count >= parser->max_errors) {
-            break;
-        }
-
-        // Recover from panic mode
-        if (parser->panic_mode) {
-            xr_parser_synchronize(parser);
-            if (xr_parser_check(parser, TK_EOF))
-                break;
-        }
-
-        int stmt_line = parser->current.line;
-        const char *stmt_start = parser->current.start;
-
-        AstNode *decl = xr_parse_declaration(parser);
-        if (decl != NULL) {
-            xr_ast_program_add(parser->compiler_session, program, decl);
-        }
-
-        // Smart semicolon handling
-        if (xr_parser_check(parser, TK_SEMICOLON)) {
-            xr_parser_advance(parser);
-        } else {
-            if (!xr_parser_check(parser, TK_EOF) && parser->current.line == stmt_line &&
-                parser->current.type != TK_QUESTION && parser->current.type != TK_COLON) {
-                if (!xr_parser_check_asi_hint(parser)) {
-                    xr_parser_error_at_current(
-                        parser, "multiple statements on same line must be separated by semicolon");
-                }
-                // Don't break - continue parsing for more errors
-            }
-        }
-
-        // Last-resort progress guarantee for the recoverable/LSP entrypoint.
-        // Local recovery normally consumes or synchronizes tokens, but a
-        // malformed construct must never be allowed to pin this loop.
-        if (parser->current.start == stmt_start && decl == NULL && !parser->panic_mode &&
-            !xr_parser_check(parser, TK_EOF) && !xr_parser_check(parser, TK_RBRACE)) {
-            xr_parser_advance(parser);
-        }
-
-        // Don't break on error - continue to find more errors
-    }
-
-    xr_type_scope_free(parser->type_scope);
-    parser->type_scope = NULL;
-
-    // Return partial AST even if there were errors
-    return program;
 }
 
 /* ========== Variable Parsing ========== */
@@ -1572,6 +1385,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
 // Returns: number of type args parsed, 0 means not a generic call/type namespace.
 static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, int capacity,
                                        bool allow_dot_follow) {
+    if (!xr_parser_healthy(parser)) return 0;
     // disambiguation: if '<' has leading space, treat as comparison
     if (parser->current.type == TK_LT && parser->current.has_leading_space) {
         return 0;  // Space before '<' means comparison, not generic
@@ -1579,6 +1393,7 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
 
     // Save parser state for rollback
     XrParserStreamState saved_stream = xr_parser_stream_save(parser);
+    if (!xr_parser_healthy(parser)) return 0;
     int saved_had_error = parser->had_error;
     int saved_panic_mode = parser->panic_mode;
     int saved_error_count = parser->error_count;
@@ -1599,6 +1414,7 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
         }
 
         XrTypeRef *type = xr_parse_type_annotation(parser);
+        if (!xr_parser_healthy(parser)) return 0;
         if (parser->error_count > saved_error_count) {
             parser->panic_mode = 1;
             return 0;
@@ -1614,7 +1430,7 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
 
         type_args[count++] = type;
 
-    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
     // Must end with >
     if (!xr_parser_match(parser, TK_GT)) {
@@ -1633,7 +1449,10 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
 
 rollback:
     // Restore parser state
-    xr_parser_stream_restore(parser, &saved_stream);
+    do {
+        xr_parser_stream_restore(parser, &saved_stream);
+        if (!xr_parser_healthy(parser)) return 0;
+    } while (0);
     parser->had_error = saved_had_error;
     parser->panic_mode = saved_panic_mode;
     return 0;
@@ -1642,16 +1461,20 @@ rollback:
 // Parse variable reference: x
 // Supports generic call syntax: foo<int, string>(arg1, arg2)
 AstNode *xr_parse_variable(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     // Context keyword intercept: "linked go" as expression.
     Token prev = parser->previous;
-    if (prev.length == 6 && memcmp(prev.start, "linked", 6) == 0 &&
+    if (prev.length == 6 && xr_parser_compare_bytes(parser, prev.start, "linked", 6) == 0 &&
         xr_parser_check(parser, TK_GO)) {
-        xr_parser_advance(parser);  // consume "go"
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // consume "go"
         return xr_parse_go_expr_with_link(parser, XR_LINK_LINKED);
     }
 
     // Contextual keyword intercept: "cancelled()" expression
-    if (prev.length == 9 && memcmp(prev.start, "cancelled", 9) == 0 &&
+    if (prev.length == 9 && xr_parser_compare_bytes(parser, prev.start, "cancelled", 9) == 0 &&
         xr_parser_check(parser, TK_LPAREN)) {
         return xr_parse_cancelled_expr(parser);
     }
@@ -1661,38 +1484,47 @@ AstNode *xr_parse_variable(Parser *parser) {
     // `Channel.method(...)` (followed by '.') keep flowing through the
     // regular variable path — this lookahead only triggers when the
     // very next token is '('.
-    if (prev.length == 7 && memcmp(prev.start, "Channel", 7) == 0 &&
+    if (prev.length == 7 && xr_parser_compare_bytes(parser, prev.start, "Channel", 7) == 0 &&
         xr_parser_check(parser, TK_LPAREN)) {
         return xr_parse_channel_new(parser);
     }
     // Contextual keyword intercept: "move var" expression
     // Only trigger when followed by an identifier (the variable to move)
-    if (prev.length == 4 && memcmp(prev.start, "move", 4) == 0 &&
+    if (prev.length == 4 && xr_parser_compare_bytes(parser, prev.start, "move", 4) == 0 &&
         xr_parser_check(parser, TK_NAME)) {
         return xr_parse_move_expr(parser);
     }
 
     // Detect 'not' keyword misuse: not true, not x, not (expr)
-    if (prev.length == 3 && memcmp(prev.start, "not", 3) == 0) {
+    if (prev.length == 3 && xr_parser_compare_bytes(parser, prev.start, "not", 3) == 0) {
         const ParseRule *next_rule = xr_get_rule(parser->current.type);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (next_rule->prefix != NULL) {
-            xr_parser_error_at_previous(
+            do {
+                xr_parser_error_at_previous(
                 parser, "'not' is not an operator. Use '!' for logical NOT in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
     }
     // Detect 'lambda' keyword misuse: lambda x: x + 1
-    if (prev.length == 6 && memcmp(prev.start, "lambda", 6) == 0) {
+    if (prev.length == 6 && xr_parser_compare_bytes(parser, prev.start, "lambda", 6) == 0) {
         const ParseRule *next_rule = xr_get_rule(parser->current.type);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (next_rule->prefix != NULL || parser->current.type == TK_NAME) {
-            xr_parser_error_at_previous(
+            do {
+                xr_parser_error_at_previous(
                 parser,
                 "'lambda' is not supported. Use 'fn(params) { }' or '(params) -> expr' in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
     }
 
     char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
-    memcpy(name, parser->previous.start, parser->previous.length);
-    name[parser->previous.length] = '\0';
+    if (!xr_parser_healthy(parser)) return NULL;
+    do { if (!ast_copy(parser->compiler_session, name, parser->previous.start, parser->previous.length)) return NULL; } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; name[parser->previous.length] = '\0'; } while (0);
     int line = parser->previous.line;
     int column = parser->previous.column;
 
@@ -1700,8 +1532,10 @@ AstNode *xr_parse_variable(Parser *parser) {
     XrTypeRef *type_args[16];  // Max 16 type args
     int before_generic_error_count = parser->error_count;
     int type_arg_count = try_parse_generic_type_args(parser, type_args, 16, true);
+    if (!xr_parser_healthy(parser)) return NULL;
     if (parser->error_count > before_generic_error_count) {
         AstNode *node = xr_ast_variable(parser->compiler_session, name, line);
+        if (!xr_parser_healthy(parser)) return NULL;
         node->column = column;
         return node;
     }
@@ -1710,6 +1544,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         if (xr_parser_check(parser, TK_DOT)) {
             AstNode *type_namespace = xr_ast_new_expr(parser->compiler_session, NULL, name, NULL,
                                                       NULL, 0, type_args, type_arg_count, line);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (type_namespace)
                 type_namespace->as.new_expr.is_type_namespace = true;
             return type_namespace;
@@ -1718,6 +1553,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         // Check if this is a generic struct literal: Name<T1, T2>{field: value}
         if (xr_parser_check(parser, TK_LBRACE)) {
             AstNode *type_path = xr_ast_variable(parser->compiler_session, name, line);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (type_path)
                 type_path->column = column;
             return xr_parse_struct_literal_after_type(parser, type_path, type_args, type_arg_count);
@@ -1725,9 +1561,13 @@ AstNode *xr_parse_variable(Parser *parser) {
 
         // Generic call detected: identifier<T1, T2>(args)
         AstNode *callee = xr_ast_variable(parser->compiler_session, name, line);
+        if (!xr_parser_healthy(parser)) return NULL;
         callee->column = column;
 
-        xr_parser_advance(parser);  // Consume (
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // Consume (
 
         // Parse argument list
         AstNode **arguments = NULL;
@@ -1741,16 +1581,26 @@ AstNode *xr_parse_variable(Parser *parser) {
             do {
                 XrCallArgAccess access = XR_CALL_ARG_PLAIN;
                 AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
-                XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
-                XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
-            } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+                if (!xr_parser_healthy(parser)) return NULL;
+                do {
+                    XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                do {
+                    XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+            } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
         }
 
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+        do {
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         // `Map<K,V>()` / `Array<T>()` / `Channel<T>(n)` construct built-in heap
         // types directly (no `new`); route to the construction node.
-        if (xr_is_construct_only_type_name(name)) {
+        if (xr_is_construct_only_type_name(parser, name)) {
             return xr_ast_new_expr(parser->compiler_session, NULL, name, arguments, arg_accesses,
                                    arg_count, type_args, type_arg_count, line);
         }
@@ -1766,15 +1616,22 @@ AstNode *xr_parse_variable(Parser *parser) {
         // Lookahead: check if this is { name: ... } pattern (struct literal)
         // vs block statement (which would have statements, not name:value pairs)
         XrParserStreamState saved_stream = xr_parser_stream_save(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         int saved_had_error = parser->had_error;
         int saved_panic_mode = parser->panic_mode;
 
         parser->panic_mode = 1;     // suppress errors during lookahead
-        xr_parser_advance(parser);  // consume '{'
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);  // consume '{'
 
         bool is_struct_literal = false;
         if (xr_parser_check(parser, TK_NAME)) {
-            xr_parser_advance(parser);  // consume field name
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);  // consume field name
             if (xr_parser_check(parser, TK_COLON)) {
                 is_struct_literal = true;
             }
@@ -1784,12 +1641,16 @@ AstNode *xr_parse_variable(Parser *parser) {
         }
 
         // Restore parser state
-        xr_parser_stream_restore(parser, &saved_stream);
+        do {
+            xr_parser_stream_restore(parser, &saved_stream);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         parser->had_error = saved_had_error;
         parser->panic_mode = saved_panic_mode;
 
         if (is_struct_literal) {
             AstNode *type_path = xr_ast_variable(parser->compiler_session, name, line);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (type_path)
                 type_path->column = column;
             return xr_parse_struct_literal_after_type(parser, type_path, NULL, 0);
@@ -1798,21 +1659,26 @@ AstNode *xr_parse_variable(Parser *parser) {
 
     // Regular variable reference
     AstNode *node = xr_ast_variable(parser->compiler_session, name, line);
+    if (!xr_parser_healthy(parser)) return NULL;
     node->column = column;
     return node;
 }
 
 // Parse assignment: x = expression
 AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = left->line;
     int column = left->column;
 
     // Variable assignment: x = 10
     if (left->type == AST_VARIABLE) {
         char *name = ast_strdup(parser->compiler_session, left->as.variable.name);
+        if (!xr_parser_healthy(parser)) return NULL;
         AstNode *value = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
 
         AstNode *node = xr_ast_assignment(parser->compiler_session, name, value, line);
+        if (!xr_parser_healthy(parser)) return NULL;
         node->column = column;  // Preserve column for rename
         return node;
     }
@@ -1822,7 +1688,9 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         AstNode *index = left->as.index_get.index;
 
         AstNode *value = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         AstNode *node = xr_ast_index_set(parser->compiler_session, array, index, value, line);
+        if (!xr_parser_healthy(parser)) return NULL;
 
         // Don't free left - arena handles it, or reused in node
         return node;
@@ -1831,9 +1699,12 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
     else if (left->type == AST_MEMBER_ACCESS) {
         AstNode *object = left->as.member_access.object;
         char *member = ast_strdup(parser->compiler_session, left->as.member_access.name);
+        if (!xr_parser_healthy(parser)) return NULL;
 
         AstNode *value = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         AstNode *node = xr_ast_member_set(parser->compiler_session, object, member, value, line);
+        if (!xr_parser_healthy(parser)) return NULL;
 
         // Arena bulk-frees left/member; no individual free needed.
         return node;
@@ -1841,65 +1712,93 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
     // Destructure assignment: [a, b] = arr or (a, b) = pair or {x, y} = obj
     else if (left->type == AST_ARRAY_LITERAL) {
         XrDestructurePattern *pattern =
-            convert_array_literal_to_pattern(parser->compiler_session, left);
+            convert_array_literal_to_pattern(parser, left);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!pattern) {
-            xr_parser_error(parser, "destructure target must be variable list, e.g. [a, b]");
+            do {
+                xr_parser_error(parser, "destructure target must be variable list, e.g. [a, b]");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
 
         AstNode *value = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);
     } else if (left->type == AST_TUPLE_LITERAL) {
         XrDestructurePattern *pattern =
-            convert_tuple_literal_to_pattern(parser->compiler_session, left);
+            convert_tuple_literal_to_pattern(parser, left);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!pattern) {
-            xr_parser_error(parser, "destructure target must be variable list, e.g. (a, b)");
+            do {
+                xr_parser_error(parser, "destructure target must be variable list, e.g. (a, b)");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
         AstNode *value = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);
     } else if (left->type == AST_OBJECT_LITERAL) {
         XrDestructurePattern *pattern =
-            convert_object_literal_to_pattern(parser->compiler_session, left);
+            convert_object_literal_to_pattern(parser, left);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!pattern) {
-            xr_parser_error(parser, "destructure target must be variable list, e.g. {x, y}");
+            do {
+                xr_parser_error(parser, "destructure target must be variable list, e.g. {x, y}");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
 
         AstNode *value = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);
     }
     // Invalid assignment target
     else {
-        xr_parser_error(parser,
+        do {
+            xr_parser_error(parser,
                         "assignment target must be variable, index, member or destructure pattern");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 }
 
 // Parse compound assignment: x += 10, x -= 5, this.field += 10, etc.
 AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = left->line;
     XrTokenType op_token = parser->previous.type;
 
     if (left->type == AST_VARIABLE) {
         // Variable compound assignment: x += 10
         char *var_name = ast_strdup(parser->compiler_session, left->as.variable.name);
+        if (!xr_parser_healthy(parser)) return NULL;
         AstNode *right = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         AstNode *compound_assignment =
             xr_ast_compound_assignment(parser->compiler_session, var_name, op_token, right, line);
+        if (!xr_parser_healthy(parser)) return NULL;
         return compound_assignment;
     } else if (left->type == AST_MEMBER_ACCESS) {
         // Member compound assignment: this.field += 10
         AstNode *object = left->as.member_access.object;
         char *member_name = ast_strdup(parser->compiler_session, left->as.member_access.name);
+        if (!xr_parser_healthy(parser)) return NULL;
 
         AstNode *right = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         AstNode *compound_assignment = xr_ast_member_compound_assignment(
             parser->compiler_session, object, member_name, op_token, right, line);
+        if (!xr_parser_healthy(parser)) return NULL;
         return compound_assignment;
     } else {
-        xr_parser_error(parser, "compound assignment only for variables or member access");
+        do {
+            xr_parser_error(parser, "compound assignment only for variables or member access");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 }
@@ -1907,8 +1806,15 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
 // Parse prefix increment/decrement: ++x, --x
 // xray syntax: only postfix form (x++, x--) is supported
 AstNode *xr_parse_inc_dec(Parser *parser) {
-    xr_parser_error(parser, "prefix ++/-- not supported, use postfix form (x++, x--)");
-    xr_parser_advance(parser); /* consume ++/-- so the parser can recover */
+    if (!xr_parser_healthy(parser)) return NULL;
+    do {
+        xr_parser_error(parser, "prefix ++/-- not supported, use postfix form (x++, x--)");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0); /* consume ++/-- so the parser can recover */
     return NULL;
 }
 
@@ -1917,25 +1823,37 @@ AstNode *xr_parse_inc_dec(Parser *parser) {
 // entrypoints. Expression parsing reaches this function only for illegal
 // embedded uses such as `var y = x++`, `f(x++)`, or `a[i++]`.
 AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
+    if (!xr_parser_healthy(parser)) return NULL;
     int line = left->line;
     (void) line;
 
     if (left->type != AST_VARIABLE) {
-        xr_parser_error(parser, "++/-- only for variables");
+        do {
+            xr_parser_error(parser, "++/-- only for variables");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
 
-    xr_parser_error_at_previous(
+    do {
+        xr_parser_error_at_previous(
         parser, "postfix ++/-- can only be used as a standalone statement or for-step");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     return NULL;
 }
 
 // Parse single variable declaration: var x = 10 or const PI = 3.14
 AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
-    xr_parser_consume(parser, TK_NAME, "expected variable name");
+    if (!xr_parser_healthy(parser)) return NULL;
+    do {
+        xr_parser_consume(parser, TK_NAME, "expected variable name");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
-    memcpy(name, parser->previous.start, parser->previous.length);
-    name[parser->previous.length] = '\0';
+    if (!xr_parser_healthy(parser)) return NULL;
+    do { if (!ast_copy(parser->compiler_session, name, parser->previous.start, parser->previous.length)) return NULL; } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; name[parser->previous.length] = '\0'; } while (0);
     int line = parser->previous.line;
     int column = parser->previous.column;
     int name_length = parser->previous.length;
@@ -1945,17 +1863,27 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
 
     // Parse optional type annotation (: Type)
     if (xr_parser_match(parser, TK_COLON)) {
-        type_annotation = xr_parse_type_annotation(parser);
+        do {
+            type_annotation = xr_parse_type_annotation(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     if (xr_parser_match(parser, TK_ASSIGN)) {
-        initializer = xr_parse_expression(parser);
+        do {
+            initializer = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     } else if (is_const) {
-        xr_parser_error(parser, "constants must be initialized");
+        do {
+            xr_parser_error(parser, "constants must be initialized");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return NULL;
     }
     // var variables can be uninitialized
     AstNode *node = xr_ast_var_decl(parser->compiler_session, name, initializer, is_const, line);
+    if (!xr_parser_healthy(parser)) return NULL;
     node->column = column;
     // End span extends to the initializer when present; otherwise just the name.
     if (initializer && initializer->end_line > 0) {
@@ -1971,16 +1899,21 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
 
 // Parse block: { ... }
 AstNode *xr_parse_block(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     bool saved_tail = parser->block_tail_value_observed;
     parser->block_tail_value_observed = parser->match_value_block_pending;
     parser->match_value_block_pending = false;
     int line = parser->previous.line;
     AstNode *block = xr_ast_block(parser->compiler_session, line);
+    if (!xr_parser_healthy(parser)) return NULL;
 
-    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Error recovery to avoid infinite loop
         if (parser->panic_mode) {
-            xr_parser_synchronize(parser);
+            do {
+                xr_parser_synchronize(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
                 break;
             continue;
@@ -1993,15 +1926,16 @@ AstNode *xr_parse_block(Parser *parser) {
         parser->current.leading_trivia = NULL;
 
         AstNode *decl = xr_parse_declaration(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (decl != NULL) {
             // Attach leading trivia to the statement
             if (leading_trivia && !decl->leading_comments) {
                 decl->leading_comments = leading_trivia;
             } else if (leading_trivia) {
-                xr_trivia_free_chain(leading_trivia);
+                (void) (leading_trivia);
             }
         } else if (leading_trivia) {
-            xr_trivia_free_chain(leading_trivia);
+            (void) (leading_trivia);
         }
 
         // Smart semicolon handling (block-internal variant). The
@@ -2009,14 +1943,20 @@ AstNode *xr_parse_block(Parser *parser) {
         // or `}`-terminator's trailing trivia, not the final
         // expression token's.
         if (xr_parser_check(parser, TK_SEMICOLON)) {
-            xr_parser_advance(parser);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         } else {
             if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF) &&
                 parser->current.line == stmt_line && parser->current.type != TK_QUESTION &&
                 parser->current.type != TK_COLON) {
                 if (!xr_parser_check_asi_hint(parser)) {
-                    xr_parser_error_at_current(
+                    do {
+                        xr_parser_error_at_current(
                         parser, "multiple statements on same line must be separated by semicolon");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 }
                 break;
             }
@@ -2036,7 +1976,10 @@ AstNode *xr_parse_block(Parser *parser) {
             break;
     }
 
-    xr_parser_consume(parser, TK_RBRACE, "expected '}' to close block");
+    do {
+        xr_parser_consume(parser, TK_RBRACE, "expected '}' to close block");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     // Record closing `}` location (exclusive end). `parser->previous` now
     // points to the consumed `}`; its column is 1-indexed, so the exclusive

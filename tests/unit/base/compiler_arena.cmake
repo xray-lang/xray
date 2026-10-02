@@ -1,0 +1,28 @@
+# The system executable deliberately has no compiler ledger link dependency.
+get_filename_component(XR_ARENA_TEST_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+add_library(arena_ledger_production OBJECT "${XR_ARENA_TEST_ROOT}/src/base/xcompile_resources.c")
+add_executable(test_compiler_arena
+    "${CMAKE_CURRENT_LIST_DIR}/test_compiler_arena.c"
+    "${XR_ARENA_TEST_ROOT}/src/base/xcompile_state.c"
+    "${XR_ARENA_TEST_ROOT}/src/base/xarena.c"
+    "${XR_ARENA_TEST_ROOT}/src/toolchain/xcompiler_arena_backing.c")
+add_executable(test_arena_system_link
+    "${CMAKE_CURRENT_LIST_DIR}/test_arena_system_link.c"
+    "${XR_ARENA_TEST_ROOT}/src/base/xarena.c"
+    "${XR_ARENA_TEST_ROOT}/src/base/xarena_backing.c")
+foreach(arena_target arena_ledger_production test_compiler_arena test_arena_system_link)
+    target_include_directories(${arena_target} PRIVATE "${XR_ARENA_TEST_ROOT}/src")
+    target_compile_features(${arena_target} PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_definitions(${arena_target} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${arena_target} PRIVATE /W4 /WX /utf-8)
+        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+            target_compile_options(${arena_target} PRIVATE /experimental:c11atomics)
+        endif()
+    else()
+        target_compile_options(${arena_target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+endforeach()
+add_test(NAME test_compiler_arena COMMAND test_compiler_arena)
+add_test(NAME test_arena_system_link COMMAND test_arena_system_link)
+set_tests_properties(test_compiler_arena test_arena_system_link PROPERTIES LABELS "unit;compiler;ownership;budget")

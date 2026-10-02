@@ -23,11 +23,20 @@
 #define XTYPE_SCOPE_H
 
 #include "../../base/xdefs.h"
+#include "../../base/xcompile_state.h"
 
 // Forward declaration of the AST type reference (defined in xtype_ref.h).
 typedef struct XrTypeRef XrTypeRef;
 
 typedef struct XrTypeScope XrTypeScope;
+
+typedef enum XrTypeScopeStatus {
+    XR_TYPE_SCOPE_OK,
+    XR_TYPE_SCOPE_DUPLICATE,
+    XR_TYPE_SCOPE_BAD_ARGUMENT,
+    XR_TYPE_SCOPE_BUDGET,
+    XR_TYPE_SCOPE_OUT_OF_MEMORY
+} XrTypeScopeStatus;
 
 // Single alias entry. `name` is heap-allocated and owned by the scope.
 // `type` may be NULL during forward-declaration (e.g. `type A = A` self-ref
@@ -42,18 +51,17 @@ typedef struct XrTypeAlias {
 } XrTypeAlias;
 
 // Allocate a new scope. `parent` may be NULL for the root scope.
-XR_FUNC XrTypeScope *xr_type_scope_new(XrTypeScope *parent);
+XR_FUNC XrCompileResourceStatus xr_compile_type_scope_open(XrCompileState *state, XrTypeScope *parent, XrTypeScope **output);
 
 // Free a scope and all its alias entries (including their `name` strings).
 // Does NOT touch `parent`. Safe to call with NULL.
 XR_FUNC void xr_type_scope_free(XrTypeScope *scope);
 
-// Define an alias in the innermost scope. Returns the new entry, or NULL if
-// `name` is already defined locally (caller should report duplicate). The
-// returned pointer is stable until the scope is freed; callers may mutate
-// `entry->type` to patch forward-declared placeholders.
-XR_FUNC XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name,
-                                          XrTypeRef *type_ref);
+// Define an alias with a required empty output. DUPLICATE leaves output empty
+// without setting a resource failure. Other failures preserve the first state
+// failure. The successful entry remains stable until the scope is freed.
+XR_FUNC XrTypeScopeStatus xr_compile_type_scope_define(XrTypeScope *scope, const char *name,
+    XrTypeRef *type_ref, XrTypeAlias **output);
 
 // Walk the scope chain to find an alias. Returns NULL if not found.
 XR_FUNC XrTypeAlias *xr_type_scope_lookup(XrTypeScope *scope, const char *name);

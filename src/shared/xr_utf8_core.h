@@ -55,17 +55,29 @@ static inline int xr_utf8_core_is_continuation(uint8_t byte) {
  * rule used by lossy conversion; strict diagnostics may report a wider
  * semantically invalid sequence through xr_utf8_core_scan_strict().
  */
-static inline XrUtf8Step xr_utf8_core_decode_step(const uint8_t *data, size_t len) {
+typedef int (*XrUtf8ReadByte)(void *context, const uint8_t *address, uint8_t *output);
+
+static inline int xr_utf8_core_direct_read(void *context, const uint8_t *address, uint8_t *output) {
+    (void) context;
+    *output = *address;
+    return 1;
+}
+
+static inline int xr_utf8_core_decode_step_read(const uint8_t *data, size_t len,
+                                                XrUtf8ReadByte read, void *context,
+                                                XrUtf8Step *result) {
+    if (!read || !result) return 0;
     XrUtf8Step out = {XR_UTF8_CORE_REPLACEMENT, 0, XR_UTF8_TRUNCATED};
     if (!data || len == 0)
-        return out;
+        do { *result = out; return 1; } while (0);
 
-    uint8_t b0 = data[0];
+    uint8_t b0;
+    if (!read(context, data + 0, &b0)) return 0;
     if (b0 <= UINT8_C(0x7F)) {
         out.scalar = b0;
         out.consumed = 1;
         out.error = XR_UTF8_OK;
-        return out;
+        do { *result = out; return 1; } while (0);
     }
 
     size_t expected = 0;
@@ -93,14 +105,15 @@ static inline XrUtf8Step xr_utf8_core_decode_step(const uint8_t *data, size_t le
             out.error = XR_UTF8_OVERLONG;
         else
             out.error = XR_UTF8_OUT_OF_RANGE;
-        return out;
+        do { *result = out; return 1; } while (0);
     }
 
     out.consumed = 1;
     if (len < 2)
-        return out;
+        do { *result = out; return 1; } while (0);
 
-    uint8_t b1 = data[1];
+    uint8_t b1;
+    if (!read(context, data + 1, &b1)) return 0;
     if (b1 < second_min || b1 > second_max) {
         if (!xr_utf8_core_is_continuation(b1)) {
             out.error = XR_UTF8_TRUNCATED;
@@ -111,86 +124,114 @@ static inline XrUtf8Step xr_utf8_core_decode_step(const uint8_t *data, size_t le
         } else {
             out.error = XR_UTF8_OUT_OF_RANGE;
         }
-        return out;
+        do { *result = out; return 1; } while (0);
     }
 
     if (expected == 2) {
         out.scalar = ((uint32_t) (b0 & UINT8_C(0x1F)) << 6) | (uint32_t) (b1 & UINT8_C(0x3F));
         out.consumed = 2;
         out.error = XR_UTF8_OK;
-        return out;
+        do { *result = out; return 1; } while (0);
     }
 
     out.consumed = 2;
-    if (len < 3 || !xr_utf8_core_is_continuation(data[2]))
-        return out;
-
-    uint8_t b2 = data[2];
+    if (len < 3) { *result = out; return 1; }
+    uint8_t b2;
+    if (!read(context, data + 2, &b2)) return 0;
+    if (!xr_utf8_core_is_continuation(b2)) { *result = out; return 1; }
     if (expected == 3) {
         out.scalar = ((uint32_t) (b0 & UINT8_C(0x0F)) << 12) |
                      ((uint32_t) (b1 & UINT8_C(0x3F)) << 6) | (uint32_t) (b2 & UINT8_C(0x3F));
         out.consumed = 3;
         out.error = XR_UTF8_OK;
-        return out;
+        do { *result = out; return 1; } while (0);
     }
 
     out.consumed = 3;
-    if (len < 4 || !xr_utf8_core_is_continuation(data[3]))
-        return out;
-
-    uint8_t b3 = data[3];
+    if (len < 4) { *result = out; return 1; }
+    uint8_t b3;
+    if (!read(context, data + 3, &b3)) return 0;
+    if (!xr_utf8_core_is_continuation(b3)) { *result = out; return 1; }
     out.scalar = ((uint32_t) (b0 & UINT8_C(0x07)) << 18) | ((uint32_t) (b1 & UINT8_C(0x3F)) << 12) |
                  ((uint32_t) (b2 & UINT8_C(0x3F)) << 6) | (uint32_t) (b3 & UINT8_C(0x3F));
     out.consumed = 4;
     out.error = XR_UTF8_OK;
-    return out;
+    do { *result = out; return 1; } while (0);
 }
 
-static inline size_t xr_utf8_core_diagnostic_length(const uint8_t *data, size_t len,
-                                                    XrUtf8Step step) {
-    if (!data || len == 0)
-        return 0;
-    if (step.error == XR_UTF8_TRUNCATED || step.error == XR_UTF8_STRAY_CONTINUATION)
-        return step.consumed;
-
+static inline int xr_utf8_core_diagnostic_length_read(const uint8_t *data, size_t len,
+                                                       XrUtf8Step step, XrUtf8ReadByte read,
+                                                       void *context, size_t *output) {
+    if (!read || !output) return 0;
+    if (!data || !len) { *output = 0; return 1; }
+    if (step.error == XR_UTF8_TRUNCATED || step.error == XR_UTF8_STRAY_CONTINUATION) {
+        *output = step.consumed;
+        return 1;
+    }
+    uint8_t b0;
+    if (!read(context, data, &b0)) return 0;
     size_t expected = 1;
-    uint8_t b0 = data[0];
-    if (b0 == UINT8_C(0xC0) || b0 == UINT8_C(0xC1))
-        expected = 2;
-    else if (b0 >= UINT8_C(0xE0) && b0 <= UINT8_C(0xEF))
-        expected = 3;
-    else if (b0 >= UINT8_C(0xF0) && b0 <= UINT8_C(0xF7))
-        expected = 4;
-
+    if (b0 == UINT8_C(0xC0) || b0 == UINT8_C(0xC1)) expected = 2;
+    else if (b0 >= UINT8_C(0xE0) && b0 <= UINT8_C(0xEF)) expected = 3;
+    else if (b0 >= UINT8_C(0xF0) && b0 <= UINT8_C(0xF7)) expected = 4;
     size_t actual = 1;
-    while (actual < expected && actual < len && xr_utf8_core_is_continuation(data[actual]))
-        actual++;
-    return actual;
+    while (actual < expected && actual < len) {
+        uint8_t byte;
+        if (!read(context, data + actual, &byte)) return 0;
+        if (!xr_utf8_core_is_continuation(byte)) break;
+        ++actual;
+    }
+    *output = actual;
+    return 1;
 }
 
-static inline XrUtf8ScanResult xr_utf8_core_scan_strict(const uint8_t *data, size_t len) {
+/* A failed read preserves output and is distinct from malformed UTF-8. */
+static inline int xr_utf8_core_scan_strict_read(const uint8_t *data, size_t len,
+                                               XrUtf8ReadByte read, void *context,
+                                               XrUtf8ScanResult *output) {
+    if (!read || !output) return 0;
     XrUtf8ScanResult out = {XR_UTF8_OK, 0, 0, 0};
     if (!data) {
-        if (len != 0)
-            out.error = XR_UTF8_TRUNCATED;
-        return out;
+        if (len) out.error = XR_UTF8_TRUNCATED;
+        *output = out;
+        return 1;
     }
-
     size_t pos = 0;
     while (pos < len) {
-        XrUtf8Step step = xr_utf8_core_decode_step(data + pos, len - pos);
+        XrUtf8Step step;
+        if (!xr_utf8_core_decode_step_read(data + pos, len - pos, read, context, &step)) return 0;
         if (step.error != XR_UTF8_OK) {
             out.error = step.error;
             out.byte_offset = pos;
-            out.invalid_length = xr_utf8_core_diagnostic_length(data + pos, len - pos, step);
-            return out;
+            if (!xr_utf8_core_diagnostic_length_read(data + pos, len - pos, step,
+                                                       read, context, &out.invalid_length)) return 0;
+            *output = out;
+            return 1;
         }
         pos += step.consumed;
-        out.rune_count++;
+        ++out.rune_count;
     }
-
     out.byte_offset = len;
-    return out;
+    *output = out;
+    return 1;
+}
+
+static inline XrUtf8Step xr_utf8_core_decode_step(const uint8_t *data, size_t len) {
+    XrUtf8Step result;
+    (void) xr_utf8_core_decode_step_read(data, len, xr_utf8_core_direct_read, NULL, &result);
+    return result;
+}
+
+static inline size_t xr_utf8_core_diagnostic_length(const uint8_t *data, size_t len, XrUtf8Step step) {
+    size_t result;
+    (void) xr_utf8_core_diagnostic_length_read(data, len, step, xr_utf8_core_direct_read, NULL, &result);
+    return result;
+}
+
+static inline XrUtf8ScanResult xr_utf8_core_scan_strict(const uint8_t *data, size_t len) {
+    XrUtf8ScanResult result;
+    (void) xr_utf8_core_scan_strict_read(data, len, xr_utf8_core_direct_read, NULL, &result);
+    return result;
 }
 
 static inline XrUtf8LossyPlan xr_utf8_core_lossy_plan(const uint8_t *data, size_t len) {
