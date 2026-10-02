@@ -67,3 +67,15 @@ XR_FUNC XrXirValueStatus xr_xir_enum_get(const XrXirValue *value, uint32_t varia
     XrXirValueStatus status = xr_xir_value_admit(value, (XrXirType) value->type, admission);
     return status == XR_XIR_VALUE_OK ? xr_xir_value_copy(&record->fields[field], output) : status;
 }
+XR_FUNC XrXirValueStatus xr_xir_enum_borrow(const XrXirValue *value, XrXirEnumBorrow *output) {
+    uint32_t variant = 0;
+    if (!output || xr_xir_enum_variant(value, &variant) != XR_XIR_VALUE_OK)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirNominalValue *record = (const XirNominalValue *)object_pointer(value);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(record->object.arena);
+    const XrXirTypeNode *node = xr_xir_type_node(types, record->object.type);
+    const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
+    *output = (XrXirEnumBorrow){identity->name, identity->variants[variant].name,
+        record->fields, record->count};
+    return XR_XIR_VALUE_OK;
+}

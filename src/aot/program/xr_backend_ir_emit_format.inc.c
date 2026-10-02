@@ -82,12 +82,14 @@ static bool emit_format_reader(CBuffer *buffer, const XrBackendIR *ir) {
             "    case %u: { const XrAotType%u *value = node.value; "
             "view->kind = XR_VALUE_FORMAT_ENUM; view->name = ", type->type_id, type->type_id) ||
             !emit_format_name(buffer, type->display_name) ||
-            !append_text(buffer, "; switch (value->tag) {\n"))
+            !append_format(buffer, "; view->name_size = %zu; switch (value->tag) {\n",
+                type->display_name ? strlen(type->display_name) : 0))
             return false;
         for (uint32_t variant = 0u; variant < type->variant_count; ++variant) {
             if (!append_format(buffer, "    case %u: view->member = ", variant) ||
                 !emit_format_name(buffer, type->variants[variant].display_name) ||
-                !append_format(buffer, "; view->children = %u; return 1;\n",
+                !append_format(buffer, "; view->member_size = %zu; view->children = %u; return 1;\n",
+                    type->variants[variant].display_name ? strlen(type->variants[variant].display_name) : 0,
                     type->variants[variant].payload_count))
                 return false;
         }

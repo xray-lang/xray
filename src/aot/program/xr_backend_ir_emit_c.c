@@ -683,7 +683,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
         (f64_constants && !append_text(buffer, "#include <float.h>\n"
             "_Static_assert(sizeof(double) == 8 && DBL_MANT_DIG == 53 && DBL_MAX_EXP == 1024, \"binary64 required\");\n")) ||
         /* typed output renders through a heap line buffer */
-        ((arena || output) && !append_text(buffer, "#include <stdlib.h>\n")) ||
+        ((arena || output || has_boundary_error(ir) || has_boundary_panic(ir)) &&
+         !append_text(buffer, "#include <stdlib.h>\n")) ||
         ((text || f64_constants || program_uses_operation(ir, XR_CORE_OP_CORE_PROVIDER_CALL)) &&
          !append_text(buffer, "#include <string.h>\n")) ||
         ((host_providers || host_timer) && !append_text(buffer, "#include <time.h>\n"
@@ -702,6 +703,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                               "#if defined(_WIN32)\n"
                               "#include <fcntl.h>\n"
                               "#include <io.h>\n"
+                              "#else\n"
+                              "#include <unistd.h>\n"
                               "#endif\n")) ||
         (host_providers && !emit_native_provider_headers(buffer, ir)) || !append_text(buffer, "\n"))
         return false;
@@ -4091,6 +4094,14 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     }
     if (!append_text(buffer, "    }\n"))
         return false;
+    if ((has_boundary_error(ir) || has_boundary_panic(ir)) && !append_text(buffer,
+        "    const char *no_color = getenv(\"NO_COLOR\");\n"
+        "#if defined(_WIN32)\n"
+        "    int error_color = (!no_color || !no_color[0]) && _isatty(_fileno(stderr));\n"
+        "#else\n"
+        "    int error_color = (!no_color || !no_color[0]) && isatty(STDERR_FILENO);\n"
+        "#endif\n"))
+        return false;
     if (has_boundary_error(ir) && !append_text(buffer,
         "    if (result.kind == UINT32_C(2)) {\n"
         "#if defined(_WIN32)\n"
@@ -4099,7 +4110,7 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
         "        XrValueFormatReader reader = {NULL, xr_aot_format_read, xr_aot_format_child};\n"
         "        XrValueFormatNode value = {result.error_value, result.error_type_id};\n"
         "        XrValueFormatSink sink = {stderr, xr_value_format_file_write};\n"
-        "        if (!xr_value_format_uncaught(reader, value, sink, 0))\n"
+        "        if (!xr_value_format_uncaught(reader, value, sink, 0, error_color))\n"
         "            fputs(\"XR_RUN_6005: cannot render uncaught typed error\\n\", stderr);\n"
         "        exit_code = 1;\n"
         "    }\n"))
@@ -4117,8 +4128,8 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
         if (!(has_panic_messages(ir) ? append_text(buffer,
             "            result.panic_info.message != NULL,\n"
             "            result.panic_info.message ? result.panic_info.message->bytes : NULL,\n"
-            "            result.panic_info.message ? result.panic_info.message->size : 0);\n")
-            : append_text(buffer, "            0, NULL, 0);\n")) ||
+            "            result.panic_info.message ? result.panic_info.message->size : 0, error_color);\n")
+            : append_text(buffer, "            0, NULL, 0, error_color);\n")) ||
             !append_text(buffer, "        exit_code = 1;\n    }\n"))
             return false;
     }

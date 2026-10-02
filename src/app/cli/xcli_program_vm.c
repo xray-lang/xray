@@ -17,6 +17,7 @@
 #include "xcli_output.h"
 #include "../../execution/xr_stdlib_provider_binding.h"
 #include "../../os/os_time.h"
+#include "../../frontend/xdiag_fmt.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 #include "../../plan/target/xr_target_profile.h"
 #include <stdio.h>
@@ -247,13 +248,13 @@ XrCliVmResult xr_cli_program_vm_invoke(XrCliProgramVm *vm, uint32_t function_id,
     result.timed_out = deadline.expired;
     if (errors && outcome.kind == XR_VM_OUTCOME_ERROR)
         result.error_reported = xr_value_format_uncaught(xr_vm_value_format_reader(vm->code),
-            (XrValueFormatNode) {&outcome.error_value, 0u}, *errors, 0) != 0;
+            (XrValueFormatNode) {&outcome.error_value, 0u}, *errors, 0, xr_diag_use_color()) != 0;
     if (errors && outcome.kind == XR_VM_OUTCOME_PANIC) {
         XrVmStringView message = {0};
         bool has_message = xr_vm_panic_message_view(&result.panic_info, &message);
         result.panic_reported = xr_value_format_panic(*errors, result.panic_info.code,
             result.panic_info.has_bounds, result.panic_info.index, result.panic_info.length,
-            has_message, message.bytes, message.size) != 0;
+            has_message, message.bytes, message.size, xr_diag_use_color()) != 0;
     }
     result.panic_info.message = NULL;
     xr_vm_execution_free(execution);

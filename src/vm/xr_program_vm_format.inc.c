@@ -54,6 +54,8 @@ static int vm_format_read(const void *context, XrValueFormatNode node, XrValueFo
             view->kind = XR_VALUE_FORMAT_ENUM;
             view->name = type->display_name;
             view->member = type->variants[aggregate.variant_ordinal].display_name;
+            view->name_size = view->name ? strlen(view->name) : 0;
+            view->member_size = view->member ? strlen(view->member) : 0;
             view->children = aggregate.field_count;
             return 1;
         }
