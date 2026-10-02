@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     size_t size = 0;
     char *root = xr_file_read_all(argv[1], "rb", &size);
     if (!root || !size) return 3;
-    char *resolved = xr_realpath(root);
+    char *resolved = xr_realpath(root, NULL);
     char *path = xr_path_join(root, "main.xr");
     char *legacy = path ? xr_file_read_all(path, "rb", NULL) : NULL;
     XrFileBytes bytes = {0};

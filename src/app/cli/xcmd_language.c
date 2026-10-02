@@ -250,8 +250,8 @@ static int language_conversions(const char *input, bool json) {
     graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
-    int graph_rc = graph && xr_module_identity_script_authority_from_source(
-                                input, &authority, &authority_root)
+    int graph_rc = graph && (xr_module_identity_script_authority_from_source(
+                                input, &authority, &authority_root) == XR_MODULE_OK)
                        ? xr_module_graph_build(graph, input, &authority, &graph_error)
                        : -1;
     xr_free(authority_root);

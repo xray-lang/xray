@@ -10,6 +10,7 @@
  *   Published library bytes survive deletion of their original module source.
  */
 #include "base/xmalloc.h"
+#include "xir_stdlib_output_module_probe.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
@@ -27,6 +28,7 @@ XR_FUNC void *xr_test_stdlib_output_source_calloc(size_t count,size_t size){
  if(p){CHECK(source_live<4096);CHECK(count*size<=SIZE_MAX-source_bytes);source_owned[source_live++]=(LibrarySourceAllocation){p,count*size};source_bytes+=count*size;if(source_bytes>source_peak)source_peak=source_bytes;}return p;
 }
 XR_FUNC void xr_test_stdlib_output_source_free(void *p){
+ xr_test_stdlib_output_module_forget(p);
  if(p)for(size_t i=0;i<source_live;++i)if(source_owned[i].pointer==p){source_bytes-=source_owned[i].bytes;source_owned[i]=source_owned[--source_live];break;}
  xr_free(p);
 }
@@ -51,6 +53,9 @@ XR_FUNC void *xr_test_stdlib_output_source_malloc(size_t size){return xr_test_st
 #include "xir/xxir_library_catalog.h"
 #include "base/xsha256.h"
 #include "base/xfileio.h"
+#ifdef XR_OS_WINDOWS
+#include "base/xwindows_utf8.h"
+#endif
 
 static XrXirCheckedPacket publication_packet(const char *root, const char *path) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
@@ -216,6 +221,127 @@ static void publication_resolver_cases(XrXirLibraryCatalog *catalog, const char 
         xr_module_id_cleanup(&id); xr_free(error); xr_module_resolver_free(resolver);
     }
 }
+static void publication_source_resolver_faults(const char *root) {
+    for (unsigned cached = 0; cached < 2; ++cached) {
+        size_t sites = 0;
+        for (size_t pass = 0; pass == 0 || pass <= sites; ++pass) {
+            XrModuleResolverConfig config = {root, NULL, NULL, 0};
+            XrModuleResolver *resolver = xr_module_resolver_new(&config); CHECK(resolver);
+            XrModuleId id = {0}; char *error = NULL;
+            if (cached) {
+                CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &id, &error) == XR_MODULE_OK);
+                xr_module_id_cleanup(&id); CHECK(!error);
+            }
+            module_attempts = 0; module_fail_at = pass ? pass - 1 : SIZE_MAX; module_injecting = true;
+            XrModuleStatus status = xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &id, &error);
+            module_injecting = false;
+            if (!pass) { CHECK(status == XR_MODULE_OK); sites = module_attempts; }
+            else CHECK(status == XR_MODULE_OUT_OF_MEMORY && !id.canonical && !id.logical_path &&
+                !id.source_path && !id.authority.namespace_id && !id.authority.physical_root);
+            xr_module_id_cleanup(&id); xr_test_stdlib_output_module_forget(error); xr_free(error);
+            xr_module_resolver_free(resolver);
+            CHECK(!module_live && !module_bytes);
+        }
+        printf("stdlib output source resolver cached=%u allocations=%zu exact OOM/physical zero\n", cached, sites);
+    }
+}
+
+static void publication_module_faults(const XrXirSourceRequest *request) {
+    size_t count = 0;
+    const XrModuleResourceBinding *resources = xr_xir_library_catalog_resources(request->libraries, &count);
+    XrModuleResolverConfig config = {request->stdlib_path, NULL, resources, count};
+    XrModuleResolver *resolver = xr_module_resolver_new(&config); CHECK(resolver);
+    size_t sites = 0;
+    for (size_t pass = 0; pass == 0 || pass <= sites; ++pass) {
+        module_attempts = 0; module_fail_at = pass ? pass - 1 : SIZE_MAX; module_injecting = true;
+        XrModuleId id = {0}; char *error = NULL;
+        XrModuleStatus status = xr_module_resolver_resolve(resolver, "std/io/output",
+            request->entry_path, request->authority, &id, &error);
+        module_injecting = false;
+        if (!pass) { CHECK(status == XR_MODULE_OK && id.resource == resources); sites = module_attempts; }
+        else CHECK(status == XR_MODULE_OUT_OF_MEMORY && !id.canonical && !id.logical_path &&
+            !id.source_path && !id.authority.namespace_id && !id.authority.physical_root && !id.resource);
+        xr_module_id_cleanup(&id); xr_free(error);
+        CHECK(!module_live && !module_bytes);
+    }
+    xr_module_resolver_free(resolver);
+    printf("stdlib output real resolver allocations=%zu exact OOM/physical zero\n", sites);
+    size_t source_sites = 0;
+    for (size_t pass = 0; pass == 0 || pass <= source_sites; ++pass) {
+        module_attempts = 0; module_fail_at = pass ? pass - 1 : SIZE_MAX; module_injecting = true;
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        module_injecting = false;
+        if (!pass) { CHECK(status == XR_XIR_OK); source_sites = module_attempts; }
+        else if (status != XR_XIR_OUT_OF_MEMORY || result.checked || result.snapshot) {
+            fprintf(stderr, "module source fault=%zu/%zu status=%d message=%s\n",
+                pass, source_sites, status, diagnostic.message); CHECK(false);
+        }
+        xr_xir_source_result_free(&result);
+        CHECK(!module_live && !module_bytes);
+    }
+    printf("stdlib output Source real module allocations=%zu exact OOM/physical zero\n", source_sites);
+}
+
+static void publication_core_module_faults(const XrXirSourceRequest *request) {
+    char path[2048];
+    CHECK(snprintf(path, sizeof(path), "%s/core-probe.xr", request->authority->physical_root) > 0);
+    FILE *file = fopen(path, "wb"); CHECK(file);
+    const char source[] = "import \"std/io/output\" as output\n"
+        "export fn emit(value:string)->bool {assert(true);return output.writeStdout(value)}\n";
+    CHECK(fwrite(source, 1, sizeof(source) - 1, file) == sizeof(source) - 1 && !fclose(file));
+    XrXirSourceRequest core = *request; core.entry_path = path;
+    publication_module_faults(&core);
+    CHECK(!remove(path));
+}
+
+static void publication_module_statuses(const XrXirSourceRequest *request) {
+    XrXirSourceRequest invalid = *request;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+    char missing[2048];
+    CHECK(snprintf(missing, sizeof(missing), "%s/not-published.xr", request->authority->physical_root) > 0);
+    invalid.entry_path = missing;
+    CHECK(xr_xir_source_check(&invalid, &result, &diagnostic) == XR_XIR_UNRESOLVED);
+    CHECK(diagnostic.status == XR_XIR_UNRESOLVED && !result.checked && !result.snapshot);
+    char long_root[33000]; memset(long_root, 'a', sizeof(long_root) - 1); long_root[sizeof(long_root) - 1] = 0;
+    invalid = *request; invalid.stdlib_path = long_root;
+    CHECK(xr_xir_source_check(&invalid, &result, &diagnostic) == XR_XIR_BUDGET);
+    CHECK(!result.checked && !result.snapshot);
+    XrModuleIdentityAuthority authority = *request->authority; authority.namespace_id = "forged";
+    invalid = *request; invalid.authority = &authority;
+    CHECK(xr_xir_source_check(&invalid, &result, &diagnostic) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!result.checked && !result.snapshot);
+#ifdef XR_OS_WINDOWS
+    XrWinPathStatus converted;
+    wchar_t *wide = xr_win_utf8_path(request->entry_path, &converted); CHECK(wide);
+    HANDLE held = CreateFileW(wide, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL); xr_free(wide);
+    CHECK(held != INVALID_HANDLE_VALUE);
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_IO);
+    CHECK(diagnostic.status == XR_XIR_IO && !result.checked && !result.snapshot);
+    CHECK(CloseHandle(held));
+#endif
+    size_t count = 0;
+    const XrModuleResourceBinding *resources = xr_xir_library_catalog_resources(request->libraries, &count);
+    CHECK(count == 1);
+    XrModuleResourceBinding binding = resources[0]; binding.checked = NULL;
+    XrModuleResolverConfig config = {request->stdlib_path, NULL, &binding, 1};
+    XrModuleResolver *resolver = xr_module_resolver_new(&config); CHECK(resolver);
+    size_t attempts = 0;
+    for (unsigned pass = 0; pass < 2; ++pass) {
+        module_injecting = true; module_attempts = 0; module_fail_at = pass ? attempts - 1 : SIZE_MAX;
+        XrModuleId id = {0}; char *error = NULL;
+        CHECK(xr_module_resolver_resolve(resolver, "std/io/output", request->entry_path,
+            request->authority, &id, &error) == XR_MODULE_INVALID);
+        module_injecting = false; attempts = module_attempts;
+        CHECK(attempts && !id.canonical && !id.source_path);
+        CHECK(pass ? !error : !!error);
+        xr_test_stdlib_output_module_forget(error); xr_free(error);
+        CHECK(!module_live && !module_bytes);
+    }
+    xr_module_resolver_free(resolver);
+    puts("module INVALID/UNRESOLVED/BUDGET/IO retain their causes; diagnostic OOM keeps INVALID");
+}
+
 static void publication_source_budgets(const XrXirSourceRequest *request) {
     size_t live = source_live, bytes = source_bytes, core_live = runtime_live, core_bytes = runtime_bytes;
     for (unsigned dimension = 0; dimension < 2; ++dimension) {
@@ -246,7 +372,7 @@ static void publication_source_budgets(const XrXirSourceRequest *request) {
     }
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 3); char *root = xr_realpath(argv[1]); CHECK(root);
+    CHECK(argc == 3); char *root = xr_realpath(argv[1], NULL); CHECK(root);
     char source[1024], entry[1024], path[1024];
     CHECK(snprintf(source,sizeof(source),"%s/io/output.xr",root) > 0);
     CHECK(snprintf(entry,sizeof(entry),"%s/root.xr",root) > 0);
@@ -265,6 +391,7 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_library_catalog_new(&input,1,NULL,&catalog) == XR_XIR_OK);
     memset(bytes,0,length); xr_free(bytes);
     publication_resolver_cases(catalog,root,entry);
+    publication_source_resolver_faults(root);
     CHECK(!remove(source)); publication_resolver_cases(catalog,root,entry);
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
@@ -293,6 +420,9 @@ int main(int argc, char **argv) {
     printf("stdlib output Source actual OOM=%zu physicalbaseline\n",sites);
     printf("stdlib output Source Core actual OOM=%zu physicalbaseline\n",core_sites);
     publication_source_budgets(&request);
+    publication_module_faults(&request);
+    publication_module_statuses(&request);
+    publication_core_module_faults(&request);
     XrXirArtifact *owned = result.checked; result.checked = NULL;
     xr_xir_source_result_free(&result); xr_compiler_session_delete(session);
     xr_xir_library_catalog_free(catalog); xr_free(root);

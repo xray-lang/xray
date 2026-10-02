@@ -1160,8 +1160,8 @@ int xdap_run(XdapController *ctrl) {
                 xdap_stdout_capture_begin(&out_cap);
                 XrModuleIdentityAuthority authority = {0};
                 char *authority_root = NULL;
-                int result = xr_module_identity_script_authority_from_source(
-                                 ctrl->program_path, &authority, &authority_root)
+                int result = (xr_module_identity_script_authority_from_source(
+                                 ctrl->program_path, &authority, &authority_root) == XR_MODULE_OK)
                                  ? xr_isolate_dofile_debug(ctrl->isolate, ctrl->program_path,
                                                           &authority, (void **) &proto)
                                  : -1;

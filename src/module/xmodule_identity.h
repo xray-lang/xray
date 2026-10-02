@@ -15,6 +15,28 @@
 #include <stddef.h>
 
 #include "../base/xdefs.h"
+#include "../base/xfileio.h"
+
+/* Shared failure vocabulary for identity construction, resolution and graph build. */
+typedef enum XrModuleStatus {
+    XR_MODULE_OK = 0,
+    XR_MODULE_INVALID = -1,
+    XR_MODULE_OUT_OF_MEMORY = -2,
+    XR_MODULE_BUDGET = -3,
+    XR_MODULE_IO = -4,
+    XR_MODULE_NOT_FOUND = -5
+} XrModuleStatus;
+
+static inline XrModuleStatus xr_module_status_from_path(XrPathStatus status) {
+    switch (status) {
+        case XR_PATH_OK: return XR_MODULE_OK;
+        case XR_PATH_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
+        case XR_PATH_BUDGET: return XR_MODULE_BUDGET;
+        case XR_PATH_IO: return XR_MODULE_IO;
+        case XR_PATH_NOT_FOUND: return XR_MODULE_NOT_FOUND;
+        default: return XR_MODULE_INVALID;
+    }
+}
 
 typedef enum XrModuleIdentityKind {
     XR_MODULE_IDENTITY_PROJECT = 1,
@@ -36,18 +58,18 @@ XR_FUNC bool xr_module_identity_authority_valid(const XrModuleIdentityAuthority 
 
 /* Derive a durable identity from an already-authoritative logical path.
  * Memory authorities require an explicit namespace id and an empty path. */
-XR_FUNC bool xr_module_identity_from_logical(const XrModuleIdentityAuthority *authority,
+XR_FUNC XrModuleStatus xr_module_identity_from_logical(const XrModuleIdentityAuthority *authority,
                                              const char *logical_path, char **identity_out);
 
 /* Derive one root-relative logical path and its length-framed durable identity.
  * Both outputs are xr_malloc-owned. Absolute or escaping paths fail closed. */
-XR_FUNC bool xr_module_identity_from_source(const XrModuleIdentityAuthority *authority,
+XR_FUNC XrModuleStatus xr_module_identity_from_source(const XrModuleIdentityAuthority *authority,
                                             const char *source_path, char **identity_out,
                                             char **logical_path_out);
 
 /* Build an explicit script authority rooted at the source file's directory.
  * The returned root is xr_malloc-owned and backs authority->physical_root. */
-XR_FUNC bool xr_module_identity_script_authority_from_source(
+XR_FUNC XrModuleStatus xr_module_identity_script_authority_from_source(
     const char *source_path, XrModuleIdentityAuthority *authority, char **root_out);
 
 /* Validate the exact typed identity grammar and optionally return its kind. */

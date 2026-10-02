@@ -19,7 +19,8 @@ static bool source_manifest_same(const XrModuleIdentityAuthority *a, const XrMod
 }
 static bool source_manifest_failure(SourceContext *ctx, XrDeclarationStatus status) {
     return source_fail(ctx, NULL, status == XR_DECLARATION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-        status == XR_DECLARATION_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE,
+        status == XR_DECLARATION_LIMIT ? XR_XIR_BUDGET :
+        status == XR_DECLARATION_IO ? XR_XIR_IO : XR_XIR_BAD_STRUCTURE,
         "declaration manifest admission failed");
 }
 static uint64_t source_manifest_bytes(const XrDeclarationManifest *manifest) {
@@ -42,7 +43,9 @@ static bool source_manifest_module(SourceContext *ctx, SourceManifest *manifest,
     XrFileReadStatus read = xr_file_read_under_root(manifest->authority.physical_root, logical, limit, &bytes);
     if (read != XR_FILE_READ_OK)
         return source_fail(ctx, NULL, read == XR_FILE_READ_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-            read == XR_FILE_READ_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE,
+            read == XR_FILE_READ_LIMIT ? XR_XIR_BUDGET :
+            read == XR_FILE_READ_IO ? XR_XIR_IO :
+            read == XR_FILE_READ_MISSING ? XR_XIR_UNRESOLVED : XR_XIR_BAD_STRUCTURE,
             "declaration source is missing or outside its authority");
     if (memchr(bytes.data, 0, bytes.size)) {
         xr_free(bytes.data);
@@ -58,13 +61,14 @@ static bool source_manifest_module(SourceContext *ctx, SourceManifest *manifest,
     memcpy(path, manifest->authority.physical_root, root_size); path[root_size] = '/';
     memcpy(path + root_size + 1, logical, logical_size + 1);
     char *error = NULL;
-    int result = xr_module_graph_include(ctx->graph, path, &manifest->authority, &error);
-    if (result) source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "declaration source discovery failed");
+    XrModuleStatus result = xr_module_graph_include(ctx->graph, path, &manifest->authority, &error);
+    if (result) source_module_fail(ctx, NULL, result, error ? error : "declaration source discovery failed");
     xr_free(error);
     if (result) return false;
     char *canonical = NULL;
-    if (!xr_module_identity_from_logical(&manifest->authority, logical, &canonical))
-        return source_fail(ctx, NULL, XR_XIR_OUT_OF_MEMORY, "declaration identity allocation failed");
+    result = xr_module_identity_from_logical(&manifest->authority, logical, &canonical);
+    if (result != XR_MODULE_OK)
+        return source_module_fail(ctx, NULL, result, "declaration identity construction failed");
     int index = xr_module_graph_find(ctx->graph, canonical); xr_free(canonical);
     if (index < 0 || memcmp(&fingerprint, &ctx->graph->specs[index].source_content_fingerprint, sizeof(fingerprint)))
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "declaration source changed during discovery");
@@ -176,8 +180,9 @@ static bool source_manifests_bind(SourceContext *ctx) {
             if (!source_work(ctx, NULL)) return false;
             const XrDeclarationRecord *record = &manifest->declarations->records[i];
             char *canonical = NULL;
-            if (!xr_module_identity_from_logical(&manifest->authority, record->module, &canonical))
-                return source_fail(ctx, NULL, XR_XIR_OUT_OF_MEMORY, "declaration identity allocation failed");
+            XrModuleStatus identity_status = xr_module_identity_from_logical(&manifest->authority, record->module, &canonical);
+            if (identity_status != XR_MODULE_OK)
+                return source_module_fail(ctx, NULL, identity_status, "declaration identity construction failed");
             SourceDeclarationSelector selector = {{canonical, (uint32_t)strlen(canonical)},
                 {record->name, (uint32_t)strlen(record->name)},
                 {record->owner, record->owner ? (uint32_t)strlen(record->owner) : 0}};

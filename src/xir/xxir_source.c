@@ -220,6 +220,13 @@ static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, c
     }
     return false;
 }
+static bool source_module_fail(SourceContext *ctx, AstNode *node, XrModuleStatus status, const char *message) {
+    XrXirStatus mapped = status == XR_MODULE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        status == XR_MODULE_BUDGET ? XR_XIR_BUDGET :
+        status == XR_MODULE_IO ? XR_XIR_IO :
+        status == XR_MODULE_NOT_FOUND ? XR_XIR_UNRESOLVED : XR_XIR_BAD_STRUCTURE;
+    return source_fail(ctx, node, mapped, message);
+}
 static void *source_alloc(SourceContext *ctx, size_t count, size_t size) {
     if (ctx->diagnostic.status != XR_XIR_OK) return NULL;
     if (count > (SIZE_MAX - sizeof(SourceMemory)) / size ||
@@ -1831,14 +1838,16 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
     ImportStmtNode *decl = &node->as.import_stmt;
     XrModuleSpec *spec = &ctx->graph->specs[ctx->module];
     XrModuleId id = {0}; char *error = NULL;
-    int resolved = xr_module_resolver_resolve(ctx->graph->resolver, decl->module_name, spec->source_path, &spec->authority, &id, &error);
+    XrModuleStatus resolved = xr_module_resolver_resolve(ctx->graph->resolver, decl->module_name, spec->source_path, &spec->authority, &id, &error);
     int target = resolved == 0 && id.canonical && id.logical_path && xr_module_identity_authority_valid(&id.authority) ?
         xr_module_graph_find(ctx->graph, id.canonical) : -1;
     if (target >= 0 && !source_resolved_identity(&ctx->graph->specs[target], &id)) target = -1;
     xr_free(error); xr_module_id_cleanup(&id);
     if (target < 0) {
         ctx->query_ready = false;
-        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "import does not resolve to the parsed graph");
+        return resolved != XR_MODULE_OK ?
+            source_module_fail(ctx, node, resolved, "import resolution failed") :
+            source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "import does not resolve to the parsed graph");
     }
     for (int i = 0; i < (decl->member_count ? decl->member_count : 1); ++i) {
         const char *name = decl->member_count ? (decl->members[i].alias ? decl->members[i].alias : decl->members[i].name) : decl->alias;
@@ -2514,11 +2523,16 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     ctx.graph = resolver ? xr_module_graph_new(request->session, resolver) : NULL;
     if (!ctx.graph) { source_fail(&ctx, NULL, XR_XIR_OUT_OF_MEMORY, "module graph allocation failed"); goto done; }
     ctx.graph->admit_checked_resources = true;
-    if (xr_module_graph_build(ctx.graph, request->entry_path, request->authority, &error) != 0) {
-        source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph build failed"); goto done;
+    XrModuleStatus module_status = xr_module_graph_build(ctx.graph, request->entry_path, request->authority, &error);
+    if (module_status != XR_MODULE_OK) {
+        source_module_fail(&ctx, NULL, module_status, error ? error : "module graph build failed"); goto done;
     }
     if (!source_manifests_load(&ctx)) goto done;
-    if (xr_module_graph_topological_sort(ctx.graph) != 0 || ctx.graph->has_cycle || ctx.graph->entry_index < 0) {
+    module_status = xr_module_graph_topological_sort(ctx.graph);
+    if (module_status != XR_MODULE_OK) {
+        source_module_fail(&ctx, NULL, module_status, "module graph ordering failed"); goto done;
+    }
+    if (ctx.graph->has_cycle || ctx.graph->entry_index < 0) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
     source_construct(&ctx, &checking, output);

@@ -462,7 +462,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
 
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
-    ASSERT_TRUE(xr_module_identity_script_authority_from_source(path, &authority, &authority_root));
+    ASSERT_TRUE((xr_module_identity_script_authority_from_source(path, &authority, &authority_root) == XR_MODULE_OK));
     int rc = xr_isolate_dofile_debug(iso, path, &authority, NULL);
     xr_free(authority_root);
     ASSERT_EQ_INT(rc, 0);

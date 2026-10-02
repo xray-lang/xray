@@ -89,7 +89,7 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
     XrBundle *bundle =
-        xr_module_identity_script_authority_from_source(input_file, &authority, &authority_root)
+        (xr_module_identity_script_authority_from_source(input_file, &authority, &authority_root) == XR_MODULE_OK)
             ? xr_bundle_create_ex(X, input_file, &authority, XR_BUNDLE_DEFAULT)
             : NULL;
     xr_free(authority_root);

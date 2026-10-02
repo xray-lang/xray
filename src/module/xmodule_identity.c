@@ -184,7 +184,7 @@ static const char *identity_kind_name(XrModuleIdentityKind kind) {
     }
 }
 
-static bool build_framed_identity(const char *prefix, const char *first, const char *middle,
+static XrModuleStatus build_framed_identity(const char *prefix, const char *first, const char *middle,
                                   const char *second, char **identity_out) {
     size_t first_length = strlen(first);
     size_t second_length = middle ? strlen(second) : 0;
@@ -199,44 +199,46 @@ static bool build_framed_identity(const char *prefix, const char *first, const c
                         checked_add(&identity_length, 1) &&
                         checked_add(&identity_length, second_length))) &&
                       identity_length <= INT_MAX && identity_length < SIZE_MAX;
-    char *identity = size_valid ? xr_malloc(identity_length + 1) : NULL;
+    if (!size_valid)
+        return XR_MODULE_BUDGET;
+    char *identity = xr_malloc(identity_length + 1);
     if (!identity)
-        return false;
+        return XR_MODULE_OUT_OF_MEMORY;
     int written = middle ? snprintf(identity, identity_length + 1, "%s%zu:%s%s%zu:%s", prefix,
                                     first_length, first, middle, second_length, second)
                          : snprintf(identity, identity_length + 1, "%s%zu:%s", prefix,
                                     first_length, first);
     if (written < 0 || (size_t) written != identity_length) {
         xr_free(identity);
-        return false;
+        return XR_MODULE_INVALID;
     }
     *identity_out = identity;
-    return true;
+    return XR_MODULE_OK;
 }
 
-XR_FUNC bool xr_module_identity_from_logical(const XrModuleIdentityAuthority *authority,
+XR_FUNC XrModuleStatus xr_module_identity_from_logical(const XrModuleIdentityAuthority *authority,
                                              const char *logical_path, char **identity_out) {
     if (identity_out)
         *identity_out = NULL;
     if (!authority || !identity_out || !xr_module_identity_authority_valid(authority))
-        return false;
+        return XR_MODULE_INVALID;
 
     const char *namespace_id = authority->namespace_id ? authority->namespace_id : "";
     if (authority->kind == XR_MODULE_IDENTITY_MEMORY) {
         if (logical_path && logical_path[0])
-            return false;
+            return XR_MODULE_INVALID;
         return build_framed_identity("memory-module-v1:id=", namespace_id, NULL, "",
                                      identity_out);
     }
     if (!logical_path_valid(logical_path))
-        return false;
+        return XR_MODULE_INVALID;
     if (authority->kind == XR_MODULE_IDENTITY_STDLIB)
         return build_framed_identity("stdlib-module-v1:module=", namespace_id, ":path=",
                                      logical_path, identity_out);
 
     const char *kind_name = identity_kind_name(authority->kind);
     if (!kind_name || authority->kind == XR_MODULE_IDENTITY_MEMORY)
-        return false;
+        return XR_MODULE_INVALID;
     size_t kind_length = strlen(kind_name);
     size_t namespace_length = strlen(namespace_id);
     size_t relative_length = strlen(logical_path);
@@ -254,22 +256,24 @@ XR_FUNC bool xr_module_identity_from_logical(const XrModuleIdentityAuthority *au
                       checked_add(&identity_length, 1) &&
                       checked_add(&identity_length, relative_length) &&
                       identity_length <= INT_MAX && identity_length < SIZE_MAX;
-    char *identity = size_valid ? xr_malloc(identity_length + 1) : NULL;
+    if (!size_valid)
+        return XR_MODULE_BUDGET;
+    char *identity = xr_malloc(identity_length + 1);
     if (!identity)
-        return false;
+        return XR_MODULE_OUT_OF_MEMORY;
     int written = snprintf(identity, identity_length + 1,
                            "module-id-v1:kind=%zu:%s:namespace=%zu:%s:path=%zu:%s", kind_length,
                            kind_name, namespace_length, namespace_id, relative_length,
                            logical_path);
     if (written < 0 || (size_t) written != identity_length) {
         xr_free(identity);
-        return false;
+        return XR_MODULE_INVALID;
     }
     *identity_out = identity;
-    return true;
+    return XR_MODULE_OK;
 }
 
-XR_FUNC bool xr_module_identity_from_source(const XrModuleIdentityAuthority *authority,
+XR_FUNC XrModuleStatus xr_module_identity_from_source(const XrModuleIdentityAuthority *authority,
                                             const char *source_path, char **identity_out,
                                             char **logical_path_out) {
     if (identity_out)
@@ -279,19 +283,19 @@ XR_FUNC bool xr_module_identity_from_source(const XrModuleIdentityAuthority *aut
     if (!authority || !source_path || !identity_out || !logical_path_out ||
         !physical_path_is_absolute(authority->physical_root) ||
         !physical_path_is_absolute(source_path) || !xr_module_identity_authority_valid(authority))
-        return false;
+        return XR_MODULE_INVALID;
     if (authority->kind == XR_MODULE_IDENTITY_MEMORY)
-        return false;
+        return XR_MODULE_INVALID;
 
     char *root = normalize_path(authority->physical_root);
     char *source = normalize_path(source_path);
     if (!root || !source) {
         xr_free(root);
         xr_free(source);
-        return false;
+        return XR_MODULE_OUT_OF_MEMORY;
     }
     size_t root_length = strlen(root);
-    bool contained = path_prefix_equal(source, root, root_length) &&
+    bool contained = strlen(source) >= root_length && path_prefix_equal(source, root, root_length) &&
                      (source[root_length] == '/' || source[root_length] == '\0');
     const char *relative = contained ? source + root_length : NULL;
     if (relative && relative[0] == '/')
@@ -299,45 +303,50 @@ XR_FUNC bool xr_module_identity_from_source(const XrModuleIdentityAuthority *aut
     if (!contained || !logical_path_valid(relative)) {
         xr_free(root);
         xr_free(source);
-        return false;
+        return XR_MODULE_INVALID;
     }
 
     char *logical = xr_strdup(relative);
     char *identity = NULL;
-    if (!logical || !xr_module_identity_from_logical(authority, relative, &identity)) {
+    XrModuleStatus status = logical ? xr_module_identity_from_logical(authority, relative, &identity) :
+        XR_MODULE_OUT_OF_MEMORY;
+    if (status != XR_MODULE_OK) {
         xr_free(logical);
         xr_free(root);
         xr_free(source);
-        return false;
+        return status;
     }
     *identity_out = identity;
     *logical_path_out = logical;
     xr_free(root);
     xr_free(source);
-    return true;
+    return XR_MODULE_OK;
 }
 
-XR_FUNC bool xr_module_identity_script_authority_from_source(
+XR_FUNC XrModuleStatus xr_module_identity_script_authority_from_source(
     const char *source_path, XrModuleIdentityAuthority *authority, char **root_out) {
     if (authority)
         *authority = (XrModuleIdentityAuthority) {0};
     if (root_out)
         *root_out = NULL;
     if (!source_path || !authority || !root_out)
-        return false;
-    char *source = xr_realpath(source_path);
-    char *root = source ? xr_path_dirname(source) : NULL;
+        return XR_MODULE_INVALID;
+    XrPathStatus path_status;
+    char *source = xr_realpath(source_path, &path_status);
+    if (!source) return xr_module_status_from_path(path_status);
+    char *root = xr_path_dirname(source);
     xr_free(source);
     if (!root || !physical_path_is_absolute(root)) {
+        XrModuleStatus status = root ? XR_MODULE_INVALID : XR_MODULE_OUT_OF_MEMORY;
         xr_free(root);
-        return false;
+        return status;
     }
     *authority = (XrModuleIdentityAuthority) {
         .kind = XR_MODULE_IDENTITY_SCRIPT,
         .physical_root = root,
     };
     *root_out = root;
-    return true;
+    return XR_MODULE_OK;
 }
 
 static bool parse_framed_component(const char **cursor, const char *prefix, const char **value_out,

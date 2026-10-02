@@ -46,7 +46,7 @@ static int xaot_build_script(const char *source_path, XaotBuildOptions *options,
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
     if (!options ||
-        !xr_module_identity_script_authority_from_source(source_path, &authority, &authority_root))
+        !(xr_module_identity_script_authority_from_source(source_path, &authority, &authority_root) == XR_MODULE_OK))
         return 1;
     options->entry_module_authority = authority;
     int rc = xaot_build(source_path, options, result);
@@ -382,8 +382,8 @@ static bool package_module_spec_fixture_init(PackageModuleSpecFixture *fixture,
         .namespace_id = fixture->namespace_id,
         .physical_root = fixture->physical_root,
     };
-    if (!xr_module_identity_from_source(&fixture->spec.authority, source_path,
-                                        &fixture->spec.canonical, &fixture->spec.logical_path))
+    if (!(xr_module_identity_from_source(&fixture->spec.authority, source_path,
+                                        &fixture->spec.canonical, &fixture->spec.logical_path) == XR_MODULE_OK))
         return false;
     source = xr_file_read_all(source_path, "r", NULL);
     if (!source) {
@@ -1452,8 +1452,8 @@ static void test_driver_requires_exact_typed_entry_authority(void) {
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     ASSERT_TRUE(install_native_target_profile(&options, &target));
-    ASSERT_TRUE(xr_module_identity_script_authority_from_source(source_path, &script_authority,
-                                                                &physical_root));
+    ASSERT_TRUE((xr_module_identity_script_authority_from_source(source_path, &script_authority,
+                                                                &physical_root) == XR_MODULE_OK));
 
     options.entry_module_authority = script_authority;
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);

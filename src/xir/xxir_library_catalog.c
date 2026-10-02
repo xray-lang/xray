@@ -120,7 +120,9 @@ static XrXirStatus library_catalog_item(XrXirLibraryCatalog *catalog, size_t ind
     if (memcmp(digest,input->sha256,32)) return XR_XIR_BAD_STRUCTURE;
     XrModuleResourceBinding *resource = &catalog->resources[index];
     char *identity = NULL;
-    if (!xr_module_identity_from_logical(&input->authority,input->logical_path,&identity)) return XR_XIR_OUT_OF_MEMORY;
+    XrModuleStatus identity_status = xr_module_identity_from_logical(&input->authority,input->logical_path,&identity);
+    if (identity_status != XR_MODULE_OK) return identity_status == XR_MODULE_OUT_OF_MEMORY ?
+        XR_XIR_OUT_OF_MEMORY : identity_status == XR_MODULE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     resource->canonical = identity; resource->logical_path = library_catalog_text(input->logical_path);
     resource->authority.kind = input->authority.kind;
     resource->authority.physical_root = library_catalog_text(input->authority.physical_root);

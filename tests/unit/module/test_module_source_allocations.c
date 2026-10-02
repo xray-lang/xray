@@ -125,7 +125,7 @@ static int graph_attempt(const char *directory,const char *source,size_t failure
     if(!failure) {
         if(built!=0||sorted!=(cycle?-1:0)||graph->has_cycle!=cycle||
            graph->spec_count!=(cycle?2:19)||graph->topo_count!=graph->spec_count)code=32;
-        if(!cycle && (graph->specs[graph->entry_index].dep_count!=18 || graph->resolution_failed))code=33;
+        if(!cycle && (graph->specs[graph->entry_index].dep_count!=18 || graph->resolution_status != XR_MODULE_OK))code=33;
     } else if(built==0&&sorted==0)code=34;
     xr_module_test_free(error);
     xr_module_graph_free(graph);xr_module_resolver_free(resolver);xr_compiler_session_delete(session);
@@ -134,7 +134,7 @@ static int graph_attempt(const char *directory,const char *source,size_t failure
 }
 static int graph_cases(void) {
     char reserved[512];if(xr_temp_dir_create("xray-module-graph-allocations",reserved,sizeof(reserved))!=0)return 36;
-    char *directory=xr_realpath(reserved);if(!directory)return 37;
+    char *directory=xr_realpath(reserved, NULL);if(!directory)return 37;
     char source[2048]={0};size_t used=0;
     for(int i=0;i<18;++i) {
         used+=(size_t)snprintf(source+used,sizeof(source)-used,"import { value } from \"./leaf%d\"\n",i);

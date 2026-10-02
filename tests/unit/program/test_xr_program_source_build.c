@@ -925,8 +925,8 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
 
     fixture->authority.kind = XR_MODULE_IDENTITY_SCRIPT;
     fixture->authority.physical_root = fixture->directory;
-    if (!xr_module_identity_from_source(&fixture->authority, fixture->entry_path,
-                                        &fixture->entry_identity, &fixture->entry_logical_path))
+    if (!(xr_module_identity_from_source(&fixture->authority, fixture->entry_path,
+                                        &fixture->entry_identity, &fixture->entry_logical_path) == XR_MODULE_OK))
         goto fail;
     XrFingerprint source_fingerprint;
     xr_module_source_fingerprint(entry_source, &source_fingerprint);
@@ -1327,8 +1327,8 @@ TEST(source_owner_retained_roots_share_one_detached_program_and_instance) {
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     char *library_identity = NULL;
     char *library_path = NULL;
-    ASSERT_TRUE(xr_module_identity_from_source(&fixture.authority, fixture.dependency_path,
-                                               &library_identity, &library_path));
+    ASSERT_TRUE((xr_module_identity_from_source(&fixture.authority, fixture.dependency_path,
+                                               &library_identity, &library_path) == XR_MODULE_OK));
     XrProgramSourceEntryIdentity roots[2] = {fixture.input.entry, fixture.input.entry};
     roots[0].function_name = "testCase";
     roots[1].module_identity = library_identity;
@@ -1434,8 +1434,8 @@ TEST(source_owner_rejects_invalid_retained_root_identity_without_partial_product
                 expected = XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT;
                 break;
             case 8:
-                ASSERT_TRUE(xr_module_identity_from_logical(&fixture.authority, "absent.xr",
-                                                            &wrong_identity));
+                ASSERT_TRUE((xr_module_identity_from_logical(&fixture.authority, "absent.xr",
+                                                            &wrong_identity) == XR_MODULE_OK));
                 roots[0].module_identity = wrong_identity;
                 break;
             case 7:
@@ -8586,7 +8586,7 @@ TEST(source_owner_rejects_non_authoritative_entry_identity) {
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     char *wrong_identity = NULL;
-    ASSERT_TRUE(xr_module_identity_from_logical(&fixture.authority, "other.xr", &wrong_identity));
+    ASSERT_TRUE((xr_module_identity_from_logical(&fixture.authority, "other.xr", &wrong_identity) == XR_MODULE_OK));
     XrProgramSourceBuildInput input = fixture.input;
     input.entry.module_identity = wrong_identity;
     XrProgramSourceProduct product = {0};

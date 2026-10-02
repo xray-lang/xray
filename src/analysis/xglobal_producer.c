@@ -13199,7 +13199,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
 
 static bool prelude_enum_module_identity(char **identity_out) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB, "prelude", NULL};
-    return xr_module_identity_from_logical(&authority, "builtin-enums", identity_out);
+    return (xr_module_identity_from_logical(&authority, "builtin-enums", identity_out) == XR_MODULE_OK);
 }
 
 XR_FUNC uint64_t xg_prelude_enum_module_canonical_hash(void) {

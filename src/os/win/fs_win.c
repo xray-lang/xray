@@ -298,7 +298,7 @@ char *xr_fs_realpath(const char *path, char *out, size_t out_size) {
     if (path == NULL || out == NULL || out_size == 0) {
         return NULL;
     }
-    char *resolved = xr_realpath(path);
+    char *resolved = xr_realpath(path, NULL);
     if (!resolved) return NULL;
     size_t size = strlen(resolved) + 1;
     if (size <= out_size) memcpy(out, resolved, size);

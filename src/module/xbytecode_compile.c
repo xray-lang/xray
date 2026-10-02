@@ -29,7 +29,7 @@ static bool stdlib_compile_authority(const char *module_name, const char *source
                                      char **identity_out) {
     *root_out = NULL;
     *identity_out = NULL;
-    char *source = xr_realpath(source_file);
+    char *source = xr_realpath(source_file, NULL);
     char *module_dir = source ? xr_path_dirname(source) : NULL;
     char *root = module_dir ? xr_path_dirname(module_dir) : NULL;
     char *logical = NULL;
@@ -44,7 +44,7 @@ static bool stdlib_compile_authority(const char *module_name, const char *source
         .namespace_id = module_name,
         .physical_root = root,
     };
-    bool valid = xr_module_identity_from_source(authority, source, identity_out, &logical);
+    bool valid = (xr_module_identity_from_source(authority, source, identity_out, &logical) == XR_MODULE_OK);
     char expected[512];
     int expected_length = snprintf(expected, sizeof(expected), "%s/%s.xr", module_name,
                                    module_name);

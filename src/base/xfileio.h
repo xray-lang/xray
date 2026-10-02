@@ -52,6 +52,10 @@ XR_FUNC char *xr_path_basename(const char *path);
  * System realpath() uses libc malloc; this function converts to xr_malloc.
  * Returns NULL if realpath() fails. Caller must xr_free().
  */
-XR_FUNC char *xr_realpath(const char *path);
+typedef enum XrPathStatus {
+    XR_PATH_OK, XR_PATH_INVALID, XR_PATH_BUDGET, XR_PATH_IO, XR_PATH_OUT_OF_MEMORY, XR_PATH_NOT_FOUND
+} XrPathStatus;
+/* Optional status preserves the cause even when no diagnostic can be allocated. */
+XR_FUNC char *xr_realpath(const char *path, XrPathStatus *status);
 
 #endif  // XFILEIO_H

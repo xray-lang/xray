@@ -353,7 +353,7 @@ static XrModule *publish_source_module_fixture(XrVMRuntime *isolate, const char 
 TEST(source_module_exports_ignore_an_unrelated_program_module_table) {
     char directory[512];
     ASSERT_EQ_INT(xr_temp_dir_create("xray-source-module-binding", directory, sizeof(directory)), 0);
-    char *canonical = xr_realpath(directory);
+    char *canonical = xr_realpath(directory, NULL);
     ASSERT_NOT_NULL(canonical);
     const char *source_a = "import { value } from \"./leaf_a\"\n"
         "export fn answer() -> i64 { return value() + 1 }\n";
@@ -379,7 +379,7 @@ TEST(source_module_exports_ignore_an_unrelated_program_module_table) {
     ASSERT_NULL(registry->module_table);
     char leaf_path[1024];
     snprintf(leaf_path, sizeof(leaf_path), "%s/leaf_b.xr", canonical);
-    char *leaf_canonical = xr_realpath(leaf_path);
+    char *leaf_canonical = xr_realpath(leaf_path, NULL);
     ASSERT_NOT_NULL(leaf_canonical);
     XrValue leaf_b = xr_module_import(isolate, leaf_canonical);
     xr_free(leaf_canonical);

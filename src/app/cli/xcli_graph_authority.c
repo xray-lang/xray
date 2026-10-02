@@ -92,8 +92,8 @@ XR_FUNC bool xr_cli_graph_authority_open(XrCliGraphAuthority *context, XrModuleR
                 return false;
             }
         }
-    } else if (!xr_module_identity_script_authority_from_source(
-                   entry_path, &context->entry_authority, &context->authority_root)) {
+    } else if (!(xr_module_identity_script_authority_from_source(
+                   entry_path, &context->entry_authority, &context->authority_root) == XR_MODULE_OK)) {
         graph_authority_error(error, error_size, "cannot establish exact script module authority");
         xr_cli_graph_authority_close(context);
         return false;

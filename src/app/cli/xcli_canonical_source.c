@@ -107,7 +107,7 @@ xr_cli_canonical_source_build(const XrCliCanonicalSourceRequest *request,
         return reject(diagnostic_out, XR_CLI_CANONICAL_SOURCE_INVALID_INPUT,
                       "compiler host lacks a source session or module registry");
 
-    char *canonical_path = xr_realpath(request->entry_source_path);
+    char *canonical_path = xr_realpath(request->entry_source_path, NULL);
     if (!canonical_path)
         return reject(diagnostic_out, XR_CLI_CANONICAL_SOURCE_SOURCE_REJECTED,
                       "entry source path cannot be canonicalized");
@@ -128,8 +128,8 @@ xr_cli_canonical_source_build(const XrCliCanonicalSourceRequest *request,
     char *logical_path = NULL;
     XrFingerprint source_fingerprint = {{0}};
     XrCliCanonicalSourceStatus status = XR_CLI_CANONICAL_SOURCE_OK;
-    if (!xr_module_identity_from_source(&authority.entry_authority, canonical_path,
-                                        &module_identity, &logical_path)) {
+    if (!(xr_module_identity_from_source(&authority.entry_authority, canonical_path,
+                                        &module_identity, &logical_path) == XR_MODULE_OK)) {
         status = reject(diagnostic_out, XR_CLI_CANONICAL_SOURCE_AUTHORITY_REJECTED,
                         "entry source is outside its exact module authority");
         goto cleanup;

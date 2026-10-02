@@ -248,7 +248,7 @@ XR_FUNC bool xr_project_module_identity_authority(const XrProject *project,
         return false;
     }
 
-    char *physical_root = xr_realpath(project->root);
+    char *physical_root = xr_realpath(project->root, NULL);
     char *namespace_id = NULL;
     if (!physical_root) {
         project_authority_error(err, err_size, "project root does not resolve to a real path");

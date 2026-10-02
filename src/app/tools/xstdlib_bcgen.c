@@ -206,8 +206,8 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
-    bool have_authority = stdlib_module || xr_module_identity_script_authority_from_source(
-                                               input, &authority, &authority_root);
+    bool have_authority = stdlib_module || (xr_module_identity_script_authority_from_source(
+                                               input, &authority, &authority_root) == XR_MODULE_OK);
     bool ok =
         have_authority &&
         (stdlib_module ? xr_compile_stdlib_to_file(session, stdlib_module, input, output, flags)

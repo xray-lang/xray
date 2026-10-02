@@ -80,7 +80,7 @@ static bool build_compile_unit_identity(const XrModuleIdentityAuthority *authori
     XrModuleIdentityKind kind = authority ? authority->kind : 0;
     bool valid = false;
     if (kind == XR_MODULE_IDENTITY_MEMORY) {
-        valid = xr_module_identity_from_logical(authority, NULL, owned_identity);
+        valid = (xr_module_identity_from_logical(authority, NULL, owned_identity) == XR_MODULE_OK);
     } else if (kind == XR_MODULE_IDENTITY_STDLIB) {
         char logical_path[512];
         int logical_length = authority && authority->namespace_id
@@ -88,12 +88,12 @@ static bool build_compile_unit_identity(const XrModuleIdentityAuthority *authori
                                             authority->namespace_id, authority->namespace_id)
                                  : -1;
         valid = logical_length > 0 && (size_t) logical_length < sizeof(logical_path) &&
-                xr_module_identity_from_logical(authority, logical_path, owned_identity);
+                (xr_module_identity_from_logical(authority, logical_path, owned_identity) == XR_MODULE_OK);
     } else {
-        char *absolute_source = source_file ? xr_realpath(source_file) : NULL;
+        char *absolute_source = source_file ? xr_realpath(source_file, NULL) : NULL;
         char *logical_path = NULL;
-        valid = absolute_source && xr_module_identity_from_source(
-                                       authority, absolute_source, owned_identity, &logical_path);
+        valid = absolute_source && (xr_module_identity_from_source(
+                                       authority, absolute_source, owned_identity, &logical_path) == XR_MODULE_OK);
         xr_free(logical_path);
         xr_free(absolute_source);
     }

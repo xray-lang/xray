@@ -1461,7 +1461,7 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
         return false;
 
     /* Normalize to realpath for cache matching */
-    char *real = xr_realpath(abs_path);
+    char *real = xr_realpath(abs_path, NULL);
     if (real) {
         xr_free(abs_path);
         abs_path = real;

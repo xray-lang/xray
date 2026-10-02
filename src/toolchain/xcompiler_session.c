@@ -1112,7 +1112,7 @@ XR_FUNC bool xr_compiler_session_retain_repl_source(XrCompilerSession *session, 
     snprintf(record.namespace_id, length + 32u, "%s-g%llu", authority->namespace_id,
              (unsigned long long) session->repl_declarations[record.declaration_index].generation);
     XrModuleIdentityAuthority derived = {XR_MODULE_IDENTITY_MEMORY, record.namespace_id, NULL};
-    if (!xr_module_identity_from_logical(&derived, NULL, &record.canonical))
+    if (!(xr_module_identity_from_logical(&derived, NULL, &record.canonical) == XR_MODULE_OK))
         goto fail;
     if (!xa_analyzer_prepare_input_scope(session->repl_analyzer, record.source_file,
                                          session->published_repl_scope

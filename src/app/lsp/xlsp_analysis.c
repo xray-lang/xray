@@ -88,7 +88,7 @@ static const char *lsp_graph_identity_for_uri(const XrModuleGraph *graph, const 
         return NULL;
 
     const char *path = xlsp_uri_to_path(uri);
-    char *canonical_path = xr_realpath(path);
+    char *canonical_path = xr_realpath(path, NULL);
     int idx = xr_module_graph_find_source(graph, canonical_path ? canonical_path : path);
     xr_free(canonical_path);
     return idx >= 0 ? graph->specs[idx].canonical : NULL;
@@ -112,7 +112,7 @@ bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession 
         if (!lsp_logical_path_from_uri(uri, logical, sizeof(logical)))
             return false;
         const XrModuleIdentityAuthority authority = {.kind = XR_MODULE_IDENTITY_SCRIPT};
-        if (!xr_module_identity_from_logical(&authority, logical, &identity))
+        if (!(xr_module_identity_from_logical(&authority, logical, &identity) == XR_MODULE_OK))
             return false;
     }
 
@@ -322,7 +322,7 @@ static XrLspDocument *lsp_document_for_source(XrLspServer *server, const char *s
              bucket = bucket->next) {
             XrLspDocument *doc = bucket->doc;
             const char *doc_path = doc && doc->uri ? xlsp_uri_to_path(doc->uri) : NULL;
-            char *canonical_path = doc_path ? xr_realpath(doc_path) : NULL;
+            char *canonical_path = doc_path ? xr_realpath(doc_path, NULL) : NULL;
             bool matches = canonical_path && strcmp(canonical_path, source_path) == 0;
             xr_free(canonical_path);
             if (matches)

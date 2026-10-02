@@ -116,7 +116,7 @@ typedef struct XrModuleGraph {
     /* Entry module index */
     int entry_index;
     /* Failure remains observable even when allocating its diagnostic fails. */
-    bool resolution_failed;
+    XrModuleStatus resolution_status;
 } XrModuleGraph;
 
 /* ========== API ========== */
@@ -135,9 +135,9 @@ XR_FUNC void xr_module_graph_free(XrModuleGraph *g);
 
 /* Build an empty graph by BFS from an entry source file.
  * Parses each discovered module and collects its import edges.
- * Returns 0 on success, -1 on error (e.g. file not found).
+ * Returns XR_MODULE_OK on success, otherwise the precise failure status.
  * On error, *out_err is set to a descriptive message (caller frees). */
-XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
+XR_FUNC XrModuleStatus xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
                                   const XrModuleIdentityAuthority *entry_authority,
                                   char **out_err);
 
@@ -146,27 +146,27 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
  * authority. New modules invalidate the topological order. This extends the
  * checking graph, not an execution or initialization closure. On error discard
  * the graph; partial discovery is owned by it and freed with it. */
-XR_FUNC int xr_module_graph_include(XrModuleGraph *g, const char *source_path,
+XR_FUNC XrModuleStatus xr_module_graph_include(XrModuleGraph *g, const char *source_path,
                                     const XrModuleIdentityAuthority *authority, char **out_err);
 
 /* Build the graph from an in-memory entry source.
  * The caller-supplied memory authority is mandatory.
  * Relative imports fail because memory modules have no physical root. */
-XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
+XR_FUNC XrModuleStatus xr_module_graph_build_source(XrModuleGraph *g,
                                          const XrModuleIdentityAuthority *entry_authority,
                                          const char *entry_source, char **out_err);
 
 /* Check the caller's exact bytes under a typed logical source identity.
  * A physical root requires a matching rooted locator. A rootless stdlib source
  * may use a diagnostic locator but cannot resolve relative file imports. */
-XR_FUNC int xr_module_graph_build_logical_source(XrModuleGraph *g,
+XR_FUNC XrModuleStatus xr_module_graph_build_logical_source(XrModuleGraph *g,
     const XrModuleIdentityAuthority *authority, const char *logical_path,
     const char *source_path, const char *source, char **out_err);
 
 /* Run topological sort (Tarjan SCC).
  * After success, g->topo_order is filled and g->has_cycle indicates cycles.
  * Returns 0 on success (no cycle), -1 if cycles detected (g->cycle_desc set). */
-XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g);
+XR_FUNC XrModuleStatus xr_module_graph_topological_sort(XrModuleGraph *g);
 
 /* The name this module is imported under at run time.
  *

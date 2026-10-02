@@ -46,31 +46,21 @@ static char *make_error(const char *fmt, ...) {
     return xr_strdup(buf);
 }
 
-/*
- * Probe for a file import: try <base>/<rel>.xr, then <base>/<rel>/index.xr.
- * Returns xr_malloc'd absolute path on success, NULL on failure.
- */
-static char *probe_file_import(const char *base_dir, const char *rel_path) {
-    XR_DCHECK(base_dir != NULL, "probe_file_import: NULL base_dir");
-    XR_DCHECK(rel_path != NULL, "probe_file_import: NULL rel_path");
-
+/* Probe the two source spellings and publish an owned path only on success. */
+static XrModuleStatus probe_file_import(const char *base_dir, const char *rel_path, char **output) {
     char path[XR_PATH_MAX];
-
-    /* Try <base>/<rel>.xr */
-    snprintf(path, sizeof(path), "%s/%s.xr", base_dir, rel_path);
-    if (xr_fs_exists(path)) {
-        char *real = xr_realpath(path);
-        return real ? real : xr_strdup(path);
+    const char *formats[] = {"%s/%s.xr", "%s/%s/index.xr"};
+    for (size_t i = 0; i < sizeof(formats) / sizeof(formats[0]); ++i) {
+        int length = snprintf(path, sizeof(path), formats[i], base_dir, rel_path);
+        if (length < 0) return XR_MODULE_INVALID;
+        if ((size_t) length >= sizeof(path)) return XR_MODULE_BUDGET;
+        if (xr_fs_exists(path)) {
+            XrPathStatus status;
+            *output = xr_realpath(path, &status);
+            return xr_module_status_from_path(status);
+        }
     }
-
-    /* Try <base>/<rel>/index.xr (directory entry) */
-    snprintf(path, sizeof(path), "%s/%s/index.xr", base_dir, rel_path);
-    if (xr_fs_exists(path)) {
-        char *real = xr_realpath(path);
-        return real ? real : xr_strdup(path);
-    }
-
-    return NULL;
+    return XR_MODULE_NOT_FOUND;
 }
 
 /*
@@ -145,124 +135,90 @@ void xr_module_id_cleanup(XrModuleId *id) {
     xr_free((char *) id->authority.namespace_id);
     xr_free((char *) id->authority.physical_root);
     memset(&id->authority, 0, sizeof(id->authority));
+    id->resource = NULL; id->representation = XR_MODULE_SOURCE;
 }
 
 /* ========== Cache Key ========== */
 
 /* Build a cache key from the durable importer identity, never its physical path. */
-static char *make_cache_key(const char *specifier, const char *importer_path,
-                            const XrModuleIdentityAuthority *authority) {
-    char *importer_identity = NULL;
-    char *importer_logical = NULL;
-    if (is_relative_specifier(specifier) &&
-        (!importer_path || !authority ||
-         !xr_module_identity_from_source(authority, importer_path, &importer_identity,
-                                         &importer_logical)))
-        return NULL;
-    const char *imp = importer_identity ? importer_identity : "named-module-v1";
-    size_t imp_len = strlen(imp);
-    size_t spec_len = strlen(specifier);
-    if (imp_len > SIZE_MAX - spec_len - 2) {
-        xr_free(importer_identity);
-        xr_free(importer_logical);
-        return NULL;
+static XrModuleStatus make_cache_key(const char *specifier, const char *importer_path,
+    const XrModuleIdentityAuthority *authority, char **output) {
+    char *identity = NULL, *logical = NULL;
+    if (is_relative_specifier(specifier) && !importer_path) return XR_MODULE_OK;
+    if (is_relative_specifier(specifier)) {
+        XrModuleStatus status = xr_module_identity_from_source(authority, importer_path, &identity, &logical);
+        if (status != XR_MODULE_OK) return status;
     }
-    char *key = xr_malloc(imp_len + 1 + spec_len + 1);
-    if (!key) {
-        xr_free(importer_identity);
-        xr_free(importer_logical);
-        return NULL;
+    const char *importer = identity ? identity : "named-module-v1";
+    size_t importer_length = strlen(importer), length = strlen(specifier);
+    XrModuleStatus status = XR_MODULE_BUDGET;
+    if (length <= SIZE_MAX - 2 && importer_length <= SIZE_MAX - length - 2) {
+        char *key = xr_malloc(importer_length + length + 2);
+        status = key ? XR_MODULE_OK : XR_MODULE_OUT_OF_MEMORY;
+        if (key) {
+            memcpy(key, importer, importer_length); key[importer_length] = '|';
+            memcpy(key + importer_length + 1, specifier, length + 1); *output = key;
+        }
     }
-    memcpy(key, imp, imp_len);
-    key[imp_len] = '|';
-    memcpy(key + imp_len + 1, specifier, spec_len);
-    key[imp_len + 1 + spec_len] = '\0';
-    xr_free(importer_identity);
-    xr_free(importer_logical);
-    return key;
+    xr_free(identity); xr_free(logical); return status;
 }
 
-/* Copy an XrModuleId into a fresh heap allocation for caching. */
-static XrModuleId *clone_module_id(const XrModuleId *src) {
-    XrModuleId *dst = xr_malloc(sizeof(XrModuleId));
-    if (!dst)
-        return NULL;
-    dst->kind = src->kind;
-    dst->canonical = src->canonical ? xr_strdup(src->canonical) : NULL;
-    dst->logical_path = src->logical_path ? xr_strdup(src->logical_path) : NULL;
-    dst->source_path = src->source_path ? xr_strdup(src->source_path) : NULL;
-    dst->authority.kind = src->authority.kind;
-    dst->authority.namespace_id =
-        src->authority.namespace_id ? xr_strdup(src->authority.namespace_id) : NULL;
-    dst->authority.physical_root =
-        src->authority.physical_root ? xr_strdup(src->authority.physical_root) : NULL;
-    return dst;
-}
-
-/* Copy a cached XrModuleId into the caller's out_id (which caller will cleanup). */
-static void copy_module_id(XrModuleId *dst, const XrModuleId *src) {
-    dst->kind = src->kind;
-    dst->canonical = src->canonical ? xr_strdup(src->canonical) : NULL;
-    dst->logical_path = src->logical_path ? xr_strdup(src->logical_path) : NULL;
-    dst->source_path = src->source_path ? xr_strdup(src->source_path) : NULL;
-    dst->authority.kind = src->authority.kind;
-    dst->authority.namespace_id =
-        src->authority.namespace_id ? xr_strdup(src->authority.namespace_id) : NULL;
-    dst->authority.physical_root =
-        src->authority.physical_root ? xr_strdup(src->authority.physical_root) : NULL;
+static XrModuleStatus copy_module_id(XrModuleId *output, const XrModuleId *source) {
+    XrModuleId owned = {0};
+    owned.kind = source->kind;
+    owned.canonical = source->canonical ? xr_strdup(source->canonical) : NULL;
+    owned.logical_path = source->logical_path ? xr_strdup(source->logical_path) : NULL;
+    owned.source_path = source->source_path ? xr_strdup(source->source_path) : NULL;
+    owned.authority.kind = source->authority.kind;
+    owned.authority.namespace_id = source->authority.namespace_id ? xr_strdup(source->authority.namespace_id) : NULL;
+    owned.authority.physical_root = source->authority.physical_root ? xr_strdup(source->authority.physical_root) : NULL;
+    owned.representation = source->representation; owned.resource = source->resource;
+    if ((source->canonical && !owned.canonical) || (source->logical_path && !owned.logical_path) ||
+        (source->source_path && !owned.source_path) ||
+        (source->authority.namespace_id && !owned.authority.namespace_id) ||
+        (source->authority.physical_root && !owned.authority.physical_root)) {
+        xr_module_id_cleanup(&owned); return XR_MODULE_OUT_OF_MEMORY;
+    }
+    *output = owned; return XR_MODULE_OK;
 }
 
 /* ========== Resolution: stdlib ========== */
 
-static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out_id,
-                          char **err_buf) {
-    if (xr_stdlib_module_descriptor(name)) {
-        char logical_path[XR_PATH_MAX];
-        int logical_length = snprintf(logical_path, sizeof(logical_path), "%s/%s.xr", name, name);
-        if (logical_length <= 0 || (size_t) logical_length >= sizeof(logical_path)) {
-            if (err_buf)
-                *err_buf = make_error("stdlib module '%s' has an invalid logical identity", name);
-            return -1;
-        }
-        char *stdlib_root = NULL;
-        out_id->kind = XR_MOD_STDLIB;
-        out_id->source_path = NULL;
-
-        /* Also check for script extension: stdlib/<name>/<name>.xr */
-        if (r->config.stdlib_path) {
-            char path[XR_PATH_MAX];
-            snprintf(path, sizeof(path), "%s/%s/%s.xr", r->config.stdlib_path, name, name);
-            if (xr_fs_exists(path)) {
-                char *real = xr_realpath(path);
-                out_id->source_path = real ? real : xr_strdup(path);
-                stdlib_root = xr_realpath(r->config.stdlib_path);
-            }
-        }
-        XrModuleIdentityAuthority authority = {
-            .kind = XR_MODULE_IDENTITY_STDLIB,
-            .namespace_id = name,
-            .physical_root = stdlib_root,
-        };
-        bool valid = xr_module_identity_from_logical(&authority, logical_path, &out_id->canonical);
-        out_id->logical_path = valid ? xr_strdup(logical_path) : NULL;
-        out_id->authority.kind = XR_MODULE_IDENTITY_STDLIB;
-        out_id->authority.namespace_id = valid ? xr_strdup(name) : NULL;
-        out_id->authority.physical_root = stdlib_root;
-        if (!valid || !out_id->logical_path || !out_id->authority.namespace_id ||
-            (out_id->source_path && !out_id->authority.physical_root)) {
-            xr_module_id_cleanup(out_id);
-            if (err_buf)
-                *err_buf =
-                    make_error("stdlib module '%s' has an incomplete identity authority", name);
-            return -1;
-        }
-        return 0;
+static XrModuleStatus resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out_id,
+    char **err_buf) {
+    if (!xr_stdlib_module_descriptor(name)) {
+        if (err_buf) *err_buf = make_error("module '%s' not found in stdlib", name);
+        return XR_MODULE_NOT_FOUND;
     }
-
-    /* Not a known stdlib module */
-    if (err_buf)
-        *err_buf = make_error("module '%s' not found in stdlib", name);
-    return -1;
+    char logical[XR_PATH_MAX];
+    int length = snprintf(logical, sizeof(logical), "%s/%s.xr", name, name);
+    if (length < 0) return XR_MODULE_INVALID;
+    if ((size_t) length >= sizeof(logical)) return XR_MODULE_BUDGET;
+    XrModuleStatus status = XR_MODULE_OK;
+    out_id->kind = XR_MOD_STDLIB;
+    out_id->authority.kind = XR_MODULE_IDENTITY_STDLIB;
+    out_id->authority.namespace_id = xr_strdup(name);
+    if (!out_id->authority.namespace_id) { status = XR_MODULE_OUT_OF_MEMORY; goto failed; }
+    if (r->config.stdlib_path) {
+        char path[XR_PATH_MAX];
+        length = snprintf(path, sizeof(path), "%s/%s", r->config.stdlib_path, logical);
+        if (length < 0) { status = XR_MODULE_INVALID; goto failed; }
+        if ((size_t) length >= sizeof(path)) { status = XR_MODULE_BUDGET; goto failed; }
+        if (xr_fs_exists(path)) {
+            XrPathStatus path_status;
+            out_id->source_path = xr_realpath(path, &path_status);
+            if (!out_id->source_path) { status = xr_module_status_from_path(path_status); goto failed; }
+            out_id->authority.physical_root = xr_realpath(r->config.stdlib_path, &path_status);
+            if (!out_id->authority.physical_root) { status = xr_module_status_from_path(path_status); goto failed; }
+        }
+    }
+    status = xr_module_identity_from_logical(&out_id->authority, logical, &out_id->canonical);
+    if (status != XR_MODULE_OK) goto failed;
+    out_id->logical_path = xr_strdup(logical);
+    if (out_id->logical_path) return XR_MODULE_OK;
+    status = XR_MODULE_OUT_OF_MEMORY;
+failed:
+    xr_module_id_cleanup(out_id); return status;
 }
 
 /* ========== Resolution: relative file/directory ========== */
@@ -280,31 +236,40 @@ static bool stdlib_submodule_path(const char *path, char *name, size_t capacity)
     return !first && strcmp(slash + 1, name) && xr_stdlib_module_descriptor(name);
 }
 
-static int resolve_stdlib_submodule(XrModuleResolver *r, const char *specifier,
-                                    XrModuleId *out_id, char **err_buf) {
+static XrModuleStatus resolve_stdlib_submodule(XrModuleResolver *r, const char *specifier,
+    XrModuleId *out_id, char **err_buf) {
     const char *relative = specifier + 4;
     char name[256], logical[XR_PATH_MAX], path[XR_PATH_MAX];
-    if (!r->config.stdlib_path || !stdlib_submodule_path(relative, name, sizeof(name))) goto invalid;
+    XrModuleStatus status = XR_MODULE_INVALID;
+    if (!stdlib_submodule_path(relative, name, sizeof(name))) goto failed;
+    if (!r->config.stdlib_path) { status = XR_MODULE_NOT_FOUND; goto failed; }
     int length = snprintf(logical, sizeof(logical), "%s.xr", relative);
-    if (length <= 0 || (size_t) length >= sizeof(logical)) goto invalid;
+    if (length < 0) goto failed;
+    if ((size_t) length >= sizeof(logical)) { status = XR_MODULE_BUDGET; goto failed; }
     length = snprintf(path, sizeof(path), "%s/%s", r->config.stdlib_path, logical);
-    if (length <= 0 || (size_t) length >= sizeof(path) || !xr_fs_exists(path)) goto invalid;
+    if (length < 0) goto failed;
+    if ((size_t) length >= sizeof(path)) { status = XR_MODULE_BUDGET; goto failed; }
+    if (!xr_fs_exists(path)) { status = XR_MODULE_NOT_FOUND; goto failed; }
+    XrPathStatus path_status;
     out_id->kind = XR_MOD_STDLIB;
-    out_id->source_path = xr_realpath(path);
+    out_id->source_path = xr_realpath(path, &path_status);
+    if (!out_id->source_path) { status = xr_module_status_from_path(path_status); goto failed; }
     out_id->authority.kind = XR_MODULE_IDENTITY_STDLIB;
     out_id->authority.namespace_id = xr_strdup(name);
-    out_id->authority.physical_root = xr_realpath(r->config.stdlib_path);
-    if (!out_id->source_path || !out_id->authority.namespace_id || !out_id->authority.physical_root ||
-        !xr_module_identity_from_source(&out_id->authority, out_id->source_path,
-            &out_id->canonical, &out_id->logical_path) || strcmp(out_id->logical_path, logical)) goto invalid;
-    return 0;
-invalid:
+    if (!out_id->authority.namespace_id) { status = XR_MODULE_OUT_OF_MEMORY; goto failed; }
+    out_id->authority.physical_root = xr_realpath(r->config.stdlib_path, &path_status);
+    if (!out_id->authority.physical_root) { status = xr_module_status_from_path(path_status); goto failed; }
+    status = xr_module_identity_from_source(&out_id->authority, out_id->source_path,
+        &out_id->canonical, &out_id->logical_path);
+    if (status == XR_MODULE_OK && strcmp(out_id->logical_path, logical)) status = XR_MODULE_INVALID;
+    if (status == XR_MODULE_OK) return status;
+failed:
     xr_module_id_cleanup(out_id);
     if (err_buf) *err_buf = make_error("stdlib source submodule '%s' lacks an exact authorized source", specifier);
-    return -1;
+    return status;
 }
 
-static int resolve_relative(const char *specifier, const char *importer_path,
+static XrModuleStatus resolve_relative(const char *specifier, const char *importer_path,
                             const XrModuleIdentityAuthority *importer_authority, XrModuleId *out_id,
                             char **err_buf) {
     const XrModuleIdentityAuthority *authority = importer_authority;
@@ -333,25 +298,27 @@ static int resolve_relative(const char *specifier, const char *importer_path,
         if (err_buf)
             *err_buf =
                 make_error("cannot determine base directory for relative import '%s'", specifier);
-        return -1;
+        return importer_path ? XR_MODULE_OUT_OF_MEMORY : XR_MODULE_IO;
     }
 
-    char *resolved = probe_file_import(base_dir, specifier);
+    char *resolved = NULL;
+    XrModuleStatus status = probe_file_import(base_dir, specifier, &resolved);
     xr_free(base_dir);
 
     if (!resolved) {
         if (err_buf)
             *err_buf = make_error("module '%s' not found (tried .xr and /index.xr)", specifier);
-        return -1;
+        return status;
     }
 
     out_id->kind = authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE;
-    if (!xr_module_identity_from_source(authority, resolved, &out_id->canonical,
-                                        &out_id->logical_path)) {
+    status = xr_module_identity_from_source(authority, resolved, &out_id->canonical,
+        &out_id->logical_path);
+    if (status != XR_MODULE_OK) {
         if (err_buf)
             *err_buf = make_error("module '%s' escapes or lacks its identity authority", specifier);
         xr_free(resolved);
-        return -1;
+        return status;
     }
     out_id->source_path = resolved;
     out_id->authority.kind = authority->kind;
@@ -363,14 +330,33 @@ static int resolve_relative(const char *specifier, const char *importer_path,
         xr_module_id_cleanup(out_id);
         if (err_buf)
             *err_buf = make_error("out of memory resolving module '%s'", specifier);
-        return -1;
+        return XR_MODULE_OUT_OF_MEMORY;
     }
     return 0;
 }
 
 /* ========== Resolution: third-party package ========== */
 
-static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleId *out_id,
+static XrModuleStatus resolve_package_source(const XrModuleIdentityAuthority *authority,
+    const char *path, XrModuleId *out_id) {
+    XrPathStatus path_status;
+    out_id->source_path = xr_realpath(path, &path_status);
+    if (!out_id->source_path) return xr_module_status_from_path(path_status);
+    out_id->kind = XR_MOD_PACKAGE;
+    XrModuleStatus status = xr_module_identity_from_source(authority, out_id->source_path,
+        &out_id->canonical, &out_id->logical_path);
+    if (status == XR_MODULE_OK) {
+        out_id->authority.kind = authority->kind;
+        out_id->authority.namespace_id = xr_strdup(authority->namespace_id);
+        out_id->authority.physical_root = xr_strdup(authority->physical_root);
+        if (!out_id->authority.namespace_id || !out_id->authority.physical_root)
+            status = XR_MODULE_OUT_OF_MEMORY;
+    }
+    if (status != XR_MODULE_OK) xr_module_id_cleanup(out_id);
+    return status;
+}
+
+static XrModuleStatus resolve_package(XrModuleResolver *r, const char *specifier, XrModuleId *out_id,
                            char **err_buf) {
     /* Parse owner/name */
     char owner[64], name[64];
@@ -439,15 +425,14 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
     /* Every source path below is canonicalized before the identity authority
      * sees it, and containment is a byte comparison, so a root reached through
      * a symlinked home would make the package escape a root that is its own.
-     * A root that does not resolve is left alone: the entry probe below
-     * reports a missing package far better than a path error would. */
+     * Canonicalization failures retain their typed cause rather than falling
+     * back to an unverified physical path. */
     if (root_length > 0 && (size_t) root_length < sizeof(package_root)) {
-        char *canonical_root = xr_realpath(package_root);
-        if (canonical_root) {
-            int copied = snprintf(package_root, sizeof(package_root), "%s", canonical_root);
-            xr_free(canonical_root);
-            root_length = copied;
-        }
+        XrPathStatus path_status;
+        char *canonical_root = xr_realpath(package_root, &path_status);
+        if (!canonical_root) return xr_module_status_from_path(path_status);
+        root_length = snprintf(package_root, sizeof(package_root), "%s", canonical_root);
+        xr_free(canonical_root);
     }
     char namespace_id[256];
     int namespace_length =
@@ -467,52 +452,20 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
 
     const char *entries[] = {"src/main.xr", "main.xr"};
     for (int i = 0; i < 2; i++) {
-        snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s", home, owner, name, version,
-                 entries[i]);
-        if (xr_fs_exists(path)) {
-            char *real = xr_realpath(path);
-            out_id->kind = XR_MOD_PACKAGE;
-            out_id->source_path = real ? real : xr_strdup(path);
-            if (out_id->source_path &&
-                xr_module_identity_from_source(&authority, out_id->source_path, &out_id->canonical,
-                                               &out_id->logical_path)) {
-                out_id->authority.kind = authority.kind;
-                out_id->authority.namespace_id = xr_strdup(namespace_id);
-                out_id->authority.physical_root = xr_strdup(package_root);
-                if (out_id->authority.namespace_id && out_id->authority.physical_root)
-                    return 0;
-            }
-            xr_module_id_cleanup(out_id);
-            if (err_buf)
-                *err_buf = make_error("package '%s' has an invalid identity root", specifier);
-            return -1;
-        }
+        int length = snprintf(path, sizeof(path), "%s/%s", package_root, entries[i]);
+        if (length < 0) return XR_MODULE_INVALID;
+        if ((size_t) length >= sizeof(path)) return XR_MODULE_BUDGET;
+        if (xr_fs_exists(path)) return resolve_package_source(&authority, path, out_id);
     }
-    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s.xr", home, owner, name, version,
-             name);
-    if (xr_fs_exists(path)) {
-        char *real = xr_realpath(path);
-        out_id->kind = XR_MOD_PACKAGE;
-        out_id->source_path = real ? real : xr_strdup(path);
-        if (out_id->source_path &&
-            xr_module_identity_from_source(&authority, out_id->source_path, &out_id->canonical,
-                                           &out_id->logical_path)) {
-            out_id->authority.kind = authority.kind;
-            out_id->authority.namespace_id = xr_strdup(namespace_id);
-            out_id->authority.physical_root = xr_strdup(package_root);
-            if (out_id->authority.namespace_id && out_id->authority.physical_root)
-                return 0;
-        }
-        xr_module_id_cleanup(out_id);
-        if (err_buf)
-            *err_buf = make_error("package '%s' has an invalid identity root", specifier);
-        return -1;
-    }
+    int length = snprintf(path, sizeof(path), "%s/%s.xr", package_root, name);
+    if (length < 0) return XR_MODULE_INVALID;
+    if ((size_t) length >= sizeof(path)) return XR_MODULE_BUDGET;
+    if (xr_fs_exists(path)) return resolve_package_source(&authority, path, out_id);
 
     if (err_buf)
         *err_buf =
             make_error("package '%s' not found; run 'xray pkg add %s'", specifier, specifier);
-    return -1;
+    return XR_MODULE_NOT_FOUND;
 }
 
 /* ========== Resolution: project-relative path ========== */
@@ -521,7 +474,7 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
 
 /* ========== Main Resolution Entry ========== */
 
-int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
+XrModuleStatus xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
                                const char *importer_path,
                                const XrModuleIdentityAuthority *importer_authority,
                                XrModuleId *out_id, char **err_buf) {
@@ -533,21 +486,24 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
     if (err_buf)
         *err_buf = NULL;
 
-    int resource_result = resolve_checked_resource(r, specifier, importer_path,
-        importer_authority, out_id, err_buf);
-    if (resource_result) return resource_result > 0 ? 0 : -1;
+    bool matched = false;
+    XrModuleStatus resource_status = resolve_checked_resource(r, specifier, importer_path,
+        importer_authority, out_id, err_buf, &matched);
+    if (resource_status != XR_MODULE_OK || matched) return resource_status;
     /* Check cache */
-    char *cache_key = make_cache_key(specifier, importer_path, importer_authority);
+    char *cache_key = NULL;
+    XrModuleStatus key_status = make_cache_key(specifier, importer_path, importer_authority, &cache_key);
+    if (key_status != XR_MODULE_OK) return key_status;
     if (cache_key) {
         XrModuleId *cached = (XrModuleId *) xr_hashmap_get(r->cache, cache_key);
         if (cached) {
-            copy_module_id(out_id, cached);
+            XrModuleStatus status = copy_module_id(out_id, cached);
             xr_free(cache_key);
-            return 0;
+            return status;
         }
     }
 
-    int rc;
+    XrModuleStatus rc;
 
     /* The specifier's shape decides what it is, and the four shapes do not
      * overlap. `is_bare_name` used to carry that decision from the caller and
@@ -571,23 +527,15 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
         rc = resolve_stdlib(r, specifier, out_id, err_buf);
     }
 
-    /* Cache on success. The cache is an optimization: on OOM just skip
-     * caching, resolution itself already succeeded. */
-    if (rc == 0 && cache_key) {
-        XrModuleId *to_cache = clone_module_id(out_id);
-        if (to_cache) {
-            if (xr_hashmap_set(r->cache, cache_key, to_cache)) {
-                /* The map holds the key pointer without copying it, so the
-                 * resolver keeps ownership until its teardown releases it. */
-                return 0;
-            }
-            xr_module_id_cleanup(to_cache);
-            xr_free(to_cache);
-        }
+    if (rc == XR_MODULE_OK && cache_key) {
+        XrModuleId *cached = xr_calloc(1, sizeof(*cached));
+        rc = cached ? copy_module_id(cached, out_id) : XR_MODULE_OUT_OF_MEMORY;
+        if (rc == XR_MODULE_OK && !xr_hashmap_set(r->cache, cache_key, cached))
+            rc = XR_MODULE_OUT_OF_MEMORY;
+        if (rc == XR_MODULE_OK) return rc;
+        if (cached) { xr_module_id_cleanup(cached); xr_free(cached); }
+        xr_module_id_cleanup(out_id);
     }
-
-    if (cache_key)
-        xr_free(cache_key);
-
+    xr_free(cache_key);
     return rc;
 }

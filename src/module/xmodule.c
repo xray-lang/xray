@@ -451,7 +451,7 @@ static char *resolve_stdlib_root(void) {
                 char cand[XR_PATH_MAX];
                 snprintf(cand, sizeof(cand), "%s/%s", dir, suffixes[i]);
                 if (xr_fs_exists(cand)) {
-                    char *real = xr_realpath(cand);
+                    char *real = xr_realpath(cand, NULL);
                     xr_free(dir);
                     return real ? real : xr_strdup(cand);
                 }
@@ -620,13 +620,13 @@ static const XrModuleSpec *module_spec_for_locator(const XrModuleRegistry *regis
         return NULL;
     const XrModuleSpec *match = NULL;
     bool invalid_match = false;
-    char *locator_realpath = xr_realpath(locator);
+    char *locator_realpath = xr_realpath(locator, NULL);
     for (int i = 0; i < graph->spec_count; i++) {
         const XrModuleSpec *spec = &graph->specs[i];
         bool matches = (spec->canonical && strcmp(spec->canonical, locator) == 0) ||
                        (spec->source_path && strcmp(spec->source_path, locator) == 0);
         if (!matches && locator_realpath && spec->source_path) {
-            char *spec_realpath = xr_realpath(spec->source_path);
+            char *spec_realpath = xr_realpath(spec->source_path, NULL);
             matches = spec_realpath && strcmp(spec_realpath, locator_realpath) == 0;
             xr_free(spec_realpath);
         }
@@ -1292,7 +1292,7 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     }
 
     // Normalize path (resolve . and ..), ensure same file uses same cache key
-    char *real_path = xr_realpath(path);
+    char *real_path = xr_realpath(path, NULL);
     if (real_path) {
         xr_free(path);
         path = real_path;

@@ -4459,8 +4459,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     char *entry_canonical = NULL;
     char *entry_logical = NULL;
     ASSERT(entry_realpath != NULL);
-    ASSERT(xr_module_identity_from_source(&authority, entry_realpath, &entry_canonical,
-                                          &entry_logical));
+    ASSERT((xr_module_identity_from_source(&authority, entry_realpath, &entry_canonical,
+                                          &entry_logical) == XR_MODULE_OK));
 
     XrModuleSpec specs[5] = {{.canonical = lib_id.canonical,
                               .logical_path = lib_id.logical_path,

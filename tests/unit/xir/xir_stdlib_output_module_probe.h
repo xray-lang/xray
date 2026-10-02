@@ -1,0 +1,46 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_stdlib_output_module_probe.h - Actual module allocation fault boundary
+ */
+#ifndef XIR_STDLIB_OUTPUT_MODULE_PROBE_H
+#define XIR_STDLIB_OUTPUT_MODULE_PROBE_H
+#include <stddef.h>
+#include <stdbool.h>
+extern size_t module_attempts, module_fail_at, module_live, module_bytes;
+extern bool module_injecting;
+void xr_test_stdlib_output_module_forget(void *pointer);
+/* Separate symbols let bootstrap objects coexist with the instrumented real implementations. */
+#define xr_file_read_all xr_test_output_file_read_all
+#define xr_path_basename xr_test_output_path_basename
+#define xr_path_dirname xr_test_output_path_dirname
+#define xr_path_join xr_test_output_path_join
+#define xr_realpath xr_test_output_realpath
+#define xr_module_identity_authority_valid xr_test_output_module_identity_authority_valid
+#define xr_module_identity_from_logical xr_test_output_module_identity_from_logical
+#define xr_module_identity_from_source xr_test_output_module_identity_from_source
+#define xr_module_identity_script_authority_from_source xr_test_output_module_identity_script_authority_from_source
+#define xr_module_identity_valid xr_test_output_module_identity_valid
+#define xr_module_resolver_new xr_test_output_module_resolver_new
+#define xr_module_resolver_free xr_test_output_module_resolver_free
+#define xr_module_resolver_set_lockfile xr_test_output_module_resolver_set_lockfile
+#define xr_module_resolver_resolve xr_test_output_module_resolver_resolve
+#define xr_module_id_cleanup xr_test_output_module_id_cleanup
+#define xr_module_source_fingerprint xr_test_output_module_source_fingerprint
+#define xr_module_spec_owns_top_level_decl xr_test_output_module_spec_owns_top_level_decl
+#define xr_module_graph_new xr_test_output_module_graph_new
+#define xr_module_graph_free xr_test_output_module_graph_free
+#define xr_module_graph_find xr_test_output_module_graph_find
+#define xr_module_graph_find_source xr_test_output_module_graph_find_source
+#define xr_module_graph_find_named_dependency xr_test_output_module_graph_find_named_dependency
+#define xr_module_graph_build xr_test_output_module_graph_build
+#define xr_module_graph_include xr_test_output_module_graph_include
+#define xr_module_graph_build_source xr_test_output_module_graph_build_source
+#define xr_module_graph_build_logical_source xr_test_output_module_graph_build_logical_source
+#define xr_module_graph_topological_sort xr_test_output_module_graph_topological_sort
+#define xr_module_spec_import_name xr_test_output_module_spec_import_name
+#define xr_module_graph_preload xr_test_output_module_graph_preload
+#endif

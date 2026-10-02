@@ -117,11 +117,11 @@ XR_FUNC bool xr_module_resolver_set_lockfile(XrModuleResolver *r, struct XrLockf
  * @param err_buf       On failure, a human-readable error message is
  *                      written here (xr_malloc'd).  Caller must xr_free().
  *                      May be NULL if the caller doesn't need the message.
- * @return              0 on success, -1 on failure
+ * @return              XR_MODULE_OK on success, otherwise a typed failure
  */
 /* Resolve with the importing module's exact authority. Package-internal relative
  * imports must use their package authority rather than the entry project root. */
-XR_FUNC int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
+XR_FUNC XrModuleStatus xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
                                        const char *importer_path,
                                        const XrModuleIdentityAuthority *importer_authority,
                                        XrModuleId *out_id, char **err_buf);

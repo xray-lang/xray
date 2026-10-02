@@ -257,7 +257,7 @@ static bool module_source_graph_build(ModuleSourceContext *context, const char *
         valid = xr_module_graph_build_logical_source(graph, authority, NULL, NULL,
                                                      source, &error) == 0;
     } else {
-        valid = xr_module_identity_from_source(authority, file, &identity, &logical) &&
+        valid = (xr_module_identity_from_source(authority, file, &identity, &logical) == XR_MODULE_OK) &&
             xr_module_graph_build_logical_source(graph, authority, logical,
                                                  file, source, &error) == 0;
     }

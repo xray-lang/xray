@@ -5242,8 +5242,8 @@ static bool xa_default_arg_path_matches(const char *a, const char *b) {
     if (blen > alen && b[blen - alen - 1] == '/' && strcmp(b + blen - alen, a) == 0)
         return true;
 
-    char *areal = xr_realpath(a);
-    char *breal = xr_realpath(b);
+    char *areal = xr_realpath(a, NULL);
+    char *breal = xr_realpath(b, NULL);
     bool same = areal && breal && strcmp(areal, breal) == 0;
     if (areal)
         xr_free(areal);

@@ -40,7 +40,7 @@ static void setup_tmpdir(void) {
      * authority compares the two byte for byte, so the root has to be
      * canonical as well. On Darwin /tmp is a symlink to private/tmp, which
      * makes an uncanonicalized root escape itself. */
-    char *canonical = xr_realpath(g_tmpdir);
+    char *canonical = xr_realpath(g_tmpdir, NULL);
     ASSERT_NOT_NULL(canonical);
     snprintf(g_tmpdir, sizeof(g_tmpdir), "%s", canonical);
     xr_free(canonical);
@@ -128,7 +128,7 @@ TEST(resolve_bare_stdlib_unknown) {
     XrModuleId mid;
     char *err = NULL;
     int rc = xr_module_resolver_resolve(r, "nosuchmodule", NULL, NULL, &mid, &err);
-    ASSERT_EQ_INT(rc, -1);
+    ASSERT_EQ_INT(rc, XR_MODULE_NOT_FOUND);
     ASSERT_NOT_NULL(err);
     xr_free(err);
 
@@ -152,7 +152,7 @@ TEST(resolve_relative_file) {
     XrModuleId mid;
     char *err = NULL;
     int rc = xr_module_resolver_resolve(r, "./utils", importer, NULL, &mid, &err);
-    ASSERT_EQ_INT(rc, -1);
+    ASSERT_EQ_INT(rc, XR_MODULE_INVALID);
     ASSERT_NOT_NULL(err);
     xr_free(err);
     err = NULL;
@@ -210,7 +210,7 @@ TEST(resolve_relative_not_found) {
     XrModuleId mid;
     char *err = NULL;
     int rc = xr_module_resolver_resolve(r, "./nonexist", importer, &authority, &mid, &err);
-    ASSERT_EQ_INT(rc, -1);
+    ASSERT_EQ_INT(rc, XR_MODULE_NOT_FOUND);
     ASSERT_NOT_NULL(err);
     xr_free(err);
 
@@ -307,7 +307,7 @@ TEST(resolve_single_segment_is_not_project_relative) {
     XrModuleId mid;
     char *err = NULL;
     int rc = xr_module_resolver_resolve(r, "config", importer, NULL, &mid, &err);
-    ASSERT_EQ_INT(rc, -1);
+    ASSERT_EQ_INT(rc, XR_MODULE_NOT_FOUND);
     xr_free(err);
     err = NULL;
 

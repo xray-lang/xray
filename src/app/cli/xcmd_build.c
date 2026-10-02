@@ -3095,8 +3095,8 @@ cmd_build_native_library(const char *input, const char *output, const char *cc, 
         project ? xr_project_module_identity_authority(
                       project, &entry_authority, &entry_authority_namespace, &entry_authority_root,
                       entry_authority_err, sizeof(entry_authority_err))
-                : xr_module_identity_script_authority_from_source(input, &entry_authority,
-                                                                  &entry_authority_root);
+                : (xr_module_identity_script_authority_from_source(input, &entry_authority,
+                                                                  &entry_authority_root) == XR_MODULE_OK);
     if (!have_entry_authority) {
         fprintf(stderr, "Error: %s\n",
                 entry_authority_err[0] ? entry_authority_err

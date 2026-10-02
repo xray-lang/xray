@@ -91,8 +91,8 @@ static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
     char *graph_error = NULL;
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
-    int graph_rc = xr_module_identity_script_authority_from_source(
-                       input_file, &authority, &authority_root)
+    int graph_rc = (xr_module_identity_script_authority_from_source(
+                       input_file, &authority, &authority_root) == XR_MODULE_OK)
                        ? xr_module_graph_build(graph, input_file, &authority, &graph_error)
                        : -1;
     xr_free(authority_root);

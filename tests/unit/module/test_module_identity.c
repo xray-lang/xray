@@ -27,7 +27,7 @@ static void require_identity(const XrModuleIdentityAuthority *authority, const c
                              const char *expected_identity, const char *expected_logical) {
     char *identity = NULL;
     char *logical = NULL;
-    ASSERT_TRUE(xr_module_identity_from_source(authority, source, &identity, &logical));
+    ASSERT_TRUE((xr_module_identity_from_source(authority, source, &identity, &logical) == XR_MODULE_OK));
     ASSERT_STR_EQ(identity, expected_identity);
     ASSERT_STR_EQ(logical, expected_logical);
     xr_free(identity);
@@ -37,7 +37,7 @@ static void require_identity(const XrModuleIdentityAuthority *authority, const c
 static char *require_logical_identity(const XrModuleIdentityAuthority *authority,
                                       const char *logical_path) {
     char *identity = NULL;
-    if (!xr_module_identity_from_logical(authority, logical_path, &identity)) {
+    if (!(xr_module_identity_from_logical(authority, logical_path, &identity) == XR_MODULE_OK)) {
         xr_free(identity);
         return NULL;
     }
@@ -93,8 +93,8 @@ TEST(source_outside_authority_fails_closed) {
     };
     char *identity = (char *) 1;
     char *logical = (char *) 1;
-    ASSERT_FALSE(xr_module_identity_from_source(&authority, "/checkout/app-copy/main.xr",
-                                                &identity, &logical));
+    ASSERT_FALSE((xr_module_identity_from_source(&authority, "/checkout/app-copy/main.xr",
+                                                &identity, &logical) == XR_MODULE_OK));
     ASSERT_NULL(identity);
     ASSERT_NULL(logical);
 }
@@ -103,7 +103,7 @@ static void require_identity_rejected(const XrModuleIdentityAuthority *authority
                                       const char *source) {
     char *identity = (char *) 1;
     char *logical = (char *) 1;
-    ASSERT_FALSE(xr_module_identity_from_source(authority, source, &identity, &logical));
+    ASSERT_FALSE((xr_module_identity_from_source(authority, source, &identity, &logical) == XR_MODULE_OK));
     ASSERT_NULL(identity);
     ASSERT_NULL(logical);
 }
@@ -115,6 +115,8 @@ TEST(relative_physical_locator_fails_closed) {
         .physical_root = "checkout/app",
     };
     require_identity_rejected(&relative_root, "checkout/app/src/main.xr");
+    XrModuleIdentityAuthority long_root = {XR_MODULE_IDENTITY_SCRIPT, NULL, "/a/long/authority/root"};
+    require_identity_rejected(&long_root, "/a");
     relative_root.physical_root = "/checkout/app";
     require_identity_rejected(&relative_root, "checkout/app/src/main.xr");
 }
@@ -179,14 +181,14 @@ TEST(namespace_kinds_cannot_collide) {
     char *script_id = NULL;
     char *package_id = NULL;
     char *logical = NULL;
-    ASSERT_TRUE(xr_module_identity_from_source(&project, "/checkout/app/main.xr", &project_id,
-                                               &logical));
+    ASSERT_TRUE((xr_module_identity_from_source(&project, "/checkout/app/main.xr", &project_id,
+                                               &logical) == XR_MODULE_OK));
     xr_free(logical);
-    ASSERT_TRUE(xr_module_identity_from_source(&script, "/checkout/app/main.xr", &script_id,
-                                               &logical));
+    ASSERT_TRUE((xr_module_identity_from_source(&script, "/checkout/app/main.xr", &script_id,
+                                               &logical) == XR_MODULE_OK));
     xr_free(logical);
-    ASSERT_TRUE(xr_module_identity_from_source(&package, "/checkout/app/main.xr", &package_id,
-                                               &logical));
+    ASSERT_TRUE((xr_module_identity_from_source(&package, "/checkout/app/main.xr", &package_id,
+                                               &logical) == XR_MODULE_OK));
     xr_free(logical);
     ASSERT_TRUE(strcmp(project_id, script_id) != 0);
     ASSERT_TRUE(strcmp(project_id, package_id) != 0);
@@ -237,12 +239,12 @@ TEST(memory_identity_requires_an_explicit_valid_id) {
 
     authority.namespace_id = NULL;
     identity = (char *) 1;
-    ASSERT_FALSE(xr_module_identity_from_logical(&authority, NULL, &identity));
+    ASSERT_FALSE((xr_module_identity_from_logical(&authority, NULL, &identity) == XR_MODULE_OK));
     ASSERT_NULL(identity);
     authority.namespace_id = "<eval>";
-    ASSERT_FALSE(xr_module_identity_from_logical(&authority, NULL, &identity));
+    ASSERT_FALSE((xr_module_identity_from_logical(&authority, NULL, &identity) == XR_MODULE_OK));
     authority.namespace_id = "eval-unit";
-    ASSERT_FALSE(xr_module_identity_from_logical(&authority, "eval.xr", &identity));
+    ASSERT_FALSE((xr_module_identity_from_logical(&authority, "eval.xr", &identity) == XR_MODULE_OK));
 }
 
 TEST(memory_graph_rejects_missing_or_raw_eval_identity_before_publication) {
@@ -486,10 +488,10 @@ TEST(active_graph_named_import_never_falls_back_to_shared_resolver) {
     char *entry_logical = NULL;
     char *base64_canonical = NULL;
     char *base64_logical = NULL;
-    ASSERT_TRUE(xr_module_identity_from_source(&entry_authority, entry_path, &entry_canonical,
-                                               &entry_logical));
-    ASSERT_TRUE(xr_module_identity_from_source(&base64_authority, base64_path,
-                                               &base64_canonical, &base64_logical));
+    ASSERT_TRUE((xr_module_identity_from_source(&entry_authority, entry_path, &entry_canonical,
+                                               &entry_logical) == XR_MODULE_OK));
+    ASSERT_TRUE((xr_module_identity_from_source(&base64_authority, base64_path,
+                                               &base64_canonical, &base64_logical) == XR_MODULE_OK));
 
     int dependencies[2] = {1, 2};
     XrModuleSpec specs[3] = {0};

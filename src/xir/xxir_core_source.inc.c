@@ -260,12 +260,17 @@ static bool source_core_load(SourceContext *ctx, AstNode *site) {
     char *error=NULL;
     core.graph=session && resolver ? xr_module_graph_new(session,resolver) : NULL;
     if (!core.graph) source_fail(&core,NULL,XR_XIR_OUT_OF_MEMORY,"core source graph allocation failed");
-    else if (xr_module_graph_build_source(core.graph,&authority,xir_core_declaration_source,&error) ||
-        xr_module_graph_topological_sort(core.graph) || core.graph->has_cycle)
-        source_fail(&core,NULL,XR_XIR_BAD_STRUCTURE,error ? error : "core source graph is invalid");
-    else if (source_manifests_load(&core)) {
-        XrXirBudget checking=core.budget;
-        source_construct(&core,&checking,&result);
+    else {
+        XrModuleStatus status = xr_module_graph_build_source(core.graph,&authority,xir_core_declaration_source,&error);
+        if (status == XR_MODULE_OK) status = xr_module_graph_topological_sort(core.graph);
+        if (status != XR_MODULE_OK)
+            source_module_fail(&core,NULL,status,error ? error : "core source graph is invalid");
+        else if (core.graph->has_cycle)
+            source_fail(&core,NULL,XR_XIR_BAD_STRUCTURE,"core source graph contains a cycle");
+        else if (source_manifests_load(&core)) {
+            XrXirBudget checking=core.budget;
+            source_construct(&core,&checking,&result);
+        }
     }
     ctx->budget=core.budget;
     bool ok=core.diagnostic.status==XR_XIR_OK && result.checked && source_core_install(ctx,&core,result.checked);

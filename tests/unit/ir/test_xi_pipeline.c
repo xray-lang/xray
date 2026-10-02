@@ -117,7 +117,7 @@ static char *compile_source_module_identity(void) {
         .namespace_id = "xi-pipeline-fixture",
     };
     char *identity = NULL;
-    if (!xr_module_identity_from_logical(&authority, NULL, &identity) ||
+    if (!(xr_module_identity_from_logical(&authority, NULL, &identity) == XR_MODULE_OK) ||
         !xr_module_identity_valid(identity, NULL)) {
         xr_free(identity);
         return NULL;

@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #ifdef XR_OS_WINDOWS
 #include "xwindows_utf8.h"
 #endif
@@ -147,29 +148,51 @@ char *xr_path_basename(const char *path) {
     return result;
 }
 
-char *xr_realpath(const char *path) {
+char *xr_realpath(const char *path, XrPathStatus *status) {
+    XrPathStatus ignored;
+    if (!status) status = &ignored;
+    *status = XR_PATH_INVALID;
     if (!path)
         return NULL;
 
 #ifdef XR_OS_WINDOWS
     XrWinPathStatus converted;
     wchar_t *wide = xr_win_utf8_path(path, &converted);
-    if (!wide) return NULL;
+    if (!wide) {
+        *status = converted == XR_WIN_PATH_OOM ? XR_PATH_OUT_OF_MEMORY :
+            converted == XR_WIN_PATH_LIMIT ? XR_PATH_BUDGET : XR_PATH_INVALID;
+        return NULL;
+    }
     DWORD units = GetFullPathNameW(wide, 0, NULL, NULL);
-    if (!units || units > 32768) { xr_free(wide); return NULL; }
+    if (!units || units > 32768) {
+        *status = units ? XR_PATH_BUDGET : XR_PATH_IO;
+        xr_free(wide); return NULL;
+    }
     wchar_t *resolved = xr_malloc((size_t)units * sizeof(wchar_t));
-    if (!resolved) { xr_free(wide); return NULL; }
+    if (!resolved) { *status = XR_PATH_OUT_OF_MEMORY; xr_free(wide); return NULL; }
     DWORD length = GetFullPathNameW(wide, units, resolved, NULL);
     xr_free(wide);
-    char *result = length && length < units ? xr_win_utf16_text(resolved, &converted) : NULL;
+    char *result = NULL;
+    if (length && length < units) {
+        result = xr_win_utf16_text(resolved, &converted);
+        *status = result ? XR_PATH_OK : converted == XR_WIN_PATH_OOM ?
+            XR_PATH_OUT_OF_MEMORY : XR_PATH_INVALID;
+    } else {
+        *status = length ? XR_PATH_BUDGET : XR_PATH_IO;
+    }
     xr_free(resolved);
     return result;
 #else
     char *rp = realpath(path, NULL);
-    if (!rp)
+    if (!rp) {
+        *status = errno == ENOMEM ? XR_PATH_OUT_OF_MEMORY :
+            errno == ENAMETOOLONG ? XR_PATH_BUDGET :
+            errno == ENOENT || errno == ENOTDIR ? XR_PATH_NOT_FOUND : XR_PATH_IO;
         return NULL;
+    }
 
     char *dup = xr_strdup(rp);
+    *status = dup ? XR_PATH_OK : XR_PATH_OUT_OF_MEMORY;
     free(rp); /* xr:allow-raw-alloc realpath uses system malloc */
     return dup;
 #endif

@@ -169,7 +169,7 @@ static char *native_resolve_existing_path(XrNativePackagePlan *plan, const char 
         return NULL;
     }
     char *joined = xr_path_join(plan->root, relative);
-    char *resolved = joined ? xr_realpath(joined) : NULL;
+    char *resolved = joined ? xr_realpath(joined, NULL) : NULL;
     xr_free(joined);
     if (!resolved) {
         native_fail(plan, "E-NATIVE-PATH: %s does not exist: %s", where, relative);
@@ -1194,7 +1194,7 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
     XrNativePackagePlan *plan = (XrNativePackagePlan *) xr_calloc(1, sizeof(XrNativePackagePlan));
     if (!plan)
         return NULL;
-    plan->root = xr_realpath(project_root);
+    plan->root = xr_realpath(project_root, NULL);
     if (!plan->root)
         plan->root = xr_strdup(project_root);
     plan->valid = true;

@@ -36,7 +36,7 @@ static void setup(void) {
     /* Same canonical-root requirement as the resolver suite: the graph
      * canonicalizes the entry it is handed, and the identity authority
      * compares that against this root byte for byte. */
-    char *canonical = xr_realpath(g_tmpdir);
+    char *canonical = xr_realpath(g_tmpdir, NULL);
     if (!canonical)
         abort();
     snprintf(g_tmpdir, sizeof(g_tmpdir), "%s", canonical);
@@ -364,7 +364,7 @@ TEST(graph_entry_not_found) {
 
     char *err = NULL;
     int rc = build_script_graph(g, abs_path("nonexistent.xr"), &err);
-    ASSERT_EQ_INT(rc, -1);
+    ASSERT_EQ_INT(rc, XR_MODULE_NOT_FOUND);
     ASSERT_NOT_NULL(err);
     xr_free(err);
 
@@ -456,7 +456,7 @@ TEST(graph_additional_root_failures) {
         ASSERT_EQ_INT(build_script_graph(g, abs_path("main.xr"), &err), 0);
         ASSERT_EQ_INT(xr_module_graph_topological_sort(g), 0);
         int result = xr_module_graph_include(g, abs_path(names[i]), &authority, &err);
-        ASSERT_EQ_INT(result, i == 1 ? 0 : -1);
+        ASSERT_EQ_INT(result, i == 1 ? XR_MODULE_OK : i >= 2 ? XR_MODULE_NOT_FOUND : XR_MODULE_INVALID);
         ASSERT_EQ_INT(g->entry_index, 0);
         ASSERT_EQ_INT(g->specs[0].dep_count, 0);
         if (i == 1) {
@@ -477,7 +477,7 @@ TEST(graph_additional_root_conflicting_authority) {
     create_file("main.xr", "var value = 1\n");
     char other_directory[512], other_path[1024];
     ASSERT_EQ_INT(xr_temp_dir_create("xray-test-graph-other", other_directory, sizeof(other_directory)), 0);
-    char *other_root = xr_realpath(other_directory);
+    char *other_root = xr_realpath(other_directory, NULL);
     ASSERT_NOT_NULL(other_root);
     int length = snprintf(other_path, sizeof(other_path), "%s/main.xr", other_root);
     ASSERT_TRUE(length > 0 && (size_t)length < sizeof(other_path));
