@@ -38,6 +38,8 @@ static void *source_observed_allocate(size_t bytes) {
 #include "program/xr_xir_source_product.c"
 #include "xir_source_product_execution.h"
 #include "xir_source_product_identity.h"
+#include "xir_native_projection_fixture.h"
+#include "xir_native_projection_faults.h"
 static void product_guards(const XrXirSourceProductRequest *request) {
     XrXirSourceProduct *held=(XrXirSourceProduct *)(uintptr_t)17,*before=held;
     CHECK(xr_xir_compile_source_product_build(request,&held,NULL)==XR_XIR_BAD_STRUCTURE && held==before);
@@ -91,6 +93,7 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
     XrXirSourceProduct *product=NULL;XrXirProgram *program=NULL;
     XrXirSourceProductDiagnostic diagnostic={0};XrXirCSource code={0};
+    XrXirNativeProjection projection={0};
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_new(limits,&resources));
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     if (status==XR_XIR_OK) {
@@ -103,9 +106,19 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
         status=xr_xir_compile_source_product_build(&owned,&product,&diagnostic);
     }
     xr_compile_session_free(session);
-    if (status==XR_XIR_OK && stop>=1) status=xr_xir_compile_source_product_verify(product,16777216,NULL);
-    if (status==XR_XIR_OK && stop>=2) status=xr_xir_compile_source_product_emit(product,"original_source",16777216,&code);
-    if (status==XR_XIR_OK && stop>=3) status=xr_xir_compile_source_product_vm_take(product,&program);
+    if (stop==4 && status==XR_XIR_OK) {
+        XrToolchainInput input={XR_TOOLCHAIN_BINDING_SCHEMA_VERSION,XR_TOOLCHAIN_PROVIDER_MSVC,{0},
+            "fixture-cl","fixture-windows-x86_64","fixture-opt=2",{{1}},{{2}},{{3}}};
+        XrToolchainBinding binding;
+        XrToolchainBindingStatus built=xr_compile_toolchain_binding_build(resources,&input,&binding);
+        status=built==XR_TOOLCHAIN_BINDING_OK ? XR_XIR_OK : XR_XIR_BUDGET;
+        XrXirNativeProjectionRequest project={product,&binding,"original_source",16777216};
+        if (status==XR_XIR_OK) status=xr_compile_native_projection_build(&project,&projection,NULL);
+    } else {
+        if (status==XR_XIR_OK && stop>=1) status=xr_xir_compile_source_product_verify(product,16777216,NULL);
+        if (status==XR_XIR_OK && stop>=2) status=xr_xir_compile_source_product_emit(product,"original_source",16777216,&code);
+        if (status==XR_XIR_OK && stop>=3) status=xr_xir_compile_source_product_vm_take(product,&program);
+    }
     if (resources) {
         CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
         CHECK(stats->allocated_bytes==source_physical_total && stats->peak_bytes==source_physical_peak);
@@ -114,12 +127,13 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     }
     xr_compile_resources_release(resources);
     xr_xir_compile_c_source_free(&code);xr_xir_compile_program_drop(program);
+    xr_compile_native_projection_free(&projection);
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(runtime_live==live && runtime_bytes==bytes);source_base_bytes=0;
     return status;
 }
 static void product_cumulative_limits(const XrXirSourceProductRequest *request) {
-    for (unsigned stage=0;stage<4;++stage) {
+    for (unsigned stage=0;stage<5;++stage) {
         const XrCompileResourceLimits unlimited={UINT64_MAX,UINT64_MAX,UINT64_MAX};
         XrCompileResourceStats normal={0},actual={0};
         CHECK(product_limited_pipeline(request,&unlimited,stage,&normal)==XR_XIR_OK);
@@ -229,15 +243,20 @@ int main(int argc,char **argv) {
     const XrXirSourceView *view=xr_xir_compile_source_product_view(product);CHECK(view && view->complete);
     product_packet_gates(product,true);product_corruptions(product);
     if (!strcmp(argv[6],"tiny")) product_crossed_owners(product,argv[1],argv[3]);
-    if (scan) {product_verify_oom(product);product_emit_oom(product);}
+    product_projection_guards(product);
+    if (scan) {product_verify_oom(product);product_emit_oom(product);product_projection_oom(product);}
     const XrXirSourceProductFacts facts=*xr_xir_compile_source_product_facts(product);
     CHECK(facts.function_count && facts.module_count && facts.entry<facts.function_count);
     for (uint32_t f=0;f<facts.function_count;++f) {
         XrXirSourceProductLayoutView layout={0};CHECK(xr_xir_compile_source_product_layout(product,f,&layout)==XR_XIR_OK && layout.layout);
     }
-    XrXirCSource code={0};CHECK(xr_xir_compile_source_product_emit(product,"original_source",16777216,&code)==XR_XIR_OK);
-    FILE *file=fopen(argv[5],"wb");CHECK(file && fwrite(code.text,1,code.length,file)==code.length && !fclose(file));
-    xr_xir_compile_c_source_free(&code);XrXirProgram *program=NULL;
+    XrToolchainBinding binding=projection_fixture_binding(product);
+    XrXirNativeProjectionRequest project={product,&binding,"original_source",16777216};
+    XrXirNativeProjection projection={0};
+    CHECK(xr_compile_native_projection_build(&project,&projection,NULL)==XR_XIR_OK);
+    projection_fixture_check(product,&projection,false);
+    FILE *file=fopen(argv[5],"wb");CHECK(file && fwrite(projection.source.text,1,projection.source.length,file)==projection.source.length && !fclose(file));
+    XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
     CHECK(!memcmp(&facts,xr_xir_compile_source_product_facts(product),sizeof(facts)));
     XrXirSourceProductLayoutView layout={17,(const XrXirFunctionLayout *)(uintptr_t)23},saved=layout;
@@ -246,9 +265,14 @@ int main(int argc,char **argv) {
     XrXirCSource unavailable={0};XrXirProgram *transferred=NULL;
     CHECK(xr_xir_compile_source_product_emit(product,"original_source",16777216,&unavailable)==XR_XIR_BAD_STAGE);
     CHECK(!unavailable.text && !unavailable.length);
+    XrXirNativeProjection refused={0},saved_projection=refused;
+    CHECK(xr_compile_native_projection_build(&project,&refused,NULL)==XR_XIR_BAD_STAGE);
+    CHECK(!memcmp(&refused,&saved_projection,sizeof(refused)));
     CHECK(xr_xir_compile_source_product_vm_take(product,&transferred)==XR_XIR_BAD_STAGE);
     CHECK(!transferred);
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+    CHECK(projection.source.text && projection.source.length);
+    xr_compile_native_projection_free(&projection);xr_compile_native_projection_free(&projection);
     const char *expected=!strcmp(argv[6],"array") ? "array-growth-accounting-ok\n" : !strcmp(argv[6],"tiny") ? "source-product-ok\n" : "";
     if (scan) probe_program(program,facts.entry,expected);
     else CHECK(probe_once(program,facts.entry,expected,64000000,SIZE_MAX,0).status==XR_XIR_CALL_RETURNED);

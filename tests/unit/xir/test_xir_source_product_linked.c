@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
+#include "xir_native_projection_fixture.h"
 typedef struct LinkedOutput {
     char bytes[64];
     size_t length;
@@ -84,17 +85,26 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_OK);
     XrXirSourceProductPacketView packet={0};
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK && packet.bytes && packet.length);
-    XrXirCSource code={0};CHECK(xr_xir_compile_source_product_emit(product,"linked_source",16777216,&code)==XR_XIR_OK);
-    FILE *file=fopen(argv[5],"wb");CHECK(file && fwrite(code.text,1,code.length,file)==code.length && !fclose(file));
-    xr_xir_compile_c_source_free(&code);
+    CHECK(xr_xir_compile_source_product_context(product)->resources==resources);
+    XrToolchainBinding binding=projection_fixture_binding(product);
+    XrXirNativeProjectionRequest projection_request={product,&binding,"linked_source",16777216};
+    XrXirNativeProjection projection={0};
+    CHECK(xr_compile_native_projection_build(&projection_request,&projection,NULL)==XR_XIR_OK);
+    projection_fixture_check(product,&projection,true);
+    FILE *file=fopen(argv[5],"wb");CHECK(file && fwrite(projection.source.text,1,projection.source.length,file)==projection.source.length && !fclose(file));
     uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
     CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STAGE);
-    CHECK(xr_xir_compile_source_product_emit(product,"linked_source",16777216,&code)==XR_XIR_BAD_STAGE && !code.text && !code.length);
+    XrXirNativeProjection unavailable={0},saved=unavailable;
+    CHECK(xr_compile_native_projection_build(&projection_request,&unavailable,NULL)==XR_XIR_BAD_STAGE);
+    CHECK(!memcmp(&unavailable,&saved,sizeof(saved)));
     XrXirProgram *second=NULL;
     CHECK(xr_xir_compile_source_product_vm_take(product,&second)==XR_XIR_BAD_STAGE && !second);
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK && packet.bytes && packet.length);
     xr_xir_compile_source_product_free(product);
+    CHECK(projection.source.length && projection.source.text[0]);
+    xr_compile_native_projection_free(&projection);
+    xr_compile_native_projection_free(&projection);
     LinkedOutput output={0};output.sink=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,linked_bytes,&output,sizeof(output.bytes)};
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,linked_group,&output};

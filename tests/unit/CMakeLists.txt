@@ -403,7 +403,10 @@ set_tests_properties(test_xir_output_status PROPERTIES LABELS "unit;xir;ownershi
 add_xray_bootstrap_executable(test_xir_source xir/test_xir_source.c)
 target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
 add_executable(test_xir_source_product xir/test_xir_source_product.c)
-target_link_libraries(test_xir_source_product PRIVATE xray_xir_source_product)
+add_test(NAME test_xir_native_projection_policy COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_native_projection_vectors.py)
+set_tests_properties(test_xir_native_projection_policy PROPERTIES LABELS "unit;xir;abi;generated-c" TIMEOUT 30)
+target_link_libraries(test_xir_source_product PRIVATE xray_xir_native_projection)
 if(MSVC)
     target_compile_options(test_xir_source_product PRIVATE /W4 /WX /utf-8)
 else()
@@ -427,7 +430,7 @@ add_test(NAME test_xir_source_product_allocations COMMAND ${XRAY_PYTHON}
 set_tests_properties(test_xir_source_product_allocations PROPERTIES
     LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 80)
 add_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
-target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_source_product)
+target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_native_projection)
 if(MSVC)
     target_compile_options(test_xir_source_product_linked PRIVATE /W4 /WX /utf-8)
 else()

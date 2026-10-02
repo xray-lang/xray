@@ -181,6 +181,9 @@ XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDia
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product) {
     return product ? &product->facts : NULL;
 }
+XR_FUNC const XrXirCompileContext *xr_xir_compile_source_product_context(const XrXirSourceProduct *product) {
+    return product ? &product->context : NULL;
+}
 XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output) {
     if (!product || !output || (kind!=XR_XIR_SOURCE_PRODUCT_SOURCE && kind!=XR_XIR_SOURCE_PRODUCT_CLOSED))
