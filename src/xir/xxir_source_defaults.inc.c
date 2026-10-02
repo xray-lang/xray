@@ -40,7 +40,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
                 }
             }
             if (!available) continue;
-            if (ctx->function_count == ctx->budget.functions)
+            if (ctx->function_count == ctx->compile.limits.functions)
                 return source_fail(ctx, symbol->node, XR_XIR_BUDGET, "default constructor function budget exhausted");
             ctx->nominal_defaultable[d] = true; changed = true;
             ++ctx->function_count; ++ctx->first_closure; ++ctx->next_closure;

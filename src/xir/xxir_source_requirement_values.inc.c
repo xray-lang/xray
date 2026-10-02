@@ -47,7 +47,7 @@ static bool source_requirement_helper_body(SourceContext *ctx, AstNode *site,
 }
 static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     const SourceRequirementHelper *request, uint32_t *output) {
-    if (ctx->function_count >= ctx->function_capacity || ctx->function_count >= ctx->budget.functions)
+    if (ctx->function_count >= ctx->function_capacity || ctx->function_count >= ctx->compile.limits.functions)
         return source_fail(ctx,site,XR_XIR_BUDGET,"bound requirement function budget exhausted");
     XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types,request->signature);
     if (signature.parameter_count >= 65536)
@@ -68,7 +68,8 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
         if (!source_work(ctx,site)) return false;
         parameters[p+1] = signature.parameters[p].type;
     }
-    snprintf(name,40,"$requirement%u",index);
+    if (source_format(ctx, name, 40, "$requirement%u", index) != XR_DIAG_OK)
+        return source_fail(ctx, site, XR_XIR_BUDGET, "requirement name formatting exhausted");
     SourceName declaration = {0}; declaration.name = name; declaration.node = site;
     if (!source_query_declare(ctx,&declaration,XR_XIR_SOURCE_FUNCTION,parent->declaration,
         source_query_range(ctx,site,NULL))) return false;
@@ -76,7 +77,7 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     body->type_owner = parent->type_owner; body->generic_owner = parent->generic_owner;
     body->type_parameters = parent->type_parameters; body->type_parameter_count = parent->type_parameter_count;
     body->declaration = declaration.declaration;
-    ctx->functions[index] = (XrXirFunction){name,(uint32_t)strlen(name),parameters,
+    ctx->functions[index] = (XrXirFunction){name,(uint32_t)source_text_size(ctx, name),parameters,
         signature.parameter_count+1,signature.result,NULL,0,NULL,0,NULL,0};
     ctx->generics[index].parameter_count = generic_count;
     ctx->generics[index].constraints = constraints;

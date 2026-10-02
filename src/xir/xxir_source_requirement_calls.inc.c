@@ -66,8 +66,8 @@ static bool source_requirement_prove(SourceContext *ctx, AstNode *node,
         if (!source_work(ctx,node)) return false;
         XrXirConstraintUse use = {&module,
             {XR_XIR_CONTEXT_INTERFACE_METHOD,application.declaration,member},parent+p,types,count};
-        XrXirStatus status = xr_xir_constraints_prove(&context,&use,&ctx->budget);
-        if (status == XR_XIR_OK) status = xr_xir_type_access(&module,ctx->function,types[parent+p],&ctx->budget);
+        XrXirStatus status = xr_xir_compile_constraints_prove(&ctx->compile, &context, &use);
+        if (status == XR_XIR_OK) status = xr_xir_compile_type_access(&ctx->compile, &module, ctx->function, types[parent+p]);
         if (status != XR_XIR_OK)
             return source_fail(ctx,node,status,"method type argument does not prove the declared constraint");
     }
@@ -88,19 +88,17 @@ static bool source_requirement_select(SourceContext *ctx, AstNode *node,
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"receiver has no declared interface requirements");
     XrXirTypes input = ctx->types;
     XrXirInterfaceClosure *closure = NULL;
-    uint64_t scratch = ctx->budget.scratch_bytes;
     XrXirInterfaceClosureRoots roots = {&ctx->interfaces,&input,
         constraint->interfaces,constraint->interface_count,generic->parameter_count};
-    XrXirStatus status = xr_xir_interface_closure_build(&roots,&ctx->budget,&closure);
+    XrXirStatus status = xr_xir_compile_interface_closure_build(&ctx->compile, &roots, &closure);
     if (status != XR_XIR_OK) return source_fail(ctx,node,status,"interface requirements are invalid");
-    scratch -= ctx->budget.scratch_bytes;
     bool ok = false;
     const XrXirInterfaceRequirement *selected = NULL;
-    size_t length = strlen(name);
+    size_t length = source_text_size(ctx, name);
     for (uint32_t r = 0; r < xr_xir_interface_closure_requirement_count(closure); ++r) {
         const XrXirInterfaceRequirement *requirement = xr_xir_interface_closure_requirement(closure,r);
         if (!source_work(ctx,node)) goto done;
-        if (length == requirement->name.length && !memcmp(name,requirement->name.bytes,length))
+        if (length == requirement->name.length && source_span_same(ctx, NULL, name, requirement->name.bytes, length))
             if (!selected) selected = requirement;
     }
     if (!selected) { source_fail(ctx,node,XR_XIR_BAD_TYPE,"member is absent from declared interface requirements"); goto done; }
@@ -111,8 +109,8 @@ static bool source_requirement_select(SourceContext *ctx, AstNode *node,
     }
     output->member = selected->member; ok = true;
 done:
-    xr_xir_interface_closure_free(closure);
-    ctx->budget.scratch_bytes += scratch; return ok;
+    xr_xir_compile_interface_closure_free(closure);
+    return ok;
 }
 static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceValue receiver, SourceExpectedType result_context, SourceValue *value) {

@@ -24,7 +24,7 @@ static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *patt
         SourceName *symbol=arm->bindings;
         for (;symbol;symbol=symbol->next) {
             if (!source_work(ctx,node)) return false;
-            if (!strcmp(symbol->name,name)) break;
+            if (source_text_same(ctx, NULL, symbol->name, name)) break;
         }
         if (!alternative) {
             if (symbol) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"duplicate pattern binding");

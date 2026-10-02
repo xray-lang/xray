@@ -92,7 +92,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         for (uint32_t f = 0; f < decl->field_count; ++f) {
             if (!source_work(ctx, node)) return false;
             const XrXirLiteral *name = &decl->fields[f].name;
-            if (strlen(node->as.member_access.name) == name->length && !memcmp(node->as.member_access.name, name->bytes, name->length)) {
+            if (source_text_size(ctx, node->as.member_access.name) == name->length && source_span_same(ctx, NULL, node->as.member_access.name, name->bytes, name->length)) {
                 if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field value has no method type parameters");
                 return source_constructor_field(ctx, node, node->as.member_access.name, value, NULL);
             }
@@ -106,11 +106,11 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         return source_requirement_value(ctx,node,&request,value);
     }
     if (receiver.type == XR_XIR_PANIC_INFO) return source_panic_member(ctx, node, type_arguments, receiver, value);
-    if (xr_xir_type_is_enum(&ctx->types, receiver.type) && !strcmp(node->as.member_access.name, "name")) {
+    if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, node->as.member_access.name, "name")) {
         if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum name is not generic");
         return source_enum_text(ctx, node, receiver, false, value);
     }
-    if (xr_xir_type_is_enum(&ctx->types, receiver.type) && !strcmp(node->as.member_access.name, "ordinal")) {
+    if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, node->as.member_access.name, "ordinal")) {
         if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum ordinal is not generic");
         uint32_t declaration = xr_xir_type_node(&ctx->types, receiver.type)->nominal.declaration;
         uint32_t member = ctx->nominal_variants[declaration][ctx->nominals.declarations[declaration].variant_count];
@@ -152,19 +152,16 @@ static bool source_enum_method_name(SourceContext *ctx, SourceName *owner, AstNo
     MethodDeclNode *method = &node->as.method_decl;
     const char *name = method->name;
     if (!source_work(ctx,node) || !name) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"enum method name is missing");
-    size_t length = strlen(name);
-    if (length > ctx->budget.work) return source_fail(ctx,node,XR_XIR_BUDGET,"enum method name budget exhausted");
-    ctx->budget.work -= length;
-    if ((!method->is_static && (!strcmp(name,"name") || !strcmp(name,"ordinal") || !strcmp(name,"toString"))) ||
-        (method->is_static && !strcmp(name,"variants")))
+    size_t length;
+    if (!source_text_length(ctx,node,name,&length)) return false;
+    if ((!method->is_static && (source_text_same(ctx, NULL, name, "name") || source_text_same(ctx, NULL, name, "ordinal") || source_text_same(ctx, NULL, name, "toString"))) ||
+        (method->is_static && source_text_same(ctx, NULL, name, "variants")))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method conflicts with enum builtin member");
     const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[owner->index];
     for (uint32_t v = 0; v < declaration->variant_count; ++v) {
         if (!source_work(ctx,node)) return false;
         const XrXirLiteral *variant = &declaration->variants[v].name;
-        if (variant->length > ctx->budget.work) return source_fail(ctx,node,XR_XIR_BUDGET,"enum variant name budget exhausted");
-        ctx->budget.work -= variant->length;
-        if (length == variant->length && !memcmp(name,variant->bytes,variant->length))
+        if (length == variant->length && source_span_same(ctx, NULL, name, variant->bytes, variant->length))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum method conflicts with variant");
     }
     return true;
@@ -199,7 +196,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 ClassDeclNode *decl = owner->node->type == AST_CLASS_DECL ? &owner->node->as.class_decl : &owner->node->as.struct_decl;
                 for (int f = 0; f < decl->field_count; ++f) {
                     if (!source_work(ctx,node)) return false;
-                    if (!strcmp(method->name,decl->fields[f]->as.field_decl.name))
+                    if (source_text_same(ctx, NULL, method->name, decl->fields[f]->as.field_decl.name))
                         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"field and method names must be distinct");
                 }
             }
@@ -221,18 +218,18 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             if (count && !body->parameters) return false;
             if (offset) body->parameters[0] = owner->type;
             XrXirFunction *function = &ctx->functions[index];
-            *function = (XrXirFunction) {method->name, (uint32_t)strlen(method->name), body->parameters,
+            *function = (XrXirFunction) {method->name, (uint32_t)source_text_size(ctx, method->name), body->parameters,
                 count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
             if (!source_type(ctx, method->return_type, &function->result)) return false;
             for (int i = 0; i < method->param_count; ++i) {
                 XrParamNode *param = method->params[i];
                 if (!param->type || param->passing_mode != XR_PARAM_READ ||
-                    param->pattern || param->is_rest || !strcmp(param->name, "this") ||
+                    param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this") ||
                     !source_type(ctx, param->type, &body->parameters[i + offset]) || body->parameters[i + offset] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
                 for (int j = 0; j < i; ++j) {
                     if (!source_work(ctx, node)) return false;
-                    if (!strcmp(param->name, method->params[j]->name))
+                    if (source_text_same(ctx, NULL, param->name, method->params[j]->name))
                         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate method parameter");
                 }
             }
@@ -258,8 +255,8 @@ static bool source_method_body(SourceContext *ctx) {
         if (i >= offset) {
             const XrParamNode *parameter = method->params[i - offset];
             range = (XrXirSourceRange) {ctx->module, parameter->line, parameter->column, parameter->line, 0};
-            if (parameter->column > 0 && strlen(name) <= (size_t)(INT_MAX - parameter->column))
-                range.end_column = parameter->column + (int)strlen(name);
+            if (parameter->column > 0 && source_text_size(ctx, name) <= (size_t)(INT_MAX - parameter->column))
+                range.end_column = parameter->column + (int)source_text_size(ctx, name);
         }
         if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
         source_query_binding_type(ctx, symbol);

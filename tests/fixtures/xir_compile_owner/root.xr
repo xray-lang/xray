@@ -1,0 +1,10 @@
+import { next } from "./counter"
+import { label } from "./label"
+fn checked<T:Equal>(a:T,b:T) { assertEqual(a,b) }
+var runs = 1
+runs++
+checked(runs, 2)
+checked(next(), 40)
+checked(next(), 41)
+checked(label("-ok"), "owner中-ok")
+print(label("-ok"), next(), true)

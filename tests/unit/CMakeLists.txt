@@ -31,9 +31,20 @@ if(ENABLE_ASAN AND (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC"))
 endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compile_resources.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_arena.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_producer.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_parser.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/incremental/cache_compile_resources.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/module/package_compile_resources.cmake)
+add_subdirectory(base/hashmap_owner)
 add_subdirectory(xir/compile_owner)
 add_subdirectory(shared/native_admission)
+add_subdirectory(shared/core_intrinsic_owner)
 add_subdirectory(module/declaration_owner)
+add_subdirectory(module/stdlib_source_owner)
+if(WIN32)
+    add_subdirectory(module/module_owner)
+endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 
 macro(add_xray_unit_test name source)
@@ -415,7 +426,7 @@ add_test(NAME test_xir_source_product_allocations COMMAND ${XRAY_PYTHON}
     $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib --scan)
 set_tests_properties(test_xir_source_product_allocations PROPERTIES
     LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 420)
-add_xray_bootstrap_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
+add_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
 target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_source_product)
 if(MSVC)
     target_compile_options(test_xir_source_product_linked PRIVATE /W4 /WX /utf-8)
@@ -425,7 +436,30 @@ endif()
 add_test(NAME test_xir_source_product_linked COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
     $<TARGET_FILE:test_xir_source_product_linked> ${CMAKE_SOURCE_DIR}/stdlib)
-set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution")
+set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
+set(XIR_SOURCE_OWNER_FIXTURE "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_compile_owner")
+set(XIR_SOURCE_OWNER_NATIVE "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-native.c")
+add_custom_command(OUTPUT "${XIR_SOURCE_OWNER_NATIVE}"
+    COMMAND $<TARGET_FILE:test_xir_source_product_linked> "${XIR_SOURCE_OWNER_FIXTURE}"
+        "${XIR_SOURCE_OWNER_FIXTURE}/root.xr" "${CMAKE_SOURCE_DIR}/stdlib"
+        accept "${XIR_SOURCE_OWNER_NATIVE}" multi normal
+    DEPENDS test_xir_source_product_linked "${XIR_SOURCE_OWNER_FIXTURE}/root.xr"
+        "${XIR_SOURCE_OWNER_FIXTURE}/counter.xr" "${XIR_SOURCE_OWNER_FIXTURE}/label.xr"
+    VERBATIM)
+add_executable(test_xir_source_product_native xir/test_xir_source_product_native.c "${XIR_SOURCE_OWNER_NATIVE}")
+target_link_libraries(test_xir_source_product_native PRIVATE xray_xir_scalar xray_compile_resources)
+if(MSVC)
+    target_compile_options(test_xir_source_product_native PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_product_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_source_product_vm_modules
+    COMMAND test_xir_source_product_linked "${XIR_SOURCE_OWNER_FIXTURE}"
+        "${XIR_SOURCE_OWNER_FIXTURE}/root.xr" "${CMAKE_SOURCE_DIR}/stdlib"
+        accept "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-vm.c" multi normal)
+add_test(NAME test_xir_source_product_native COMMAND test_xir_source_product_native)
+set_tests_properties(test_xir_source_product_vm_modules test_xir_source_product_native
+    PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
 target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 add_xray_bootstrap_executable(test_xir_source_admission xir/test_xir_source_admission.c)
 add_xray_bootstrap_executable(test_xir_source_generics xir/test_xir_source_generics.c)

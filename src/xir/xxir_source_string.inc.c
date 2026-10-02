@@ -13,11 +13,7 @@ static bool source_string_declaration(SourceContext *ctx) {
     if (ctx->string_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     if (!source_work(ctx, NULL)) return false;
-    if (!native || native->member_count > ctx->budget.work)
-        return source_fail(ctx, NULL, XR_XIR_BUDGET, "native string declaration work budget exhausted");
-    ctx->budget.work -= native->member_count;
-    if (!xr_native_declaration_validate(native))
-        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "native string declaration authority is inconsistent");
+    if (!source_native_admit(ctx,native)) return false;
     XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
         &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
     if (!modules) return false;
@@ -27,7 +23,7 @@ static bool source_string_declaration(SourceContext *ctx) {
     SourceName symbol = {0}; symbol.name = source_owned_text(ctx, native->name);
     if (!symbol.name) return false;
     XrXirSourceRange range = {ctx->string_module, (int)native->line, (int)native->column,
-        (int)native->line, (int)(native->column + strlen(native->name))};
+        (int)native->line, (int)(native->column + source_text_size(ctx, native->name))};
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE, 0, range)) return false;
     ctx->string_declaration = symbol.declaration;
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration - 1];
@@ -44,7 +40,7 @@ static bool source_string_member_reference(SourceContext *ctx, AstNode *node,
         SourceName symbol = {0}; symbol.name = source_owned_text(ctx, member->name);
         if (!symbol.name) return false;
         XrXirSourceRange range = {ctx->string_module, (int)member->line, (int)member->column,
-            (int)member->line, (int)(member->column + strlen(member->name))};
+            (int)member->line, (int)(member->column + source_text_size(ctx, member->name))};
         if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_MEMBER, ctx->string_declaration, range)) return false;
         ctx->string_members[index] = symbol.declaration;
         XrXirSourceType *parameter = source_alloc(ctx, member->parameter_count, sizeof(*parameter));
@@ -65,7 +61,7 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     CallExprNode *call = &node->as.call_expr;
     if (!source_string_declaration(ctx)) return false;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
-    const XrNativeMemberDeclaration *member = xr_native_declaration_member(native, call->callee->as.member_access.name);
+    const XrNativeMemberDeclaration *member = source_native_member(ctx,native,call->callee->as.member_access.name);
     if (!source_work(ctx, node)) return false;
     if (!member || !member->is_public || member->is_static || !member->parameter_count ||
         member->parameters[0].type != XR_NATIVE_TERM_STRING || member->receiver != XR_NATIVE_RECEIVER_READ)

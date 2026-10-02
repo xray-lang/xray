@@ -11,7 +11,7 @@
  */
 static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     const char *name, SourceValue value) {
-    if (!strcmp(name,"_")) return true;
+    if (source_text_same(ctx, NULL, name, "_")) return true;
     SourceName *symbol = source_alloc(ctx,1,sizeof(*symbol));
     if (!symbol) return false;
     *symbol = (SourceName){ctx->locals,name,NULL,node,SOURCE_LOCAL,value.id,ctx->module,
@@ -40,7 +40,7 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
             "Array for-in requires an unlabelled single or direct pair binding without annotation");
     if (!syntax->item_name || (syntax->is_keyvalue && !syntax->value_name) || !syntax->body)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"for-in binding shape is invalid");
-    if (syntax->is_keyvalue && strcmp(syntax->item_name,"_") && !strcmp(syntax->item_name,syntax->value_name))
+    if (syntax->is_keyvalue && !source_text_same(ctx, NULL, syntax->item_name, "_") && source_text_same(ctx, NULL, syntax->item_name, syntax->value_name))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"for-in binding names must be distinct");
     SourceValue array, length, zero, cursor;
     if (!expression(ctx,syntax->collection,&array)) return false;

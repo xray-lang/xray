@@ -17,7 +17,7 @@ static bool source_inference_result(SourceContext *ctx, AstNode *site,
     if (!context.present) return true;
     XrXirType expected = context.type;
     XrXirInferenceKnown known = {0};
-    XrXirStatus status = xr_xir_inference_expected_known(state,&ctx->types,formal,&known);
+    XrXirStatus status = xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
     if (status != XR_XIR_OK) return source_fail(ctx,site,status,"inferred result context is invalid");
     /* Preserve numeric widening and root callable weakening of known results. */
     if (known.known) return true;
@@ -30,7 +30,7 @@ static bool source_inference_result(SourceContext *ctx, AstNode *site,
         XrXirTypeNode ordinary = *from; ordinary.flags = 0;
         if (!source_intern_type(ctx,ordinary,&evidence)) return false;
     }
-    status = xr_xir_inference_observe(state,&ctx->types,(XrXirInferencePair){evidence,expected});
+    status = xr_xir_compile_inference_observe(state, &ctx->types, (XrXirInferencePair){evidence,expected});
     if (status != XR_XIR_OK) return source_fail(ctx,site,status,"argument and result type evidence conflict");
     return true;
 }

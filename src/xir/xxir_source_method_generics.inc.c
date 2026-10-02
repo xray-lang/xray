@@ -22,7 +22,7 @@ static bool source_method_conditions(SourceContext *ctx, SourceFunction *body,
         if (!source_parameter_constraints(ctx,body->node,condition,&requirement)) return false;
         for (uint32_t p = 0; p < count; ++p) {
             if (!source_work(ctx, body->node)) return false;
-            if (!strcmp(condition->name, parameters[p]->name)) { selected = p; break; }
+            if (source_text_same(ctx, NULL, condition->name, parameters[p]->name)) { selected = p; break; }
         }
         if (selected == UINT32_MAX)
             return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method condition subject is not a type parameter");
@@ -53,7 +53,7 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
             return source_fail(ctx,body->node,XR_XIR_BAD_TYPE,"method type parameter is malformed");
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
             if (!source_work(ctx, body->node)) return false;
-            if (!strcmp(parameter->name, parameters[earlier]->name))
+            if (source_text_same(ctx, NULL, parameter->name, parameters[earlier]->name))
                 return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method type parameter duplicates or shadows a parameter");
         }
         parameters[p] = parameter;
@@ -83,7 +83,7 @@ static bool source_method_instantiation(SourceContext *ctx, AstNode *node, uint3
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method requires its exact explicit type arguments");
     XrXirType *types = generic->parameter_count ? source_alloc(ctx,generic->parameter_count,sizeof(*types)) : NULL;
     if (generic->parameter_count && !types) return false;
-    if (prefix) memcpy(types,enclosing.types,prefix * sizeof(*types));
+    if (prefix && !source_copy_bytes(ctx, node, types, enclosing.types, prefix * sizeof(*types))) return false;
     for (uint32_t p = 0; p < own; ++p)
         if (!source_work(ctx,node) || !source_type(ctx,arguments->refs[p],&types[prefix + p])) return false;
     SourceSubstitution substitution = {types,generic->parameter_count};

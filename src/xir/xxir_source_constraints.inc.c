@@ -12,17 +12,17 @@ static SourceName *source_interface_name(SourceContext *ctx, AstNode *node, cons
     XrGenericParam **parameters = source_type_parameters(ctx, &count);
     for (int p = 0; p < count; ++p) {
         if (!source_work(ctx, node)) return NULL;
-        if (!strcmp(parameters[p]->name, name)) {
+        if (source_text_same(ctx, NULL, parameters[p]->name, name)) {
             source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface requirement names a type parameter"); return NULL;
         }
     }
-    const char *dot = strchr(name, '.');
+    const char *dot = source_text_find(ctx, name, '.');
     SourceName *symbol = NULL;
     if (dot) {
         size_t length = (size_t)(dot - name);
         char *prefix = source_alloc(ctx, length + 1, 1);
         if (!prefix) return NULL;
-        memcpy(prefix, name, length);
+        if (!source_copy_bytes(ctx, node, prefix, name, length)) return NULL;
         symbol = visible_name(ctx, prefix);
         if (symbol && symbol->kind == SOURCE_MODULE) symbol = imported_declaration(ctx, symbol, dot + 1);
         else symbol = NULL;
@@ -72,10 +72,10 @@ static uint32_t source_predicate_marker(SourceContext *ctx, const char *name) {
     int count = 0;
     XrGenericParam **parameters = source_type_parameters(ctx,&count);
     for (int p = 0; p < count; ++p)
-        if (!strcmp(parameters[p]->name,name)) return 0;
+        if (source_text_same(ctx, NULL, parameters[p]->name, name)) return 0;
 #define XR_XIR_PREDICATE_VALUE_EQUAL XR_XIR_CONSTRAINT_EQUAL
 #define XR_BUILTIN_PREDICATE(spelling, arity, identity) \
-    if (!strcmp(name,spelling)) return XR_XIR_PREDICATE_##identity;
+    if (source_text_same(ctx, NULL, name, spelling)) return XR_XIR_PREDICATE_##identity;
 #include "../../stdlib/prelude/builtin_symbols.def"
 #undef XR_XIR_PREDICATE_VALUE_EQUAL
     return 0;
@@ -83,7 +83,7 @@ static uint32_t source_predicate_marker(SourceContext *ctx, const char *name) {
 static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
     const XrGenericParam *parameter, XrXirConstraint *output) {
     if (!parameter || !parameter->name || !*parameter->name ||
-        !strcmp(parameter->name, "Sendable") || !strcmp(parameter->name, "Error") ||
+        source_text_same(ctx, NULL, parameter->name, "Sendable") || source_text_same(ctx, NULL, parameter->name, "Error") ||
         parameter->constraint_count < 0 || parameter->constraint_count > 65536 ||
         (parameter->constraint_count && !parameter->constraints))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic parameter contract is not admitted");
@@ -95,8 +95,8 @@ static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
         if (!source_work(ctx, node)) return false;
         const XrTypeRef *ref = parameter->constraints[i];
         if (ref && ref->kind == XR_TREF_NAMED && !ref->nchildren && ref->name) {
-            uint32_t marker = !strcmp(ref->name, "Sendable") ? XR_XIR_CONSTRAINT_SENDABLE :
-                !strcmp(ref->name, "Error") ? XR_XIR_CONSTRAINT_ERROR : source_predicate_marker(ctx,ref->name);
+            uint32_t marker = source_text_same(ctx, NULL, ref->name, "Sendable") ? XR_XIR_CONSTRAINT_SENDABLE :
+                source_text_same(ctx, NULL, ref->name, "Error") ? XR_XIR_CONSTRAINT_ERROR : source_predicate_marker(ctx,ref->name);
             if (marker) { result.markers |= marker; continue; }
         }
         XrXirInterfaceApplication application = {0};

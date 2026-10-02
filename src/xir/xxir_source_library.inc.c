@@ -14,11 +14,15 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     if(!resource||!resource->checked){source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");return NULL;}
     const XrXirArtifact *artifact=resource->checked;
-    const XrXirModule *library=xr_xir_artifact_module(artifact);
+    const XrXirCompileContext *owner=xr_xir_compile_artifact_context(artifact);
+    if (!owner || owner->resources!=ctx->compile.resources) {
+        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library has a foreign resource owner");return NULL;
+    }
+    const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
     if(library->linkage_kind!=XR_XIR_LIBRARY||!library->function_count){
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"Checked library kind is required");return NULL;
     }
-    XrXirStatus status=xr_xir_verify_remaining(library,&ctx->budget,NULL);
+    XrXirStatus status=xr_xir_compile_verify(&ctx->compile, library, NULL);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
     return library;
 }
@@ -48,19 +52,14 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
     if (declarations->literal_count > UINT32_MAX - ctx->literal_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal inventory exhausted");
     size_t bytes = (size_t)library->function_count * sizeof(uint32_t);
-    if (bytes / sizeof(uint32_t) != library->function_count ||
-        bytes > ctx->budget.scratch_bytes)
+    if (bytes / sizeof(uint32_t) != library->function_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"library identity map scratch exhausted");
-    ctx->budget.scratch_bytes -= bytes;
-    uint32_t *functions = xr_malloc(bytes);
-    if (!functions) {
-        ctx->budget.scratch_bytes += bytes;
-        return source_fail(ctx,NULL,XR_XIR_OUT_OF_MEMORY,"library identity map allocation failed");
-    }
+    uint32_t *functions = source_scratch(ctx,1,bytes,false);
+    if (!functions) return false;
     uint32_t next = first;
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx,NULL)) {
-            xr_free(functions); ctx->budget.scratch_bytes += bytes; return false;
+            xr_compile_resources_free(functions); return false;
         }
         functions[f] = f == initializer ? module : next++;
     }
@@ -119,7 +118,7 @@ static void *source_library_bytes(SourceContext *ctx, const void *input,
     uint32_t count, size_t size) {
     if (!count) return NULL;
     void *output = source_alloc(ctx, count, size);
-    if (output) memcpy(output, input, (size_t)count * size);
+    if (output && !source_copy_bytes(ctx, NULL, output, input, (size_t)count * size)) return NULL;
     return output;
 }
 
@@ -131,7 +130,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     *function = *original;
     char *name = source_alloc(ctx, (size_t)original->name_length + 1, 1);
     if (!name) return false;
-    memcpy(name, original->name, original->name_length);
+    if (!source_copy_bytes(ctx, NULL, name, original->name, original->name_length)) return false;
     name[original->name_length] = 0;
     function->name = name;
     function->parameters = source_library_bytes(ctx, original->parameters,
@@ -172,12 +171,9 @@ static bool source_library_literals(SourceContext *ctx, const XrXirModule *libra
         const XrXirLiteral *original = &declarations->literals[i];
         if (original->length && !original->bytes)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal bytes are missing");
-        if (original->length > ctx->budget.work)
-            return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal copy work exhausted");
         char *bytes = original->length ? source_alloc(ctx, original->length, 1) : NULL;
         if (original->length && !bytes) return false;
-        ctx->budget.work -= original->length;
-        if (original->length) memcpy(bytes, original->bytes, original->length);
+        if (!source_copy_bytes(ctx,NULL,bytes,original->bytes,original->length)) return false;
         uint32_t id;
         if (!source_literal_append(ctx, NULL, bytes, original->length, &id)) return false;
         if (id != map->literal_begin + i)
@@ -206,12 +202,11 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
 
 static bool source_library_install(SourceContext *ctx, uint32_t module, uint32_t *next_function) {
     const XrModuleResourceBinding *resource = ctx->graph->specs[module].resource;
-    const XrXirModule *library = xr_xir_artifact_module(resource->checked);
+    const XrXirModule *library = xr_xir_compile_artifact_module(resource->checked);
     SourceLibraryMap map = {0};
     if (!source_library_map(ctx,library,module,*next_function,&map)) return false;
     bool ok = source_library_copy(ctx,library,&map);
-    xr_free(map.functions);
-    ctx->budget.scratch_bytes += (size_t)map.function_count * sizeof(uint32_t);
+    xr_compile_resources_free(map.functions);
     if (ok) *next_function = map.next_function;
     return ok;
 }

@@ -39,7 +39,7 @@ static bool source_match_alternatives(SourceContext *ctx, SourceMatchArm *arm,
             SourceName *bound=branches[i];
             for (;bound!=saved;bound=bound->next) {
                 if (!source_work(ctx,symbol->node)) return false;
-                if (!strcmp(bound->name,symbol->name)) break;
+                if (source_text_same(ctx, NULL, bound->name, symbol->name)) break;
             }
             if (bound==saved || bound->type!=symbol->type)
                 return source_fail(ctx,symbol->node,XR_XIR_BAD_TYPE,"alternative binding join is inconsistent");

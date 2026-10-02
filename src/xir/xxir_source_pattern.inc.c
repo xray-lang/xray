@@ -105,7 +105,7 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
             if (!source_direct_decimal(ctx,path,&decimal) || !decimal.node ||
                 !source_decimal_payload(ctx,&decimal,type,&bits)) return false;
         }
-        memcpy(&out->literal_payload,&bits,sizeof(bits));
+        if (!source_copy_bytes(ctx, path, &out->literal_payload, &bits, sizeof(bits))) return false;
         return source_query_expression(ctx,path,type);
     }
     if (!xr_xir_type_is_enum(&ctx->types,type) || !path || path->type!=AST_MEMBER_ACCESS)
@@ -122,8 +122,8 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
     uint32_t v=0;
     for (;v<d->variant_count;++v) {
         if (!source_work(ctx,node)) return false;
-        if (strlen(path->as.member_access.name)==d->variants[v].name.length &&
-            !memcmp(path->as.member_access.name,d->variants[v].name.bytes,d->variants[v].name.length)) break;
+        if (source_text_size(ctx, path->as.member_access.name)==d->variants[v].name.length &&
+            source_span_same(ctx, NULL, path->as.member_access.name, d->variants[v].name.bytes, d->variants[v].name.length)) break;
     }
     if (v==d->variant_count || (payload!=NULL)!=(d->variants[v].field_count!=0))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"pattern variant or payload syntax mismatch");
@@ -142,13 +142,13 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
         for (;field<variant.field_count;++field) {
             if (!source_work(ctx,node)) return false;
             XrXirLiteral spelling=d->fields[variant.field_begin+field].name;
-            if (strlen(name)==spelling.length && !memcmp(name,spelling.bytes,spelling.length)) break;
+            if (source_text_size(ctx, name)==spelling.length && source_span_same(ctx, NULL, name, spelling.bytes, spelling.length)) break;
         }
         if (field==variant.field_count || out->fields[field])
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown or duplicate pattern field");
         XrNameSpan span=payload->field_name_spans[i];
         XrXirSourceRange range={ctx->module,span.line,span.column,span.line,span.column};
-        if (span.column>0 && strlen(name)<=(size_t)(INT_MAX-span.column)) range.end_column+=(int)strlen(name);
+        if (span.column>0 && source_text_size(ctx, name)<=(size_t)(INT_MAX-span.column)) range.end_column+=(int)source_text_size(ctx, name);
         if (!source_query_target_reference(ctx,range,ctx->nominal_members[declaration][variant.field_begin+field],XR_XIR_SOURCE_READ)) return false;
         SourceMatchPattern *child=source_alloc(ctx,1,sizeof(*child));
         if (!child || !source_match_pattern(ctx,payload->patterns[i],types[field],child,depth+1)) return false;

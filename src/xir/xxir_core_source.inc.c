@@ -69,25 +69,26 @@ static bool source_core_contract(SourceContext *ctx) {
 
 static void source_core_dispose(SourceContext *ctx) {
     for (SourceManifest *manifest=ctx->manifests;manifest;manifest=manifest->next)
-        xr_declaration_manifest_free(manifest->declarations);
+        xr_compile_declaration_manifest_free(manifest->declarations);
     while (ctx->memory) {
         SourceMemory *next=ctx->memory->next;
-        xr_free(ctx->memory); ctx->memory=next;
+        xr_compile_resources_free(ctx->memory); ctx->memory=next;
     }
-    xr_module_graph_free(ctx->graph);
+    xr_compile_module_graph_free(ctx->graph);
 }
 
 static char *source_core_text(SourceContext *ctx, const char *input, size_t length) {
     if (!input) return NULL;
-    if (length > ctx->budget.work) {
-        source_fail(ctx,NULL,XR_XIR_BUDGET,"core source copy work exhausted"); return NULL;
+    if (length == SIZE_MAX) {
+        source_fail(ctx,NULL,XR_XIR_BUDGET,"core source text size exhausted"); return NULL;
     }
     char *output=source_alloc(ctx,length+1,1);
-    if (output) {memcpy(output,input,length);output[length]=0;ctx->budget.work-=length;}
-    return output;
+    if (!output || !source_copy_bytes(ctx,NULL,output,input,length) || !source_work(ctx,NULL)) return NULL;
+    output[length]=0; return output;
 }
 static char *source_core_string(SourceContext *ctx, const char *input) {
-    return input ? source_core_text(ctx,input,strlen(input)) : NULL;
+    size_t length;
+    return input && source_text_length(ctx,NULL,input,&length) ? source_core_text(ctx,input,length) : NULL;
 }
 
 static XrXirSourceType source_core_query_type(XrXirSourceType type, uint32_t declaration, XrXirType action) {
@@ -199,10 +200,10 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
 
 static bool source_core_install(SourceContext *ctx, const SourceContext *core,
     const XrXirArtifact *artifact) {
-    const XrXirModule *module=xr_xir_artifact_module(artifact);
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     uint32_t first=ctx->function_count, count=module->function_count;
     if (first > ctx->function_capacity || count > ctx->function_capacity-first ||
-        first > ctx->budget.functions || count > ctx->budget.functions-first ||
+        first > ctx->compile.limits.functions || count > ctx->compile.limits.functions-first ||
         ctx->module_count==UINT32_MAX)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"core declaration capacity exhausted");
     uint32_t literal=ctx->literal_count;
@@ -222,7 +223,7 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
     if (!source_core_query(ctx,core,declarations,action)) return false;
     XrXirSourceModule *modules=source_alloc(ctx,(size_t)ctx->module_count+1,sizeof(*modules));
     if (!modules) return false;
-    memcpy(modules,ctx->modules,ctx->module_count*sizeof(*modules));
+    if (!source_copy_bytes(ctx, NULL, modules, ctx->modules, ctx->module_count*sizeof(*modules))) return false;
     const XrXirSourceModule *original=&module->declarations->modules[0];
     char *identity=source_core_text(ctx,original->name,original->name_length);
     if (!identity) return false;
@@ -251,37 +252,43 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
  * ordinary checking then qualifies the internally bound executable body. */
 static bool source_core_load(SourceContext *ctx, AstNode *site) {
     SourceContext core={0};
-    core.budget=ctx->budget; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
-    XrCompilerSession *session=xr_compiler_session_new(NULL);
+    core.compile=ctx->compile; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
+    core.remaining_blocks=core.compile.limits.blocks;
+    core.remaining_instructions=core.compile.limits.instructions;
+    XrCompilerSession *session=NULL;
+    XrCompilerSessionStatus opened=xr_compile_session_new(ctx->compile.resources,&session);
     XrModuleResolverConfig config={0};
-    XrModuleResolver *resolver=xr_module_resolver_new(&config);
+    XrModuleResolver *resolver=NULL;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"xray-core-assertions-v1",NULL};
     XrXirSourceResult result={0};
     char *error=NULL;
-    core.graph=session && resolver ? xr_module_graph_new(session,resolver) : NULL;
-    if (!core.graph) source_fail(&core,NULL,XR_XIR_OUT_OF_MEMORY,"core source graph allocation failed");
+    if (opened!=XR_COMPILER_SESSION_OK) source_fail(&core,NULL,opened==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET :
+        opened==XR_COMPILER_SESSION_BAD_ARGUMENT ? XR_XIR_BAD_STRUCTURE : XR_XIR_OUT_OF_MEMORY,
+        "core source session allocation failed");
     else {
-        XrModuleStatus status = xr_module_graph_build_source(core.graph,&authority,xir_core_declaration_source,&error);
-        if (status == XR_MODULE_OK) status = xr_module_graph_topological_sort(core.graph);
+        XrModuleStatus status=xr_compile_module_resolver_new(ctx->compile.resources,&config,&resolver);
+        if (status==XR_MODULE_OK)
+            status=xr_compile_module_graph_new(ctx->compile.resources,session,resolver,&core.graph);
+        if (status==XR_MODULE_OK)
+            status=xr_compile_module_graph_build_source(core.graph,&authority,xir_core_declaration_source,&error);
+        if (status == XR_MODULE_OK) status = xr_compile_module_graph_topological_sort(core.graph);
         if (status != XR_MODULE_OK)
             source_module_fail(&core,NULL,status,error ? error : "core source graph is invalid");
         else if (core.graph->has_cycle)
             source_fail(&core,NULL,XR_XIR_BAD_STRUCTURE,"core source graph contains a cycle");
         else if (source_manifests_load(&core)) {
-            XrXirBudget checking=core.budget;
-            source_construct(&core,&checking,&result);
+            source_construct(&core,&result);
         }
     }
-    ctx->budget=core.budget;
     bool ok=core.diagnostic.status==XR_XIR_OK && result.checked && source_core_install(ctx,&core,result.checked);
     if (!ok && ctx->diagnostic.status==XR_XIR_OK)
         source_fail(ctx,site,core.diagnostic.status==XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : core.diagnostic.status,
             core.diagnostic.message[0] ? core.diagnostic.message : "core source construction failed");
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
     source_core_dispose(&core);
-    xr_module_resolver_free(resolver);
-    xr_compiler_session_delete(session);
-    xr_free(error);
+    xr_compile_module_resolver_free(resolver);
+    xr_compile_session_free(session);
+    xr_compile_resources_free(error);
     return ok;
 }
 
@@ -297,7 +304,8 @@ static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint
     }
     uint32_t *dependencies=source_alloc(ctx,(size_t)module->dependency_count+1,sizeof(*dependencies));
     if (!dependencies) return NULL;
-    if (module->dependency_count) memcpy(dependencies,module->dependencies,module->dependency_count*sizeof(*dependencies));
+    if (module->dependency_count && !source_copy_bytes(ctx, site, dependencies, module->dependencies,
+        module->dependency_count*sizeof(*dependencies))) return NULL;
     dependencies[module->dependency_count++]=symbol->module;
     module->dependencies=dependencies;
     return symbol;

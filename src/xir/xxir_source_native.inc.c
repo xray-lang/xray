@@ -10,14 +10,10 @@
  *   Generated declaration identities grant authority only after lexical lookup.
  */
 static const char *source_owned_text(SourceContext *ctx, const char *text) {
-    size_t length = strlen(text);
-    if (length == SIZE_MAX || length + 1 > ctx->budget.work) {
-        source_fail(ctx, NULL, XR_XIR_BUDGET, "source declaration text budget exhausted"); return NULL;
-    }
-    ctx->budget.work -= length + 1;
+    size_t length;
+    if (!source_text_length(ctx,NULL,text,&length)) return NULL;
     char *copy = source_alloc(ctx, length + 1, 1);
-    if (copy) memcpy(copy, text, length + 1);
-    return copy;
+    return copy && source_copy_bytes(ctx,NULL,copy,text,length+1) ? copy : NULL;
 }
 static bool source_query_target_reference(SourceContext *ctx, XrXirSourceRange range,
     uint32_t declaration, XrXirSourceAccess access) {
@@ -32,11 +28,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     if (ctx->array_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
     if (!source_work(ctx, NULL)) return false;
-    if (!native || native->member_count > ctx->budget.work)
-        return source_fail(ctx, NULL, XR_XIR_BUDGET, "native declaration work budget exhausted");
-    ctx->budget.work -= native->member_count;
-    if (!xr_native_declaration_validate(native))
-        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "native declaration authority is inconsistent");
+    if (!source_native_admit(ctx,native)) return false;
     XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
         &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
     if (!modules) return false;
@@ -46,7 +38,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     SourceName symbol = {0}; symbol.name = source_owned_text(ctx, native->name);
     if (!symbol.name) return false;
     XrXirSourceRange range = {ctx->array_module, (int) native->line, (int) native->column,
-        (int) native->line, (int) (native->column + strlen(native->name))};
+        (int) native->line, (int) (native->column + source_text_size(ctx, native->name))};
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE, 0, range)) return false;
     ctx->array_declaration = symbol.declaration;
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
@@ -96,13 +88,13 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"function type declaration context is missing");
         uint32_t count = ctx->generics[ctx->function].parameter_count;
         status = element == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types,element) ? XR_XIR_BAD_TYPE :
-            xr_xir_type_expression_shape(&ctx->types,element,count,&ctx->budget);
+            xr_xir_compile_type_expression_shape(&ctx->compile, &ctx->types, element, count);
         /* Explicit implementations are bound after every signature exists.
          * Module constraint verification must discharge this use before bodies. */
     } else {
         XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        status = xr_xir_type_use_verify(&context,element,&ctx->budget);
-        if (status == XR_XIR_OK) status = xr_xir_type_access(&module,ctx->function,element,&ctx->budget);
+        status = xr_xir_compile_type_use_verify(&ctx->compile, &context, element);
+        if (status == XR_XIR_OK) status = xr_xir_compile_type_access(&ctx->compile, &module, ctx->function, element);
     }
     if (status != XR_XIR_OK)
         return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
@@ -115,7 +107,7 @@ static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
     XrGenericParam **parameters = source_type_parameters(ctx, &count);
     for (int i = 0; i < count; ++i) {
         if (!source_work(ctx, owner)) return true;
-        if (!strcmp(name, parameters[i]->name)) return true;
+        if (source_text_same(ctx, NULL, name, parameters[i]->name)) return true;
     }
     /* Module declarations are hoisted, including ones whose signatures follow this one. */
     AstNode *module = ctx->graph->specs[ctx->module].ast;
@@ -127,21 +119,21 @@ static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
             node->type == AST_STRUCT_DECL ? node->as.struct_decl.name :
             node->type == AST_ENUM_DECL ? node->as.enum_decl.name :
             node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ? node->as.var_decl.name : NULL;
-        if (declared && !strcmp(declared, name)) return true;
+        if (declared && source_text_same(ctx, NULL, declared, name)) return true;
         if (node->type == AST_IMPORT_STMT) {
             ImportStmtNode *import = &node->as.import_stmt;
-            if (!import->member_count && import->alias && !strcmp(import->alias, name)) return true;
+            if (!import->member_count && import->alias && source_text_same(ctx, NULL, import->alias, name)) return true;
             for (int m = 0; m < import->member_count; ++m) {
                 if (!source_work(ctx, node)) return true;
                 const char *alias = import->members[m].alias ? import->members[m].alias : import->members[m].name;
-                if (!strcmp(alias, name)) return true;
+                if (source_text_same(ctx, NULL, alias, name)) return true;
             }
         }
     }
     return false;
 }
 static bool source_native_array_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
-    const XrNativeTypeDeclaration *native = xr_native_declaration_by_name(ref->name);
+    const XrNativeTypeDeclaration *native = source_native_find(ctx,ref->name);
     if (!native || native->id != XR_NATIVE_DECLARATION_ARRAY || ref->nchildren != native->parameter_count ||
         !ref->children || source_native_type_shadowed(ctx, ref->name))
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type name does not bind the governed Array declaration");
@@ -152,7 +144,7 @@ static bool source_native_array_type(SourceContext *ctx, XrTypeRef *ref, XrXirTy
     --ctx->depth;
     if (!ok || !source_array_element_type(ctx, element, type) || !source_native_array_declaration(ctx)) return false;
     XrXirSourceRange range = {ctx->module, ref->line, ref->column, ref->line, 0};
-    if (range.column > 0 && strlen(ref->name) <= (size_t) (INT_MAX - range.column))
-        range.end_column = range.column + (int) strlen(ref->name);
+    if (range.column > 0 && source_text_size(ctx, ref->name) <= (size_t) (INT_MAX - range.column))
+        range.end_column = range.column + (int) source_text_size(ctx, ref->name);
     return source_query_target_reference(ctx, range, ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
 }

@@ -32,9 +32,14 @@ endif()
 add_test(NAME test_utf8_runtime_owner COMMAND test_utf8_runtime_owner)
 
 
+if(WIN32)
+    set(XR_PRODUCER_FD_SOURCE "${XR_PRODUCER_TEST_ROOT}/src/os/win/fd_win.c")
+else()
+    set(XR_PRODUCER_FD_SOURCE "${XR_PRODUCER_TEST_ROOT}/src/os/unix/fd_unix.c")
+endif()
 add_executable(test_diag_runtime_owner
     "${XR_PRODUCER_TEST_ROOT}/tests/unit/frontend/test_diag_fmt.c"
-    "${XR_PRODUCER_TEST_ROOT}/src/os/win/fd_win.c")
+    "${XR_PRODUCER_FD_SOURCE}")
 target_include_directories(test_diag_runtime_owner PRIVATE "${XR_PRODUCER_TEST_ROOT}/src" "${XR_PRODUCER_TEST_ROOT}/include")
 target_compile_features(test_diag_runtime_owner PRIVATE c_std_11)
 if(MSVC)

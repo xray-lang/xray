@@ -52,24 +52,24 @@ typedef struct XrXirSourceProductDiagnostic {
     XrXirSourceSnapshot *snapshot;
 } XrXirSourceProductDiagnostic;
 /* Failure preserves output. Diagnostics own any partial query snapshot. */
-XR_FUNC XrXirStatus xr_xir_source_product_build(const XrXirSourceProductRequest *request,
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic);
-XR_FUNC void xr_xir_source_product_free(XrXirSourceProduct *product);
-XR_FUNC void xr_xir_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
+XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);
+XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
 /* Borrowed immutable facts and packets remain valid after VM code transfer. */
-XR_FUNC const XrXirSourceProductFacts *xr_xir_source_product_facts(const XrXirSourceProduct *product);
-XR_FUNC XrXirStatus xr_xir_source_product_packet(const XrXirSourceProduct *product,
+XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
+XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output);
-XR_FUNC const XrXirSourceView *xr_xir_source_product_view(const XrXirSourceProduct *product);
+XR_FUNC const XrXirSourceView *xr_xir_compile_source_product_view(const XrXirSourceProduct *product);
 /* Layout borrows end when the Lowered artifact transfers to a VM program. */
-XR_FUNC XrXirStatus xr_xir_source_product_layout(const XrXirSourceProduct *product,
+XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduct *product,
     uint32_t function,XrXirSourceProductLayoutView *output);
 /* Rebuild packet correspondence and compare the complete native projection. */
-XR_FUNC XrXirStatus xr_xir_source_product_verify(const XrXirSourceProduct *product,
-    const XrXirBudget *budget,size_t code_limit,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduct *product,
+    size_t code_limit,XrXirDiagnostic *diagnostic);
 /* Successful VM projection transfers code ownership and leaves queries owned. */
-XR_FUNC XrXirStatus xr_xir_source_product_vm_take(XrXirSourceProduct *product,
-    XrXirProgramBudget budget,XrXirProgram **output);
-XR_FUNC XrXirStatus xr_xir_source_product_emit(const XrXirSourceProduct *product,
+XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *product,
+    XrXirProgram **output);
+XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct *product,
     const char *prefix,size_t byte_limit,XrXirCSource *output);
 #endif // XR_XIR_SOURCE_PRODUCT_H

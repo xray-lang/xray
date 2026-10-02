@@ -1,0 +1,2 @@
+const prefix = "owner中"
+export fn label(suffix:string) -> string { return prefix + suffix }

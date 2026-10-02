@@ -42,7 +42,7 @@ static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type)
             for (uint32_t f = 0; f < decl->field_count; ++f) {
                 if (!source_work(ctx,step)) return false;
                 const XrXirNominalField *field = &decl->fields[f];
-                if (strlen(name) == field->name.length && !memcmp(name,field->name.bytes,field->name.length)) {
+                if (source_text_size(ctx, name) == field->name.length && source_span_same(ctx, NULL, name, field->name.bytes, field->name.length)) {
                     if (!source_substitute(ctx,&substitution,field->type,0,type)) return false;
                     break;
                 }

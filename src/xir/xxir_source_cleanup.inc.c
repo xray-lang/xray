@@ -36,12 +36,13 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     body->parameters = scan.count ? source_alloc(ctx,scan.count,sizeof(*body->parameters)) : NULL;
     SourceValue *captures = source_alloc(ctx, scan.count, sizeof(*captures));
     if (!name || (scan.count && !body->parameters) || !captures) return false;
-    snprintf(name, 32, "$cleanup%u", index);
+    if (source_format(ctx, name, 32, "$cleanup%u", index) != XR_DIAG_OK)
+        return source_fail(ctx, node, XR_XIR_BUDGET, "cleanup name formatting exhausted");
     SourceName declaration = {0}; declaration.name = name; declaration.node = node;
     if (!source_query_declare(ctx, &declaration, XR_XIR_SOURCE_FUNCTION, owner->declaration,
         source_query_range(ctx, node, NULL))) return false;
     body->declaration = declaration.declaration;
-    ctx->functions[index] = (XrXirFunction){name, (uint32_t)strlen(name), body->parameters,
+    ctx->functions[index] = (XrXirFunction){name, (uint32_t)source_text_size(ctx, name), body->parameters,
         scan.count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
     ctx->identities[index] = ctx->identities[outer];
     ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;

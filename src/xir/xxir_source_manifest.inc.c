@@ -8,14 +8,15 @@
  */
 static char *source_manifest_text(SourceContext *ctx, const char *text) {
     if (!text) return NULL;
-    size_t length = strlen(text);
+    size_t length = 0;
+    if (!source_text_length(ctx, NULL, text, &length)) return NULL;
     char *copy = source_alloc(ctx, length + 1, 1);
-    if (copy) memcpy(copy, text, length + 1);
+    if (copy && !source_copy_bytes(ctx, NULL, copy, text, length + 1)) return NULL;
     return copy;
 }
-static bool source_manifest_same(const XrModuleIdentityAuthority *a, const XrModuleIdentityAuthority *b) {
-    return a->kind == b->kind && !strcmp(a->physical_root, b->physical_root) &&
-        !strcmp(a->namespace_id ? a->namespace_id : "", b->namespace_id ? b->namespace_id : "");
+static bool source_manifest_same(SourceContext *ctx, const XrModuleIdentityAuthority *a, const XrModuleIdentityAuthority *b) {
+    return a->kind == b->kind && source_text_same(ctx, NULL, a->physical_root, b->physical_root) &&
+        source_text_same(ctx, NULL, a->namespace_id ? a->namespace_id : "", b->namespace_id ? b->namespace_id : "");
 }
 static bool source_manifest_failure(SourceContext *ctx, XrDeclarationStatus status) {
     return source_fail(ctx, NULL, status == XR_DECLARATION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
@@ -23,54 +24,50 @@ static bool source_manifest_failure(SourceContext *ctx, XrDeclarationStatus stat
         status == XR_DECLARATION_IO ? XR_XIR_IO : XR_XIR_BAD_STRUCTURE,
         "declaration manifest admission failed");
 }
-static uint64_t source_manifest_bytes(const XrDeclarationManifest *manifest) {
-    if (!manifest) return 0;
-    uint64_t bytes = sizeof(*manifest) + (uint64_t)manifest->count * sizeof(*manifest->records);
-    for (uint32_t i = 0; i < manifest->count; ++i) {
-        const XrDeclarationRecord *record = &manifest->records[i];
-        bytes += strlen(record->module) + 1 + strlen(record->name) + 1;
-        if (record->owner) bytes += strlen(record->owner) + 1;
-        bytes += (uint64_t)record->parameter_count * sizeof(*record->parameters);
-        for (uint32_t p = 0; p < record->parameter_count; ++p) bytes += strlen(record->parameters[p]) + 1;
-    }
-    return bytes;
-}
 static bool source_manifest_module(SourceContext *ctx, SourceManifest *manifest, const char *logical) {
     if (!source_work(ctx, NULL)) return false;
-    uint64_t available = ctx->budget.metadata_bytes;
-    size_t limit = available > SIZE_MAX - 1 ? SIZE_MAX - 1 : (size_t)available;
+    XrOsIoPolicy policy = xr_compile_io_policy(ctx->compile.resources);
     XrFileBytes bytes = {0};
-    XrFileReadStatus read = xr_file_read_under_root(manifest->authority.physical_root, logical, limit, &bytes);
+    XrFileReadStatus read = xr_os_io_read_under_root(&policy, manifest->authority.physical_root, logical, SIZE_MAX - 1, &bytes);
     if (read != XR_FILE_READ_OK)
         return source_fail(ctx, NULL, read == XR_FILE_READ_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
             read == XR_FILE_READ_LIMIT ? XR_XIR_BUDGET :
             read == XR_FILE_READ_IO ? XR_XIR_IO :
             read == XR_FILE_READ_MISSING ? XR_XIR_UNRESOLVED : XR_XIR_BAD_STRUCTURE,
             "declaration source is missing or outside its authority");
-    if (memchr(bytes.data, 0, bytes.size)) {
-        xr_free(bytes.data);
-        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "declaration source contains a NUL byte");
+    for (size_t i = 0; i < bytes.size; ++i) {
+        if (!source_work(ctx, NULL)) { xr_compile_resources_free(bytes.data); return false; }
+        if (!bytes.data[i]) {
+            xr_compile_resources_free(bytes.data);
+            return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "declaration source contains a NUL byte");
+        }
     }
     XrFingerprint fingerprint;
-    xr_module_source_fingerprint(bytes.data, &fingerprint); xr_free(bytes.data);
-    size_t root_size = strlen(manifest->authority.physical_root), logical_size = strlen(logical);
-    if (root_size > SIZE_MAX - logical_size - 2)
-        return source_fail(ctx, NULL, XR_XIR_BUDGET, "declaration path budget exhausted");
-    char *path = source_alloc(ctx, root_size + logical_size + 2, 1);
-    if (!path) return false;
-    memcpy(path, manifest->authority.physical_root, root_size); path[root_size] = '/';
-    memcpy(path + root_size + 1, logical, logical_size + 1);
+    XrCompileResourceStatus hashed = xr_compile_module_source_fingerprint(ctx->compile.resources, bytes.data, &fingerprint);
+    xr_compile_resources_free(bytes.data);
+    if (hashed != XR_COMPILE_RESOURCE_OK)
+        return source_fail(ctx, NULL, XR_XIR_BUDGET, "declaration fingerprint work exhausted");
+    char *path = NULL;
+    XrOsIoStatus joined = xr_path_join_owned(&policy, manifest->authority.physical_root, logical, &path);
+    if (joined != XR_OS_IO_OK)
+        return source_fail(ctx, NULL, joined == XR_OS_IO_BUDGET ? XR_XIR_BUDGET :
+            joined == XR_OS_IO_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+            joined == XR_OS_IO_IO ? XR_XIR_IO : XR_XIR_BAD_STRUCTURE, "declaration path construction failed");
     char *error = NULL;
-    XrModuleStatus result = xr_module_graph_include(ctx->graph, path, &manifest->authority, &error);
+    XrModuleStatus result = xr_compile_module_graph_include(ctx->graph, path, &manifest->authority, &error);
     if (result) source_module_fail(ctx, NULL, result, error ? error : "declaration source discovery failed");
-    xr_free(error);
+    xr_compile_resources_free(error); xr_compile_resources_free(path);
     if (result) return false;
     char *canonical = NULL;
-    result = xr_module_identity_from_logical(&manifest->authority, logical, &canonical);
+    result = xr_compile_module_identity_from_logical(ctx->compile.resources, &manifest->authority, logical, &canonical);
     if (result != XR_MODULE_OK)
         return source_module_fail(ctx, NULL, result, "declaration identity construction failed");
-    int index = xr_module_graph_find(ctx->graph, canonical); xr_free(canonical);
-    if (index < 0 || memcmp(&fingerprint, &ctx->graph->specs[index].source_content_fingerprint, sizeof(fingerprint)))
+    int index = -1;
+    result = xr_compile_module_graph_find(ctx->graph, canonical, &index);
+    xr_compile_resources_free(canonical);
+    if (result != XR_MODULE_OK)
+        return source_module_fail(ctx, NULL, result, "declaration source lookup failed");
+    if (index < 0 || !source_span_same(ctx, NULL, &fingerprint, &ctx->graph->specs[index].source_content_fingerprint, sizeof(fingerprint)))
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "declaration source changed during discovery");
     return true;
 }
@@ -82,22 +79,12 @@ static bool source_manifest_load(SourceContext *ctx, const XrModuleIdentityAutho
     manifest->authority.physical_root = source_manifest_text(ctx, authority->physical_root);
     manifest->next = ctx->manifests; ctx->manifests = manifest;
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
-    uint64_t available = (ctx->budget.metadata_bytes) / 3;
-    size_t bytes = available > SIZE_MAX ? SIZE_MAX : (size_t)available;
-    size_t work = ctx->budget.work > SIZE_MAX ? SIZE_MAX : (size_t)ctx->budget.work;
-    uint32_t record_work = work > UINT32_MAX ? UINT32_MAX : (uint32_t)work;
-    XrDeclarationInputBudget budget = {{bytes, bytes, work, 128},
-        {bytes, ctx->budget.functions, ctx->budget.parameters, record_work}};
-    size_t consumed_work = 0;
-    XrDeclarationStatus status = xr_declaration_manifest_load(manifest->authority.physical_root,
-        budget, &manifest->declarations, &consumed_work);
-    ctx->budget.work -= consumed_work;
+    XrDeclarationInputLimits limits = {{SIZE_MAX - 1, 128},
+        {ctx->compile.limits.functions, ctx->compile.limits.parameters}};
+    XrDeclarationStatus status = xr_compile_declaration_manifest_load(ctx->compile.resources,
+        manifest->authority.physical_root, &limits, &manifest->declarations);
     if (status == XR_DECLARATION_ABSENT) return true;
     if (status != XR_DECLARATION_OK) return source_manifest_failure(ctx, status);
-    uint64_t owned_bytes = source_manifest_bytes(manifest->declarations);
-    if (owned_bytes > ctx->budget.metadata_bytes)
-        return source_fail(ctx, NULL, XR_XIR_BUDGET, "declaration ownership budget exhausted");
-    ctx->budget.metadata_bytes -= owned_bytes;
     for (uint32_t i = 0; i < manifest->declarations->count; ++i)
         if (!source_manifest_module(ctx, manifest, manifest->declarations->records[i].module)) return false;
     return true;
@@ -113,7 +100,7 @@ static bool source_manifests_load(SourceContext *ctx) {
         bool found = false;
         for (SourceManifest *manifest = ctx->manifests; manifest; manifest = manifest->next) {
             if (!source_work(ctx, NULL)) return false;
-            if (source_manifest_same(&manifest->authority, authority)) { found = true; break; }
+            if (source_manifest_same(ctx, &manifest->authority, authority)) { found = true; break; }
         }
         if (!found && !source_manifest_load(ctx, authority)) return false;
     }
@@ -129,7 +116,7 @@ static bool source_manifest_parameters(SourceContext *ctx, uint32_t function, co
         uint32_t selected = UINT32_MAX;
         for (int i = 0; i < count; ++i) {
             if (!source_work(ctx, node)) return false;
-            if (strcmp(parameters[i]->name, record->parameters[p])) continue;
+            if (!source_text_same(ctx, node, parameters[i]->name, record->parameters[p])) continue;
             if (selected != UINT32_MAX)
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "ambiguous declaration parameter name");
             selected = (uint32_t)i;
@@ -151,13 +138,14 @@ static bool source_manifest_requirement(SourceContext *ctx, SourceDeclarationTar
     XrXirCallableParameter *parameters = signature.parameter_count ?
         source_alloc(ctx,signature.parameter_count,sizeof(*parameters)) : NULL;
     if (signature.parameter_count && !parameters) return false;
-    if (signature.parameter_count) memcpy(parameters,signature.parameters,signature.parameter_count * sizeof(*parameters));
+    if (signature.parameter_count && !source_copy_bytes(ctx, node, parameters, signature.parameters,
+        signature.parameter_count * sizeof(*parameters))) return false;
     signature.parameters = parameters;
     for (uint32_t p = 0; p < record->parameter_count; ++p) {
         uint32_t selected = UINT32_MAX;
         for (int a = 0; a < method->param_count; ++a) {
             if (!source_work(ctx,node)) return false;
-            if (!strcmp(record->parameters[p],method->params[a]->name)) selected = (uint32_t)a;
+            if (source_text_same(ctx, node, record->parameters[p],method->params[a]->name)) selected = (uint32_t)a;
         }
         if (selected == UINT32_MAX)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface declaration parameter name is missing");
@@ -180,14 +168,21 @@ static bool source_manifests_bind(SourceContext *ctx) {
             if (!source_work(ctx, NULL)) return false;
             const XrDeclarationRecord *record = &manifest->declarations->records[i];
             char *canonical = NULL;
-            XrModuleStatus identity_status = xr_module_identity_from_logical(&manifest->authority, record->module, &canonical);
+            XrModuleStatus identity_status = xr_compile_module_identity_from_logical(ctx->compile.resources, &manifest->authority, record->module, &canonical);
             if (identity_status != XR_MODULE_OK)
                 return source_module_fail(ctx, NULL, identity_status, "declaration identity construction failed");
-            SourceDeclarationSelector selector = {{canonical, (uint32_t)strlen(canonical)},
-                {record->name, (uint32_t)strlen(record->name)},
-                {record->owner, record->owner ? (uint32_t)strlen(record->owner) : 0}};
+            size_t canonical_length = 0, name_length = 0, owner_length = 0;
+            bool lengths = source_text_length(ctx, NULL, canonical, &canonical_length) &&
+                source_text_length(ctx, NULL, record->name, &name_length) &&
+                (!record->owner || source_text_length(ctx, NULL, record->owner, &owner_length));
+            if (!lengths || canonical_length > UINT32_MAX || name_length > UINT32_MAX || owner_length > UINT32_MAX) {
+                xr_compile_resources_free(canonical);
+                return source_fail(ctx, NULL, XR_XIR_BUDGET, "declaration selector text exceeds its representation");
+            }
+            SourceDeclarationSelector selector = {{canonical, (uint32_t)canonical_length},
+                {record->name, (uint32_t)name_length}, {record->owner, (uint32_t)owner_length}};
             SourceDeclarationTarget target = {0};
-            bool found = source_declaration_target(ctx,&selector,&target); xr_free(canonical);
+            bool found = source_declaration_target(ctx,&selector,&target); xr_compile_resources_free(canonical);
             if (!found) return false;
             if (target.requirement) {
                 if (!source_manifest_requirement(ctx,target,record)) return false;

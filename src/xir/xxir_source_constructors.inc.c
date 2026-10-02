@@ -21,7 +21,7 @@ static bool source_constructor_scan(AstNode *node, void *pointer) {
     if (scan->depth == 128) return source_fail(scan->ctx, node, XR_XIR_BUDGET, "constructor capture depth exhausted");
     if (node->type == AST_FUNCTION_EXPR && !scan->cleanup) return true;
     if (scan->cleanup && (node->type == AST_THIS_EXPR ||
-        (node->type == AST_VARIABLE && !strcmp(node->as.variable.name, "this")))) {
+        (node->type == AST_VARIABLE && source_text_same(scan->ctx, node, node->as.variable.name, "this")))) {
         scan->shared = true; return true;
     }
     bool cleanup = scan->cleanup;
@@ -37,7 +37,7 @@ static bool source_constructor_active(SourceContext *ctx) {
 }
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node) {
     if (!node || (node->type != AST_THIS_EXPR &&
-        (node->type != AST_VARIABLE || strcmp(node->as.variable.name, "this")))) return false;
+        (node->type != AST_VARIABLE || !source_text_same(ctx, NULL, node->as.variable.name, "this")))) return false;
     SourceName *symbol = visible_name(ctx, "this");
     return symbol && symbol->construction;
 }
@@ -126,20 +126,20 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner->index];
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *param = method->params[p];
-        if (param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest || !strcmp(param->name, "this"))
+        if (param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this"))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter contract is not admitted");
         if (param->type) { if (!source_type(ctx, param->type, &body->parameters[p])) return false; }
         else {
             for (uint32_t f = 0; f < decl->field_count; ++f) {
                 if (!source_work(ctx, node)) return false;
-                if (strlen(param->name) == decl->fields[f].name.length &&
-                    !memcmp(param->name, decl->fields[f].name.bytes, decl->fields[f].name.length)) body->parameters[p] = decl->fields[f].type;
+                if (source_text_size(ctx, param->name) == decl->fields[f].name.length &&
+                    source_span_same(ctx, NULL, param->name, decl->fields[f].name.bytes, decl->fields[f].name.length)) body->parameters[p] = decl->fields[f].type;
             }
         }
         if (body->parameters[p] == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter needs a declaration type");
         for (uint32_t q = 0; q < p; ++q) {
             if (!source_work(ctx, node)) return false;
-            if (!strcmp(param->name, method->params[q]->name)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate constructor parameter");
+            if (source_text_same(ctx, NULL, param->name, method->params[q]->name)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate constructor parameter");
         }
     }
     uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
@@ -195,8 +195,8 @@ static bool source_constructor_body(SourceContext *ctx) {
         symbol->kind = SOURCE_LOCAL; symbol->index = p; symbol->type = body->parameters[p];
         XrParamNode *parameter = method->params[p];
         XrXirSourceRange range = {ctx->module, parameter->line, parameter->column, parameter->line, 0};
-        if (parameter->column > 0 && strlen(symbol->name) <= (size_t)(INT_MAX - parameter->column))
-            range.end_column = parameter->column + (int)strlen(symbol->name);
+        if (parameter->column > 0 && source_text_size(ctx, symbol->name) <= (size_t)(INT_MAX - parameter->column))
+            range.end_column = parameter->column + (int)source_text_size(ctx, symbol->name);
         if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
         source_query_binding_type(ctx, symbol);
     }
