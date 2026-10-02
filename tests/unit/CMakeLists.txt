@@ -33,6 +33,7 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compile_resources.cmake)
 add_subdirectory(xir/compile_owner)
 add_subdirectory(shared/native_admission)
+add_subdirectory(module/declaration_owner)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 
 macro(add_xray_unit_test name source)
@@ -75,7 +76,12 @@ if(WIN32)
             --xray $<TARGET_FILE:xray>)
     set_tests_properties(test_windows_unicode_paths PROPERTIES
         LABELS "integration;cli;windows;vm;aot" TIMEOUT 600 COST 180)
-    add_executable(test_file_read_windows base/test_file_read_windows.c)
+    add_executable(test_file_read_windows base/test_file_read_windows.c
+        ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c)
+    if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_file_read_windows PRIVATE /experimental:c11atomics)
+    endif()
     target_include_directories(test_file_read_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
     add_executable(test_declaration_file_windows base/test_declaration_file_windows.c)
     target_include_directories(test_declaration_file_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)

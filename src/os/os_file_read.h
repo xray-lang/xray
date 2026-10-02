@@ -12,7 +12,7 @@
  */
 #ifndef XR_OS_FILE_READ_H
 #define XR_OS_FILE_READ_H
-#include "../base/xdefs.h"
+#include "../base/xio_policy.h"
 #include <stddef.h>
 
 typedef enum XrFileReadStatus {
@@ -21,7 +21,8 @@ typedef enum XrFileReadStatus {
     XR_FILE_READ_FORBIDDEN,
     XR_FILE_READ_LIMIT,
     XR_FILE_READ_IO,
-    XR_FILE_READ_OUT_OF_MEMORY
+    XR_FILE_READ_OUT_OF_MEMORY,
+    XR_FILE_READ_BAD_ARGUMENT
 } XrFileReadStatus;
 
 typedef struct XrFileBytes {
@@ -32,8 +33,9 @@ typedef struct XrFileBytes {
 /* Root is an absolute UTF-8 directory locator; logical_path uses '/' segments.
  * The caller keeps the input tree stable during the call. This is not a
  * transaction against arbitrary concurrent filesystem mutation. Success owns
- * a NUL-terminated xr_malloc buffer; size excludes the terminator. On error,
- * output is empty. Only a missing target under an opened root is MISSING. */
-XR_FUNC XrFileReadStatus xr_file_read_under_root(const char *root, const char *logical_path,
-    size_t limit, XrFileBytes *output);
+ * a NUL-terminated policy allocation; size excludes the terminator. Release
+ * it using the same policy.free. Every failure preserves output. Only a
+ * missing target under an opened root is MISSING. Cleanup needs no new work. */
+XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
+    const char *root, const char *logical_path, size_t limit, XrFileBytes *output);
 #endif // XR_OS_FILE_READ_H
