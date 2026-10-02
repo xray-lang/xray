@@ -14,101 +14,94 @@
  */
 
 #include "../os_dir.h"
-
-#include "xmalloc.h"
+#include "../../base/xio_policy.inc.h"
 #include <dirent.h>
-#include <string.h>
 #include <sys/stat.h>
 
 struct XrDirIter {
-    DIR *d;
-    // Path-prefix buffer used to build the full path of each
-    // entry when d_type is DT_UNKNOWN and we must stat() to
-    // resolve directory-ness.
-    char prefix[XR_DIR_ENTRY_NAME_MAX * 4];
-    size_t prefix_len;
+    XrOsIoPolicy policy;
+    DIR *directory;
+    char *prefix;
+    size_t prefix_length;
+    XrDirEntry pending;
+    XrOsIoStatus status;
+    bool ended;
 };
-
-XrDirIter *xr_dir_open(const char *path) {
-    if (!path || !*path)
-        return NULL;
-    DIR *d = opendir(path);
-    if (!d)
-        return NULL;
-    XrDirIter *it = (XrDirIter *) xr_malloc(sizeof(*it));
-    if (!it) {
-        closedir(d);
-        return NULL;
+XR_FUNC XrOsIoStatus xr_os_io_dir_open(const XrOsIoPolicy *policy, const char *path, XrDirIter **output) {
+    if (!io_policy_valid(policy) || !path || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; size_t length = 0;
+    if (!io_length(&io, path, &length)) return io.status;
+    if (!length) return XR_OS_IO_BAD_ARGUMENT;
+    if (length > SIZE_MAX - 2) return XR_OS_IO_BUDGET;
+    XrDirIter *iterator = io_alloc(&io, sizeof(*iterator));
+    if (!iterator) return io.status;
+    if (!io_clear(&io, iterator, sizeof(*iterator))) { io_free(&io, iterator); return io.status; }
+    iterator->policy = *policy;
+    iterator->prefix = io_alloc(&io, length + 2);
+    if (iterator->prefix && io_copy(&io, iterator->prefix, path, length) && io_work(&io, 1)) {
+        if (path[length - 1] != '/' && io_work(&io, 1)) iterator->prefix[length++] = '/';
+        if (io_work(&io, 1)) iterator->prefix[length] = 0;
+        iterator->prefix_length = length;
     }
-    it->d = d;
-    size_t plen = strlen(path);
-    if (plen >= sizeof(it->prefix) - 1) {
-        // Path too long to use for stat fallback. Truncating
-        // would silently produce wrong is_dir; instead disable
-        // the fallback by leaving prefix empty, which forces
-        // is_dir = false when d_type is DT_UNKNOWN.
-        it->prefix[0] = '\0';
-        it->prefix_len = 0;
-    } else {
-        memcpy(it->prefix, path, plen);
-        // Append trailing slash if missing.
-        if (plen > 0 && it->prefix[plen - 1] != '/') {
-            it->prefix[plen++] = '/';
-        }
-        it->prefix[plen] = '\0';
-        it->prefix_len = plen;
+    if (io_work(&io, 1)) {
+        iterator->directory = opendir(path);
+        if (!iterator->directory) io_status(&io, io_errno_status(errno));
     }
-    return it;
+    if (io.status != XR_OS_IO_OK) xr_os_io_dir_close(iterator);
+    else *output = iterator;
+    return io.status;
 }
-
-bool xr_dir_next(XrDirIter *it, XrDirEntry *out) {
-    if (!it || !out)
-        return false;
-    for (;;) {
-        struct dirent *e = readdir(it->d);
-        if (!e)
-            return false;
-        const char *n = e->d_name;
-        if (n[0] == '.' && (n[1] == '\0' || (n[1] == '.' && n[2] == '\0')))
-            continue;
-
-        size_t nlen = strlen(n);
-        if (nlen >= XR_DIR_ENTRY_NAME_MAX) {
-            // Filename too long for our fixed buffer. Skip
-            // rather than truncate to avoid surprising callers
-            // with a partial name they will then mishandle.
-            continue;
-        }
-        memcpy(out->name, n, nlen + 1);
-
-        // is_dir resolution. DT_UNKNOWN happens on some FSes
-        // (older XFS, some NFS mounts); fall back to stat() on
-        // the joined path.
-        out->is_dir = false;
+static void classify_entry(XrIoContext *io, XrDirIter *iterator, const struct dirent *entry, size_t length) {
 #ifdef DT_DIR
-        if (e->d_type == DT_DIR) {
-            out->is_dir = true;
-        } else if (e->d_type == DT_UNKNOWN && it->prefix_len > 0) {
-#else
-        if (it->prefix_len > 0) {
+    if (entry->d_type == DT_DIR) { iterator->pending.is_dir = true; return; }
+    if (entry->d_type != DT_UNKNOWN) return;
 #endif
-            char full[XR_DIR_ENTRY_NAME_MAX * 4];
-            if (it->prefix_len + nlen < sizeof(full)) {
-                memcpy(full, it->prefix, it->prefix_len);
-                memcpy(full + it->prefix_len, n, nlen + 1);
-                struct stat st;
-                if (stat(full, &st) == 0 && S_ISDIR(st.st_mode))
-                    out->is_dir = true;
+    if (length > SIZE_MAX - iterator->prefix_length - 1) { io_status(io, XR_OS_IO_BUDGET); return; }
+    char *full = io_alloc(io, iterator->prefix_length + length + 1);
+    if (full && io_copy(io, full, iterator->prefix, iterator->prefix_length) &&
+        io_copy(io, full + iterator->prefix_length, entry->d_name, length + 1) && io_work(io, 1)) {
+        struct stat info;
+        if (stat(full, &info)) io_status(io, io_errno_status(errno));
+        else iterator->pending.is_dir = S_ISDIR(info.st_mode);
+    }
+    io_free(io, full);
+}
+XR_FUNC XrOsIoStatus xr_os_io_dir_next(XrDirIter *iterator, XrDirEntry *output) {
+    if (!iterator || !output) return XR_OS_IO_BAD_ARGUMENT;
+    if (iterator->status != XR_OS_IO_OK) return iterator->status;
+    if (iterator->ended) return XR_OS_IO_END;
+    XrIoContext io = {&iterator->policy, XR_OS_IO_OK};
+    while (io_work(&io, 1)) {
+        errno = 0;
+        struct dirent *entry = readdir(iterator->directory);
+        if (!entry) {
+            if (!errno) { iterator->ended = true; return XR_OS_IO_END; }
+            io_status(&io, io_errno_status(errno)); break;
+        }
+        const char *name = entry->d_name;
+        bool dot = false;
+        if (io_work(&io, 1) && name[0] == '.' && io_work(&io, 1)) {
+            if (!name[1]) dot = true;
+            else if (name[1] == '.' && io_work(&io, 1) && !name[2]) dot = true;
+        }
+        if (dot) continue;
+        size_t length = 0;
+        if (io.status == XR_OS_IO_OK && io_length(&io, name, &length)) {
+            if (length >= XR_DIR_ENTRY_NAME_MAX) io_status(&io, XR_OS_IO_BUDGET);
+            else if (io_clear(&io, &iterator->pending, sizeof(iterator->pending)) &&
+                io_copy(&io, iterator->pending.name, name, length + 1)) {
+                classify_entry(&io, iterator, entry, length);
+                io_copy(&io, output, &iterator->pending, sizeof(*output));
             }
         }
-        return true;
+        break;
     }
+    iterator->status = io.status; return io.status;
 }
-
-void xr_dir_close(XrDirIter *it) {
-    if (!it)
-        return;
-    if (it->d)
-        closedir(it->d);
-    xr_free(it);
+XR_FUNC void xr_os_io_dir_close(XrDirIter *iterator) {
+    if (!iterator) return;
+    if (iterator->directory) closedir(iterator->directory);
+    XrOsIoPolicy policy = iterator->policy;
+    if (iterator->prefix) policy.free(policy.context, iterator->prefix);
+    policy.free(policy.context, iterator);
 }
