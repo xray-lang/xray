@@ -12,6 +12,7 @@
 #ifndef XR_XIR_RUNTIME_SDK_H
 #define XR_XIR_RUNTIME_SDK_H
 #include "../base/xdefs.h"
+#include "../base/xcompile_resources.h"
 
 typedef enum XrXirRuntimeSdkStatus {
     XR_XIR_SDK_OK = 0, XR_XIR_SDK_INVALID = 1, XR_XIR_SDK_UNRESOLVED = 2,
@@ -23,7 +24,7 @@ typedef struct XrXirRuntimeSdkRequest {
     const char *root;
     const void *manifest;
     size_t manifest_length;
-    uint64_t metadata_limit, work_limit;
+    XrCompileResources *resources;
 } XrXirRuntimeSdkRequest;
 typedef struct XrXirRuntimeSdkFacts {
     uint32_t schema, wire, semantic, value_abi, call_abi, program_abi;
@@ -33,12 +34,18 @@ typedef struct XrXirRuntimeSdkFacts {
     uint64_t file_bytes, metadata_bytes, work_used;
     uint8_t identity[32];
 } XrXirRuntimeSdkFacts;
-/* Requests are borrowed synchronously. Failure preserves every output byte.
- * The consumer must keep the SDK alive until compiler and linker have exited. */
+/* Requests are borrowed synchronously; resources are mandatory and shared with
+ * other compiler stages. Failure preserves output, which must initially be NULL.
+ * Blocks keep resources alive after the producer releases its external reference.
+ * The consumer must keep the SDK alive until compiler and linker have exited.
+ * Facts report this load's cumulative allocation/work deltas, never limits. */
 XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_load(const XrXirRuntimeSdkRequest *request,
     XrXirRuntimeSdk **output);
 XR_FUNC const XrXirRuntimeSdkFacts *xr_xir_runtime_sdk_facts(const XrXirRuntimeSdk *sdk);
 XR_FUNC const char *xr_xir_runtime_sdk_root(const XrXirRuntimeSdk *sdk);
-XR_FUNC const char *xr_xir_runtime_sdk_file(const XrXirRuntimeSdk *sdk, const char *relative_path);
+/* Lookup charges comparisons to the same ledger. Success borrows a path; failure
+ * preserves output, which must initially be NULL. Unknown paths are UNRESOLVED. */
+XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_file(const XrXirRuntimeSdk *sdk,
+    const char *relative_path, const char **output);
 XR_FUNC void xr_xir_runtime_sdk_free(XrXirRuntimeSdk *sdk);
 #endif // XR_XIR_RUNTIME_SDK_H

@@ -7,24 +7,43 @@
  * xr_xir_runtime_sdk_json.inc.c - Allocation-free closed bundle JSON decoder
  *
  * KEY CONCEPT:
- *   Each consumed byte is charged to one work counter; only known members exist.
+ *   Reads and writes charge the caller's cumulative ledger; only known members exist.
  */
 #include "xr_xir_runtime_sdk_internal.h"
 #include <string.h>
 typedef struct SdkJson {
     char *begin, *cursor, *end;
-    uint64_t remaining, initial;
+    XrCompileResources *resources;
     XrXirRuntimeSdkStatus status;
 } SdkJson;
+static XrXirRuntimeSdkStatus sdk_resource_status(XrCompileResourceStatus status) {
+    switch (status) {
+    case XR_COMPILE_RESOURCE_OK: return XR_XIR_SDK_OK;
+    case XR_COMPILE_RESOURCE_BUDGET: return XR_XIR_SDK_BUDGET;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_XIR_SDK_OUT_OF_MEMORY;
+    default: return XR_XIR_SDK_INVALID;
+    }
+}
 static bool sdk_json_fail(SdkJson *json, XrXirRuntimeSdkStatus status) {
     if (json->status == XR_XIR_SDK_OK) json->status = status;
     return false;
 }
 static bool sdk_json_work(SdkJson *json, uint64_t work) {
     if (json->status != XR_XIR_SDK_OK) return false;
-    if (work > json->remaining) return sdk_json_fail(json, XR_XIR_SDK_BUDGET);
-    json->remaining -= work;
+    XrXirRuntimeSdkStatus status = sdk_resource_status(xr_compile_resources_work(json->resources, work));
+    if (status != XR_XIR_SDK_OK) return sdk_json_fail(json, status);
     return true;
+}
+static bool sdk_json_length(SdkJson *json, const char *text, size_t *output) {
+    for (size_t length = 0;; ++length) {
+        if (!sdk_json_work(json, 1)) return false;
+        if (!text[length]) { *output = length; return true; }
+    }
+}
+static bool sdk_json_peek(SdkJson *json, uint8_t *output) {
+    if (json->cursor == json->end) return sdk_json_fail(json, XR_XIR_SDK_INVALID);
+    if (!sdk_json_work(json, 1)) return false;
+    *output = (uint8_t)*json->cursor; return true;
 }
 static bool sdk_json_byte(SdkJson *json, uint8_t *output) {
     if (json->cursor == json->end) return sdk_json_fail(json, XR_XIR_SDK_INVALID);
@@ -33,9 +52,10 @@ static bool sdk_json_byte(SdkJson *json, uint8_t *output) {
     return true;
 }
 static bool sdk_json_space(SdkJson *json) {
-    while (json->cursor != json->end && (*json->cursor == ' ' || *json->cursor == '\t' ||
-           *json->cursor == '\n' || *json->cursor == '\r')) {
-        if (!sdk_json_work(json, 1)) return false;
+    while (json->cursor != json->end) {
+        uint8_t byte = 0;
+        if (!sdk_json_peek(json, &byte)) return false;
+        if (byte != ' ' && byte != '\t' && byte != '\n' && byte != '\r') break;
         ++json->cursor;
     }
     return json->status == XR_XIR_SDK_OK;
@@ -47,7 +67,7 @@ static bool sdk_json_take(SdkJson *json, char token) {
 }
 static bool sdk_json_equal(SdkJson *json, const char *left, const char *right) {
     for (;;) {
-        if (!sdk_json_work(json, 1)) return false;
+        if (!sdk_json_work(json, 2)) return false;
         if (*left != *right) return false;
         if (!*left++) return true;
         ++right;
@@ -119,7 +139,10 @@ static bool sdk_json_string(SdkJson *json, size_t limit, const char **output) {
     for (;;) {
         uint8_t byte = 0;
         if (!sdk_json_byte(json, &byte)) return false;
-        if (byte == '"') { *write = 0; *output = begin; return true; }
+        if (byte == '"') {
+            if (!sdk_json_work(json, 1)) return false;
+            *write = 0; *output = begin; return true;
+        }
         if (byte < 32) return sdk_json_fail(json, XR_XIR_SDK_INVALID);
         uint32_t code = byte;
         if (byte == '\\') {
@@ -134,19 +157,24 @@ static bool sdk_json_string(SdkJson *json, size_t limit, const char **output) {
             else if (byte == 't') code = '\t';
             else return sdk_json_fail(json, XR_XIR_SDK_INVALID);
         } else if (byte >= 128 && !sdk_json_utf8(json, byte, &code)) return false;
-        size_t bytes = sdk_json_encode(code, write);
+        size_t bytes = code < 0x80 ? 1u : code < 0x800 ? 2u : code < 0x10000 ? 3u : 4u;
         if ((size_t)(write - begin) > limit || bytes > limit - (size_t)(write - begin))
             return sdk_json_fail(json, XR_XIR_SDK_BUDGET);
+        if (!sdk_json_work(json, bytes)) return false;
+        sdk_json_encode(code, write);
         write += bytes;
     }
 }
 static bool sdk_json_u64(SdkJson *json, uint64_t *output) {
-    if (!sdk_json_space(json) || json->cursor == json->end ||
-        *json->cursor < '0' || *json->cursor > '9') return sdk_json_fail(json, XR_XIR_SDK_INVALID);
-    bool zero = *json->cursor == '0';
+    uint8_t peek = 0;
+    if (!sdk_json_space(json) || !sdk_json_peek(json, &peek) ||
+        peek < '0' || peek > '9') return sdk_json_fail(json, XR_XIR_SDK_INVALID);
+    bool zero = peek == '0';
     uint64_t value = 0;
     uint32_t digits = 0;
-    while (json->cursor != json->end && *json->cursor >= '0' && *json->cursor <= '9') {
+    while (json->cursor != json->end) {
+        if (!sdk_json_peek(json, &peek)) return false;
+        if (peek < '0' || peek > '9') break;
         uint8_t byte = 0;
         if (!sdk_json_byte(json, &byte)) return false;
         if (zero && digits) return sdk_json_fail(json, XR_XIR_SDK_INVALID);
@@ -163,7 +191,10 @@ static bool sdk_json_key(SdkJson *json, const char *const *names, uint32_t count
     const char *key = NULL;
     if (!sdk_json_string(json, 128, &key) || !sdk_json_take(json, ':')) return false;
     for (uint32_t i = 0; i < count; ++i) {
-        if (!sdk_json_equal(json, key, names[i])) continue;
+        if (!sdk_json_equal(json, key, names[i])) {
+            if (json->status != XR_XIR_SDK_OK) return false;
+            continue;
+        }
         if (*seen & (UINT64_C(1) << i)) return sdk_json_fail(json, XR_XIR_SDK_INVALID);
         *seen |= UINT64_C(1) << i;
         *ordinal = i;
@@ -174,9 +205,10 @@ static bool sdk_json_key(SdkJson *json, const char *const *names, uint32_t count
 static bool sdk_json_member_end(SdkJson *json, bool *more) {
     if (!sdk_json_space(json) || json->cursor == json->end)
         return sdk_json_fail(json, XR_XIR_SDK_INVALID);
-    char token = *json->cursor;
+    uint8_t token = 0;
+    if (!sdk_json_peek(json, &token)) return false;
     if (token != ',' && token != '}') return sdk_json_fail(json, XR_XIR_SDK_INVALID);
-    if (!sdk_json_take(json, token)) return false;
+    if (!sdk_json_take(json, (char)token)) return false;
     *more = token == ',';
     return true;
 }
@@ -203,7 +235,9 @@ static bool sdk_json_abi(SdkJson *json) {
 static bool sdk_json_digest(SdkJson *json, uint8_t output[32]) {
     const char *text = NULL;
     if (!sdk_json_string(json, 64, &text)) return false;
-    if (strlen(text) != 64) return sdk_json_fail(json, XR_XIR_SDK_INVALID);
+    size_t length = 0;
+    if (!sdk_json_length(json, text, &length)) return false;
+    if (length != 64) return sdk_json_fail(json, XR_XIR_SDK_INVALID);
     for (uint32_t i = 0; i < 64; ++i) {
         if (!sdk_json_work(json, 1)) return false;
         uint8_t byte = (uint8_t)text[i];
@@ -268,18 +302,19 @@ static bool sdk_json_prefix(SdkJson *json, const XrXirSdkManifest *manifest) {
         sdk_json_equal(json, manifest->abi_recipe, "xray:xir-runtime-abi-measurements:v1") &&
         sdk_json_equal(json, manifest->closure_recipe, "xray:xir-runtime-recipe:windows-x86_64-hosted:v1");
 }
-static XrXirRuntimeSdkStatus sdk_json_parse(char *bytes, size_t length, uint64_t work,
+static XrXirRuntimeSdkStatus sdk_json_parse(char *bytes, size_t length, XrCompileResources *resources,
     XrXirSdkManifest *manifest, size_t *failure_offset) {
     static const char *const names[] = {"schema", "wire", "semantic", "value_abi", "call_abi",
         "program_abi", "architecture", "object_format", "hosted", "c_dialect", "crt",
         "sanitizers", "allocator", "assertions", "build_provider", "abi_recipe_version",
         "closure_recipe_version", "target_triple", "abi_recipe", "closure_recipe",
         "abi_measurements", "files", "system_libraries"};
-    if (!bytes || !manifest || !length) return XR_XIR_SDK_INVALID;
-    if (length > XR_XIR_SDK_MANIFEST_LIMIT || work > XR_XIR_SDK_WORK_LIMIT) return XR_XIR_SDK_BUDGET;
-    SdkJson json = {bytes, bytes, bytes + length, work, work, XR_XIR_SDK_OK};
+    if (!bytes || !manifest || !length || !resources) return XR_XIR_SDK_INVALID;
+    if (length > XR_XIR_SDK_MANIFEST_LIMIT) return XR_XIR_SDK_BUDGET;
+    SdkJson json = {bytes, bytes, bytes + length, resources, XR_XIR_SDK_OK};
     uint64_t seen = 0;
     bool more = true;
+    if (!sdk_json_work(&json, sizeof(*manifest))) return json.status;
     memset(manifest, 0, sizeof(*manifest));
     if (!sdk_json_take(&json, '{')) more = false;
     while (more && json.status == XR_XIR_SDK_OK) {
@@ -302,7 +337,6 @@ static XrXirRuntimeSdkStatus sdk_json_parse(char *bytes, size_t length, uint64_t
     if (json.status == XR_XIR_SDK_OK && (seen != ((UINT64_C(1) << 23) - 1) ||
         !sdk_json_space(&json) || json.cursor != json.end || !sdk_json_prefix(&json, manifest)))
         sdk_json_fail(&json, XR_XIR_SDK_INVALID);
-    manifest->work_used = json.initial - json.remaining;
     if (failure_offset) *failure_offset = (size_t)(json.cursor - json.begin);
     return json.status;
 }

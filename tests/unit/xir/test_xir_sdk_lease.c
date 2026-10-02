@@ -20,17 +20,23 @@ int main(int argc,char **argv) {
     if (!bytes) {fclose(file);return 4;}
     size_t actual=fread(bytes,1,(size_t)length,file);int closed=fclose(file);
     if (actual!=(size_t)length || closed) {xr_free(bytes);return 5;}
-    XrXirRuntimeSdkRequest request={argv[1],bytes,(size_t)length,16777216,67108864};
+    XrCompileResourceLimits limits={16777216,16777216,UINT64_C(1)<<30};
+    XrCompileResources *resources=NULL;
+    if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) {xr_free(bytes);return 4;}
+    XrXirRuntimeSdkRequest request={argv[1],bytes,(size_t)length,resources};
     XrXirRuntimeSdk *sdk=NULL;XrXirRuntimeSdkStatus status=xr_xir_runtime_sdk_load(&request,&sdk);
-    xr_free(bytes);if (status!=XR_XIR_SDK_OK) return 6+(int)status;
+    xr_free(bytes);xr_compile_resources_release(resources);
+    if (status!=XR_XIR_SDK_OK) return 6+(int)status;
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
     printf("READY %u %u %u\n",facts->value_abi,facts->crt,facts->file_count);
     puts(xr_xir_runtime_sdk_root(sdk));
     const char *libraries[]={"lib/xray_xir_admission.lib","lib/xray_xir_declarations.lib",
         "lib/xray_xir_scalar.lib","lib/xray_xir_runtime_host.lib"};
     for (size_t i=0;i<4;++i) {
-        const char *path=xr_xir_runtime_sdk_file(sdk,libraries[i]);
-        if (!path) {xr_xir_runtime_sdk_free(sdk);return 20;}
+        const char *path=NULL;
+        if (xr_xir_runtime_sdk_file(sdk,libraries[i],&path)!=XR_XIR_SDK_OK) {
+            xr_xir_runtime_sdk_free(sdk);return 20;
+        }
         puts(path);
     }
     if (fflush(stdout)) {xr_xir_runtime_sdk_free(sdk);return 21;}
