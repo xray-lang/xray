@@ -72,7 +72,13 @@ static void positive(const XrXirRuntimeSdkRequest *original) {
     XrXirHostExecutionRequest call={program,&config,1,NULL,0};XrXirCallResult number={0},text={0};
     CHECK(xr_xir_host_execute(&call,&number)==XR_XIR_CALL_RETURNED && number.value.type==XR_XIR_I64 && number.value.payload==42);
     call.entry=2;CHECK(xr_xir_host_execute(&call,&text)==XR_XIR_CALL_RETURNED);
-    xr_compile_resources_release(request.resources);xr_xir_compile_program_drop(program);xr_xir_runtime_sdk_free(sdk);
+    xr_compile_resources_release(request.resources);xr_xir_compile_program_drop(program);
+    before=sdk_stats(request.resources);
+    CHECK(!xr_xir_runtime_sdk_resources(NULL) && xr_xir_runtime_sdk_resources(sdk)==request.resources);
+    after=sdk_stats(xr_xir_runtime_sdk_resources(sdk));
+    CHECK(before.allocation_count==after.allocation_count && before.allocated_bytes==after.allocated_bytes &&
+        before.live_bytes==after.live_bytes && before.peak_bytes==after.peak_bytes && before.work==after.work);
+    xr_xir_runtime_sdk_free(sdk);
     const char *bytes=NULL;size_t length=0;
     CHECK(xr_xir_string_view(&text.value,&bytes,&length) && length==5 && !memcmp(bytes,"A\0\xe4\xb8\xad",5));
     xr_xir_call_result_drop(&number);xr_xir_call_result_drop(&text);

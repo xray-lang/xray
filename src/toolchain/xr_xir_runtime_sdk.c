@@ -126,6 +126,9 @@ XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_load(const XrXirRuntimeSdkReque
 XR_FUNC const XrXirRuntimeSdkFacts *xr_xir_runtime_sdk_facts(const XrXirRuntimeSdk *sdk) {
     return sdk ? &sdk->facts : NULL;
 }
+XR_FUNC XrCompileResources *xr_xir_runtime_sdk_resources(const XrXirRuntimeSdk *sdk) {
+    return sdk ? sdk->resources : NULL;
+}
 XR_FUNC const char *xr_xir_runtime_sdk_root(const XrXirRuntimeSdk *sdk) {
     return sdk ? sdk->root : NULL;
 }
