@@ -146,7 +146,8 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CALLABLE = 1,
     XR_XIR_TYPE_ARRAY = 2,
     XR_XIR_TYPE_CELL = 3,
-    XR_XIR_TYPE_NOMINAL = 4
+    XR_XIR_TYPE_NOMINAL = 4,
+    XR_XIR_TYPE_NULLABLE = 5
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;

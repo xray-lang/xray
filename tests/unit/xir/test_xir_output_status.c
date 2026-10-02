@@ -161,6 +161,6 @@ int main(void) {
     _Static_assert(sizeof(XrXirProgramSpec)==96 && sizeof(XrXirValue)==16 && sizeof(XrXirCallEntry)==64 &&
         sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 && sizeof(XrXirCallView)==216,"unchanged provider payload layout");
     config_guards();renderer_channels();call_channels();
-    printf("Call21 Provider24 Sink32 CallConfig136 InstanceConfig88; Value16/Program26 layouts unchanged; typed channels, cancel, physical PASS\n");
+    printf("Call21 Provider24 Sink32 CallConfig136 InstanceConfig88; Value17/Program26 layouts unchanged; typed channels, cancel, physical PASS\n");
     return 0;
 }

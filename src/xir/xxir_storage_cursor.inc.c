@@ -43,11 +43,14 @@ static XrXirValueStatus storage_cursor_enter(StorageCursor *cursor, StorageSpan 
     const XrXirTypes *types = xr_xir_type_arena_types(cursor->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
     const XrXirStorageLayout *layout = xr_xir_type_arena_storage(cursor->arena, span.type);
-    XR_CHECK(node && node->kind == XR_XIR_TYPE_NOMINAL && layout, "inline cursor requires sealed nominal metadata");
+    XR_CHECK(node && inline_nominal_type(types, span.type) && layout, "inline cursor requires sealed value metadata");
     if (cursor->owned_only && !layout->owned_depth) return XR_XIR_VALUE_OK;
-    const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
     uint32_t begin = 0, count = node->nominal.field_count;
-    if (identity->kind == XR_XIR_NOMINAL_ENUM) {
+    if (node->kind == XR_XIR_TYPE_NULLABLE) {
+        if (!span.bytes || span.bytes[0] > 1) return XR_XIR_VALUE_BAD_ARGUMENT;
+        count = span.bytes[0];
+    } else if (types->nominals->identities[node->nominal.declaration].kind == XR_XIR_NOMINAL_ENUM) {
+        const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
         uint32_t variant = 0;
         if (layout->tag_bytes) memcpy(&variant, span.bytes, layout->tag_bytes);
         if (variant >= identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -77,8 +80,9 @@ static XrXirValueStatus storage_cursor_next(StorageCursor *cursor, uint64_t *wor
             const XrXirTypeNode *node = xr_xir_type_node(types, frame->span.type);
             const XrXirStorageLayout *layout = xr_xir_type_arena_storage(cursor->arena, frame->span.type);
             uint32_t field = frame->next++;
-            span.type = node->nominal.fields[field];
-            span.bytes = frame->span.bytes ? frame->span.bytes + layout->field_offsets[field] : NULL;
+            span.type = node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field];
+            span.bytes = frame->span.bytes ? frame->span.bytes +
+                (node->kind == XR_XIR_TYPE_NULLABLE ? layout->value.alignment : layout->field_offsets[field]) : NULL;
         }
         if (inline_nominal_type(types, span.type)) {
             XrXirValueStatus status = storage_cursor_enter(cursor, span);

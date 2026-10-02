@@ -34,11 +34,15 @@ static XrXirValueStatus storage_unpack_enter(StorageUnpack *unpack,
     if (!inline_nominal_type(types, span.type)) return storage_unpack_leaf(span, unpack->admission, ready);
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
     const XrXirStorageLayout *layout = xr_xir_type_arena_storage(unpack->admission->arena, span.type);
-    const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
+    const XrXirNominalIdentity *identity = node->kind == XR_XIR_TYPE_NOMINAL ?
+        &types->nominals->identities[node->nominal.declaration] : NULL;
     uint32_t variant = 0, begin = 0, count = node->nominal.field_count;
     if (!layout || (layout->value.size && !span.bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (layout->tag_bytes) memcpy(&variant, span.bytes, layout->tag_bytes);
-    if (identity->kind == XR_XIR_NOMINAL_ENUM) {
+    if (node->kind == XR_XIR_TYPE_NULLABLE) {
+        if (variant > 1) return XR_XIR_VALUE_BAD_ARGUMENT;
+        count = variant;
+    } else if (identity->kind == XR_XIR_NOMINAL_ENUM) {
         if (variant >= identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
         begin = identity->variants[variant].field_begin; count = identity->variants[variant].field_count;
         if (!count) {
@@ -55,7 +59,12 @@ static XrXirValueStatus storage_unpack_enter(StorageUnpack *unpack,
     XirNominalValue *record = (XirNominalValue *)constructed_allocate(unpack->admission->domain,
         (XrXirTypeArena *)unpack->admission->arena, span.type, (size_t)bytes, &status);
     if (!record) return status;
-    record->variant = variant; record->count = count; record->fields = (XrXirValue *)(record + 1);
+    record->variant = variant; record->count = count;
+    record->fields = node->kind == XR_XIR_TYPE_NULLABLE && !count ? NULL : (XrXirValue *)(record + 1);
+    if (node->kind == XR_XIR_TYPE_NULLABLE && !count) {
+        *ready = (XrXirValue){(uint32_t)span.type, 0, 0};
+        memcpy(&ready->payload, &record, sizeof(record)); return XR_XIR_VALUE_OK;
+    }
     unpack->frames[unpack->depth++] = (StorageUnpackFrame){record, node, layout, span.bytes, begin, 0};
     return XR_XIR_VALUE_OK;
 }
@@ -74,8 +83,10 @@ static XrXirValueStatus storage_unpack_walk(StorageUnpack *unpack,
                 memcpy(&ready.payload, &frame->record, sizeof(frame->record)); --unpack->depth;
             } else {
                 uint32_t field = frame->begin + frame->next;
-                span = (StorageSpan){frame->node->nominal.fields[field],
-                    frame->bytes ? frame->bytes + frame->layout->field_offsets[field] : NULL};
+                bool nullable = frame->node->kind == XR_XIR_TYPE_NULLABLE;
+                span = (StorageSpan){nullable ? frame->node->element : frame->node->nominal.fields[field],
+                    frame->bytes ? frame->bytes +
+                        (nullable ? frame->layout->value.alignment : frame->layout->field_offsets[field]) : NULL};
                 status = storage_unpack_enter(unpack, span, &ready);
             }
         }

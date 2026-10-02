@@ -43,9 +43,10 @@ static XrXirValueStatus storage_pack_enter(StoragePack *pack,
     const XrXirTypes *types = xr_xir_type_arena_types(pack->admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     const XrXirStorageLayout *layout = xr_xir_type_arena_storage(pack->admission->arena, type);
-    const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
     const XirNominalValue *record = (const XirNominalValue *) object_pointer(value);
-    uint32_t begin = identity->kind == XR_XIR_NOMINAL_ENUM ? identity->variants[record->variant].field_begin : 0;
+    const XrXirNominalIdentity *identity = node->kind == XR_XIR_TYPE_NOMINAL ?
+        &types->nominals->identities[node->nominal.declaration] : NULL;
+    uint32_t begin = identity && identity->kind == XR_XIR_NOMINAL_ENUM ? identity->variants[record->variant].field_begin : 0;
     if (layout->tag_bytes) memcpy(bytes, &record->variant, layout->tag_bytes);
     if (record->count) {
         if (pack->depth >= pack->capacity) return XR_XIR_VALUE_LIMIT;
@@ -67,8 +68,11 @@ static XrXirValueStatus storage_pack_walk(StoragePack *pack,
             if (frame->next == frame->end) { --pack->depth; continue; }
             uint32_t field = frame->next++;
             value = &frame->record->fields[field - frame->begin];
-            bytes = frame->bytes ? frame->bytes + frame->layout->field_offsets[field] : NULL;
-            if (value->type != (uint32_t)frame->node->nominal.fields[field]) return XR_XIR_VALUE_BAD_ARGUMENT;
+            bool nullable = frame->node->kind == XR_XIR_TYPE_NULLABLE;
+            bytes = frame->bytes ? frame->bytes +
+                (nullable ? frame->layout->value.alignment : frame->layout->field_offsets[field]) : NULL;
+            if (value->type != (uint32_t)(nullable ? frame->node->element : frame->node->nominal.fields[field]))
+                return XR_XIR_VALUE_BAD_ARGUMENT;
         }
         XrXirValueStatus status = inline_nominal_type(types, (XrXirType)value->type) ?
             storage_pack_enter(pack, value, bytes) : storage_pack_leaf(pack, value, bytes);

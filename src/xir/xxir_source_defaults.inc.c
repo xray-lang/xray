@@ -72,6 +72,8 @@ static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType ty
     }
     if (type == XR_XIR_BOOL)
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, type, {0}, {0}, 0, {0}}, value);
+    if (xr_xir_type_is_nullable(&ctx->types,type))
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_NONE,type,{0},{0},0,{0}},value);
     if (xr_xir_type_is_number(type)) {
         XrXirOp op = type == XR_XIR_F32 || type == XR_XIR_F64 ? XR_XIR_CONST_FLOAT : XR_XIR_CONST_INT;
         return source_recipe_record(ctx, (XrXirInstruction) {op, type, {0}, {0}, 0, {0}}, value);

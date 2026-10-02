@@ -24,6 +24,7 @@ static bool source_numeric_plan(SourceContext *ctx, AstNode *site,
         *output = (SourceNumericRecipe){0}; return true;
     }
     XrXirType expected = request->expected.present ? request->expected.type : XR_XIR_UNIT;
+    if (xr_xir_type_is_nullable(&ctx->types,expected)) expected = xr_xir_nullable_element(&ctx->types,expected);
     SourceNumericRecipe recipe = {true,XR_XIR_CONST_INT,XR_XIR_I64,0};
     uint64_t bits = 0;
     if (request->decimal) {

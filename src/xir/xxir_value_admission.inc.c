@@ -47,10 +47,11 @@ static XrXirValueStatus array_needs_admission(const XirArray *array,
         --admission->work;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
-        if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL) {
+        if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
+            node->kind == XR_XIR_TYPE_NULLABLE) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
-        if (node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
         type = node->element;
     }
 }
@@ -63,8 +64,9 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
         const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(arena), frame->storage.type);
         const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, frame->storage.type);
         uint32_t field = frame->begin + (uint32_t)index;
-        *span = (StorageSpan){node->nominal.fields[field],
-            frame->storage.bytes ? frame->storage.bytes + layout->field_offsets[field] : NULL};
+        *span = (StorageSpan){node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field],
+            frame->storage.bytes ? frame->storage.bytes +
+                (node->kind == XR_XIR_TYPE_NULLABLE ? layout->value.alignment : layout->field_offsets[field]) : NULL};
     } else if (*inlined) {
         const XirArray *array = (const XirArray *)frame->object;
         *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
@@ -77,9 +79,12 @@ static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
     const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, span.type);
     if (!layout || (layout->value.size && !span.bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
     uint32_t begin = 0, count = node->nominal.field_count, variant = 0;
-    if (identity->kind == XR_XIR_NOMINAL_ENUM) {
+    if (node->kind == XR_XIR_TYPE_NULLABLE) {
+        if (!span.bytes || span.bytes[0] > 1) return XR_XIR_VALUE_BAD_ARGUMENT;
+        count = span.bytes[0];
+    } else if (types->nominals->identities[node->nominal.declaration].kind == XR_XIR_NOMINAL_ENUM) {
+        const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
         if (layout->tag_bytes) memcpy(&variant, span.bytes, layout->tag_bytes);
         if (variant >= identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
         begin = identity->variants[variant].field_begin; count = identity->variants[variant].field_count;
@@ -119,7 +124,7 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
                     }
                     if (body->field_count > admission->work) {status=XR_XIR_VALUE_LIMIT;break;}
                     admission->work-=body->field_count;
-                } else if (object->kind == XR_XIR_TYPE_NOMINAL) {
+                } else if (object->kind == XR_XIR_TYPE_NOMINAL || object->kind == XR_XIR_TYPE_NULLABLE) {
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                     count = ((XirNominalValue *) object)->count;
                 } else if (object->kind == XR_XIR_TYPE_ARRAY) {

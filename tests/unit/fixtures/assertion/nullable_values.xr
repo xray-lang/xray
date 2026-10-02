@@ -1,0 +1,63 @@
+fn same<T:Equal>(a:T,b:T)->bool { return a == b }
+fn relay<T:Equal>(a:T,b:T)->bool { return same(a,b) }
+fn identity<T>(v:T?)->T? { return v }
+fn defaultNone(v:i64? = null)->i64? { return v }
+fn defaultSome(v:u8? = 7)->u8? { return v }
+fn send<T:Sendable>(v:T) {}
+fn capture(value:string?)->fn()->string? { return fn()->string? { return value } }
+
+var blank:i64?
+assertEqual(blank,null)
+assertEqual(defaultNone(),null)
+assertEqual(defaultSome(),7)
+assertEqual(identity(blank),null)
+assert(blank == null)
+assert(null == blank)
+assert(blank != 0)
+assert(0 != blank)
+
+var small:u8? = 7
+assert(small == 7)
+assert(7 == small)
+assert(relay(small,7))
+assert(relay(7,small))
+var real:f32? = -1.5
+assertEqual(real,-1.5)
+var nested:Array<string?>? = [null,"value"]
+assertEqual(nested,[null,"value"])
+send(nested)
+const captured = capture("captured")
+assertEqual(captured(),"captured")
+var order = 0
+fn onceLeft()->i64 { order = order * 10 + 1; return 7 }
+fn onceRight()->i64? { order = order * 10 + 2; return 7 }
+assertEqual(onceLeft(),onceRight())
+assertEqual(order,12)
+
+var items:Array<string?> = [null,"original"]
+const alias = items
+items[0] = "changed"
+items.push(null)
+assertEqual(items,["changed","original",null])
+assertEqual(alias,[null,"original"])
+
+struct Holder { text:string? }
+const holder = Holder{text:"owned"}
+assertEqual(holder.text,"owned")
+enum Choice { Empty, Present { text:string? } }
+const choice = Choice.Present{text:"variant"}
+const selected:string? = match(choice) { Choice.Empty -> null, Choice.Present{text} -> text }
+assertEqual(selected,"variant")
+
+var getCount = 0
+final class Box {
+    text:string?
+    constructor(text:string?) { this.text = text }
+    get()->string? { getCount = getCount + 1; return this.text }
+    set(text:string?) { this.text = text }
+}
+const box = Box("field")
+assertEqual(box.get(),"field")
+box.set(null)
+assertEqual(box.get(),null)
+assertEqual(getCount,2)

@@ -42,7 +42,7 @@ static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environmen
             return fact && (fact->markers & XR_XIR_CONSTRAINT_EQUAL) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         }
         const XrXirTypeNode *node = xr_xir_type_node(environment->types,type);
-        if (!node || node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_BAD_TYPE;
+        if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return XR_XIR_BAD_TYPE;
         if ((uint32_t)node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
             (uint32_t)node->element < XR_XIR_CONSTRUCTED_TYPE_LIMIT && (uint32_t)node->element >= id)
             return XR_XIR_BAD_TYPE;
@@ -78,7 +78,7 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
             return fact && (fact->markers & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         }
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
-        if (!node || node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_BAD_TYPE;
+        if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return XR_XIR_BAD_TYPE;
         if ((uint32_t) node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
             (uint32_t) node->element < XR_XIR_CONSTRUCTED_TYPE_LIMIT && (uint32_t) node->element >= id)
             return XR_XIR_BAD_TYPE;
@@ -257,7 +257,7 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
         status = proof_nominal(proof,proof->context->module,node);
         for (uint32_t a = 0; status == XR_XIR_OK && a < node->nominal.argument_count; ++a)
             status = proof_type_edge(proof,index,node->nominal.arguments[a]);
-    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL)
+    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE)
         status = proof_type_edge(proof,index,node->element);
     else if (node->kind == XR_XIR_TYPE_CALLABLE) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;

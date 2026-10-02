@@ -15,7 +15,9 @@ static bool source_conversion_plan(SourceContext *ctx, AstNode *node, XrXirType 
     SourceConversionRecipe recipe = {false,(XrXirOp)0,actual,actual};
     if (!expected.present || actual == expected.type) { *output = recipe; return true; }
     XrXirType target = expected.type;
-    if (xr_xir_type_is_callable(&ctx->types,target) && xr_xir_type_is_callable(&ctx->types,actual)) {
+    if (xr_xir_type_is_nullable(&ctx->types,target) && xr_xir_nullable_element(&ctx->types,target) == actual) {
+        recipe.operation = XR_XIR_NULLABLE_SOME;
+    } else if (xr_xir_type_is_callable(&ctx->types,target) && xr_xir_type_is_callable(&ctx->types,actual)) {
         XrXirStatus status = xr_xir_callable_weakening(&ctx->types,actual,target,&ctx->budget.work);
         if (status != XR_XIR_OK) return source_fail(ctx,node,status,"callable conversion may only discard its top-level promise");
         recipe.operation = XR_XIR_FUNCTION_WEAKEN;

@@ -6,9 +6,8 @@
  *
  * xir_assert_equal_pipeline_oom.inc.c - Typed binder pipeline and resource failure refunds
  */
-static void equal_pipeline_oom(const char *directory,const char *path) {
-    XrXirSourceResult result=panics_source(directory,path,
-        "export fn run(){assertPanics(fn(){assertEqual([[1]],[[1]])},\"normal return\")}\n",true);
+static void equal_pipeline_oom(const char *directory,const char *path,const char *source) {
+    XrXirSourceResult result=panics_source(directory,path,source,true);
     size_t live=runtime_live,bytes=runtime_bytes;XrXirArtifact *closed=NULL;
     CHECK(xr_xir_specialize(result.checked,NULL,&closed,NULL)==XR_XIR_OK);
     size_t kept=runtime_live,kept_bytes=runtime_bytes;const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

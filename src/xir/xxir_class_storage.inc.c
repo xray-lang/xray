@@ -25,7 +25,8 @@ static const XrXirStorageLayout *class_body_layout(const XirObject *object) {
         layout->body.alignment && layout->body.alignment <= _Alignof(XirClassObject) ? layout : NULL;
 }
 static bool inline_nominal_type(const XrXirTypes *types, XrXirType type) {
-    return xr_xir_type_is_nominal(types,type) && !xr_xir_type_is_class(types,type);
+    return xr_xir_type_is_nullable(types,type) ||
+        (xr_xir_type_is_nominal(types,type) && !xr_xir_type_is_class(types,type));
 }
 
 static bool class_allocation_valid(const XirObject *object);

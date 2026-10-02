@@ -433,6 +433,11 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CELL, element,
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
+static bool source_nullable_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
+    if (!element || xr_xir_type_is_cell(&ctx->types,element) || xr_xir_type_is_nullable(&ctx->types,element))
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable element must be an ordinary nonnullable value type");
+    return source_intern_type(ctx,(XrXirTypeNode){XR_XIR_TYPE_NULLABLE,element,NULL,0,XR_XIR_UNIT,0,0,{0}},type);
+}
 static XrGenericParam **source_type_parameters(SourceContext *ctx, int *count) {
     if (ctx->type_scope.active) {
         *count = (int)ctx->type_scope.count;
@@ -500,6 +505,13 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     if (!ref) { *type = XR_XIR_UNIT; return true; }
     switch (ref->kind) {
+    case XR_TREF_OPTIONAL: {
+        if (ref->nchildren != 1 || !ref->children || ctx->depth >= 128)
+            return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable type requires one bounded element");
+        XrXirType element; ++ctx->depth;
+        bool valid = source_type(ctx,ref->children[0],&element); --ctx->depth;
+        return valid && source_nullable_type(ctx,element,type);
+    }
     case XR_TREF_FUNCTION: return source_callable_type(ctx, ref, type);
     case XR_TREF_UNIT: *type = XR_XIR_UNIT; return true;
     case XR_TREF_BOOL: *type = XR_XIR_BOOL; return true;
@@ -1049,8 +1061,8 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedT
         if (!source_plan_binary_prepare(ctx,plan,expected,true)) return false;
         SourceExpressionPlan *first=plan->left,*second=plan->right;
         bool shift=node->type==AST_BINARY_LSHIFT || node->type==AST_BINARY_RSHIFT;
-        bool first_literal=first->integer.present || first->decimal.node;
-        bool second_literal=second->integer.present || second->decimal.node;
+        bool first_literal=first->integer.present || first->decimal.node || first->syntax->type==AST_LITERAL_NULL;
+        bool second_literal=second->integer.present || second->decimal.node || second->syntax->type==AST_LITERAL_NULL;
         if (!shift && first_literal && !second_literal && !first->numeric.ready) {
             if (!source_plan_complete(ctx,second,&right)) return false;
             first->expected=(SourceExpectedType){true,right.type};
@@ -1177,7 +1189,14 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 static bool source_defer(SourceContext *ctx, AstNode *node);
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
-    case AST_ARRAY_LITERAL: return source_array_literal(ctx, node, context, value);
+    case AST_LITERAL_NULL:
+        if (!context.present || !xr_xir_type_is_nullable(&ctx->types,context.type))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"null requires an exact nullable context");
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_NONE,context.type,{0},{0},0,{0}},value);
+    case AST_ARRAY_LITERAL:
+        if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))
+            context.type = xr_xir_nullable_element(&ctx->types,context.type);
+        return source_array_literal(ctx, node, context, value);
     case AST_INDEX_GET: return source_array_get(ctx, node, node->as.index_get.array,
         node->as.index_get.index, NULL, NULL, value);
     case AST_INDEX_SET: return source_array_set(ctx, node, node->as.index_set.array,
@@ -1195,7 +1214,10 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     }
     case AST_CALL_EXPR: return source_call(ctx, node, context, value);
     case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, context, value);
-    case AST_FUNCTION_EXPR: return source_closure(ctx, node, context, value);
+    case AST_FUNCTION_EXPR:
+        if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))
+            context.type=xr_xir_nullable_element(&ctx->types,context.type);
+        return source_closure(ctx, node, context, value);
     case AST_STRUCT_LITERAL: return source_struct_literal(ctx, node, value);
     case AST_ENUM_CONSTRUCT: return source_enum_literal(ctx, node, value);
     case AST_MEMBER_SET: return source_struct_set(ctx, node, value);
@@ -1337,6 +1359,7 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
     *recorded_recipe=recipe;plan->binary=recorded_recipe;plan->type_ready=true;plan->ground_type=recipe.result;
     return true;
 }
+#include "xxir_source_ground_type.inc.c"
 static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *node, SourceExpectedType context) {
     if (!node || !source_work(ctx,node)) return NULL;
     SourceFunction *body=&ctx->bodies[ctx->function];
@@ -1364,6 +1387,11 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         if (plan->binding && plan->binding->kind==SOURCE_FUNCTION && !ctx->generics[plan->binding->index].parameter_count) {
             plan->type_ready=true;plan->ground_type=ctx->functions[plan->binding->index].result;
         }
+    }
+    if (!plan->type_ready) {
+        SourceExpectedType ground;
+        if (!source_ground_type(ctx,node,0,&ground)) return NULL;
+        if (ground.present) {plan->type_ready=true;plan->ground_type=ground.type;}
     }
     plan->expected=context;
     plan->entry=body->block_count ? body->current_block : (SourceBlockReference){ctx->function,0};

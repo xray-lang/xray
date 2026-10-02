@@ -84,9 +84,11 @@ def main():
             assert new.hex()==record['current_hex'] and positions==record['insertions']
             text=(directory/record['path']).read_text(encoding='utf-8')
             match=re.search(r'\b'+record['name']+r'\s*\[[^\]]*\]\s*=\s*\{(.*?)\};',text,re.S)
-            literal=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]));assert literal==__import__("derive_equal57_migration").migrate(new)
+            literal=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))
+            from derive_equal57_migration import migrate as equal_frame, nullable_frame
+            assert literal==nullable_frame(equal_frame(new))
         print(json.dumps({'old55_digest_reproductions':len(records),'old56_independent_framing':len(records),
-                          'full57_independent_literals':len(records)}));return
+                          'full58_independent_literals':len(records)}));return
     assert not manifest_path.exists();records=[]
     for path in sorted(directory.glob('*')):
         if path.suffix not in ('.c','.h'):continue

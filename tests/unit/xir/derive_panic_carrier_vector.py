@@ -38,7 +38,7 @@ def main():
     previous55 = packet(55)
     assert previous55[32:64].hex() == 'e1a0d96d358b17400c34000266e978426ecdaf8b0e9e11e833f853a63d87b1c3'
     previous56 = packet(56,22)
-    current = packet(57,22)
+    current = packet(58,22)
     assert previous56[32:64].hex() == 'ad6f38d1cd3ce90b74cac518abc41bd987cb6809ab4d86f4049260a790101c34'
     assert old[:8] == current[:8] and old[16:32] == current[16:32] and old[64:] == current[64:]
     directory = Path(__file__).parent
@@ -53,17 +53,18 @@ def main():
             assert hashlib.sha256(literal).hexdigest() == record['sha256']
             assert struct.unpack_from('<II',literal,8) == (record['schema'],record['contract'])
             continue
-        assert struct.unpack_from('<II',literal,8) == (22,57)
+        assert struct.unpack_from('<II',literal,8) == (22,58)
         assert record['previous_contract'] == 54
         previous_header = bytearray(literal[:32]); struct.pack_into('<II', previous_header, 8, 21,54)
         assert hashlib.sha256(previous_header + literal[64:]).hexdigest() == record['previous_digest']
-        assert len(literal) == record['bytes'] and literal[32:64].hex() == record['current_digest']
+        previous57_header=bytearray(literal[:32]);struct.pack_into('<I',previous57_header,12,57)
+        assert len(literal) == record['bytes'] and hashlib.sha256(previous57_header+literal[64:]).hexdigest() == record['current_digest']
         assert hashlib.sha256(literal[64:]).hexdigest() == record['body_sha256']
         previous55_header=bytearray(literal[:32]);struct.pack_into('<II',previous55_header,8,21,55)
         assert hashlib.sha256(previous55_header+literal[64:]).hexdigest()==record['previous55_digest']
         historical_header = bytearray(literal[:32]); struct.pack_into('<II',historical_header,8,21,53)
         assert hashlib.sha256(historical_header+literal[64:]).hexdigest() == record['old_digest']
-    result = {'schema': 22, 'bytes': 221, 'historical_schema':21,'old_contract': 53, 'current_contract': 57,
+    result = {'schema': 22, 'bytes': 221, 'historical_schema':21,'old_contract': 53, 'current_contract': 58,
         'old_digest': old[32:64].hex(), 'current_digest': current[32:64].hex(),
         'body_sha256': hashlib.sha256(current[64:]).hexdigest(),
         'old_packet_hex': old.hex(), 'current_packet_hex': current.hex(),

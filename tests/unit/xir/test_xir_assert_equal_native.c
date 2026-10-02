@@ -61,7 +61,7 @@ static void equal_native_mixed(const XrXirProgramSpec *native,bool root_native) 
 }
 int main(void) {
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==16 && sizeof(XrXirValue)==16,"public value ABI");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==17 && sizeof(XrXirValue)==16,"public value ABI");
     _Static_assert(XR_XIR_CALL_ABI_VERSION==21 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
     _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==26 && sizeof(XrXirProgramSpec)==96,"public program ABI");
@@ -71,5 +71,5 @@ int main(void) {
     equal_native_mixed(spec,false);CHECK(!runtime_live && !runtime_bytes);
     equal_native_mixed(spec,true);CHECK(!runtime_live && !runtime_bytes);
     CHECK(equal_native_releases==2);
-    puts("13 independent outcomes: native and both VM/native directions PASS; Value16 Call21 Program26; carrier layouts unchanged; physical baseline restored");return 0;
+    puts("13 independent outcomes: native and both VM/native directions PASS; Value17 Call21 Program26; carrier layouts unchanged; physical baseline restored");return 0;
 }

@@ -50,6 +50,8 @@ typedef struct SourceCallPlan {
 } SourceCallPlan;
 static bool source_call_evidence_view(SourceContext *ctx,XrXirType formal,XrXirType actual_type,XrXirType *evidence) {
     *evidence=actual_type;
+    if (xr_xir_type_is_nullable(&ctx->types,formal) && !xr_xir_type_is_nullable(&ctx->types,actual_type))
+        return source_nullable_type(ctx,actual_type,evidence);
     const XrXirTypeNode *wanted=xr_xir_callable_signature(&ctx->types,formal);
     const XrXirTypeNode *actual=xr_xir_callable_signature(&ctx->types,actual_type);
     if (wanted && !wanted->flags && actual && actual->flags==XR_XIR_CALLABLE_NO_SUSPEND) {
@@ -62,7 +64,7 @@ static bool source_call_observe(SourceContext *ctx,AstNode *node,XrXirInferenceS
     XrXirType formal,XrXirType actual_type,bool requirement) {
             XrXirType evidence=actual_type;
             if (!source_call_evidence_view(ctx,formal,actual_type,&evidence)) return false;
-            if (evidence!=actual_type) {
+            if (evidence!=actual_type && !xr_xir_type_is_nullable(&ctx->types,evidence)) {
                 XrXirStatus status=xr_xir_callable_weakening(&ctx->types,actual_type,evidence,&ctx->budget.work);
                 if (status!=XR_XIR_OK) { source_fail(ctx,node,status,requirement ?
                     "callable inference view is invalid" : "callable inference evidence is invalid"); return false; }
@@ -98,6 +100,19 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         if (!arguments[a]) goto done;
     }
     if (inferred) {
+        /* Nullable evidence fixes an ordinary binder before narrower values
+         * acquire their conversion recipes. This visits types only: all value
+         * evaluation remains in the ordered completion loop below. */
+        for (uint32_t a=0;a<argument_count;++a) {
+            SourceExpressionPlan *argument=arguments[a];
+            uint32_t parameter=a+plan->parameter_offset;
+            XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
+            uint32_t id=(uint32_t)formal;
+            if (!source_work(ctx,node)) goto done;
+            if (!argument->type_ready || !xr_xir_type_is_nullable(&ctx->types,argument->ground_type) ||
+                id<XR_XIR_TYPE_PARAMETER_BASE+prefix || id>=XR_XIR_TYPE_PARAMETER_BASE+count) continue;
+            if (!source_call_observe(ctx,node,state,formal,argument->ground_type,requirement)) goto done;
+        }
         for (uint32_t a=0;a<argument_count;++a) {
             SourceExpressionPlan *argument=arguments[a];
             if (!argument->type_ready) continue;

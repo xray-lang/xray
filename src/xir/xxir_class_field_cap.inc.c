@@ -15,6 +15,7 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
     if (type==XR_XIR_BOOL || xr_xir_type_is_number(type) || type==XR_XIR_STRING) return XR_XIR_OK;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
+    if (node->kind==XR_XIR_TYPE_NULLABLE) { *leaf=false; return XR_XIR_OK; }
     if (node->kind==XR_XIR_TYPE_ARRAY)
         return node->element==XR_XIR_I64 || node->element==XR_XIR_STRING ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     if (node->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals ||
@@ -27,6 +28,9 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
 }
 static XrXirStatus class_field_frame(const XrXirTypes *types, uint32_t index, ClassFieldFrame *frame) {
     const XrXirTypeNode *node=&types->nodes[index];
+    if (node->kind==XR_XIR_TYPE_NULLABLE) {
+        *frame=(ClassFieldFrame){index,0,1,false}; return XR_XIR_OK;
+    }
     uint32_t count=types->nominals->declarations ?
         types->nominals->declarations[node->nominal.declaration].field_count :
         types->nominals->identities[node->nominal.declaration].field_count;
@@ -60,7 +64,7 @@ XR_FUNC XrXirStatus xr_xir_class_field_verify(const XrXirTypes *types, XrXirType
         ClassFieldFrame *frame=&frames[depth-1];
         if (frame->next==frame->count) {states[frame->index]=2;--depth;continue;}
         const XrXirTypeNode *node=&types->nodes[frame->index];uint32_t field=frame->next++;
-        XrXirType child=frame->declaration ?
+        XrXirType child=node->kind==XR_XIR_TYPE_NULLABLE ? node->element : frame->declaration ?
             types->nominals->declarations[node->nominal.declaration].fields[field].type : node->nominal.fields[field];
         status=class_field_leaf(types,child,&leaf);
         if (status!=XR_XIR_OK || leaf) continue;

@@ -97,7 +97,7 @@ static void equal_rejections(const char *directory,const char *path) {
         "var a:f32=1.0;var b:f64=1.0;assert(a!=b)",
         "assertEqual(1,1,null)",
         "struct S{value:i64};assertEqual(S{value:1},S{value:1})",
-        "var a:i64?=1;assertEqual(a,a)"
+        "var a:i64?=1;var b:u8=1;assertEqual(a,b)"
     };
     for (uint32_t i=0;i<sizeof(sources)/sizeof(*sources);++i) {
         XrXirSourceResult result=panics_source(directory,path,sources[i],false);
@@ -196,7 +196,7 @@ static void equal_run(XrXirArtifact *lowered,const char *generated_path) {
     XrXirValue held[2]={{0}};equal_owned_inputs(instance,relation,assertion,held);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);equal_held_messages(held);
 }
-static void equal_existing_fixture(const char *directory,const char *path,const char *fixture) {
+static void equal_existing_fixture(const char *directory,const char *path,const char *fixture,const char *generated_path) {
     FILE *file=fopen(fixture,"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
     CHECK(length>0 && length<1048576 && !fseek(file,0,SEEK_SET));
     char *source=xr_malloc((size_t)length+1);CHECK(source);
@@ -204,6 +204,11 @@ static void equal_existing_fixture(const char *directory,const char *path,const 
     XrXirSourceResult result=panics_source(directory,path,source,true);xr_free(source);
     XrXirArtifact *lowered=panics_lower(&result);const XrXirModule *module=xr_xir_artifact_module(lowered);
     uint32_t entry=module->declarations->entry_function;CHECK(entry<module->function_count);
+    XrXirCSource generated={0};
+    CHECK(xr_xir_emit_c(lowered,"nullable_checked",16777216,&generated)==XR_XIR_OK);
+    CHECK(!strstr(generated.text,"({"));FILE *output=fopen(generated_path,"wb");CHECK(output);
+    CHECK(fwrite(generated.text,1,generated.length,output)==generated.length && !fclose(output));
+    xr_xir_c_source_free(&generated);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
     XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -218,9 +223,26 @@ static void equal_existing_fixture(const char *directory,const char *path,const 
 }
 int main(int argc,char **argv) {
     CHECK(argc==3 || argc==4 || argc==5);char path[2048];CHECK(snprintf(path,sizeof(path),"%s/equal.xr",argv[1])>0);
-    if (argc==5) {CHECK(!strcmp(argv[3],"fixture"));equal_existing_fixture(argv[1],path,argv[4]);return 0;}
+    if (argc==5) {
+        CHECK(!strcmp(argv[3],"fixture"));const char *name=argv[2];
+        const char *slash=strrchr(name,'/'),*backslash=strrchr(name,'\\');
+        if (slash) name=slash+1;
+        if (backslash && backslash>=name) name=backslash+1;
+        int length=snprintf(path,sizeof(path),"%s/fixture-%s.xr",argv[1],name);
+        CHECK(length>0 && (size_t)length<sizeof(path));
+        equal_existing_fixture(argv[1],path,argv[4],argv[2]);return 0;
+    }
     if (argc==4) {
-        equal_source_oom(argv[1],path);equal_pipeline_oom(argv[1],path);
+        if (!strcmp(argv[3],"nullable-oom")) {
+            equal_source_oom(argv[1],path,
+                "fn same<T:Equal>(a:T,b:T)->bool{return a==b};export fn run(){var a:Array<string?>=[null,\"a\"];assert(same(a,a));var n:i64?=7;assertEqual(7,n)}\n");
+            equal_pipeline_oom(argv[1],path,
+                "export fn run(){var a:Array<string?>=[null,\"owned\"];var n:Array<string?>?=a;assertPanics(fn(){assertEqual(n,a)},\"normal return\")}\n");
+        } else {
+            CHECK(!strcmp(argv[3],"oom"));
+            equal_source_oom(argv[1],path,"fn same<T:Equal>(a:Array<T>,b:Array<T>)->bool{return a==b};export fn run(){assertEqual([1],[1]);assert(same([1],[1]))}\n");
+            equal_pipeline_oom(argv[1],path,"export fn run(){assertPanics(fn(){assertEqual([[1]],[[1]])},\"normal return\")}\n");
+        }
         puts("Equal Source/default/proof/pipeline/runtime OOM and exact-budget physical refunds PASS");return 0;
     }
     equal_packet_gates();

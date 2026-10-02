@@ -12,6 +12,8 @@
 #include "xxir_types.h"
 #include "xxir_storage.h"
 #include "../base/xmalloc.h"
+static XrXirStatus nullable_storage_layout(const XrXirTypes *types, XrXirType type,
+    const XrXirTarget *target, XrXirLayout *layout);
 
 XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
                         XrXirLayoutContext context, XrXirLayout *layout) {
@@ -25,6 +27,8 @@ XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTa
         (xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_class(types, type) && context == XR_XIR_LAYOUT_STORAGE) ||
         (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER) || xr_xir_type_span(types, type))
         return XR_XIR_BAD_LAYOUT;
+    if (context == XR_XIR_LAYOUT_STORAGE && xr_xir_type_is_nullable(types, type))
+        return nullable_storage_layout(types, type, target, layout);
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
         context == XR_XIR_LAYOUT_BOXED)
         *layout = (XrXirLayout) {16, 8};
@@ -58,7 +62,7 @@ XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
         layouts[i].depth = 0; layouts[i].owned_depth = 0; layouts[i].tag_bytes = 0; layouts[i].body = (XrXirLayout){0,0};
         if (node->parameter_span || layouts[i].field_count != node->nominal.field_count ||
             (layouts[i].field_count != 0) != (layouts[i].field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
-        if (node->kind == XR_XIR_TYPE_NOMINAL) nominal = true;
+        if (node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE) nominal = true;
         else {
             XrXirStatus status = xr_xir_layout(types, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i),
                 target, XR_XIR_LAYOUT_STORAGE, &layouts[i].value);
@@ -74,7 +78,7 @@ XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
     for (uint32_t i = 0; i < count; ++i) nodes[i].offsets = (uint32_t *) layouts[i].field_offsets;
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t i = 0; i < count && status == XR_XIR_OK; ++i) {
-        if (types->nodes[i].kind != XR_XIR_TYPE_NOMINAL) continue;
+        if (types->nodes[i].kind != XR_XIR_TYPE_NOMINAL && types->nodes[i].kind != XR_XIR_TYPE_NULLABLE) continue;
         if (!nodes[i].state) status = nominal_storage_walk(types, target, &budget, nodes, stack, i);
         if (status == XR_XIR_OK) {
             layouts[i].value = nodes[i].layout;

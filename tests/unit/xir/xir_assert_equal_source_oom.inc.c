@@ -13,8 +13,8 @@ static XrXirStatus panics_source_attempt(const XrXirSourceRequest *request,XrXir
         fprintf(stderr,"Equal Source failed %u %s\n",status,diagnostic.message);
     return status;
 }
-static void equal_source_oom(const char *directory,const char *path) {
-    panics_write(path,"fn same<T:Equal>(a:Array<T>,b:Array<T>)->bool{return a==b};export fn run(){assertEqual([1],[1]);assert(same([1],[1]))}\n");
+static void equal_source_oom(const char *directory,const char *path,const char *source) {
+    panics_write(path,source);
     XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     XrXirSourceRequest request={session,path,&authority,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};

@@ -3,7 +3,7 @@ from pathlib import Path
 import argparse,hashlib,json,re
 from derive_assert_panics_vector import words,op,function,packet,vector as old_vector
 
-def vector():
+def vector(semantic=58):
     # Fixed intrinsic inventory: init, condition, panic action, ordinary Equal.
     blocks=[(0,1,0,0),(1,1,4,0),(2,4,0,0),(6,2,0,0),(8,2,0,0)]
     panic_ops=[op(23,normal=1),op(92,65536,normal=2,error=3),op(116,immediate=1),
@@ -33,7 +33,7 @@ def vector():
     body+=words(1,0,0,1,1,0,65536,0)
     offsets['defaults']=64+len(body)
     body+=words(3,0,1,1,4,0,2,1,5,0,3,2,6)+words(0)
-    return packet(body,22,57),offsets
+    return packet(body,22,semantic),offsets
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--write',action='store_true');args=parser.parse_args()
@@ -41,11 +41,15 @@ def main():
     historical=json.loads((directory/'assert_panics_packet_vectors.json').read_text(encoding='utf-8'))
     assert old.hex()==historical['core_packet_hex'] and old_offsets==historical['offsets']
     current,offsets=vector()
-    data={'wire':22,'semantic':57,'historical56_reproduced':True,
+    previous,previous_offsets=vector(57)
+    assert previous_offsets==offsets
+    data={'wire':22,'semantic':58,'historical56_reproduced':True,
+        'previous57_core_packet_hex':previous.hex(),
+        'previous57_sha256':hashlib.sha256(previous).hexdigest(),
         'old56_sha256':hashlib.sha256(old).hexdigest(),'core_packet_hex':current.hex(),
         'core_body_sha256':hashlib.sha256(current[64:]).hexdigest(),
         'core_packet_sha256':hashlib.sha256(current).hexdigest(),'offsets':offsets}
-    header='/* Complete independently framed wire22 semantic57 Core declaration. */\nstatic const uint8_t assert_equal_golden[]={\n'
+    header='/* Complete independently framed wire22 semantic58 Core declaration. */\nstatic const uint8_t assert_equal_golden[]={\n'
     header+='\n'.join('    '+','.join(f'0x{byte:02x}' for byte in current[at:at+12])+',' for at in range(0,len(current),12))+'\n};\n'
     header+='\n'.join(f'#define XR_EQUAL_VECTOR_{name.upper()} {value}u' for name,value in offsets.items())+'\n'
     if args.write:

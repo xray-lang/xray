@@ -108,7 +108,8 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
             if (from->parameters[p].mode != to->parameters[p].mode) { s->status = XR_XIR_BAD_TYPE; break; }
             inference_enqueue(w,from->parameters[p].type,to->parameters[p].type,depth);
         }
-    } else if (from->kind == XR_XIR_TYPE_ARRAY || from->kind == XR_XIR_TYPE_CELL)
+    } else if (from->kind == XR_XIR_TYPE_ARRAY || from->kind == XR_XIR_TYPE_CELL ||
+               from->kind == XR_XIR_TYPE_NULLABLE)
         inference_enqueue(w,from->element,to->element,depth);
     else s->status = XR_XIR_BAD_TYPE;
 }

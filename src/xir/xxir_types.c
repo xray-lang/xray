@@ -10,6 +10,13 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+
+XR_FUNC XrXirBudget xr_xir_default_budget(void) {
+    return (XrXirBudget) {1024, 65536, 4096, 1048576,
+                         UINT64_C(128) * 1024 * 1024,
+                         UINT64_C(16) * 1024 * 1024, UINT64_C(16000000),
+                         UINT64_C(16) * 1024 * 1024};
+}
 #include "xxir_interface.h"
 #include "xxir_constraints.h"
 #include "xxir_constraint_proof.h"
@@ -57,6 +64,9 @@ bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type) {
 bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_ARRAY);
 }
+XR_FUNC bool xr_xir_type_is_nullable(const XrXirTypes *types, XrXirType type) {
+    return type_has_kind(types, type, XR_XIR_TYPE_NULLABLE);
+}
 bool xr_xir_type_is_cell(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_CELL);
 }
@@ -86,7 +96,8 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
-                  node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL));
+                  node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
+                  node->kind == XR_XIR_TYPE_NULLABLE));
 }
 const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -102,6 +113,9 @@ XrXirType xr_xir_cell_element(const XrXirTypes *types, XrXirType type) {
 XrXirType xr_xir_array_element(const XrXirTypes *types, XrXirType type) {
     return type_element(types, type, XR_XIR_TYPE_ARRAY);
 }
+XR_FUNC XrXirType xr_xir_nullable_element(const XrXirTypes *types, XrXirType type) {
+    return type_element(types, type, XR_XIR_TYPE_NULLABLE);
+}
 uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type) {
     uint32_t id = (uint32_t) type;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
@@ -116,7 +130,8 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
-        (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY);
+        (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
+         node->kind == XR_XIR_TYPE_NULLABLE);
 }
 static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -145,10 +160,13 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
             uint32_t component = xr_xir_type_span(types, node->parameters[p].type);
             if (component > span) span = component;
         }
-    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL) {
+    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
+               node->kind == XR_XIR_TYPE_NULLABLE) {
         if (node->parameters || node->parameter_count || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *element = xr_xir_type_node(types, node->element);
+        if (node->kind == XR_XIR_TYPE_NULLABLE && element && element->kind == XR_XIR_TYPE_NULLABLE)
+            return XR_XIR_BAD_TYPE;
         bool nominal_element = element &&
             element->kind == XR_XIR_TYPE_NOMINAL &&
             (uint32_t) node->element - XR_XIR_CONSTRUCTED_TYPE_BASE < index;

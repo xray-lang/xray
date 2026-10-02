@@ -17,6 +17,11 @@ typedef struct ValueEqualStack {
     ValueEqualFrame *frames;
     size_t depth, capacity, bytes;
 } ValueEqualStack;
+typedef struct ValueEqualCursor {
+    XrXirValue left, right;
+    StorageSpan left_span, right_span;
+    bool inlined, descend;
+} ValueEqualCursor;
 static bool equal_work(XrXirValueAdmission *admission, uint64_t count) {
     if (count > admission->work) return false;
     admission->work -= count;
@@ -29,13 +34,13 @@ static XrXirValueStatus equal_closed_type(XrXirType type, XrXirValueAdmission *a
         if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING)
             return XR_XIR_VALUE_OK;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
-        if (!node || node->kind != XR_XIR_TYPE_ARRAY || node->parameter_span)
+        if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) || node->parameter_span)
             return XR_XIR_VALUE_BAD_ARGUMENT;
         type = node->element;
     }
 }
-static XrXirValueStatus equal_push(ValueEqualStack *stack, const XirArray *left,
-    const XirArray *right, XrXirValueAdmission *admission) {
+static XrXirValueStatus equal_push(ValueEqualStack *stack, ValueEqualFrame frame,
+    XrXirValueAdmission *admission) {
     if (stack->depth == stack->capacity) {
         if (stack->capacity > SIZE_MAX / 2 / sizeof(*stack->frames)) return XR_XIR_VALUE_LIMIT;
         size_t capacity = stack->capacity ? stack->capacity * 2 : 1;
@@ -53,7 +58,7 @@ static XrXirValueStatus equal_push(ValueEqualStack *stack, const XirArray *left,
         }
         stack->frames = frames; stack->capacity = capacity; stack->bytes = bytes;
     }
-    stack->frames[stack->depth++] = (ValueEqualFrame){left, right, 0, left->length};
+    stack->frames[stack->depth++] = frame;
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus equal_leaf(const XrXirValue *left, const XrXirValue *right,
@@ -78,25 +83,57 @@ static XrXirValueStatus equal_leaf(const XrXirValue *left, const XrXirValue *rig
     else return XR_XIR_VALUE_BAD_ARGUMENT;
     return XR_XIR_VALUE_OK;
 }
-static XrXirValueStatus equal_current(const XrXirValue *left, const XrXirValue *right,
-    ValueEqualStack *stack, XrXirValueAdmission *admission, bool *equal) {
-    XrXirType type = (XrXirType)left->type;
+static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack *stack,
+    XrXirValueAdmission *admission, bool *equal) {
+    XrXirValue *left=&cursor->left,*right=&cursor->right;
+    StorageSpan *a_span=&cursor->left_span,*b_span=&cursor->right_span;
+    bool *inlined=&cursor->inlined,*descend=&cursor->descend;
+    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    XrXirType type = *inlined ? a_span->type : (XrXirType)left->type;
+    *descend = false;
+    if (*inlined && xr_xir_type_is_nullable(types, type)) {
+        const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, type);
+        if (b_span->type != type || !layout || !a_span->bytes || !b_span->bytes ||
+            a_span->bytes[0] > 1 || b_span->bytes[0] > 1) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (a_span->bytes[0] != b_span->bytes[0]) { *equal = false; return XR_XIR_VALUE_OK; }
+        if (a_span->bytes[0]) {
+            XrXirType element = xr_xir_nullable_element(types,type);
+            a_span->type = b_span->type = element;
+            a_span->bytes += layout->value.alignment; b_span->bytes += layout->value.alignment;
+            *descend = true;
+        }
+        return XR_XIR_VALUE_OK;
+    }
+    if (*inlined) {
+        XrXirLayout layout = {0};
+        if (b_span->type != type || !xr_xir_type_arena_layout(admission->arena,type,&layout) ||
+            !layout.size || layout.size > sizeof(uint64_t) || !a_span->bytes || !b_span->bytes)
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+        *left = storage_leaf_value(type,a_span->bytes,layout.size);
+        *right = storage_leaf_value(type,b_span->bytes,layout.size);
+    }
     if (right->type != left->type || !xr_xir_value_argument(left, admission->arena, type) ||
         !xr_xir_value_argument(right, admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_type_is_array(xr_xir_type_arena_types(admission->arena), type))
-        return equal_leaf(left, right, admission, equal);
+    if (xr_xir_type_is_nullable(types,type)) {
+        const XirNominalValue *a = (const XirNominalValue *)object_pointer(left);
+        const XirNominalValue *b = (const XirNominalValue *)object_pointer(right);
+        if (a->variant != b->variant) { *equal = false; return XR_XIR_VALUE_OK; }
+        if (a->count) { *left = a->fields[0]; *right = b->fields[0]; *inlined = false; *descend = true; }
+        return XR_XIR_VALUE_OK;
+    }
+    if (!xr_xir_type_is_array(types,type)) return equal_leaf(left,right,admission,equal);
     const XirArray *a = (const XirArray *)object_pointer(left);
     const XirArray *b = (const XirArray *)object_pointer(right);
     if (a->length != b->length) { *equal = false; return XR_XIR_VALUE_OK; }
-    return a->length ? equal_push(stack, a, b, admission) : XR_XIR_VALUE_OK;
+    return a->length ? equal_push(stack,(ValueEqualFrame){a,b,0,a->length},admission) : XR_XIR_VALUE_OK;
 }
-static void equal_child(ValueEqualFrame *frame, XrXirValue *left, XrXirValue *right) {
-    XR_CHECK(frame->next < frame->count, "comparison cursor exceeded validated array length");
+static void equal_child(ValueEqualFrame *frame,
+    StorageSpan *a_span, StorageSpan *b_span, bool *inlined) {
+    XR_CHECK(frame->next < frame->count, "comparison cursor exceeded validated active children");
     size_t index = frame->next++;
-    *left = storage_leaf_value(frame->left->element,
-        frame->left->data + index * frame->left->stride, frame->left->stride);
-    *right = storage_leaf_value(frame->right->element,
-        frame->right->data + index * frame->right->stride, frame->right->stride);
+    *inlined = true;
+    *a_span = (StorageSpan){frame->left->element,frame->left->data + index * frame->left->stride};
+    *b_span = (StorageSpan){frame->right->element,frame->right->data + index * frame->right->stride};
 }
 XR_FUNC XrXirValueStatus xr_xir_value_equal(const XrXirValue *left, const XrXirValue *right,
     XrXirType type, XrXirValueAdmission *admission, bool *output) {
@@ -105,16 +142,17 @@ XR_FUNC XrXirValueStatus xr_xir_value_equal(const XrXirValue *left, const XrXirV
     XrXirValueStatus status = equal_closed_type(type, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     ValueEqualStack stack = {0};
-    XrXirValue a = *left, b = *right;
+    ValueEqualCursor cursor = {*left,*right,{0},{0},false,false};
     bool equal = true;
     for (;;) {
         if (!equal_work(admission, 1)) { status = XR_XIR_VALUE_LIMIT; break; }
-        status = equal_current(&a, &b, &stack, admission, &equal);
+        status = equal_current(&cursor,&stack,admission,&equal);
         if (status != XR_XIR_VALUE_OK || !equal) break;
+        if (cursor.descend) continue;
         while (stack.depth && stack.frames[stack.depth - 1].next == stack.frames[stack.depth - 1].count)
             --stack.depth;
         if (!stack.depth) break;
-        equal_child(&stack.frames[stack.depth - 1], &a, &b);
+        equal_child(&stack.frames[stack.depth - 1],&cursor.left_span,&cursor.right_span,&cursor.inlined);
     }
     if (stack.frames) {
         xr_xir_domain_deallocate(admission->domain, stack.frames, stack.bytes);

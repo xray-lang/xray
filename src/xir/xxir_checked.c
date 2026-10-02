@@ -397,7 +397,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             }
             s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
             s.flags = checked_u32(c, s.flags);
-        } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL) {
+        } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL || s.kind == XR_XIR_TYPE_NULLABLE) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);

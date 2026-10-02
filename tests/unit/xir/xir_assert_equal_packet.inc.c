@@ -98,13 +98,13 @@ static void equal_packet_gates(void) {
         if (status!=attacks[i].expected) fprintf(stderr,"Equal attack %u status=%u expected=%u\n",i,status,attacks[i].expected);
         CHECK(status==attacks[i].expected && !read && runtime_live==live && runtime_bytes==bytes);
     }
-    for (uint32_t group=0;group<2;++group) {
+    for (uint32_t group=0;group<3;++group) {
         memcpy(packet.bytes,assert_equal_golden,packet.length);
-        panics_word(packet.bytes+(group ? 12 : 8),group ? 56 : 21);panics_hash(&packet);
+        panics_word(packet.bytes+(group ? 12 : 8),group ? 55+group : 21);panics_hash(&packet);
         runtime_attempts=0;XrXirArtifact *read=NULL;
         CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && !runtime_attempts);
     }
     xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(checked);
     CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
-    puts("Independent Core1919 KAT, valid-rehash Equal/proof/default attacks and old56 early refusal PASS");
+    puts("Independent Core1919 KAT, valid-rehash Equal/proof/default attacks and old56/57 early refusal PASS");
 }

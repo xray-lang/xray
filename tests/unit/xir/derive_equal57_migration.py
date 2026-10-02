@@ -10,6 +10,12 @@ def migrate(old):
     head=bytearray(old[:32]);struct.pack_into('<I',head,12,57)
     return bytes(head)+hashlib.sha256(head+old[64:]).digest()+old[64:]
 
+def nullable_frame(previous):
+    assert struct.unpack_from('<II',previous,8)==(22,57)
+    assert hashlib.sha256(previous[:32]+previous[64:]).digest()==previous[32:64]
+    head=bytearray(previous[:32]);struct.pack_into('<I',head,12,58)
+    return bytes(head)+hashlib.sha256(head+previous[64:]).digest()+previous[64:]
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--write',action='store_true');args=parser.parse_args()
     directory=Path(__file__).parent;manifest=directory/'equal57_ordinary_vectors.json'
@@ -19,17 +25,20 @@ def main():
             new=migrate(bytes.fromhex(record['old56_hex']));assert new.hex()==record['current57_hex']
             text=(directory/record['path']).read_text(encoding='utf-8')
             match=re.search(r'\b'+record['name']+r'\s*\[[^\]]*\]\s*=\s*\{(.*?)\};',text,re.S)
-            assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))==new
+            assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))==nullable_frame(new)
         from derive_panic_carrier_vector import packet
-        old_scalar=packet(56,22);current_scalar=packet(57,22)
+        old_scalar=packet(56,22);previous_scalar=packet(57,22);current_scalar=packet(58,22)
         assert old_scalar[32:64].hex()=='ad6f38d1cd3ce90b74cac518abc41bd987cb6809ab4d86f4049260a790101c34'
         scalar=(directory/'xir_checked_scalar57_golden.h').read_text(encoding='utf-8')
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==previous_scalar
+        scalar=(directory/'xir_checked_scalar58_golden.h').read_text(encoding='utf-8')
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==current_scalar
         checked=(directory/'test_xir_checked.c').read_text(encoding='utf-8')
         digest=re.search(r'const uint8_t expected_digest\[32\] = \{(.*?)\};',checked,re.S)
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',digest[1]))==current_scalar[32:64]
         print(json.dumps({'old56_whole_packets_reproduced':len(records)+1,
-                          'current57_whole_packets_verified':len(records)+1}));return
+                          'historical57_whole_packets_reproduced':len(records)+1,
+                          'current58_whole_packets_verified':len(records)+1}));return
     assert not manifest.exists();records=[]
     for path in sorted(directory.iterdir()):
         if path.suffix not in ('.c','.h') or path.name=='xir_assert_panics_golden.h':continue

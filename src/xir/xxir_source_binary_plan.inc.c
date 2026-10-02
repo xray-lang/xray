@@ -20,11 +20,15 @@ static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType oper
     XrXirType left,XrXirType right,SourceBinaryRecipe *output) {
     SourceBinaryRecipe recipe={0};XrXirType target=left;
     if (operation==AST_BINARY_EQ || operation==AST_BINARY_NE) {
-        if (left!=right) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"equality requires the same declared operand type");
+        if (left!=right) {
+            if (xr_xir_type_is_nullable(&ctx->types,left) && xr_xir_nullable_element(&ctx->types,left)==right) target=left;
+            else if (xr_xir_type_is_nullable(&ctx->types,right) && xr_xir_nullable_element(&ctx->types,right)==left) target=right;
+            else return source_fail(ctx,node,XR_XIR_BAD_TYPE,"equality requires the same declared operand type");
+        }
         XrXirDeclarations declarations;
         XrXirModule module=source_module_view(ctx,&declarations);
         XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status=xr_xir_type_markers_prove(&proof,left,XR_XIR_CONSTRAINT_EQUAL,&ctx->budget);
+        XrXirStatus status=xr_xir_type_markers_prove(&proof,target,XR_XIR_CONSTRAINT_EQUAL,&ctx->budget);
         if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"equality requires its declaration predicate");
         recipe.operation=XR_XIR_EQUAL; recipe.result=XR_XIR_BOOL; recipe.immediate=operation==AST_BINARY_NE;
     } else if (left==XR_XIR_STRING && right==XR_XIR_STRING && operation==AST_BINARY_ADD) {

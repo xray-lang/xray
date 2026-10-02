@@ -18,13 +18,6 @@
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
 
-XrXirBudget xr_xir_default_budget(void) {
-    return (XrXirBudget) {1024, 65536, 4096, 1048576,
-                         UINT64_C(128) * 1024 * 1024,
-                         UINT64_C(16) * 1024 * 1024, UINT64_C(16000000),
-                         UINT64_C(16) * 1024 * 1024};
-}
-
 const char *xr_xir_op_name(XrXirOp op) {
     switch (op) {
 #define XR_XIR_OP(name, stages, rule, operands, edges, terminal) \
