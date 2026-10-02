@@ -7,6 +7,9 @@ get_filename_component(XR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
 if(NOT IS_ABSOLUTE "${INVOCATION_SOURCE_BUILD}")
     message(FATAL_ERROR "Set INVOCATION_SOURCE_BUILD to the qualified Source archive tree")
 endif()
+if(NOT INVOCATION_SDK)
+    set(INVOCATION_SDK "${XR_ROOT}/build/xir-runtime-sdk")
+endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -15,7 +18,7 @@ add_compile_definitions(NDEBUG WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNI
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     add_compile_options(/experimental:c11atomics)
 endif()
-include_directories("${XR_ROOT}/src" "${XR_ROOT}/include" "${XR_ROOT}/build/xir-runtime-sdk")
+include_directories("${XR_ROOT}/src" "${XR_ROOT}/include" "${INVOCATION_SDK}")
 set(source_libraries)
 foreach(item xir/xray_xir_source_product xir/xray_xir_source xir/xray_xir_vm
     xir/xray_xir_scalar xir/xray_xir_cgen xir/xray_xir xir/xray_xir_admission
@@ -54,13 +57,13 @@ find_program(INVOCATION_LINKER NAMES link REQUIRED)
 enable_testing()
 add_test(NAME native_invocation_owner COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_owner>
-    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${XR_ROOT}/build/xir-runtime-sdk")
+    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}")
 add_test(NAME native_invocation_faults COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
-    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${XR_ROOT}/build/xir-runtime-sdk" "faults")
+    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "faults")
 add_test(NAME native_invocation_guard COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
-    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${XR_ROOT}/build/xir-runtime-sdk" "guard")
+    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "guard")
 set_tests_properties(native_invocation_owner PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
 set_tests_properties(native_invocation_faults PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
 set_tests_properties(native_invocation_guard PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)

@@ -172,8 +172,7 @@ static bool invocation_copy(XrXirInvocation *owner, void *destination, const voi
     if (!invocation_work(owner, bytes)) return false;
     memcpy(destination, source, bytes); return true;
 }
-static bool invocation_file_add(XrXirInvocation *owner, XrXirInvocationStage stage,
-    XrXirInvocationFileKind kind, XtcXirFileLease **lease) {
+static bool invocation_file_reserve(XrXirInvocation *owner) {
     if (owner->facts.file_count == owner->limits.files)
         return invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_SELF, 0);
     if (owner->facts.file_count == owner->capacity) {
@@ -186,14 +185,25 @@ static bool invocation_file_add(XrXirInvocation *owner, XrXirInvocationStage sta
             (void **)&owner->files, (size_t)capacity * sizeof(*owner->files)))) return false;
         owner->capacity = capacity;
     }
+    return true;
+}
+static bool invocation_file_publish(XrXirInvocation *owner, XrXirInvocationStage stage,
+    XrXirInvocationFileKind kind, const char *path, uint64_t length, const uint8_t *digest,
+    XtcXirFileLease *lease) {
+    if (!invocation_file_reserve(owner) || !invocation_work(owner, sizeof(InvocationFile) + 32)) return false;
+    InvocationFile *file = &owner->files[owner->facts.file_count];
+    *file = (InvocationFile){{stage, kind, path, length, {0}}, lease};
+    memcpy(file->facts.digest, digest, sizeof(file->facts.digest));
+    if (kind == XR_XIR_INVOCATION_OUTPUT) owner->output_lease = lease;
+    ++owner->facts.file_count;
+    return true;
+}
+static bool invocation_file_add(XrXirInvocation *owner, XrXirInvocationStage stage,
+    XrXirInvocationFileKind kind, XtcXirFileLease **lease) {
     const XtcXirFileFacts *facts = xtc_xir_file_lease_facts(*lease);
     if (!facts) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
-    if (!invocation_work(owner, sizeof(InvocationFile) + sizeof(facts->digest))) return false;
-    InvocationFile *file = &owner->files[owner->facts.file_count];
-    *file = (InvocationFile){{stage, kind, facts->path, facts->length, {0}}, *lease};
-    memcpy(file->facts.digest, facts->digest, sizeof(facts->digest));
-    if (kind == XR_XIR_INVOCATION_OUTPUT) owner->output_lease = *lease;
-    *lease = NULL; ++owner->facts.file_count;
+    if (!invocation_file_publish(owner, stage, kind, facts->path, facts->length, facts->digest, *lease)) return false;
+    *lease = NULL;
     return true;
 }
 static bool invocation_platform(void) {
@@ -682,10 +692,16 @@ static bool invocation_finish(XrXirInvocation *owner) {
     for (unsigned stage = 0; stage < 3; ++stage) {
         owner->diagnostic.stage = (XrXirInvocationStage)stage;
         owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
-        uint32_t count = xtc_xir_images_count(owner->images[stage]);
+        const XrXirImageCollector *images = owner->images[stage];
+        if (xtc_xir_images_resources(images) != owner->context.resources || !xtc_xir_images_sealed(images))
+            return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
+        uint32_t count = xtc_xir_images_count(images);
         for (uint32_t i = 0; i < count; ++i) {
-            const XrXirImageFile *image = xtc_xir_images_file(owner->images[stage], i);
-            if (!invocation_open_add(owner, image->path, (XrXirInvocationStage)stage, XR_XIR_INVOCATION_PROVIDER_IMAGE)) return false;
+            const XrXirImageFile *image = xtc_xir_images_file(images, i);
+            /* This owned collector retains the original same-ID image leases.
+             * Each stage keeps its fact row; only a redundant lease is omitted. */
+            if (!invocation_file_publish(owner, (XrXirInvocationStage)stage, XR_XIR_INVOCATION_PROVIDER_IMAGE,
+                image->path, image->length, image->digest, NULL)) return false;
         }
     }
     if (!invocation_work(owner, sizeof(owner->facts.kind))) return false;
@@ -793,10 +809,11 @@ XR_FUNC void xtc_xir_invocation_free(XrXirInvocation *owner) {
     for (unsigned stage = 0; stage < 3; ++stage) {
         xtc_process_free(owner->process[stage]);
         xtc_dependencies_free(owner->reports[stage]);
-        xtc_xir_images_free(owner->images[stage]);
     }
     for (uint32_t i = 0; i < owner->facts.file_count; ++i) xtc_xir_file_lease_free(owner->files[i].lease);
     xr_compile_resources_free(owner->files);
+    /* File-table paths borrowed from collectors stay valid through the table's lifetime. */
+    for (unsigned stage = 0; stage < 3; ++stage) xtc_xir_images_free(owner->images[stage]);
     xr_compile_resources_free(owner->prefix);
     for (unsigned i = 0; i < 2; ++i) xtc_xir_file_lease_free(owner->directories[i]);
     xr_compile_resources_free(owner);

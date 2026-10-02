@@ -29,7 +29,7 @@ def run(mode):
         sys.stdout.buffer.write(result.stdout); sys.stderr.buffer.write(result.stderr)
         print(f'case={mode} wall={time.perf_counter()-started:.3f}s', flush=True)
         assert result.returncode == 0, (mode, result.returncode)
-        if mode in ('positive', 'full-program'):
+        if mode in ('positive', 'full-program') or mode.startswith('headroom-'):
             native = subprocess.run([str(output / 'program.exe')], capture_output=True, timeout=30)
             expected = b'owner\xe4\xb8\xad-ok 42 true\r\n' if mode == 'full-program' else b'native-invocation-ok\r\n'
             assert native.returncode == 0 and native.stdout == expected and native.stderr == b'', (native.returncode, native.stdout, native.stderr)
@@ -56,9 +56,11 @@ if faults:
         run(f'oom-{index}')
     for index in range(6):
         run(f'process-oom-{index}')
-    for axis, cuts in [('work', [50000000, 250000000, 500000000, 800000000]),
-                       ('bytes', [10000000, 30000000, 60000000]), ('live', [5000000, 15000000, 28000000])]:
+    for axis, cuts in [('work', [50000000, 250000000, 500000000, 650000000]),
+                       ('bytes', [10000000, 30000000, 50000000]), ('live', [5000000, 15000000, 23000000])]:
         for cut in cuts:
             run(f'budget-{axis}-{cut}')
+    for mode in ['headroom-work-800000000', 'headroom-bytes-60000000', 'headroom-live-28000000']:
+        run(mode)
     run(f'io-all-{comparisons}')
 print('actual MSVC Source/SDK six calls; positive leases and exact native output; no full Target authority', flush=True)

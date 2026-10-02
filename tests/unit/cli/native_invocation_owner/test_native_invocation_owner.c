@@ -78,13 +78,16 @@ static int run_test(int argc, char **argv) {
     CHECK(argc == 16);
     const char *mode = argv[15];
 #ifdef INVOCATION_INJECTED
-    if (!strcmp(mode, "positive")) owner_record_boundaries(argv[2]);
+    if (!strcmp(mode, "positive")) { owner_record_boundaries(argv[2]); owner_image_boundaries(argv[2]); }
 #endif
     DWORD handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &handles));
     XrCompileResourceLimits limits = sdk_unlimited;
     if (!strncmp(mode, "budget-work-", 12)) limits.work = strtoull(mode + 12, NULL, 10);
     if (!strncmp(mode, "budget-bytes-", 13)) limits.allocated_bytes = strtoull(mode + 13, NULL, 10);
     if (!strncmp(mode, "budget-live-", 12)) limits.live_bytes = strtoull(mode + 12, NULL, 10);
+    if (!strncmp(mode, "headroom-work-", 14)) limits.work = strtoull(mode + 14, NULL, 10);
+    if (!strncmp(mode, "headroom-bytes-", 15)) limits.allocated_bytes = strtoull(mode + 15, NULL, 10);
+    if (!strncmp(mode, "headroom-live-", 14)) limits.live_bytes = strtoull(mode + 14, NULL, 10);
     XrCompileResources *resources = sdk_ledger(&limits);
     XrXirNativeProjection *project = projection(resources, argv[1], argv[2], argv[3]);
     char manifest_path[32768]; CHECK(snprintf(manifest_path, sizeof(manifest_path), "%s/sdk_manifest.json", argv[4]) > 0);
@@ -224,6 +227,7 @@ static int run_test(int argc, char **argv) {
 #endif
     }
 #ifdef INVOCATION_INJECTED
+    measure_report = request.link_report; measure_output = request.output;
     guard_input_path = request.input_directory;
     for (unsigned i = 0; i < 2; ++i) guard_source_paths[i] = commands[i].source;
     if (!strcmp(mode, "guard-break")) { guard_break_check = 2; expected = XR_XIR_INVOCATION_BROKEN; }
@@ -358,16 +362,49 @@ static int run_test(int argc, char **argv) {
         xtc_xir_invocation_command(owner, XR_XIR_INVOCATION_GENERATED)->argv[0]));
     uint64_t output_length = 0;
     unsigned kinds[9] = {0};
+#ifdef INVOCATION_INJECTED
+    uint32_t image_positions[3] = {0};
+#endif
     for (uint32_t i = 0; i < facts->file_count; ++i) {
         const XrXirInvocationFile *file = xtc_xir_invocation_file(owner, i);
         CHECK(file && file->kind < 9 && file->path && file->length); ++kinds[file->kind];
         if (file->kind == XR_XIR_INVOCATION_OUTPUT) output_length = file->length;
+#ifdef INVOCATION_INJECTED
+        if (file->kind == XR_XIR_INVOCATION_PROVIDER_IMAGE) {
+            CHECK(file->stage < 3 && !owner->files[i].lease);
+            const XrXirImageFile *image = xtc_xir_images_file(owner->images[file->stage], image_positions[file->stage]++);
+            CHECK(image && file->path == image->path && file->length == image->length && !memcmp(file->digest, image->digest, 32));
+        }
+#endif
+        if (!strcmp(mode, "measure")) {
+            printf("file-fact %u %d %d %llu ", i, file->stage, file->kind, (unsigned long long)file->length);
+            for (unsigned j = 0; j < 32; ++j) printf("%02x", file->digest[j]);
+            printf(" %s\n", file->path);
+        }
     }
     CHECK(kinds[XR_XIR_INVOCATION_SOURCE] == 2 && kinds[XR_XIR_INVOCATION_OBJECT] == 2 &&
         kinds[XR_XIR_INVOCATION_SDK_ARCHIVE] == 5 && kinds[XR_XIR_INVOCATION_CRT] == 4 &&
         kinds[XR_XIR_INVOCATION_SYSTEM] == 1 && kinds[XR_XIR_INVOCATION_REPORT] == 3 && kinds[XR_XIR_INVOCATION_OUTPUT] == 1 &&
         kinds[XR_XIR_INVOCATION_HEADER] && kinds[XR_XIR_INVOCATION_PROVIDER_IMAGE]);
     printf("six calls; %u observed files; dead producers; frozen complete commands PASS\n", facts->file_count);
+#ifdef INVOCATION_INJECTED
+    LARGE_INTEGER frequency; CHECK(QueryPerformanceFrequency(&frequency));
+    printf("finish-image-opens count=%u ms=%.3f bytes=%llu malloc=%zu allocated=%llu work=%llu\n",
+        finish_measurement.calls, (double)finish_measurement.ticks * 1000.0 / (double)frequency.QuadPart,
+        (unsigned long long)finish_measurement.bytes, finish_measurement.allocations,
+        (unsigned long long)finish_measurement.allocated, (unsigned long long)finish_measurement.work);
+    printf("image-seals count=%u ms=%.3f malloc=%zu allocated=%llu work=%llu\n",
+        seal_measurement.calls, (double)seal_measurement.ticks * 1000.0 / (double)frequency.QuadPart,
+        seal_measurement.allocations, (unsigned long long)seal_measurement.allocated,
+        (unsigned long long)seal_measurement.work);
+    CHECK(seal_measurement.calls == 6);
+    CHECK(!finish_measurement.calls);
+    for (unsigned stage = 0; stage < 3; ++stage) {
+        CHECK(image_positions[stage] == xtc_xir_images_count(owner->images[stage]));
+
+    }
+    puts("image rows retain each real collector order, digest and original leases PASS");
+#endif
     void *bytes = NULL; size_t length = 0;
     CHECK(output_length && output_length <= SIZE_MAX);
     size_t expected_length = 0; void *expected_output = read_input(output, &expected_length);
