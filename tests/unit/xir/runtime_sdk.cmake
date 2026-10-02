@@ -23,6 +23,11 @@ if(WIN32)
     endif()
     add_test(NAME test_xir_runtime_sdk_owner COMMAND test_xir_runtime_sdk
         ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json)
+    # Target-only impact gate; SDK loader/parser changes still require the full owner matrix.
+    add_test(NAME test_xir_runtime_sdk_shared_resources COMMAND test_xir_runtime_sdk
+        ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json --shared-resources)
+    set_tests_properties(test_xir_runtime_sdk_shared_resources PROPERTIES
+        LABELS "unit;xir;ownership;sdk;resources;target-impact" RUN_SERIAL TRUE TIMEOUT 300 COST 1)
     add_test(NAME test_xir_runtime_sdk_manifest COMMAND ${XRAY_PYTHON}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_manifest_vectors.py
         --executable $<TARGET_FILE:test_xir_runtime_sdk> --bundle ${CMAKE_BINARY_DIR}/xir-runtime-sdk)
@@ -34,6 +39,10 @@ if(WIN32)
     set_tests_properties(test_xir_runtime_sdk_owner test_xir_runtime_sdk_manifest test_xir_runtime_sdk_install
         test_xir_runtime_sdk_wire_vector
         PROPERTIES LABELS "unit;xir;execution;ownership;sdk;abi" RUN_SERIAL TRUE TIMEOUT 300 COST 30)
+    # The exhaustive instrumented fault matrix takes substantially longer than its Release lane.
+    if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+        set_tests_properties(test_xir_runtime_sdk_owner PROPERTIES COST 210)
+    endif()
     find_program(XIR_SDK_LINKER NAMES link REQUIRED)
     find_program(XIR_SDK_MSVC NAMES cl)
     find_program(XIR_SDK_CLANG NAMES clang)

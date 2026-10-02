@@ -146,10 +146,21 @@ static void sdk_actual_faults(const XrXirRuntimeSdkRequest *original) {
 }
 #include "xir_sdk_shared_resources.inc.c"
 int main(int argc,char **argv) {
-    sdk_known_bytes();
-    CHECK(argc==3 || argc==4);size_t length=0;char *manifest=sdk_input(argv[2],&length);
+    if ((argc!=3 && argc!=4) || (argc==4 && strcmp(argv[3],"status") && strcmp(argv[3],"--shared-resources"))) {
+        fputs("usage: sdk-test ROOT MANIFEST [status|--shared-resources]\n",stderr);return 2;
+    }
+    bool shared_only=argc==4 && !strcmp(argv[3],"--shared-resources");
+    if (!shared_only) sdk_known_bytes();
+    size_t length=0;char *manifest=sdk_input(argv[2],&length);
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirRuntimeSdkRequest request={argv[1],manifest,length,resources};
+    DWORD initial_handles=sdk_handles();
+    if (shared_only) {
+        sdk_shared_resources(&request,false);
+        xr_free(manifest);xr_compile_resources_release(resources);
+        CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
+        puts("SDK/Target shared-resources mode PASS; exhaustive SDK faults require the default mode");return 0;
+    }
     if (argc==4) {
         XrXirRuntimeSdk *sdk=NULL;XrXirRuntimeSdkStatus status=xr_xir_runtime_sdk_load(&request,&sdk);
         printf("%u",(unsigned)status);
@@ -159,9 +170,9 @@ int main(int argc,char **argv) {
             for (size_t i=0;i<32;++i) printf("%02x",facts->identity[i]);
         }
         puts("");xr_xir_runtime_sdk_free(sdk);xr_free(manifest);xr_compile_resources_release(resources);
-        CHECK(!runtime_live && !runtime_bytes);return 0;
+        CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);return 0;
     }
-    sdk_shared_resources(&request);sdk_fixed_work();sdk_bounded_scanning();
+    sdk_shared_resources(&request,true);sdk_fixed_work();sdk_bounded_scanning();
     XrXirRuntimeSdkRequest too_large=request;too_large.manifest_length=XR_XIR_SDK_MANIFEST_LIMIT+1;
     XrXirRuntimeSdk *empty=NULL;CHECK(xr_xir_runtime_sdk_load(&too_large,&empty)==XR_XIR_SDK_BUDGET && !empty);
     XrXirRuntimeSdkRequest no_resources=request;no_resources.resources=NULL;
@@ -177,6 +188,6 @@ int main(int argc,char **argv) {
         existing==(const char *)(uintptr_t)1 && sdk_stats(resources).work==query_work);
     xr_free(manifest);xr_free(producer_root);xr_compile_resources_release(resources);
     CHECK(xr_xir_runtime_sdk_root(sdk) && xr_xir_runtime_sdk_facts(sdk)->value_abi==18);
-    sdk_locked_files(sdk);xr_xir_runtime_sdk_free(sdk);CHECK(!runtime_live && !runtime_bytes);
+    sdk_locked_files(sdk);xr_xir_runtime_sdk_free(sdk);CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
     puts("SDK producer destroyed, immutable same-source facts and locked actual bundle PASS");return 0;
 }

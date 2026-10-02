@@ -35,7 +35,11 @@ static void sdk_target_faults(const XrXirRuntimeSdkRequest *request) {
     xr_xir_runtime_sdk_free(sdk);
     printf("Target with SDK alive: %zu allocator and %zu IO/OOM points PASS\n",allocations,ios);
 }
-static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original) {
+static void sdk_faults_with_target(const XrXirRuntimeSdkRequest *original) {
+    XrXirTargetSnapshot *target=NULL;CHECK(sdk_target(original,&target)==XR_XIR_TARGET_OK);
+    sdk_actual_faults(original);CHECK(xtc_xir_target_file(target,0)->length>0);xtc_xir_target_free(target);
+}
+static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original,bool run_sdk_faults) {
     size_t physical=runtime_bytes;DWORD handles=sdk_handles();
     XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_unlimited);
     XrXirRuntimeSdk *sdk=NULL;XrXirTargetSnapshot *target=NULL;
@@ -84,9 +88,9 @@ static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original) {
     CHECK(xr_xir_runtime_sdk_load(&request,&sdk)==XR_XIR_SDK_BUDGET && !sdk);
     CHECK(sdk_stats(request.resources).allocated_bytes==cumulative);
     xr_compile_resources_release(request.resources);
-    /* Exercise SDK failures while an independent input owner holds the same ledger. */
-    target=NULL;CHECK(sdk_target(original,&target)==XR_XIR_TARGET_OK);
-    sdk_actual_faults(original);CHECK(xtc_xir_target_file(target,0)->length>0);xtc_xir_target_free(target);
+    /* The full SDK matrix retains its original position between shared-budget
+     * checks and Target failures. The focused mode still loads the real SDK. */
+    if (run_sdk_faults) sdk_faults_with_target(original);
     sdk_target_faults(original);
     CHECK(runtime_bytes==physical && sdk_handles()==handles);
     puts("SDK + Target cumulative/peak/work exact-minus1, no refresh, producer release and both destruction orders PASS");

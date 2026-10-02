@@ -30,9 +30,19 @@ foreach(target xir_sdk_resources_production test_xir_sdk_resources test_xir_sdk_
 endforeach()
 add_test(NAME test_xir_sdk_resources COMMAND test_xir_sdk_resources
     "${XIR_SDK_BUNDLE_DIR}" "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json")
+# Target-only impact gate; the default executable invocation remains exhaustive.
+add_test(NAME test_xir_sdk_shared_resources COMMAND test_xir_sdk_resources
+    "${XIR_SDK_BUNDLE_DIR}" "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json" --shared-resources)
+set_tests_properties(test_xir_sdk_shared_resources PROPERTIES
+    LABELS "unit;xir;ownership;sdk;resources;target-impact" RUN_SERIAL TRUE TIMEOUT 300 COST 1)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME test_xir_sdk_resources_manifest COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_LIST_DIR}/sdk_manifest_vectors.py" --executable $<TARGET_FILE:test_xir_sdk_resources>
     --bundle "${XIR_SDK_BUNDLE_DIR}")
 set_tests_properties(test_xir_sdk_resources test_xir_sdk_resources_manifest PROPERTIES
     LABELS "unit;xir;ownership;sdk;resources" RUN_SERIAL TRUE TIMEOUT 300)
+if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+    set_tests_properties(test_xir_sdk_resources PROPERTIES COST 210)
+else()
+    set_tests_properties(test_xir_sdk_resources PROPERTIES COST 30)
+endif()
