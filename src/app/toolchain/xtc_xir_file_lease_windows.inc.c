@@ -53,16 +53,15 @@ XR_FUNC XrXirTargetStatus xtc_xir_file_lease_directory_open(XrCompileResources *
     const char *path, XtcXirFileLease **output) {
     return file_lease_open(resources, path, true, output);
 }
-XR_FUNC XrXirTargetStatus xtc_xir_file_lease_read(XtcXirFileLease *lease, size_t limit,
-    void **owned_bytes, size_t *length) {
-    if (!lease || !limit || !owned_bytes || *owned_bytes || !length || *length || lease->directory)
+XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
+    XtcXirLock *lock, uint64_t file_length, size_t limit, void **owned_bytes, size_t *length) {
+    if (!storage || !lock || lock->directory || !limit || !owned_bytes || *owned_bytes || !length || *length)
         return XR_XIR_TARGET_INVALID;
-    XrXirTargetSnapshot *storage = &lease->storage;
     if (storage->status != XR_XIR_TARGET_OK) return storage->status;
-    if (lease->file.length > limit || lease->file.length > SIZE_MAX) {
+    if (file_length > limit || file_length > SIZE_MAX) {
         xtc_xir_target_fail(storage, XR_XIR_TARGET_BUDGET); return storage->status;
     }
-    size_t bytes = (size_t)lease->file.length;
+    size_t bytes = (size_t)file_length;
     void *data = NULL;
     XrCompileResourceStatus allocated = xr_compile_resources_alloc(storage->resources, bytes ? bytes : 1, &data);
     if (allocated != XR_COMPILE_RESOURCE_OK) {
@@ -71,12 +70,12 @@ XR_FUNC XrXirTargetStatus xtc_xir_file_lease_read(XtcXirFileLease *lease, size_t
         return storage->status;
     }
     LARGE_INTEGER start = {0};
-    if (xtc_xir_target_work(storage, 1) && !SetFilePointerEx(lease->lock->handle, start, NULL, FILE_BEGIN))
+    if (xtc_xir_target_work(storage, 1) && !SetFilePointerEx(lock->handle, start, NULL, FILE_BEGIN))
         sysroot_error(storage, GetLastError());
     for (size_t at = 0; at < bytes && storage->status == XR_XIR_TARGET_OK;) {
         DWORD amount = (DWORD)(bytes - at > 65536 ? 65536 : bytes - at), actual = 0;
         if (!xtc_xir_target_work(storage, (uint64_t)amount + 1)) break;
-        if (!ReadFile(lease->lock->handle, (uint8_t *)data + at, amount, &actual, NULL)) {
+        if (!ReadFile(lock->handle, (uint8_t *)data + at, amount, &actual, NULL)) {
             sysroot_error(storage, GetLastError()); break;
         }
         if (actual != amount) { xtc_xir_target_fail(storage, XR_XIR_TARGET_IO); break; }

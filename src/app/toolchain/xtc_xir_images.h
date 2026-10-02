@@ -33,5 +33,11 @@ XR_FUNC bool xtc_xir_images_sealed(const XrXirImageCollector *images);
 /* Only sealed owners expose their immutable file table. */
 XR_FUNC uint32_t xtc_xir_images_count(const XrXirImageCollector *images);
 XR_FUNC const XrXirImageFile *xtc_xir_images_file(const XrXirImageCollector *images, uint32_t index);
+/* Reads a sealed row's existing handle without reopening or hashing. Serialize
+ * with all collector operations. Both outputs must be empty and survive any
+ * failure unchanged. Successful bytes retain the original ledger independently
+ * of this owner; release them with xr_compile_resources_free. */
+XR_FUNC XrXirTargetStatus xtc_xir_images_read(XrXirImageCollector *images,
+    uint32_t index, size_t limit, void **owned_bytes, size_t *length);
 XR_FUNC void xtc_xir_images_free(XrXirImageCollector *images);
 #endif // XTC_XIR_IMAGES_H

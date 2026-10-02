@@ -75,6 +75,20 @@ XR_FUNC uint32_t xtc_xir_images_count(const XrXirImageCollector *images) { retur
 XR_FUNC const XrXirImageFile *xtc_xir_images_file(const XrXirImageCollector *images, uint32_t index) {
     return images && images->sealed && index < images->count ? &images->files[index] : NULL;
 }
+XR_FUNC XrXirTargetStatus xtc_xir_images_read(XrXirImageCollector *images,
+    uint32_t index, size_t limit, void **owned_bytes, size_t *length) {
+    if (!images || !images->sealed || index >= images->count || !limit ||
+        !owned_bytes || *owned_bytes || !length || *length) return XR_XIR_TARGET_INVALID;
+    if (images->storage.status != XR_XIR_TARGET_OK) return images->storage.status;
+    XtcXirImage *image = images->images;
+    for (uint32_t at = 0; at <= index; ++at) {
+        if (!xtc_xir_target_work(&images->storage, 1)) return images->storage.status;
+        if (!image) { xtc_xir_target_fail(&images->storage, XR_XIR_TARGET_INVALID); return images->storage.status; }
+        if (at != index) image = image->next;
+    }
+    return xtc_xir_sysroot_read(&images->storage, image->lease, images->files[index].length,
+        limit, owned_bytes, length);
+}
 XR_FUNC void xtc_xir_images_free(XrXirImageCollector *images) {
     if (!images) return;
     xtc_xir_sysroot_close(&images->storage);

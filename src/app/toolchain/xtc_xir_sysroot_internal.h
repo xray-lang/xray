@@ -65,4 +65,6 @@ XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirT
 XR_FUNC void xtc_xir_sysroot_close(XrXirTargetSnapshot *snapshot);
 XR_FUNC bool xtc_xir_sysroot_observe(XrXirImageCollector *images, const XrProcImageEvent *event);
 XR_FUNC bool xtc_xir_sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirTargetFile *file);
+XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
+    XtcXirLock *lock, uint64_t file_length, size_t limit, void **owned_bytes, size_t *length);
 #endif // XTC_XIR_SYSROOT_INTERNAL_H

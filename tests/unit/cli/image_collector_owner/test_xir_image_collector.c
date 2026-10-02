@@ -99,6 +99,7 @@ static DWORD observed_path(HANDLE handle,LPWSTR path,DWORD capacity,DWORD flags)
 #define CompareStringOrdinal(...) (fail_io()?0:CompareStringOrdinal(__VA_ARGS__))
 #define GetFileSizeEx(...) (fail_io()?FALSE:GetFileSizeEx(__VA_ARGS__))
 #define ReadFile(...) (fail_io()?FALSE:ReadFile(__VA_ARGS__))
+#define SetFilePointerEx(...) (fail_io()?FALSE:SetFilePointerEx(__VA_ARGS__))
 #define DuplicateHandle observed_duplicate
 #include "app/toolchain/xtc_xir_target.c"
 #include "app/toolchain/xtc_xir_sysroot.c"
@@ -114,6 +115,7 @@ static DWORD observed_path(HANDLE handle,LPWSTR path,DWORD capacity,DWORD flags)
 #undef CompareStringOrdinal
 #undef GetFileSizeEx
 #undef ReadFile
+#undef SetFilePointerEx
 #undef DuplicateHandle
 #endif
 static const XrCompileResourceLimits unlimited={UINT64_MAX,UINT64_MAX,UINT64_MAX};
@@ -157,6 +159,13 @@ static XrXirTargetStatus workflow(XrCompileResources *r,HANDLE event,const char 
         if(observe(images,event,XR_PROC_IMAGE_EXECUTABLE)!=XR_PROC_OK)s=xtc_xir_images_status(images);
         if(s==XR_XIR_TARGET_OK&&observe(images,event,XR_PROC_IMAGE_DLL)!=XR_PROC_OK)s=xtc_xir_images_status(images);
         if(s==XR_XIR_TARGET_OK)s=xtc_xir_images_seal(images);
+        if(s==XR_XIR_TARGET_OK) {
+            void *bytes=NULL;size_t length=0;
+            s=xtc_xir_images_read(images,0,3,&bytes,&length);
+            if(s==XR_XIR_TARGET_OK)CHECK(length==3&&!memcmp(bytes,"abc",3));
+            else CHECK(!bytes&&!length);
+            xr_compile_resources_free(bytes);
+        }
         if(s==XR_XIR_TARGET_OK) {
             XrXirTargetDependency input={path,XR_XIR_TARGET_COMPILER};XrXirTargetSnapshotRequest spec=request(r,images,&input,1);
             s=xtc_xir_target_snapshot_capture(&spec,out);
@@ -207,6 +216,9 @@ static void identities(const char *path,const char *alias,const char *saved) {
     CHECK(observe(images,event,XR_PROC_IMAGE_EXECUTABLE)==XR_PROC_OK);
     CHECK(observe(images,event,XR_PROC_IMAGE_DLL)==XR_PROC_OK);
     CHECK(!xtc_xir_images_count(images)&&!xtc_xir_images_file(images,0));
+    void *owned=NULL;size_t owned_length=0;size_t invalid_attempts=attempts;
+    CHECK(xtc_xir_images_read(images,0,3,&owned,&owned_length)==XR_XIR_TARGET_INVALID);
+    CHECK(!owned&&!owned_length&&attempts==invalid_attempts);
     HANDLE second=open_event(alias);
     CHECK(observe(images,second,XR_PROC_IMAGE_DLL)==XR_PROC_OK);CHECK(CloseHandle(second));
     xr_compile_resources_release(r); /* Collector allocations retain the original ledger. */
@@ -227,6 +239,20 @@ static void identities(const char *path,const char *alias,const char *saved) {
     CHECK(xtc_xir_images_file(images,0)->kind_mask==(XR_XIR_IMAGE_EXE|XR_XIR_IMAGE_DLL));
     for(uint32_t i=0;i<2;++i)CHECK(xtc_xir_images_file(images,i)->length==3&&!memcmp(xtc_xir_images_file(images,i)->digest,abc,32));
     CHECK(!xtc_xir_images_file(images,2));blocked_writer(path);
+    invalid_attempts=attempts;
+    CHECK(xtc_xir_images_read(images,2,3,&owned,&owned_length)==XR_XIR_TARGET_INVALID);
+    owned=(void *)(uintptr_t)1;
+    CHECK(xtc_xir_images_read(images,0,3,&owned,&owned_length)==XR_XIR_TARGET_INVALID);
+    CHECK(owned==(void *)(uintptr_t)1&&!owned_length);owned=NULL;owned_length=1;
+    CHECK(xtc_xir_images_read(images,0,3,&owned,&owned_length)==XR_XIR_TARGET_INVALID);
+    CHECK(!owned&&owned_length==1&&attempts==invalid_attempts);owned_length=0;
+    CHECK(xtc_xir_images_read(images,0,3,&owned,&owned_length)==XR_XIR_TARGET_OK);
+    CHECK(owned_length==3&&!memcmp(owned,"abc",3));
+    for(uint32_t i=0;i<2;++i) {
+        void *again=NULL;size_t length=0;
+        CHECK(xtc_xir_images_read(images,i,3,&again,&length)==XR_XIR_TARGET_OK);
+        CHECK(length==3&&!memcmp(again,"abc",3));xr_compile_resources_free(again);
+    }
     XrXirTargetSnapshot *snapshot=NULL;XrXirTargetDependency file={path,XR_XIR_TARGET_HEADER};XrXirTargetSnapshotRequest spec=request(r,images,&file,1);
     CHECK(xtc_xir_target_snapshot_capture(&spec,&snapshot)==XR_XIR_TARGET_INVALID&&!snapshot);
     XrCompileResources *foreign=NULL;CHECK(xr_compile_resources_new(&unlimited,&foreign)==XR_COMPILE_RESOURCE_OK);
@@ -236,7 +262,18 @@ static void identities(const char *path,const char *alias,const char *saved) {
     CHECK(xtc_xir_target_facts(snapshot)->file_count==2);xtc_xir_images_free(images);
     blocked_writer(path);blocked_writer(alias);
     for(uint32_t i=0;i<2;++i)CHECK(xtc_xir_target_file(snapshot,i)->length==3&&!memcmp(xtc_xir_target_file(snapshot,i)->digest,abc,32));
-    xtc_xir_target_free(snapshot);CHECK(!live&&!bytes_live&&!owned_handles&&handle_count()==baseline);CHECK(DeleteFileA(alias));
+    xtc_xir_target_free(snapshot);
+    CHECK(owned_length==3&&!memcmp(owned,"abc",3));xr_compile_resources_free(owned);
+    CHECK(!live&&!bytes_live&&!owned_handles&&handle_count()==baseline);CHECK(DeleteFileA(alias));
+    r=ledger(&unlimited);images=make_images(r);event=open_event(path);
+    CHECK(observe(images,event,XR_PROC_IMAGE_EXECUTABLE)==XR_PROC_OK);
+    CHECK(xtc_xir_images_seal(images)==XR_XIR_TARGET_OK);CHECK(CloseHandle(event));
+    owned=NULL;owned_length=0;invalid_attempts=attempts;
+    CHECK(xtc_xir_images_read(images,0,2,&owned,&owned_length)==XR_XIR_TARGET_BUDGET);
+    CHECK(!owned&&!owned_length&&attempts==invalid_attempts);
+    CHECK(xtc_xir_images_read(images,0,3,&owned,&owned_length)==XR_XIR_TARGET_BUDGET);
+    xtc_xir_images_free(images);xr_compile_resources_release(r);
+    CHECK(!live&&!bytes_live&&!owned_handles&&handle_count()==baseline);
 #ifndef IMAGE_PRODUCTION
     r=ledger(&unlimited);images=make_images(r);event=open_event(path);
     replace_source=path;replace_saved=saved;replace_after_path=true;
@@ -248,7 +285,7 @@ static void identities(const char *path,const char *alias,const char *saved) {
 #else
     (void)saved;(void)replace_source;(void)replace_saved;(void)replace_after_path;
 #endif
-    puts("hardlink aliases, read cursor, sealed immutability and independent snapshot lease PASS");
+    puts("hardlink aliases, same-handle reads, producer-dead bytes, cursor and sealed immutability PASS");
 }
 /* This independent WinAPI control reproduces first-use OS-owned state without
  * invoking any Xray process/collector owner. Preserve its initial delta; only

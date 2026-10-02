@@ -46,13 +46,19 @@ XR_FUNC XrXirTargetStatus xtc_xir_file_lease_directory_open(XrCompileResources *
     const char *path, XtcXirFileLease **output) {
     return xtc_xir_file_lease_open(resources, path, output);
 }
-XR_FUNC XrXirTargetStatus xtc_xir_file_lease_read(XtcXirFileLease *lease, size_t limit,
-    void **owned_bytes, size_t *length) {
-    if (!lease || !limit || !owned_bytes || *owned_bytes || !length || *length || lease->directory)
+XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
+    XtcXirLock *lock, uint64_t file_length, size_t limit, void **owned_bytes, size_t *length) {
+    (void)file_length;
+    if (!storage || !lock || lock->directory || !limit || !owned_bytes || *owned_bytes || !length || *length)
         return XR_XIR_TARGET_INVALID;
     return XR_XIR_TARGET_UNSUPPORTED;
 }
 #endif
+XR_FUNC XrXirTargetStatus xtc_xir_file_lease_read(XtcXirFileLease *lease, size_t limit,
+    void **owned_bytes, size_t *length) {
+    if (!lease || lease->directory) return XR_XIR_TARGET_INVALID;
+    return xtc_xir_sysroot_read(&lease->storage, lease->lock, lease->file.length, limit, owned_bytes, length);
+}
 XR_FUNC XrCompileResources *xtc_xir_file_lease_resources(const XtcXirFileLease *lease) {
     return lease ? lease->storage.resources : NULL;
 }
