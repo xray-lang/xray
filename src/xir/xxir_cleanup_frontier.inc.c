@@ -10,9 +10,9 @@
  *   An active cleanup is proved by its registration edge, never by a body name.
  */
 static XrXirStatus cleanup_ancestor(const Graph *graph, const XrXirFunction *function,
-    uint32_t from, uint32_t to, XrXirBudget *remaining) {
+    uint32_t from, uint32_t to, XrXirCompileContext *remaining) {
     while (from != to && from) {
-        if (!spend(&remaining->work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
         if (from > function->instruction_count ||
             function->instructions[from - 1].op != XR_XIR_CLEANUP_REGISTER) return XR_XIR_BAD_STRUCTURE;
         uint32_t parent = function->blocks[graph->owner[from - 1]].frontier;
@@ -29,7 +29,7 @@ static XrXirStatus cleanup_frontiers(const Graph *graph, const XrXirFunction *fu
         const XrXirBlock *block = &function->blocks[b];
         uint32_t frontier = block->frontier, last = block->first + block->count - 1;
         context->location.instruction = last;
-        if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
         if (frontier) {
             if (frontier > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
             const XrXirInstruction *registration = &function->instructions[frontier - 1];

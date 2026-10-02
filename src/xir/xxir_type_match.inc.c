@@ -18,13 +18,13 @@ typedef struct TypeMatchContext {
     const XrXirTypes *types;
     const XrXirType *arguments;
     uint32_t count;
-    XrXirBudget *remaining;
+    XrXirCompileContext *remaining;
 } TypeMatchContext;
 static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
                                   XrXirType actual, TypeMatchFrame *frame) {
     frame->from = NULL;
-    if (!c->remaining->work) return XR_XIR_BUDGET;
-    --c->remaining->work;
+    if (!xir_compile_work(c->remaining, 1)) return XR_XIR_BUDGET;
+
     uint32_t id = (uint32_t) expected;
     if (!c->count && c->source_types == c->types && expected == actual) return XR_XIR_OK;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
@@ -33,8 +33,7 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
         if (c->arguments[index] == actual) return XR_XIR_OK;
         /* Substituted expressions belong to the destination environment. The
          * nested matcher has no substitution, so this branch cannot recur. */
-        return xr_xir_type_substitution_matches_between(c->types, c->types, NULL, 0,
-            c->arguments[index], actual, c->remaining);
+        return xr_xir_compile_type_substitution_matches_between(c->remaining, c->types, c->types, NULL, 0, c->arguments[index], actual);
     }
     const XrXirTypeNode *from = xr_xir_type_node(c->source_types, expected);
     if (!from) return expected == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
@@ -50,19 +49,21 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
         return XR_XIR_BAD_TYPE;
     *frame = (TypeMatchFrame) {from, to, 0}; return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_type_substitution_matches_between(const XrXirTypes *source_types, const XrXirTypes *types,
-    const XrXirType *arguments, uint32_t count, XrXirType expected,
-    XrXirType actual, XrXirBudget *remaining) {
+XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between(const XrXirCompileContext *compile_context, const XrXirTypes *source_types, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
     if (!remaining || (count && !arguments)) return XR_XIR_BAD_STRUCTURE;
     TypeMatchContext c = {source_types, types, arguments, count, remaining};
     TypeMatchFrame root = {0};
     XrXirStatus status = type_match_pair(&c, expected, actual, &root);
     if (status != XR_XIR_OK || !root.from) return status;
     uint64_t bytes = (uint64_t) source_types->count * sizeof(TypeMatchFrame);
-    if (bytes > SIZE_MAX || bytes > remaining->scratch_bytes) return XR_XIR_BUDGET;
-    remaining->scratch_bytes -= bytes;
-    TypeMatchFrame *stack = xr_malloc((size_t) bytes);
-    if (!stack) { remaining->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
+    if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
+
+    TypeMatchFrame *stack = xir_compile_alloc(compile_context, (size_t) bytes, &allocation_status);
+    if (!stack) {  return allocation_status; }
     uint32_t depth = 1; stack[0] = root;
     while (depth && status == XR_XIR_OK) {
         TypeMatchFrame *frame = &stack[depth - 1];
@@ -87,10 +88,11 @@ XR_FUNC XrXirStatus xr_xir_type_substitution_matches_between(const XrXirTypes *s
         if (child.from >= from || depth >= source_types->count) { status = XR_XIR_BAD_TYPE; break; }
         stack[depth++] = child;
     }
-    xr_free(stack); remaining->scratch_bytes += bytes; return status;
+    xr_compile_resources_free(stack);  return status;
 }
-XR_FUNC XrXirStatus xr_xir_type_substitution_matches(const XrXirTypes *types,
-    const XrXirType *arguments, uint32_t count, XrXirType expected,
-    XrXirType actual, XrXirBudget *remaining) {
-    return xr_xir_type_substitution_matches_between(types, types, arguments, count, expected, actual, remaining);
+XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches(const XrXirCompileContext *compile_context, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
+    return xr_xir_compile_type_substitution_matches_between(remaining, types, types, arguments, count, expected, actual);
 }

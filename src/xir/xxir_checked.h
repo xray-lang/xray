@@ -18,9 +18,7 @@ typedef struct XrXirCheckedPacket {
     uint8_t *bytes;
     size_t length;
 } XrXirCheckedPacket;
-XR_FUNC XrXirStatus xr_xir_checked_write(const XrXirArtifact *artifact,
-    const XrXirBudget *budget, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_checked_read(const void *bytes, size_t length,
-    const XrXirBudget *budget, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
-XR_FUNC void xr_xir_checked_packet_free(XrXirCheckedPacket *packet);
+XR_FUNC XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *compile_context, const void *bytes, size_t length, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+XR_FUNC void xr_xir_compile_checked_packet_free(XrXirCheckedPacket *packet);
 #endif // XXIR_CHECKED_H

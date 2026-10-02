@@ -46,13 +46,10 @@ typedef struct XrXirInterfaceTable {
 } XrXirInterfaceTable;
 
 /* Structural validation alone grants no member lookup, conformance or execution.
- * Budgets and outputs publish only after successful complete validation. */
-XR_FUNC XrXirStatus xr_xir_interfaces_verify_structure(const XrXirInterfaceTable *table,
-    const XrXirTypes *types, XrXirBudget *budget);
-XR_FUNC XrXirStatus xr_xir_interfaces_clone(const XrXirInterfaceTable *table,
-    const XrXirTypes *types, XrXirBudget *budget, XrXirInterfaceTable **output);
-XR_FUNC void xr_xir_interfaces_free(XrXirInterfaceTable *table);
+ * Outputs publish only after successful complete validation; work is never refunded. */
+XR_FUNC XrXirStatus xr_xir_compile_interfaces_verify_structure(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, const XrXirTypes *types);
+XR_FUNC XrXirStatus xr_xir_compile_interfaces_clone(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, const XrXirTypes *types, XrXirInterfaceTable **output);
+XR_FUNC void xr_xir_compile_interfaces_free(XrXirInterfaceTable *table);
 /* Requires a previously verified table; copies no external type-pool owner. */
-XR_FUNC XrXirStatus xr_xir_interfaces_copy_verified(const XrXirInterfaceTable *table,
-    XrXirInterfaceTable **output);
+XR_FUNC XrXirStatus xr_xir_compile_interfaces_copy_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, XrXirInterfaceTable **output);
 #endif // XXIR_INTERFACE_H

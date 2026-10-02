@@ -10,41 +10,48 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_compile_memory.h"
 
-XR_FUNC XrXirBudget xr_xir_default_budget(void) {
-    return (XrXirBudget) {1024, 65536, 4096, 1048576,
-                         UINT64_C(128) * 1024 * 1024,
-                         UINT64_C(16) * 1024 * 1024, UINT64_C(16000000),
-                         UINT64_C(16) * 1024 * 1024};
+XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
+    return (XrXirCompileLimits){1024, 65536, 4096, 1048576, UINT64_C(16) * 1024 * 1024};
 }
 #include "xxir_interface.h"
 #include "xxir_constraints.h"
 #include "xxir_constraint_proof.h"
 #include "../base/xmalloc.h"
 
-XrXirStatus xr_xir_callable_weakening(const XrXirTypes *types,
-    XrXirType source, XrXirType target, uint64_t *work) {
+XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
+    XrXirType source, XrXirType target, void *work_owner, bool (*charge)(void *, uint64_t)) {
+    if (!work_owner || !charge) return XR_XIR_BAD_STRUCTURE;
+    if (!charge(work_owner, 1)) return XR_XIR_BUDGET;
     const XrXirTypeNode *from = xr_xir_callable_signature(types, source);
     const XrXirTypeNode *to = xr_xir_callable_signature(types, target);
-    if (!from || !to || !work || from->flags != XR_XIR_CALLABLE_NO_SUSPEND || to->flags ||
+    if (!from || !to || from->flags != XR_XIR_CALLABLE_NO_SUSPEND || to->flags ||
         from->parameter_count != to->parameter_count || from->result != to->result) return XR_XIR_BAD_TYPE;
-    uint64_t cost = (uint64_t)from->parameter_count + 1;
-    if (cost > *work) return XR_XIR_BUDGET;
-    *work -= cost;
-    for (uint32_t p = 0; p < from->parameter_count; ++p)
+    for (uint32_t p = 0; p < from->parameter_count; ++p) {
+        if (!charge(work_owner, 1)) return XR_XIR_BUDGET;
         if (from->parameters[p].type != to->parameters[p].type ||
             from->parameters[p].mode != to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+    }
     return XR_XIR_OK;
 }
-static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrXirBudget *budget);
-static XrXirStatus nominal_copy_identities(const XrXirNominalTable *table, XrXirNominalTable **output);
-static bool nominal_identity_copy_work(const XrXirNominalTable *table, XrXirBudget *budget);
+static bool callable_compile_charge(void *owner, uint64_t work) {
+    return xr_compile_resources_work(owner, work) == XR_COMPILE_RESOURCE_OK;
+}
+XrXirStatus xr_xir_compile_callable_weakening(const XrXirCompileContext *compile_context,
+    const XrXirTypes *types, XrXirType source, XrXirType target) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    return xr_xir_callable_weakening_admit(types, source, target,
+        compile_context->resources, callable_compile_charge);
+}
+static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrXirCompileContext *budget);
+static XrXirStatus nominal_copy_identities(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrXirNominalTable **output);
 static void nominal_free_identities(XrXirNominalTable *table);
 static XrXirStatus nominal_table_verify(const XrXirNominalTable *table,
-    const XrXirTypes *types, XrXirBudget *budget);
-static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirBudget *budget);
-static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirBudget *budget);
-static XrXirStatus nominal_copy_table(const XrXirNominalTable *table,
+    const XrXirTypes *types, XrXirCompileContext *budget);
+static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileContext *budget);
+static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirCompileContext *budget);
+static XrXirStatus nominal_copy_table(const XrXirCompileContext *compile_context, const XrXirNominalTable *table,
     XrXirNominalTable **output);
 
 const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type) {
@@ -138,7 +145,7 @@ static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t
     return type_component(types, type, earlier) || (node && node->kind == XR_XIR_TYPE_NOMINAL &&
         (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier);
 }
-static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBudget *remaining) {
+static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCompileContext *remaining) {
     const XrXirTypeNode *node = &types->nodes[index];
     uint32_t span = 0;
     if (node->kind != XR_XIR_TYPE_NOMINAL &&
@@ -147,12 +154,12 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
     if (node->kind == XR_XIR_TYPE_CALLABLE) {
         if (node->element != XR_XIR_UNIT || (node->flags & ~XR_XIR_CALLABLE_NO_SUSPEND) ||
             (node->result != XR_XIR_UNIT && !callable_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
-        if (node->parameter_count > 65536 || node->parameter_count > remaining->parameters) return XR_XIR_BUDGET;
+        if (node->parameter_count > 65536 || node->parameter_count > remaining->limits.parameters) return XR_XIR_BUDGET;
         uint64_t bytes = (uint64_t) node->parameter_count * sizeof(*node->parameters);
-        if (bytes > SIZE_MAX || bytes > remaining->metadata_bytes || node->parameter_count > remaining->work)
+        if (bytes > SIZE_MAX ||!xir_compile_work(remaining, node->parameter_count))
             return XR_XIR_BUDGET;
-        remaining->metadata_bytes -= bytes; remaining->work -= node->parameter_count;
-        remaining->parameters -= node->parameter_count;
+
+        remaining->limits.parameters -= node->parameter_count;
         if ((node->parameter_count != 0) != (node->parameters != NULL)) return XR_XIR_BAD_STRUCTURE;
         span = xr_xir_type_span(types, node->result);
         for (uint32_t p = 0; p < node->parameter_count; ++p) {
@@ -181,21 +188,21 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
             (node->nominal.field_count != 0) != (node->nominal.fields != NULL)) return XR_XIR_BAD_STRUCTURE;
         uint32_t count = node->nominal.argument_count;
         if (xr_xir_type_is_class(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index))) {
-            if (node->nominal.field_count > remaining->work) return XR_XIR_BUDGET;
-            remaining->work -= node->nominal.field_count;
+            if (!xir_compile_work(remaining, node->nominal.field_count)) return XR_XIR_BUDGET;
+
             for (uint32_t f=0; f<node->nominal.field_count; ++f) {
                 XrXirType field=node->nominal.fields[f];
                 if (!types->nominals->declarations || !xr_xir_type_span(types,field)) {
-                    XrXirStatus status=xr_xir_class_field_verify(types,field,remaining);
+                    XrXirStatus status=xr_xir_compile_class_field_verify(remaining, types, field);
                     if (status!=XR_XIR_OK) return status;
                 }
             }
         }
         uint64_t total = (uint64_t) count + node->nominal.field_count;
         uint64_t bytes = total * sizeof(XrXirType);
-        if (count > 65536 || total > remaining->parameters || total > remaining->work ||
-            bytes > SIZE_MAX || bytes > remaining->metadata_bytes) return XR_XIR_BUDGET;
-        remaining->parameters -= (uint32_t) total; remaining->work -= total; remaining->metadata_bytes -= bytes;
+        if (count > 65536 || total > remaining->limits.parameters ||!xir_compile_work(remaining, total) ||
+            bytes > SIZE_MAX) return XR_XIR_BUDGET;
+        remaining->limits.parameters -= (uint32_t) total;
         for (uint32_t a = 0; a < count; ++a) {
             XrXirType argument = node->nominal.arguments[a];
             const XrXirTypeNode *nested = xr_xir_type_node(types, argument);
@@ -209,41 +216,44 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
     if (types->nominals && types->nominals->identities && span) return XR_XIR_BAD_TYPE;
     return node->parameter_span == span ? XR_XIR_OK : XR_XIR_BAD_TYPE;
 }
-static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index, uint64_t *work) {
+static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index, const XrXirCompileContext *work) {
     const XrXirTypeNode *node = &types->nodes[index];
     for (uint32_t j = 0; j < index; ++j) {
-        if (!*work) return XR_XIR_BUDGET;
-        --*work;
+        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
         const XrXirTypeNode *previous = &types->nodes[j];
         if (previous->kind != node->kind || previous->element != node->element ||
             previous->parameter_count != node->parameter_count || previous->result != node->result ||
             previous->flags != node->flags || previous->nominal.declaration != node->nominal.declaration ||
             previous->nominal.argument_count != node->nominal.argument_count) continue;
-        if (node->parameter_count > *work) return XR_XIR_BUDGET;
-        *work -= node->parameter_count;
+        if (!xir_compile_work(work, node->parameter_count)) return XR_XIR_BUDGET;
+
         bool same = true;
         for (uint32_t p = 0; p < node->parameter_count; ++p)
             if (node->parameters[p].type != previous->parameters[p].type ||
                 node->parameters[p].mode != previous->parameters[p].mode) same = false;
-        if (node->nominal.argument_count > *work) return XR_XIR_BUDGET;
-        *work -= node->nominal.argument_count;
+        if (!xir_compile_work(work, node->nominal.argument_count)) return XR_XIR_BUDGET;
+
         for (uint32_t a = 0; a < node->nominal.argument_count; ++a)
             if (node->nominal.arguments[a] != previous->nominal.arguments[a]) same = false;
         if (same) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_type_descriptors_verify(const XrXirTypes *types, XrXirBudget *remaining) {
+XrXirStatus xr_xir_compile_type_descriptors_verify(const XrXirCompileContext *compile_context, const XrXirTypes *types) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
     if (!types) return XR_XIR_OK;
     if (!remaining || (types->count != 0) != (types->nodes != NULL) ||
         (!types->count && !types->nominals && !types->interfaces)) return XR_XIR_BAD_STRUCTURE;
     if (types->count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_BUDGET;
     uint64_t bytes = sizeof(*types) + (uint64_t) types->count * sizeof(*types->nodes);
-    if (bytes > SIZE_MAX || bytes > remaining->metadata_bytes || types->count > remaining->work) return XR_XIR_BUDGET;
-    remaining->metadata_bytes -= bytes; remaining->work -= types->count;
+    if (bytes > SIZE_MAX ||!xir_compile_work(remaining, types->count)) return XR_XIR_BUDGET;
+
     for (uint32_t i = 0; i < types->count; ++i) {
         XrXirStatus status = type_payload(types, i, remaining);
-        if (status == XR_XIR_OK) status = type_unique(types, i, &remaining->work);
+        if (status == XR_XIR_OK) status = type_unique(types, i, remaining);
         if (status != XR_XIR_OK) return status;
     }
     XrXirStatus status = nominal_table_verify(types->nominals, types, remaining);
@@ -251,60 +261,100 @@ XrXirStatus xr_xir_type_descriptors_verify(const XrXirTypes *types, XrXirBudget 
     if (status == XR_XIR_OK) status = nominal_layout_verify(types, remaining);
     return status;
 }
-XrXirStatus xr_xir_types_structure_verify(const XrXirTypes *types, XrXirBudget *remaining) {
-    XrXirStatus status = xr_xir_type_descriptors_verify(types, remaining);
-    if (status == XR_XIR_OK && types) status = xr_xir_interfaces_verify_structure(types->interfaces, types, remaining);
+static bool type_parameter_count_add(const XrXirCompileContext *context, uint32_t *total, uint64_t amount) {
+    if (!xir_compile_work(context, 1) || amount > context->limits.parameters - *total) return false;
+    *total += (uint32_t)amount;
+    return true;
+}
+XrXirStatus xr_xir_compile_types_parameter_count(const XrXirCompileContext *context,
+    const XrXirTypes *types, uint32_t *output) {
+    if (!xir_compile_context_valid(context) || !output) return XR_XIR_BAD_STRUCTURE;
+    uint32_t total = 0;
+    if (types) {
+        for (uint32_t i = 0; i < types->count; ++i) {
+            const XrXirTypeNode *node = &types->nodes[i];
+            uint64_t slots = (uint64_t)node->parameter_count + node->nominal.argument_count + node->nominal.field_count;
+            if (!type_parameter_count_add(context, &total, slots)) return XR_XIR_BUDGET;
+        }
+        if (types->nominals) {
+            const XrXirNominalTable *table = types->nominals;
+            for (uint32_t i = 0; i < table->count; ++i) {
+                uint32_t slots = table->declarations ? table->declarations[i].parameter_count : table->identities[i].arity;
+                if (!type_parameter_count_add(context, &total, slots)) return XR_XIR_BUDGET;
+            }
+        }
+        if (types->interfaces) for (uint32_t i = 0; i < types->interfaces->count; ++i) {
+            const XrXirInterfaceDeclaration *declaration = &types->interfaces->declarations[i];
+            if (!type_parameter_count_add(context, &total, declaration->parameter_count)) return XR_XIR_BUDGET;
+            for (uint32_t m = 0; m < declaration->method_count; ++m)
+                if (!type_parameter_count_add(context, &total, declaration->methods[m].own_parameter_count)) return XR_XIR_BUDGET;
+        }
+    }
+    *output = total;
+    return XR_XIR_OK;
+}
+XrXirStatus xr_xir_compile_types_structure_verify(const XrXirCompileContext *compile_context, const XrXirTypes *types) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
+    XrXirStatus status = xr_xir_compile_type_descriptors_verify(remaining, types);
+    if (status == XR_XIR_OK && types) status = xr_xir_compile_interfaces_verify_structure(remaining, types->interfaces, types);
+    uint32_t parameters;
+    if (status == XR_XIR_OK) status = xr_xir_compile_types_parameter_count(compile_context, types, &parameters);
     return status;
 }
-void xr_xir_types_free(XrXirTypes *types) {
+void xr_xir_compile_types_free(XrXirTypes *types) {
     if (!types) return;
     if (types->nodes)
         for (uint32_t i = 0; i < types->count; ++i) {
-            xr_free((void *) types->nodes[i].parameters);
-            xr_free((void *) types->nodes[i].nominal.arguments);
-            xr_free((void *) types->nodes[i].nominal.fields);
+            xr_compile_resources_free((void *) types->nodes[i].parameters);
+            xr_compile_resources_free((void *) types->nodes[i].nominal.arguments);
+            xr_compile_resources_free((void *) types->nodes[i].nominal.fields);
         }
-    xr_xir_nominal_free((XrXirNominalTable *) types->nominals);
-    xr_xir_interfaces_free((XrXirInterfaceTable *) types->interfaces);
-    xr_free((void *) types->nodes); xr_free(types);
+    xr_xir_compile_nominal_free((XrXirNominalTable *) types->nominals);
+    xr_xir_compile_interfaces_free((XrXirInterfaceTable *) types->interfaces);
+    xr_compile_resources_free((void *) types->nodes); xr_compile_resources_free(types);
 }
-XrXirStatus xr_xir_types_clone(const XrXirTypes *types, XrXirTypes **output) {
+XrXirStatus xr_xir_compile_types_clone(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirTypes **output) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus allocation_status = XR_XIR_OK;
     if (!output) return XR_XIR_BAD_STRUCTURE;
-    *output = NULL;
-    if (!types) return XR_XIR_OK;
+
+    if (!types) { *output = NULL; return XR_XIR_OK; }
     if ((types->count != 0) != (types->nodes != NULL) || (!types->count && !types->nominals && !types->interfaces) ||
         types->count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_BAD_STRUCTURE;
-    XrXirTypes *copy = xr_calloc(1, sizeof(*copy));
-    if (!copy) return XR_XIR_OUT_OF_MEMORY;
-    XrXirTypeNode *nodes = types->count ? xr_calloc(types->count, sizeof(*nodes)) : NULL;
-    if (types->count && !nodes) { xr_free(copy); return XR_XIR_OUT_OF_MEMORY; }
+    if (!xir_compile_work(compile_context, types->count)) return XR_XIR_BUDGET;
+    XrXirTypes *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
+    if (!copy) return allocation_status;
+    XrXirTypeNode *nodes = types->count ? xir_compile_calloc(compile_context, types->count, sizeof(*nodes), &allocation_status) : NULL;
+    if (types->count && !nodes) { xr_compile_resources_free(copy); return allocation_status; }
     copy->nodes = nodes; copy->count = types->count;
     for (uint32_t i = 0; i < types->count; ++i) {
         nodes[i] = types->nodes[i];
         nodes[i].nominal.arguments = NULL; nodes[i].nominal.fields = NULL;
         uint32_t count = nodes[i].parameter_count;
-        XrXirCallableParameter *parameters = count ? xr_malloc((size_t) count * sizeof(*parameters)) : NULL;
+        XrXirCallableParameter *parameters = xir_compile_copy(compile_context, types->nodes[i].parameters, (size_t) count * sizeof(*parameters), &allocation_status);
         nodes[i].parameters = parameters;
-        if (count && !parameters) { xr_xir_types_free(copy); return XR_XIR_OUT_OF_MEMORY; }
-        if (count) memcpy(parameters, types->nodes[i].parameters, (size_t) count * sizeof(*parameters));
+        if (count && !parameters) { xr_xir_compile_types_free(copy); return allocation_status; }
+
         uint32_t arguments = nodes[i].nominal.argument_count;
-        XrXirType *owned = arguments ? xr_malloc((size_t) arguments * sizeof(*owned)) : NULL;
+        XrXirType *owned = xir_compile_copy(compile_context, types->nodes[i].nominal.arguments, (size_t) arguments * sizeof(*owned), &allocation_status);
         nodes[i].nominal.arguments = owned;
-        if (arguments && !owned) { xr_xir_types_free(copy); return XR_XIR_OUT_OF_MEMORY; }
-        if (arguments) memcpy(owned, types->nodes[i].nominal.arguments, (size_t) arguments * sizeof(*owned));
+        if (arguments && !owned) { xr_xir_compile_types_free(copy); return allocation_status; }
+
         uint32_t fields = nodes[i].nominal.field_count;
-        XrXirType *owned_fields = fields ? xr_malloc((size_t) fields * sizeof(*owned_fields)) : NULL;
+        XrXirType *owned_fields = xir_compile_copy(compile_context, types->nodes[i].nominal.fields, (size_t) fields * sizeof(*owned_fields), &allocation_status);
         nodes[i].nominal.fields = owned_fields;
-        if (fields && !owned_fields) { xr_xir_types_free(copy); return XR_XIR_OUT_OF_MEMORY; }
-        if (fields) memcpy(owned_fields, types->nodes[i].nominal.fields, (size_t) fields * sizeof(*owned_fields));
+        if (fields && !owned_fields) { xr_xir_compile_types_free(copy); return allocation_status; }
+
     }
     XrXirNominalTable *nominals = NULL;
-    XrXirStatus status = nominal_copy_table(types->nominals, &nominals);
-    if (status != XR_XIR_OK) { xr_xir_types_free(copy); return status; }
+    XrXirStatus status = nominal_copy_table(compile_context, types->nominals, &nominals);
+    if (status != XR_XIR_OK) { xr_xir_compile_types_free(copy); return status; }
     copy->nominals = nominals;
     XrXirInterfaceTable *interfaces = NULL;
-    status = xr_xir_interfaces_copy_verified(types->interfaces, &interfaces);
-    if (status != XR_XIR_OK) { xr_xir_types_free(copy); return status; }
+    status = xr_xir_compile_interfaces_copy_verified(compile_context, types->interfaces, &interfaces);
+    if (status != XR_XIR_OK) { xr_xir_compile_types_free(copy); return status; }
     copy->interfaces = interfaces;
     *output = copy; return XR_XIR_OK;
 }

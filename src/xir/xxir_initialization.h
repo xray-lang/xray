@@ -20,7 +20,5 @@ typedef struct XrXirInitializationRegion {
 
 /* Requires structurally checked executable input and compiler-owned regions.
  * The function index names the executable owner; diagnostics are output only. */
-XR_FUNC XrXirStatus xr_xir_initialization_check(const XrXirModule *module,
-    uint32_t function, const XrXirInitializationRegion *regions,
-    XrXirBudget *remaining, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_initialization_check(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, const XrXirInitializationRegion *regions, XrXirDiagnostic *diagnostic);
 #endif // XXIR_INITIALIZATION_H

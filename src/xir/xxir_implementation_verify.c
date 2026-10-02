@@ -11,44 +11,45 @@
  *   and declaration precondition has been checked.
  */
 #include "xxir_implementation_verify.h"
+#include "xxir_compile_memory.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
 #include "../base/xmalloc.h"
 #include <string.h>
-static bool implementation_charge(XrXirBudget *budget, uint64_t bytes, uint64_t work) {
-    if (bytes > SIZE_MAX || bytes > budget->metadata_bytes || work > budget->work) return false;
-    budget->metadata_bytes -= bytes; budget->work -= work; return true;
+static bool implementation_charge(XrXirCompileContext *budget, uint64_t bytes, uint64_t work) {
+    if (bytes > SIZE_MAX ||!xir_compile_work(budget, work)) return false;
+      return true;
 }
-static XrXirStatus implementation_identity_arguments(uint32_t count, XrXirBudget *budget, XrXirType **output) {
-    *output = NULL;
+static XrXirStatus implementation_identity_arguments(uint32_t count, XrXirCompileContext *budget, XrXirType **output) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+
     uint64_t bytes = (uint64_t)count * sizeof(XrXirType);
-    if (bytes > SIZE_MAX || bytes > budget->scratch_bytes || count > budget->work) return XR_XIR_BUDGET;
-    budget->scratch_bytes -= bytes; budget->work -= count;
+    if (bytes > SIZE_MAX ||!xir_compile_work(budget, count)) return XR_XIR_BUDGET;
+
     if (!count) return XR_XIR_OK;
-    XrXirType *arguments = xr_malloc((size_t)bytes);
-    if (!arguments) { budget->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
+    XrXirType *arguments = xir_compile_alloc(budget, (size_t)bytes, &allocation_status);
+    if (!arguments) {  return allocation_status; }
     for (uint32_t a = 0; a < count; ++a) arguments[a] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
     *output = arguments; return XR_XIR_OK;
 }
-static void implementation_arguments_free(XrXirType *arguments, uint32_t count, XrXirBudget *budget) {
-    if (arguments) { xr_free(arguments); budget->scratch_bytes += (uint64_t)count*sizeof(*arguments); }
+static void implementation_arguments_free(XrXirType *arguments) {
+    if (arguments) { xr_compile_resources_free(arguments);  }
 }
 static XrXirStatus implementation_application_equal(const XrXirTypes *from, const XrXirTypes *to,
     const XrXirInterfaceApplication *expected, const XrXirInterfaceApplication *actual,
-    const XrXirInterfaceApplication *substitution, XrXirBudget *budget) {
+    const XrXirInterfaceApplication *substitution, XrXirCompileContext *budget) {
     if (!implementation_charge(budget,0,1)) return XR_XIR_BUDGET;
     if (expected->declaration != actual->declaration || expected->argument_count != actual->argument_count)
         return XR_XIR_BAD_TYPE;
     for (uint32_t a = 0; a < expected->argument_count; ++a) {
-        XrXirStatus status = xr_xir_type_substitution_matches_between(from,to,substitution->arguments,
-            substitution->argument_count,expected->arguments[a],actual->arguments[a],budget);
+        XrXirStatus status = xr_xir_compile_type_substitution_matches_between(budget, from, to, substitution->arguments, substitution->argument_count, expected->arguments[a], actual->arguments[a]);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus implementation_function(const XrXirModule *module, const XrXirImplementation *record,
     const XrXirInterfaceRequirement *requirement, const XrXirInterfaceClosure *closure,
-    uint32_t function, XrXirBudget *budget) {
+    uint32_t function, XrXirCompileContext *budget) {
     if (function >= module->function_count || !module->functions || !module->declarations->functions)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[function];
@@ -72,21 +73,19 @@ static XrXirStatus implementation_function(const XrXirModule *module, const XrXi
     if (!signature || f->parameter_count != signature->parameter_count+1 || !f->parameters) return XR_XIR_BAD_TYPE;
     if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) && !(identity->promises & XR_XIR_FUNCTION_NO_SUSPEND))
         return XR_XIR_BAD_TYPE;
-    XrXirStatus receiver_status = xr_xir_method_signature_verify(module,function,budget);
+    XrXirStatus receiver_status = xr_xir_compile_method_signature_verify(budget, module, function);
     if (receiver_status != XR_XIR_OK) return receiver_status;
     XrXirType *arguments = NULL;
     XrXirStatus status = implementation_identity_arguments(full_count,budget,&arguments);
     for (uint32_t a = 0; status == XR_XIR_OK && a < signature->parameter_count; ++a) {
         if (signature->parameters[a].mode) { status = XR_XIR_BAD_TYPE; break; }
-        status = xr_xir_type_substitution_matches_between(types,module->types,arguments,full_count,
-            signature->parameters[a].type,f->parameters[a+1],budget);
+        status = xr_xir_compile_type_substitution_matches_between(budget, types, module->types, arguments, full_count, signature->parameters[a].type, f->parameters[a+1]);
     }
-    if (status == XR_XIR_OK) status = xr_xir_type_substitution_matches_between(types,module->types,
-        arguments,full_count,signature->result,f->result,budget);
-    implementation_arguments_free(arguments,full_count,budget); return status;
+    if (status == XR_XIR_OK) status = xr_xir_compile_type_substitution_matches_between(budget, types, module->types, arguments, full_count, signature->result, f->result);
+    implementation_arguments_free(arguments); return status;
 }
 static XrXirStatus implementation_bindings(const XrXirModule *module, const XrXirImplementation *record,
-    XrXirInterfaceClosure *closure, XrXirBudget *budget) {
+    XrXirInterfaceClosure *closure, XrXirCompileContext *budget) {
     uint32_t count = module->types->nominals->declarations[record->nominal_declaration].parameter_count;
     uint32_t required = xr_xir_interface_closure_requirement_count(closure);
     if (record->binding_count != required || (!!record->bindings != !!record->binding_count)) return XR_XIR_BAD_STRUCTURE;
@@ -111,16 +110,16 @@ static XrXirStatus implementation_bindings(const XrXirModule *module, const XrXi
         if (found == UINT32_MAX) { status = XR_XIR_BAD_TYPE; break; }
         status = implementation_function(module,record,requirement,closure,found,budget);
     }
-    implementation_arguments_free(arguments,count,budget); return status;
+    implementation_arguments_free(arguments); return status;
 }
 static XrXirStatus implementation_record_shape(const XrXirModule *module,
-    const XrXirImplementation *record, XrXirBudget *budget) {
+    const XrXirImplementation *record, XrXirCompileContext *budget) {
     const XrXirNominalTable *nominals = module->types ? module->types->nominals : NULL;
     if (!nominals || !nominals->declarations || record->nominal_declaration >= nominals->count ||
         (!!record->bindings != !!record->binding_count)) return XR_XIR_BAD_STRUCTURE;
     uint32_t count = nominals->declarations[record->nominal_declaration].parameter_count;
     XrXirConstraint constraint = {0,&record->interface,1};
-    XrXirStatus status = xr_xir_constraint_structure(module->types,constraint,count,budget);
+    XrXirStatus status = xr_xir_compile_constraint_structure(budget, module->types, constraint, count);
     if (status != XR_XIR_OK) return status;
     const XrXirInterfaceDeclaration *interface = &module->types->interfaces->declarations[record->interface.declaration];
     const XrXirNominalDeclaration *nominal = &nominals->declarations[record->nominal_declaration];
@@ -134,7 +133,7 @@ static XrXirStatus implementation_record_shape(const XrXirModule *module,
     for (uint32_t b = 0; b < record->binding_count; ++b) {
         const XrXirImplementationBinding *binding = &record->bindings[b];
         constraint.interfaces = &binding->requirement;
-        status = xr_xir_constraint_structure(module->types,constraint,count,budget);
+        status = xr_xir_compile_constraint_structure(budget, module->types, constraint, count);
         if (status != XR_XIR_OK) return status;
         if (binding->member >= module->types->interfaces->declarations[binding->requirement.declaration].method_count ||
             binding->function >= module->function_count) return XR_XIR_BAD_STRUCTURE;
@@ -142,24 +141,22 @@ static XrXirStatus implementation_record_shape(const XrXirModule *module,
     return XR_XIR_OK;
 }
 static XrXirStatus implementation_record_prior(const XrXirModule *module,
-    const XrXirImplementation *record, XrXirBudget *budget) {
+    const XrXirImplementation *record, XrXirCompileContext *budget) {
     XrXirInterfaceClosure *closure = NULL;
-    uint64_t before = budget->scratch_bytes;
     XrXirInterfaceClosureRoots roots = {module->types->interfaces,module->types,&record->interface,1,
         module->types->nominals->declarations[record->nominal_declaration].parameter_count};
-    XrXirStatus status = xr_xir_interface_closure_build(&roots,budget,&closure);
-    uint64_t reserved = before-budget->scratch_bytes;
+    XrXirStatus status = xr_xir_compile_interface_closure_build(budget, &roots, &closure);
     if (status == XR_XIR_OK) status = implementation_bindings(module,record,closure,budget);
-    xr_xir_interface_closure_free(closure); budget->scratch_bytes += reserved; return status;
+    xr_xir_compile_interface_closure_free(closure);  return status;
 }
 static XrXirStatus implementation_record_conditions(const XrXirModule *module,
-    const XrXirImplementation *record, XrXirBudget *budget) {
+    const XrXirImplementation *record, XrXirCompileContext *budget) {
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_NOMINAL,record->nominal_declaration,0}};
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t a = 0; status == XR_XIR_OK && a < record->interface.argument_count; ++a) {
         XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_INTERFACE,record->interface.declaration,0},a,
             record->interface.arguments,record->interface.argument_count};
-        status = xr_xir_constraints_prove(&context,&use,budget);
+        status = xr_xir_compile_constraints_prove(budget, &context, &use);
     }
     for (uint32_t b = 0; status == XR_XIR_OK && b < record->binding_count; ++b) {
         uint32_t function = record->bindings[b].function;
@@ -170,14 +167,14 @@ static XrXirStatus implementation_record_conditions(const XrXirModule *module,
             (uint32_t)(record-module->declarations->implementations->records),b};
         for (uint32_t a = 0; status == XR_XIR_OK && a < count; ++a) {
             XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_FUNCTION,function,0},a,arguments,count};
-            status = xr_xir_constraints_prove(&context,&use,budget);
+            status = xr_xir_compile_constraints_prove(budget, &context, &use);
         }
-        implementation_arguments_free(arguments,count,budget);
+        implementation_arguments_free(arguments);
     }
     return status;
 }
 static XrXirStatus implementation_shared_binding(const XrXirModule *module,
-    const XrXirImplementationBinding *a, const XrXirImplementationBinding *b, XrXirBudget *budget) {
+    const XrXirImplementationBinding *a, const XrXirImplementationBinding *b, XrXirCompileContext *budget) {
     const XrXirInterfaceTable *interfaces = module->types->interfaces;
     XrXirLiteral an = interfaces->declarations[a->requirement.declaration].methods[a->member].name;
     XrXirLiteral bn = interfaces->declarations[b->requirement.declaration].methods[b->member].name;
@@ -186,7 +183,7 @@ static XrXirStatus implementation_shared_binding(const XrXirModule *module,
         return XR_XIR_BAD_TYPE;
     return XR_XIR_OK;
 }
-static XrXirStatus implementation_binding_consistency(const XrXirModule *module, XrXirBudget *budget) {
+static XrXirStatus implementation_binding_consistency(const XrXirModule *module, XrXirCompileContext *budget) {
     const XrXirImplementationTable *table = module->declarations->implementations;
     for (uint32_t i = 0; i < table->count; ++i) {
         const XrXirImplementation *record = &table->records[i];
@@ -206,7 +203,8 @@ static XrXirStatus implementation_binding_consistency(const XrXirModule *module,
     return XR_XIR_OK;
 }
 static XrXirStatus implementation_nominal_roots(const XrXirModule *module,
-    uint32_t nominal, XrXirBudget *budget) {
+    uint32_t nominal, XrXirCompileContext *budget) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirImplementationTable *table = module->declarations->implementations;
     uint32_t count = 0;
     for (uint32_t i = 0; i < table->count; ++i) {
@@ -215,19 +213,17 @@ static XrXirStatus implementation_nominal_roots(const XrXirModule *module,
     }
     if (!count) return XR_XIR_OK;
     uint64_t bytes = (uint64_t)count*sizeof(XrXirInterfaceApplication);
-    if (bytes > SIZE_MAX || bytes > budget->scratch_bytes) return XR_XIR_BUDGET;
-    budget->scratch_bytes -= bytes;
-    XrXirInterfaceApplication *roots = xr_malloc((size_t)bytes);
-    if (!roots) { budget->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
+    if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
+
+    XrXirInterfaceApplication *roots = xir_compile_alloc(budget, (size_t)bytes, &allocation_status);
+    if (!roots) {  return allocation_status; }
     uint32_t at = 0;
     for (uint32_t i = 0; i < table->count; ++i)
         if (table->records[i].nominal_declaration == nominal) roots[at++] = table->records[i].interface;
     XrXirInterfaceClosure *closure = NULL;
-    uint64_t before = budget->scratch_bytes;
     XrXirInterfaceClosureRoots request = {module->types->interfaces,module->types,roots,count,
         module->types->nominals->declarations[nominal].parameter_count};
-    XrXirStatus status = xr_xir_interface_closure_build(&request,budget,&closure);
-    uint64_t reserved = before-budget->scratch_bytes;
+    XrXirStatus status = xr_xir_compile_interface_closure_build(budget, &request, &closure);
     uint32_t parameters = module->types->nominals->declarations[nominal].parameter_count;
     XrXirType *arguments = NULL;
     if (status == XR_XIR_OK) status = implementation_identity_arguments(parameters,budget,&arguments);
@@ -239,10 +235,13 @@ static XrXirStatus implementation_nominal_roots(const XrXirModule *module,
             if (match != XR_XIR_BAD_TYPE) { status = match; break; }
         }
     }
-    implementation_arguments_free(arguments,parameters,budget);
-    xr_free(roots); xr_xir_interface_closure_free(closure); budget->scratch_bytes += bytes+reserved; return status;
+    implementation_arguments_free(arguments);
+    xr_compile_resources_free(roots); xr_xir_compile_interface_closure_free(closure);  return status;
 }
-XrXirStatus xr_xir_implementations_verify(const XrXirModule *module, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_implementations_verify(const XrXirCompileContext *compile_context, const XrXirModule *module) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!module || !budget) return XR_XIR_BAD_STRUCTURE;
     const XrXirImplementationTable *table = module->declarations ? module->declarations->implementations : NULL;
     if (!table) return XR_XIR_OK;
@@ -269,14 +268,15 @@ XrXirStatus xr_xir_implementations_verify(const XrXirModule *module, XrXirBudget
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_witness_resolve(const XrXirProofContext *context,
-    const XrXirWitnessRequest *request, XrXirBudget *budget, XrXirWitness *output) {
-    if (output) *output = (XrXirWitness){0};
+XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirWitnessRequest *request, XrXirWitness *output) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!context || !context->module || !request || !request->declaration_module || !budget || !output)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirTypeNode *node = xr_xir_type_node(context->module->types,request->receiver);
     if (!node || node->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_BAD_TYPE;
-    XrXirStatus status = xr_xir_interface_prove(context,request->declaration_module,request->receiver,request->application,budget);
+    XrXirStatus status = xr_xir_compile_interface_prove(budget, context, request->declaration_module, request->receiver, request->application);
     if (status != XR_XIR_OK) return status;
     const XrXirDeclarations *declarations = request->declaration_module->declarations;
     const XrXirImplementationTable *table = declarations ? declarations->implementations : NULL;

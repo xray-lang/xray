@@ -17,8 +17,6 @@ static inline const uint32_t *xr_xir_default_identity(const XrXirInstruction *op
     return op->op == XR_XIR_INVOKE_DEFAULT ? op->args : op->targets;
 }
 /* Descriptor, generic and declaration structure must already be admitted. */
-XR_FUNC XrXirStatus xr_xir_default_helper(const XrXirModule *module,uint32_t function,
-    XrXirBudget *budget,bool *bound);
-XR_FUNC XrXirStatus xr_xir_default_call_verify(const XrXirModule *module,uint32_t caller,
-    const XrXirInstruction *instruction,XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_default_helper(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, bool *bound);
+XR_FUNC XrXirStatus xr_xir_compile_default_call_verify(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t caller, const XrXirInstruction *instruction);
 #endif // XXIR_DEFAULTS_INTERNAL_H

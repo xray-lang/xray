@@ -61,21 +61,16 @@ typedef struct XrXirNominalTable {
     const XrXirNominalIdentity *identities;
 } XrXirNominalTable;
 /* Metadata helpers grant no executable type or source admission.
- * Budgets and outputs publish only after complete successful validation. */
-XR_FUNC XrXirStatus xr_xir_nominal_structure_verify(const XrXirNominalTable *table,
-    const XrXirTypes *types, XrXirBudget *budget);
-XR_FUNC XrXirStatus xr_xir_nominal_clone(const XrXirNominalTable *table,
-    const XrXirTypes *types, XrXirBudget *budget, XrXirNominalTable **output);
+ * Outputs publish only after complete successful validation; work is never refunded. */
+XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types);
+XR_FUNC XrXirStatus xr_xir_compile_nominal_clone(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types, XrXirNominalTable **output);
 /* Projection requires a verified declaration table and owns only identities. */
-XR_FUNC XrXirStatus xr_xir_nominal_project(const XrXirNominalTable *table,
-    XrXirBudget *budget, XrXirNominalTable **output);
-XR_FUNC void xr_xir_nominal_free(XrXirNominalTable *table);
+XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrXirNominalTable **output);
+XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table);
 typedef enum XrXirNominalAccess {
     XR_XIR_NOMINAL_CONSTRUCT, XR_XIR_NOMINAL_READ, XR_XIR_NOMINAL_WRITE, XR_XIR_NOMINAL_TYPE
 } XrXirNominalAccess;
 /* Requires a verified module; declaration ownership grants no generic facts. */
-XR_FUNC XrXirStatus xr_xir_nominal_access(const XrXirModule *module, uint32_t function,
-    uint32_t declaration, uint32_t field, XrXirNominalAccess access, uint64_t *work);
-XR_FUNC XrXirStatus xr_xir_type_access(const XrXirModule *module, uint32_t function,
-    XrXirType type, XrXirBudget *remaining);
+XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, uint32_t declaration, uint32_t field, XrXirNominalAccess access);
+XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type);
 #endif // XXIR_NOMINAL_H

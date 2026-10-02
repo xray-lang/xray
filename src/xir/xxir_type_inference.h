@@ -28,21 +28,17 @@ typedef struct XrXirInferenceKnown {
 /* Internal source API, not proof authority. Descriptor shapes are prior-admitted.
  * A single append-only type arena owns all IDs. Pass its current immutable view
  * per operation; state retains IDs, never node pointers across expression growth.
- * Budget is borrowed through dispose. Persistent state holds scratch until free;
+ * State stores the context by value and every allocation pins its ledger;
  * temporary operation storage is released on success and failure. Work consumed
  * by failed observations remains consumed; a failed state cannot be finalized. */
-XR_FUNC XrXirStatus xr_xir_inference_begin(const XrXirInferenceRequest *request,
-    XrXirBudget *budget, XrXirInferenceState **output);
-XR_FUNC XrXirStatus xr_xir_inference_observe(XrXirInferenceState *state,
-    const XrXirTypes *types, XrXirInferencePair pair);
+XR_FUNC XrXirStatus xr_xir_compile_inference_begin(const XrXirCompileContext *compile_context, const XrXirInferenceRequest *request, XrXirInferenceState **output);
+XR_FUNC XrXirStatus xr_xir_compile_inference_observe(XrXirInferenceState *state, const XrXirTypes *types, XrXirInferencePair pair);
 /* Unknown is successful with a zero view. A known view is borrowed solely for
  * substituting this formal expression; other own slots can still be unsolved.
  * This view cannot publish a generic tuple or discharge a constraint. */
-XR_FUNC XrXirStatus xr_xir_inference_expected_known(XrXirInferenceState *state,
-    const XrXirTypes *types, XrXirType formal, XrXirInferenceKnown *output);
+XR_FUNC XrXirStatus xr_xir_compile_inference_expected_known(XrXirInferenceState *state, const XrXirTypes *types, XrXirType formal, XrXirInferenceKnown *output);
 /* Caller output has total prefix+own slots and is untouched on failure.
  * Whole constraints/access must still be proven before emitting a call. */
-XR_FUNC XrXirStatus xr_xir_inference_finalize(XrXirInferenceState *state,
-    const XrXirTypes *types, XrXirType *output, uint32_t output_count);
-XR_FUNC void xr_xir_inference_dispose(XrXirInferenceState *state);
+XR_FUNC XrXirStatus xr_xir_compile_inference_finalize(XrXirInferenceState *state, const XrXirTypes *types, XrXirType *output, uint32_t output_count);
+XR_FUNC void xr_xir_compile_inference_dispose(XrXirInferenceState *state);
 #endif // XXIR_TYPE_INFERENCE_H

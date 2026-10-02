@@ -72,14 +72,17 @@ static bool result_default_recipe(const XrXirModule *m, uint32_t f) {
     }
     return false;
 }
-XR_FUNCDEF XrXirStatus xr_xir_result_binders_verify(const XrXirModule *m, XrXirBudget *b) {
+XR_FUNCDEF XrXirStatus xr_xir_compile_result_binders_verify(const XrXirCompileContext *compile_context, const XrXirModule *m) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *b = &compile_state;
     if (!m || !b) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f = 0; m->generics && f < m->function_count; ++f) {
         const XrXirGeneric *g = &m->generics[f];
         if (!g->parameter_kinds) continue;
         uint64_t work = 20 + (m->defaults ? (uint64_t)m->defaults->count * 21 : 0);
-        if (work > b->work) return XR_XIR_BUDGET;
-        b->work -= work;
+        if (!xir_compile_work(b, work)) return XR_XIR_BUDGET;
+
         if (g->parameter_count != 1 || !g->constraints || g->argument_count || g->arguments ||
             g->parameter_kinds[0] != XR_XIR_BINDER_RESULT_VARIABLE || g->constraints[0].markers ||
             g->constraints[0].interface_count || g->constraints[0].interfaces ||
@@ -87,28 +90,33 @@ XR_FUNCDEF XrXirStatus xr_xir_result_binders_verify(const XrXirModule *m, XrXirB
     }
     return XR_XIR_OK;
 }
-XR_FUNCDEF XrXirStatus xr_xir_result_argument(const XrXirModule *m, uint32_t caller,
-    XrXirType type, XrXirBudget *b) {
+XR_FUNCDEF XrXirStatus xr_xir_compile_result_argument(const XrXirCompileContext *compile_context, const XrXirModule *m, uint32_t caller, XrXirType type) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *b = &compile_state;
     if (!m || !b || caller >= m->function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!b->work) return XR_XIR_BUDGET;
-    --b->work;
+    if (!xir_compile_work(b, 1)) return XR_XIR_BUDGET;
+
     if (type == XR_XIR_UNIT) return XR_XIR_OK;
     if (m->generics && result_symbol(&m->generics[caller],type)) return XR_XIR_BAD_TYPE;
     XrXirProofContext context = {m,{XR_XIR_CONTEXT_FUNCTION,caller,0}};
-    XrXirStatus status = xr_xir_type_storage_prove(&context,type,b);
-    return status == XR_XIR_OK ? xr_xir_type_access(m,caller,type,b) : status;
+    XrXirStatus status = xr_xir_compile_type_storage_prove(b, &context, type);
+    return status == XR_XIR_OK ? xr_xir_compile_type_access(b, m, caller, type) : status;
 }
 /* Every Unit table entry must be consumed only by a result-role substitution.
  * Ordinary generic, nominal and requirement consumers keep their storage rule. */
-XR_FUNCDEF XrXirStatus xr_xir_result_unit_use(const XrXirModule *m, uint32_t f, uint32_t argument, XrXirBudget *b) {
+XR_FUNCDEF XrXirStatus xr_xir_compile_result_unit_use(const XrXirCompileContext *compile_context, const XrXirModule *m, uint32_t f, uint32_t argument) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *b = &compile_state;
     if (!m || !b || f >= m->function_count || !m->generics || !m->functions ||
         argument >= m->generics[f].argument_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *function = &m->functions[f];
     if (function->instruction_count && !function->instructions) return XR_XIR_BAD_STRUCTURE;
     bool used = false;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
-        if (!b->work) return XR_XIR_BUDGET;
-        --b->work;
+        if (!xir_compile_work(b, 1)) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op = &function->instructions[i];
         uint32_t first = op->type_arguments[0], count = op->type_arguments[1];
         if (argument < first || argument-first >= count) continue;

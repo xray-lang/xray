@@ -43,36 +43,26 @@ typedef struct XrXirConstraintUse {
  * Descriptor/declaration shapes and implementation signature priors must have
  * been admitted. Semantic failures consume budget; no pending obligation grants
  * success. Neither query admits a function body or naming access by itself. */
-XR_FUNC XrXirStatus xr_xir_constraints_prove(const XrXirProofContext *context,
-    const XrXirConstraintUse *use, XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirConstraintUse *use);
 
 /* Structural admission grants no proof authority. */
-XR_FUNC XrXirStatus xr_xir_constraint_structure(const XrXirTypes *types,
-    XrXirConstraint constraint, uint32_t parameter_count, XrXirBudget *budget);
-XR_FUNC XrXirStatus xr_xir_type_use_verify(const XrXirProofContext *context,
-    XrXirType type, XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirConstraint constraint, uint32_t parameter_count);
+XR_FUNC XrXirStatus xr_xir_compile_type_use_verify(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type);
 /* Intrinsic ordinary-value admission, not a user-visible marker. Parameters
  * derive copy/save obligations from this exact binder. This does not promise
  * any particular closed physical class carrier, layout or execution authority.
  * Unit and internal Cell are outside the current ordinary-argument IR domain;
  * no resource/view carrier is represented by this API. */
-XR_FUNC XrXirStatus xr_xir_type_storage_prove(const XrXirProofContext *context,
-    XrXirType type, XrXirBudget *budget);
-XR_FUNC XrXirStatus xr_xir_type_markers_prove(const XrXirProofContext *context,
-    XrXirType type, uint32_t markers, XrXirBudget *budget);
-XR_FUNC XrXirStatus xr_xir_context_constraints_verify(const XrXirProofContext *context,
-    XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_type_storage_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type);
+XR_FUNC XrXirStatus xr_xir_compile_type_markers_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type, uint32_t markers);
+XR_FUNC XrXirStatus xr_xir_compile_context_constraints_verify(const XrXirCompileContext *compile_context, const XrXirProofContext *context);
 /* Catalog admission reads no initializer bodies or inferred instance slots. */
-XR_FUNC XrXirStatus xr_xir_declaration_constraints_verify(const XrXirModule *module,
-    XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_declaration_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 /* Complete signature structure is a prior of the full module pass; all slots
  * and cross-module Sendable obligations are checked even without catalogs. */
-XR_FUNC XrXirStatus xr_xir_module_constraints_verify(const XrXirModule *module,
-    XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_module_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 /* Arguments and subject belong to context.module; identities and explicit
  * implementation rules belong to declaration_module. Cross-pool nominal
  * identities must already have authenticated provenance. */
-XR_FUNC XrXirStatus xr_xir_interface_prove(const XrXirProofContext *context,
-    const XrXirModule *declaration_module, XrXirType subject,
-    XrXirInterfaceApplication application, XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_interface_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirModule *declaration_module, XrXirType subject, XrXirInterfaceApplication application);
 #endif // XXIR_CONSTRAINT_PROOF_H

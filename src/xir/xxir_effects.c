@@ -12,6 +12,7 @@
  *   recursion or assumptions about function storage order.
  */
 #include "xxir_effects.h"
+#include "xxir_compile_memory.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
@@ -32,17 +33,14 @@ typedef struct EffectGraph {
     uint8_t *queued;
     EffectEdge *edges;
 } EffectGraph;
-static bool effect_spend(uint64_t *work, uint64_t amount) {
-    if (*work < amount) return false;
-    *work -= amount; return true;
-}
+
 static void effect_graph_free(EffectGraph *graph) {
-    xr_free(graph->heads); xr_free(graph->queue); xr_free(graph->queued); xr_free(graph->edges);
+    xr_compile_resources_free(graph->heads); xr_compile_resources_free(graph->queue); xr_compile_resources_free(graph->queued); xr_compile_resources_free(graph->edges);
 }
-void xr_xir_effects_free(XrXirEffects *effects) {
+void xr_xir_compile_effects_free(XrXirEffects *effects) {
     if (effects) {
-        xr_free(effects->errors); xr_free(effects->atoms); xr_free(effects->functions);
-        xr_free(effects->witnesses); xr_free(effects);
+        xr_compile_resources_free(effects->errors); xr_compile_resources_free(effects->atoms); xr_compile_resources_free(effects->functions);
+        xr_compile_resources_free(effects->witnesses); xr_compile_resources_free(effects);
     }
 }
 const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function) {
@@ -122,11 +120,12 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
     }
 }
 static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *effects,
-    EffectGraph *graph, XrXirBudget *remaining) {
+    EffectGraph *graph, XrXirCompileContext *remaining) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     uint32_t edges = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
-        if (!effect_spend(&remaining->work, function->instruction_count)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(remaining, function->instruction_count)) return XR_XIR_BUDGET;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             XrXirOp op = function->instructions[i].op;
             if (!effect_seed(module, function, &function->instructions[i], &effects->functions[f]))
@@ -139,18 +138,18 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
     }
     uint64_t bytes = (uint64_t) module->function_count * (2 * sizeof(uint32_t) + sizeof(uint8_t)) +
         (uint64_t) edges * sizeof(EffectEdge);
-    if (bytes > remaining->scratch_bytes || bytes > SIZE_MAX) return XR_XIR_BUDGET;
-    graph->heads = xr_calloc(module->function_count, sizeof(*graph->heads));
-    graph->queue = xr_calloc(module->function_count, sizeof(*graph->queue));
-    graph->queued = xr_calloc(module->function_count, sizeof(*graph->queued));
-    if (edges) graph->edges = xr_calloc(edges, sizeof(*graph->edges));
+    if ((bytes > SIZE_MAX) || bytes > SIZE_MAX) return XR_XIR_BUDGET;
+    graph->heads = xir_compile_calloc(remaining, module->function_count, sizeof(*graph->heads), &allocation_status);
+    graph->queue = xir_compile_calloc(remaining, module->function_count, sizeof(*graph->queue), &allocation_status);
+    graph->queued = xir_compile_calloc(remaining, module->function_count, sizeof(*graph->queued), &allocation_status);
+    if (edges) graph->edges = xir_compile_calloc(remaining, edges, sizeof(*graph->edges), &allocation_status);
     if (!graph->heads || !graph->queue || !graph->queued || (edges && !graph->edges))
-        return XR_XIR_OUT_OF_MEMORY;
+        return allocation_status;
     for (uint32_t f = 0; f < module->function_count; ++f) graph->heads[f] = UINT32_MAX;
     uint32_t at = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
-        if (!effect_spend(&remaining->work, function->instruction_count)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(remaining, function->instruction_count)) return XR_XIR_BUDGET;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_INVOKE_DEFAULT && op->op != XR_XIR_CALL_DEFAULT && op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE) continue;
@@ -158,7 +157,7 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
             if(op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
                 const XrXirDefaultBinding *binding=NULL;
                 const uint32_t *identity=xr_xir_default_identity(op);
-                XrXirStatus status=xr_xir_default_lookup(module,identity[0],identity[1],remaining,&binding);
+                XrXirStatus status=xr_xir_compile_default_lookup(remaining, module, identity[0], identity[1], &binding);
                 if(status!=XR_XIR_OK) return status;
                 if(!binding) return XR_XIR_BAD_STRUCTURE;
                 callee=binding->function;
@@ -169,17 +168,17 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
     }
     return XR_XIR_OK;
 }
-static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, uint64_t *work) {
+static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, const XrXirCompileContext *work) {
     uint32_t front = 0, back = 0, pending = effects->count;
     for (uint32_t f = 0; f < effects->count; ++f) { graph->queue[f] = f; graph->queued[f] = 1; }
     while (pending) {
-        if (!effect_spend(work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
         uint32_t callee = graph->queue[front];
         front = front + 1 == effects->count ? 0 : front + 1;
         --pending; graph->queued[callee] = 0;
         XrXirFunctionEffects from = effects->functions[callee];
         for (uint32_t edge = graph->heads[callee]; edge != UINT32_MAX; edge = graph->edges[edge].next) {
-            if (!effect_spend(work, 1)) return XR_XIR_BUDGET;
+            if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
             EffectEdge link = graph->edges[edge];
             XrXirFunctionEffects *to = &effects->functions[link.caller];
             bool changed = false;
@@ -199,12 +198,12 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, u
 /* A breadth-first forest over final facts cannot inherit a cyclic cause chain
  * from recursive fixed-point updates. Each function enters the queue once. */
 static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *effects,
-    EffectGraph *graph, uint64_t *work) {
+    EffectGraph *graph, const XrXirCompileContext *work) {
     uint32_t front = 0, back = 0;
     for (uint32_t f = 0; f < effects->count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         XrXirEffect fact = effects->functions[f].suspend;
-        if (!effect_spend(work, (uint64_t)function->instruction_count + 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(work, (uint64_t)function->instruction_count + 1)) return XR_XIR_BUDGET;
         if (fact == XR_XIR_EFFECT_NONE) continue;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             XrXirOp op = function->instructions[i].op;
@@ -220,10 +219,10 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
         }
     }
     while (front < back) {
-        if (!effect_spend(work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
         uint32_t callee = graph->queue[front++];
         for (uint32_t e = graph->heads[callee]; e != UINT32_MAX; e = graph->edges[e].next) {
-            if (!effect_spend(work, 1)) return XR_XIR_BUDGET;
+            if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
             EffectEdge edge = graph->edges[e];
             if (effects->witnesses[edge.caller].cause ||
                 effects->functions[edge.caller].suspend != effects->functions[callee].suspend) continue;
@@ -235,36 +234,41 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
     return XR_XIR_OK;
 }
 
-XrXirStatus xr_xir_effects_infer_verified(const XrXirModule *module,
-    XrXirBudget *remaining, XrXirEffects **output) {
-    *output = NULL;
+XrXirStatus xr_xir_compile_effects_infer_verified(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirEffects **output) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
+
     uint64_t bytes = sizeof(XrXirEffects) + (uint64_t) module->function_count *
         (sizeof(XrXirFunctionEffects) + sizeof(XrXirEffectWitness));
-    if (bytes > remaining->metadata_bytes || bytes > SIZE_MAX) return XR_XIR_BUDGET;
-    XrXirEffects *effects = xr_calloc(1, sizeof(*effects));
-    if (!effects) return XR_XIR_OUT_OF_MEMORY;
+    if ((bytes > SIZE_MAX) || bytes > SIZE_MAX) return XR_XIR_BUDGET;
+    XrXirEffects *effects = xir_compile_calloc(compile_context, 1, sizeof(*effects), &allocation_status);
+    if (!effects) return allocation_status;
     effects->count = module->function_count;
-    effects->functions = xr_calloc(effects->count, sizeof(*effects->functions));
-    effects->witnesses = xr_calloc(effects->count, sizeof(*effects->witnesses));
-    if (!effects->functions || !effects->witnesses) { xr_xir_effects_free(effects); return XR_XIR_OUT_OF_MEMORY; }
+    effects->functions = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->functions), &allocation_status);
+    effects->witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->witnesses), &allocation_status);
+    if (!effects->functions || !effects->witnesses) { xr_xir_compile_effects_free(effects); return allocation_status; }
     EffectGraph graph = {0};
     XrXirStatus status = effect_graph_build(module, effects, &graph, remaining);
-    if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, &remaining->work);
-    if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, &remaining->work);
+    if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, remaining);
+    if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);
     effect_graph_free(&graph);
-    if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
-    remaining->metadata_bytes -= bytes;
+    if (status != XR_XIR_OK) { xr_xir_compile_effects_free(effects); return status; }
+
     status = effect_errors_analyze(module, effects, remaining);
-    if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
+    if (status != XR_XIR_OK) { xr_xir_compile_effects_free(effects); return status; }
     *output = effects; return XR_XIR_OK;
 }
-XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,
-    const XrXirBudget *budget, XrXirEffects **output) {
+XrXirStatus xr_xir_compile_effects_analyze(const XrXirArtifact *artifact, XrXirEffects **output) {
+    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = artifact->context;
+    XrXirCompileContext *budget = &compile_state;
     if (!output) return XR_XIR_BAD_STRUCTURE;
-    *output = NULL;
-    const XrXirModule *module = xr_xir_artifact_module(artifact);
+
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     if (!module || (module->stage != XR_XIR_CHECKED && module->stage != XR_XIR_LOWERED)) return XR_XIR_BAD_STAGE;
-    XrXirBudget remaining = budget ? *budget : xr_xir_default_budget();
-    XrXirStatus status = xr_xir_verify_remaining(module, &remaining, NULL);
-    return status == XR_XIR_OK ? xr_xir_effects_infer_verified(module, &remaining, output) : status;
+    XrXirCompileContext remaining = *budget;
+    XrXirStatus status = xr_xir_compile_verify(&remaining, module, NULL);
+    return status == XR_XIR_OK ? xr_xir_compile_effects_infer_verified(&remaining, module, output) : status;
 }

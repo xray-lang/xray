@@ -10,6 +10,7 @@
  *   Only an authenticated owner and ordinal authorize a private default helper.
  */
 #include "xxir_defaults_internal.h"
+#include "xxir_compile_memory.h"
 #include "xxir_declarations.h"
 #include "xxir_constraints.h"
 #include "xxir_types.h"
@@ -18,16 +19,17 @@
 #include "xxir_implementation.h"
 #include "../base/xmalloc.h"
 
-static bool defaults_spend(XrXirBudget *b, uint64_t amount) {
-    if (amount>b->work) return false;
-    b->work-=amount; return true;
+static bool defaults_spend(XrXirCompileContext *b, uint64_t amount) {
+    if (!xir_compile_work(b, amount)) return false;
+     return true;
 }
-XR_FUNC XrXirStatus xr_xir_default_lookup(const XrXirModule *m,uint32_t owner,uint32_t ordinal,
-    XrXirBudget *b,const XrXirDefaultBinding **out) {
+XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *compile_context, const XrXirModule *m, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **out) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *b = &compile_state;
     if (!out) return XR_XIR_BAD_STRUCTURE;
-    *out=NULL;
     if (!m || !b) return XR_XIR_BAD_STRUCTURE;
-    if (!m->defaults) return XR_XIR_OK;
+    if (!m->defaults) { *out = NULL; return XR_XIR_OK; }
     const XrXirDefaultTable *t=m->defaults;
     if (!t->count || !t->records) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<t->count;++i) {
@@ -35,25 +37,28 @@ XR_FUNC XrXirStatus xr_xir_default_lookup(const XrXirModule *m,uint32_t owner,ui
         const XrXirDefaultBinding *a=&t->records[i];
         if (a->owner==owner && a->ordinal==ordinal) { *out=a; return XR_XIR_OK; }
     }
-    return XR_XIR_OK;
+    *out = NULL; return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_default_helper(const XrXirModule *m,uint32_t function,XrXirBudget *b,bool *out) {
-    *out=false;
-    if (!m || !b || function>=m->function_count) return XR_XIR_BAD_STRUCTURE;
+XR_FUNC XrXirStatus xr_xir_compile_default_helper(const XrXirCompileContext *compile_context, const XrXirModule *m, uint32_t function, bool *out) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *b = &compile_state;
+    if (!out || !m || !b || function>=m->function_count) return XR_XIR_BAD_STRUCTURE;
     if (m->provenance) {
         const XrXirProvenance *p=m->provenance;
         if (!p->source || !p->origins || function>=p->count) return XR_XIR_BAD_STRUCTURE;
         function=p->origins[function].function; m=&p->source->module;
     }
-    if (!m->defaults) return XR_XIR_OK;
+    if (!m->defaults) { *out = false; return XR_XIR_OK; }
     if (!m->defaults->count || !m->defaults->records) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<m->defaults->count;++i) {
         if (!defaults_spend(b,1)) return XR_XIR_BUDGET;
-        if (m->defaults->records[i].function==function) { *out=true; break; }
+        if (m->defaults->records[i].function==function) { *out=true; return XR_XIR_OK; }
     }
-    return XR_XIR_OK;
+    *out = false; return XR_XIR_OK;
 }
-static XrXirStatus default_signature(const XrXirModule *m,const XrXirDefaultBinding *a,XrXirBudget *b) {
+static XrXirStatus default_signature(const XrXirModule *m,const XrXirDefaultBinding *a,XrXirCompileContext *b) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirGeneric zero={0};
     const XrXirGeneric *f=m->generics?&m->generics[a->owner]:&zero;
     const XrXirGeneric *h=m->generics?&m->generics[a->function]:&zero;
@@ -71,20 +76,22 @@ static XrXirStatus default_signature(const XrXirModule *m,const XrXirDefaultBind
             if(!defaults_spend(b,1)) return XR_XIR_BUDGET;
             if(fc->interfaces[j].declaration!=hc->interfaces[j].declaration) return XR_XIR_BAD_TYPE;
         }
-        XrXirStatus s=xr_xir_constraint_records_match(m->types,*fc,m->types,*hc,n,b);
+        XrXirStatus s=xr_xir_compile_constraint_records_match(b, m->types, *fc, m->types, *hc, n);
         if (s!=XR_XIR_OK) return s;
     }
     uint64_t bytes=(uint64_t)n*sizeof(XrXirType);
-    if (bytes>SIZE_MAX || bytes>b->scratch_bytes || !defaults_spend(b,n)) return XR_XIR_BUDGET;
-    b->scratch_bytes-=bytes;
-    XrXirType *args=n?xr_malloc((size_t)bytes):NULL;
-    if (n && !args) { b->scratch_bytes+=bytes; return XR_XIR_OUT_OF_MEMORY; }
+    if (bytes>SIZE_MAX ||(bytes > SIZE_MAX) || !defaults_spend(b,n)) return XR_XIR_BUDGET;
+
+    XrXirType *args=n?xir_compile_alloc(b, (size_t)bytes, &allocation_status):NULL;
+    if (n && !args) {  return allocation_status; }
     for (uint32_t i=0;i<n;++i) args[i]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+i);
-    XrXirStatus s=xr_xir_type_substitution_matches(m->types,args,n,
-        m->functions[a->owner].parameters[a->ordinal],m->functions[a->function].result,b);
-    xr_free(args); b->scratch_bytes+=bytes; return s;
+    XrXirStatus s=xr_xir_compile_type_substitution_matches(b, m->types, args, n, m->functions[a->owner].parameters[a->ordinal], m->functions[a->function].result);
+    xr_compile_resources_free(args);  return s;
 }
-XR_FUNC XrXirStatus xr_xir_defaults_verify(const XrXirModule *m,XrXirBudget *b) {
+XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *compile_context, const XrXirModule *m) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *b = &compile_state;
     if (!m || !b) return XR_XIR_BAD_STRUCTURE;
     if (!m->defaults) return XR_XIR_OK;
     if (m->stage==XR_XIR_LOWERED || m->provenance) return XR_XIR_BAD_STAGE;
@@ -92,8 +99,8 @@ XR_FUNC XrXirStatus xr_xir_defaults_verify(const XrXirModule *m,XrXirBudget *b) 
     const XrXirDeclarations *d=m->declarations;
     if (!t->count || !t->records || !d || !d->functions || !m->functions || !d->modules || !d->module_count) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes=sizeof(*t)+(uint64_t)t->count*sizeof(*t->records);
-    if (bytes>b->metadata_bytes || !defaults_spend(b,t->count)) return XR_XIR_BUDGET;
-    b->metadata_bytes-=bytes;
+    if ((bytes > SIZE_MAX) || !defaults_spend(b,t->count)) return XR_XIR_BUDGET;
+
     for (uint32_t i=0;i<t->count;++i) {
         const XrXirDefaultBinding *a=&t->records[i];
         if (a->owner_kind!=XR_XIR_DEFAULT_PARAMETER || a->owner>=m->function_count ||
@@ -133,15 +140,17 @@ XR_FUNC XrXirStatus xr_xir_defaults_verify(const XrXirModule *m,XrXirBudget *b) 
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_default_call_verify(const XrXirModule *m,uint32_t caller,
-    const XrXirInstruction *op,XrXirBudget *b) {
+XR_FUNC XrXirStatus xr_xir_compile_default_call_verify(const XrXirCompileContext *compile_context, const XrXirModule *m, uint32_t caller, const XrXirInstruction *op) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *b = &compile_state;
     if (!m->declarations || caller>=m->function_count || op->immediate ||
         (op->op != XR_XIR_CALL_DEFAULT && op->op != XR_XIR_INVOKE_DEFAULT) ||
         (op->op == XR_XIR_CALL_DEFAULT && (op->args[0] || op->args[1])))
         return XR_XIR_BAD_STRUCTURE;
     const XrXirDefaultBinding *a=NULL;
     const uint32_t *identity=xr_xir_default_identity(op);
-    XrXirStatus s=xr_xir_default_lookup(m,identity[0],identity[1],b,&a);
+    XrXirStatus s=xr_xir_compile_default_lookup(b, m, identity[0], identity[1], &a);
     if (s!=XR_XIR_OK) return s;
     if (!a || a->owner>=m->function_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirDeclarations *d=m->declarations;
@@ -151,7 +160,7 @@ XR_FUNC XrXirStatus xr_xir_default_call_verify(const XrXirModule *m,uint32_t cal
         !xr_xir_module_imports(d,c->module,f->module) || (c->module!=f->module && !f->exported))
         return XR_XIR_BAD_STRUCTURE;
     XrXirInstruction call=*op; call.immediate=a->owner;
-    s=xr_xir_generic_call(m,caller,&call,b);
-    if (s==XR_XIR_OK) s=xr_xir_call_type_matches(m,caller,&call,m->functions[a->owner].parameters[a->ordinal],op->type,b);
+    s=xr_xir_compile_generic_call(b, m, caller, &call);
+    if (s==XR_XIR_OK) s=xr_xir_compile_call_type_matches(b, m, caller, &call, m->functions[a->owner].parameters[a->ordinal], op->type);
     return s;
 }

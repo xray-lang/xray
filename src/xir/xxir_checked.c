@@ -11,6 +11,7 @@
  *   independent semantic verification of fully owned data.
  */
 #include "xxir_checked.h"
+#include "xxir_compile_memory.h"
 #include "xxir_nominal.h"
 #include "xxir_interface.h"
 #include "xxir_implementation.h"
@@ -22,8 +23,8 @@ typedef struct CheckedCursor {
     const uint8_t *input;
     uint8_t *output;
     size_t position, capacity;
-    uint64_t allocated;
-    XrXirBudget remaining;
+    XrXirCompileLimits structural;
+    XrXirCompileContext remaining;
     XrXirStatus status;
     bool reading;
 } CheckedCursor;
@@ -36,12 +37,12 @@ static bool checked_room(CheckedCursor *c, size_t size) {
     }
     return true;
 }
-/* Decode work is cumulative; writer sizing uses its separate capacity contract. */
+/* Sizing, encoding and decoding all charge their actual field traversal. */
 static bool checked_read_work(CheckedCursor *c, size_t bytes) {
     if (c->status != XR_XIR_OK) return false;
-    if (!c->reading) return true;
-    if (bytes > c->remaining.work) { c->status = XR_XIR_BUDGET; return false; }
-    c->remaining.work -= bytes;
+
+    if (!xir_compile_work(&c->remaining, bytes)) { c->status = XR_XIR_BUDGET; return false; }
+
     return true;
 }
 static uint64_t checked_integer(CheckedCursor *c, uint64_t value, unsigned width) {
@@ -66,17 +67,17 @@ static uint32_t checked_count(CheckedCursor *c, uint32_t value, uint32_t *remain
 }
 static void *checked_array(CheckedCursor *c, const void *source, uint32_t count,
                            size_t size, size_t wire_minimum) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     if (c->status != XR_XIR_OK || !count) return NULL;
     if (!c->reading) return (void *) source;
     if (count > (c->capacity - c->position) / wire_minimum) {
         c->status = XR_XIR_BAD_STRUCTURE; return NULL;
     }
-    if (count > SIZE_MAX / size || (uint64_t) count * size > c->remaining.metadata_bytes - c->allocated) {
+    if (count > SIZE_MAX / size) {
         c->status = XR_XIR_BUDGET; return NULL;
     }
-    void *memory = xr_calloc(count, size);
-    if (!memory) { c->status = XR_XIR_OUT_OF_MEMORY; return NULL; }
-    c->allocated += (uint64_t) count * size;
+    void *memory = xir_compile_calloc(&c->remaining, count, size, &allocation_status);
+    if (!memory) { c->status = allocation_status; return NULL; }
     return memory;
 }
 static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *length) {
@@ -93,7 +94,7 @@ static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *l
 }
 static void checked_function(CheckedCursor *c, XrXirFunction *f) {
     f->name = checked_blob(c, f->name, &f->name_length);
-    f->parameter_count = checked_count(c, f->parameter_count, &c->remaining.parameters);
+    f->parameter_count = checked_count(c, f->parameter_count, &c->structural.parameters);
     XrXirType *parameters = checked_array(c, f->parameters, f->parameter_count, sizeof(*parameters), 4);
     f->parameters = parameters;
     for (uint32_t i = 0; i < f->parameter_count && c->status == XR_XIR_OK; ++i) {
@@ -101,7 +102,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         if (c->reading) parameters[i] = (XrXirType) type;
     }
     f->result = (XrXirType) checked_u32(c, (uint32_t) f->result);
-    f->block_count = checked_count(c, f->block_count, &c->remaining.blocks);
+    f->block_count = checked_count(c, f->block_count, &c->structural.blocks);
     XrXirBlock *blocks = checked_array(c, f->blocks, f->block_count, sizeof(*blocks), 16);
     f->blocks = blocks;
     for (uint32_t i = 0; i < f->block_count && c->status == XR_XIR_OK; ++i) {
@@ -111,7 +112,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         b.frontier = checked_u32(c, b.frontier);
         if (c->reading) blocks[i] = b;
     }
-    f->instruction_count = checked_count(c, f->instruction_count, &c->remaining.instructions);
+    f->instruction_count = checked_count(c, f->instruction_count, &c->structural.instructions);
     XrXirInstruction *instructions = checked_array(c, f->instructions, f->instruction_count, sizeof(*instructions), 40);
     f->instructions = instructions;
     for (uint32_t i = 0; i < f->instruction_count && c->status == XR_XIR_OK; ++i) {
@@ -251,7 +252,7 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
     m->generics = generics;
     for (uint32_t f = 0; f < m->function_count && c->status == XR_XIR_OK; ++f) {
         XrXirGeneric g = generics[f];
-        g.parameter_count = checked_count(c, g.parameter_count, &c->remaining.parameters);
+        g.parameter_count = checked_count(c, g.parameter_count, &c->structural.parameters);
         uint32_t kinds_present = checked_u32(c, g.parameter_kinds ? 1u : 0u);
         if (kinds_present > 1 || (kinds_present && !g.parameter_count)) {
             c->status = XR_XIR_BAD_STRUCTURE; break;
@@ -306,7 +307,7 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.exported = checked_u32(c, d.exported);
         d.kind = checked_u32(c, d.kind);
         d.flags = checked_u32(c, d.flags);
-        uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         uint32_t fields = checked_u32(c, d.field_count);
@@ -348,7 +349,7 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
         d.module = checked_nominal_name(c, d.module);
         d.name = checked_nominal_name(c, d.name);
         d.exported = checked_u32(c, d.exported);
-        uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         checked_interface_parents(c, &d);
@@ -360,7 +361,7 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
             method.name = checked_nominal_name(c, method.name);
             method.signature = (XrXirType) checked_u32(c, (uint32_t) method.signature);
             method.receiver = checked_u32(c, method.receiver);
-            uint32_t own = checked_count(c,method.own_parameter_count,&c->remaining.parameters);
+            uint32_t own = checked_count(c,method.own_parameter_count,&c->structural.parameters);
             XrXirConstraint *own_constraints = checked_constraints(c,method.constraints,own);
             method.constraints = own_constraints;
             method.own_parameter_count = own_constraints ? own : 0;
@@ -386,7 +387,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
         s.kind = checked_u32(c, s.kind);
         s.parameter_span = checked_u32(c, s.parameter_span);
         if (s.kind == XR_XIR_TYPE_CALLABLE) {
-            s.parameter_count = checked_count(c, s.parameter_count, &c->remaining.parameters);
+            s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters);
             XrXirCallableParameter *parameters = checked_array(c, s.parameters, s.parameter_count, sizeof(*parameters), 8);
             s.parameters = parameters;
             for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
@@ -401,14 +402,14 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);
-            s.nominal.argument_count = checked_count(c, s.nominal.argument_count, &c->remaining.parameters);
+            s.nominal.argument_count = checked_count(c, s.nominal.argument_count, &c->structural.parameters);
             XrXirType *arguments = checked_array(c, s.nominal.arguments, s.nominal.argument_count, sizeof(*arguments), 4);
             s.nominal.arguments = arguments;
             for (uint32_t a = 0; a < s.nominal.argument_count && c->status == XR_XIR_OK; ++a) {
                 XrXirType argument = (XrXirType) checked_u32(c, (uint32_t) arguments[a]);
                 if (c->reading) arguments[a] = argument;
             }
-            s.nominal.field_count = checked_count(c, s.nominal.field_count, &c->remaining.parameters);
+            s.nominal.field_count = checked_count(c, s.nominal.field_count, &c->structural.parameters);
             XrXirType *fields = checked_array(c, s.nominal.fields, s.nominal.field_count, sizeof(*fields), 4);
             s.nominal.fields = fields;
             for (uint32_t f = 0; f < s.nominal.field_count && c->status == XR_XIR_OK; ++f) {
@@ -454,7 +455,7 @@ static void checked_provenance(CheckedCursor *c, XrXirModule *m, bool allowed) {
     XrXirArtifact *source = checked_array(c, p->source, 1, sizeof(*source), 8);
     if (c->reading) {
         p->source = source;
-        if (source) { source->module.stage = XR_XIR_CHECKED; source->budget = c->remaining; }
+        if (source) { source->module.stage = XR_XIR_CHECKED; source->context = c->remaining; }
     }
     if (!source) return;
     XrXirModule original = source->module;
@@ -481,7 +482,7 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenan
     if (c->status == XR_XIR_OK && kind > XR_XIR_LIBRARY) c->status = XR_XIR_BAD_STRUCTURE;
     if (c->reading && c->status == XR_XIR_OK) m->linkage_kind = (XrXirLinkageKind)kind;
     if (c->status != XR_XIR_OK) return;
-    uint32_t count = checked_count(c, m->function_count, &c->remaining.functions);
+    uint32_t count = checked_count(c, m->function_count, &c->structural.functions);
     uint32_t declarations = checked_u32(c, m->declarations ? 1u : 0u);
     if (c->status == XR_XIR_OK && declarations > 1) c->status = XR_XIR_BAD_STRUCTURE;
     XrXirFunction *functions = checked_array(c, m->functions, count, sizeof(*functions), 24);
@@ -516,54 +517,60 @@ static XrXirStatus checked_error(XrXirStatus status, XrXirDiagnostic *diagnostic
     if (diagnostic) *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     return status;
 }
-static size_t checked_capacity(const XrXirBudget *budget) {
-    uint64_t limit = budget->metadata_bytes;
-    if (limit > budget->work / 4) limit = budget->work / 4;
-    return limit > SIZE_MAX ? SIZE_MAX : (size_t) limit;
+void xr_xir_compile_checked_packet_free(XrXirCheckedPacket *packet) {
+    if (packet) { xr_compile_resources_free(packet->bytes); *packet = (XrXirCheckedPacket) {0}; }
 }
-void xr_xir_checked_packet_free(XrXirCheckedPacket *packet) {
-    if (packet) { xr_free(packet->bytes); *packet = (XrXirCheckedPacket) {0}; }
-}
-XrXirStatus xr_xir_checked_write(const XrXirArtifact *artifact,
-    const XrXirBudget *budget, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic) {
+XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = artifact->context;
+    XrXirCompileContext *budget = &compile_state;
     if (!output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    *output = (XrXirCheckedPacket) {0};
+
     if (!artifact || artifact->module.stage != XR_XIR_CHECKED)
         return checked_error(XR_XIR_BAD_STAGE, diagnostic);
-    XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
-    XrXirStatus status = xr_xir_artifact_verify(artifact, &limits, diagnostic);
+    XrXirCompileContext limits = *budget;
+    XrXirStatus status = xr_xir_compile_artifact_verify(artifact, diagnostic);
     if (status != XR_XIR_OK) return status;
-    size_t capacity = checked_capacity(&limits);
-    if (capacity < 64) return checked_error(XR_XIR_BUDGET, diagnostic);
-    CheckedCursor c = {NULL, NULL, 64, capacity, 0, limits, XR_XIR_OK, false};
+    size_t capacity = SIZE_MAX;
+    CheckedCursor c = {NULL, NULL, 64, capacity, limits.limits, limits, XR_XIR_OK, false};
     XrXirModule module = artifact->module;
     checked_module(&c, &module, true);
     if (c.status != XR_XIR_OK) return checked_error(c.status, diagnostic);
     size_t size = c.position;
-    uint8_t *bytes = xr_calloc(size, 1);
-    if (!bytes) return checked_error(XR_XIR_OUT_OF_MEMORY, diagnostic);
+    uint8_t *bytes = xir_compile_calloc(&artifact->context, size, 1, &allocation_status);
+    if (!bytes) return checked_error(allocation_status, diagnostic);
+    if (!xir_compile_work(&limits, 8)) {
+        xr_compile_resources_free(bytes); return checked_error(XR_XIR_BUDGET, diagnostic);
+    }
     memcpy(bytes, "XRCHK\0\0\0", 8);
-    c = (CheckedCursor) {NULL, bytes, 8, size, 0, limits, XR_XIR_OK, false};
+    c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false};
     checked_u32(&c, XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
     checked_u32(&c, XR_XIR_CHECKED); checked_u32(&c, 0);
     checked_integer(&c, size - 64, 8);
     c.position = 64; module = artifact->module;
     checked_module(&c, &module, true);
     if (c.status != XR_XIR_OK || c.position != size) {
-        xr_free(bytes); return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+        xr_compile_resources_free(bytes); return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
+    }
+    if (!xir_compile_work(&limits, size - 32)) {
+        xr_compile_resources_free(bytes); return checked_error(XR_XIR_BUDGET, diagnostic);
     }
     checked_digest(bytes, size, bytes + 32);
     *output = (XrXirCheckedPacket) {bytes, size};
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_checked_read_remaining(const void *bytes, size_t length,
-    XrXirBudget *budget, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *compile_context, const void *bytes, size_t length, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    *output = NULL;
-    XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
+
+    XrXirCompileContext limits = *budget;
     if (!bytes || length < 64) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    if (length > checked_capacity(&limits)) return checked_error(XR_XIR_BUDGET, diagnostic);
-    CheckedCursor c = {bytes, NULL, 8, length, 0, limits, XR_XIR_OK, true};
+
+    CheckedCursor c = {bytes, NULL, 8, length, limits.limits, limits, XR_XIR_OK, true};
     XrXirArtifact *artifact = NULL;
     if (!checked_read_work(&c,8)) goto decode_failure;
     if (memcmp(bytes,"XRCHK\0\0\0",8)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
@@ -579,30 +586,21 @@ XR_FUNC XrXirStatus xr_xir_checked_read_remaining(const void *bytes, size_t leng
     if (!checked_read_work(&c,length)) goto decode_failure;
     uint8_t digest[32]; checked_digest(bytes,length,digest);
     if (memcmp(digest,(const uint8_t *)bytes+32,32)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
-    if (sizeof(XrXirArtifact)>limits.metadata_bytes) { c.status=XR_XIR_BUDGET; goto decode_failure; }
-    artifact=xr_calloc(1,sizeof(*artifact));
-    if (!artifact) { c.status=XR_XIR_OUT_OF_MEMORY; goto decode_failure; }
-    artifact->module.stage=XR_XIR_CHECKED; artifact->budget=limits;
-    c.position=64; c.allocated=sizeof(*artifact);
+    artifact=xir_compile_calloc(compile_context, 1,sizeof(*artifact), &allocation_status);
+    if (!artifact) { c.status=allocation_status; goto decode_failure; }
+    artifact->module.stage=XR_XIR_CHECKED; artifact->context=limits;
+    c.position=64;
     checked_module(&c,&artifact->module,true);
     if (c.status==XR_XIR_OK && c.position!=length) c.status=XR_XIR_BAD_STRUCTURE;
     if (c.status!=XR_XIR_OK) goto decode_failure;
-    /* Metadata/counts describe one artifact: verifier charges those once.
-     * Do not subtract decoded allocation bytes a second time. */
-    limits.work=c.remaining.work;
-    c.status=xr_xir_verify_remaining(&artifact->module,&limits,diagnostic);
-    if (budget) *budget=limits;
-    if (c.status!=XR_XIR_OK) { xr_xir_artifact_free(artifact); return c.status; }
+    /* Decoding and semantic verification share the allocation owner. */
+
+    c.status=xr_xir_compile_verify(&limits, &artifact->module, diagnostic);
+
+    if (c.status!=XR_XIR_OK) { xr_xir_compile_artifact_free(artifact); return c.status; }
     *output=artifact;
     return XR_XIR_OK;
 decode_failure:
-    if (budget) budget->work=c.remaining.work;
-    xr_xir_artifact_free(artifact);
+    xr_xir_compile_artifact_free(artifact);
     return checked_error(c.status,diagnostic);
-}
-
-XrXirStatus xr_xir_checked_read(const void *bytes, size_t length,
-    const XrXirBudget *budget, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
-    XrXirBudget remaining=budget?*budget:xr_xir_default_budget();
-    return xr_xir_checked_read_remaining(bytes,length,&remaining,output,diagnostic);
 }

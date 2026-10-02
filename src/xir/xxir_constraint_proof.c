@@ -11,6 +11,7 @@
  *   only when seeded by an authentic parameter declaration.
  */
 #include "xxir_constraint_proof.h"
+#include "xxir_compile_memory.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
 #include "xxir_implementation.h"
@@ -31,10 +32,10 @@ static const XrXirConstraint *constraint_fact(const XrXirConstraintEnvironment *
 }
 
 static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environment,
-    XrXirType type, uint64_t *work) {
+    XrXirType type, const XrXirCompileContext *work) {
     for (;;) {
-        if (!work || !*work) return XR_XIR_BUDGET;
-        --*work;
+        if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
         uint32_t id = (uint32_t)type;
         if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
         if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
@@ -50,12 +51,12 @@ static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environmen
     }
 }
 static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environment,
-    XrXirType type, uint32_t required, uint64_t *work) {
+    XrXirType type, uint32_t required, const XrXirCompileContext *work) {
     const XrXirTypes *types = environment->types;
     if (required & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
     if (required & XR_XIR_CONSTRAINT_ERROR) {
-        if (!work || !*work) return XR_XIR_BUDGET;
-        --*work;
+        if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
         uint32_t id = (uint32_t) type;
         bool parameter = id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT;
         const XrXirConstraint *fact = parameter ? constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE) : NULL;
@@ -68,8 +69,8 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
     }
     if (!(required & XR_XIR_CONSTRAINT_SENDABLE)) return XR_XIR_OK;
     for (;;) {
-        if (!work || !*work) return XR_XIR_BUDGET;
-        --*work;
+        if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
         uint32_t id = (uint32_t) type;
         if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
             type == XR_XIR_ATOMIC_I64) return XR_XIR_OK;
@@ -85,9 +86,9 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         type = node->element;
     }
 }
-static bool constraint_charge(XrXirBudget *budget, uint64_t bytes, uint64_t work) {
-    if (bytes > SIZE_MAX || bytes > budget->metadata_bytes || work > budget->work) return false;
-    budget->metadata_bytes -= bytes; budget->work -= work; return true;
+static bool constraint_charge(XrXirCompileContext *budget, uint64_t bytes, uint64_t work) {
+    if (bytes > SIZE_MAX ||!xir_compile_work(budget, work)) return false;
+      return true;
 }
 static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, uint32_t count) {
     if (type == XR_XIR_UNIT || xr_xir_type_is_cell(types, type)) return false;
@@ -98,8 +99,10 @@ static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, u
     return node ? node->parameter_span <= count : type == XR_XIR_BOOL || xr_xir_type_is_number(type) ||
         type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
 }
-XrXirStatus xr_xir_constraint_structure(const XrXirTypes *types, XrXirConstraint constraint,
-    uint32_t count, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirConstraint constraint, uint32_t count) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!budget || (!!constraint.interfaces != !!constraint.interface_count)) return XR_XIR_BAD_STRUCTURE;
     if (constraint.markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
     if (!constraint_charge(budget, (uint64_t)constraint.interface_count * sizeof(*constraint.interfaces),
@@ -165,43 +168,38 @@ typedef struct ConstraintProof {
     const XrXirProofContext *context;
     XrXirConstraintEnvironment environment;
     ConstraintObligation *first, *last, *memory;
-    XrXirBudget *budget;
+    XrXirCompileContext *budget;
     unsigned char *type_seen;
-    uint64_t scratch_owned;
     XrXirInterfaceClosure *seed_closure;
     XrXirTypes seed_types;
-    uint64_t seed_scratch;
 } ConstraintProof;
 static XrXirStatus proof_enqueue(ConstraintProof *proof, ConstraintObligation task) {
-    if (!constraint_charge(proof->budget, 0, 1) || sizeof(task) > proof->budget->scratch_bytes)
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!constraint_charge(proof->budget, 0, 1))
         return XR_XIR_BUDGET;
-    proof->budget->scratch_bytes -= sizeof(task); proof->scratch_owned += sizeof(task);
-    ConstraintObligation *copy = xr_malloc(sizeof(*copy));
-    if (!copy) return XR_XIR_OUT_OF_MEMORY;
+    ConstraintObligation *copy = xir_compile_alloc(proof->budget, sizeof(*copy), &allocation_status);
+    if (!copy) return allocation_status;
     *copy = task; copy->next = NULL;
     if (proof->last) proof->last->next = copy; else proof->first = proof->memory = copy;
     proof->last = copy; return XR_XIR_OK;
 }
 static void proof_dispose(ConstraintProof *proof) {
-    xr_free(proof->type_seen);
+    xr_compile_resources_free(proof->type_seen);
     while (proof->memory) { ConstraintObligation *next = proof->memory->next;
-        xr_free(proof->memory); proof->memory = next; }
-    if (proof->budget) proof->budget->scratch_bytes += proof->scratch_owned;
-    xr_xir_interface_closure_free(proof->seed_closure);
-    if (proof->budget) proof->budget->scratch_bytes += proof->seed_scratch;
+        xr_compile_resources_free(proof->memory); proof->memory = next; }
+    xr_xir_compile_interface_closure_free(proof->seed_closure);
 }
 static XrXirStatus proof_type(ConstraintProof *proof, XrXirType type) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirTypeNode *node = xr_xir_type_node(proof->environment.types,type);
-    if (!node) return xr_xir_type_expression_shape(proof->environment.types,type,
-        proof->environment.parameter_count,proof->budget);
+    if (!node) return xr_xir_compile_type_expression_shape(proof->budget, proof->environment.types, type, proof->environment.parameter_count);
     if (!constraint_charge(proof->budget,0,1)) return XR_XIR_BUDGET;
     if (node) {
         uint32_t count = proof->environment.types->count;
         if (!proof->type_seen) {
-            if (count > proof->budget->scratch_bytes || !constraint_charge(proof->budget,0,count)) return XR_XIR_BUDGET;
-            proof->budget->scratch_bytes -= count; proof->scratch_owned += count;
-            proof->type_seen = xr_calloc(count,1);
-            if (!proof->type_seen) return XR_XIR_OUT_OF_MEMORY;
+            if ( !constraint_charge(proof->budget,0,count)) return XR_XIR_BUDGET;
+            proof->type_seen = xir_compile_calloc(proof->budget, count,1, &allocation_status);
+            if (!proof->type_seen) return allocation_status;
         }
         uint32_t index = (uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
         if (proof->type_seen[index]) return XR_XIR_OK;
@@ -274,15 +272,14 @@ static XrXirStatus proof_match(ConstraintProof *proof, const ConstraintObligatio
     if (required->declaration != fact->declaration || required->argument_count != fact->argument_count)
         return XR_XIR_BAD_TYPE;
     for (uint32_t a = 0; a < fact->argument_count; ++a) {
-        XrXirStatus status = xr_xir_type_substitution_matches_between(task->requirement_types ? task->requirement_types : task->declaration_module->types,
-            xr_xir_interface_closure_types(closure), task->arguments, task->argument_count,
-            required->arguments[a], fact->arguments[a], proof->budget);
+        XrXirStatus status = xr_xir_compile_type_substitution_matches_between(proof->budget, task->requirement_types ? task->requirement_types : task->declaration_module->types, xr_xir_interface_closure_types(closure), task->arguments, task->argument_count, required->arguments[a], fact->arguments[a]);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus proof_concrete_closure(ConstraintProof *proof, const ConstraintObligation *task,
-    const XrXirTypeNode *node, XrXirInterfaceClosure **output, uint64_t *scratch_owned) {
+    const XrXirTypeNode *node, XrXirInterfaceClosure **output) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirDeclarations *declarations = task->declaration_module->declarations;
     const XrXirImplementationTable *table = declarations ? declarations->implementations : NULL;
     if (!table) return XR_XIR_BAD_TYPE;
@@ -294,48 +291,44 @@ static XrXirStatus proof_concrete_closure(ConstraintProof *proof, const Constrai
     }
     if (!count) return XR_XIR_BAD_TYPE;
     uint64_t bytes = (uint64_t)count * sizeof(XrXirInterfaceApplication);
-    if (bytes > SIZE_MAX || bytes > proof->budget->scratch_bytes) return XR_XIR_BUDGET;
-    proof->budget->scratch_bytes -= bytes;
-    XrXirInterfaceApplication *roots = xr_malloc((size_t)bytes);
-    if (!roots) { proof->budget->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
+    if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
+
+    XrXirInterfaceApplication *roots = xir_compile_alloc(proof->budget, (size_t)bytes, &allocation_status);
+    if (!roots) {  return allocation_status; }
     uint32_t at = 0;
     for (uint32_t i = 0; i < table->count; ++i)
         if (table->records[i].nominal_declaration == node->nominal.declaration)
             roots[at++] = table->records[i].interface;
     XrXirInterfaceClosureRequest request = {task->declaration_module->types,proof->environment.types,
         roots,count,node->nominal.arguments,node->nominal.argument_count,proof->environment.parameter_count};
-    uint64_t before = proof->budget->scratch_bytes;
-    XrXirStatus status = xr_xir_interface_closure_substitute(&request,proof->budget,output);
-    *scratch_owned = before - proof->budget->scratch_bytes;
-    xr_free(roots); proof->budget->scratch_bytes += bytes;
+    XrXirStatus status = xr_xir_compile_interface_closure_substitute(proof->budget, &request, output);
+
+    xr_compile_resources_free(roots);
     if (status == XR_XIR_OK) status = proof_nominal(proof,task->declaration_module,node);
     return status;
 }
 static XrXirStatus proof_requirement_task(ConstraintProof *proof, const ConstraintObligation *task) {
     if (!constraint_argument_shape(proof->environment.types,task->subject,proof->environment.parameter_count))
         return XR_XIR_BAD_TYPE;
-    XrXirStatus status = xr_xir_constraint_structure(task->requirement_types ? task->requirement_types : task->declaration_module->types,
-        task->requirement,task->argument_count,proof->budget);
+    XrXirStatus status = xr_xir_compile_constraint_structure(proof->budget, task->requirement_types ? task->requirement_types : task->declaration_module->types, task->requirement, task->argument_count);
     if (status != XR_XIR_OK) return status;
-    status = constraint_markers(&proof->environment,task->subject,task->requirement.markers,&proof->budget->work);
+    status = constraint_markers(&proof->environment,task->subject,task->requirement.markers,proof->budget);
     if (status != XR_XIR_OK || !task->requirement.interface_count) return status;
-    XrXirInterfaceClosure *closure = NULL; uint64_t closure_scratch = 0;
+    XrXirInterfaceClosure *closure = NULL;
     uint32_t id = (uint32_t)task->subject;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
         const XrXirConstraint *facts = constraint_fact(&proof->environment,id-XR_XIR_TYPE_PARAMETER_BASE);
-        status = xr_xir_constraint_structure(proof->environment.types,*facts,
-            proof->environment.parameter_count,proof->budget);
+        status = xr_xir_compile_constraint_structure(proof->budget, proof->environment.types, *facts, proof->environment.parameter_count);
         if (status == XR_XIR_OK) {
-            uint64_t before = proof->budget->scratch_bytes;
             XrXirInterfaceClosureRoots roots = {proof->environment.types ? proof->environment.types->interfaces : NULL,
                 proof->environment.types,facts->interfaces,facts->interface_count,proof->environment.parameter_count};
-            status = xr_xir_interface_closure_build(&roots,proof->budget,&closure);
-            closure_scratch = before - proof->budget->scratch_bytes;
+            status = xr_xir_compile_interface_closure_build(proof->budget, &roots, &closure);
+
         }
     } else {
         const XrXirTypeNode *node = xr_xir_type_node(proof->environment.types,task->subject);
         status = node && node->kind == XR_XIR_TYPE_NOMINAL ?
-            proof_concrete_closure(proof,task,node,&closure,&closure_scratch) : XR_XIR_BAD_TYPE;
+            proof_concrete_closure(proof,task,node,&closure) : XR_XIR_BAD_TYPE;
     }
     for (uint32_t r = 0; status == XR_XIR_OK && r < task->requirement.interface_count; ++r) {
         bool matched = false;
@@ -347,7 +340,7 @@ static XrXirStatus proof_requirement_task(ConstraintProof *proof, const Constrai
         }
         if (status == XR_XIR_OK && !matched) status = XR_XIR_BAD_TYPE;
     }
-    xr_xir_interface_closure_free(closure); proof->budget->scratch_bytes += closure_scratch; return status;
+    xr_xir_compile_interface_closure_free(closure);  return status;
 }
 static XrXirStatus proof_run(ConstraintProof *proof, XrXirStatus status) {
     for (ConstraintObligation *task = proof->first; status == XR_XIR_OK && task; task = task->next) {
@@ -382,9 +375,7 @@ static XrXirStatus proof_conformance_seed(ConstraintProof *proof) {
         identity->member_access != XR_XIR_MEMBER_PUBLIC || identity->cleanup_owner ||
         (module->generics ? module->generics[binding->function].parameter_count : 0) != count) return XR_XIR_BAD_TYPE;
     XrXirInterfaceClosureRoots roots = {interfaces,module->types,&binding->requirement,1,nominal->parameter_count};
-    uint64_t before = proof->budget->scratch_bytes;
-    XrXirStatus status = xr_xir_interface_closure_build(&roots,proof->budget,&proof->seed_closure);
-    proof->seed_scratch = before-proof->budget->scratch_bytes;
+    XrXirStatus status = xr_xir_compile_interface_closure_build(proof->budget, &roots, &proof->seed_closure);
     if (status != XR_XIR_OK) return status;
     const XrXirInterfaceRequirement *required = NULL;
     for (uint32_t r = 0; r < xr_xir_interface_closure_requirement_count(proof->seed_closure); ++r) {
@@ -400,14 +391,16 @@ static XrXirStatus proof_conformance_seed(ConstraintProof *proof) {
         required->constraints,nominal->parameter_count};
     return XR_XIR_OK;
 }
-static XrXirStatus proof_begin(ConstraintProof *proof, const XrXirProofContext *context, XrXirBudget *budget) {
+static XrXirStatus proof_begin(ConstraintProof *proof, const XrXirProofContext *context, XrXirCompileContext *budget) {
     if (!context || !budget) return XR_XIR_BAD_STRUCTURE;
     *proof = (ConstraintProof){0}; proof->context = context; proof->budget = budget;
     if (context->owner.kind == XR_XIR_CONTEXT_CONFORMANCE_METHOD) return proof_conformance_seed(proof);
     return constraint_environment(context->module,context->owner,&proof->environment);
 }
-XrXirStatus xr_xir_constraints_prove(const XrXirProofContext *context,
-    const XrXirConstraintUse *use, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirConstraintUse *use) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     ConstraintProof proof = {0};
     XrXirStatus status = proof_begin(&proof,context,budget);
     if (status != XR_XIR_OK || !use || !use->declaration_module)
@@ -436,13 +429,18 @@ XrXirStatus xr_xir_constraints_prove(const XrXirProofContext *context,
     if (status == XR_XIR_OK) status = proof_enqueue(&proof,task);
     return proof_run(&proof,status);
 }
-XrXirStatus xr_xir_type_use_verify(const XrXirProofContext *context, XrXirType type, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_type_use_verify(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     ConstraintProof proof = {0}; XrXirStatus status = proof_begin(&proof,context,budget);
     if (status == XR_XIR_OK) status = proof_type(&proof,type);
     return proof_run(&proof,status);
 }
-XR_FUNC XrXirStatus xr_xir_type_storage_prove(const XrXirProofContext *context,
-    XrXirType type, XrXirBudget *budget) {
+XR_FUNC XrXirStatus xr_xir_compile_type_storage_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     ConstraintProof proof = {0};
     XrXirStatus status = proof_begin(&proof,context,budget);
     if (status == XR_XIR_OK && !constraint_argument_shape(proof.environment.types,type,
@@ -450,28 +448,32 @@ XR_FUNC XrXirStatus xr_xir_type_storage_prove(const XrXirProofContext *context,
     if (status == XR_XIR_OK) status = proof_type(&proof,type);
     return proof_run(&proof,status);
 }
-XrXirStatus xr_xir_type_markers_prove(const XrXirProofContext *context,
-    XrXirType type, uint32_t markers, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_type_markers_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type, uint32_t markers) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     ConstraintProof proof = {0}; XrXirStatus status = proof_begin(&proof,context,budget);
     if (status != XR_XIR_OK) return proof_run(&proof,status);
     if (type != XR_XIR_UNIT && !constraint_argument_shape(proof.environment.types,type,proof.environment.parameter_count))
         return proof_run(&proof,XR_XIR_BAD_TYPE);
     status = proof_type(&proof,type);
-    if (status == XR_XIR_OK) status = constraint_markers(&proof.environment,type,markers,&budget->work);
+    if (status == XR_XIR_OK) status = constraint_markers(&proof.environment,type,markers,budget);
     return proof_run(&proof,status);
 }
-XrXirStatus xr_xir_interface_prove(const XrXirProofContext *context,
-    const XrXirModule *declaration_module, XrXirType subject,
-    XrXirInterfaceApplication application, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_interface_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirModule *declaration_module, XrXirType subject, XrXirInterfaceApplication application) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     ConstraintProof proof = {0}; XrXirStatus status = proof_begin(&proof,context,budget);
     if (status != XR_XIR_OK || !declaration_module)
         return proof_run(&proof,status == XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : status);
     uint32_t count = proof.environment.parameter_count;
     uint64_t bytes = (uint64_t)count * sizeof(XrXirType);
-    if (bytes > SIZE_MAX || bytes > budget->scratch_bytes || count > budget->work) return proof_run(&proof,XR_XIR_BUDGET);
-    budget->scratch_bytes -= bytes; budget->work -= count;
-    XrXirType *arguments = count ? xr_malloc((size_t)bytes) : NULL;
-    if (count && !arguments) { budget->scratch_bytes += bytes; return proof_run(&proof,XR_XIR_OUT_OF_MEMORY); }
+    if (bytes > SIZE_MAX ||!xir_compile_work(budget, count)) return proof_run(&proof,XR_XIR_BUDGET);
+
+    XrXirType *arguments = count ? xir_compile_alloc(compile_context, (size_t)bytes, &allocation_status) : NULL;
+    if (count && !arguments) {  return proof_run(&proof,allocation_status); }
     for (uint32_t a = 0; a < count; ++a) arguments[a] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + a);
     XrXirTypes actual = proof.environment.types ? *proof.environment.types : (XrXirTypes){0};
     actual.interfaces = declaration_module->types ? declaration_module->types->interfaces : NULL;
@@ -484,26 +486,29 @@ XrXirStatus xr_xir_interface_prove(const XrXirProofContext *context,
         status = proof_type(&proof,application.arguments[a]);
     }
     if (status == XR_XIR_OK) status = proof_enqueue(&proof,task);
-    status = proof_run(&proof,status); xr_free(arguments); budget->scratch_bytes += bytes; return status;
+    status = proof_run(&proof,status); xr_compile_resources_free(arguments);  return status;
 }
 static XrXirStatus proof_application_use(const XrXirProofContext *context,
-    XrXirInterfaceApplication app, XrXirBudget *budget) {
+    XrXirInterfaceApplication app, XrXirCompileContext *budget) {
     for (uint32_t a = 0; a < app.argument_count; ++a) {
         XrXirConstraintUse use = {context->module,{XR_XIR_CONTEXT_INTERFACE,app.declaration,0},a,
             app.arguments,app.argument_count};
-        XrXirStatus status = xr_xir_constraints_prove(context,&use,budget);
+        XrXirStatus status = xr_xir_compile_constraints_prove(budget, context, &use);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_context_constraints_verify(const XrXirProofContext *context, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_context_constraints_verify(const XrXirCompileContext *compile_context, const XrXirProofContext *context) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     XrXirConstraintEnvironment environment = {0};
     if (!context || !budget) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = constraint_environment(context->module,context->owner,&environment);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < environment.parameter_count; ++p) {
         XrXirConstraint constraint = *constraint_fact(&environment,p);
-        status = xr_xir_constraint_structure(environment.types,constraint,environment.parameter_count,budget);
+        status = xr_xir_compile_constraint_structure(budget, environment.types, constraint, environment.parameter_count);
         if (status != XR_XIR_OK) return status;
         if (!constraint.interface_count) continue;
         for (uint32_t a = 0; a < constraint.interface_count; ++a) {
@@ -511,43 +516,42 @@ XrXirStatus xr_xir_context_constraints_verify(const XrXirProofContext *context, 
             if (status != XR_XIR_OK) return status;
         }
         XrXirInterfaceClosure *closure = NULL;
-        uint64_t before = budget->scratch_bytes;
         XrXirInterfaceClosureRoots roots = {environment.types ? environment.types->interfaces : NULL,
             environment.types,constraint.interfaces,constraint.interface_count,environment.parameter_count};
-        status = xr_xir_interface_closure_build(&roots,budget,&closure);
-        uint64_t reserved = before - budget->scratch_bytes;
-        xr_xir_interface_closure_free(closure); budget->scratch_bytes += reserved;
+        status = xr_xir_compile_interface_closure_build(budget, &roots, &closure);
+        xr_xir_compile_interface_closure_free(closure);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
-static XrXirStatus proof_nominal_declaration(const XrXirModule *module, uint32_t index, XrXirBudget *budget) {
+static XrXirStatus proof_nominal_declaration(const XrXirModule *module, uint32_t index, XrXirCompileContext *budget) {
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_NOMINAL,index,0}};
     const XrXirNominalDeclaration *d = &module->types->nominals->declarations[index];
-    XrXirStatus status = xr_xir_context_constraints_verify(&context,budget);
+    XrXirStatus status = xr_xir_compile_context_constraints_verify(budget, &context);
     for (uint32_t f = 0; status == XR_XIR_OK && f < d->field_count; ++f)
         status = d->kind == XR_XIR_NOMINAL_CLASS ?
-            xr_xir_type_storage_prove(&context,d->fields[f].type,budget) :
-            xr_xir_type_use_verify(&context,d->fields[f].type,budget);
+            xr_xir_compile_type_storage_prove(budget, &context, d->fields[f].type) :
+            xr_xir_compile_type_use_verify(budget, &context, d->fields[f].type);
     return status;
 }
-static XrXirStatus proof_interface_declaration(const XrXirModule *module, uint32_t index, XrXirBudget *budget) {
+static XrXirStatus proof_interface_declaration(const XrXirModule *module, uint32_t index, XrXirCompileContext *budget) {
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_INTERFACE,index,0}};
     const XrXirInterfaceDeclaration *d = &module->types->interfaces->declarations[index];
-    XrXirStatus status = xr_xir_context_constraints_verify(&context,budget);
+    XrXirStatus status = xr_xir_compile_context_constraints_verify(budget, &context);
     for (uint32_t p = 0; status == XR_XIR_OK && p < d->parent_count; ++p)
         status = proof_application_use(&context,d->parents[p],budget);
     for (uint32_t m = 0; status == XR_XIR_OK && m < d->method_count; ++m) {
         context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_INTERFACE_METHOD,index,m};
-        status = xr_xir_context_constraints_verify(&context,budget);
-        if (status == XR_XIR_OK) status = xr_xir_type_use_verify(&context,d->methods[m].signature,budget);
+        status = xr_xir_compile_context_constraints_verify(budget, &context);
+        if (status == XR_XIR_OK) status = xr_xir_compile_type_use_verify(budget, &context, d->methods[m].signature);
     }
     return status;
 }
 /* Static methods carry nominal binders without an implicit receiver type.
  * Prove the inherited requirements in the actual function environment; neither
  * the nominal declaration nor a matching binder index grants those facts. */
-static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirBudget *budget) {
+static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirCompileContext *budget) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirModule *module = context->module;
     if (!module->declarations || module->provenance) return XR_XIR_OK;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[context->owner.declaration];
@@ -556,46 +560,49 @@ static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirBud
     const XrXirNominalDeclaration *owner = &module->types->nominals->declarations[identity->nominal_owner-1];
     uint32_t count = owner->parameter_count;
     if (!count) return XR_XIR_OK;
-    if (count > budget->work) return XR_XIR_BUDGET;
-    budget->work -= count;
+    if (!xir_compile_work(budget, count)) return XR_XIR_BUDGET;
+
     bool required = false;
     for (uint32_t a = 0; a < count; ++a)
         required |= owner->constraints[a].markers != 0 || owner->constraints[a].interface_count != 0;
     if (!required) return XR_XIR_OK;
     uint64_t bytes = (uint64_t)count*sizeof(XrXirType);
     uint64_t work = (uint64_t)count*2; /* Fill plus complete obligation scan. */
-    if (bytes > SIZE_MAX || bytes > budget->scratch_bytes || work > budget->work) return XR_XIR_BUDGET;
-    budget->scratch_bytes -= bytes; budget->work -= work;
-    XrXirType *arguments = xr_malloc((size_t)bytes);
-    if (!arguments) { budget->scratch_bytes += bytes; return XR_XIR_OUT_OF_MEMORY; }
+    if (bytes > SIZE_MAX ||!xir_compile_work(budget, work)) return XR_XIR_BUDGET;
+
+    XrXirType *arguments = xir_compile_alloc(budget, (size_t)bytes, &allocation_status);
+    if (!arguments) {  return allocation_status; }
     for (uint32_t a = 0; a < count; ++a) arguments[a] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t a = 0; status == XR_XIR_OK && a < count; ++a) {
         if (!owner->constraints[a].markers && !owner->constraints[a].interface_count) continue;
         XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_NOMINAL,identity->nominal_owner-1,0},a,arguments,count};
-        status = xr_xir_constraints_prove(context,&use,budget);
+        status = xr_xir_compile_constraints_prove(budget, context, &use);
     }
-    xr_free(arguments); budget->scratch_bytes += bytes; return status;
+    xr_compile_resources_free(arguments);  return status;
 }
-static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_t index, XrXirBudget *budget) {
+static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_t index, XrXirCompileContext *budget) {
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,index,0}};
     const XrXirFunction *function = &module->functions[index];
     if (function->parameter_count && !function->parameters) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = xr_xir_method_signature_verify(module,index,budget);
-    if (status == XR_XIR_OK) status = xr_xir_context_constraints_verify(&context,budget);
+    XrXirStatus status = xr_xir_compile_method_signature_verify(budget, module, index);
+    if (status == XR_XIR_OK) status = xr_xir_compile_context_constraints_verify(budget, &context);
     if (status == XR_XIR_OK) status = proof_static_owner(&context,budget);
     for (uint32_t p = 0; status == XR_XIR_OK && p < function->parameter_count; ++p)
-        status = xr_xir_type_use_verify(&context,function->parameters[p],budget);
-    if (status == XR_XIR_OK) status = xr_xir_type_use_verify(&context,function->result,budget);
+        status = xr_xir_compile_type_use_verify(budget, &context, function->parameters[p]);
+    if (status == XR_XIR_OK) status = xr_xir_compile_type_use_verify(budget, &context, function->result);
     const XrXirGeneric *g = module->generics ? &module->generics[index] : NULL;
     for (uint32_t a = 0; status == XR_XIR_OK && g && a < g->argument_count; ++a) {
         if (xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;
-        status = g->arguments[a] == XR_XIR_UNIT ? xr_xir_result_unit_use(module,index,a,budget) :
-            xr_xir_type_use_verify(&context,g->arguments[a],budget);
+        status = g->arguments[a] == XR_XIR_UNIT ? xr_xir_compile_result_unit_use(budget, module, index, a) :
+            xr_xir_compile_type_use_verify(budget, &context, g->arguments[a]);
     }
     return status;
 }
-XrXirStatus xr_xir_declaration_constraints_verify(const XrXirModule *module, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_declaration_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!module || !budget || (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = XR_XIR_OK;
     const XrXirNominalTable *nominals = module->types ? module->types->nominals : NULL;
@@ -609,23 +616,26 @@ XrXirStatus xr_xir_declaration_constraints_verify(const XrXirModule *module, XrX
     XrXirProofContext closed = {module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     for (uint32_t n = 0; status == XR_XIR_OK && module->types && n < module->types->count; ++n)
         if (!module->types->nodes[n].parameter_span && module->types->nodes[n].kind == XR_XIR_TYPE_NOMINAL)
-            status = xr_xir_type_use_verify(&closed,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n),budget);
+            status = xr_xir_compile_type_use_verify(budget, &closed, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n));
     return status;
 }
-XrXirStatus xr_xir_module_constraints_verify(const XrXirModule *module, XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_module_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!module || !budget || (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
     /* Complete signature structure was admitted before this module pass.
      * A scalar pool without generics has no declaration constraint obligations. */
     XrXirStatus status = !module->types && !module->generics ? XR_XIR_OK :
-        xr_xir_declaration_constraints_verify(module,budget);
+        xr_xir_compile_declaration_constraints_verify(budget, module);
     if (status != XR_XIR_OK) return status;
     XrXirProofContext closed = {module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     const XrXirDeclarations *declarations = module->declarations;
     for (uint32_t s = 0; status == XR_XIR_OK && declarations && s < declarations->slot_count; ++s) {
         const XrXirSlot *slot = &declarations->slots[s];
-        status = xr_xir_type_use_verify(&closed,slot->type,budget);
+        status = xr_xir_compile_type_use_verify(budget, &closed, slot->type);
         if (status == XR_XIR_OK && slot->module != declarations->root_module)
-            status = xr_xir_type_markers_prove(&closed,slot->type,XR_XIR_CONSTRAINT_SENDABLE,budget);
+            status = xr_xir_compile_type_markers_prove(budget, &closed, slot->type, XR_XIR_CONSTRAINT_SENDABLE);
     }
     return status;
 }

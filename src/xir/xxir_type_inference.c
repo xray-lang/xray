@@ -11,6 +11,7 @@
  *   publication, while partial known shapes can guide a later expression.
  */
 #include "xxir_type_inference.h"
+#include "xxir_compile_memory.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 typedef struct InferenceTask {
@@ -23,13 +24,12 @@ typedef struct InferenceObservation {
     XrXirInferencePair pair;
 } InferenceObservation;
 struct XrXirInferenceState {
-    XrXirBudget *budget;
+    XrXirCompileContext context;
     XrXirType *arguments;
     uint32_t *kinds;
     unsigned char *solved;
     uint32_t prefix_count, count, caller_count;
     InferenceObservation *first, *last;
-    uint64_t scratch;
     XrXirStatus status;
     bool finalized;
 };
@@ -37,25 +37,25 @@ typedef struct InferenceWalk {
     XrXirInferenceState *state;
     const XrXirTypes *types;
     InferenceTask *first, *last;
-    uint64_t initial_scratch;
 } InferenceWalk;
 static bool inference_work(XrXirInferenceState *s, uint64_t work) {
     if (s->status != XR_XIR_OK) return false;
-    if (work > s->budget->work) { s->status = XR_XIR_BUDGET; return false; }
-    s->budget->work -= work; return true;
+    if (!xir_compile_work(&s->context, work)) { s->status = XR_XIR_BUDGET; return false; }
+     return true;
 }
 static void *inference_alloc(XrXirInferenceState *s, uint64_t bytes) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     if (!bytes || s->status != XR_XIR_OK) return NULL;
-    if (bytes > SIZE_MAX || bytes > s->budget->scratch_bytes) { s->status = XR_XIR_BUDGET; return NULL; }
-    s->budget->scratch_bytes -= bytes; s->scratch += bytes;
-    void *p = xr_calloc(1,(size_t)bytes);
-    if (!p) s->status = XR_XIR_OUT_OF_MEMORY;
+    if (bytes > SIZE_MAX) { s->status = XR_XIR_BUDGET; return NULL; }
+
+    void *p = xir_compile_calloc(&s->context, 1,(size_t)bytes, &allocation_status);
+    if (!p) s->status = allocation_status;
     return p;
 }
 static void inference_enqueue(InferenceWalk *w, XrXirType formal, XrXirType actual, uint32_t depth) {
     XrXirInferenceState *s = w->state;
     if (!inference_work(s,1)) return;
-    if ((uint64_t)depth*sizeof(InferenceTask) > s->budget->frame_bytes) { s->status = XR_XIR_BUDGET; return; }
+    if ((uint64_t)depth*sizeof(InferenceTask) > s->context.limits.frame_bytes) { s->status = XR_XIR_BUDGET; return; }
     InferenceTask *task = inference_alloc(s,sizeof(*task));
     if (!task) return;
     task->pair = (XrXirInferencePair){formal,actual}; task->depth = depth;
@@ -63,16 +63,15 @@ static void inference_enqueue(InferenceWalk *w, XrXirType formal, XrXirType actu
     w->last = task;
 }
 static void inference_walk_dispose(InferenceWalk *w) {
-    while (w->first) { InferenceTask *next = w->first->next; xr_free(w->first); w->first = next; }
-    w->state->budget->scratch_bytes += w->state->scratch-w->initial_scratch;
-    w->state->scratch = w->initial_scratch;
+    while (w->first) { InferenceTask *next = w->first->next; xr_compile_resources_free(w->first); w->first = next; }
+
+
 }
 static XrXirStatus inference_match(XrXirInferenceState *s, const XrXirTypes *types,
     const XrXirType *arguments, uint32_t count, XrXirInferencePair pair) {
-    XrXirBudget match = *s->budget;
-    XrXirStatus status = xr_xir_type_substitution_matches_between(types,types,
-        arguments,count,pair.formal,pair.actual,&match);
-    s->budget->work = match.work; return status;
+    XrXirCompileContext match = s->context;
+    XrXirStatus status = xr_xir_compile_type_substitution_matches_between(&match, types, types, arguments, count, pair.formal, pair.actual);
+     return status;
 }
 static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
     XrXirInferenceState *s = w->state;
@@ -113,21 +112,24 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
         inference_enqueue(w,from->element,to->element,depth);
     else s->status = XR_XIR_BAD_TYPE;
 }
-XR_FUNC void xr_xir_inference_dispose(XrXirInferenceState *s) {
+XR_FUNC void xr_xir_compile_inference_dispose(XrXirInferenceState *s) {
     if (!s) return;
-    while (s->first) { InferenceObservation *next = s->first->next; xr_free(s->first); s->first = next; }
-    xr_free(s->kinds); xr_free(s->solved); xr_free(s->arguments); s->budget->scratch_bytes += s->scratch; xr_free(s);
+    while (s->first) { InferenceObservation *next = s->first->next; xr_compile_resources_free(s->first); s->first = next; }
+    xr_compile_resources_free(s->kinds); xr_compile_resources_free(s->solved); xr_compile_resources_free(s->arguments);  xr_compile_resources_free(s);
 }
-XR_FUNC XrXirStatus xr_xir_inference_begin(const XrXirInferenceRequest *r,
-    XrXirBudget *budget, XrXirInferenceState **output) {
-    if (output) *output = NULL;
+XR_FUNC XrXirStatus xr_xir_compile_inference_begin(const XrXirCompileContext *compile_context, const XrXirInferenceRequest *r, XrXirInferenceState **output) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
+
     if (!r || !budget || !output || (!!r->prefix != !!r->prefix_count) || r->prefix_count > 65536 ||
         r->own_count > 65536-r->prefix_count || r->caller_parameter_count > 65536) return XR_XIR_BAD_STRUCTURE;
-    if (!budget->work || sizeof(XrXirInferenceState) > budget->scratch_bytes) return XR_XIR_BUDGET;
-    --budget->work;
-    XrXirInferenceState *s = xr_calloc(1,sizeof(*s));
-    if (!s) return XR_XIR_OUT_OF_MEMORY;
-    s->budget = budget; s->scratch = sizeof(*s); budget->scratch_bytes -= sizeof(*s);
+    if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
+
+    XrXirInferenceState *s = xir_compile_calloc(compile_context, 1,sizeof(*s), &allocation_status);
+    if (!s) return allocation_status;
+    s->context = *compile_context;
     s->prefix_count = r->prefix_count; s->count = r->prefix_count+r->own_count; s->caller_count = r->caller_parameter_count;
     s->arguments = inference_alloc(s,(uint64_t)s->count*sizeof(*s->arguments)); s->solved = inference_alloc(s,s->count);
     if (r->parameter_kinds) {
@@ -144,37 +146,34 @@ XR_FUNC XrXirStatus xr_xir_inference_begin(const XrXirInferenceRequest *r,
     for (uint32_t p = 0; p < s->prefix_count && inference_work(s,1); ++p) {
         if ((r->prefix[p] == XR_XIR_UNIT && (!s->kinds || s->kinds[p] != XR_XIR_BINDER_RESULT_VARIABLE)) ||
             xr_xir_type_is_cell(r->types,r->prefix[p])) { s->status = XR_XIR_BAD_TYPE; break; }
-        s->status = xr_xir_type_expression_shape(r->types,r->prefix[p],s->caller_count,budget);
+        s->status = xr_xir_compile_type_expression_shape(budget, r->types, r->prefix[p], s->caller_count);
         if (s->status == XR_XIR_OK) { s->arguments[p] = r->prefix[p]; s->solved[p] = 1; }
     }
     XrXirStatus status = s->status;
-    if (status == XR_XIR_OK) *output = s; else xr_xir_inference_dispose(s);
+    if (status == XR_XIR_OK) *output = s; else xr_xir_compile_inference_dispose(s);
     return status;
 }
-XR_FUNC XrXirStatus xr_xir_inference_observe(XrXirInferenceState *s,
-    const XrXirTypes *types, XrXirInferencePair pair) {
+XR_FUNC XrXirStatus xr_xir_compile_inference_observe(XrXirInferenceState *s, const XrXirTypes *types, XrXirInferencePair pair) {
     if (!s || s->finalized) return XR_XIR_BAD_STRUCTURE;
     if (s->status != XR_XIR_OK) return s->status;
-    s->status = xr_xir_type_expression_shape(types,pair.formal,s->count,s->budget);
-    if (s->status == XR_XIR_OK) s->status = xr_xir_type_expression_shape(types,pair.actual,s->caller_count,s->budget);
+    s->status = xr_xir_compile_type_expression_shape(&s->context, types, pair.formal, s->count);
+    if (s->status == XR_XIR_OK) s->status = xr_xir_compile_type_expression_shape(&s->context, types, pair.actual, s->caller_count);
     InferenceObservation *observation = inference_alloc(s,sizeof(*observation));
     if (observation) {
         observation->pair = pair;
         if (s->last) s->last->next = observation; else s->first = observation;
         s->last = observation;
     }
-    InferenceWalk walk = {s,types,NULL,NULL,s->scratch};
+    InferenceWalk walk = {s,types,NULL,NULL};
     inference_enqueue(&walk,pair.formal,pair.actual,1);
     for (InferenceTask *task = walk.first; task && s->status == XR_XIR_OK; task = task->next) inference_pair(&walk,task);
     inference_walk_dispose(&walk); return s->status;
 }
-XR_FUNC XrXirStatus xr_xir_inference_expected_known(XrXirInferenceState *s,
-    const XrXirTypes *types, XrXirType formal, XrXirInferenceKnown *output) {
-    if (output) *output = (XrXirInferenceKnown){0};
+XR_FUNC XrXirStatus xr_xir_compile_inference_expected_known(XrXirInferenceState *s, const XrXirTypes *types, XrXirType formal, XrXirInferenceKnown *output) {
     if (!s || !output || s->finalized) return XR_XIR_BAD_STRUCTURE;
     if (s->status != XR_XIR_OK) return s->status;
-    s->status = xr_xir_type_expression_shape(types,formal,s->count,s->budget);
-    InferenceWalk walk = {s,types,NULL,NULL,s->scratch}; bool known = true;
+    s->status = xr_xir_compile_type_expression_shape(&s->context, types, formal, s->count);
+    InferenceWalk walk = {s,types,NULL,NULL}; bool known = true;
     inference_enqueue(&walk,formal,XR_XIR_UNIT,1);
     for (InferenceTask *task = walk.first; task && s->status == XR_XIR_OK; task = task->next) {
         if (!inference_work(s,1)) break;
@@ -198,11 +197,11 @@ XR_FUNC XrXirStatus xr_xir_inference_expected_known(XrXirInferenceState *s,
         } else inference_enqueue(&walk,node->element,XR_XIR_UNIT,depth);
     }
     inference_walk_dispose(&walk);
-    if (s->status == XR_XIR_OK && known) *output = (XrXirInferenceKnown){true,s->arguments,s->count};
+    if (s->status == XR_XIR_OK) *output = known ?
+        (XrXirInferenceKnown){true,s->arguments,s->count} : (XrXirInferenceKnown){0};
     return s->status;
 }
-XR_FUNC XrXirStatus xr_xir_inference_finalize(XrXirInferenceState *s,
-    const XrXirTypes *types, XrXirType *output, uint32_t output_count) {
+XR_FUNC XrXirStatus xr_xir_compile_inference_finalize(XrXirInferenceState *s, const XrXirTypes *types, XrXirType *output, uint32_t output_count) {
     if (!s || s->finalized || output_count != s->count || (!!output != !!output_count)) return XR_XIR_BAD_STRUCTURE;
     if (s->status != XR_XIR_OK) return s->status;
     for (uint32_t p = 0; p < s->count && inference_work(s,1); ++p)
@@ -210,6 +209,7 @@ XR_FUNC XrXirStatus xr_xir_inference_finalize(XrXirInferenceState *s,
     for (InferenceObservation *item = s->first; item && inference_work(s,1); item = item->next)
         s->status = inference_match(s,types,s->arguments,s->count,item->pair);
     if (s->status == XR_XIR_OK && inference_work(s,s->count)) {
+        if (!inference_work(s,(uint64_t)s->count*sizeof(*output))) return s->status;
         if (s->count) memcpy(output,s->arguments,(size_t)s->count*sizeof(*output));
         s->finalized = true;
     }

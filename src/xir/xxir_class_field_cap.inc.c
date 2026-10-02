@@ -44,23 +44,26 @@ static XrXirStatus class_field_frame(const XrXirTypes *types, uint32_t index, Cl
         !node->nominal.fields)) return XR_XIR_BAD_STRUCTURE;
     *frame=(ClassFieldFrame){index,0,count,declaration};return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_class_field_verify(const XrXirTypes *types, XrXirType type,
-    XrXirBudget *budget) {
+XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!budget) return XR_XIR_BAD_STRUCTURE;
-    if (!budget->work) return XR_XIR_BUDGET;
-    --budget->work;bool leaf=false;XrXirStatus status=class_field_leaf(types,type,&leaf);
+    if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
+    bool leaf=false;XrXirStatus status=class_field_leaf(types,type,&leaf);
     if (status!=XR_XIR_OK || leaf) return status;
     uint32_t count=types->count;
     uint64_t bytes=(uint64_t)count*(sizeof(ClassFieldFrame)+sizeof(unsigned char));
-    if (bytes>SIZE_MAX || bytes>budget->scratch_bytes) return XR_XIR_BUDGET;
-    budget->scratch_bytes-=bytes;
-    ClassFieldFrame *frames=xr_calloc(1,(size_t)bytes);
-    if (!frames) {budget->scratch_bytes+=bytes;return XR_XIR_OUT_OF_MEMORY;}
+    if (bytes>SIZE_MAX ||(bytes > SIZE_MAX)) return XR_XIR_BUDGET;
+
+    ClassFieldFrame *frames=xir_compile_calloc(compile_context, 1,(size_t)bytes, &allocation_status);
+    if (!frames) {return allocation_status;}
     unsigned char *states=(unsigned char *)(frames+count);uint32_t depth=1;
     uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
     status=class_field_frame(types,index,&frames[0]);states[index]=1;
     while(status==XR_XIR_OK && depth) {
-        if (!budget->work) {status=XR_XIR_BUDGET;break;}--budget->work;
+        if (!xir_compile_work(budget, 1)) {status=XR_XIR_BUDGET;break;}
         ClassFieldFrame *frame=&frames[depth-1];
         if (frame->next==frame->count) {states[frame->index]=2;--depth;continue;}
         const XrXirTypeNode *node=&types->nodes[frame->index];uint32_t field=frame->next++;
@@ -75,5 +78,5 @@ XR_FUNC XrXirStatus xr_xir_class_field_verify(const XrXirTypes *types, XrXirType
         status=class_field_frame(types,index,&frames[depth]);
         if (status==XR_XIR_OK) {states[index]=1;++depth;}
     }
-    xr_free(frames);budget->scratch_bytes+=bytes;return status;
+    xr_compile_resources_free(frames);return status;
 }

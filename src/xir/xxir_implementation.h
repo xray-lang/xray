@@ -30,7 +30,6 @@ struct XrXirImplementationTable {
 };
 /* NULL is the only empty table. Nested arrays use NULL iff count is zero.
  * Copies require verified identities and preserve the source type pool IDs. */
-XR_FUNC XrXirStatus xr_xir_implementations_copy_verified(
-    const XrXirImplementationTable *source, XrXirImplementationTable **output);
-XR_FUNC void xr_xir_implementations_free(XrXirImplementationTable *table);
+XR_FUNC XrXirStatus xr_xir_compile_implementations_copy_verified(const XrXirCompileContext *compile_context, const XrXirImplementationTable *source, XrXirImplementationTable **output);
+XR_FUNC void xr_xir_compile_implementations_free(XrXirImplementationTable *table);
 #endif // XXIR_IMPLEMENTATION_H
