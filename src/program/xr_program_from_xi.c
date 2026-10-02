@@ -7624,13 +7624,6 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
         bool callable_signature = source->type && source->type->kind == XR_KIND_FUNCTION &&
                                   callable_signature_key_for_value(context, function->xi, source,
                                                                    0u, &callable_signature_key);
-        fprintf(stderr, "DEBUG live-in fn=%s op=%s/%u type=%u block=%u\\n",
-                function && function->xi && function->xi->name ? function->xi->name : "<none>",
-                xi_op_name(source->op), source->op,
-                source->type ? (unsigned) source->type->kind : UINT32_MAX,
-                block && block->xi ? block->xi->id : UINT32_MAX);
-        if (function && function->xi)
-            xi_func_dump(function->xi, stderr);
         return fail(
             diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
             "Xi live-in v%u op%u type=%u nargs=%u source=%u/%u in b%u has no active "
@@ -12016,9 +12009,6 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
                 find_xi_function(context, callee, NULL, NULL);
             uint32_t protocol_effects = protocol_storage ? protocol_storage->closed_effect_mask
                                                           : UINT32_MAX;
-            fprintf(stderr, "DEBUG protocol invoke v%u callee=%s storage=%p effects=%u has_error=%d\\n",
-                    call->id, callee->name ? callee->name : "<none>", (void *)protocol_storage,
-                    protocol_effects, has_error);
             protocol_no_failure = protocol_storage &&
                                   (protocol_effects &
                                    (has_error ? XR_CORE_EFFECT_ERROR : XR_CORE_EFFECT_PANIC)) == 0u;
@@ -12027,18 +12017,6 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
             (callsite && ((callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
                           facts_error != has_error || (!has_error && !facts_panic))) ||
             (protocol_no_failure && has_error)) {
-            fprintf(stderr, "DEBUG invoke mismatch fn=%s b%u v%u op=%s/%u callee=%s callsite=%p flags=%u facts_error=%d facts_panic=%d has_error=%d proto=%d\\n",
-                    function->xi->name ? function->xi->name : "<none>", source->id, call->id,
-                    xi_op_name(call->op), call->op, callee && callee->name ? callee->name : "<none>",
-                    (void *)callsite, callsite ? callsite->flags : 0u, facts_error, facts_panic, has_error,
-                    protocol_no_failure);
-            xi_func_dump(function->xi, stderr);
-            if (callee) {
-                const XrXiFunctionStorage *dbg_storage = find_xi_function(context, callee, NULL, NULL);
-                fprintf(stderr, "DEBUG invoke callee effects=%u storage=%p\\n",
-                        dbg_storage ? dbg_storage->closed_effect_mask : UINT32_MAX,
-                        (void *)dbg_storage);
-            }
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi invoke %s:b%u v%u has mismatched failure facts (flags=%u error=%u)",
                         function->xi->name, source->id, call->id,
@@ -12084,10 +12062,6 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
         }
         if ((error_type != XR_CORE_TYPE_VOID) != has_error ||
             (!has_error && panic_type == XR_CORE_TYPE_VOID)) {
-            fprintf(stderr, "DEBUG invoke channels fn=%s b%u v%u flags=%u has_error=%d error_type=%u panic_type=%u callee=%s\\n",
-                    function->xi->name ? function->xi->name : "<none>", source->id, call->id,
-                    callsite ? callsite->flags : 0u, has_error, error_type, panic_type,
-                    callee && callee->name ? callee->name : "<none>");
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi invoke b%u disagrees with its declared failure channels", source->id);
         }
@@ -12107,10 +12081,6 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
         if (panic_type != XR_CORE_TYPE_VOID &&
             (panic_type != XR_CORE_TYPE_PANIC_INFO ||
              (!find_panic_edge(context, function->xi, call) && function_has_static_cleanup))) {
-            fprintf(stderr, "DEBUG no panic edge fn=%s b%u v%u panic_type=%u\\n",
-                    function->xi->name ? function->xi->name : "<none>", source->id, call->id,
-                    panic_type);
-            xi_func_dump(function->xi, stderr);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi invoke %s:b%u call v%u from b%u has no explicit panic continuation",
                         function->xi->name, source->id, call->id, call->block->id);
@@ -17524,10 +17494,6 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             const XrXiFunctionStorage *callee_storage =
                                 find_xi_function(context, callee, NULL, NULL);
                             if (!callee_storage) {
-                                fprintf(stderr, "DEBUG unresolved direct %s v%u callee=%p name=%s module=%p\\n",
-                                        storage->xi && storage->xi->name ? storage->xi->name : "<anonymous>",
-                                        value->id, (void *)callee,
-                                        callee->name ? callee->name : "<none>", (void *)callee->module);
                                 return fail(diagnostic, diagnostic_size,
                                             XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
                                             "Xi function contract has an unresolved direct target");
@@ -17540,23 +17506,6 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             continue;
                         }
                         if (sealed_method) {
-                            fprintf(stderr, "DEBUG unresolved method %s v%u op=%s/%u flags=0x%x aux=%lld xgmethod=%u nargs=%u ctor=%d resolved=%p exported=%p callsite=%p kind=%u recv=%u method=%u arg_count=%u arg0=%p type0=%p\\n",
-                                    storage->xi && storage->xi->name ? storage->xi->name : "<anonymous>",
-                                    value->id, xi_op_name(value->op), (unsigned)value->op, value->flags, (long long)value->aux_int, value->xg_method_id,
-                                    value->nargs, xi_value_is_constructor_call(value),
-                                    (void *)resolved_sealed_callee(context, storage->xi, value),
-                                    (void *)xi_value_resolve_method_callee(storage->xi, value),
-                                    (void *)resolved_callsite(context, storage->xi, value),
-                                    resolved_callsite(context, storage->xi, value)
-                                        ? resolved_callsite(context, storage->xi, value)->kind : 0u,
-                                    resolved_callsite(context, storage->xi, value)
-                                        ? resolved_callsite(context, storage->xi, value)->receiver_static_class_id : 0u,
-                                    resolved_callsite(context, storage->xi, value)
-                                        ? resolved_callsite(context, storage->xi, value)->method_id : 0u,
-                                    resolved_callsite(context, storage->xi, value)
-                                        ? resolved_callsite(context, storage->xi, value)->arg_count : 0u,
-                                    (void *)(value->nargs ? value->args[0] : NULL),
-                                    (void *)(value->nargs && value->args[0] ? value->args[0]->type : NULL));
                             return fail(diagnostic, diagnostic_size,
                                         XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
                                         "Xi function %s call v%u has an unresolved method target",

@@ -4389,21 +4389,6 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
             if (!function_value_target_is_exact(call_target))
                 call_target = resolve_call_target(ctx, node->as.call_expr.callee);
             if (function_value_target_is_exact(call_target)) {
-                if (ctx->current_func && ctx->current_func->links.function_decl_node &&
-                    ctx->current_func->links.function_decl_node->type == AST_FUNCTION_DECL &&
-                    ctx->current_func->links.function_decl_node->as.function_decl.name &&
-                    strcmp(ctx->current_func->links.function_decl_node->as.function_decl.name,
-                           "checked") == 0) {
-                    fprintf(stderr, "DEBUG call checked target_count=%u target=%s\\n",
-                            call_target.target_count,
-                            call_target.target_symbols[0] &&
-                                    call_target.target_symbols[0]->links.function_decl_node &&
-                                    call_target.target_symbols[0]->links.function_decl_node->type ==
-                                        AST_FUNCTION_DECL
-                                ? call_target.target_symbols[0]->links.function_decl_node->as
-                                      .function_decl.name
-                                : "?");
-                }
                 publish_call_error_effect_fact(ctx, node, call_target);
                 for (uint32_t i = 0; i < call_target.target_count; i++) {
                     AstNode *function_expr = call_target.target_function_exprs[i];
@@ -4421,33 +4406,9 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
                         callee_sym->links.effect_id != XA_EFFECT_NONE) {
                         const XaEffectSummary *callee_summary =
                             xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
-                        if (ctx->current_func && ctx->current_func->links.function_decl_node &&
-                            ctx->current_func->links.function_decl_node->type == AST_FUNCTION_DECL &&
-                            ctx->current_func->links.function_decl_node->as.function_decl.name &&
-                            strcmp(ctx->current_func->links.function_decl_node->as.function_decl.name,
-                                   "checked") == 0)
-                            fprintf(stderr, "DEBUG add callee id=%u summary=%p escaping=%u all=%d words=%u\\n",
-                                    (unsigned) callee_sym->links.effect_id,
-                                    (void *) callee_summary,
-                                    callee_summary ? callee_summary->escaping.count : 0u,
-                                    callee_summary && callee_summary->escaping.count
-                                        ? callee_summary->escaping.types[0].all_variants
-                                        : 0,
-                                    callee_summary && callee_summary->escaping.count
-                                        ? callee_summary->escaping.types[0].variants.word_count
-                                        : 0u);
-                        if (callee_summary) {
-                            bool add_ok = xa_effect_summary_add_summary(
+                        if (callee_summary)
+                            (void) xa_effect_summary_add_summary(
                                 ctx->analyzer->effect_db, ctx->current_summary, callee_summary);
-                            if (ctx->current_func && ctx->current_func->links.function_decl_node &&
-                                ctx->current_func->links.function_decl_node->type == AST_FUNCTION_DECL &&
-                                ctx->current_func->links.function_decl_node->as.function_decl.name &&
-                                strcmp(ctx->current_func->links.function_decl_node->as.function_decl.name,
-                                       "checked") == 0)
-                                fprintf(stderr, "DEBUG added ok=%d dst=%u ptr=%p\\n", add_ok,
-                                        ctx->current_summary->escaping.count,
-                                        (void *) ctx->current_summary);
-                        }
                     }
                 }
                 break;
@@ -5228,15 +5189,6 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
         xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_INVALID_PROGRAM);
     XaEffectId previous_id = func_sym->links.effect_id;
     func_sym->links.effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary);
-    if (func_node->as.function_decl.name &&
-        (strcmp(func_node->as.function_decl.name, "checked") == 0 ||
-         strcmp(func_node->as.function_decl.name, "quotient") == 0)) {
-        fprintf(stderr, "DEBUG infer %s effect=%u sum=%p ctx=%p escaping=%u unknown=%u complete=%d\\n",
-                func_node->as.function_decl.name, (unsigned) func_sym->links.effect_id,
-                (void *) &summary, (void *) ctx->current_summary,
-                summary.escaping.count, summary.unknown_reasons,
-                xa_effect_summary_is_complete(&summary));
-    }
     for (int i = 0; i < func_sym->links.param_effect_count; i++)
         func_sym->links.param_effects[i].callable_effects = func_sym->links.effect_id;
     if (func_sym->links.effect_id != previous_id)
