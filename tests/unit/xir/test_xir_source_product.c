@@ -38,7 +38,7 @@ static void *source_observed_allocate(size_t bytes) {
 #include "program/xr_xir_source_product.c"
 #include "xir_source_product_execution.h"
 #include "xir_source_product_identity.h"
-#include "xir_native_projection_fixture.h"
+#include "xir_native_projection_expectations.h"
 #include "xir_native_projection_faults.h"
 static void product_guards(const XrXirSourceProductRequest *request) {
     XrXirSourceProduct *held=(XrXirSourceProduct *)(uintptr_t)17,*before=held;
@@ -93,7 +93,7 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
     XrXirSourceProduct *product=NULL;XrXirProgram *program=NULL;
     XrXirSourceProductDiagnostic diagnostic={0};XrXirCSource code={0};
-    XrXirNativeProjection projection={0};
+    XrXirNativeProjection *projection=NULL;
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_new(limits,&resources));
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     if (status==XR_XIR_OK) {
@@ -107,13 +107,8 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     }
     xr_compile_session_free(session);
     if (stop==4 && status==XR_XIR_OK) {
-        XrToolchainInput input={XR_TOOLCHAIN_BINDING_SCHEMA_VERSION,XR_TOOLCHAIN_BINDING_PROVIDER_MSVC,{0},
-            "fixture-cl","fixture-windows-x86_64","fixture-opt=2",{{1}},{{2}},{{3}}};
-        XrToolchainBinding binding;
-        XrToolchainBindingStatus built=xr_compile_toolchain_binding_build(resources,&input,&binding);
-        status=built==XR_TOOLCHAIN_BINDING_OK ? XR_XIR_OK : XR_XIR_BUDGET;
-        XrXirNativeProjectionRequest project={product,&binding,"original_source",16777216};
-        if (status==XR_XIR_OK) status=xr_compile_native_projection_build(&project,&projection,NULL);
+        XrXirNativeProjectionRequest project={product,"original_source",16777216};
+        if (status==XR_XIR_OK) status=xr_compile_native_projection_prepare(&project,&projection,NULL);
     } else {
         if (status==XR_XIR_OK && stop>=1) status=xr_xir_compile_source_product_verify(product,16777216,NULL);
         if (status==XR_XIR_OK && stop>=2) status=xr_xir_compile_source_product_emit(product,"original_source",16777216,&code);
@@ -127,7 +122,7 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     }
     xr_compile_resources_release(resources);
     xr_xir_compile_c_source_free(&code);xr_xir_compile_program_drop(program);
-    xr_compile_native_projection_free(&projection);
+    xr_compile_native_projection_owner_free(projection);projection=NULL;
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(runtime_live==live && runtime_bytes==bytes);source_base_bytes=0;
     return status;
@@ -250,12 +245,11 @@ int main(int argc,char **argv) {
     for (uint32_t f=0;f<facts.function_count;++f) {
         XrXirSourceProductLayoutView layout={0};CHECK(xr_xir_compile_source_product_layout(product,f,&layout)==XR_XIR_OK && layout.layout);
     }
-    XrToolchainBinding binding=projection_fixture_binding(product);
-    XrXirNativeProjectionRequest project={product,&binding,"original_source",16777216};
-    XrXirNativeProjection projection={0};
-    CHECK(xr_compile_native_projection_build(&project,&projection,NULL)==XR_XIR_OK);
-    projection_fixture_check(product,&projection,false);
-    FILE *file=fopen(argv[5],"wb");CHECK(file && fwrite(projection.source.text,1,projection.source.length,file)==projection.source.length && !fclose(file));
+    XrXirNativeProjectionRequest project={product,"original_source",16777216};
+    XrXirNativeProjection *projection=NULL;
+    CHECK(xr_compile_native_projection_prepare(&project,&projection,NULL)==XR_XIR_OK);
+    projection_expectations_check(product,projection,false);
+    FILE *file=fopen(argv[5],"wb");CHECK(file && fwrite(xr_compile_native_projection_source(projection)->text,1,xr_compile_native_projection_source(projection)->length,file)==xr_compile_native_projection_source(projection)->length && !fclose(file));
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
     CHECK(!memcmp(&facts,xr_xir_compile_source_product_facts(product),sizeof(facts)));
@@ -265,14 +259,14 @@ int main(int argc,char **argv) {
     XrXirCSource unavailable={0};XrXirProgram *transferred=NULL;
     CHECK(xr_xir_compile_source_product_emit(product,"original_source",16777216,&unavailable)==XR_XIR_BAD_STAGE);
     CHECK(!unavailable.text && !unavailable.length);
-    XrXirNativeProjection refused={0},saved_projection=refused;
-    CHECK(xr_compile_native_projection_build(&project,&refused,NULL)==XR_XIR_BAD_STAGE);
+    XrXirNativeProjection *refused=NULL,*saved_projection=refused;
+    CHECK(xr_compile_native_projection_prepare(&project,&refused,NULL)==XR_XIR_BAD_STAGE);
     CHECK(!memcmp(&refused,&saved_projection,sizeof(refused)));
     CHECK(xr_xir_compile_source_product_vm_take(product,&transferred)==XR_XIR_BAD_STAGE);
     CHECK(!transferred);
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
-    CHECK(projection.source.text && projection.source.length);
-    xr_compile_native_projection_free(&projection);xr_compile_native_projection_free(&projection);
+    CHECK(xr_compile_native_projection_source(projection)->text && xr_compile_native_projection_source(projection)->length);
+    xr_compile_native_projection_owner_free(projection);projection=NULL;xr_compile_native_projection_owner_free(projection);projection=NULL;
     const char *expected=!strcmp(argv[6],"array") ? "array-growth-accounting-ok\n" : !strcmp(argv[6],"tiny") ? "source-product-ok\n" : "";
     if (scan) probe_program(program,facts.entry,expected);
     else CHECK(probe_once(program,facts.entry,expected,64000000,SIZE_MAX,0).status==XR_XIR_CALL_RETURNED);

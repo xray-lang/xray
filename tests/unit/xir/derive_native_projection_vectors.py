@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import struct
 
-source = Path(__file__).with_name('xir_native_projection_fixture.h').read_text(encoding='utf-8')
+source = Path(__file__).with_name('xir_native_projection_expectations.h').read_text(encoding='utf-8')
 for name in ('linked', 'original'):
     prefix = (name + '_source').encode('ascii')
     framing = b'xray:xir-c11-codegen-policy:v1' + struct.pack('<7I', 1, 22, 58, 18, 22, 27, len(prefix)) + prefix
