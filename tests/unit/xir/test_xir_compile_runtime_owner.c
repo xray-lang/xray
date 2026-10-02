@@ -172,6 +172,7 @@ static void arena_budget_and_output(void) {
 int main(void) {
     arena_lifetime_and_authenticity(); arena_allocation_failures(); arena_budget_and_output();
     program_lifetime(); program_take_failures(); program_abi_and_owner();
+    program_method_kind_match();
     puts("Canonical metadata: producer/domain release, nested forged handles rejected, physical zero");
     return 0;
 }

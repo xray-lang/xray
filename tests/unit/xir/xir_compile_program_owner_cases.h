@@ -9,6 +9,7 @@
 #ifndef XIR_COMPILE_PROGRAM_OWNER_CASES_H
 #define XIR_COMPILE_PROGRAM_OWNER_CASES_H
 #include "xir_compile_program_fixture.h"
+#include "xir_class_owned_fixture.h"
 static void program_lifetime(void) {
     reset_observer();
     XrXirCompileContext context=context_new(UINT64_MAX);
@@ -112,5 +113,101 @@ static void program_abi_and_owner(void) {
     CHECK(untouched==(XrXirProgram *)(uintptr_t)1);
     xr_xir_compile_artifact_free(lowered); xr_compile_resources_release(context.resources);
     CHECK(!live && !physical);
+}
+
+static XrXirArtifact *program_method_lowered(const XrXirCompileContext *context,
+    uint32_t method_kind) {
+    ClassOwnedFixture fixture;
+    class_owned_fixture(&fixture);
+    fixture.identities[2].method_kind = method_kind;
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
+    CHECK(xr_xir_compile_check(context, &fixture.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
+    xr_xir_compile_artifact_free(closed);
+    return lowered;
+}
+static void program_method_result(XrXirProgram *program, uint32_t entry) {
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    XrXirInstance *instance = NULL;
+    CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    XrXirValue value = {0};
+    CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
+    CHECK(value.type == XR_XIR_I64 && value.payload == 41);
+    xr_xir_value_drop(&value);
+    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+}
+static void program_method_kind_match(void) {
+    reset_observer();
+    XrXirCompileContext context = context_new(UINT64_MAX);
+    const uint32_t roles[] = {XR_XIR_READ_METHOD, XR_XIR_MEMBER_HELPER};
+    XrXirArtifact *lowered[2] = {NULL, NULL};
+    XrXirVmBinding bindings[2][5];
+    XrXirCallEntry entries[2][5];
+    XrXirProgramSpec specs[2];
+    for (uint32_t side = 0; side < 2; ++side) {
+        lowered[side] = program_method_lowered(&context, roles[side]);
+        const XrXirModule *module = xr_xir_compile_artifact_module(lowered[side]);
+        CHECK(module->function_count == 5 && module->provenance);
+        CHECK(module->declarations->functions[2].method_kind == roles[side]);
+        for (uint32_t f = 0; f < 5; ++f)
+            CHECK(xr_xir_compile_vm_bind(lowered[side], f,
+                &bindings[side][f], &entries[side][f]) == XR_XIR_OK);
+        specs[side] = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
+            *xr_xir_compile_artifact_target(lowered[side]), entries[side], 5,
+            module->declarations, {0}, module->types,
+            xr_xir_compile_program_proof(lowered[side])};
+        CHECK(xr_xir_compile_program_match(&context, &specs[side],
+            specs[side].proof.layouts, lowered[side]) == XR_XIR_OK);
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_program_seal(&context, &specs[side], &program) == XR_XIR_OK);
+        program_method_result(program, module->declarations->entry_function);
+        xr_xir_compile_program_drop(program);
+    }
+    for (uint32_t side = 0; side < 2; ++side) {
+        XrXirFunctionIdentity identities[5];
+        memcpy(identities, specs[side].declarations->functions, sizeof(identities));
+        identities[2].method_kind = roles[1 - side];
+        XrXirDeclarations declarations = *specs[side].declarations;
+        declarations.functions = identities;
+        XrXirProgramSpec altered = specs[side];
+        altered.declarations = &declarations;
+        /* The other independently verified proof admits this exact descriptor.
+         * A legal member role must still match the selected proof's authority. */
+        altered.proof = specs[1 - side].proof;
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_program_seal(&context, &altered, &program) == XR_XIR_OK);
+        program_method_result(program, declarations.entry_function);
+        xr_xir_compile_program_drop(program);
+        altered.proof = specs[side].proof;
+        XrCompileResourceStats before = stats(&context);
+        XrXirStatus matched = xr_xir_compile_program_match(&context, &altered,
+            altered.proof.layouts, lowered[side]);
+        XrXirStatus proof = xr_xir_compile_program_proof_verify(&context, &altered,
+            &altered.proof);
+        program = NULL;
+        XrXirStatus sealed = xr_xir_compile_program_seal(&context, &altered, &program);
+        bool empty = !program;
+        if (matched != XR_XIR_BAD_STRUCTURE || proof != XR_XIR_BAD_STRUCTURE ||
+            sealed != XR_XIR_BAD_STRUCTURE || !empty)
+            fprintf(stderr, "method role %u -> %u: match=%u proof=%u seal=%u output=%u\n",
+                roles[side], roles[1 - side], (unsigned)matched, (unsigned)proof,
+                (unsigned)sealed, empty ? 0u : 1u);
+        xr_xir_compile_program_drop(program);
+        CHECK(matched == XR_XIR_BAD_STRUCTURE && proof == XR_XIR_BAD_STRUCTURE &&
+            sealed == XR_XIR_BAD_STRUCTURE && empty);
+        CHECK(stats(&context).live_bytes == before.live_bytes);
+        CHECK(xr_xir_compile_artifact_verify(lowered[side], NULL) == XR_XIR_OK);
+    }
+    xr_xir_compile_artifact_free(lowered[0]);
+    xr_xir_compile_artifact_free(lowered[1]);
+    xr_compile_resources_release(context.resources);
+    CHECK(!live && !physical);
+    puts("Program method roles: two valid proofs return 41; mismatched descriptors rejected both ways");
 }
 #endif
