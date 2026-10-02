@@ -40,6 +40,7 @@ add_library(invocation_production STATIC
     "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
     "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c"
     "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c"
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_pe_version.c"
     "${XR_ROOT}/src/base/xjson_cursor.c"
     "${XR_ROOT}/src/toolchain/xr_xir_runtime_sdk.c"
     "${XR_ROOT}/src/toolchain/xr_toolchain_binding.c"
@@ -55,6 +56,8 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_program(INVOCATION_MSVC NAMES cl REQUIRED)
 find_program(INVOCATION_LINKER NAMES link REQUIRED)
 enable_testing()
+add_test(NAME native_invocation_provider COMMAND test_native_invocation_faults --provider-only
+    "${INVOCATION_MSVC}" "${INVOCATION_LINKER}")
 add_test(NAME native_invocation_owner COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_owner>
     "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}")

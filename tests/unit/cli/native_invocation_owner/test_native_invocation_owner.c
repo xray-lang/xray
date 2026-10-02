@@ -491,6 +491,9 @@ static int run_test(int argc, char **argv) {
     xr_compile_native_projection_owner_free(project); xr_xir_runtime_sdk_free(sdk); free(launcher); free(large_launcher);
     xr_compile_resources_release(resources);
     const XrXirInvocationFacts *facts = xtc_xir_invocation_facts(owner);
+    const XrXirInvocationProviderFacts *provider = xtc_xir_invocation_provider(owner);
+    CHECK(provider && provider->compiler.path[0] && provider->linker.path[0]);
+    CHECK(provider->compiler.version.file_text[0] && provider->linker.version.file_text[0]);
     if (!owner) {
         CHECK(!runtime_live && !runtime_bytes); free(commands); printf("typed failure %s; unchanged output/live; physical heap zero PASS\n", mode); return 0;
     }
@@ -589,6 +592,9 @@ static DWORD WINAPI invocation_thread(void *context) {
     InvocationThread *test = context; return (DWORD)run_test(test->argc, test->argv);
 }
 int main(int argc, char **argv) {
+#ifdef INVOCATION_INJECTED
+    if (argc == 4 && !strcmp(argv[1], "--provider-only")) return owner_provider_suite(argv[2], argv[3]);
+#endif
     if (argc == 2 && !strcmp(argv[1], "--native-control-child")) return 0;
     /* A pure WinAPI child is an explicit control for process-wide lazy state.
      * Windows also retains its debugger object until the calling thread exits. */

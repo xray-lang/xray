@@ -70,6 +70,7 @@ static void unit(const char *parent) {
     size_t allocations = runtime_attempts - before;
     XrCompileResourceStats exact; CHECK(xr_compile_resources_stats(resources, &exact) == XR_COMPILE_RESOURCE_OK);
     CHECK(xtc_xir_native_operation_phase(owner) == XTC_XIR_NATIVE_NEW && !xtc_xir_native_operation_facts(owner));
+    CHECK(!xtc_xir_native_operation_provider(owner) && !xtc_xir_native_operation_provider(NULL));
     void *sentinel = (void *)(uintptr_t)1; size_t length = 17;
     CHECK(xtc_xir_native_operation_read_output(owner, 100, &sentinel, &length) == XTC_XIR_NATIVE_INVALID);
     CHECK(sentinel == (void *)(uintptr_t)1 && length == 17);
@@ -200,6 +201,7 @@ static int run_test(int argc, char **argv) {
     memset(&request, 0xA5, sizeof(request)); xr_compile_resources_release(resources);
     for (unsigned i = 0; status == XTC_XIR_NATIVE_PENDING && i < 100; ++i) {
         CHECK(!xtc_xir_native_operation_facts(owner));
+        CHECK(!xtc_xir_native_operation_provider(owner));
         status = xtc_xir_native_operation_drain(owner, 100);
     }
     print_diagnostic(owner);
@@ -208,6 +210,9 @@ static int run_test(int argc, char **argv) {
         return status == XTC_XIR_NATIVE_BROKEN ? 20 : 1;
     }
     const XrXirInvocationFacts *facts = xtc_xir_native_operation_facts(owner);
+    const XrXirInvocationProviderFacts *provider = xtc_xir_native_operation_provider(owner);
+    CHECK(provider && provider->compiler.path[0] && provider->linker.path[0]);
+    CHECK(provider->compiler.version.file_text[0] && provider->linker.version.file_text[0]);
     CHECK(facts && facts->completed_runs == 6 && facts->kind == XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS);
     const XrXirInvocationFile *output = NULL;
     for (uint32_t i = 0; i < facts->file_count; ++i) {

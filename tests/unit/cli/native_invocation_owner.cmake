@@ -23,6 +23,10 @@ endforeach()
 target_compile_definitions(test_native_invocation_faults PRIVATE INVOCATION_INJECTED)
 find_program(XIR_INVOCATION_MSVC NAMES cl REQUIRED)
 find_program(XIR_INVOCATION_LINKER NAMES link REQUIRED)
+add_test(NAME native_invocation_provider COMMAND $<TARGET_FILE:test_native_invocation_faults>
+    --provider-only "${XIR_INVOCATION_MSVC}" "${XIR_INVOCATION_LINKER}")
+set_tests_properties(native_invocation_provider PROPERTIES
+    RUN_SERIAL TRUE TIMEOUT 180 COST 3 LABELS "unit;xir;toolchain;ownership;budget")
 foreach(mode owner faults guard profile)
     set(extra_args)
     set(binary test_native_invocation_owner)

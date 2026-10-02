@@ -46,6 +46,7 @@ struct XrXirInvocation {
     XrXirInvocationDiagnostic diagnostic;
     XrXirInvocationLimits limits;
     XrXirInvocationFacts facts;
+    XrXirInvocationProviderFacts provider;
     XrToolchainProcess *process[3];
     XrProcessView commands[3];
     XrXirImageCollector *images[3];
@@ -689,6 +690,80 @@ static bool invocation_prepare(XrXirInvocation *owner, const XrXirInvocationRequ
     return invocation_compile_recipe(owner, request, 0) && invocation_compile_recipe(owner, request, 1) &&
         invocation_link_recipe(owner, request, sdk_libraries);
 }
+#ifdef XR_OS_WINDOWS
+static bool invocation_provider_index(XrXirInvocation *owner, unsigned stage, uint32_t *output) {
+    owner->diagnostic.stage = (XrXirInvocationStage)stage;
+    owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
+    XrXirImageCollector *images = owner->images[stage];
+    if (xtc_xir_images_resources(images) != owner->context.resources || !xtc_xir_images_sealed(images))
+        return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
+    bool found = false;
+    uint32_t selected = 0, count = xtc_xir_images_count(images);
+    for (uint32_t i = 0; i < count; ++i) {
+        const XrXirImageFile *image = xtc_xir_images_file(images, i);
+        if (!invocation_work(owner, sizeof(image->kind_mask))) return false;
+        if (!(image->kind_mask & XR_XIR_IMAGE_EXE)) continue;
+        bool same = false;
+        if (!invocation_profile_equal(owner, image->path, owner->commands[stage].executable, &same)) return false;
+        if (!same) continue;
+        if (found) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
+        found = true; selected = i;
+    }
+    if (!found) return invocation_fail(owner, XR_XIR_INVOCATION_UNRESOLVED, XR_XIR_INVOCATION_SELF, 0);
+    *output = selected;
+    return true;
+}
+static bool invocation_provider_read(XrXirInvocation *owner, unsigned stage, uint32_t index,
+    XrXirInvocationProviderImageFacts *output) {
+    owner->diagnostic.stage = (XrXirInvocationStage)stage;
+    owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
+    size_t limit = SIZE_MAX;
+    if (owner->limits.artifact_bytes < (uint64_t)SIZE_MAX) limit = (size_t)owner->limits.artifact_bytes;
+    void *bytes = NULL; size_t length = 0;
+    if (!invocation_target(owner, xtc_xir_images_read(owner->images[stage], index, limit, &bytes, &length))) return false;
+    XtcXirPeVersion version;
+    XtcXirPeVersionStatus parsed = xtc_xir_pe_version_parse(owner->context.resources, bytes, length, &version);
+    xr_compile_resources_free(bytes);
+    if (parsed != XTC_XIR_PE_VERSION_OK) {
+        XrXirInvocationStatus status = parsed == XTC_XIR_PE_VERSION_BUDGET ? XR_XIR_INVOCATION_BUDGET :
+            parsed == XTC_XIR_PE_VERSION_NOT_FOUND ? XR_XIR_INVOCATION_UNRESOLVED :
+            parsed == XTC_XIR_PE_VERSION_UNSUPPORTED ? XR_XIR_INVOCATION_UNSUPPORTED : XR_XIR_INVOCATION_INVALID;
+        return invocation_fail(owner, status, XR_XIR_INVOCATION_PE_VERSION, parsed);
+    }
+    const XrXirImageFile *image = xtc_xir_images_file(owner->images[stage], index);
+    return invocation_copy(owner, &output->path, &image->path, sizeof(output->path)) &&
+        invocation_copy(owner, &output->length, &image->length, sizeof(output->length)) &&
+        invocation_copy(owner, output->digest, image->digest, sizeof(output->digest)) &&
+        invocation_copy(owner, &output->version, &version, sizeof(version)) &&
+        invocation_copy(owner, &output->observed_image_index, &index, sizeof(index));
+}
+static bool invocation_provider_versions(XrXirInvocation *owner) {
+    uint32_t selected[3];
+    for (unsigned stage = 0; stage < 3; ++stage)
+        if (!invocation_provider_index(owner, stage, &selected[stage])) return false;
+    owner->diagnostic.stage = XR_XIR_INVOCATION_LAUNCHER;
+    const XrXirImageFile *generated = xtc_xir_images_file(owner->images[0], selected[0]);
+    const XrXirImageFile *launcher = xtc_xir_images_file(owner->images[1], selected[1]);
+    bool same = false;
+    if (!invocation_profile_equal(owner, generated->path, launcher->path, &same) ||
+        !invocation_work(owner, 2 * sizeof(uint64_t))) return false;
+    if (!same || generated->length != launcher->length)
+        return invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_SELF, 0);
+    if (!invocation_bytes(owner, generated->digest, launcher->digest, sizeof(generated->digest))) return false;
+    /* Both original collectors keep the matching file and its ancestors leased.
+     * Read the compiler once, without reopening or releasing either stage. */
+    if (!invocation_work(owner, sizeof(XrXirInvocationProviderFacts))) return false;
+    XrXirInvocationProviderFacts result = {0};
+    if (!invocation_provider_read(owner, 0, selected[0], &result.compiler) ||
+        !invocation_provider_read(owner, 2, selected[2], &result.linker) ||
+        !invocation_copy(owner, &result.launcher_compiler_image_index, &selected[1], sizeof(selected[1]))) return false;
+    return invocation_copy(owner, &owner->provider, &result, sizeof(result));
+}
+#else
+static bool invocation_provider_versions(XrXirInvocation *owner) {
+    return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
+}
+#endif
 static bool invocation_finish(XrXirInvocation *owner) {
     for (unsigned stage = 0; stage < 3; ++stage) {
         owner->diagnostic.stage = (XrXirInvocationStage)stage;
@@ -705,7 +780,7 @@ static bool invocation_finish(XrXirInvocation *owner) {
                 image->path, image->length, image->digest, NULL)) return false;
         }
     }
-    if (!invocation_work(owner, sizeof(owner->facts.kind))) return false;
+    if (!invocation_provider_versions(owner) || !invocation_work(owner, sizeof(owner->facts.kind))) return false;
     owner->facts.kind = XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS;
     return true;
 }
@@ -836,6 +911,9 @@ XR_FUNC XrCompileResources *xtc_xir_invocation_resources(const XrXirInvocation *
 }
 XR_FUNC const XrXirInvocationFacts *xtc_xir_invocation_facts(const XrXirInvocation *owner) {
     return owner ? &owner->facts : NULL;
+}
+XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_invocation_provider(const XrXirInvocation *owner) {
+    return owner ? &owner->provider : NULL;
 }
 XR_FUNC const XrProcessView *xtc_xir_invocation_command(const XrXirInvocation *owner,
     XrXirInvocationStage stage) {

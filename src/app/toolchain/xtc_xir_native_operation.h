@@ -74,6 +74,7 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_drain(XtcXirNativeO
     uint32_t wait_ms);
 /* READY-only borrows. Facts remain LOCKED_REPLAY_FACTS, never Target admission. */
 XR_FUNC const XrXirInvocationFacts *xtc_xir_native_operation_facts(const XtcXirNativeOperation *owner);
+XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_native_operation_provider(const XtcXirNativeOperation *owner);
 XR_FUNC const XrXirInvocationFile *xtc_xir_native_operation_file(const XtcXirNativeOperation *owner,
     uint32_t index);
 /* Reads the held OUTPUT handle without reopening or hashing. Both outputs must

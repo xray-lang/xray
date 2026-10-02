@@ -12,6 +12,7 @@
 #include "xtc_process.h"
 #include "xtc_dependencies.h"
 #include "xtc_xir_namespace.h"
+#include "xtc_xir_pe_version.h"
 #include "../../aot/program/xr_xir_native_projection.h"
 #include "../../toolchain/xr_xir_runtime_sdk.h"
 
@@ -34,7 +35,8 @@ typedef enum XrXirInvocationPass {
 typedef enum XrXirInvocationFailureDomain {
     XR_XIR_INVOCATION_SELF, XR_XIR_INVOCATION_RESOURCE,
     XR_XIR_INVOCATION_FILESYSTEM, XR_XIR_INVOCATION_TARGET,
-    XR_XIR_INVOCATION_PROCESS, XR_XIR_INVOCATION_SDK, XR_XIR_INVOCATION_NAMESPACE
+    XR_XIR_INVOCATION_PROCESS, XR_XIR_INVOCATION_SDK, XR_XIR_INVOCATION_NAMESPACE,
+    XR_XIR_INVOCATION_PE_VERSION
 } XrXirInvocationFailureDomain;
 typedef struct XrXirInvocationDiagnostic {
     XrXirInvocationStage stage;
@@ -98,6 +100,17 @@ typedef struct XrXirInvocationFacts {
     XrXirNativeProjectionFacts projection;
     XrXirRuntimeSdkFacts sdk;
 } XrXirInvocationFacts;
+typedef struct XrXirInvocationProviderImageFacts {
+    const char *path;
+    uint64_t length;
+    uint8_t digest[32];
+    XtcXirPeVersion version;
+    uint32_t observed_image_index;
+} XrXirInvocationProviderImageFacts;
+typedef struct XrXirInvocationProviderFacts {
+    XrXirInvocationProviderImageFacts compiler, linker;
+    uint32_t launcher_compiler_image_index;
+} XrXirInvocationProviderFacts;
 typedef struct XrXirInvocation XrXirInvocation;
 
 /* Derives the same twelve roots that run validates. Only projection, SDK,
@@ -133,6 +146,12 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
  * Queries neither allocate nor consume work. */
 XR_FUNC XrCompileResources *xtc_xir_invocation_resources(const XrXirInvocation *owner);
 XR_FUNC const XrXirInvocationFacts *xtc_xir_invocation_facts(const XrXirInvocation *owner);
+/* Compiler and linker refer to the GENERATED and LINK observed collectors;
+ * launcher_compiler_image_index refers to LAUNCHER's matching compiler row.
+ * Version values come from those held image bytes, bounded by artifact_bytes,
+ * before the final namespace check. Paths borrow this owner's collectors.
+ * These self-reported versions grant no provider or Binding authority. */
+XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_invocation_provider(const XrXirInvocation *owner);
 XR_FUNC const XrProcessView *xtc_xir_invocation_command(const XrXirInvocation *owner,
     XrXirInvocationStage stage);
 XR_FUNC const XrXirInvocationFile *xtc_xir_invocation_file(const XrXirInvocation *owner,
