@@ -1,0 +1,33 @@
+if(NOT WIN32)
+    return()
+endif()
+find_program(XIR_WORKSPACE_MSVC NAMES cl REQUIRED)
+foreach(mode injected production)
+    set(target test_xir_workspace_${mode})
+    add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/workspace_owner/test_xir_workspace.c")
+    target_link_libraries(${target} PRIVATE xray_xir_namespace ntdll bcrypt)
+    if(mode STREQUAL "production")
+        target_compile_definitions(${target} PRIVATE WORKSPACE_PRODUCTION)
+        target_link_libraries(${target} PRIVATE xray_xir_workspace)
+    else()
+        add_dependencies(${target} xray_xir_workspace)
+    endif()
+    target_include_directories(${target} PRIVATE
+        "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
+    target_compile_definitions(${target} PRIVATE
+        WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(${target} PRIVATE /experimental:c11atomics)
+    endif()
+    add_test(NAME workspace_${mode} COMMAND ${XRAY_PYTHON} -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/workspace_owner/test_xir_workspace.py"
+        $<TARGET_FILE:${target}> "${XIR_WORKSPACE_MSVC}")
+    set_tests_properties(workspace_${mode} PROPERTIES
+        TIMEOUT 240 RUN_SERIAL TRUE LABELS "unit;xir;ownership;budget")
+endforeach()
