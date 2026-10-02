@@ -32,6 +32,7 @@ endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compile_resources.cmake)
 add_subdirectory(xir/compile_owner)
+add_subdirectory(shared/native_admission)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 
 macro(add_xray_unit_test name source)

@@ -27,6 +27,10 @@ add_executable(test_xir_compile_emit_owner
     "${XIR_OWNER_ROOT}/src/aot/xi_cgen_verify_output.c"
     "${XIR_OWNER_ROOT}/src/base/xcompile_resources.c")
 target_link_libraries(test_xir_compile_emit_owner PRIVATE xir_compile_owner_runtime)
+add_executable(test_xir_compile_decimal_work
+    "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_decimal_work.c"
+    "${XIR_OWNER_ROOT}/src/base/xcompile_resources.c")
+target_link_libraries(test_xir_compile_decimal_work PRIVATE xir_compile_owner_runtime)
 set(XIR_OWNER_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/compile-owner-generated.c")
 add_custom_command(OUTPUT "${XIR_OWNER_GENERATED}"
     COMMAND $<TARGET_FILE:test_xir_compile_emit_owner> "${XIR_OWNER_GENERATED}"
@@ -56,7 +60,7 @@ if(DEFINED XR_XIR_OLD_ADMISSION_OBJECT)
     add_test(NAME test_xir_compile_old_data COMMAND test_xir_compile_old_data)
     set_tests_properties(test_xir_compile_old_data PROPERTIES LABELS "unit;xir;abi" TIMEOUT 30)
 endif()
-foreach(owner_target xir_compile_owner_runtime test_xir_compile_snapshot_owner test_xir_compile_api test_xir_compile_c_buffer test_xir_compile_runtime_owner
+foreach(owner_target xir_compile_owner_runtime test_xir_compile_decimal_work test_xir_compile_snapshot_owner test_xir_compile_api test_xir_compile_c_buffer test_xir_compile_runtime_owner
     test_xir_compile_emit_owner test_xir_compile_native_owner)
     target_include_directories(${owner_target} PRIVATE "${XIR_OWNER_ROOT}/src" "${XIR_OWNER_ROOT}/include")
     target_compile_features(${owner_target} PRIVATE c_std_11)
@@ -81,7 +85,7 @@ add_test(NAME test_xir_compile_api_rejection
         --compiler "${CMAKE_C_COMPILER}" --msvc "${XIR_OWNER_MSVC}" --root "${XIR_OWNER_ROOT}"
         --output "${CMAKE_CURRENT_BINARY_DIR}/compile-api-rejections")
 set_tests_properties(test_xir_compile_api_rejection PROPERTIES LABELS "unit;xir;abi" TIMEOUT 60)
-foreach(owner_target test_xir_compile_snapshot_owner test_xir_compile_api test_xir_compile_c_buffer test_xir_compile_runtime_owner test_xir_compile_native_owner)
+foreach(owner_target test_xir_compile_decimal_work test_xir_compile_snapshot_owner test_xir_compile_api test_xir_compile_c_buffer test_xir_compile_runtime_owner test_xir_compile_native_owner)
     add_test(NAME ${owner_target} COMMAND ${owner_target})
     set_tests_properties(${owner_target} PROPERTIES LABELS "unit;xir;compiler;ownership;budget;abi" TIMEOUT 60)
 endforeach()

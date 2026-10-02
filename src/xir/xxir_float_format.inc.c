@@ -39,6 +39,7 @@ static void float_decimal_carry(char *digits, unsigned *count, int *exponent) {
 }
 static bool float_decimal_digits(const FloatFormat *format, FloatParts parts,
     char *digits, unsigned *count, int *exponent) {
+    XrDecimalWork work = xr_decimal_runtime_work();
     bool inclusive = !(parts.significand & 1);
     bool asymmetric = parts.significand == (UINT64_C(1) << format->fraction) &&
         parts.exponent > 1 - format->bias - (int) format->fraction;
@@ -47,19 +48,19 @@ static bool float_decimal_digits(const FloatFormat *format, FloatParts parts,
     XrDecimalInteger lower = float_decimal_integer(asymmetric ? 1 : 2);
     XrDecimalInteger upper = float_decimal_integer(2);
     if (parts.exponent < 0) {
-        if (!xr_decimal_shift(&denominator, (unsigned) -parts.exponent)) return false;
-    } else if (!xr_decimal_shift(&numerator, (unsigned) parts.exponent) ||
-        !xr_decimal_shift(&lower, (unsigned) parts.exponent) ||
-        !xr_decimal_shift(&upper, (unsigned) parts.exponent)) return false;
+        if (!xr_decimal_shift(&work, &denominator, (unsigned) -parts.exponent)) return false;
+    } else if (!xr_decimal_shift(&work, &numerator, (unsigned) parts.exponent) ||
+        !xr_decimal_shift(&work, &lower, (unsigned) parts.exponent) ||
+        !xr_decimal_shift(&work, &upper, (unsigned) parts.exponent)) return false;
     *exponent = 0; *count = 0;
-    while (xr_decimal_compare(&numerator, &denominator) < 0) {
-        if (--*exponent < -324 || !xr_decimal_multiply(&numerator, 10, 0) ||
-            !xr_decimal_multiply(&lower, 10, 0) || !xr_decimal_multiply(&upper, 10, 0)) return false;
+    while (xr_decimal_compare(&work, &numerator, &denominator) < 0) {
+        if (--*exponent < -324 || !xr_decimal_multiply(&work, &numerator, 10, 0) ||
+            !xr_decimal_multiply(&work, &lower, 10, 0) || !xr_decimal_multiply(&work, &upper, 10, 0)) return false;
     }
     for (;;) {
         XrDecimalInteger trial = denominator;
-        if (!xr_decimal_multiply(&trial, 10, 0)) return false;
-        if (xr_decimal_compare(&numerator, &trial) < 0) break;
+        if (!xr_decimal_multiply(&work, &trial, 10, 0)) return false;
+        if (xr_decimal_compare(&work, &numerator, &trial) < 0) break;
         if (++*exponent > 308) return false;
         denominator = trial;
     }
@@ -68,28 +69,28 @@ static bool float_decimal_digits(const FloatFormat *format, FloatParts parts,
     unsigned limit = format->fraction == 23 ? 9 : 17;
     while (*count < limit) {
         unsigned digit = 0;
-        while (xr_decimal_compare(&numerator, &denominator) >= 0) {
-            xr_decimal_subtract(&numerator, &denominator);
+        while (xr_decimal_compare(&work, &numerator, &denominator) >= 0) {
+            xr_decimal_subtract(&work, &numerator, &denominator);
             if (++digit > 9) return false;
         }
         digits[(*count)++] = (char) ('0' + digit);
-        int below = xr_decimal_compare(&numerator, &lower);
+        int below = xr_decimal_compare(&work, &numerator, &lower);
         XrDecimalInteger above = numerator;
         if (!float_decimal_add(&above, &upper)) return false;
-        int beyond = xr_decimal_compare(&above, &denominator);
+        int beyond = xr_decimal_compare(&work, &above, &denominator);
         bool down = below < 0 || (inclusive && !below);
         bool up = beyond > 0 || (inclusive && !beyond);
         if (down || up) {
             XrDecimalInteger twice = numerator;
-            if (!xr_decimal_shift(&twice, 1)) return false;
-            int distance_order = xr_decimal_compare(&twice, &denominator);
+            if (!xr_decimal_shift(&work, &twice, 1)) return false;
+            int distance_order = xr_decimal_compare(&work, &twice, &denominator);
             if (up && (!down || distance_order > 0 || (!distance_order && (digit & 1))))
                 float_decimal_carry(digits, count, exponent);
             while (*count > 1 && digits[*count - 1] == '0') --*count;
             return true;
         }
-        if (!xr_decimal_multiply(&numerator, 10, 0) || !xr_decimal_multiply(&lower, 10, 0) ||
-            !xr_decimal_multiply(&upper, 10, 0)) return false;
+        if (!xr_decimal_multiply(&work, &numerator, 10, 0) || !xr_decimal_multiply(&work, &lower, 10, 0) ||
+            !xr_decimal_multiply(&work, &upper, 10, 0)) return false;
     }
     return false;
 }
