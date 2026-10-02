@@ -4,8 +4,8 @@ import hashlib, os, re, shutil, subprocess, sys, tempfile, time
 
 exe, root, compiler, linker, sdk = map(lambda value: Path(value).resolve(), sys.argv[1:6])
 faults = sys.argv[6:] == ['faults']
-guard = sys.argv[6:] == ['guard']
 profile = sys.argv[6:] == ['profile']
+preflight = sys.argv[6:] == ['preflight']
 vc = Path(os.environ['VCToolsInstallDir']) / 'lib/x64'
 kit = Path(os.environ['WindowsSdkDir']) / 'Lib' / os.environ['WindowsSDKVersion'].strip('/\\')
 libraries = [vc / name for name in ('msvcrt.lib', 'oldnames.lib', 'vcruntime.lib')]
@@ -30,7 +30,7 @@ def run(mode):
             private_launcher.write_bytes(launcher.read_bytes() + ('\n#include "' + header.as_posix() + '"\n').encode('utf-8'))
             launcher = private_launcher
         selected_compiler, selected_linker = compiler, linker
-        if mode in ('profile-config', 'profile-link-config', 'profile-local', 'profile-manifest', 'profile-local-directory', 'profile-post-local'):
+        if mode in ('profile-config', 'profile-link-config', 'profile-local', 'profile-manifest', 'profile-local-directory'):
             provider = directory / 'provider'; provider.mkdir()
             for original in (compiler, linker):
                 shutil.copy2(original, provider / original.name)
@@ -42,7 +42,7 @@ def run(mode):
                 config.write_bytes(original.replace(b'apply="no"', b'apply="NO"'))
             elif mode == 'profile-local-directory':
                 Path(str(selected_compiler) + '.local').mkdir()
-            elif mode != 'profile-post-local':
+            else:
                 Path(str(selected_compiler) + ('.manifest' if mode == 'profile-manifest' else '.local')).write_bytes(b'redirect')
         command = [exe, authority, source, root / 'stdlib', sdk, selected_compiler, selected_linker, inputs,
                    launcher, *libraries, output, mode,
@@ -62,31 +62,30 @@ def run(mode):
             assert native.returncode == 0 and native.stdout == expected and native.stderr == b'', (native.returncode, native.stdout, native.stderr)
         return result.stdout.decode('utf-8', 'replace')
 
-positive = run('positive')
-if not faults and not guard and not profile:
+positive = '' if preflight else run('positive')
+if not faults and not profile and not preflight:
     run('full-program')
-if profile:
+if profile or preflight:
+    run('constructor-admission')
+    for mode in ['foreign-sdk', 'foreign-0', 'foreign-1', 'foreign-2', 'occupied-out']:
+        run(mode)
     measured = run('constructor-measure')
     total_bytes, peak, work = map(int, re.search(r'constructor costs allocated=(\d+) peak=(\d+) work=(\d+)', measured).groups())
     for axis, exact in [('bytes', total_bytes), ('live', peak), ('work', work)]:
         run(f'constructor-{axis}-{exact}-pass')
         run(f'constructor-{axis}-{exact - 1}-fail')
     for mode in ['profile-legacy', 'profile-env-extra', 'profile-temp', 'profile-system-root', 'profile-include',
-                 'profile-scope', 'profile-missing-root', 'profile-root', 'profile-config', 'profile-link-config',
-                 'profile-local', 'profile-manifest', 'profile-local-directory', 'profile-post-local', 'profile-header', 'profile-image']:
-        run(mode)
-if guard:
-    for mode in ['null-guard', 'foreign-guard', 'armed-guard', 'failed-guard', 'closing-guard', 'guard-arm-oom',
-                 'guard-check-budget', 'guard-check-io',
-                 'guard-break', 'guard-final-break', 'guard-pending', 'read-oom', 'cancel']:
-        run(mode)
+                 'profile-config', 'profile-link-config',
+                 'profile-local', 'profile-manifest', 'profile-local-directory', 'profile-header', 'profile-image']:
+        if not preflight or mode not in ('profile-header', 'profile-image'):
+            run(mode)
 if faults:
     allocations, comparisons, runs = map(int, re.search(
         r'owner direct allocations=(\d+) comparisons=(\d+) attempted-runs=(\d+)', positive).groups())
     assert runs == 6 and allocations and comparisons
     for mode in ['foreign-sdk', 'foreign-0', 'foreign-1', 'foreign-2', 'occupied-out', 'bad-recipe', 'nonempty',
                  'same-directory', 'case-directory', 'ancestor-directory', 'reverse-ancestor', 'source-shape', 'launcher-shape',
-                 'launcher-race', 'source-race', 'cancel', 'timeout', 'child', 'replay',
+                 'launcher-race', 'source-race', 'read-oom', 'cancel', 'timeout', 'child', 'replay',
                  'includes-replay', 'link-replay', 'image-replay']:
         run(mode)
     for index in range(allocations):
@@ -100,4 +99,5 @@ if faults:
     for mode in ['headroom-work-800000000', 'headroom-bytes-70000000', 'headroom-live-28000000']:
         run(mode)
     run(f'io-all-{comparisons}')
-print('actual MSVC Source/SDK six calls; positive leases and exact native output; no full Target authority', flush=True)
+print('pre-execution profile gates; no provider execution' if preflight else
+      'actual MSVC Source/SDK six calls; positive leases and exact native output; no full Target authority', flush=True)

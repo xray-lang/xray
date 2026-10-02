@@ -49,7 +49,7 @@ if(WIN32)
     add_library(xray_xir_invocation STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_invocation.c)
     target_link_libraries(xray_xir_invocation PUBLIC
         xray_toolchain_process xray_toolchain_dependencies xray_xir_target
-        xray_xir_native_projection xray_xir_runtime_sdk xray_xir_namespace xray_xir_pe_version)
+        xray_xir_native_projection xray_xir_runtime_sdk xray_xir_pe_version)
     target_compile_features(xray_xir_invocation PUBLIC c_std_11)
     set_target_properties(xray_xir_invocation PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_compile_definitions(xray_xir_invocation PRIVATE
@@ -59,7 +59,6 @@ if(WIN32)
     else()
         target_compile_options(xray_xir_invocation PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
-    include("${CMAKE_CURRENT_LIST_DIR}/xir_namespace.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/xir_workspace.cmake")
     add_library(xray_xir_native_operation STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_native_operation.c)
     target_link_libraries(xray_xir_native_operation PUBLIC xray_xir_invocation xray_xir_workspace)

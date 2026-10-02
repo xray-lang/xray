@@ -107,20 +107,6 @@ static bool invocation_target(XrXirInvocation *owner, XrXirTargetStatus status) 
     return status == XR_XIR_TARGET_OK ||
         invocation_fail(owner, invocation_target_status(status), XR_XIR_INVOCATION_TARGET, status);
 }
-static bool invocation_namespace(XrXirInvocation *owner, XrXirNamespaceStatus status) {
-    if (status == XR_XIR_NAMESPACE_OK) return true;
-    XrXirInvocationStatus mapped;
-    switch (status) {
-    case XR_XIR_NAMESPACE_UNRESOLVED: mapped = XR_XIR_INVOCATION_UNRESOLVED; break;
-    case XR_XIR_NAMESPACE_UNSUPPORTED: mapped = XR_XIR_INVOCATION_UNSUPPORTED; break;
-    case XR_XIR_NAMESPACE_BUDGET: mapped = XR_XIR_INVOCATION_BUDGET; break;
-    case XR_XIR_NAMESPACE_OUT_OF_MEMORY: mapped = XR_XIR_INVOCATION_OUT_OF_MEMORY; break;
-    case XR_XIR_NAMESPACE_IO: mapped = XR_XIR_INVOCATION_IO; break;
-    case XR_XIR_NAMESPACE_BROKEN: mapped = XR_XIR_INVOCATION_BROKEN; break;
-    default: mapped = XR_XIR_INVOCATION_INVALID; break;
-    }
-    return invocation_fail(owner, mapped, XR_XIR_INVOCATION_NAMESPACE, status);
-}
 static bool invocation_process(XrXirInvocation *owner, XrProcessStatus status) {
     if (status == XTC_PROCESS_OK) return true;
     XrXirInvocationStatus mapped;
@@ -611,7 +597,6 @@ static bool invocation_run_process(XrXirInvocation *owner, const XrXirInvocation
     if (okay && (result.stdout_bytes.truncated || result.stderr_bytes.truncated))
         okay = invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_PROCESS, XTC_PROCESS_BUDGET);
     xtc_process_result_free(&result);
-    if (okay) okay = invocation_namespace(owner, xtc_xir_namespace_check(request->namespace_owner));
     if (okay) okay = invocation_target(owner, xtc_xir_images_seal(images));
     for (uint32_t i = 0; okay && i < xtc_xir_images_count(images); ++i)
         okay = invocation_profile_contains(owner, xtc_xir_images_file(images, i)->path, true);
@@ -784,43 +769,6 @@ static bool invocation_finish(XrXirInvocation *owner) {
     owner->facts.kind = XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS;
     return true;
 }
-XR_FUNC XrXirInvocationStatus xtc_xir_invocation_namespace_new(const XrXirInvocationRequest *request,
-    const XrXirNamespaceLimits *limits, XrXirNamespace **output, XrXirInvocationDiagnostic *diagnostic) {
-    XrXirInvocation owner = {0};
-    owner.diagnostic = (XrXirInvocationDiagnostic){XR_XIR_INVOCATION_NO_STAGE, XR_XIR_INVOCATION_NO_PASS,
-        XR_XIR_INVOCATION_SELF, XR_XIR_INVOCATION_INVALID, 0};
-    const XrXirCompileContext *context = request ? xr_compile_native_projection_context(request->projection) : NULL;
-    if (!invocation_profile_fields(request) || !limits || !limits->roots || !limits->directories || !limits->path_bytes ||
-        !output || *output || request->namespace_owner ||
-        !context || !context->resources || xr_xir_runtime_sdk_resources(request->sdk) != context->resources ||
-        xtc_process_resources(request->compile[0].process) != context->resources ||
-        xtc_process_resources(request->compile[1].process) != context->resources ||
-        xtc_process_resources(request->link) != context->resources) {
-        if (diagnostic) *diagnostic = owner.diagnostic;
-        return XR_XIR_INVOCATION_INVALID;
-    }
-    owner.context.resources = context->resources;
-    owner.io = xr_compile_io_policy(context->resources);
-    owner.limits.dependencies.path_bytes = limits->path_bytes;
-    owner.diagnostic.code = 0;
-    bool okay = true;
-    for (unsigned i = 0; okay && i < 3; ++i)
-        okay = invocation_process(&owner, xtc_process_view(i < 2 ? request->compile[i].process : request->link,
-            &owner.commands[i]));
-    if (okay) okay = invocation_profile_derive(&owner, request);
-    XrXirNamespaceRoot roots[12];
-    for (unsigned i = 0; okay && i < 12; ++i) {
-        okay = invocation_work(&owner, sizeof(roots[i]));
-        if (okay) roots[i] = (XrXirNamespaceRoot){owner.profile.paths[i], invocation_profile_scope(i)};
-    }
-    XrXirNamespace *guard = NULL;
-    XrXirNamespaceRequest create = {roots, 12, *limits};
-    if (okay) okay = invocation_namespace(&owner, xtc_xir_namespace_new(context->resources, &create, &guard));
-    invocation_profile_free(&owner.profile);
-    if (diagnostic) *diagnostic = owner.diagnostic;
-    if (okay) *output = guard;
-    return owner.status;
-}
 XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationRequest *request,
     XrXirInvocation **output, XrXirInvocationDiagnostic *diagnostic) {
     XrXirInvocationDiagnostic initial = {XR_XIR_INVOCATION_NO_STAGE, XR_XIR_INVOCATION_NO_PASS,
@@ -828,10 +776,6 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     const XrXirCompileContext *context = request ? xr_compile_native_projection_context(request->projection) : NULL;
     if (!invocation_profile_fields(request) || !output || *output || !context || !context->resources || !request->sdk ||
         xr_xir_runtime_sdk_resources(request->sdk) != context->resources ||
-        !request->namespace_owner ||
-        xtc_xir_namespace_resources(request->namespace_owner) != context->resources ||
-        xtc_xir_namespace_phase(request->namespace_owner) != XR_XIR_NAMESPACE_NEW ||
-        xtc_xir_namespace_status(request->namespace_owner) != XR_XIR_NAMESPACE_OK ||
         xtc_process_resources(request->compile[0].process) != context->resources ||
         xtc_process_resources(request->compile[1].process) != context->resources ||
         xtc_process_resources(request->link) != context->resources ||
@@ -868,7 +812,7 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     const char *sdk_libraries[5] = {0};
     if (okay) okay = invocation_prepare(owner, request, sdk_libraries);
     if (okay) okay = invocation_profile_derive(owner, request) &&
-        invocation_profile_guard(owner, request->namespace_owner, false) && invocation_profile_configs(owner) &&
+        invocation_profile_configs(owner) &&
         invocation_profile_redirects(owner);
     if (okay) {
         owner->diagnostic.stage = XR_XIR_INVOCATION_LINK;
@@ -879,26 +823,9 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     for (uint32_t i = 0; okay && i < request->library_count; ++i)
         okay = invocation_open_add(owner, request->libraries[i].path, XR_XIR_INVOCATION_LINK, request->libraries[i].kind);
     if (okay) okay = invocation_create(owner, request);
-    if (okay) {
-        owner->diagnostic.stage = XR_XIR_INVOCATION_NO_STAGE;
-        owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
-        okay = invocation_namespace(owner, xtc_xir_namespace_arm(request->namespace_owner));
-        if (okay) okay = invocation_profile_guard(owner, request->namespace_owner, true) &&
-            invocation_profile_redirects(owner);
-        if (okay) {
-            owner->diagnostic.stage = XR_XIR_INVOCATION_NO_STAGE;
-            owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
-            okay = invocation_namespace(owner, xtc_xir_namespace_check(request->namespace_owner));
-        }
-    }
     for (unsigned stage = 0; okay && stage < 2; ++stage) okay = invocation_stage(owner, request, stage);
     if (okay) okay = invocation_stage(owner, request, 2);
     if (okay) okay = invocation_finish(owner);
-    if (okay) {
-        owner->diagnostic.stage = XR_XIR_INVOCATION_NO_STAGE;
-        owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
-        okay = invocation_namespace(owner, xtc_xir_namespace_check(request->namespace_owner));
-    }
     if (okay) okay = invocation_work(owner, sizeof(owner));
     XrXirInvocationStatus status = owner->status;
     if (diagnostic) *diagnostic = owner->diagnostic;

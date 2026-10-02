@@ -6,9 +6,6 @@
  *
  * xtc_xir_invocation_profile.inc.c - One derivation of controlled MSVC roots
  */
-static XrXirNamespaceScope invocation_profile_scope(unsigned index) {
-    return index < 9 ? XR_XIR_NAMESPACE_TREE : XR_XIR_NAMESPACE_DIRECTORY;
-}
 static void invocation_profile_free(InvocationProfile *profile) {
     for (unsigned i = 0; i < 12; ++i) {
         xtc_xir_file_lease_free(profile->directories[i]);
@@ -251,40 +248,6 @@ static bool invocation_profile_derive(XrXirInvocation *owner, const XrXirInvocat
     xr_compile_resources_free(windows); xr_compile_resources_free(system);
     return okay;
 }
-static bool invocation_profile_guard(XrXirInvocation *owner, const XrXirNamespace *guard, bool armed) {
-    const XrXirNamespaceFacts *facts = xtc_xir_namespace_facts(guard);
-    if (!facts || facts->root_count != 12 || facts->armed != armed)
-        return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-    for (unsigned i = 0; i < 12; ++i) {
-        const XrXirNamespaceRootFacts *root = xtc_xir_namespace_root(guard, i);
-        bool same = false;
-        if (!invocation_work(owner, sizeof(root->scope)) ||
-            !invocation_profile_equal(owner, root->requested_path, owner->profile.paths[i], &same)) return false;
-        if (!same || root->scope != invocation_profile_scope(i))
-            return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-        if (!armed) continue;
-        bool missing = owner->profile.missing[i];
-        if (root->initially_missing != missing)
-            return invocation_fail(owner, XR_XIR_INVOCATION_BROKEN, XR_XIR_INVOCATION_SELF, 0);
-        const XtcXirDirectoryFacts *expected = xtc_xir_file_lease_directory_facts(owner->profile.directories[i]);
-        if (!invocation_profile_equal(owner, root->watched_path, expected->path, &same)) return false;
-        if (!same) return invocation_fail(owner, XR_XIR_INVOCATION_BROKEN, XR_XIR_INVOCATION_SELF, 0);
-        bool found = false;
-        for (uint32_t j = 0; j < facts->directory_count; ++j) {
-            const XrXirNamespaceDirectoryFacts *actual = xtc_xir_namespace_directory(guard, j);
-            if (!invocation_profile_equal(owner, actual->path, expected->path, &same)) return false;
-            if (!same) continue;
-            if (!invocation_work(owner, 2 * sizeof(uint64_t) + 32)) return false;
-            if (actual->volume != expected->volume || memcmp(actual->file_id, expected->file_id, 16))
-                return invocation_fail(owner, XR_XIR_INVOCATION_BROKEN, XR_XIR_INVOCATION_SELF, 0);
-            if (!missing && invocation_profile_scope(i) == XR_XIR_NAMESPACE_TREE && !actual->recursive)
-                return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-            found = true; break;
-        }
-        if (!found) return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-    }
-    return true;
-}
 static bool invocation_profile_contains(XrXirInvocation *owner, const char *path, bool image) {
     wchar_t *wide = NULL; size_t length = 0;
     if (!invocation_profile_wide(owner, path, &wide, &length)) return false;
@@ -294,7 +257,7 @@ static bool invocation_profile_contains(XrXirInvocation *owner, const char *path
         if (!invocation_profile_relation(owner, owner->profile.wide[i], owner->profile.lengths[i], wide, length, &relation)) break;
         if (relation != 1) continue;
         found = true;
-        if (invocation_profile_scope(i) == XR_XIR_NAMESPACE_DIRECTORY) {
+        if (i >= 9) {
             size_t at = owner->profile.lengths[i];
             if (!invocation_work(owner, sizeof(wchar_t))) break;
             if (wide[at] == L'\\') ++at;
@@ -311,9 +274,6 @@ static bool invocation_profile_contains(XrXirInvocation *owner, const char *path
 #else
 static bool invocation_profile_derive(XrXirInvocation *owner, const XrXirInvocationRequest *request) {
     (void)request; return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-}
-static bool invocation_profile_guard(XrXirInvocation *owner, const XrXirNamespace *guard, bool armed) {
-    (void)guard; (void)armed; return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
 }
 static bool invocation_profile_contains(XrXirInvocation *owner, const char *path, bool image) {
     (void)path; (void)image; return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);

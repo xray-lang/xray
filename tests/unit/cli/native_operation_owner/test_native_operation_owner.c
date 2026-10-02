@@ -12,28 +12,22 @@
 #ifdef OPERATION_INJECTED
 #include "operation_inject.h"
 #endif
-static const XtcXirNativeOperationLimits test_limits = {{12, 4096, 64, 32767},
-    {{4 * 1024 * 1024, 32768, 4096}, 64 * 1024 * 1024, 4096}, 30000, 4 * 1024 * 1024};
+static const XtcXirNativeOperationLimits test_limits = {{{4 * 1024 * 1024, 32768, 4096}, 64 * 1024 * 1024, 4096}, 30000, 4 * 1024 * 1024};
 static XtcXirWorkspaceRequest workspace_request(const char *parent) {
     XtcXirWorkspaceRequest request = {parent, {32767, 32, 65536}}; return request;
 }
 static void close_owner(XtcXirNativeOperation **owner) {
     for (unsigned i = 0; *owner && i < 10000; ++i) {
-        XtcXirNativeOperationStatus status = xtc_xir_native_operation_close(owner, 100, 64);
+        XtcXirNativeOperationStatus status = xtc_xir_native_operation_close(owner, 64);
         CHECK(status == XTC_XIR_NATIVE_OK || status == XTC_XIR_NATIVE_PENDING);
     }
     CHECK(!*owner);
 }
 static void print_diagnostic(const XtcXirNativeOperation *owner) {
     const XtcXirNativeOperationDiagnostic *d = xtc_xir_native_operation_diagnostic(owner);
-    printf("status=%u domain=%u code=%d stage=%u pass=%u exit=%d ns=%u kind=%u index=%u volume=%llu id=",
+    printf("status=%u domain=%u code=%d stage=%u pass=%u exit=%d\n",
         (unsigned)d->status, (unsigned)d->domain, d->code, (unsigned)d->invocation.stage,
-        (unsigned)d->invocation.pass, d->invocation.exit_code, (unsigned)d->namespace_diagnostic.status,
-        (unsigned)d->namespace_diagnostic.kind, d->namespace_diagnostic.directory_index,
-        (unsigned long long)d->namespace_diagnostic.volume);
-    for (unsigned i = 0; i < 16; ++i) printf("%02x", d->namespace_diagnostic.file_id[i]);
-    const XrXirNamespaceDirectoryFacts *node = xtc_xir_native_operation_namespace_directory(owner, d->namespace_diagnostic.directory_index);
-    printf(" path=%s\n", node ? node->path : "unavailable"); fflush(stdout);
+        (unsigned)d->invocation.pass, d->invocation.exit_code); fflush(stdout);
 }
 static XrXirNativeProjection *projection(XrCompileResources *resources, const char *directory,
     const char *source, const char *stdlib) {
@@ -103,61 +97,55 @@ static void unit(const char *parent) {
     HANDLE temp = CreateFileA(unregistered, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
     CHECK(temp != INVALID_HANDLE_VALUE); DWORD written = 0;
     CHECK(WriteFile(temp, "partial compiler temporary", 26, &written, NULL) && written == 26 && CloseHandle(temp));
-    XrXirNamespaceRoot nsroot = {xtc_xir_workspace_paths(owner->workspace)->input, XR_XIR_NAMESPACE_DIRECTORY};
-    XrXirNamespaceRequest nsrequest = {&nsroot, 1, {1, 8, 4, 32767}};
-    CHECK(xtc_xir_namespace_new(resources, &nsrequest, &owner->guard) == XR_XIR_NAMESPACE_OK);
-    CHECK(xtc_xir_namespace_arm(owner->guard) == XR_XIR_NAMESPACE_OK);
     native_fail(owner, XTC_XIR_NATIVE_CANCELLED, XTC_XIR_NATIVE_SELF, 91);
-    operation_hold_guard = true; operation_workspace_closes = 0;
+    operation_workspace_closes = 0;
     size_t allocation_boundary = runtime_attempts; XrCompileResourceStats before_close;
     CHECK(xr_compile_resources_stats(resources, &before_close) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_work(resources, UINT64_MAX - before_close.work) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(resources, &before_close) == XR_COMPILE_RESOURCE_OK && before_close.work == UINT64_MAX);
-    CHECK(xtc_xir_native_operation_close(&owner, 0, 64) == XTC_XIR_NATIVE_PENDING && owner);
-    CHECK(!operation_workspace_closes && GetFileAttributesA(root) != INVALID_FILE_ATTRIBUTES);
-    operation_hold_guard = false; operation_hold_workspace = true;
+    operation_hold_workspace = true;
     XtcXirNativeOperationStatus status = XTC_XIR_NATIVE_PENDING;
     for (unsigned i = 0; status == XTC_XIR_NATIVE_PENDING && i < 100; ++i)
-        status = xtc_xir_native_operation_close(&owner, 100, 64);
-    CHECK(status == XTC_XIR_NATIVE_IO && owner && !owner->guard);
+        status = xtc_xir_native_operation_close(&owner, 64);
+    CHECK(status == XTC_XIR_NATIVE_IO && owner && operation_workspace_closes);
     CHECK(xtc_xir_native_operation_diagnostic(owner)->code == 91 &&
         xtc_xir_native_operation_cleanup_diagnostic(owner)->domain == XTC_XIR_NATIVE_WORKSPACE);
     operation_hold_workspace = false;
-    CHECK(xtc_xir_native_operation_close(&owner, 0, 1) == XTC_XIR_NATIVE_PENDING && owner);
+    CHECK(xtc_xir_native_operation_close(&owner, 1) == XTC_XIR_NATIVE_PENDING && owner);
     CHECK(xtc_xir_native_operation_diagnostic(owner)->status == XTC_XIR_NATIVE_CANCELLED);
     close_owner(&owner); CHECK(GetFileAttributesA(root) == INVALID_FILE_ATTRIBUTES && GetFileAttributesA(unregistered) == INVALID_FILE_ATTRIBUTES);
     XrCompileResourceStats after_close; CHECK(xr_compile_resources_stats(resources, &after_close) == XR_COMPILE_RESOURCE_OK);
     CHECK(runtime_attempts == allocation_boundary && after_close.work == before_close.work);
     xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
-    printf("unit constructor OOM=%zu exact allocated=%llu peak=%llu work=%llu; pending/drain/cleanup=PASS physical=0\n",
+    printf("unit constructor OOM=%zu exact allocated=%llu peak=%llu work=%llu; workspace pending/cleanup=PASS physical=0\n",
         allocations, (unsigned long long)exact.allocated_bytes, (unsigned long long)exact.peak_bytes, (unsigned long long)exact.work);
 }
 static bool cancelled(void *context) { (void)context; return true; }
-static void prearm(const char *parent, XrCompileResources *resources, XtcXirNativeOperationRequest *request) {
+static void preflight(const char *parent, XrCompileResources *resources, XtcXirNativeOperationRequest *request) {
     XtcXirWorkspaceRequest ws = workspace_request(parent);
     XrCompileResources *foreign = sdk_ledger(&sdk_unlimited);
     XtcXirNativeOperation *owner = NULL;
     CHECK(xtc_xir_native_operation_new(foreign, &ws, &test_limits, &owner) == XTC_XIR_NATIVE_OK);
     size_t before = runtime_attempts;
-    CHECK(xtc_xir_native_operation_run(owner, request, 0) == XTC_XIR_NATIVE_INVALID);
+    CHECK(xtc_xir_native_operation_run(owner, request) == XTC_XIR_NATIVE_INVALID);
     CHECK(runtime_attempts == before && !xtc_xir_workspace_paths(owner->workspace)->root);
     close_owner(&owner);
     XrXirRuntimeSdk *foreign_sdk = load_sdk(foreign, xr_xir_runtime_sdk_root(request->sdk));
     const XrXirRuntimeSdk *saved_sdk = request->sdk; request->sdk = foreign_sdk;
     CHECK(xtc_xir_native_operation_new(resources, &ws, &test_limits, &owner) == XTC_XIR_NATIVE_OK);
     before = runtime_attempts;
-    CHECK(xtc_xir_native_operation_run(owner, request, 0) == XTC_XIR_NATIVE_INVALID);
+    CHECK(xtc_xir_native_operation_run(owner, request) == XTC_XIR_NATIVE_INVALID);
     CHECK(runtime_attempts == before && !xtc_xir_workspace_paths(owner->workspace)->root);
     close_owner(&owner); request->sdk = saved_sdk;
     xr_xir_runtime_sdk_free(foreign_sdk); xr_compile_resources_release(foreign);
     CHECK(xtc_xir_native_operation_new(resources, &ws, &test_limits, &owner) == XTC_XIR_NATIVE_OK);
     request->cancelled = cancelled; before = runtime_attempts;
-    CHECK(xtc_xir_native_operation_run(owner, request, 0) == XTC_XIR_NATIVE_CANCELLED);
+    CHECK(xtc_xir_native_operation_run(owner, request) == XTC_XIR_NATIVE_CANCELLED);
     CHECK(runtime_attempts == before && !xtc_xir_workspace_paths(owner->workspace)->root);
     close_owner(&owner); request->cancelled = NULL;
     operation_stop_before_native = true; operation_direct_count = 0;
     CHECK(xtc_xir_native_operation_new(resources, &ws, &test_limits, &owner) == XTC_XIR_NATIVE_OK);
-    CHECK(xtc_xir_native_operation_run(owner, request, 0) == XTC_XIR_NATIVE_IO);
+    CHECK(xtc_xir_native_operation_run(owner, request) == XTC_XIR_NATIVE_IO);
     CHECK(operation_run_calls == 1 && !xtc_xir_native_operation_facts(owner));
     size_t direct = operation_direct_count;
     close_owner(&owner);
@@ -165,13 +153,13 @@ static void prearm(const char *parent, XrCompileResources *resources, XtcXirNati
     for (size_t fail = 0; fail < direct; ++fail) {
         operation_direct_count = 0; operation_direct_fail = fail; operation_run_calls = 0;
         XtcXirNativeOperationStatus status = xtc_xir_native_operation_new(resources, &ws, &test_limits, &owner);
-        if (status == XTC_XIR_NATIVE_OK) status = xtc_xir_native_operation_run(owner, request, 0);
+        if (status == XTC_XIR_NATIVE_OK) status = xtc_xir_native_operation_run(owner, request);
         CHECK(status == XTC_XIR_NATIVE_OUT_OF_MEMORY && !operation_run_calls);
         operation_direct_fail = SIZE_MAX; close_owner(&owner);
         XrCompileResourceStats current; CHECK(xr_compile_resources_stats(resources, &current) == XR_COMPILE_RESOURCE_OK);
         CHECK(current.live_bytes == baseline.live_bytes);
     }
-    printf("prearm direct actual OOM=%zu foreign/pre-cancel zero allocation; real SDK launcher/3 prepared/guard NEW=PASS\n", direct);
+    printf("preflight direct actual OOM=%zu foreign/pre-cancel zero allocation; real SDK launcher/3 prepared=PASS\n", direct);
 }
 #endif
 static int run_test(int argc, char **argv) {
@@ -187,27 +175,22 @@ static int run_test(int argc, char **argv) {
     XtcXirNativeOperationRequest request = {project, sdk, argv[6], argv[7],
         {argv[14], argv[15], argv[16], argv[17], argv[18]}, libraries, 5, NULL, NULL};
 #ifdef OPERATION_INJECTED
-    if (!strcmp(argv[1], "prearm")) {
-        prearm(argv[8], resources, &request);
+    if (!strcmp(argv[1], "preflight")) {
+        preflight(argv[8], resources, &request);
         xr_compile_native_projection_owner_free(project); xr_xir_runtime_sdk_free(sdk);
         xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes); return 0;
     }
 #endif
     XtcXirWorkspaceRequest ws = workspace_request(argv[8]); XtcXirNativeOperation *owner = NULL;
     CHECK(xtc_xir_native_operation_new(resources, &ws, &test_limits, &owner) == XTC_XIR_NATIVE_OK);
-    XtcXirNativeOperationStatus status = xtc_xir_native_operation_run(owner, &request, 0);
-    /* Producers and every request borrow end before PENDING drain continues. */
+    XtcXirNativeOperationStatus status = xtc_xir_native_operation_run(owner, &request);
+    /* Producers and every request borrow end before result use and cleanup. */
     xr_compile_native_projection_owner_free(project); xr_xir_runtime_sdk_free(sdk);
     memset(&request, 0xA5, sizeof(request)); xr_compile_resources_release(resources);
-    for (unsigned i = 0; status == XTC_XIR_NATIVE_PENDING && i < 100; ++i) {
-        CHECK(!xtc_xir_native_operation_facts(owner));
-        CHECK(!xtc_xir_native_operation_provider(owner));
-        status = xtc_xir_native_operation_drain(owner, 100);
-    }
     print_diagnostic(owner);
     if (status != XTC_XIR_NATIVE_OK) {
         close_owner(&owner); CHECK(!runtime_live && !runtime_bytes);
-        return status == XTC_XIR_NATIVE_BROKEN ? 20 : 1;
+        return 1;
     }
     const XrXirInvocationFacts *facts = xtc_xir_native_operation_facts(owner);
     const XrXirInvocationProviderFacts *provider = xtc_xir_native_operation_provider(owner);

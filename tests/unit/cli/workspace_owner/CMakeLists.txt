@@ -17,12 +17,9 @@ endif()
 foreach(mode injected production)
     add_executable(test_xir_workspace_${mode} test_xir_workspace.c
         "${XR_ROOT}/src/base/xutf8.c" "${XR_ROOT}/src/base/xsha256.c"
-        "${XR_ROOT}/src/base/xio_policy.c" "${XR_ROOT}/src/base/xfileio.c"
-        "${XR_ROOT}/src/os/win/dir_win.c"
         "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
         "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c"
-        "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c"
-        "${XR_ROOT}/src/app/toolchain/xtc_xir_namespace.c")
+        "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c")
     if(mode STREQUAL "production")
         target_compile_definitions(test_xir_workspace_${mode} PRIVATE WORKSPACE_PRODUCTION)
         target_sources(test_xir_workspace_${mode} PRIVATE "${XR_ROOT}/src/app/toolchain/xtc_xir_workspace.c")

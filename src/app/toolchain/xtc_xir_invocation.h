@@ -11,7 +11,6 @@
 #define XTC_XIR_INVOCATION_H
 #include "xtc_process.h"
 #include "xtc_dependencies.h"
-#include "xtc_xir_namespace.h"
 #include "xtc_xir_pe_version.h"
 #include "../../aot/program/xr_xir_native_projection.h"
 #include "../../toolchain/xr_xir_runtime_sdk.h"
@@ -22,7 +21,7 @@ typedef enum XrXirInvocationStatus {
     XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_OUT_OF_MEMORY,
     XR_XIR_INVOCATION_IO, XR_XIR_INVOCATION_TIMEOUT,
     XR_XIR_INVOCATION_CANCELLED, XR_XIR_INVOCATION_CHILD_FAILED,
-    XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_BROKEN
+    XR_XIR_INVOCATION_REPLAY_MISMATCH
 } XrXirInvocationStatus;
 typedef enum XrXirInvocationStage {
     XR_XIR_INVOCATION_GENERATED, XR_XIR_INVOCATION_LAUNCHER,
@@ -35,7 +34,7 @@ typedef enum XrXirInvocationPass {
 typedef enum XrXirInvocationFailureDomain {
     XR_XIR_INVOCATION_SELF, XR_XIR_INVOCATION_RESOURCE,
     XR_XIR_INVOCATION_FILESYSTEM, XR_XIR_INVOCATION_TARGET,
-    XR_XIR_INVOCATION_PROCESS, XR_XIR_INVOCATION_SDK, XR_XIR_INVOCATION_NAMESPACE,
+    XR_XIR_INVOCATION_PROCESS, XR_XIR_INVOCATION_SDK,
     XR_XIR_INVOCATION_PE_VERSION
 } XrXirInvocationFailureDomain;
 typedef struct XrXirInvocationDiagnostic {
@@ -72,7 +71,6 @@ typedef struct XrXirInvocationRequest {
     const XrXirNativeProjection *projection;
     const XrXirRuntimeSdk *sdk;
     XrXirMsvcRecipe msvc;
-    XrXirNamespace *namespace_owner;
     XrXirInvocationCompile compile[2];
     const XrToolchainProcess *link;
     const char *input_directory, *output_directory, *link_report, *output;
@@ -113,14 +111,6 @@ typedef struct XrXirInvocationProviderFacts {
 } XrXirInvocationProviderFacts;
 typedef struct XrXirInvocation XrXirInvocation;
 
-/* Derives the same twelve roots that run validates. Only projection, SDK,
- * three prepared processes, msvc and input/output directories are consumed.
- * namespace_owner and *output must both be NULL. This copies a NEW namespace
- * on the producer ledger without arming it or executing any command. The
- * caller owns finite close/drain. Failure preserves output. */
-XR_FUNC XrXirInvocationStatus xtc_xir_invocation_namespace_new(const XrXirInvocationRequest *request,
-    const XrXirNamespaceLimits *limits, XrXirNamespace **output, XrXirInvocationDiagnostic *diagnostic);
-
 /* Windows x64 MSVC C11/MD only, with /X and seven ordered include roots.
  * Every actual prepared environment contains exactly SystemRoot, TEMP and TMP
  * in that order; no historical environment-source enum is inferred from it.
@@ -129,10 +119,8 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_namespace_new(const XrXirInvoca
  * two empty, nonoverlapping private directories. Sources are direct children
  * of input_directory; objects, reports and the executable are direct children
  * of output_directory. All commands use input_directory as their frozen cwd.
- * The mandatory same-ledger namespace owner must be NEW and is borrowed. It
- * is armed after source creation and checked after each successful run and
- * before publication. The caller must close/drain it, retaining the surrounding
- * operation and directories while close is PENDING, before public publication.
+ * The installed toolchain and search directories are trusted not to change
+ * concurrently during this build. No continuous directory proof is granted.
  * Every artifact is initially CREATE_NEW; existing paths are never overwritten.
  * The caller owns both directories and must later reclaim disk artifacts even
  * on failure. Free releases only this owner's memory and file/image leases.
@@ -149,7 +137,7 @@ XR_FUNC const XrXirInvocationFacts *xtc_xir_invocation_facts(const XrXirInvocati
 /* Compiler and linker refer to the GENERATED and LINK observed collectors;
  * launcher_compiler_image_index refers to LAUNCHER's matching compiler row.
  * Version values come from those held image bytes, bounded by artifact_bytes,
- * before the final namespace check. Paths borrow this owner's collectors.
+ * before result publication. Paths borrow this owner's collectors.
  * These self-reported versions grant no provider or Binding authority. */
 XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_invocation_provider(const XrXirInvocation *owner);
 XR_FUNC const XrProcessView *xtc_xir_invocation_command(const XrXirInvocation *owner,

@@ -1,6 +1,6 @@
 /* Interpose only the new composition boundary. All owners and allocations are
  * real. The explicit pre-execution stop does not qualify native execution. */
-static bool operation_stop_before_native, operation_hold_guard, operation_hold_workspace;
+static bool operation_stop_before_native, operation_hold_workspace;
 static size_t operation_direct_count, operation_direct_fail = SIZE_MAX, operation_run_calls;
 static size_t operation_workspace_closes;
 static XrCompileResourceStatus operation_alloc(XrCompileResources *resources, size_t bytes, void **out) {
@@ -22,7 +22,6 @@ static XrXirInvocationStatus operation_invoke(const XrXirInvocationRequest *requ
     ++operation_run_calls;
     if (operation_stop_before_native) {
         CHECK(!*out && request->launcher && request->launcher_length);
-        CHECK(request->namespace_owner && xtc_xir_namespace_phase(request->namespace_owner) == XR_XIR_NAMESPACE_NEW);
         /* Independently check the SDK launcher; the previous invocation fixture
          * used a different test consumer and cannot satisfy this expectation. */
         static const char expected[] = "return xr_xir_host_main(&XIR_SDK_PROGRAM_SYMBOL);";
@@ -45,10 +44,6 @@ static XrXirInvocationStatus operation_invoke(const XrXirInvocationRequest *requ
     }
     return xtc_xir_invocation_run(request, out, diagnostic);
 }
-static XrXirNamespaceStatus operation_guard_close(XrXirNamespace **owner, uint32_t wait_ms) {
-    if (*owner && operation_hold_guard) return XR_XIR_NAMESPACE_PENDING;
-    return xtc_xir_namespace_close(owner, wait_ms);
-}
 static XtcXirWorkspaceStatus operation_workspace_close(XtcXirWorkspace **owner, uint32_t steps) {
     ++operation_workspace_closes;
     if (*owner && operation_hold_workspace) return XTC_XIR_WORKSPACE_IO;
@@ -57,11 +52,9 @@ static XtcXirWorkspaceStatus operation_workspace_close(XtcXirWorkspace **owner, 
 #define xr_compile_resources_alloc operation_alloc
 #define xr_compile_resources_calloc operation_calloc
 #define xtc_xir_invocation_run operation_invoke
-#define xtc_xir_namespace_close operation_guard_close
 #define xtc_xir_workspace_close operation_workspace_close
 #include "app/toolchain/xtc_xir_native_operation.c"
 #undef xr_compile_resources_alloc
 #undef xr_compile_resources_calloc
 #undef xtc_xir_invocation_run
-#undef xtc_xir_namespace_close
 #undef xtc_xir_workspace_close

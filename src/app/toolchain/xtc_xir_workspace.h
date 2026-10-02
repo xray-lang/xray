@@ -38,8 +38,7 @@ XR_FUNC const XtcXirWorkspacePaths *xtc_xir_workspace_paths(const XtcXirWorkspac
 XR_FUNC XrCompileResources *xtc_xir_workspace_resources(const XtcXirWorkspace *owner);
 XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_status(const XtcXirWorkspace *owner);
 XR_FUNC const XtcXirWorkspaceDiagnostic *xtc_xir_workspace_diagnostic(const XtcXirWorkspace *owner);
-/* Caller must first drain all processes and guards and release borrowed leases.
- * A pending guard retains the whole operation; it must not enter this cleanup.
+/* Caller must first complete all processes and release borrowed leases.
  * Deletes ordinary descendants of the original private root, never follows a
  * reparse point, and only unlinks the named entry of a regular hard link.
  * No new heap or ledger work is needed. Each explicit OS call and existing

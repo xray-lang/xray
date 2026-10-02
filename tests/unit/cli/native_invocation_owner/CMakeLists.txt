@@ -35,7 +35,6 @@ endforeach()
 include("${XR_ROOT}/src/app/toolchain/xir_process.cmake")
 add_library(invocation_production STATIC
     "${XR_ROOT}/src/app/toolchain/xtc_xir_invocation.c"
-    "${XR_ROOT}/src/app/toolchain/xtc_xir_namespace.c"
     "${XR_ROOT}/src/app/toolchain/xtc_dependencies.c"
     "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
     "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c"
@@ -64,13 +63,13 @@ add_test(NAME native_invocation_owner COMMAND "${Python3_EXECUTABLE}" -X utf8
 add_test(NAME native_invocation_faults COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
     "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "faults")
-add_test(NAME native_invocation_guard COMMAND "${Python3_EXECUTABLE}" -X utf8
-    "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
-    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "guard")
 add_test(NAME native_invocation_profile COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
     "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "profile")
 set_tests_properties(native_invocation_owner PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
 set_tests_properties(native_invocation_faults PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
-set_tests_properties(native_invocation_guard PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
 set_tests_properties(native_invocation_profile PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+add_test(NAME native_invocation_preflight COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_faults>
+    "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}" "preflight")
+set_tests_properties(native_invocation_preflight PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)

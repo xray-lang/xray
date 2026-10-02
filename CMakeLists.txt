@@ -1412,7 +1412,6 @@ file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
 # Native operation components are owned by their explicit production libraries.
 list(REMOVE_ITEM APP_TOOLCHAIN_SRC
     "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_invocation.c"
-    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_namespace.c"
     "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_workspace.c")
 
 # Standard Library (Native modules) - modular conditional compilation

@@ -142,7 +142,6 @@ static int run_test(int argc, char **argv) {
     request.link_report = report; request.output = output;
     request.launcher = launcher; request.launcher_length = launcher_length; request.libraries = libraries; request.library_count = 5;
     request.limits = (XrXirInvocationLimits){{4 * 1024 * 1024, 32768, 4096}, 64 * 1024 * 1024, 4096};
-    XrXirInvocationRequest admission_template = request;
     XrXirInvocationStatus expected = XR_XIR_INVOCATION_OK;
     XrCompileResources *foreign = NULL; XrXirRuntimeSdk *foreign_sdk = NULL; XrToolchainProcess *foreign_process = NULL;
     char alternate_directory[32768] = {0}, collision[32768] = {0};
@@ -209,7 +208,7 @@ static int run_test(int argc, char **argv) {
         expected = XR_XIR_INVOCATION_INVALID;
     } else if (!strcmp(mode, "reverse-ancestor")) {
         request.output_directory = argv[1]; expected = XR_XIR_INVOCATION_INVALID;
-    } else if (!strncmp(mode, "foreign-", 8) && strcmp(mode, "foreign-guard")) {
+    } else if (!strncmp(mode, "foreign-", 8)) {
         foreign = sdk_ledger(&sdk_unlimited); preallocation = true; expected = XR_XIR_INVOCATION_INVALID;
         if (!strcmp(mode, "foreign-sdk")) {
             manifest = read_input(manifest_path, &manifest_length);
@@ -236,10 +235,6 @@ static int run_test(int argc, char **argv) {
 #ifdef INVOCATION_INJECTED
     invocation_other_source = commands[1].source;
     if (!strcmp(mode, "profile-image")) profile_image_outside = true;
-    if (!strcmp(mode, "profile-post-local")) {
-        CHECK(snprintf(alternate_directory, sizeof(alternate_directory), "%s.local", argv[5]) > 0);
-        profile_post_redirect = alternate_directory;
-    }
     if (!strncmp(mode, "process-oom-", 12)) { invocation_process_fail = (unsigned)strtoul(mode + 12, NULL, 10); expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
     if (!strcmp(mode, "replay")) { invocation_tamper = 1; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH; }
     if (!strcmp(mode, "includes-replay")) { invocation_tamper = 2; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH; }
@@ -249,115 +244,24 @@ static int run_test(int argc, char **argv) {
         owner_tamper_write = !strcmp(mode, "launcher-race") ? 1 : 0; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH;
     }
 #endif
-    XrCompileResourceStats before_guard;
-    CHECK(xr_compile_resources_stats(resources, &before_guard) == XR_COMPILE_RESOURCE_OK);
-    XrXirNamespaceLimits guard_limits = {12, 4096, 64, 32768};
-    XrXirNamespace *guard = NULL;
-    XrXirInvocationRequest guard_input = admission_template;
-    guard_input.sdk = sdk;
-    for (unsigned i = 0; i < 2; ++i) guard_input.compile[i].process = processes[i];
-    guard_input.link = processes[2];
-    guard_input.input_directory = argv[7]; guard_input.output_directory = argv[14];
 #ifdef INVOCATION_INJECTED
-    if (!strcmp(mode, "positive") || !strcmp(mode, "constructor-admission")) profile_namespace_matrix(&guard_input, &guard_limits);
-    if (foreign) {
-        XrXirInvocationRequest reject = request; reject.namespace_owner = NULL;
-        size_t attempts = runtime_attempts;
-        XrXirNamespace *unchanged = NULL;
-        CHECK(xtc_xir_invocation_namespace_new(&reject, &guard_limits, &unchanged, NULL) == XR_XIR_INVOCATION_INVALID);
-        CHECK(!unchanged && runtime_attempts == attempts);
-    }
-#endif
-    XrXirInvocationDiagnostic guard_diagnostic = {0};
-    XrXirInvocationStatus guard_status = xtc_xir_invocation_namespace_new(&guard_input, &guard_limits, &guard, &guard_diagnostic);
-    printf("profile namespace status=%d domain=%d code=%d\n", guard_status, guard_diagnostic.domain, guard_diagnostic.code);
+    if (!strcmp(mode, "positive") || !strcmp(mode, "constructor-admission")) profile_derivation_matrix(&request);
     if (!strncmp(mode, "constructor-", 12)) {
         bool failure = strstr(mode, "-fail") != NULL;
-        CHECK(guard_status == (failure ? XR_XIR_INVOCATION_BUDGET : XR_XIR_INVOCATION_OK));
-        CHECK(failure ? guard == NULL : guard != NULL);
-        XrCompileResourceStats cost; CHECK(xr_compile_resources_stats(resources, &cost) == XR_COMPILE_RESOURCE_OK);
+        XrCompileResourceStats before_profile, cost;
+        CHECK(xr_compile_resources_stats(resources, &before_profile) == XR_COMPILE_RESOURCE_OK);
+        CHECK(profile_derive_status(&request) == (failure ? XR_XIR_INVOCATION_BUDGET : XR_XIR_INVOCATION_OK));
+        CHECK(xr_compile_resources_stats(resources, &cost) == XR_COMPILE_RESOURCE_OK);
+        CHECK(cost.live_bytes == before_profile.live_bytes);
         printf("constructor costs allocated=%llu peak=%llu work=%llu\n", (unsigned long long)cost.allocated_bytes,
             (unsigned long long)cost.peak_bytes, (unsigned long long)cost.work);
-#ifdef INVOCATION_INJECTED
-        if (!strcmp(mode, "constructor-interval")) {
-            for (uint32_t i = 0; i < xtc_xir_namespace_facts(guard)->root_count; ++i) {
-                const XrXirNamespaceRootFacts *root = xtc_xir_namespace_root(guard, i);
-                printf("interval-root scope=%u path=%s\n", (unsigned)root->scope, root->requested_path);
-            }
-            XrXirNamespaceStatus armed = xtc_xir_namespace_arm(guard);
-            printf("interval arm=%u phase=%u directories=%u\n", (unsigned)armed,
-                (unsigned)xtc_xir_namespace_phase(guard), xtc_xir_namespace_facts(guard)->directory_count);
-            for (unsigned i = 0; i < 3; ++i) {
-                if (i) Sleep(500);
-                XrXirNamespaceStatus checked = xtc_xir_namespace_check(guard);
-                printf("interval check=%u status=%u phase=%u\n", i, (unsigned)checked, (unsigned)xtc_xir_namespace_phase(guard));
-            }
-        }
-#endif
-        if (failure) CHECK(cost.live_bytes == before_guard.live_bytes);
         for (unsigned i = 0; i < 3; ++i) xtc_process_free(processes[i]);
         xr_compile_native_projection_owner_free(project); xr_xir_runtime_sdk_free(sdk);
         xr_compile_resources_release(resources); free(launcher); free(commands);
-        if (guard) {
-            CHECK(xtc_xir_namespace_facts(guard)->root_count == 12);
-            for (unsigned i = 0; i < 12; ++i) CHECK(xtc_xir_namespace_root(guard, i)->requested_path[0]);
-            XrXirNamespaceStatus closed = XR_XIR_NAMESPACE_PENDING;
-            for (unsigned attempt = 0; guard && attempt < 100; ++attempt) {
-                closed = xtc_xir_namespace_close(&guard, 100);
-                CHECK(closed == XR_XIR_NAMESPACE_OK || closed == XR_XIR_NAMESPACE_PENDING);
-            }
-            CHECK(closed == XR_XIR_NAMESPACE_OK && !guard);
-        }
         CHECK(!runtime_live && !runtime_bytes);
-        puts("constructor owns roots after all producers; exact resources and physical zero PASS"); return 0;
+        puts("profile derivation exact resources and physical zero PASS"); return 0;
     }
-    CHECK(guard_status == XR_XIR_INVOCATION_OK);
-    if (!strcmp(mode, "foreign-guard")) {
-        CHECK(xtc_xir_namespace_close(&guard, 100) == XR_XIR_NAMESPACE_OK);
-        foreign = sdk_ledger(&sdk_unlimited); expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
-        XrXirNamespaceRoot guard_root = {request.input_directory, XR_XIR_NAMESPACE_DIRECTORY};
-        XrXirNamespaceRequest guard_request = {&guard_root, 1, {1, 8, 8, 32768}};
-        CHECK(xtc_xir_namespace_new(foreign, &guard_request, &guard) == XR_XIR_NAMESPACE_OK);
-    }
-    if (!strcmp(mode, "profile-scope") || !strcmp(mode, "profile-missing-root") || !strcmp(mode, "profile-root")) {
-        XrXirNamespaceRoot roots[12];
-        for (unsigned i = 0; i < 12; ++i) {
-            const XrXirNamespaceRootFacts *fact = xtc_xir_namespace_root(guard, i);
-            roots[i] = (XrXirNamespaceRoot){fact->requested_path, fact->scope};
-        }
-        if (!strcmp(mode, "profile-scope")) roots[1].scope = XR_XIR_NAMESPACE_DIRECTORY;
-        if (!strcmp(mode, "profile-root")) roots[1].path = request.output_directory;
-        XrXirNamespaceRequest changed = {roots, !strcmp(mode, "profile-missing-root") ? 11u : 12u, guard_limits};
-        XrXirNamespace *replacement = NULL;
-        CHECK(xtc_xir_namespace_new(resources, &changed, &replacement) == XR_XIR_NAMESPACE_OK);
-        CHECK(xtc_xir_namespace_close(&guard, 0) == XR_XIR_NAMESPACE_OK); guard = replacement;
-    }
-    request.namespace_owner = guard;
-    if (!strcmp(mode, "null-guard")) {
-        request.namespace_owner = NULL; expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
-    } else if (!strcmp(mode, "armed-guard") || !strcmp(mode, "closing-guard") || !strcmp(mode, "failed-guard")) {
-        CHECK(xtc_xir_namespace_arm(guard) == XR_XIR_NAMESPACE_OK);
-        expected = XR_XIR_INVOCATION_INVALID; preallocation = true;
-#ifdef INVOCATION_INJECTED
-        if (!strcmp(mode, "failed-guard")) {
-            guard_input_path = request.input_directory; guard_change_directory();
-            CHECK(xtc_xir_namespace_check(guard) == XR_XIR_NAMESPACE_BROKEN);
-        }
-        if (!strcmp(mode, "closing-guard")) {
-            guard_hold_cancel = true;
-            CHECK(xtc_xir_namespace_close(&guard, 0) == XR_XIR_NAMESPACE_PENDING && guard && guard_cancel_holds);
-        }
-#endif
-    }
-#ifdef INVOCATION_INJECTED
     measure_report = request.link_report; measure_output = request.output;
-    guard_input_path = request.input_directory;
-    for (unsigned i = 0; i < 2; ++i) guard_source_paths[i] = commands[i].source;
-    if (!strcmp(mode, "guard-break")) { guard_break_check = 3; expected = XR_XIR_INVOCATION_BROKEN; }
-    if (!strcmp(mode, "guard-final-break")) { guard_break_check = 8; expected = XR_XIR_INVOCATION_BROKEN; }
-    if (!strcmp(mode, "guard-arm-oom")) { guard_arm_oom = true; expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
-    if (!strcmp(mode, "guard-check-budget")) { guard_check_budget = true; expected = XR_XIR_INVOCATION_BUDGET; }
-    if (!strcmp(mode, "guard-check-io")) { guard_check_io = true; expected = XR_XIR_INVOCATION_IO; }
 #endif
 #ifdef INVOCATION_INJECTED
     owner_allocation_count = 0; owner_compare_count = 0;
@@ -406,36 +310,13 @@ static int run_test(int argc, char **argv) {
         diagnostic.pass, diagnostic.domain, diagnostic.code, diagnostic.exit_code); fflush(stdout);
     CHECK(status == expected);
 #ifdef INVOCATION_INJECTED
-    printf("owner direct allocations=%zu comparisons=%zu attempted-runs=%u\n", owner_allocation_count, owner_prearm_comparisons, invocation_runs);
+    printf("owner direct allocations=%zu comparisons=%zu attempted-runs=%u\n", owner_allocation_count, owner_preexecution_comparisons, invocation_runs);
     printf("owner all-stage comparisons=%zu\n", owner_compare_count);
 #endif
     if (preallocation) CHECK(runtime_attempts == allocation_start && !memcmp(&before, &after_run, sizeof(before)));
-#ifdef INVOCATION_INJECTED
-    if (!strcmp(mode, "guard-pending")) {
-        CHECK(status == XR_XIR_INVOCATION_OK && owner && guard && guard_checks == 8);
-        XrCompileResourceStats retained, pending;
-        CHECK(xr_compile_resources_stats(resources, &retained) == XR_COMPILE_RESOURCE_OK);
-        guard_hold_cancel = true;
-        CHECK(xtc_xir_namespace_close(&guard, 0) == XR_XIR_NAMESPACE_PENDING && guard && guard_cancel_holds);
-        CHECK(xr_compile_resources_stats(resources, &pending) == XR_COMPILE_RESOURCE_OK);
-        CHECK(!memcmp(&retained, &pending, sizeof(retained)));
-        CHECK(xtc_xir_invocation_facts(owner)->completed_runs == 6);
-        CHECK(GetFileAttributesA(request.output) != INVALID_FILE_ATTRIBUTES);
-        puts("upper operation, output lease and directory retained through real PENDING PASS");
-    }
-    guard_hold_cancel = false;
-#endif
-    XrXirNamespaceStatus closed = XR_XIR_NAMESPACE_PENDING;
-    for (unsigned attempt = 0; guard && attempt < 100; ++attempt) {
-        closed = xtc_xir_namespace_close(&guard, 100);
-        CHECK(closed == XR_XIR_NAMESPACE_OK || closed == XR_XIR_NAMESPACE_PENDING);
-    }
-    CHECK(closed == XR_XIR_NAMESPACE_OK && !guard);
-    XrCompileResourceStats after_guard;
-    CHECK(xr_compile_resources_stats(resources, &after_guard) == XR_COMPILE_RESOURCE_OK);
     if (expected != XR_XIR_INVOCATION_OK) {
         if (!strcmp(mode, "occupied-out")) { CHECK(owner == (XrXirInvocation *)(uintptr_t)1); owner = NULL; }
-        CHECK(!owner && before_guard.live_bytes == after_guard.live_bytes);
+        CHECK(!owner && before.live_bytes == after_run.live_bytes);
 #ifdef INVOCATION_INJECTED
         if (!strncmp(mode, "profile-", 8)) {
             if (!strcmp(mode, "profile-header")) {
@@ -444,27 +325,11 @@ static int run_test(int argc, char **argv) {
                 CHECK(invocation_runs == 1 && diagnostic.stage == XR_XIR_INVOCATION_GENERATED && diagnostic.pass == XR_XIR_INVOCATION_OBSERVE);
             } else CHECK(!invocation_runs && diagnostic.pass == XR_XIR_INVOCATION_NO_PASS);
             if (!strcmp(mode, "profile-config") || !strcmp(mode, "profile-local") || !strcmp(mode, "profile-manifest") ||
-                !strcmp(mode, "profile-local-directory") || !strcmp(mode, "profile-post-local"))
+                !strcmp(mode, "profile-local-directory"))
                 CHECK(diagnostic.stage == XR_XIR_INVOCATION_GENERATED);
             if (!strcmp(mode, "profile-link-config")) CHECK(diagnostic.stage == XR_XIR_INVOCATION_LINK);
         }
-        if (!strcmp(mode, "guard-break") || !strcmp(mode, "guard-final-break")) {
-            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && diagnostic.code == XR_XIR_NAMESPACE_BROKEN);
-            CHECK(invocation_runs == (!strcmp(mode, "guard-break") ? 2u : 6u));
-            CHECK(guard_checks == guard_break_check);
-            CHECK(diagnostic.stage == (!strcmp(mode, "guard-break") ? XR_XIR_INVOCATION_GENERATED : XR_XIR_INVOCATION_NO_STAGE));
-            CHECK(diagnostic.pass == (!strcmp(mode, "guard-break") ? XR_XIR_INVOCATION_REPLAY : XR_XIR_INVOCATION_NO_PASS));
-        }
-        if (!strcmp(mode, "guard-check-budget") || !strcmp(mode, "guard-check-io")) {
-            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && !invocation_runs && guard_checks == 1);
-            CHECK(diagnostic.code == (!strcmp(mode, "guard-check-budget") ? XR_XIR_NAMESPACE_BUDGET : XR_XIR_NAMESPACE_IO));
-            CHECK(diagnostic.stage == XR_XIR_INVOCATION_NO_STAGE && diagnostic.pass == XR_XIR_INVOCATION_NO_PASS);
-        }
-        if (!strcmp(mode, "cancel")) CHECK(guard_checks == 1 && diagnostic.domain == XR_XIR_INVOCATION_PROCESS);
-        if (!strcmp(mode, "guard-arm-oom")) {
-            CHECK(diagnostic.domain == XR_XIR_INVOCATION_NAMESPACE && diagnostic.code == XR_XIR_NAMESPACE_OUT_OF_MEMORY);
-            CHECK(!invocation_runs && !guard_checks && diagnostic.stage == XR_XIR_INVOCATION_NO_STAGE);
-        }
+        if (!strcmp(mode, "cancel")) CHECK(diagnostic.domain == XR_XIR_INVOCATION_PROCESS);
 #endif
         if (!strcmp(mode, "bad-recipe")) CHECK(diagnostic.stage == XR_XIR_INVOCATION_GENERATED && diagnostic.pass == XR_XIR_INVOCATION_NO_PASS);
         if (!strcmp(mode, "child")) CHECK(diagnostic.stage == XR_XIR_INVOCATION_LAUNCHER && diagnostic.pass == XR_XIR_INVOCATION_OBSERVE && diagnostic.exit_code);
@@ -492,13 +357,13 @@ static int run_test(int argc, char **argv) {
     xr_compile_resources_release(resources);
     const XrXirInvocationFacts *facts = xtc_xir_invocation_facts(owner);
     const XrXirInvocationProviderFacts *provider = xtc_xir_invocation_provider(owner);
-    CHECK(provider && provider->compiler.path[0] && provider->linker.path[0]);
-    CHECK(provider->compiler.version.file_text[0] && provider->linker.version.file_text[0]);
+    CHECK(!owner || (provider && provider->compiler.path[0] && provider->linker.path[0] &&
+        provider->compiler.version.file_text[0] && provider->linker.version.file_text[0]));
     if (!owner) {
         CHECK(!runtime_live && !runtime_bytes); free(commands); printf("typed failure %s; unchanged output/live; physical heap zero PASS\n", mode); return 0;
     }
 #ifdef INVOCATION_INJECTED
-    CHECK(guard_checks == 8 && invocation_runs == 6);
+    CHECK(invocation_runs == 6);
 #endif
     CHECK(facts && facts->kind == XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS && facts->completed_runs == 6);
     CHECK(xtc_xir_invocation_resources(owner) == resources && !strcmp(facts->projection.prefix, "invocation_source"));

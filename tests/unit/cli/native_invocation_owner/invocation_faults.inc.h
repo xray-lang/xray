@@ -9,7 +9,6 @@
 static size_t profile_os_calls, profile_os_failure = SIZE_MAX;
 static DWORD profile_os_error = ERROR_ACCESS_DENIED;
 static bool profile_packaged;
-static const char *profile_post_redirect;
 static bool profile_os_enter(void) {
     if (profile_os_calls++ != profile_os_failure) return true;
     SetLastError(profile_os_error); return false;
@@ -27,75 +26,7 @@ static LONG WINAPI profile_package(UINT32 *size, PWSTR buffer) {
     if (!profile_os_enter()) return (LONG)profile_os_error;
     return profile_packaged ? ERROR_INSUFFICIENT_BUFFER : GetCurrentPackageFullName(size, buffer);
 }
-/* A retained real pending kernel request exercises the upper owner boundary. */
-static bool guard_hold_cancel, guard_fail_result;
-static unsigned guard_cancel_holds;
-static BOOL WINAPI guard_cancel(HANDLE handle, LPOVERLAPPED overlapped) {
-    if (guard_hold_cancel) { ++guard_cancel_holds; SetLastError(ERROR_NOT_FOUND); return FALSE; }
-    return CancelIoEx(handle, overlapped);
-}
-static BOOL WINAPI guard_result(HANDLE handle, LPOVERLAPPED overlapped, LPDWORD bytes, BOOL wait);
-#define GetOverlappedResult guard_result
-#define CancelIoEx guard_cancel
-#include "app/toolchain/xtc_xir_namespace.c"
-#undef CancelIoEx
-#undef GetOverlappedResult
-static BOOL WINAPI guard_result(HANDLE handle, LPOVERLAPPED overlapped, LPDWORD bytes, BOOL wait) {
-    if (guard_fail_result) { guard_fail_result = false; SetLastError(ERROR_ACCESS_DENIED); return FALSE; }
-    BOOL result = GetOverlappedResult(handle, overlapped, bytes, wait);
-    if (result && !wait) {
-        NamespaceDirectory *node = (NamespaceDirectory *)((char *)overlapped - offsetof(NamespaceDirectory, overlapped));
-        FILETIME now; GetSystemTimeAsFileTime(&now);
-        ULARGE_INTEGER timestamp; timestamp.LowPart = now.dwLowDateTime; timestamp.HighPart = now.dwHighDateTime;
-        fprintf(stderr, "completed namespace utc100ns=%llu bytes=%lu original=%lu new=%lu flags=%lu access=%lu share=%u path=%s\n",
-            (unsigned long long)timestamp.QuadPart, (unsigned long)*bytes,
-            (unsigned long)node->output.OriginalOplockLevel, (unsigned long)node->output.NewOplockLevel,
-            (unsigned long)node->output.Flags, (unsigned long)node->output.AccessMode,
-            (unsigned)node->output.ShareMode, node->facts.path);
-    }
-    return result;
-}
-
-static unsigned guard_checks, guard_break_check;
-static size_t owner_compare_count, owner_prearm_comparisons, owner_compare_fail = SIZE_MAX;
-static bool guard_arm_oom, guard_check_budget, guard_check_io;
-static const char *guard_input_path, *guard_source_paths[2];
-static void guard_change_directory(void) {
-    char path[32768]; CHECK(snprintf(path, sizeof(path), "%s/actual-namespace-change", guard_input_path) > 0);
-    HANDLE file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-    CHECK(file != INVALID_HANDLE_VALUE && CloseHandle(file) && DeleteFileA(path));
-}
-static XrXirNamespaceStatus guard_arm(XrXirNamespace *owner) {
-    owner_prearm_comparisons = owner_compare_count;
-    CHECK(xtc_xir_namespace_phase(owner) == XR_XIR_NAMESPACE_NEW);
-    for (unsigned i = 0; i < 2; ++i) {
-        CHECK(GetFileAttributesA(guard_source_paths[i]) != INVALID_FILE_ATTRIBUTES);
-        HANDLE file = CreateFileA(guard_source_paths[i], GENERIC_WRITE, FILE_SHARE_READ,
-            NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        CHECK(file == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
-    }
-    if (guard_arm_oom) runtime_fail_at = runtime_attempts;
-    XrXirNamespaceStatus status = xtc_xir_namespace_arm(owner);
-    runtime_fail_at = SIZE_MAX;
-    if (status == XR_XIR_NAMESPACE_OK && profile_post_redirect) {
-        FILE *file = fopen(profile_post_redirect, "wb"); CHECK(file);
-        CHECK(fputs("redirect", file) >= 0 && !fclose(file));
-    }
-    return status;
-}
-static XrXirNamespaceStatus guard_check(XrXirNamespace *owner) {
-    ++guard_checks;
-    if (guard_check_budget) {
-        XrCompileResourceStats stats;
-        XrCompileResources *resources = xtc_xir_namespace_resources(owner);
-        CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        CHECK(xr_compile_resources_work(resources, UINT64_MAX - stats.work) == XR_COMPILE_RESOURCE_OK);
-    }
-    if (guard_check_io) guard_fail_result = true;
-    if (guard_checks == guard_break_check) guard_change_directory();
-    return xtc_xir_namespace_check(owner);
-}
+static size_t owner_compare_count, owner_preexecution_comparisons, owner_compare_fail = SIZE_MAX;
 static size_t owner_allocation_count, owner_allocation_fail = SIZE_MAX;
 static DWORD owner_compare_error = ERROR_ACCESS_DENIED;
 static unsigned invocation_runs, invocation_process_fail = UINT_MAX;
@@ -254,6 +185,7 @@ static XrXirTargetStatus owner_seal(XrXirImageCollector *images) {
 static XrProcessStatus owner_run(const XrToolchainProcess *process, XrProcessCancelled cancel,
     void *context, XrProcessResult *output) {
     unsigned run = invocation_runs++;
+    if (!run) owner_preexecution_comparisons = owner_compare_count;
     XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(xtc_process_resources(process), &before) == XR_COMPILE_RESOURCE_OK);
     ULONGLONG started = GetTickCount64(); size_t allocations = runtime_attempts;
@@ -278,7 +210,6 @@ static XrProcessStatus owner_run(const XrToolchainProcess *process, XrProcessCan
 }
 static unsigned provider_reads, provider_read_oom = UINT_MAX, provider_corrupt = UINT_MAX;
 static uint64_t provider_read_before[2], provider_read_after[2];
-static const char *provider_change_root;
 static XrXirTargetStatus provider_read(XrXirImageCollector *images, uint32_t index,
     size_t limit, void **bytes, size_t *length) {
     unsigned call = provider_reads++;
@@ -297,11 +228,6 @@ static XrXirTargetStatus provider_read(XrXirImageCollector *images, uint32_t ind
          * it is not presented as a changed or authorized executable image. */
         CHECK(*length); ((uint8_t *)*bytes)[0] = 0;
     }
-    if (status == XR_XIR_TARGET_OK && call == 1 && provider_change_root) {
-        char path[32768]; CHECK(snprintf(path, sizeof(path), "%s/changed-after-provider-read", provider_change_root) > 0);
-        HANDLE file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-        CHECK(file != INVALID_HANDLE_VALUE && CloseHandle(file));
-    }
     return status;
 }
 #define xtc_xir_images_read provider_read
@@ -313,8 +239,6 @@ static XrXirTargetStatus provider_read(XrXirImageCollector *images, uint32_t ind
 #define xr_os_io_write_new_file_sync owner_write
 #define xtc_xir_images_seal owner_seal
 #define xtc_xir_file_lease_open owner_open
-#define xtc_xir_namespace_arm guard_arm
-#define xtc_xir_namespace_check guard_check
 #define GetWindowsDirectoryW profile_windows_directory
 #define GetSystemDirectoryW profile_system_directory
 #define GetDllDirectoryW profile_dll_directory
@@ -333,8 +257,6 @@ static XrXirTargetStatus provider_read(XrXirImageCollector *images, uint32_t ind
 #undef xr_os_io_write_new_file_sync
 #undef xtc_xir_images_seal
 #undef xtc_xir_file_lease_open
-#undef xtc_xir_namespace_arm
-#undef xtc_xir_namespace_check
 
 static bool owner_record_transaction(const char *path, const XrCompileResourceLimits *limits,
     XrCompileResourceStats *stats) {
@@ -459,14 +381,7 @@ static bool provider_transaction(const char *compiler, const char *linker,
     }
     if (scenario == 3) owner->commands[0].executable = linker;
     if (scenario == 4) owner->limits.artifact_bytes = xtc_xir_images_file(owner->images[0], 0)->length - 1;
-    XrXirNamespace *guard = NULL;
-    if (scenario == 9) {
-        XrXirNamespaceRoot root = {provider_change_root, XR_XIR_NAMESPACE_DIRECTORY};
-        XrXirNamespaceRequest request = {&root, 1, {1, 8, 4, 32767}};
-        CHECK(xtc_xir_namespace_new(resources, &request, &guard) == XR_XIR_NAMESPACE_OK);
-        CHECK(xtc_xir_namespace_arm(guard) == XR_XIR_NAMESPACE_OK);
-        CHECK(xtc_xir_namespace_check(guard) == XR_XIR_NAMESPACE_OK);
-    }
+
     XrXirInvocationProviderFacts unchanged;
     memset(&owner->provider, 0xa5, sizeof(owner->provider)); unchanged = owner->provider;
     provider_reads = 0;
@@ -498,13 +413,7 @@ static bool provider_transaction(const char *compiler, const char *linker,
         CHECK(!memcmp(&owner->provider, &unchanged, sizeof(unchanged)));
         if (!scenario) CHECK(owner->status == XR_XIR_INVOCATION_BUDGET);
     }
-    if (scenario == 9) {
-        CHECK(okay && provider_reads == 2);
-        CHECK(!invocation_namespace(owner, xtc_xir_namespace_check(guard)) && owner->status == XR_XIR_INVOCATION_BROKEN);
-        XrXirNamespaceStatus status = XR_XIR_NAMESPACE_PENDING;
-        for (unsigned i = 0; guard && i < 100; ++i) status = xtc_xir_namespace_close(&guard, 100);
-        CHECK(status == XR_XIR_NAMESPACE_OK && !guard);
-    }
+
     CHECK(xr_compile_resources_stats(resources, cost) == XR_COMPILE_RESOURCE_OK);
     XrXirInvocationProviderFacts saved = owner->provider;
     xr_compile_resources_release(resources);
@@ -541,16 +450,8 @@ static int owner_provider_suite(const char *compiler, const char *linker) {
     for (unsigned scenario = 1; scenario <= 8; ++scenario) {
         XrCompileResourceStats actual; CHECK(!provider_transaction(compiler, linker, &sdk_unlimited, scenario, &actual));
     }
-    char temporary[MAX_PATH], directory[MAX_PATH], child[32768];
-    CHECK(GetTempPathA(MAX_PATH, temporary) && GetTempFileNameA(temporary, "xpv", 0, directory));
-    CHECK(DeleteFileA(directory) && CreateDirectoryA(directory, NULL));
-    provider_change_root = directory;
-    XrCompileResourceStats actual;
-    CHECK(provider_transaction(compiler, linker, &sdk_unlimited, 9, &actual));
-    CHECK(snprintf(child, sizeof(child), "%s/changed-after-provider-read", directory) > 0);
-    CHECK(DeleteFileA(child) && RemoveDirectoryA(directory)); provider_change_root = NULL;
     CHECK(GetProcessHandleCount(GetCurrentProcess(), &after) && after == handles);
-    printf("provider-only real leases/PE/read OOM/three-axis exact-minus1/bad matches/post-read namespace break: heap=0 handles=%lu/%lu PASS\n",
+    printf("provider-only real leases/PE/read OOM/three-axis exact-minus1/bad matches: heap=0 handles=%lu/%lu PASS\n",
         (unsigned long)handles, (unsigned long)after);
     return 0;
 }

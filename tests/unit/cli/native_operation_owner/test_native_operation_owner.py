@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='xray-native-operation-') as temporary:
     assert marker.read_bytes() == b'preserve unrelated workspace-parent entry'
     assert not any(p.name.startswith('xray-') for p in parent.iterdir()), list(parent.iterdir())
     if result.returncode:
-        # Natural BROKEN stays a failed transaction; no retries or acceptance.
+        # Preserve the first failed transaction without retry.
         raise SystemExit(result.returncode)
     if mode == 'native':
         native = subprocess.run([str(parent / 'export.exe')], capture_output=True, timeout=30)

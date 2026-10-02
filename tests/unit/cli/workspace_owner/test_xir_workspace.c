@@ -7,7 +7,6 @@
  * test_xir_workspace.c - Partial creations, private descendants and cleanup
  */
 #include "app/toolchain/xtc_xir_workspace.h"
-#include "app/toolchain/xtc_xir_namespace.h"
 #include <windows.h>
 #include <winternl.h>
 #include <bcrypt.h>
@@ -184,21 +183,6 @@ static void cumulative(const char *parent) {
     xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
     puts("two successive owners consume the original cumulative ledger PASS");
 }
-static void guard_coexistence(const char *parent) {
-    XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XtcXirWorkspace *owner = NULL;
-    XtcXirWorkspaceRequest request = request_for(parent);
-    CHECK(xtc_xir_workspace_new(resources, &request, &owner) == XTC_XIR_WORKSPACE_OK);
-    CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK);
-    XrXirNamespaceRoot root = {xtc_xir_workspace_paths(owner)->input, XR_XIR_NAMESPACE_DIRECTORY};
-    XrXirNamespaceRequest guard_request = {&root, 1, {1, 1, 0, 4096}}; XrXirNamespace *guard = NULL;
-    CHECK(xtc_xir_namespace_new(resources, &guard_request, &guard) == XR_XIR_NAMESPACE_OK);
-    CHECK(xtc_xir_namespace_arm(guard) == XR_XIR_NAMESPACE_OK);
-    CHECK(xtc_xir_namespace_check(guard) == XR_XIR_NAMESPACE_OK);
-    XrXirNamespaceStatus closed;
-    do { closed = xtc_xir_namespace_close(&guard, 1); } while (closed == XR_XIR_NAMESPACE_PENDING);
-    CHECK(closed == XR_XIR_NAMESPACE_OK && !guard); drain(&owner, 3);
-    xr_compile_resources_release(resources); CHECK(!runtime_live);
-}
 #ifndef WORKSPACE_PRODUCTION
 static void release_running_leases(XtcXirWorkspace *owner) {
     for (unsigned i = 0; i < 3; ++i) {
@@ -248,6 +232,12 @@ static void replacement(const char *parent, unsigned which) {
     char moved[8192], marker[8192]; CHECK(sprintf_s(moved, sizeof(moved), "%s-moved", original) > 0);
     release_running_leases(owner);
     if (which == 0) {
+        CHECK(owner->nodes[0].created && owner->nodes[0].anchor);
+        char child[8192], renamed[8192];
+        path_join(child, sizeof(child), original, "owned-child.txt");
+        path_join(renamed, sizeof(renamed), original, "renamed-child.txt");
+        write_file(child, "private child writes and renames remain legal\n");
+        CHECK(MoveFileA(child, renamed));
         CHECK(!MoveFileA(original, moved) && GetLastError() == ERROR_SHARING_VIOLATION);
         corrupt_identity = true;
         CHECK(xtc_xir_workspace_close(&owner, 1000) == XTC_XIR_WORKSPACE_IDENTITY_MISMATCH);
@@ -382,12 +372,19 @@ static void os_matrix(const char *parent) {
 int main(int argc, char **argv) {
     CHECK(argc == 2 || argc == 3); DWORD before = native_random_boundary();
     if (argc == 3) {
+#ifndef WORKSPACE_PRODUCTION
+        if (!strcmp(argv[2], "--anchor-only")) {
+            for (unsigned i = 0; i < 3; ++i) replacement(argv[1], i);
+            reparse_refusal(argv[1]); root_reparse_refusal(argv[1]); fixed_identity_retry(argv[1]);
+            CHECK(handle_count() == before && !runtime_live && !runtime_bytes && !owner_handle_count);
+            puts("root pin/child rename/replacement/reparse/close-one-step retry physical zero PASS"); return 0;
+        }
+#endif
         CHECK(!strcmp(argv[2], "--compiler")); compiler_transaction(argv[1]);
         CHECK(handle_count() == before); return 0;
     }
     printf("initial handles=%lu\n", before);
     basics(argv[1]); printf("after basics handles=%lu\n", handle_count());
-    guard_coexistence(argv[1]); printf("after guard handles=%lu\n", handle_count());
     arguments_and_depth(argv[1]); cumulative(argv[1]);
     resources_matrix(argv[1]);
     printf("after resources handles=%lu\n", handle_count());

@@ -23,7 +23,7 @@ foreach(item src/xir/xray_xir_source_product src/xir/xray_xir_source src/xir/xra
     src/toolchain/xray_xir_native_projection src/toolchain/xray_xir_native_artifact
     src/toolchain/xray_toolchain_binding src/toolchain/xray_xir_runtime_sdk
     src/base/xray_json_cursor xray_xir_target xray_toolchain_dependencies xray_toolchain_process
-    xray_xir_workspace)
+    xray_xir_workspace xray_xir_pe_version)
     get_filename_component(name "${item}" NAME)
     set(path "${OPERATION_SOURCE_BUILD}/${item}.lib")
     if(NOT EXISTS "${path}")
@@ -33,11 +33,9 @@ foreach(item src/xir/xray_xir_source_product src/xir/xray_xir_source src/xir/xra
     set_target_properties(${name} PROPERTIES IMPORTED_LOCATION "${path}")
     list(APPEND operation_libraries ${name})
 endforeach()
-# Profile is a frozen uncommitted producer. Compile its exact current bytes,
-# rather than silently linking the older formal invocation archive.
+# Compile the current composition and invocation against qualified dependencies.
 add_library(operation_dependencies STATIC
-    "${XR_ROOT}/src/app/toolchain/xtc_xir_invocation.c"
-    "${XR_ROOT}/src/app/toolchain/xtc_xir_namespace.c")
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_invocation.c")
 target_link_libraries(operation_dependencies PUBLIC ${operation_libraries} ntdll bcrypt)
 add_library(operation_production STATIC "${XR_ROOT}/src/app/toolchain/xtc_xir_native_operation.c")
 target_link_libraries(operation_production PUBLIC operation_dependencies)
@@ -50,7 +48,7 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_program(OPERATION_MSVC NAMES cl REQUIRED)
 find_program(OPERATION_LINKER NAMES link REQUIRED)
 enable_testing()
-foreach(mode unit prearm native)
+foreach(mode unit preflight native)
     if(mode STREQUAL "native")
         set(executable test_native_operation_owner)
     else()

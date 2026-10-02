@@ -33,7 +33,7 @@ static NTSTATUS workspace_named_open(HANDLE parent, const wchar_t *name, USHORT 
     attributes.Length = sizeof(attributes); attributes.RootDirectory = parent;
     attributes.ObjectName = &text; attributes.Attributes = OBJ_CASE_INSENSITIVE;
     IO_STATUS_BLOCK result = {0}; HANDLE handle = NULL;
-    ULONG share = disposition == FILE_CREATE ? FILE_SHARE_READ :
+    ULONG share = disposition == FILE_CREATE ? FILE_SHARE_READ | FILE_SHARE_WRITE :
         access & DELETE ? FILE_SHARE_READ | FILE_SHARE_WRITE : FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
     ULONG options = FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT;
     if (disposition == FILE_CREATE) options |= FILE_DIRECTORY_FILE;
@@ -151,9 +151,14 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
         if (!workspace_work(owner, sizeof(identity) * 2)) return owner->diagnostic.status;
         if (facts->volume != node->identity.VolumeSerialNumber || memcmp(facts->file_id, node->identity.FileId.Identifier, 16))
             return workspace_fail(owner, XTC_XIR_WORKSPACE_IDENTITY_MISMATCH, 0);
-        if (!workspace_work(owner, 1)) return owner->diagnostic.status;
-        if (!CloseHandle(node->created)) return workspace_error(owner, GetLastError());
-        node->created = NULL;
+        /* Retain the root's original no-delete handle until cleanup. The
+         * independent anchor permits the later identity-checked DELETE open;
+         * it alone does not prevent renaming this private root. */
+        if (i) {
+            if (!workspace_work(owner, 1)) return owner->diagnostic.status;
+            if (!CloseHandle(node->created)) return workspace_error(owner, GetLastError());
+            node->created = NULL;
+        }
     }
     return XTC_XIR_WORKSPACE_OK;
 }

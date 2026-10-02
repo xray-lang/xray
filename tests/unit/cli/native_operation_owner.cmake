@@ -20,7 +20,7 @@ target_compile_definitions(test_native_operation_faults PRIVATE OPERATION_INJECT
 target_link_libraries(test_native_operation_faults PRIVATE xray_xir_invocation xray_xir_workspace bcrypt)
 find_program(XIR_OPERATION_MSVC NAMES cl REQUIRED)
 find_program(XIR_OPERATION_LINKER NAMES link REQUIRED)
-foreach(mode unit prearm native)
+foreach(mode unit preflight native)
     if(mode STREQUAL "native")
         set(binary test_native_operation_owner)
     else()

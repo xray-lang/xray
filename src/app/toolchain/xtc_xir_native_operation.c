@@ -18,7 +18,6 @@ struct XtcXirNativeOperation {
     XrXirInvocationStage stage;
     XtcXirNativeOperationDiagnostic first, cleanup;
     XtcXirWorkspace *workspace;
-    XrXirNamespace *guard;
     XrXirInvocation *invocation;
     XrToolchainProcess *processes[3];
     XtcXirFileLease *launcher_lease;
@@ -30,7 +29,7 @@ struct XtcXirNativeOperation {
 static XtcXirNativeOperationDiagnostic native_diagnostic(XtcXirNativeOperationStatus status,
     XtcXirNativeOperationDomain domain, int code, uint32_t error) {
     XtcXirNativeOperationDiagnostic result = {status, domain, code, error,
-        {XR_XIR_INVOCATION_NO_STAGE, XR_XIR_INVOCATION_NO_PASS, XR_XIR_INVOCATION_SELF, 0, 0}, {0}};
+        {XR_XIR_INVOCATION_NO_STAGE, XR_XIR_INVOCATION_NO_PASS, XR_XIR_INVOCATION_SELF, 0, 0}};
     return result;
 }
 static XtcXirNativeOperationStatus native_fail(XtcXirNativeOperation *owner,
@@ -70,19 +69,6 @@ static XtcXirNativeOperationStatus native_workspace_status(XtcXirWorkspaceStatus
         default: return XTC_XIR_NATIVE_INVALID;
     }
 }
-static XtcXirNativeOperationStatus native_namespace_status(XrXirNamespaceStatus status) {
-    switch (status) {
-        case XR_XIR_NAMESPACE_OK: return XTC_XIR_NATIVE_OK;
-        case XR_XIR_NAMESPACE_UNRESOLVED: return XTC_XIR_NATIVE_UNRESOLVED;
-        case XR_XIR_NAMESPACE_UNSUPPORTED: return XTC_XIR_NATIVE_UNSUPPORTED;
-        case XR_XIR_NAMESPACE_BUDGET: return XTC_XIR_NATIVE_BUDGET;
-        case XR_XIR_NAMESPACE_OUT_OF_MEMORY: return XTC_XIR_NATIVE_OUT_OF_MEMORY;
-        case XR_XIR_NAMESPACE_IO: return XTC_XIR_NATIVE_IO;
-        case XR_XIR_NAMESPACE_BROKEN: return XTC_XIR_NATIVE_BROKEN;
-        case XR_XIR_NAMESPACE_PENDING: return XTC_XIR_NATIVE_PENDING;
-        default: return XTC_XIR_NATIVE_INVALID;
-    }
-}
 static XtcXirNativeOperationStatus native_invocation_status(XrXirInvocationStatus status) {
     switch (status) {
         case XR_XIR_INVOCATION_OK: return XTC_XIR_NATIVE_OK;
@@ -95,7 +81,6 @@ static XtcXirNativeOperationStatus native_invocation_status(XrXirInvocationStatu
         case XR_XIR_INVOCATION_CANCELLED: return XTC_XIR_NATIVE_CANCELLED;
         case XR_XIR_INVOCATION_CHILD_FAILED: return XTC_XIR_NATIVE_CHILD_FAILED;
         case XR_XIR_INVOCATION_REPLAY_MISMATCH: return XTC_XIR_NATIVE_REPLAY_MISMATCH;
-        case XR_XIR_INVOCATION_BROKEN: return XTC_XIR_NATIVE_BROKEN;
         default: return XTC_XIR_NATIVE_INVALID;
     }
 }
@@ -105,7 +90,6 @@ static bool native_invocation(XtcXirNativeOperation *owner, XrXirInvocationStatu
     if (owner->first.status == XTC_XIR_NATIVE_OK) {
         native_fail(owner, native_invocation_status(status), XTC_XIR_NATIVE_INVOCATION, status);
         owner->first.invocation = *diagnostic;
-        if (owner->guard) owner->first.namespace_diagnostic = *xtc_xir_namespace_diagnostic(owner->guard);
     }
     return false;
 }
@@ -289,8 +273,6 @@ static void native_release_inputs(XtcXirNativeOperation *owner) {
 XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_new(XrCompileResources *resources,
     const XtcXirWorkspaceRequest *workspace, const XtcXirNativeOperationLimits *limits, XtcXirNativeOperation **output) {
     if (!resources || !workspace || !limits || !output || *output ||
-        !limits->namespace_limits.roots || !limits->namespace_limits.directories ||
-        !limits->namespace_limits.depth || !limits->namespace_limits.path_bytes ||
         !limits->invocation.dependencies.frame_bytes || !limits->invocation.dependencies.path_bytes ||
         !limits->invocation.dependencies.records || !limits->invocation.artifact_bytes ||
         !limits->invocation.files || !limits->timeout_ms || !limits->process_output_bytes)
@@ -309,8 +291,8 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_new(XrCompileResour
     *output = owner; return XTC_XIR_NATIVE_OK;
 }
 XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_run(XtcXirNativeOperation *owner,
-    const XtcXirNativeOperationRequest *request, uint32_t drain_wait_ms) {
-    if (!owner || owner->phase != XTC_XIR_NATIVE_NEW || drain_wait_ms == UINT32_MAX) return XTC_XIR_NATIVE_INVALID;
+    const XtcXirNativeOperationRequest *request) {
+    if (!owner || owner->phase != XTC_XIR_NATIVE_NEW) return XTC_XIR_NATIVE_INVALID;
     const XrXirCompileContext *context = request ? xr_compile_native_projection_context(request->projection) : NULL;
     if (!request || !context || context->resources != owner->resources ||
         xr_xir_runtime_sdk_resources(request->sdk) != owner->resources || !request->compiler || !request->linker ||
@@ -344,48 +326,19 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_run(XtcXirNativeOpe
     invoke.libraries = request->libraries; invoke.library_count = request->library_count;
     invoke.limits = owner->limits.invocation; invoke.cancelled = request->cancelled; invoke.cancel_context = request->cancel_context;
     XrXirInvocationDiagnostic diagnostic;
-    XrXirInvocationStatus status = xtc_xir_invocation_namespace_new(&invoke, &owner->limits.namespace_limits, &owner->guard, &diagnostic);
-    if (!native_invocation(owner, status, &diagnostic)) return owner->first.status;
-    invoke.namespace_owner = owner->guard;
-    status = xtc_xir_invocation_run(&invoke, &owner->invocation, &diagnostic);
+    XrXirInvocationStatus status = xtc_xir_invocation_run(&invoke, &owner->invocation, &diagnostic);
     if (!native_invocation(owner, status, &diagnostic)) return owner->first.status;
     owner->stage = XR_XIR_INVOCATION_NO_STAGE;
-    owner->phase = XTC_XIR_NATIVE_DRAINING;
-    return xtc_xir_native_operation_drain(owner, drain_wait_ms);
-}
-static XtcXirNativeOperationStatus native_guard_close(XtcXirNativeOperation *owner, uint32_t wait_ms) {
-    XrXirNamespaceDiagnostic first = {0};
-    if (owner->guard) first = *xtc_xir_namespace_diagnostic(owner->guard);
-    XrXirNamespaceStatus status = xtc_xir_namespace_close(&owner->guard, wait_ms);
-    if (owner->guard) first = *xtc_xir_namespace_diagnostic(owner->guard);
-    owner->cleanup = native_diagnostic(native_namespace_status(status), XTC_XIR_NATIVE_NAMESPACE, status, first.os_error);
-    owner->cleanup.namespace_diagnostic = first;
-    if (first.status != XR_XIR_NAMESPACE_OK) {
-        owner->cleanup.code = first.status;
-        if (owner->phase == XTC_XIR_NATIVE_DRAINING) {
-            native_fail(owner, native_namespace_status(first.status), XTC_XIR_NATIVE_NAMESPACE, first.status);
-            owner->first.namespace_diagnostic = first;
-            owner->first.os_error = first.os_error;
-        }
-    }
-    return owner->cleanup.status;
-}
-XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_drain(XtcXirNativeOperation *owner, uint32_t wait_ms) {
-    if (!owner || owner->phase != XTC_XIR_NATIVE_DRAINING || wait_ms == UINT32_MAX) return XTC_XIR_NATIVE_INVALID;
-    XtcXirNativeOperationStatus status = native_guard_close(owner, wait_ms);
-    if (owner->first.status != XTC_XIR_NATIVE_OK) return owner->first.status;
-    if (status == XTC_XIR_NATIVE_OK) owner->phase = XTC_XIR_NATIVE_READY;
-    return status;
+    owner->phase = XTC_XIR_NATIVE_READY;
+    return XTC_XIR_NATIVE_OK;
 }
 XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_close(XtcXirNativeOperation **slot,
-    uint32_t wait_ms, uint32_t workspace_steps) {
-    if (!slot || wait_ms == UINT32_MAX || !workspace_steps) return XTC_XIR_NATIVE_INVALID;
+    uint32_t workspace_steps) {
+    if (!slot || !workspace_steps) return XTC_XIR_NATIVE_INVALID;
     XtcXirNativeOperation *owner = *slot;
     if (!owner) return XTC_XIR_NATIVE_OK;
     if (owner->phase == XTC_XIR_NATIVE_RUNNING) return XTC_XIR_NATIVE_INVALID;
     owner->phase = XTC_XIR_NATIVE_CLOSING;
-    XtcXirNativeOperationStatus drained = native_guard_close(owner, wait_ms);
-    if (drained != XTC_XIR_NATIVE_OK) return drained;
     native_release_inputs(owner);
     XtcXirWorkspaceStatus status = xtc_xir_workspace_close(&owner->workspace, workspace_steps);
     uint32_t error = owner->workspace ? xtc_xir_workspace_diagnostic(owner->workspace)->os_error : 0;
@@ -414,7 +367,3 @@ XR_FUNC XrCompileResources *xtc_xir_native_operation_resources(const XtcXirNativ
 XR_FUNC XtcXirNativeOperationPhase xtc_xir_native_operation_phase(const XtcXirNativeOperation *owner) { return owner ? owner->phase : XTC_XIR_NATIVE_FAILED; }
 XR_FUNC const XtcXirNativeOperationDiagnostic *xtc_xir_native_operation_diagnostic(const XtcXirNativeOperation *owner) { return owner ? &owner->first : NULL; }
 XR_FUNC const XtcXirNativeOperationDiagnostic *xtc_xir_native_operation_cleanup_diagnostic(const XtcXirNativeOperation *owner) { return owner ? &owner->cleanup : NULL; }
-XR_FUNC const XrXirNamespaceDirectoryFacts *xtc_xir_native_operation_namespace_directory(
-    const XtcXirNativeOperation *owner, uint32_t index) {
-    return owner && owner->guard ? xtc_xir_namespace_directory(owner->guard, index) : NULL;
-}
