@@ -30,25 +30,29 @@ typedef struct XrXirTargetDependency {
 typedef struct XrXirTargetEnvironment {
     const char *key, *value;
 } XrXirTargetEnvironment;
-typedef struct XrXirTargetCommand {
-    const char *cwd;
+typedef struct XrXirTargetCommandFacts {
+    const char *executable, *cwd;
     const char *const *argv;
     uint32_t argc;
     const XrXirTargetEnvironment *environment;
     uint32_t environment_count;
-} XrXirTargetCommand;
+    uint32_t timeout_ms;
+    uint64_t output_limit;
+    /* Stable descriptive values: 0 = NONE, 1 = WINDOWS_TREE. No callback. */
+    uint32_t image_mode;
+} XrXirTargetCommandFacts;
 struct XrXirImageCollector;
-typedef struct XrXirTargetRequest {
+typedef struct XrXirTargetSnapshotRequest {
     XrCompileResources *resources;
     const char *triple;
     /* Descriptive neutral IDs: Clang=1, GCC=2, MSVC=3, Zig=4; MT=1, MD=2. */
     uint32_t provider, crt, dialect;
     const XrXirTargetDependency *files;
     uint32_t file_count;
-    const XrXirTargetCommand *commands;
+    const XrXirTargetCommandFacts *commands;
     uint32_t command_count;
     const struct XrXirImageCollector *images;
-} XrXirTargetRequest;
+} XrXirTargetSnapshotRequest;
 typedef struct XrXirTargetFile {
     const char *path;
     uint32_t kind;
@@ -63,13 +67,16 @@ typedef struct XrXirTargetFacts {
 typedef struct XrXirTargetSnapshot XrXirTargetSnapshot;
 /* Output must be empty and remains unchanged on failure. No executable target
  * authority is issued. Commands describe explicit inputs, without inheriting
- * this process's environment. Keys are nonempty UTF-8; '=' is allowed only as
+ * this process's environment. Executable and cwd must be absolute drive paths,
+ * independently owned and valid UTF-8; no existence check is performed.
+ * Timeout is nonzero and 0 < output_limit < SIZE_MAX. No evidence of execution
+ * or prepared-process provenance is inferred from these descriptions. Keys are nonempty UTF-8; '=' is allowed only as
  * a leading system-reserved marker followed by a nonempty key. Windows keys
  * are unique under UTF-16 ordinal case-insensitive comparison. */
-XR_FUNC XrXirTargetStatus xtc_xir_target_capture(const XrXirTargetRequest *request,
+XR_FUNC XrXirTargetStatus xtc_xir_target_snapshot_capture(const XrXirTargetSnapshotRequest *request,
     XrXirTargetSnapshot **output);
 XR_FUNC const XrXirTargetFacts *xtc_xir_target_facts(const XrXirTargetSnapshot *snapshot);
 XR_FUNC const XrXirTargetFile *xtc_xir_target_file(const XrXirTargetSnapshot *snapshot, uint32_t index);
-XR_FUNC const XrXirTargetCommand *xtc_xir_target_command(const XrXirTargetSnapshot *snapshot, uint32_t index);
+XR_FUNC const XrXirTargetCommandFacts *xtc_xir_target_command_facts(const XrXirTargetSnapshot *snapshot, uint32_t index);
 XR_FUNC void xtc_xir_target_free(XrXirTargetSnapshot *snapshot);
 #endif // XTC_XIR_TARGET_H

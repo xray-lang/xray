@@ -34,7 +34,7 @@ struct XrXirTargetSnapshot {
     XrXirTargetStatus status;
     XrXirTargetFacts facts;
     XrXirTargetFile *files;
-    XrXirTargetCommand *commands;
+    XrXirTargetCommandFacts *commands;
     XtcXirMemory *memory;
     XtcXirLock *locks;
     wchar_t *scratch;
@@ -61,7 +61,7 @@ XR_FUNC void *xtc_xir_target_allocate(XrXirTargetSnapshot *snapshot, size_t byte
 XR_FUNC char *xtc_xir_target_text(XrXirTargetSnapshot *snapshot, const char *text);
 XR_FUNC bool xtc_xir_target_length(XrXirTargetSnapshot *snapshot, const char *text, size_t *length);
 XR_FUNC bool xtc_xir_target_compare(XrXirTargetSnapshot *snapshot, const char *a, const char *b, int *order);
-XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetRequest *request);
+XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetSnapshotRequest *request);
 XR_FUNC void xtc_xir_sysroot_close(XrXirTargetSnapshot *snapshot);
 XR_FUNC bool xtc_xir_sysroot_observe(XrXirImageCollector *images, const XrProcImageEvent *event);
 XR_FUNC bool xtc_xir_sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirTargetFile *file);

@@ -3981,6 +3981,7 @@ if(WIN32)
     add_subdirectory(cli/process_image_observer)
     add_subdirectory(cli/image_collector_owner)
     add_subdirectory(cli/process_clone_observed)
+    add_subdirectory(cli/file_lease_owner)
 endif()
 
 add_xray_unit_test(test_target_profile_authority

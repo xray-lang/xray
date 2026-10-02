@@ -22,7 +22,7 @@ static bool sysroot_error(XrXirTargetSnapshot *snapshot, DWORD error) {
         XR_XIR_TARGET_INVALID : XR_XIR_TARGET_IO;
     return xtc_xir_target_fail(snapshot, status);
 }
-static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input) {
+static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input, bool directory) {
     char *text = xtc_xir_target_text(snapshot, input);
     if (!text) return NULL;
     size_t length;
@@ -49,6 +49,7 @@ static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input) {
         if (!xtc_xir_target_work(snapshot, 1)) return NULL;
         if (path[i] == '/') path[i] = '\\';
     }
+    if (directory && count == 3) return path;
     size_t start = 7;
     for (size_t i = 7; i <= (size_t)count + 4; ++i) {
         if (!xtc_xir_target_work(snapshot, 1)) return NULL;
@@ -186,11 +187,9 @@ static bool sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirT
     xr_sha256_final(&hash, file->digest);
     return true;
 }
-static bool sysroot_open_file(XrXirTargetSnapshot *snapshot, const XrXirTargetDependency *input,
-    XrXirTargetFile *file, XtcXirLock **output) {
-    if (input->kind < XR_XIR_TARGET_COMPILER || input->kind > XR_XIR_TARGET_SOURCE)
-        return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
-    wchar_t *path = sysroot_path(snapshot, input->path);
+static bool sysroot_open_path(XrXirTargetSnapshot *snapshot, const char *input, bool directory,
+    const char **canonical, XtcXirLock **output) {
+    wchar_t *path = sysroot_path(snapshot, input, directory);
     if (!path) return false;
     size_t length;
     if (!sysroot_length(snapshot, path, &length)) return false;
@@ -203,11 +202,22 @@ static bool sysroot_open_file(XrXirTargetSnapshot *snapshot, const XrXirTargetDe
         path[i] = 0; XtcXirLock *ancestor = sysroot_lock(snapshot, path, i, true); path[i] = '\\';
         if (!ancestor) return false;
     }
-    XtcXirLock *lock = sysroot_lock(snapshot, path, length, false);
+    XtcXirLock *lock = sysroot_lock(snapshot, path, length, directory);
     if (!lock) return false;
-    file->path = sysroot_canonical_text(snapshot); file->kind = input->kind;
-    if (!file->path) return false;
+    /* The final directory may already be an ancestor lease. Refresh scratch
+     * from that actual handle before deriving its canonical text. */
+    if (directory && !sysroot_check_handle(snapshot, lock->handle, path, length, true)) return false;
+    *canonical = sysroot_canonical_text(snapshot);
+    if (!*canonical) return false;
     *output = lock;
+    return true;
+}
+static bool sysroot_open_file(XrXirTargetSnapshot *snapshot, const XrXirTargetDependency *input,
+    XrXirTargetFile *file, XtcXirLock **output) {
+    if (input->kind < XR_XIR_TARGET_COMPILER || input->kind > XR_XIR_TARGET_SOURCE)
+        return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
+    if (!sysroot_open_path(snapshot, input->path, false, &file->path, output)) return false;
+    file->kind = input->kind;
     return true;
 }
 XR_FUNC bool xtc_xir_sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirTargetFile *file) {
@@ -276,7 +286,7 @@ static bool sysroot_sort_last(XrXirTargetSnapshot *snapshot, uint32_t index) {
     }
     return true;
 }
-XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetRequest *request) {
+XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetSnapshotRequest *request) {
     const XrXirImageCollector *images = request->images;
     uint32_t image_count = images ? images->count : 0;
     snapshot->scratch = xtc_xir_target_allocate(snapshot, XTC_XIR_TARGET_PATH_LIMIT * sizeof(wchar_t));

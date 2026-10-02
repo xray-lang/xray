@@ -301,12 +301,13 @@ static void sdk_target_process(const char *root) {
     XrProcessView view = frozen_view(owner);
     CHECK(view.env_count == 0 && xtc_process_resources(owner) == r);
     XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_PROVIDER_SUPPORT};
-    XrXirTargetCommand command = {view.cwd, view.argv, (uint32_t)view.argc, NULL, 0};
-    XrXirTargetRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
-    CHECK(xtc_xir_target_capture(&request, &target) == XR_XIR_TARGET_OK);
+    XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc, NULL, 0,
+        view.timeout_ms, view.output_limit, (uint32_t)view.image_mode};
+    XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
+    CHECK(xtc_xir_target_snapshot_capture(&request, &target) == XR_XIR_TARGET_OK);
     xtc_process_free(owner); owner = NULL; memset(&view, 0xCD, sizeof(view));
-    const XrXirTargetCommand *saved = xtc_xir_target_command(target, 0);
-    xtc_process_spec_init(&spec, saved->argv[0], 3000); spec.argv[1] = saved->argv[1]; spec.cwd = saved->cwd;
+    const XrXirTargetCommandFacts *saved = xtc_xir_target_command_facts(target, 0);
+    xtc_process_spec_init(&spec, saved->executable, saved->timeout_ms); spec.output_limit = (size_t)saved->output_limit; spec.argv[1] = saved->argv[1]; spec.cwd = saved->cwd;
     CHECK(xtc_process_prepare(r, &spec, &owner) == XTC_PROCESS_OK);
     XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
     CHECK(stats.live_bytes > xr_xir_runtime_sdk_facts(sdk)->metadata_bytes);
@@ -394,6 +395,7 @@ static void hidden_environment(void) {
     CHECK(SetEnvironmentStringsW(first)); check_hidden_value(L"=C:=", L"C:\\xray-drive-A");
     XrCompileResources *r = ledger(unlimited); XrProcessSpec spec; spec_init(&spec, "--hidden-env-read");
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT; spec.cwd = NULL;
+    spec.argv[0] = "independent-display-name";
     XrToolchainProcess *process = NULL; CHECK(xtc_process_prepare(r, &spec, &process) == XTC_PROCESS_OK);
     CHECK(SetEnvironmentStringsW(second)); check_hidden_value(L"=C:=", L"C:\\xray-drive-B");
     frozen_environment(process, "=C:", "C:\\xray-drive-A");
@@ -406,6 +408,18 @@ static void hidden_environment(void) {
     const char expected[] = "hidden|unicode|space";
     CHECK(result.stdout_bytes.length == sizeof(expected) - 1);
     CHECK(!memcmp(result.stdout_bytes.data, expected, sizeof(expected) - 1));
+#ifdef XTC_TEST_SDK
+    XrProcessView view = frozen_view(process);
+    XrXirTargetEnvironment environment[XTC_PROCESS_MAX_ENV];
+    for (size_t i = 0; i < view.env_count; ++i)
+        environment[i] = (XrXirTargetEnvironment){view.env_keys[i], view.env_values[i]};
+    XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc,
+        environment, (uint32_t)view.env_count, view.timeout_ms, view.output_limit, (uint32_t)view.image_mode};
+    XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_COMPILER};
+    XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
+    XrXirTargetSnapshot *target = NULL;
+    CHECK(xtc_process_resources(process) == r && xtc_xir_target_snapshot_capture(&request, &target) == XR_XIR_TARGET_OK);
+#endif
     xtc_process_result_free(&result); xtc_process_free(process); process = NULL;
     const char *reserved[] = {"=C:","=ExitCode","=XR_PRIVATE","=","a=b"};
     for (unsigned snapshot = 0; snapshot < 2; ++snapshot) for (unsigned key = 0; key < 5; ++key) {
@@ -415,6 +429,18 @@ static void hidden_environment(void) {
         CHECK(xtc_process_prepare(r, &spec, &process) == XTC_PROCESS_INVALID && !process);
     }
     xr_compile_resources_release(r);
+#ifdef XTC_TEST_SDK
+    const XrXirTargetCommandFacts *saved = xtc_xir_target_command_facts(target, 0);
+    CHECK(!strcmp(saved->executable, executable) && !strcmp(saved->argv[0], "independent-display-name"));
+    CHECK(saved->timeout_ms == view.timeout_ms && saved->output_limit == view.output_limit && saved->image_mode == (uint32_t)view.image_mode);
+    unsigned hidden = 0, unicode = 0;
+    for (uint32_t i = 0; i < saved->environment_count; ++i) {
+        if (!strcmp(saved->environment[i].key, "=C:")) { CHECK(!strcmp(saved->environment[i].value, "C:\\xray-drive-A")); ++hidden; }
+        if (!strcmp(saved->environment[i].key, "XR_OWNED_测试")) { CHECK(!strcmp(saved->environment[i].value, "unicode-A")); ++unicode; }
+    }
+    CHECK(hidden == 1 && unicode == 1); xtc_xir_target_free(target);
+    puts("real frozen view to command v2: distinct executable, hidden environment, policy and producer-first lifetime PASS");
+#endif
     CHECK(SetEnvironmentStringsW(previous)); CHECK(FreeEnvironmentStringsW(previous));
     CHECK(!live && !physical_bytes && !physical_handles && !environment_blocks);
     puts("hidden drive/ExitCode/private names frozen, Unicode and space readable, user reserved keys rejected");

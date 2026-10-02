@@ -140,11 +140,11 @@ static XrOsProcStatus observe(XrXirImageCollector *images,HANDLE file,XrProcImag
     XrProcImageObserver observer=xtc_xir_images_observer(images);
     XrProcImageEvent event={1,kind,(intptr_t)file};return observer.observe(observer.context,&event);
 }
-static XrXirTargetRequest request(XrCompileResources *r,const XrXirImageCollector *images,
+static XrXirTargetSnapshotRequest request(XrCompileResources *r,const XrXirImageCollector *images,
     const XrXirTargetDependency *dependencies,uint32_t count) {
     static const char *args[]={"observed-file"};
-    static const XrXirTargetCommand command={"C:/",args,1,NULL,0};
-    return (XrXirTargetRequest){r,"x86_64-windows-msvc",3,2,11,dependencies,count,&command,1,images};
+    static const XrXirTargetCommandFacts command={"C:/described-tool.exe","C:/",args,1,NULL,0,3000,1048576,0};
+    return (XrXirTargetSnapshotRequest){r,"x86_64-windows-msvc",3,2,11,dependencies,count,&command,1,images};
 }
 static void blocked_writer(const char *path) {
     HANDLE file=CreateFileA(path,GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,0,NULL);
@@ -158,8 +158,8 @@ static XrXirTargetStatus workflow(XrCompileResources *r,HANDLE event,const char 
         if(s==XR_XIR_TARGET_OK&&observe(images,event,XR_PROC_IMAGE_DLL)!=XR_PROC_OK)s=xtc_xir_images_status(images);
         if(s==XR_XIR_TARGET_OK)s=xtc_xir_images_seal(images);
         if(s==XR_XIR_TARGET_OK) {
-            XrXirTargetDependency input={path,XR_XIR_TARGET_COMPILER};XrXirTargetRequest spec=request(r,images,&input,1);
-            s=xtc_xir_target_capture(&spec,out);
+            XrXirTargetDependency input={path,XR_XIR_TARGET_COMPILER};XrXirTargetSnapshotRequest spec=request(r,images,&input,1);
+            s=xtc_xir_target_snapshot_capture(&spec,out);
         }
     }
     xtc_xir_images_free(images);return s;
@@ -227,12 +227,12 @@ static void identities(const char *path,const char *alias,const char *saved) {
     CHECK(xtc_xir_images_file(images,0)->kind_mask==(XR_XIR_IMAGE_EXE|XR_XIR_IMAGE_DLL));
     for(uint32_t i=0;i<2;++i)CHECK(xtc_xir_images_file(images,i)->length==3&&!memcmp(xtc_xir_images_file(images,i)->digest,abc,32));
     CHECK(!xtc_xir_images_file(images,2));blocked_writer(path);
-    XrXirTargetSnapshot *snapshot=NULL;XrXirTargetDependency file={path,XR_XIR_TARGET_HEADER};XrXirTargetRequest spec=request(r,images,&file,1);
-    CHECK(xtc_xir_target_capture(&spec,&snapshot)==XR_XIR_TARGET_INVALID&&!snapshot);
+    XrXirTargetSnapshot *snapshot=NULL;XrXirTargetDependency file={path,XR_XIR_TARGET_HEADER};XrXirTargetSnapshotRequest spec=request(r,images,&file,1);
+    CHECK(xtc_xir_target_snapshot_capture(&spec,&snapshot)==XR_XIR_TARGET_INVALID&&!snapshot);
     XrCompileResources *foreign=NULL;CHECK(xr_compile_resources_new(&unlimited,&foreign)==XR_COMPILE_RESOURCE_OK);
-    spec.resources=foreign;size_t count=attempts;CHECK(xtc_xir_target_capture(&spec,&snapshot)==XR_XIR_TARGET_INVALID&&!snapshot&&attempts==count);
+    spec.resources=foreign;size_t count=attempts;CHECK(xtc_xir_target_snapshot_capture(&spec,&snapshot)==XR_XIR_TARGET_INVALID&&!snapshot&&attempts==count);
     xr_compile_resources_release(foreign);spec.resources=r;file.kind=XR_XIR_TARGET_COMPILER;
-    CHECK(xtc_xir_target_capture(&spec,&snapshot)==XR_XIR_TARGET_OK);
+    CHECK(xtc_xir_target_snapshot_capture(&spec,&snapshot)==XR_XIR_TARGET_OK);
     CHECK(xtc_xir_target_facts(snapshot)->file_count==2);xtc_xir_images_free(images);
     blocked_writer(path);blocked_writer(alias);
     for(uint32_t i=0;i<2;++i)CHECK(xtc_xir_target_file(snapshot,i)->length==3&&!memcmp(xtc_xir_target_file(snapshot,i)->digest,abc,32));
@@ -313,11 +313,12 @@ static void real_process(const ProcessTest *test) {
         printf("IMAGE %u %llu ",file->kind_mask,(unsigned long long)file->length);
         for(unsigned b=0;b<32;++b)printf("%02x",file->digest[b]);printf(" %s\n",file->path);
     }
-    CHECK(found||test->command);XrXirTargetSnapshot *snapshot=NULL;XrXirTargetRequest target=request(r,images,NULL,0);
+    CHECK(found||test->command);XrXirTargetSnapshot *snapshot=NULL;XrXirTargetSnapshotRequest target=request(r,images,NULL,0);
     XrProcessView view;CHECK(xtc_process_view(process,&view)==XTC_PROCESS_OK);
     XrXirTargetEnvironment environment[XTC_PROCESS_MAX_ENV];
     for(size_t i=0;i<view.env_count;++i)environment[i]=(XrXirTargetEnvironment){view.env_keys[i],view.env_values[i]};
-    XrXirTargetCommand command={view.cwd,view.argv,(uint32_t)view.argc,environment,(uint32_t)view.env_count};
+    XrXirTargetCommandFacts command={view.executable,view.cwd,view.argv,(uint32_t)view.argc,environment,(uint32_t)view.env_count,
+        view.timeout_ms,view.output_limit,(uint32_t)view.image_mode};
     /* Evidence contains only a framed identity of the complete environment. */
     XrSHA256Context env_hash;uint8_t env_digest[32];xr_sha256_init(&env_hash);
     static const char domain[]="test:frozen-environment:v1";
@@ -329,9 +330,9 @@ static void real_process(const ProcessTest *test) {
     xr_sha256_final(&env_hash,env_digest);printf("FROZEN_ENV_SHA256 %zu ",view.env_count);
     for(unsigned i=0;i<32;++i)printf("%02x",env_digest[i]);putchar('\n');
     target.commands=&command;if(test->command)target.provider=(uint32_t)atoi(argv[2]);
-    CHECK(xtc_xir_target_capture(&target,&snapshot)==XR_XIR_TARGET_OK);
+    CHECK(xtc_xir_target_snapshot_capture(&target,&snapshot)==XR_XIR_TARGET_OK);
     xtc_process_free(process);xtc_xir_images_free(images);xr_compile_resources_release(r);
-    CHECK(xtc_xir_target_command(snapshot,0)->argc==view.argc);
+    CHECK(xtc_xir_target_command_facts(snapshot,0)->argc==view.argc);
     CHECK(xtc_xir_target_facts(snapshot)->file_count>2);xtc_xir_target_free(snapshot);
     fprintf(stderr,"image final: heap=%zu bytes=%zu handles=%lu baseline=%lu\n",live,bytes_live,handle_count(),baseline);
 #ifndef IMAGE_PRODUCTION

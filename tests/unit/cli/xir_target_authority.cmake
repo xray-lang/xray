@@ -36,7 +36,7 @@ foreach(target IN LISTS XIR_TARGET_TEST_TARGETS)
     target_compile_features(${target} PRIVATE c_std_11)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-        target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_definitions(${target} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
         if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
             target_compile_options(${target} PRIVATE /experimental:c11atomics)
         endif()
@@ -49,3 +49,18 @@ set_tests_properties(test_xir_target_authority PROPERTIES LABELS "unit;xir;toolc
 
 add_test(NAME test_xir_target_environment_production COMMAND test_xir_target_environment_production)
 set_tests_properties(test_xir_target_environment_production PROPERTIES LABELS "unit;xir;toolchain;ownership" TIMEOUT 120)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+foreach(target test_xir_target_authority test_xir_target_environment_production)
+    add_test(NAME ${target}_identity COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/target_environment_owner/identity_oracle.py" $<TARGET_FILE:${target}>)
+endforeach()
+if(TARGET xray_xir_target)
+    set(XIR_TARGET_CURRENT_ARCHIVE xray_xir_target)
+else()
+    add_library(xir_target_retired_link STATIC $<TARGET_OBJECTS:xir_target_snapshot_production>)
+    set(XIR_TARGET_CURRENT_ARCHIVE xir_target_retired_link)
+endif()
+add_test(NAME test_xir_target_retired_objects COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/target_environment_owner/retired_object.py"
+    "${CMAKE_C_COMPILER}" $<TARGET_FILE:${XIR_TARGET_CURRENT_ARCHIVE}> "${XIR_TARGET_SOURCE_ROOT}/src")

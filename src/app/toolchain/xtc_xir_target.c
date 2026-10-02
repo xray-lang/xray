@@ -108,17 +108,44 @@ XR_FUNC char *xtc_xir_target_text(XrXirTargetSnapshot *snapshot, const char *tex
     else return NULL;
     return copy;
 }
-static bool target_commands(XrXirTargetSnapshot *snapshot, const XrXirTargetRequest *request) {
+/* This description follows the process drive-absolute domain without probing
+ * the filesystem. Each prefix byte is charged before it is inspected. */
+static char *target_command_path(XrXirTargetSnapshot *snapshot, const char *input) {
+    char *text = xtc_xir_target_text(snapshot, input);
+    if (!text || !xtc_xir_target_work(snapshot, 1)) return NULL;
+    unsigned char first = (unsigned char)text[0];
+    if (!((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z'))) {
+        xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL;
+    }
+    if (!xtc_xir_target_work(snapshot, 1)) return NULL;
+    if (text[1] != ':') { xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL; }
+    if (!xtc_xir_target_work(snapshot, 1)) return NULL;
+    char separator = text[2];
+    if (separator != '/' && separator != '\\') {
+        xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL;
+    }
+    return text;
+}
+static bool target_commands(XrXirTargetSnapshot *snapshot, const XrXirTargetSnapshotRequest *request) {
     snapshot->commands = xtc_xir_target_allocate(snapshot, request->command_count * sizeof(*snapshot->commands));
     if (!snapshot->commands) return false;
     for (uint32_t i = 0; i < request->command_count; ++i) {
-        const XrXirTargetCommand *input = &request->commands[i];
-        XrXirTargetCommand *output = &snapshot->commands[i];
+        const XrXirTargetCommandFacts *input = &request->commands[i];
+        XrXirTargetCommandFacts *output = &snapshot->commands[i];
         if (!input->argc || !input->argv || input->argc > XTC_XIR_TARGET_ARGUMENT_LIMIT ||
             input->environment_count > XTC_XIR_TARGET_ARGUMENT_LIMIT ||
-            (input->environment_count && !input->environment))
+            (input->environment_count && !input->environment) || !input->timeout_ms ||
+            !input->output_limit || input->output_limit >= SIZE_MAX ||
+            (input->image_mode != XR_PROC_IMAGES_NONE && input->image_mode != XR_PROC_IMAGES_WINDOWS_TREE))
             return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
-        output->cwd = xtc_xir_target_text(snapshot, input->cwd);
+        output->executable = target_command_path(snapshot, input->executable);
+        if (!output->executable) return false;
+        output->cwd = target_command_path(snapshot, input->cwd);
+        if (!output->cwd) return false;
+        if (!xtc_xir_target_work(snapshot, sizeof(output->timeout_ms) + sizeof(output->output_limit) +
+            sizeof(output->image_mode))) return false;
+        output->timeout_ms = input->timeout_ms; output->output_limit = input->output_limit;
+        output->image_mode = input->image_mode;
         const char **argv = xtc_xir_target_allocate(snapshot, ((size_t)input->argc + 1) * sizeof(*argv));
         if (!output->cwd || !argv) return false;
         output->argv = argv; output->argc = input->argc;
@@ -206,7 +233,7 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
     if (!target_family_identity(snapshot, true, facts->provider_identity) ||
         !target_family_identity(snapshot, false, facts->sysroot_identity)) return false;
     XrSHA256Context hash; xr_sha256_init(&hash);
-    const char domain[] = "xray:xir-target-snapshot:v1";
+    const char domain[] = "xray:xir-target-snapshot:v2";
     if (!target_hash_bytes(snapshot, &hash, domain, sizeof(domain) - 1) ||
         !target_u32(snapshot, &hash, facts->schema) || !target_u32(snapshot, &hash, facts->provider) ||
         !target_u32(snapshot, &hash, facts->crt) || !target_u32(snapshot, &hash, facts->dialect) ||
@@ -215,8 +242,9 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
         !target_hash_bytes(snapshot, &hash, facts->sysroot_identity, 32) ||
         !target_u32(snapshot, &hash, facts->command_count)) return false;
     for (uint32_t i = 0; i < facts->command_count; ++i) {
-        const XrXirTargetCommand *command = &snapshot->commands[i];
-        if (!target_string(snapshot, &hash, command->cwd) || !target_u32(snapshot, &hash, command->argc)) return false;
+        const XrXirTargetCommandFacts *command = &snapshot->commands[i];
+        if (!target_string(snapshot, &hash, command->executable) ||
+            !target_string(snapshot, &hash, command->cwd) || !target_u32(snapshot, &hash, command->argc)) return false;
         for (uint32_t a = 0; a < command->argc; ++a)
             if (!target_string(snapshot, &hash, command->argv[a])) return false;
         if (!target_u32(snapshot, &hash, command->environment_count)) return false;
@@ -224,6 +252,9 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
             if (!target_string(snapshot, &hash, command->environment[e].key) ||
                 !target_string(snapshot, &hash, command->environment[e].value)) return false;
         }
+        if (!target_u32(snapshot, &hash, command->timeout_ms) ||
+            !target_u64(snapshot, &hash, command->output_limit) ||
+            !target_u32(snapshot, &hash, command->image_mode)) return false;
     }
     if (!target_u32(snapshot, &hash, facts->file_count)) return false;
     for (uint32_t i = 0; i < facts->file_count; ++i)
@@ -231,7 +262,7 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
     if (!xtc_xir_target_work(snapshot, 1)) return false;
     xr_sha256_final(&hash, facts->identity); return true;
 }
-XR_FUNC XrXirTargetStatus xtc_xir_target_capture(const XrXirTargetRequest *request, XrXirTargetSnapshot **output) {
+XR_FUNC XrXirTargetStatus xtc_xir_target_snapshot_capture(const XrXirTargetSnapshotRequest *request, XrXirTargetSnapshot **output) {
     if (!request || !output || *output || !request->resources || !request->triple ||
         (request->file_count && !request->files) || (!request->file_count && !request->images) ||
         !request->commands || !request->command_count) return XR_XIR_TARGET_INVALID;
@@ -249,7 +280,7 @@ XR_FUNC XrXirTargetStatus xtc_xir_target_capture(const XrXirTargetRequest *reque
         1, sizeof(XrXirTargetSnapshot), &allocation));
     if (status != XR_XIR_TARGET_OK) return status;
     XrXirTargetSnapshot *snapshot = allocation; snapshot->resources = request->resources;
-    snapshot->facts = (XrXirTargetFacts){1, request->provider, request->crt, request->dialect,
+    snapshot->facts = (XrXirTargetFacts){2, request->provider, request->crt, request->dialect,
         request->file_count, request->command_count, NULL, {0}, {0}, {0}};
     snapshot->facts.triple = xtc_xir_target_text(snapshot, request->triple);
     int triple_order = 0;
@@ -267,7 +298,7 @@ XR_FUNC const XrXirTargetFacts *xtc_xir_target_facts(const XrXirTargetSnapshot *
 XR_FUNC const XrXirTargetFile *xtc_xir_target_file(const XrXirTargetSnapshot *snapshot, uint32_t index) {
     return snapshot && index < snapshot->facts.file_count ? &snapshot->files[index] : NULL;
 }
-XR_FUNC const XrXirTargetCommand *xtc_xir_target_command(const XrXirTargetSnapshot *snapshot, uint32_t index) {
+XR_FUNC const XrXirTargetCommandFacts *xtc_xir_target_command_facts(const XrXirTargetSnapshot *snapshot, uint32_t index) {
     return snapshot && index < snapshot->facts.command_count ? &snapshot->commands[index] : NULL;
 }
 XR_FUNC void xtc_xir_target_free(XrXirTargetSnapshot *snapshot) {
