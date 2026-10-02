@@ -23,10 +23,10 @@ def header(name, data):
                       for i in range(0,len(data),12))+'\n};\n')
 
 
-def product_layout(value_abi):
+def product_layout(value_abi,call_abi=21,program_abi=26):
     # identity(string)->string, init()->Unit, entry()->i64. Each RETURN has
     # a logical Unit slot at UINT32_MAX; only the string parameter owns storage.
-    data=b'xray:xir-lowered-layout:v1'+words(1,1,value_abi,21,26,2,3,1)
+    data=b'xray:xir-lowered-layout:v1'+words(1,1,value_abi,call_abi,program_abi,2,3,1)
     data+=words(0,1,2,8,16,8,1,0,0,0,0xffffffff,16,8,0)
     data+=words(1,0,1,0,16,8,0,0,0,0xffffffff)
     data+=words(2,0,2,8,16,8,0,0,0,0,0xffffffff)
@@ -65,12 +65,12 @@ def main():
         checked.write_text(text[:digest.start(1)]+content+text[digest.end(1):],encoding='utf-8')
         identity=directory/'xir_source_product_identity.h';text=identity.read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',text,re.S)
-        content=','.join(f'0x{v:02x}' for v in product_layout(17))
+        content=','.join(f'0x{v:02x}' for v in product_layout(18,22,27))
         identity.write_text(text[:expected.start(1)]+content+text[expected.end(1):],encoding='utf-8')
     else:
         identity=(directory/'xir_source_product_identity.h').read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',identity,re.S)
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(17)
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(18,22,27)
     print(json.dumps({'unchanged_bodies_reproduced':len(records),
         'nullable_none_sha256':hashlib.sha256(sum_vector(False)).hexdigest(),
         'nullable_some_sha256':hashlib.sha256(sum_vector(True)).hexdigest()}))

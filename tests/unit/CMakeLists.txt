@@ -402,7 +402,7 @@ set_tests_properties(test_xir_output_status PROPERTIES LABELS "unit;xir;ownershi
 
 add_xray_bootstrap_executable(test_xir_source xir/test_xir_source.c)
 target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
-add_xray_bootstrap_executable(test_xir_source_product xir/test_xir_source_product.c)
+add_executable(test_xir_source_product xir/test_xir_source_product.c)
 target_link_libraries(test_xir_source_product PRIVATE xray_xir_source_product)
 if(MSVC)
     target_compile_options(test_xir_source_product PRIVATE /W4 /WX /utf-8)
