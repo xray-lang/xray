@@ -3901,6 +3901,7 @@ target_include_directories(test_cli_toolchain PRIVATE
 )
 target_link_libraries(test_cli_toolchain PRIVATE xray_core)
 add_test(NAME test_cli_toolchain COMMAND test_cli_toolchain)
+include(cli/toolchain_process_owned.cmake)
 
 add_xray_unit_test(test_target_profile_authority
     cli/test_target_profile_authority.c
