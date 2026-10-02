@@ -136,6 +136,22 @@ typedef struct XrCoreIntrinsicDesc {
     const char *diagnostic_name;
 } XrCoreIntrinsicDesc;
 
+typedef enum XrCoreIntrinsicQueryStatus {
+    XR_CORE_INTRINSIC_QUERY_OK,
+    XR_CORE_INTRINSIC_QUERY_BAD_ARGUMENT,
+    XR_CORE_INTRINSIC_QUERY_WORK_LIMIT,
+} XrCoreIntrinsicQueryStatus;
+
+/* All arguments are required, including context. The callback authorizes each
+ * descriptor-name byte read, including a terminating NUL, and each input byte
+ * read with a separate charge of one before that read. Comparisons stop at the
+ * first mismatch or name boundary; no input byte beyond length is read. A false
+ * callback stops the query immediately. Failure leaves output unchanged; OK
+ * publishes a static borrowed descriptor, or NULL when no name matches. */
+XR_FUNC XrCoreIntrinsicQueryStatus xr_core_intrinsic_by_source_name_work(
+    void *context, bool (*charge)(void *context, uint64_t units),
+    const char *name, size_t length, const XrCoreIntrinsicDesc **output);
+
 XR_FUNC const XrCoreIntrinsicDesc *xr_core_intrinsic_by_id(XrCoreBuiltinId id);
 XR_FUNC const XrCoreIntrinsicDesc *xr_core_intrinsic_by_source_name(const char *name,
                                                                     size_t length);

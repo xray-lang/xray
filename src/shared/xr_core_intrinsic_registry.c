@@ -77,15 +77,49 @@ const XrCoreIntrinsicDesc *xr_core_intrinsic_by_id(XrCoreBuiltinId id) {
     return NULL;
 }
 
-const XrCoreIntrinsicDesc *xr_core_intrinsic_by_source_name(const char *name, size_t length) {
-    if (!name)
-        return NULL;
+XrCoreIntrinsicQueryStatus xr_core_intrinsic_by_source_name_work(
+    void *context, bool (*charge)(void *context, uint64_t units),
+    const char *name, size_t length, const XrCoreIntrinsicDesc **output) {
+    if (!context || !charge || !name || !output)
+        return XR_CORE_INTRINSIC_QUERY_BAD_ARGUMENT;
     for (size_t i = 0; i < xr_core_intrinsic_count(); i++) {
         const char *candidate = g_core_intrinsics[i].source_name;
-        if (strlen(candidate) == length && memcmp(candidate, name, length) == 0)
-            return &g_core_intrinsics[i];
+        for (size_t offset = 0;; offset++) {
+            if (!charge(context, 1))
+                return XR_CORE_INTRINSIC_QUERY_WORK_LIMIT;
+            unsigned char expected = (unsigned char)candidate[offset];
+            if (offset == length) {
+                if (expected == 0) {
+                    *output = &g_core_intrinsics[i];
+                    return XR_CORE_INTRINSIC_QUERY_OK;
+                }
+                break;
+            }
+            if (expected == 0)
+                break;
+            if (!charge(context, 1))
+                return XR_CORE_INTRINSIC_QUERY_WORK_LIMIT;
+            unsigned char actual = (unsigned char)name[offset];
+            if (actual != expected)
+                break;
+        }
     }
-    return NULL;
+    *output = NULL;
+    return XR_CORE_INTRINSIC_QUERY_OK;
+}
+
+static bool core_intrinsic_runtime_work(void *context, uint64_t units) {
+    (void)context;
+    (void)units;
+    return true;
+}
+
+const XrCoreIntrinsicDesc *xr_core_intrinsic_by_source_name(const char *name, size_t length) {
+    unsigned char runtime_context = 0;
+    const XrCoreIntrinsicDesc *result = NULL;
+    (void)xr_core_intrinsic_by_source_name_work(
+        &runtime_context, core_intrinsic_runtime_work, name, length, &result);
+    return result;
 }
 
 static bool descriptor_contract_is_valid(const XrCoreIntrinsicDesc *desc) {
