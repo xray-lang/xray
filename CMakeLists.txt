@@ -1409,6 +1409,10 @@ list(REMOVE_ITEM AOT_SRC
 file(GLOB API_SRC CONFIGURE_DEPENDS "src/api/*.c")
 file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
+# Native invocation is owned by its explicit production library.
+list(REMOVE_ITEM APP_TOOLCHAIN_SRC
+    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_invocation.c"
+    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_namespace.c")
 
 # Standard Library (Native modules) - modular conditional compilation
 # Core standard-library modules: time, math, log, regex, path, datetime,

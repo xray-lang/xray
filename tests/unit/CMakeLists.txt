@@ -56,6 +56,8 @@ if(WIN32)
 endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_projection_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_invocation_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/namespace_owner.cmake)
 
 macro(add_xray_unit_test name source)
     add_executable(${name} ${source} ${ARGN})
