@@ -21,9 +21,13 @@ typedef struct XrXirLibraryInput {
     size_t length;
     uint8_t sha256[32];
 } XrXirLibraryInput;
-XR_FUNC XrXirStatus xr_xir_library_catalog_new(const XrXirLibraryInput *inputs, size_t count,
-    const XrXirBudget *budget, XrXirLibraryCatalog **output);
-XR_FUNC void xr_xir_library_catalog_free(XrXirLibraryCatalog *catalog);
-XR_FUNC const XrModuleResourceBinding *xr_xir_library_catalog_resources(
+/* The catalog copies context and owns all strings and Checked bodies on its
+ * ledger. Inputs are borrowed only during construction; failure preserves output.
+ * The catalog pins resources after the caller releases its ledger reference. */
+XR_FUNC XrXirStatus xr_xir_compile_library_catalog_new(const XrXirCompileContext *context,
+    const XrXirLibraryInput *inputs, size_t count, XrXirLibraryCatalog **output);
+XR_FUNC void xr_xir_compile_library_catalog_free(XrXirLibraryCatalog *catalog);
+XR_FUNC const XrModuleResourceBinding *xr_xir_compile_library_catalog_resources(
     const XrXirLibraryCatalog *catalog, size_t *count);
+XR_FUNC const XrXirCompileContext *xr_xir_compile_library_catalog_context(const XrXirLibraryCatalog *catalog);
 #endif // XXIR_LIBRARY_CATALOG_H
