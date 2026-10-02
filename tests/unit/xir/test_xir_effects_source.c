@@ -187,7 +187,13 @@ static void source_declared_input(XrXirSourceRequest *request, XrXirSourceResult
         if (i == 2) source_manifest_raw(request,
             "[declarations]\nversion=1\n[[declarations.function]]\nmodule=\"root.xr\"\nname=\"pure\"\nno_suspend=false\n");
         XrXirSourceResult result = {0};
-        CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_BAD_STRUCTURE);
+        XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        XrXirStatus expected = i == 1 ? XR_XIR_UNRESOLVED : XR_XIR_BAD_STRUCTURE;
+        if (status != expected)
+            fprintf(stderr, "declaration case %u: status=%u expected=%u: %s\n",
+                    i, status, expected, diagnostic.message);
+        CHECK(status == expected);
         CHECK(!result.checked); xr_xir_source_result_free(&result);
     }
     source_manifest_write(request, "root.xr", records, 1);
