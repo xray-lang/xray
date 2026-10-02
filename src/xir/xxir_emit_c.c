@@ -391,7 +391,11 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
         xr_free(buffer.text);
         return buffer.status;
     }
-    xi_cgen_verify_output_or_ice(buffer.text, buffer.length, symbol_prefix);
+    XiCgenVerifyStatus verified = xi_cgen_verify_output_or_ice(buffer.text, buffer.length, symbol_prefix);
+    if (verified != XI_CGEN_VERIFY_PASSED) {
+        xr_free(buffer.text);
+        return verified == XI_CGEN_VERIFY_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
+    }
     output->text = buffer.text;
     output->length = buffer.length;
     return XR_XIR_OK;
@@ -1236,7 +1240,11 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
         xr_free(buffer.text);
         return buffer.status;
     }
-    xi_cgen_verify_output_or_ice(buffer.text, buffer.length, symbol_prefix);
+    XiCgenVerifyStatus verified = xi_cgen_verify_output_or_ice(buffer.text, buffer.length, symbol_prefix);
+    if (verified != XI_CGEN_VERIFY_PASSED) {
+        xr_free(buffer.text);
+        return verified == XI_CGEN_VERIFY_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
+    }
     *output = (XrXirCSource) {buffer.text, buffer.length};
     return XR_XIR_OK;
 }

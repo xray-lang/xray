@@ -1384,6 +1384,9 @@ file(GLOB VM_DEBUG_SRC CONFIGURE_DEPENDS "src/vm/debug/*.c")
 file(GLOB IR_SRC CONFIGURE_DEPENDS "src/ir/*.c")
 file(GLOB CORE_SPEC_SRC CONFIGURE_DEPENDS "src/core/*.c")
 file(GLOB PROGRAM_SRC CONFIGURE_DEPENDS "src/program/*.c")
+# The source bridge depends on XIR projections and has one separate owner.
+# Keeping it in the frontend aggregate would duplicate that implementation.
+list(REMOVE_ITEM PROGRAM_SRC "${CMAKE_SOURCE_DIR}/src/program/xr_xir_source_product.c")
 file(GLOB EXECUTION_SRC CONFIGURE_DEPENDS "src/execution/*.c")
 file(GLOB PLAN_SEMANTIC_SRC CONFIGURE_DEPENDS "src/plan/semantic/*.c")
 file(GLOB PLAN_OWNERSHIP_SRC CONFIGURE_DEPENDS "src/plan/ownership/*.c")

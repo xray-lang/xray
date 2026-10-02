@@ -43,13 +43,20 @@ typedef struct XiCgenVerifyResult {
     char message[256];             /* human-readable detail */
 } XiCgenVerifyResult;
 
+typedef enum XiCgenVerifyStatus {
+    XI_CGEN_VERIFY_PASSED = 0,
+    XI_CGEN_VERIFY_OUT_OF_MEMORY = 1,
+    XI_CGEN_VERIFY_BAD_ARGUMENT = 2,
+    XI_CGEN_VERIFY_MALFORMED = 3,
+} XiCgenVerifyStatus;
+
 /* Single-pass structural check of a generated C translation unit.
  *
- * Returns true if the source is well-formed. On the first (highest-priority
- * W1 > W2 > W3 > W4) violation it returns false and fills *out. Pure and
- * side-effect free — safe to feed crafted malformed strings from unit tests.
- * A NULL/empty buffer is treated as well-formed. */
-XR_FUNC bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *out);
+ * PASSED clears the optional diagnostic; MALFORMED reports the first
+ * highest-priority W1 > W2 > W3 > W4 violation. Resource or argument failures
+ * preserve diagnostic bytes. NULL is legal only with zero length. */
+XR_FUNC XiCgenVerifyStatus xi_cgen_verify_output(const char *c_src, size_t len,
+                                               XiCgenVerifyResult *out);
 
 /* Additional fail-closed policy check for XI_CGEN_C_DIALECT_C90 output.  This
  * rejects syntax/runtime residue outside the governed ISO C90 kernel subset;
@@ -60,8 +67,10 @@ XR_FUNC bool xi_cgen_verify_c90_output(const char *c_src, size_t len, XiCgenVeri
  * Verifies the generated TU; on violation it reports an internal compiler
  * error (translation unit + category + line + detail), dumps the full
  * generated C to a diagnostics file, and aborts so malformed C can never
- * reach the C toolchain. Never returns on violation. No bypass. */
-XR_FUNC void xi_cgen_verify_output_or_ice(const char *c_src, size_t len, const char *tu_name);
+ * reach the C toolchain. Never returns on malformed C. Returns the exact
+ * resource or argument failure without accepting unchecked output. */
+XR_FUNC XiCgenVerifyStatus xi_cgen_verify_output_or_ice(const char *c_src, size_t len,
+                                                      const char *tu_name);
 
 /* Stable short name for a category, e.g. "W1_BALANCE". */
 XR_FUNC const char *xi_cgen_verify_category_name(XiCgenVerifyCategory category);

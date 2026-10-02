@@ -18,7 +18,11 @@
 static XiCgenVerifyResult verify(const char *src) {
     XiCgenVerifyResult r;
     memset(&r, 0, sizeof(r));
-    xi_cgen_verify_output(src, strlen(src), &r);
+    XiCgenVerifyStatus status = xi_cgen_verify_output(src, strlen(src), &r);
+    if (status != (r.category == XI_CGEN_VERIFY_OK ? XI_CGEN_VERIFY_PASSED : XI_CGEN_VERIFY_MALFORMED)) {
+        fprintf(stderr, "unexpected structural verification status %u\n", status);
+        exit(1);
+    }
     return r;
 }
 

@@ -663,6 +663,15 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
 
     bool string_bytes, string_integer, string_concat;
     scan_string_helpers(ir, &string_bytes, &string_integer, &string_concat);
+    /* Type declarations and drop helpers can need arena layout without any
+     * allocation in this translation unit (for example a nullable record
+     * initialized to null). Emit the allocator only when a body calls it. */
+    bool allocates = builders || string_bytes || string_integer || string_concat ||
+                     program_uses_operation(ir, XR_CORE_OP_CORE_CLASS_CONSTRUCT);
+    for (uint32_t index = 0u; index < ir->program->type_count; ++index)
+        allocates |= ir->program->types[index].kind == XR_CORE_IR_TYPE_ARRAY ||
+                     ir->program->types[index].kind == XR_CORE_IR_TYPE_CALLABLE ||
+                     ir->program->types[index].kind == XR_CORE_IR_TYPE_EXISTENTIAL;
     bool host_timer = standalone_main && has_timer_suspension(ir);
     if (((host_providers || host_timer) &&
          !append_text(buffer, "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)\n"
@@ -788,7 +797,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                                              "    XrAotLifecycleEventHandler lifecycle_event;\n"
                                              "    uint64_t next_class_identity;\n")) ||
             !append_text(buffer, "} XrAotContext;\n\n") ||
-            (arena_allocations && !append_text(buffer,
+            (allocates && !append_text(buffer,
                          "static inline void *xr_aot_alloc(XrAotContext *context, size_t size) "
                          "{\n"
                          "    if (!context || size > SIZE_MAX - sizeof(XrAotAllocation)) "
@@ -1819,10 +1828,18 @@ static bool emit_invoke_edge(CBuffer *buffer, const XrValidatedFunction *functio
     const XrValidatedBlock *target = &function->blocks[instruction->successors[successor_index]];
     if (!append_text(buffer, "{\n"))
         return false;
-    if (target_start != 0u &&
-        (!implicit_expression || !append_format(buffer, "            v%u = %s;\n",
-                                                target->argument_ids[0], implicit_expression)))
-        return false;
+    if (target_start != 0u) {
+        /* A dynamic result is written through the call's out pointer straight
+         * into the normal block's first argument. Copying it onto itself would
+         * be a self-assignment, which strict C providers reject. */
+        char in_place[24];
+        (void) snprintf(in_place, sizeof(in_place), "v%u", target->argument_ids[0]);
+        if (!implicit_expression ||
+            (strcmp(implicit_expression, in_place) != 0 &&
+             !append_format(buffer, "            v%u = %s;\n", target->argument_ids[0],
+                            implicit_expression)))
+            return false;
+    }
     for (uint32_t argument = target_start; argument < target->argument_count; ++argument) {
         uint32_t source_value = instruction->operands[operand_start + argument - target_start];
         char storage[32];
@@ -4177,11 +4194,13 @@ XrBackendStatus xr_backend_ir_emit_c_exports(const XrBackendIR *ir, bool standal
     if (emitted && standalone_main)
         emitted = emit_main(&buffer, ir);
     emitted = emitted && emit_c_exports(&buffer, &header, ir, exports, export_count);
-    XiCgenVerifyResult verify = {0};
-    if (!emitted || buffer.failed || !xi_cgen_verify_output(buffer.bytes, buffer.size, &verify)) {
+    XiCgenVerifyStatus verified = XI_CGEN_VERIFY_PASSED;
+    if (emitted && !buffer.failed)
+        verified = xi_cgen_verify_output_or_ice(buffer.bytes, buffer.size, "backend");
+    if (!emitted || buffer.failed || verified != XI_CGEN_VERIFY_PASSED) {
         xr_free(buffer.bytes);
         xr_free(header.bytes);
-        buffer.failed = buffer.failed || header.failed;
+        buffer.failed = buffer.failed || header.failed || verified == XI_CGEN_VERIFY_OUT_OF_MEMORY;
         xr_backend_set_diagnostic(
             diagnostic_out, buffer.failed ? XR_BACKEND_OUT_OF_MEMORY : XR_BACKEND_EMISSION_REJECTED,
             0u, 0u, 0u, 0u);

@@ -13,13 +13,14 @@
  */
 
 #include "xi_cgen_verify_output.h"
+#include "../base/xmalloc.h"
 
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 #include <process.h>
 #else
 #include <unistd.h>
@@ -29,7 +30,7 @@
 #define XI_CGEN_VERIFY_MAX_TEMP 8388608 /* 8M distinct vN per function */
 
 static int64_t xi_cgen_process_id(void) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     return (int64_t) _getpid();
 #else
     return (int64_t) getpid();
@@ -153,6 +154,7 @@ static bool line_has_identifier_hygiene_violation(const char *s, size_t n, char 
 typedef struct {
     unsigned char *seen; /* bit per temp id: defined so far in this function */
     size_t cap;
+    bool allocation_failed;
 } W4State;
 
 static bool w4_mark_defined(W4State *st, long n) {
@@ -162,9 +164,11 @@ static bool w4_mark_defined(W4State *st, long n) {
         size_t newcap = st->cap ? st->cap * 2 : 1024;
         while (newcap <= (size_t) n)
             newcap *= 2;
-        unsigned char *p = (unsigned char *) realloc(st->seen, newcap);
-        if (!p)
+        unsigned char *p = (unsigned char *) xr_realloc(st->seen, newcap);
+        if (!p) {
+            st->allocation_failed = true;
             return false;
+        }
         memset(p + st->cap, 0, newcap - st->cap);
         st->seen = p;
         st->cap = newcap;
@@ -354,18 +358,18 @@ static int pp_conditional_delta(const char *s, size_t n) {
 
 /* ---- Main verifier. */
 
-bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *out) {
-    if (out) {
-        out->category = XI_CGEN_VERIFY_OK;
-        out->line = 0;
-        out->message[0] = '\0';
+XiCgenVerifyStatus xi_cgen_verify_output(const char *c_src, size_t len,
+                                        XiCgenVerifyResult *out) {
+    if (!c_src && len)
+        return XI_CGEN_VERIFY_BAD_ARGUMENT;
+    if (len == 0) {
+        if (out) memset(out, 0, sizeof(*out));
+        return XI_CGEN_VERIFY_PASSED;
     }
-    if (!c_src || len == 0)
-        return true;
 
-    char *code = (char *) malloc(len);
+    char *code = (char *) xr_malloc(len);
     if (!code)
-        return true; /* cannot verify under OOM; do not manufacture a crash */
+        return XI_CGEN_VERIFY_OUT_OF_MEMORY;
     memcpy(code, c_src, len);
 
     /* Pass 1: neutralize strings / chars / comments in place (replace content
@@ -458,13 +462,13 @@ bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *ou
     if (state == STRING || state == CHAR) {
         set_result(out, XI_CGEN_VERIFY_W1_BALANCE, open_line, "unterminated %s literal",
                    state == STRING ? "string" : "character");
-        free(code);
-        return false;
+        xr_free(code);
+        return XI_CGEN_VERIFY_MALFORMED;
     }
     if (state == BLOCK_COMMENT) {
         set_result(out, XI_CGEN_VERIFY_W1_BALANCE, open_line, "unterminated block comment");
-        free(code);
-        return false;
+        xr_free(code);
+        return XI_CGEN_VERIFY_MALFORMED;
     }
 
     /* Pass 2: line-oriented structural checks over the neutralized code.
@@ -475,7 +479,7 @@ bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *ou
      * unconditional code (preprocessor conditional depth 0), preprocessor
      * directives never contribute braces, and `#define vN` marks a temp
      * available for W4. */
-    W4State w4 = {NULL, 0};
+    W4State w4 = {NULL, 0, false};
     int brace = 0, paren = 0;
     int pp_cond = 0; /* nesting depth of #if / #ifdef / #ifndef */
     XiCgenVerifyResult w2r = {0}, w3r = {0}, w4r = {0};
@@ -512,6 +516,11 @@ bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *ou
             long def_temp = pp_define_temp(lp, ln);
             if (def_temp >= 0)
                 w4_mark_defined(&w4, def_temp);
+            if (w4.allocation_failed) {
+                xr_free(w4.seen);
+                xr_free(code);
+                return XI_CGEN_VERIFY_OUT_OF_MEMORY;
+            }
             int delta = pp_conditional_delta(lp, ln);
             if (delta > 0)
                 pp_cond++;
@@ -554,6 +563,11 @@ bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *ou
             if (w4_scan_line(lp, ln, lineno, &w4, &w4r))
                 have_w4 = true;
         }
+        if (w4.allocation_failed) {
+            xr_free(w4.seen);
+            xr_free(code);
+            return XI_CGEN_VERIFY_OUT_OF_MEMORY;
+        }
 
         /* brace/paren balance (W1); braces in unconditional code are real. */
         for (size_t j = 0; j < ln; j++) {
@@ -592,31 +606,32 @@ bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *ou
         have_w1 = true;
     }
 
-    free(w4.seen);
-    free(code);
+    xr_free(w4.seen);
+    xr_free(code);
 
     /* Priority: W1 > W2 > W3 > W4. */
     if (have_w1) {
         if (out)
             *out = w1r;
-        return false;
+        return XI_CGEN_VERIFY_MALFORMED;
     }
     if (have_w2) {
         if (out)
             *out = w2r;
-        return false;
+        return XI_CGEN_VERIFY_MALFORMED;
     }
     if (have_w3) {
         if (out)
             *out = w3r;
-        return false;
+        return XI_CGEN_VERIFY_MALFORMED;
     }
     if (have_w4) {
         if (out)
             *out = w4r;
-        return false;
+        return XI_CGEN_VERIFY_MALFORMED;
     }
-    return true;
+    if (out) memset(out, 0, sizeof(*out));
+    return XI_CGEN_VERIFY_PASSED;
 }
 
 /* ---- Restricted C90 dialect policy. */
@@ -722,10 +737,12 @@ bool xi_cgen_verify_c90_output(const char *c_src, size_t len, XiCgenVerifyResult
 
 /* ---- Fail-closed ICE wrapper used at the C-write boundary. */
 
-void xi_cgen_verify_output_or_ice(const char *c_src, size_t len, const char *tu_name) {
+XiCgenVerifyStatus xi_cgen_verify_output_or_ice(const char *c_src, size_t len,
+                                              const char *tu_name) {
     XiCgenVerifyResult r;
-    if (xi_cgen_verify_output(c_src, len, &r))
-        return;
+    XiCgenVerifyStatus status = xi_cgen_verify_output(c_src, len, &r);
+    if (status != XI_CGEN_VERIFY_MALFORMED)
+        return status;
 
     const char *dir = getenv("XRAY_CGEN_ICE_DIR");
     if (!dir || !*dir)
@@ -747,7 +764,7 @@ void xi_cgen_verify_output_or_ice(const char *c_src, size_t len, const char *tu_
     snprintf(path, sizeof(path), "%s/xray_cgen_ice_%s_%lld.c", dir, safe,
              (long long) xi_cgen_process_id());
 
-    FILE *f = fopen(path, "w");
+    FILE *f = fopen(path, "wb");
     if (f) {
         fwrite(c_src, 1, len, f);
         fclose(f);

@@ -4,8 +4,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
+
+# Strict providers reject an assignment of a local to itself; the automatic
+# provider choice must not decide whether a generator defect is visible.
+SELF_ASSIGNMENT = re.compile(rb"\b(v[0-9]+) = \1;")
 
 
 def main():
@@ -24,6 +29,17 @@ def main():
             path = folder / (name + ".xr")
             output = folder / (name + (".exe" if os.name == "nt" else ""))
             path.write_text(source, encoding="utf-8")
+            generated = folder / (name + ".c")
+            emitted = subprocess.run([str(xray), "build", str(path), "--native", "--c-only",
+                                      "-o", str(generated)], cwd=root, capture_output=True,
+                                     timeout=480)
+            if emitted.returncode != 0:
+                raise RuntimeError(f"{name} C emission exit {emitted.returncode}: " +
+                    (emitted.stdout + emitted.stderr).decode("utf-8", errors="replace"))
+            self_assigned = SELF_ASSIGNMENT.search(generated.read_bytes())
+            if self_assigned:
+                raise RuntimeError(f"{name} generated C assigns a local to itself: " +
+                                   self_assigned.group(0).decode("ascii"))
             built = subprocess.run([str(xray), "build", str(path), "-o", str(output)],
                                    cwd=root, capture_output=True, timeout=480)
             if built.returncode != 0:

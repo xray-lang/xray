@@ -64,6 +64,12 @@ def check_structural_module_slots(binary: Path) -> None:
             "var state:State?=null\n"
             "export fn isEmpty() -> bool { return state == null }\n", encoding="utf-8")
         source.write_text('import "./library"\nprint(library.isEmpty())\n', encoding="utf-8")
+        generated = root / "main.c"
+        emitted = invoke_bytes(binary, "build", str(source), "--native", "--c-only",
+                               "-o", str(generated))
+        require(emitted.returncode == 0, f"structural module slot C: {emitted.stderr!r}")
+        require(b"xr_aot_alloc(" not in generated.read_bytes(),
+                "null structural module slot emits an unused arena allocator")
         vm = invoke_bytes(binary, "run", str(source))
         require((vm.returncode, vm.stdout, vm.stderr) == (0, b"true\n", b""),
                 f"structural module slot VM: {vm.returncode} {vm.stdout!r} {vm.stderr!r}")

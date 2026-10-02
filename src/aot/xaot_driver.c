@@ -2914,7 +2914,15 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
          * a full on-disk dump and never reaches clang. No bypass. */
         const char *verify_timing = getenv("XRAY_CGEN_VERIFY_TIMING");
         clock_t verify_started = verify_timing ? clock() : (clock_t) 0;
-        xi_cgen_verify_output_or_ice(buf, bufsz, mod_names[m] ? mod_names[m] : "module");
+        XiCgenVerifyStatus verified =
+            xi_cgen_verify_output_or_ice(buf, bufsz, mod_names[m] ? mod_names[m] : "module");
+        if (verified != XI_CGEN_VERIFY_PASSED) {
+            fprintf(stderr, "Error: generated C verification failed (%s)\n",
+                    verified == XI_CGEN_VERIFY_OUT_OF_MEMORY ? "out of memory" : "invalid input");
+            xr_free(buf);
+            emit_ok = false;
+            break;
+        }
         if (options->c_dialect == XI_CGEN_C_DIALECT_C90) {
             XiCgenVerifyResult c90_result;
             if (!xi_cgen_verify_c90_output(buf, bufsz, &c90_result)) {

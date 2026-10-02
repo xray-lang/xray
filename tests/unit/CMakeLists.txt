@@ -361,6 +361,41 @@ set_tests_properties(test_xir_output_status PROPERTIES LABELS "unit;xir;ownershi
 
 add_xray_bootstrap_executable(test_xir_source xir/test_xir_source.c)
 target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
+add_xray_bootstrap_executable(test_xir_source_product xir/test_xir_source_product.c)
+target_link_libraries(test_xir_source_product PRIVATE xray_xir_source_product)
+if(MSVC)
+    target_compile_options(test_xir_source_product PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_product PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_product COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
+    $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib)
+set_tests_properties(test_xir_source_product PROPERTIES
+    LABELS "unit;xir;ownership;abi;execution")
+foreach(source_case retired array)
+    add_test(NAME test_xir_source_product_original_${source_case} COMMAND ${XRAY_PYTHON}
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
+        $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib --case ${source_case})
+    set_tests_properties(test_xir_source_product_original_${source_case} PROPERTIES
+        LABELS "unit;xir;ownership;abi;execution")
+endforeach()
+add_test(NAME test_xir_source_product_allocations COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
+    $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib --scan)
+set_tests_properties(test_xir_source_product_allocations PROPERTIES
+    LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 420)
+add_xray_bootstrap_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
+target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_source_product)
+if(MSVC)
+    target_compile_options(test_xir_source_product_linked PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_product_linked PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_product_linked COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
+    $<TARGET_FILE:test_xir_source_product_linked> ${CMAKE_SOURCE_DIR}/stdlib)
+set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution")
 target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 add_xray_bootstrap_executable(test_xir_source_admission xir/test_xir_source_admission.c)
 add_xray_bootstrap_executable(test_xir_source_generics xir/test_xir_source_generics.c)
@@ -2986,6 +3021,17 @@ set_tests_properties(test_xaot_driver_program_graph_target_plan_cache PROPERTIES
 add_xray_unit_test(test_xaot_transfer_plan aot/test_xaot_transfer_plan.c)
 add_xray_unit_test(test_cgen_verify_output aot/test_cgen_verify_output.c)
 set_tests_properties(test_cgen_verify_output PROPERTIES LABELS "aot;cgen;task-218")
+add_executable(test_cgen_verify_allocations aot/test_cgen_verify_allocations.c)
+target_include_directories(test_cgen_verify_allocations PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_cgen_verify_allocations PRIVATE xray_xir_cgen)
+if(MSVC)
+    target_compile_options(test_cgen_verify_allocations PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_cgen_verify_allocations PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_cgen_verify_allocations COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/aot/test_cgen_verify_allocations.py $<TARGET_FILE:test_cgen_verify_allocations>)
+set_tests_properties(test_cgen_verify_allocations PROPERTIES LABELS "unit;aot;cgen;ownership;task-218")
 add_xray_unit_test(test_c_emission_typed_rules aot/test_c_emission_typed_rules.c)
 set_tests_properties(test_c_emission_typed_rules PROPERTIES
     LABELS "aot;cgen;typed-rules;mutation")
@@ -4018,8 +4064,10 @@ target_include_directories(xr_repl_publication_allocation_probe PRIVATE ${XRAY_C
 target_compile_definitions(xr_repl_publication_allocation_probe PRIVATE
     $<TARGET_PROPERTY:xray_core_objs,COMPILE_DEFINITIONS>)
 if(MSVC)
+    # xrepl.c reaches runtime objects that end in C11 flexible array members,
+    # which cl.exe still reports as the C4200 zero-sized-array extension.
     target_compile_options(xr_repl_publication_allocation_probe PRIVATE
-        /W4 /WX "/FI${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
+        /W4 /WX /wd4200 "/FI${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
 else()
     target_compile_options(xr_repl_publication_allocation_probe PRIVATE
         -Wall -Wextra -Werror -include "${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
