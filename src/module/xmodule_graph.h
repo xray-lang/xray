@@ -165,7 +165,8 @@ XR_FUNC XrModuleStatus xr_module_graph_build_logical_source(XrModuleGraph *g,
 
 /* Run topological sort (Tarjan SCC).
  * After success, g->topo_order is filled and g->has_cycle indicates cycles.
- * Returns 0 on success (no cycle), -1 if cycles detected (g->cycle_desc set). */
+ * Returns XR_MODULE_OK without cycles, XR_MODULE_INVALID for a cycle, or
+ * XR_MODULE_OUT_OF_MEMORY if the sorting metadata cannot be allocated. */
 XR_FUNC XrModuleStatus xr_module_graph_topological_sort(XrModuleGraph *g);
 
 /* The name this module is imported under at run time.
