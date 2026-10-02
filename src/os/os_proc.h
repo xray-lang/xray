@@ -48,22 +48,22 @@ typedef enum XrProcWaitResult {
     XR_PROC_WAIT_EXITED = 1,
 } XrProcWaitResult;
 
-typedef enum XrProcStatus {
+typedef enum XrOsProcStatus {
     XR_PROC_OK, XR_PROC_INVALID_ARGUMENT, XR_PROC_UNRESOLVED, XR_PROC_BUDGET,
     XR_PROC_OUT_OF_MEMORY, XR_PROC_IO, XR_PROC_UNSUPPORTED
-} XrProcStatus;
+} XrOsProcStatus;
 
 /* Callbacks are mandatory. The context is borrowed only during spawn.
  * Compiler callers pass their ledger; execution callers explicitly choose
  * their allocation policy. No allocation policy is selected implicitly. */
 typedef struct XrProcMemory {
     void *context;
-    XrProcStatus (*alloc)(void *context, size_t bytes, void **output);
+    XrOsProcStatus (*alloc)(void *context, size_t bytes, void **output);
     void (*free)(void *context, void *memory);
-    XrProcStatus (*work)(void *context, uint64_t units);
+    XrOsProcStatus (*work)(void *context, uint64_t units);
 } XrProcMemory;
 XR_FUNC XrProcMemory xr_proc_system_memory(void);
-XR_FUNC XrProcStatus xr_proc_last_error(void);
+XR_FUNC XrOsProcStatus xr_proc_last_error(void);
 
 typedef struct XrProcSpawnOptions {
     XrProcMemory memory;
@@ -87,7 +87,7 @@ typedef struct XrProcSpawnOptions {
 /* Failure preserves output. Successful waits consume ordinary child owners. Group IDs require close
  * after wait, including failed waits; close terminates remaining descendants.
  * Detached IDs are informational and must not be waited or closed. */
-XR_FUNC XrProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
+XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *options, XrProcId *output);
 /* Only an owned new_process_group request can be closed. */
 XR_FUNC int xr_proc_close(XrProcId pid);

@@ -45,32 +45,32 @@ static int proc_group_reserve(void) {
     return -1;
 }
 
-static XrProcStatus proc_system_alloc(void *context, size_t bytes, void **out) {
+static XrOsProcStatus proc_system_alloc(void *context, size_t bytes, void **out) {
     (void) context; void *p = xr_malloc(bytes);
     if (!p) return XR_PROC_OUT_OF_MEMORY;
     *out = p; return XR_PROC_OK;
 }
 static void proc_system_free(void *context, void *p) { (void) context; xr_free(p); }
-static XrProcStatus proc_system_work(void *context, uint64_t n) {
+static XrOsProcStatus proc_system_work(void *context, uint64_t n) {
     (void) context; (void) n; return XR_PROC_OK;
 }
 XR_FUNC XrProcMemory xr_proc_system_memory(void) {
     XrProcMemory m = {NULL, proc_system_alloc, proc_system_free, proc_system_work}; return m;
 }
-XR_FUNC XrProcStatus xr_proc_last_error(void) {
+XR_FUNC XrOsProcStatus xr_proc_last_error(void) {
     if (errno == ENOMEM) return XR_PROC_OUT_OF_MEMORY;
     if (errno == ENOENT || errno == ENOTDIR) return XR_PROC_UNRESOLVED;
     if (errno == EINVAL || errno == EILSEQ) return XR_PROC_INVALID_ARGUMENT;
     return XR_PROC_IO;
 }
 
-static XrProcStatus proc_spawn_options_valid(const XrProcSpawnOptions *o) {
+static XrOsProcStatus proc_spawn_options_valid(const XrProcSpawnOptions *o) {
     if (o->env_count && (!o->env_keys || !o->env_values)) return XR_PROC_INVALID_ARGUMENT;
     for (size_t i = 0; i < o->env_count; ++i) {
         const char *key = o->env_keys[i];
         if (!key || !*key || !o->env_values[i]) return XR_PROC_INVALID_ARGUMENT;
         for (size_t j = 0;; ++j) {
-            XrProcStatus s = o->memory.work(o->memory.context, 1); if (s != XR_PROC_OK) return s;
+            XrOsProcStatus s = o->memory.work(o->memory.context, 1); if (s != XR_PROC_OK) return s;
             if (!key[j]) break;
             if (key[j] == '=') return XR_PROC_INVALID_ARGUMENT;
         }
@@ -128,13 +128,13 @@ static bool proc_read_i64(int fd, int64_t *out) {
     return true;
 }
 
-XR_FUNC XrProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
+XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free || !o->memory.work ||
         (o->detached && o->new_process_group)) return XR_PROC_INVALID_ARGUMENT;
     XrProcMemory m = o->memory;
-    XrProcStatus status = proc_spawn_options_valid(o);
+    XrOsProcStatus status = proc_spawn_options_valid(o);
     if (status != XR_PROC_OK) return status;
     char **environment = NULL; size_t count = 0;
     int report[2] = {-1, -1}, detached_pipe[2] = {-1, -1}; pid_t pid = -1; int group_slot = -1;

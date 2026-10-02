@@ -203,7 +203,7 @@ static XrProcessStatus process_resource(XrCompileResourceStatus s) {
     }
     return XTC_PROCESS_INVALID;
 }
-static XrProcessStatus process_os(XrProcStatus s) {
+static XrProcessStatus process_os(XrOsProcStatus s) {
     switch (s) {
     case XR_PROC_OK: return XTC_PROCESS_OK;
     case XR_PROC_INVALID_ARGUMENT: return XTC_PROCESS_INVALID;
@@ -215,7 +215,7 @@ static XrProcessStatus process_os(XrProcStatus s) {
     }
     return XTC_PROCESS_IO;
 }
-static XrProcStatus process_os_resource(XrCompileResourceStatus s) {
+static XrOsProcStatus process_os_resource(XrCompileResourceStatus s) {
     switch (s) {
     case XR_COMPILE_RESOURCE_OK: return XR_PROC_OK;
     case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_PROC_INVALID_ARGUMENT;
@@ -224,11 +224,11 @@ static XrProcStatus process_os_resource(XrCompileResourceStatus s) {
     }
     return XR_PROC_INVALID_ARGUMENT;
 }
-static XrProcStatus process_allocate(void *context, size_t bytes, void **out) {
+static XrOsProcStatus process_allocate(void *context, size_t bytes, void **out) {
     return process_os_resource(xr_compile_resources_alloc(context, bytes, out));
 }
 static void process_release(void *context, void *p) { (void)context; xr_compile_resources_free(p); }
-static XrProcStatus process_charge(void *context, uint64_t units) {
+static XrOsProcStatus process_charge(void *context, uint64_t units) {
     return process_os_resource(xr_compile_resources_work(context, units));
 }
 static XrProcessStatus process_work(XrCompileResources *r, uint64_t n) {

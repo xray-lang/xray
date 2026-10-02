@@ -25,26 +25,26 @@ typedef struct ProcLive { DWORD pid; HANDLE process, job; bool waited; } ProcLiv
 static ProcLive g_live[XR_PROC_MAX_LIVE];
 static SRWLOCK g_live_lock = SRWLOCK_INIT;
 
-static XrProcStatus proc_system_alloc(void *context, size_t bytes, void **out) {
+static XrOsProcStatus proc_system_alloc(void *context, size_t bytes, void **out) {
     (void) context; void *p = xr_malloc(bytes);
     if (!p) return XR_PROC_OUT_OF_MEMORY;
     *out = p; return XR_PROC_OK;
 }
 static void proc_system_free(void *context, void *p) { (void) context; xr_free(p); }
-static XrProcStatus proc_system_work(void *context, uint64_t n) {
+static XrOsProcStatus proc_system_work(void *context, uint64_t n) {
     (void) context; (void) n; return XR_PROC_OK;
 }
 XR_FUNC XrProcMemory xr_proc_system_memory(void) {
     XrProcMemory m = {NULL, proc_system_alloc, proc_system_free, proc_system_work}; return m;
 }
-XR_FUNC XrProcStatus xr_proc_last_error(void) {
+XR_FUNC XrOsProcStatus xr_proc_last_error(void) {
     DWORD e = GetLastError();
     if (e == ERROR_NOT_ENOUGH_MEMORY || e == ERROR_OUTOFMEMORY) return XR_PROC_OUT_OF_MEMORY;
     if (e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND || e == ERROR_DIRECTORY) return XR_PROC_UNRESOLVED;
     if (e == ERROR_INVALID_PARAMETER || e == ERROR_NO_UNICODE_TRANSLATION) return XR_PROC_INVALID_ARGUMENT;
     return XR_PROC_IO;
 }
-typedef struct ProcBuild { XrProcMemory memory; XrProcStatus status; } ProcBuild;
+typedef struct ProcBuild { XrProcMemory memory; XrOsProcStatus status; } ProcBuild;
 static bool proc_work(ProcBuild *b, uint64_t n) {
     if (b->status == XR_PROC_OK) b->status = b->memory.work(b->memory.context, n);
     return b->status == XR_PROC_OK;
@@ -236,7 +236,7 @@ static wchar_t *proc_environment(ProcBuild *b, const XrProcSpawnOptions *o) {
     return block;
 }
 
-XR_FUNC XrProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
+XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free || !o->memory.work ||
