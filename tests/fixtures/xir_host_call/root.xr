@@ -1,0 +1,29 @@
+var state = 0
+fn identity<T>(value:T)->T { return value }
+export fn normal()->string {
+    const held = identity("held" + "-result")
+    state += 1
+    defer { print(state) }
+    print(state)
+    Coro.yield()
+    state += 10
+    print(state)
+    Coro.yield()
+    return held
+}
+export fn failed()->string {
+    defer { print(7) }
+    Coro.yield()
+    assert(false, "owned" + "-panic")
+    return "unreachable"
+}
+export fn cleanupAllocated()->i64 {
+    defer { print("clean" + "up") }
+    Coro.yield()
+    return 0
+}
+export fn cleanupFatal()->i64 {
+    defer { assert(false, "cleanup") }
+    Coro.yield()
+    return 0
+}
