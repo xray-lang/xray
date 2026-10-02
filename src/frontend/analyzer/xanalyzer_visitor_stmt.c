@@ -2645,10 +2645,12 @@ static bool xa_thread_lint_collect_scope_fn_summaries(XaInferContext *ctx, XaSco
             }
         }
     }
-    int symbol_count = 0;
-    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &symbol_count);
-    for (int i = 0; i < symbol_count; i++) {
-        XaSymbol *sym = symbols ? symbols[i] : NULL;
+    /* Summary construction reads symbols without changing scope membership.
+     * Keep hash iteration order without allocating a snapshot for every scope. */
+    const XrHashMap *symbols = (const XrHashMap *) scope->symbols;
+    for (uint32_t i = 0; symbols && i < symbols->capacity; i++) {
+        const XrHashMapEntry *entry = &symbols->entries[i];
+        XaSymbol *sym = entry->key ? (XaSymbol *) entry->value : NULL;
         if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const ||
             xa_symbol_has_shared_storage(sym) || sym->is_imported || !sym->name)
             continue;
@@ -2674,7 +2676,6 @@ static bool xa_thread_lint_collect_scope_fn_summaries(XaInferContext *ctx, XaSco
             added = true;
         }
     }
-    xr_free(symbols);
     for (int i = 0; i < scope->child_count; i++)
         added =
             xa_thread_lint_collect_scope_fn_summaries(ctx, scope->children[i], head, tail) || added;
@@ -5185,10 +5186,12 @@ static bool xa_os_resource_lint_collect_scope_fn_summaries(XaInferContext *ctx, 
             }
         }
     }
-    int symbol_count = 0;
-    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &symbol_count);
-    for (int i = 0; i < symbol_count; i++) {
-        XaSymbol *sym = symbols ? symbols[i] : NULL;
+    /* Summary construction reads symbols without changing scope membership.
+     * Keep hash iteration order without allocating a snapshot for every scope. */
+    const XrHashMap *symbols = (const XrHashMap *) scope->symbols;
+    for (uint32_t i = 0; symbols && i < symbols->capacity; i++) {
+        const XrHashMapEntry *entry = &symbols->entries[i];
+        XaSymbol *sym = entry->key ? (XaSymbol *) entry->value : NULL;
         if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const ||
             xa_symbol_has_shared_storage(sym) || sym->is_imported || !sym->name)
             continue;
@@ -5214,7 +5217,6 @@ static bool xa_os_resource_lint_collect_scope_fn_summaries(XaInferContext *ctx, 
             added = true;
         }
     }
-    xr_free(symbols);
     for (int i = 0; i < scope->child_count; i++)
         added =
             xa_os_resource_lint_collect_scope_fn_summaries(ctx, scope->children[i], head, tail) ||
