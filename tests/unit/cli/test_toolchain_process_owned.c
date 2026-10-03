@@ -312,7 +312,7 @@ static void sdk_target_process(const char *root) {
     XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
     CHECK(stats.live_bytes > xr_xir_runtime_sdk_facts(sdk)->metadata_bytes);
     xr_compile_resources_release(r);
-    CHECK(xr_xir_runtime_sdk_facts(sdk)->file_count == 141);
+    CHECK(xr_xir_runtime_sdk_facts(sdk)->file_count == sizeof(sdk_recipe_files) / sizeof(sdk_recipe_files[0]));
     memset(&request, 0xCD, sizeof(request)); memset(&spec, 0xCD, sizeof(spec));
     XrProcessResult result = {0}; CHECK(xtc_process_run(owner, NULL, NULL, &result) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 23 && result.stdout_bytes.length == strlen("out|none|absent|"));
