@@ -1047,6 +1047,12 @@ XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, co
                 status = XR_XIR_BUDGET;
                 break;
             }
+            if (module->declarations && module->declarations->functions[f].test_role &&
+                (module->functions[f].parameter_count || module->functions[f].result != XR_XIR_UNIT ||
+                 (module->generics && module->generics[f].parameter_count))) {
+                status = XR_XIR_BAD_TYPE;
+                break;
+            }
             status = verify_function(&module->functions[f], module->stage, &context);
             if (status != XR_XIR_OK)
                 break;

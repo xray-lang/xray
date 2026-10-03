@@ -105,6 +105,8 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             target->default_expression = expression;
             ctx->generics[helper] = ctx->generics[f];
             ctx->identities[helper] = ctx->identities[f];
+            ctx->identities[helper].test_role = XR_XIR_TEST_ROLE_NONE;
+            ctx->identities[helper].test_timeout_seconds = 0;
             ctx->identities[helper].exported = false;
             ctx->identities[helper].promises = 0;
             ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;

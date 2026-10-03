@@ -1,5 +1,6 @@
 from pathlib import Path
 import hashlib,json,struct,re
+from derive_test_roles_vectors import upgrade, historical_vector
 
 def words(*values): return struct.pack('<'+'I'*len(values),*values)
 def op(code,result=0,left=0,right=0,immediate=0):
@@ -24,7 +25,7 @@ body+=words(0,0) # Empty literal0, implementation count0.
 body+=words(0,0,0,0) # No generics or type/nominal/interface pools.
 body+=words(1,0,1,1,2) # One default: parameter owner1 ordinal1 helper2.
 body+=words(0) # No provenance on this unspecialized library.
-current=packet(body,58)
+current=upgrade(packet(body,58))
 directory=Path(__file__).parent
 manifest=json.loads((directory/'assert_condition_packet_vectors.json').read_text(encoding='utf-8'))
 header=(directory/'xir_assert_condition_golden.h').read_text(encoding='utf-8')
@@ -35,7 +36,7 @@ assert packet(body,55,21).hex()==manifest['previous55_core_packet_hex']
 for record in manifest['same_body_vectors']:
     text=(directory/record['path']).read_text(encoding='utf-8')
     match=re.search(r'static const uint8_t '+record['name']+r'\[\] = \{(.*?)\};',text,re.S)
-    literal=bytes(int(value,16) for value in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))
+    literal=historical_vector(record['path'],record['name'])
     assert packet(literal[64:],58)==literal
     assert hashlib.sha256(literal[64:]).hexdigest()==record['body_sha256']
     assert packet(literal[64:],54,21)[32:64].hex()==record['old_digest']
@@ -43,4 +44,4 @@ for record in manifest['same_body_vectors']:
     assert packet(literal[64:],57)[32:64].hex()==record['current_digest']
 print(json.dumps({'core_bytes':len(current),'core_digest':current[32:64].hex(),
     'previous54_whole_bodies_reproduced':len(manifest['same_body_vectors']),
-    'wire22_semantic58_whole_bodies_verified':len(manifest['same_body_vectors'])},indent=2))
+    'historical_wire22_semantic58_whole_bodies_verified':len(manifest['same_body_vectors'])},indent=2))

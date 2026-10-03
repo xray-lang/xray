@@ -18,6 +18,15 @@
 #include "../xir/xxir_program.h"
 
 typedef struct XrXirSourceProduct XrXirSourceProduct;
+typedef struct XrXirSourceTestEntry {
+    uint32_t function, role, timeout_seconds;
+    const char *name;
+    size_t name_length;
+} XrXirSourceTestEntry;
+typedef struct XrXirSourceTests {
+    const XrXirSourceTestEntry *entries;
+    uint32_t count;
+} XrXirSourceTests;
 typedef struct XrXirSourceProductFacts {
     XrXirTarget target;
     uint32_t entry, function_count, module_count;
@@ -62,6 +71,10 @@ XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDia
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
 /* The borrowed context is the owner's actual ledger, including after VM take. */
 XR_FUNC const XrXirCompileContext *xr_xir_compile_source_product_context(const XrXirSourceProduct *product);
+/* Root-module roles use actual closed function indexes. Entries and names are
+ * product-owned on its original ledger, survive VM transfer and producer
+ * destruction, and are borrowed until product free. They confer no authority. */
+XR_FUNC const XrXirSourceTests *xr_xir_compile_source_product_tests(const XrXirSourceProduct *product);
 XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output);
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_product_view(const XrXirSourceProduct *product);

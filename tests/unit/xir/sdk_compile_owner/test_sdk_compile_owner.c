@@ -34,7 +34,7 @@ static char *input(const char *path,size_t *length) {
 static XrXirRuntimeSdk *admit(const XrXirRuntimeSdkRequest *request) {
     XrXirRuntimeSdk *sdk=NULL;CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK);
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
-    CHECK(facts->value_abi==18 && facts->call_abi==22 && facts->program_abi==27 && facts->crt==2);
+    CHECK(facts->value_abi==18 && facts->call_abi==22 && facts->program_abi==28 && facts->crt==2);
     const char *resource_library=NULL;
     CHECK(xr_xir_runtime_sdk_file(sdk,"lib/xray_compile_resources.lib",&resource_library)==XR_XIR_SDK_OK && resource_library);
     return sdk;
@@ -105,7 +105,7 @@ static void failure_matrix(const XrXirRuntimeSdkRequest *original) {
         CHECK(xr_xir_compile_program_seal(&compile,&compile_owner_program,&program)==XR_XIR_OUT_OF_MEMORY && !program);
         runtime_fail_at=SIZE_MAX;
         CHECK(sdk_stats(request.resources).live_bytes==before.live_bytes && runtime_bytes==physical && handles()==sdk_handles);
-        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==27);
+        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==28);
         xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(request.resources);
         CHECK(!runtime_live && !runtime_bytes && handles()==initial);
     }

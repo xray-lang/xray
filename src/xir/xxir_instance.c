@@ -250,7 +250,7 @@ static XrXirCallStatus capture_arguments(XrXirInstance *instance, const XrXirVal
 }
 static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     const XrXirValue *arguments, uint32_t count, const XrXirFunctionBinding *binding,
-    XrXirValueAdmission *admission) {
+    XrXirValueAdmission *admission, bool test_entry) {
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->state == XR_XIR_INSTANCE_FAILED) return instance->failure.status;
@@ -262,8 +262,16 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     const XrXirDeclarations *d = instance->program->declarations;
     if (entry >= instance->program->entry_count ||
         !instance->program->active_modules[d->functions[entry].module] ||
-        (!binding && entry != d->entry_function && !d->functions[entry].exported)) return XR_XIR_CALL_BAD_ARGUMENT;
+        (!test_entry && !binding && entry != d->entry_function && !d->functions[entry].exported)) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *requested = &instance->program->entries[entry];
+    if (test_entry) {
+        const XrXirFunctionIdentity *identity = &d->functions[entry];
+        if (identity->module != d->root_module || identity->test_role == XR_XIR_TEST_ROLE_NONE ||
+            identity->test_role == XR_XIR_TEST_ROLE_SKIP || identity->test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
+            identity->nominal_owner || entry == d->entry_function ||
+            entry == d->modules[d->root_module].initializer || requested->parameter_count ||
+            requested->result != XR_XIR_UNIT) return XR_XIR_CALL_BAD_ARGUMENT;
+    }
     if (requested->cleanup_owner) return XR_XIR_CALL_BAD_ARGUMENT;
     uint32_t captures = binding ? binding->capture_count : 0;
     if (captures > requested->parameter_count || count != requested->parameter_count - captures ||
@@ -535,7 +543,12 @@ XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t entry,
     const XrXirValue *arguments, uint32_t count) {
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirValueAdmission admission = instance_candidate_admission(instance);
-    return instance_start(instance, entry, arguments, count, NULL, &admission);
+    return instance_start(instance, entry, arguments, count, NULL, &admission, false);
+}
+XrXirCallStatus xr_xir_instance_start_test(XrXirInstance *instance, uint32_t entry) {
+    if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirValueAdmission admission = instance_candidate_admission(instance);
+    return instance_start(instance, entry, NULL, 0, NULL, &admission, true);
 }
 static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValue *value,
     uint32_t *entry, XrXirValueAdmission *admission) {
@@ -564,7 +577,7 @@ XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const Xr
     uint32_t entry = 0;
     XrXirCallStatus status = resolve_function(instance, function, &entry, &admission);
     return status == XR_XIR_CALL_READY ? instance_start(instance, entry, arguments, count,
-        xr_xir_function_binding(function), &admission) : status;
+        xr_xir_function_binding(function), &admission, false) : status;
 }
 XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXirValue *function, uint32_t *entry) {
     XrXirInstance *instance = view_instance(view);

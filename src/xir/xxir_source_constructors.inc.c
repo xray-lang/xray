@@ -144,7 +144,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     }
     uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
     ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : decl->exported, owner->index + 1, access, 0,
-        decl->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR};
+        decl->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0};
     return source_query_parameters(ctx, symbol.declaration);
 }
 static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType type,

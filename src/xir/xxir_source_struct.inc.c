@@ -246,7 +246,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                 if (!source_nominal_function_scope(ctx,index,symbol)) return false;
                 ctx->bodies[index].declaration = ctx->nominal_members[symbol->index][f];
                 bool visible = nominal->exported && !(nominal->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED));
-                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER};
+                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER, 0, 0};
             }
         }
     }

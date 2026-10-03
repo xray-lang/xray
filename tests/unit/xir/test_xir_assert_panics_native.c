@@ -68,7 +68,7 @@ int main(void) {
     _Static_assert(XR_XIR_VALUE_ABI_VERSION==17 && sizeof(XrXirValue)==16,"public value ABI");
     _Static_assert(XR_XIR_CALL_ABI_VERSION==21 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
-    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==26 && sizeof(XrXirProgramSpec)==96,"public program ABI");
+    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==28 && sizeof(XrXirProgramSpec)==96,"public program ABI");
     for (uint32_t matrix=0;matrix<2;++matrix) {
         const XrXirProgramSpec *spec=matrix ? &panics_matrix_program : &panics_checked_program;
         XrXirProgram *program=NULL;CHECK(xr_xir_program_seal(spec,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);

@@ -16,6 +16,7 @@
 #include "xxir_implementation.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_utf8_core.h"
+#include <limits.h>
 
 
 /* Types, identity metadata and signature structure precede this pass.  A
@@ -129,6 +130,7 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
             xr_utf8_core_scan_strict((const uint8_t *) module->name, module->name_length).error != XR_UTF8_OK)
             return XR_XIR_BAD_STRUCTURE;
         if (d->functions[module->initializer].module != m || d->functions[module->initializer].exported ||
+            d->functions[module->initializer].test_role ||
             d->functions[module->initializer].nominal_owner || module->initializer == d->entry_function) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < m; ++p) {
             if (!xir_compile_work(work, module->name_length)) return XR_XIR_BUDGET;
@@ -167,10 +169,14 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
             d->functions[i].method_kind > XR_XIR_MEMBER_HELPER ||
+            d->functions[i].test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
+            (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_seconds) ||
+            d->functions[i].test_timeout_seconds > INT_MAX ||
+            (d->functions[i].test_role && (d->functions[i].nominal_owner || d->functions[i].cleanup_owner)) ||
             (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
             (d->functions[i].promises & ~XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_BAD_STRUCTURE;
     if (kind == XR_XIR_PROGRAM && (d->functions[d->entry_function].module != d->root_module ||
-        d->functions[d->entry_function].nominal_owner)) return XR_XIR_BAD_STRUCTURE;
+        d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions, work);
     if (status != XR_XIR_OK) return status;
     for (uint32_t i = 0; i < functions; ++i) {

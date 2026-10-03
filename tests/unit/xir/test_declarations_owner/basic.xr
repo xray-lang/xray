@@ -1,0 +1,22 @@
+import { imported_value } from "./library"
+fn identity<T>(value: T) -> T { return value }
+fn initial() -> i64 {
+    print("init")
+    return imported_value()
+}
+var state = initial()
+@before_all
+fn prepare() { print("before_all") }
+@before_each
+fn before_case() { print("before_each") }
+@test
+fn first() { defer {}; state += 1; print(identity<i64>(state)) }
+@test(skip)
+fn skipped() { print("must not run") }
+@test(timeout: 7)
+fn second() { state += 1; print(state) }
+@after_each
+fn after_case() { print("after_each") }
+@after_all
+fn finish() { print("after_all") }
+fn private_plain() { print("must not run") }

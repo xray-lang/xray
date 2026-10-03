@@ -195,7 +195,7 @@ static XrXirLibraryCatalog *real_catalog(const XrXirCompileContext *context) {
     const XrXirFunction function={"init",4,NULL,0,XR_XIR_UNIT,&block,1,ops,1,NULL,0};
     const char canonical[]="module-id-v1:kind=6:script:namespace=0::path=6:lib.xr";
     XrXirSourceModule source={canonical,sizeof(canonical)-1,NULL,0,0};
-    const XrXirFunctionIdentity name={0,0,0,0,0,0,0};
+    const XrXirFunctionIdentity name={0,0,0,0,0,0,0, 0, 0};
     XrXirDeclarations declarations={&source,1,&name,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module={XR_XIR_BUILT,&function,1,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};

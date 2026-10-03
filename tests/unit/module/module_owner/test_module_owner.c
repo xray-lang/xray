@@ -86,7 +86,7 @@ static void make_packet(void) {
     const XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,init_ops,1,NULL,0}, {"answer",6,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0}};
     const char *canonical = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
     XrXirSourceModule source = {canonical,(uint32_t)strlen(canonical),NULL,0,0};
-    const XrXirFunctionIdentity names[] = {{0,0,0,0,0,0,0},{0,1,0,0,0,0,0}};
+    const XrXirFunctionIdentity names[] = {{0,0,0,0,0,0,0, 0, 0},{0,1,0,0,0,0,0, 0, 0}};
     XrXirDeclarations declarations = {&source,1,names,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};

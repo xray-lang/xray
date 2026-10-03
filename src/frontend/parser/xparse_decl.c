@@ -308,7 +308,13 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
                         xr_parser_error(parser, "timeout value is too large");
                         if (!xr_parser_healthy(parser)) return NULL;
                     } else attr->timeout = (int) timeout.bits;
+                } else {
+                    xr_parser_error(parser, "unknown test attribute parameter");
+                    return NULL;
                 }
+            } else {
+                xr_parser_error(parser, "expected skip or timeout in test attribute");
+                return NULL;
             }
             do {
                 xr_parser_consume(parser, TK_RPAREN, "expected ')' to close attribute params");

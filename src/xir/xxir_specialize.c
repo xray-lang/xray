@@ -222,7 +222,10 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     }
     if (c->diagnostic.status != XR_XIR_OK) return UINT32_MAX;
     if (!spec_name(c, to, instance)) return UINT32_MAX;
-    if (c->source->declarations) c->identities[index] = c->source->declarations->functions[declaration];
+    if (c->source->declarations) {
+        if (!spec_work(c, sizeof(*c->identities))) return UINT32_MAX;
+        c->identities[index] = c->source->declarations->functions[declaration];
+    }
     return index;
 }
 static bool spec_calls(SpecContext *c, uint32_t index) {

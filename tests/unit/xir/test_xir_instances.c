@@ -141,7 +141,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->modules[2] = (XrXirSourceModule) {"alpha", 5, NULL, 0, 2};
     uint32_t owners[] = {0, 1, 2, 0, 2, 1, 0, 0, 0, 2};
     for (uint32_t i = 0; i < 10; ++i) {
-        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0, XR_XIR_NON_MEMBER};
+        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0};
         f->entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
             sizeof(Frame), initializer, cleanup, &f->env[owners[i]], 0, 0};
     }

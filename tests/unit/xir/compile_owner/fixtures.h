@@ -105,7 +105,7 @@ static XrXirStatus implementation_built(const XrXirCompileContext *context, XrXi
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0}};
     XrXirSourceModule source_module = {"alpha",5,NULL,0,1};
-    XrXirFunctionIdentity identities[] = {{0},{0},{0,1,1,0,0,0,XR_XIR_READ_METHOD}};
+    XrXirFunctionIdentity identities[] = {{0},{0},{0,1,1,0,0,0,XR_XIR_READ_METHOD, 0, 0}};
     XrXirImplementationBinding binding = {{0,&argument,1},0,2};
     XrXirImplementation implementation = {0,{0,&argument,1},&binding,1};
     XrXirImplementationTable table = {&implementation,1};
@@ -142,7 +142,7 @@ static XrXirStatus generic_error_built(const XrXirCompileContext *context, XrXir
         {"make",4,&parameter,1,(XrXirType)256,&two,1,make,2,&operand,1},
         {"initB",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0}};
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0},{"beta",4,&dependency,1,3}};
-    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER}};
+    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL};
     XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1, NULL},{&function_constraint,1,NULL,0, NULL},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};

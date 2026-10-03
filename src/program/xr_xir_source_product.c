@@ -23,7 +23,54 @@ struct XrXirSourceProduct {
     XrXirSourceSnapshot *snapshot;
     XrXirCheckedPacket source_packet, closed_packet;
     XrXirSourceProductFacts facts;
+    XrXirSourceTests tests;
 };
+static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXirModule *module) {
+    const XrXirCompileContext *context = &product->context;
+    const XrXirDeclarations *d = module->declarations;
+    if (!xir_compile_work(context, sizeof(d->root_module))) return XR_XIR_BUDGET;
+    uint32_t root = d->root_module;
+    uint32_t count = 0;
+    size_t names = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (!xir_compile_work(context, sizeof(XrXirFunctionIdentity))) return XR_XIR_BUDGET;
+        XrXirFunctionIdentity identity = d->functions[f];
+        if (!identity.test_role || identity.module != root) continue;
+        if (!xir_compile_work(context, sizeof(XrXirFunction))) return XR_XIR_BUDGET;
+        XrXirFunction function = module->functions[f];
+        if ((uint64_t)function.name_length + 1 > SIZE_MAX - names) return XR_XIR_BUDGET;
+        names += (size_t)function.name_length + 1;
+        ++count;
+    }
+    if (!count) return XR_XIR_OK;
+    uint64_t rows = (uint64_t)count * sizeof(XrXirSourceTestEntry);
+    if (rows > SIZE_MAX || names > SIZE_MAX - (size_t)rows) return XR_XIR_BUDGET;
+    size_t size = (size_t)rows + names;
+    XrXirStatus status = XR_XIR_OK;
+    XrXirSourceTestEntry *entries = xir_compile_calloc(context, 1, size, &status);
+    if (!entries) return status;
+    char *name = (char *)(entries + count);
+    uint32_t index = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (!xir_compile_work(context, sizeof(XrXirFunctionIdentity))) { status = XR_XIR_BUDGET; break; }
+        XrXirFunctionIdentity identity = d->functions[f];
+        if (!identity.test_role || identity.module != root) continue;
+        if (!xir_compile_work(context, sizeof(XrXirFunction))) { status = XR_XIR_BUDGET; break; }
+        XrXirFunction function = module->functions[f];
+        if (!xir_compile_work(context, (uint64_t)function.name_length + 1 + sizeof(*entries))) {
+            status = XR_XIR_BUDGET; break;
+        }
+        memcpy(name, function.name, function.name_length);
+        name[function.name_length] = 0;
+        entries[index++] = (XrXirSourceTestEntry){f, identity.test_role,
+            identity.test_timeout_seconds, name, function.name_length};
+        name += (size_t)function.name_length + 1;
+    }
+    if (status == XR_XIR_OK && !xir_compile_work(context, sizeof(product->tests))) status = XR_XIR_BUDGET;
+    if (status != XR_XIR_OK) { xr_compile_resources_free(entries); return status; }
+    product->tests = (XrXirSourceTests){entries, count};
+    return XR_XIR_OK;
+}
 static bool source_diagnostic_empty(const XrXirSourceProductDiagnostic *diagnostic) {
     return !diagnostic || (!diagnostic->snapshot && !diagnostic->source_path);
 }
@@ -155,12 +202,14 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
         if (status==XR_XIR_OK) status=source_product_hash(context,&closed_packet,product->facts.closed_digest);
         if (status==XR_XIR_OK)
             status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest);
+        if (status==XR_XIR_OK) status=source_product_tests(product,module);
     }
     if (status==XR_XIR_OK) {
         product->lowered=lowered;product->snapshot=source.snapshot;
         product->source_packet=source_packet;product->closed_packet=closed_packet;
         *output=product;source.snapshot=NULL;source_packet=(XrXirCheckedPacket){0};closed_packet=(XrXirCheckedPacket){0};
     } else {
+        if (product) xr_compile_resources_free((void *)product->tests.entries);
         xr_compile_resources_free(product);
         xr_xir_compile_artifact_free(lowered);
         if (diagnostic) {diagnostic->snapshot=source.snapshot;source.snapshot=NULL;}
@@ -171,6 +220,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
 }
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product) {
     if (!product) return;
+    xr_compile_resources_free((void *)product->tests.entries);
     xr_xir_compile_artifact_free(product->lowered);xr_xir_compile_source_snapshot_free(product->snapshot);
     xr_xir_compile_checked_packet_free(&product->source_packet);xr_xir_compile_checked_packet_free(&product->closed_packet);
     xr_compile_resources_free(product);
@@ -185,6 +235,9 @@ XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const
 }
 XR_FUNC const XrXirCompileContext *xr_xir_compile_source_product_context(const XrXirSourceProduct *product) {
     return product ? &product->context : NULL;
+}
+XR_FUNC const XrXirSourceTests *xr_xir_compile_source_product_tests(const XrXirSourceProduct *product) {
+    return product ? &product->tests : NULL;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output) {

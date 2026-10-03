@@ -78,7 +78,7 @@ static void nullable_native_mixed(const XrXirProgramSpec *native,bool root_nativ
 }
 int main(void) {
     _Static_assert(XR_XIR_VALUE_ABI_VERSION==17 && XR_XIR_CALL_ABI_VERSION==21 &&
-        XR_XIR_PROGRAM_ABI_VERSION==26,"sum values require current consumers");
+        XR_XIR_PROGRAM_ABI_VERSION==28,"sum values require current consumers");
     const XrXirProgramSpec *spec=&nullable_checked_program;XrXirProgramSpec old=*spec;
     old.target.abi_version=16;XrXirProgram *program=(XrXirProgram *)(uintptr_t)1;
     size_t before=runtime_attempts;

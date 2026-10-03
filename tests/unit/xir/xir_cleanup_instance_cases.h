@@ -131,7 +131,7 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
         {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,sizeof(DrainState),drain_owner,drain_release,&w,XR_XIR_ENTRY_EXIT,0},
         {XR_XIR_CALL_ABI_VERSION,parameters,late_gate ? 1u : 2u,XR_XIR_UNIT,sizeof(uint32_t),drain_body,NULL,&w,0,2},
         {XR_XIR_CALL_ABI_VERSION,parameters,1,XR_XIR_I64,sizeof(DrainState),drain_callee,drain_release,&w,0,0}};
-    XrXirFunctionIdentity ids[] = {{0},{0,1,0,0,0, 0, XR_XIR_NON_MEMBER},{0,0,0,0,2, 0, XR_XIR_NON_MEMBER},{0}};
+    XrXirFunctionIdentity ids[] = {{0},{0,1,0,0,0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0,0,2, 0, XR_XIR_NON_MEMBER, 0, 0},{0}};
     XrXirSourceModule module = {"main",4,NULL,0,0}; XrXirSlot slot = {0,XR_XIR_I64,1};
     XrXirDeclarations declarations = {&module,1,ids,&slot,1,NULL,0,0,1, NULL};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},

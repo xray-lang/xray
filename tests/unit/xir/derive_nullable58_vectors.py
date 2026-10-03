@@ -4,6 +4,7 @@ import argparse, hashlib, json, re, struct
 from derive_assert_panics_vector import words, op, function, packet
 from derive_panic_carrier_vector import packet as scalar_packet
 from derive_equal57_migration import migrate, nullable_frame
+from derive_test_roles_vectors import upgrade
 
 
 def sum_vector(some):
@@ -13,7 +14,7 @@ def sum_vector(some):
     # Empty operands were emitted by function(); no generics, one unary node,
     # no nominal or interface declarations, no defaults and no provenance.
     body += words(0,1,0,0,5,0,2,0,0)
-    return packet(body,22,58)
+    return packet(body,23,59)
 
 
 def header(name, data):
@@ -41,18 +42,18 @@ def main():
     for record in records:
         previous=migrate(bytes.fromhex(record['old56_hex']))
         assert previous.hex()==record['current57_hex']
-        expected=nullable_frame(previous)
+        expected=upgrade(nullable_frame(previous))
         path=directory/record['path'];text=path.read_text(encoding='utf-8')
         match=re.search(r'\b'+record['name']+r'\s*\[[^\]]*\]\s*=\s*\{(.*?)\};',text,re.S)
         actual=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))
         if args.write:
-            assert actual in (previous,expected)
+            assert actual==expected
             content=header(record['name'],expected).split('{',1)[1].split('};',1)[0]
             path.write_text(text[:match.start(1)]+content+text[match.end(1):],encoding='utf-8')
         else: assert actual==expected
-    scalar=scalar_packet(58,22)
+    scalar=scalar_packet(59,23)
     assert product_layout(16).hex()=='a4f36107af3fd82c6fe19e1b99ba2ca1f7f7dd818c75f04e931e26f470abc953'
-    outputs={'xir_checked_scalar58_golden.h':header('checked_scalar58_golden',scalar),
+    outputs={'xir_checked_scalar59_golden.h':header('checked_scalar59_golden',scalar),
              'xir_nullable_golden.h':header('nullable_none_golden',sum_vector(False))+
                                       header('nullable_some_golden',sum_vector(True))}
     for name,content in outputs.items():
@@ -65,13 +66,13 @@ def main():
         checked.write_text(text[:digest.start(1)]+content+text[digest.end(1):],encoding='utf-8')
         identity=directory/'xir_source_product_identity.h';text=identity.read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',text,re.S)
-        content=','.join(f'0x{v:02x}' for v in product_layout(18,22,27))
+        content=','.join(f'0x{v:02x}' for v in product_layout(18,22,28))
         identity.write_text(text[:expected.start(1)]+content+text[expected.end(1):],encoding='utf-8')
     else:
         identity=(directory/'xir_source_product_identity.h').read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',identity,re.S)
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(18,22,27)
-    print(json.dumps({'unchanged_bodies_reproduced':len(records),
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(18,22,28)
+    print(json.dumps({'ordinary_vectors_reframed_with_role_zero':len(records),
         'nullable_none_sha256':hashlib.sha256(sum_vector(False)).hexdigest(),
         'nullable_some_sha256':hashlib.sha256(sum_vector(True)).hexdigest()}))
 

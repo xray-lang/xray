@@ -21,7 +21,7 @@ static void product_layout_vector(void) {
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,initialize,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0}};
     const XrXirSourceModule source={"m",1,NULL,0,1};
-    const XrXirFunctionIdentity ids[3]={{0,1,0,0,0,0,0},{0},{0}};
+    const XrXirFunctionIdentity ids[3]={{0,1,0,0,0,0,0, 0, 0},{0},{0}};
     const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,2,NULL};
     const XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -37,7 +37,7 @@ static void product_layout_vector(void) {
         CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);
         XrXirSourceProductFacts facts={0};facts.target=target;facts.entry=2;facts.function_count=3;facts.module_count=1;
-        static const uint8_t expected[]={0x47,0x3e,0xc6,0x22,0xcb,0x20,0xaa,0xcc,0xe7,0x7d,0x26,0x4f,0x58,0x6f,0xb5,0x27,0xf3,0xfc,0x8b,0x9c,0x39,0x2a,0xe4,0x6e,0x0e,0xf3,0x44,0x78,0xda,0x3a,0x51,0x7d};
+        static const uint8_t expected[]={0x08,0xe9,0x18,0xfe,0x59,0x68,0xec,0x5d,0xb5,0xa4,0x1b,0x17,0x5e,0xa7,0xf4,0x35,0x3b,0xd6,0x6f,0x02,0x98,0x84,0x5f,0x27,0x49,0xc1,0xfc,0x15,0x81,0x8b,0x8a,0x50};
         XrCompileResourceStats before={0},after={0};
         CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
         const uint64_t units=27+43*8+33;

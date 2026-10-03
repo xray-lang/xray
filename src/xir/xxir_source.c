@@ -1896,11 +1896,39 @@ static bool source_core_result_scope(SourceContext *ctx, AstNode *node, uint32_t
     ctx->generics[index] = (XrXirGeneric){constraint,1,NULL,0,kinds}; ctx->has_generics = true;
     return true;
 }
+static bool source_test_role(SourceContext *ctx, AstNode *node, XrXirFunctionIdentity *identity) {
+    FunctionDeclNode *decl = &node->as.function_decl;
+    if (decl->attr_count < 0 || (decl->attr_count && !decl->attributes))
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function attributes are malformed");
+    for (int a = 0; a < decl->attr_count; ++a) {
+        if (!source_work(ctx, node)) return false;
+        const XrAttribute *attribute = decl->attributes[a];
+        if (!attribute || identity->test_role)
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "conflicting test attributes");
+        switch (attribute->kind) {
+        case ATTR_TEST: case ATTR_TEST_TIMEOUT: identity->test_role = XR_XIR_TEST_ROLE_TEST; break;
+        case ATTR_TEST_SKIP: identity->test_role = XR_XIR_TEST_ROLE_SKIP; break;
+        case ATTR_BEFORE_ALL: identity->test_role = XR_XIR_TEST_ROLE_BEFORE_ALL; break;
+        case ATTR_AFTER_ALL: identity->test_role = XR_XIR_TEST_ROLE_AFTER_ALL; break;
+        case ATTR_BEFORE_EACH: identity->test_role = XR_XIR_TEST_ROLE_BEFORE_EACH; break;
+        case ATTR_AFTER_EACH: identity->test_role = XR_XIR_TEST_ROLE_AFTER_EACH; break;
+        default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function attribute is not implemented in XIR");
+        }
+        if (attribute->timeout < 0 || (attribute->kind != ATTR_TEST_TIMEOUT && attribute->timeout))
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid test timeout");
+        identity->test_timeout_seconds = (uint32_t)attribute->timeout;
+    }
+    if (identity->test_role && (decl->param_count || decl->type_param_count))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "test functions and hooks require no parameters or type parameters");
+    return true;
+}
 static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) {
     FunctionDeclNode *decl = &node->as.function_decl;
-    if (decl->is_generator || decl->is_extern || decl->attr_count || decl->type_param_count < 0 || decl->type_param_count > 65536 ||
+    if (decl->is_generator || decl->is_extern || decl->type_param_count < 0 || decl->type_param_count > 65536 ||
         decl->throws_count || decl->borrow_origin_count || !decl->body || decl->param_count > 65536 || decl->param_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function contract is not implemented in XIR");
+    XrXirFunctionIdentity identity = {.module = ctx->module, .exported = node->is_exported};
+    if (!source_test_role(ctx, node, &identity)) return false;
     SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], decl->name, node);
     if (!symbol) return false;
     symbol->kind = SOURCE_FUNCTION; symbol->index = index;
@@ -1938,6 +1966,8 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     *function = (XrXirFunction) {decl->name, (uint32_t) source_text_size(ctx, decl->name), body->parameters,
         (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
     if (!source_type(ctx, decl->return_type, &function->result)) return false;
+    if (identity.test_role && function->result != XR_XIR_UNIT)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "test functions and hooks cannot return a value");
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         if (!param->type || param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest ||
@@ -1949,7 +1979,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
         }
     }
-    ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported, 0, 0, 0, 0, XR_XIR_NON_MEMBER};
+    ctx->identities[index] = identity;
     return source_query_parameters(ctx, symbol->declaration);
 }
 static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spec, const XrModuleId *id) {

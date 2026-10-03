@@ -23,9 +23,9 @@ static XrXirArtifact *owner_lowered(const XrXirCompileContext *context) {
         {"text",4,NULL,0,XR_XIR_STRING,blocks+1,1,text,2,NULL,0}};
     const XrXirSourceModule source = {"root",4,NULL,0,0};
     const XrXirFunctionIdentity identities[] = {
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER},
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER},
-        {0,1,0,0,0,0,XR_XIR_NON_MEMBER}};
+        {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},
+        {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},
+        {0,1,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0}};
     const XrXirLiteral literal = {"A\0\xe4\xb8\xad",5};
     const XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1,NULL};
     const XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};

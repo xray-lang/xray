@@ -22,7 +22,7 @@ static XrXirArtifact *nominal_generic_fixture(bool expressions) {
     XrXirBlock block = {0, 1, 0, 0};
     functions[3] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &block, 1, &init, 1, NULL, 0};
     XrXirSourceModule module = {"alpha", 5, NULL, 0, 3};
-    XrXirFunctionIdentity identities[4] = {{0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
+    XrXirFunctionIdentity identities[4] = {{0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     identities[1].nominal_owner = 1; identities[1].method_kind = XR_XIR_MEMBER_HELPER;
     XrXirDeclarations declarations = {&module, 1, identities, NULL, 0, NULL, 0, 0, 0, NULL};
     NominalFixture f; nominal_fixture(&f); f.table.count = 1;

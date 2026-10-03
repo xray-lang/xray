@@ -236,7 +236,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE :
                 method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
             ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
-                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD};
+                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0};
             if (!source_query_parameters(ctx, symbol->declaration)) return false;
         }
     }

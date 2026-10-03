@@ -144,7 +144,7 @@ static XrXirStatus check_interface_module(const XrXirTypes *types, XrXirFunction
         {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1},{"other",5,&dependency,1,2}};
-    XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER}};
+    XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
     return xr_xir_check(&module,NULL,checked,diagnostic);

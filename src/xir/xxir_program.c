@@ -51,6 +51,8 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         const XrXirCallEntry *entry = &spec->entries[i];
+        if (spec->declarations->functions[i].test_role &&
+            (entry->parameter_count || entry->result != XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
         if ((entry->flags & ~XR_XIR_ENTRY_EXIT) ||
             entry->cleanup_owner != spec->declarations->functions[i].cleanup_owner ||
             (entry->cleanup_owner && (entry->result != XR_XIR_UNIT ||

@@ -1128,7 +1128,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     }
     append(buffer, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)
-        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind);
+        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds);
     append(buffer, "};\n");
     if (d->slot_count) {
         append(buffer, "static const XrXirSlot %s_slots[] = {\n", prefix);
@@ -1151,8 +1151,10 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu, NULL};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(sizeof(XrXirFunctionIdentity) == 28, \"XIR function identity stride\");\n"
+    append(buffer, "_Static_assert(sizeof(XrXirFunctionIdentity) == 36, \"XIR function identity stride\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, method_kind) == 24, \"XIR method role offset\");\n"
+        "_Static_assert(offsetof(XrXirFunctionIdentity, test_role) == 28, \"XIR test role offset\");\n"
+        "_Static_assert(offsetof(XrXirFunctionIdentity, test_timeout_seconds) == 32, \"XIR test timeout offset\");\n"
         "_Static_assert(offsetof(XrXirDeclarations, implementations) == 64, \"XIR implementation table offset\");\n"
         "_Static_assert(sizeof(XrXirDeclarations) == 72, \"XIR declaration stride\");\n"
         "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == %uu, \"XIR program ABI\");\n"
