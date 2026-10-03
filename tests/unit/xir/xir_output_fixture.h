@@ -12,7 +12,8 @@
 #ifndef XIR_OUTPUT_FIXTURE_H
 #define XIR_OUTPUT_FIXTURE_H
 #include "xir/xxir.h"
-static XrXirArtifact *output_fixture(void) {
+#include "xir_source_fixture_owner.h"
+static XrXirArtifact *output_fixture(const XrXirCompileContext *context) {
     const uint32_t operands[] = {0, 1, 5};
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirInstruction ops[] = {
@@ -43,9 +44,9 @@ static XrXirArtifact *output_fixture(void) {
     const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     return lowered;
 }
 #endif

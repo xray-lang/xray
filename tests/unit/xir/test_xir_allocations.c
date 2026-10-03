@@ -198,9 +198,11 @@ static XrXirOutputStatus allocation_bytes(void *context, XrXirOutputStream strea
     ++*published; return XR_XIR_OUTPUT_OK;
 }
 static size_t write_allocation_failures(void) {
-    XrXirArtifact *artifact = output_fixture();
+    SourceFixtureOwner owner = {0};
+    source_fixture_owner_new(&owner);
+    XrXirArtifact *artifact = output_fixture(&owner.context);
     XrXirCallEntry entry; XrXirVmBinding binding;
-    CHECK(xr_xir_vm_bind(artifact, 1, &binding, &entry) == XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_bind(artifact, 1, &binding, &entry) == XR_XIR_OK);
     XrXirDomain *domain = NULL; XrXirValue argument = {0};
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "x", 1, &argument) == XR_XIR_VALUE_OK);
@@ -224,7 +226,8 @@ static size_t write_allocation_failures(void) {
         CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees && live == baseline);
     }
     fail_at = SIZE_MAX;
-    xr_xir_value_drop(&argument); xr_xir_domain_drop(domain); xr_xir_artifact_free(artifact);
+    xr_xir_value_drop(&argument); xr_xir_domain_drop(domain); xr_xir_compile_artifact_free(artifact);
+    source_fixture_owner_free(&owner);
     CHECK(!live); return sites;
 }
 

@@ -6067,3 +6067,8 @@ include(CPack)
 message(STATUS "Install configuration:")
 message(STATUS "  make install      - Install to ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "  make package      - Generate install package")
+
+# Source properties have directory scope; cover all identity consumers after
+# their targets and subdirectories have been declared.
+include(cmake/XrayIdentityKernel.cmake)
+xray_optimize_identity_kernel("${CMAKE_CURRENT_SOURCE_DIR}")

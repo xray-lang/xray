@@ -3,6 +3,7 @@
 
 # Child and standalone gates share one interpreter discovery in this build.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include(${CMAKE_CURRENT_SOURCE_DIR}/core/identity_sha256.cmake)
 
 # Literal semantic vectors are derived independently of compiler libraries.
 add_test(NAME test_program_identity_vectors
@@ -426,8 +427,8 @@ add_executable(test_xir_output_native xir/test_xir_output_native.c ${XIR_OUTPUT_
 target_link_libraries(test_xir_output_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_output_vm xir/test_xir_output_vm.c)
 target_link_libraries(test_xir_output_vm PRIVATE xray_xir_vm)
-add_xray_bootstrap_executable(test_xir_output_status xir/test_xir_output_status.c)
-target_link_libraries(test_xir_output_status PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+add_executable(test_xir_output_status xir/test_xir_output_status.c)
+target_link_libraries(test_xir_output_status PRIVATE xray_xir_scalar)
 if(MSVC)
     target_compile_options(test_xir_output_status PRIVATE /W4 /WX)
 else()

@@ -55,7 +55,7 @@ static void config_guards(void) {
     CHECK(xr_xir_call_config_init(&call,sizeof(call)-1)==XR_XIR_CALL_BAD_ABI && !memcmp(&call,&before,sizeof(call)));
     CHECK(xr_xir_call_config_init(&call,sizeof(call)+1)==XR_XIR_CALL_BAD_ABI && !memcmp(&call,&before,sizeof(call)));
     CHECK(xr_xir_call_config_init(&call,sizeof(call))==XR_XIR_CALL_READY);
-    CHECK(call.abi_version==21 && call.struct_size==sizeof(call) && !call.output.write && !call.output.abi_version);
+    CHECK(call.abi_version==24 && call.struct_size==sizeof(call) && !call.output.write && !call.output.abi_version);
     CHECK(call.byte_limit==16777216 && call.poll_limit==1000000 && call.depth_limit==4096);
     CHECK(!call.entries && !call.entry_count && !call.instance && !call.accounting && !call.output.reserved && !call.output.context);
     XrXirInstanceConfig instance,saved;memset(&instance,0x5a,sizeof(instance));saved=instance;
@@ -63,38 +63,44 @@ static void config_guards(void) {
     CHECK(xr_xir_instance_config_init(&instance,sizeof(instance)-1)==XR_XIR_CALL_BAD_ABI && !memcmp(&instance,&saved,sizeof(instance)));
     CHECK(xr_xir_instance_config_init(&instance,sizeof(instance)+1)==XR_XIR_CALL_BAD_ABI && !memcmp(&instance,&saved,sizeof(instance)));
     CHECK(xr_xir_instance_config_init(&instance,sizeof(instance))==XR_XIR_CALL_READY);
-    CHECK(instance.abi_version==21 && instance.struct_size==sizeof(instance));
+    CHECK(instance.abi_version==24 && instance.struct_size==sizeof(instance));
     CHECK(instance.metadata_limit==16777216 && instance.value_limit==16777216 && instance.call_limit==16777216);
     CHECK(instance.poll_limit==1000000 && instance.depth_limit==4096 && !instance.trace && !instance.trace_context);
     CHECK(!instance.output.abi_version && !instance.output.reserved && !instance.output.write && !instance.output.context);
+    CHECK(!instance.time.abi_version && !instance.time.reserved && !instance.time.clock &&
+        !instance.time.utc_offset && !instance.time.context);
     struct {uint32_t version,size;} prefix={20,8};XrXirCall *activation=(XrXirCall *)(uintptr_t)1;
     runtime_attempts=0;
     CHECK(xr_xir_call_new((const XrXirCallConfig *)&prefix,0,NULL,0,&activation)==XR_XIR_CALL_BAD_ABI);
     CHECK(!activation && !runtime_attempts && !runtime_live && !runtime_bytes);
-    prefix.version=21;
+    prefix.version=24;
     CHECK(xr_xir_call_new((const XrXirCallConfig *)&prefix,0,NULL,0,&activation)==XR_XIR_CALL_BAD_ABI && !runtime_attempts);
     CHECK(xr_xir_call_new(NULL,0,NULL,0,NULL)==XR_XIR_CALL_BAD_ARGUMENT);
     XrXirInstance *owned=(XrXirInstance *)(uintptr_t)1;
     prefix.version=20;
     CHECK(xr_xir_instance_new((XrXirProgram *)(uintptr_t)1,(const XrXirInstanceConfig *)&prefix,&owned)==XR_XIR_CALL_BAD_ABI);
     CHECK(!owned && !runtime_attempts);
-    prefix.version=21;
+    prefix.version=24;
     CHECK(xr_xir_instance_new((XrXirProgram *)(uintptr_t)1,(const XrXirInstanceConfig *)&prefix,&owned)==XR_XIR_CALL_BAD_ABI);
     for (unsigned mode=0;mode<4;++mode) {
         CHECK(xr_xir_instance_config_init(&instance,sizeof(instance))==XR_XIR_CALL_READY);
         if (mode==0) instance.output.abi_version=20;
         if (mode==1) instance.output.reserved=1;
         if (mode==2) instance.output.context=(void *)(uintptr_t)1;
-        if (mode==3) instance.output.abi_version=21;
+        if (mode==3) instance.output.abi_version=24;
         CHECK(xr_xir_instance_new((XrXirProgram *)(uintptr_t)1,&instance,&owned)==XR_XIR_CALL_BAD_ABI);
         call.output=instance.output;
         CHECK(xr_xir_call_new(&call,0,NULL,0,&activation)==XR_XIR_CALL_BAD_ABI);
         CHECK(!owned && !activation && !runtime_attempts);
     }
     XrXirCallAccounting accounting={0};CHECK(xr_xir_call_config_init(&call,sizeof(call))==XR_XIR_CALL_READY);
-    XrXirCallEntry old_entry={20,NULL,0,XR_XIR_BOOL,sizeof(unsigned),output_action,output_release,NULL,0,0};
+    XrXirCallEntry old_entry={21,NULL,0,XR_XIR_BOOL,sizeof(unsigned),output_action,output_release,NULL,0,0};
     call.entries=&old_entry;call.entry_count=1;call.accounting=&accounting;
-    CHECK(xr_xir_call_new(&call,0,NULL,0,&activation)==XR_XIR_CALL_BAD_ABI && !activation && !runtime_attempts);
+    static const uint32_t retired_versions[]={20,21,22,23};
+    for (unsigned i=0;i<sizeof(retired_versions)/sizeof(retired_versions[0]);++i) {
+        old_entry.abi_version=retired_versions[i];
+        CHECK(xr_xir_call_new(&call,0,NULL,0,&activation)==XR_XIR_CALL_BAD_ABI && !activation && !runtime_attempts);
+    }
 }
 static void call_channels(void) {
     static const XrXirCallStatus expected[]={XR_XIR_CALL_RETURNED,XR_XIR_CALL_OOM,XR_XIR_CALL_LIMIT,
@@ -155,12 +161,14 @@ static void renderer_channels(void) {
 }
 int main(void) {
     _Static_assert(sizeof(XrXirOutputProvider)==24 && sizeof(XrXirOutputSink)==32,"versioned output prefixes");
-    _Static_assert(sizeof(XrXirCallConfig)==136 && sizeof(XrXirInstanceConfig)==88,"exact config admission sizes");
+    _Static_assert(XR_XIR_CALL_ABI_VERSION==24 && XR_XIR_VALUE_ABI_VERSION==18 &&
+        XR_XIR_PROGRAM_ABI_VERSION==28,"current execution admission versions");
+    _Static_assert(sizeof(XrXirCallConfig)==136 && sizeof(XrXirInstanceConfig)==120,"exact config admission sizes");
     _Static_assert(offsetof(XrXirCallConfig,entries)==8 && offsetof(XrXirInstanceConfig,metadata_limit)==8 &&
         offsetof(XrXirOutputProvider,write)==8 && offsetof(XrXirOutputSink,write)==8,"ABI prefixes precede payload fields");
     _Static_assert(sizeof(XrXirProgramSpec)==96 && sizeof(XrXirValue)==16 && sizeof(XrXirCallEntry)==64 &&
         sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 && sizeof(XrXirCallView)==216,"unchanged provider payload layout");
     config_guards();renderer_channels();call_channels();
-    printf("Call21 Provider24 Sink32 CallConfig136 InstanceConfig88; Value17/Program26 layouts unchanged; typed channels, cancel, physical PASS\n");
+    printf("Call24 Provider24 Sink32 CallConfig136 InstanceConfig120; Value18/Program28; typed channels, cancel, physical PASS\n");
     return 0;
 }

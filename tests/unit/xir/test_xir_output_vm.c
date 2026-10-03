@@ -17,14 +17,17 @@
 #include "xir_output_fixture.h"
 #include "xir_output_cases.h"
 int main(void) {
-    XrXirArtifact *artifact = output_fixture();
+    SourceFixtureOwner owner = {0};
+    source_fixture_owner_new(&owner);
+    XrXirArtifact *artifact = output_fixture(&owner.context);
     XrXirCallEntry entries[3];
     XrXirVmBinding bindings[3];
     for (uint32_t i = 0; i < 3; ++i)
-        CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
+        CHECK(xr_xir_compile_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
     output_cases(entries);
     write_cases(entries);
     write_action_admission();
-    xr_xir_artifact_free(artifact);
+    xr_xir_compile_artifact_free(artifact);
+    source_fixture_owner_free(&owner);
     return 0;
 }
