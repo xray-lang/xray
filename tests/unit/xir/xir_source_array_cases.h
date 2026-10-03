@@ -223,7 +223,7 @@ static void source_array_sticky_bounds(XrXirProgram *program, uint32_t entry) {
         CHECK(outcome.status == XR_XIR_CALL_BOUNDS && outcome.panic.detail.index == -1 && outcome.panic.detail.length == 1);
     }
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(!runtime_live && !runtime_bytes);
 }
 static void source_array_program_cases(XrXirProgram *program, const uint32_t *functions) {
@@ -276,7 +276,7 @@ static void source_array_program_cases(XrXirProgram *program, const uint32_t *fu
         source_array_result_cases(instances[i], functions);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (unsigned i = 0; i < 2; ++i) {
         XrXirDomain *receiver = NULL;
         CHECK(xr_xir_domain_new(65536, &receiver) == XR_XIR_VALUE_OK);

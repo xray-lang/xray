@@ -10,14 +10,20 @@
 #define XIR_SOURCE_ARRAY_PIPELINE_H
 #include "xir/xxir_generic.h"
 static XrXirArtifact *source_array_lower(XrXirArtifact *checked) {
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(checked);
+    CHECK(context && context->resources);
+    XrCompileResources *resources = context->resources;
     XrXirArtifact *specialized = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_specialize(checked, NULL, &specialized, &diagnostic);
+    XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "array specialization %u f%u i%u\n", status, diagnostic.function, diagnostic.instruction);
-    CHECK(status == XR_XIR_OK); xr_xir_artifact_free(checked);
+    CHECK(status == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_context(specialized)->resources == resources);
+    xr_xir_compile_artifact_free(checked);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(specialized, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(specialized); return lowered;
+    CHECK(xr_xir_compile_lower(specialized, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_context(lowered)->resources == resources);
+    xr_xir_compile_artifact_free(specialized); return lowered;
 }
 static void source_array_find(const XrXirModule *module, uint32_t *functions) {
     static const char *const names[] = {NULL, "result", "originalFirst", "advance", "rebound", "snapshot",

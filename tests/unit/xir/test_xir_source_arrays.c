@@ -14,22 +14,25 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_source_fixture_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_source_array_cases.h"
 #include "xir_source_array_pipeline.h"
 int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 3);
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_source_check(&request, &result, &diagnostic);
+    XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "array source %u %u:%d:%d %s\n", status,
         diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
     XrXirArtifact *checked = result.checked; result.checked = NULL;
-    xr_compiler_session_delete(session);
-    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    xr_compile_session_free(session); session = NULL;
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
     unsigned members = 0, nominal_members = 0, length = 0, ordinals = 0, names = 0, texts = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
         const XrXirSourceDeclaration *decl = &view->declarations[d];
@@ -56,34 +59,35 @@ int main(int argc, char **argv) {
         }
     }
     CHECK(members == 3 && nominal_members == 5 && length == 1 && ordinals == 1 && names == 1 && texts == 1);
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     if (argc == 3) {
         FILE *file = fopen(argv[1], "wb"); CHECK(file);
         CHECK(fwrite(packet.bytes, 1, packet.length, file) == packet.length && fclose(file) == 0);
     }
-    xr_xir_checked_packet_free(&packet);
+    xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *lowered = source_array_lower(checked);
-    uint32_t functions[ARRAY_FUNCTION_COUNT]; source_array_find(xr_xir_artifact_module(lowered), functions);
+    uint32_t functions[ARRAY_FUNCTION_COUNT]; source_array_find(xr_xir_compile_artifact_module(lowered), functions);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !lowered);
-    source_array_program_cases(program, functions);
-    session = xr_compiler_session_new(NULL); CHECK(session);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+    source_array_program_cases(program, functions); program = NULL;
+    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     request.session = session; request.entry_path = XR_ARRAY_SOURCE_FIXTURES "/bounds.xr";
-    CHECK(xr_xir_source_check(&request, &result, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_source_check(&request, &result, &diagnostic, NULL) == XR_XIR_OK);
     checked = result.checked; result.checked = NULL;
-    xr_xir_source_result_free(&result); xr_compiler_session_delete(session);
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result); xr_compile_session_free(session); session = NULL;
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     if (argc == 3) {
         FILE *file = fopen(argv[2], "wb"); CHECK(file);
         CHECK(fwrite(packet.bytes, 1, packet.length, file) == packet.length && fclose(file) == 0);
     }
-    xr_xir_checked_packet_free(&packet);
+    xr_xir_compile_checked_packet_free(&packet);
     lowered = source_array_lower(checked);
-    uint32_t entry = xr_xir_artifact_module(lowered)->declarations->entry_function;
-    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !lowered);
-    source_array_sticky_bounds(program, entry);
+    uint32_t entry = xr_xir_compile_artifact_module(lowered)->declarations->entry_function;
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+    source_array_sticky_bounds(program, entry); program = NULL;
+    source_fixture_owner_free(&compiler);
     puts("Source Array VM: golden, COW, root rebinding, snapshots, result ownership and physical release passed");
     return 0;
 }

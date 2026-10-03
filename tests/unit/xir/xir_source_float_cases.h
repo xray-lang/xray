@@ -210,7 +210,7 @@ static void source_float_program_cases(XrXirProgram *program, const uint32_t *fu
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     }
     CHECK(runtime_live > baseline_live && runtime_bytes > baseline_bytes);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (unsigned i = 0; i < 2; ++i) {
         source_float_text(&retained[i], "float result");
         xr_xir_value_drop(&retained[i]);
