@@ -15,6 +15,7 @@
 #include "xxir_program_internal.h"
 #include "xxir_instance_value.h"
 #include "xxir_struct.h"
+#include "xxir_output.h"
 #include "xxir_panic.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -511,6 +512,13 @@ XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, X
     if (!instance || literal >= instance->program->declarations->literal_count) return XR_XIR_CALL_BAD_STATE;
     const XrXirLiteral *bytes = &instance->program->declarations->literals[literal];
     return value_call_status(xr_xir_string_new(instance->domain, bytes->bytes, bytes->length, output));
+}
+XrXirCallStatus xr_xir_instance_scalar_text(XrXirCallView *view, const XrXirValue *scalar, XrXirValue *output) {
+    XrXirInstance *instance = view_instance(view);
+    char buffer[XR_XIR_SCALAR_TEXT_BYTES]; const char *bytes = NULL; size_t length = 0;
+    if (!instance || !scalar || !output || !xr_xir_scalar_text(scalar, buffer, &bytes, &length))
+        return XR_XIR_CALL_BAD_STATE;
+    return value_call_status(xr_xir_string_new(instance->domain, bytes, length, output));
 }
 static XrXirCallStatus time_call_status(XrXirTimeStatus status) {
     return status == XR_XIR_TIME_OK ? XR_XIR_CALL_READY :

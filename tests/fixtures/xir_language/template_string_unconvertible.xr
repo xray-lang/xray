@@ -1,0 +1,3 @@
+struct Point { x: i64 }
+const p = Point{x: 1}
+print("point ${p}")

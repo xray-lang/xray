@@ -1,0 +1,23 @@
+// Interpolated bool and number parts are spelled as print writes them, and the
+// parts are evaluated once, left to right.
+const a: f64 = 100.0
+const b: f64 = 0.1
+const c: f64 = 1.0 / 3.0
+const d: f32 = 0.1
+const lowest: i64 = -9223372036854775807 - 1
+const highest: u64 = 18446744073709551615
+const small: u8 = 200
+print("${a} ${b} ${c} ${d} ${lowest} ${highest} ${small} ${true} ${false}")
+print("${1 + 2}|${"in" + "ner"}|${40 + 2}")
+
+var order = ""
+fn mark(label: string, v: i64) -> i64 {
+    order = order + label
+    return v
+}
+print("${mark("a", 1)}-${mark("b", 2)}-${mark("c", 3)}")
+print(order)
+const label = "x"
+print("${label}")
+print("${label}${label}")
+print("pre-${label}-post")

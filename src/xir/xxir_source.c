@@ -644,10 +644,16 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
 /* A type failure raised without an owning AST node reports the annotation that caused it. */
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     bool valid = source_type_ref(ctx, ref, type);
-    if (!valid && ref && ref->line && ctx->diagnostic.status != XR_XIR_OK && !ctx->diagnostic.line) {
-        ctx->diagnostic.module = ctx->module;
-        ctx->diagnostic.line = ref->line;
-        ctx->diagnostic.column = ref->column;
+    if (!valid && ctx->diagnostic.status != XR_XIR_OK && !ctx->diagnostic.line) {
+        /* Shared primitive references carry no position; the owning declaration is the nearest one. */
+        const AstNode *owner = ctx->type_scope.active ? ctx->type_scope.node : ctx->bodies[ctx->function].node;
+        int line = ref && ref->line ? ref->line : owner ? owner->line : 0;
+        int column = ref && ref->line ? ref->column : owner ? owner->column : 0;
+        if (line) {
+            ctx->diagnostic.module = ctx->module;
+            ctx->diagnostic.line = line;
+            ctx->diagnostic.column = column;
+        }
     }
     return valid;
 }
@@ -711,7 +717,11 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
         return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
     default: break;
     }
-    return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type declaration is not admitted by XIR");
+    char message[96];
+    if (source_format(ctx, message, sizeof(message), "type declaration is not admitted by XIR (kind %d)",
+            (int) ref->kind) != XR_DIAG_OK)
+        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type declaration is not admitted by XIR");
+    return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, message);
 }
 #include "xxir_source_region_emit.inc.c"
 static bool begin_block(SourceContext *ctx) {
@@ -1183,6 +1193,36 @@ static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0},
         node->as.literal.raw_value.bool_val, {0}}, value);
 }
+/* An interpolated template is the left-to-right concatenation of its parts; a bool or
+ * number part is spelled exactly as `print` writes it. */
+static bool source_template(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    TemplateStringNode *template = &node->as.template_str;
+    if (template->part_count < 0 || (template->part_count && !template->parts))
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "template string parts are malformed");
+    SourceValue result = {0};
+    bool started = false;
+    for (int i = 0; i < template->part_count; ++i) {
+        AstNode *part = template->parts[i];
+        SourceValue piece;
+        if (!part || !source_work(ctx, node)) return false;
+        if (part->type == AST_LITERAL_STRING) {
+            if (!source_literal(ctx, part, &piece)) return false;
+        } else {
+            if (!expression(ctx, part, &piece)) return false;
+            if (piece.type == XR_XIR_BOOL || xr_xir_type_is_number(piece.type)) {
+                if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {piece.id, 0}, {0}, 0, {0}}, &piece))
+                    return false;
+            } else if (piece.type != XR_XIR_STRING)
+                return source_fail(ctx, part, XR_XIR_BAD_TYPE, "interpolated value has no admitted string conversion");
+        }
+        if (!started) { result = piece; started = true; continue; }
+        if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {result.id, piece.id}, {0}, 0, {0}}, &result))
+            return false;
+    }
+    if (!started) return source_string_literal(ctx, node, "", 0, value);
+    *value = result;
+    return true;
+}
 static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) {
     bool negate = node->type == AST_UNARY_NOT;
     SourceValue left, initial, place, right;
@@ -1383,6 +1423,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         node->as.index_set.index, node->as.index_set.value, NULL, true, value);
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
         return source_literal(ctx, node, value);
+    case AST_TEMPLATE_STRING: return source_template(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, context, value);
     case AST_MATCH_EXPR: return source_match(ctx, node, context, !ctx->active_expression->statement_match, value);

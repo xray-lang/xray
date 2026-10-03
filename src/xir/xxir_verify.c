@@ -800,6 +800,10 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
         if (op->op == XR_XIR_ATOMIC_I64_NEW || op->op == XR_XIR_TIMER_AFTER_MS) expected = XR_XIR_I64;
+        if (op->op == XR_XIR_TO_STRING) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            if (expected != XR_XIR_BOOL && !xr_xir_type_is_number(expected)) return XR_XIR_BAD_TYPE;
+        }
         if (op->op == XR_XIR_CELL_NEW) expected = xr_xir_cell_element(context->module->types, op->type);
         if (op->op == XR_XIR_CELL_READ) {
             expected = xr_xir_operand_type(function, op->args[0]);

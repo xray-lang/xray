@@ -417,6 +417,11 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         append(buffer,"        status = xr_xir_instance_slot_write(view, %uu, &value, %s);\n",
             (uint32_t) op->immediate, op->op == XR_XIR_SLOT_INIT ? "true" : "false");
         break;
+    case XR_XIR_TO_STRING:
+        append(buffer, "        XrXirValue scalar = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        status = xr_xir_instance_scalar_text(view, &scalar, &value);\n",
+            (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
+        break;
     case XR_XIR_ATOMIC_I64_NEW:
         append(buffer, "        status = xr_xir_instance_atomic(view, xr_xir_scalar_load(state->frame, %uu), &value);\n",
             layout->offsets[op->args[0]]);
@@ -745,6 +750,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
+        op->op == XR_XIR_TO_STRING ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         emit_instance_step(buffer, module, function, op, layout, destination);
         return;
