@@ -17,40 +17,43 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_string_fixture.h"
+#include "xir_source_fixture_owner.h"
 int main(int argc, char **argv) {
     FILE *file = argc == 2 ? fopen(argv[1], "wb") : NULL;
     CHECK(argc == 1 || (argc == 2 && file));
     for (uint32_t mode = 0; mode < 2; ++mode) {
-        XrXirArtifact *artifact = string_fixture(mode);
-        const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, 0);
+        SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
+        XrXirArtifact *artifact = string_fixture(&owner.context,mode);
+        const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, 0);
         CHECK(layout->owned_count == 4);
         uint32_t *offsets = (uint32_t *) layout->owned_offsets;
         uint32_t saved = offsets[0];
         offsets[0] = UINT32_MAX;
-        CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_LAYOUT);
+        CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_LAYOUT);
         offsets[0] = saved;
-        XrXirInstruction *ops = (XrXirInstruction *) xr_xir_artifact_module(artifact)->functions[0].instructions;
+        XrXirInstruction *ops = (XrXirInstruction *) xr_xir_compile_artifact_module(artifact)->functions[0].instructions;
         CHECK(ops[1].op == XR_XIR_OWNED_RETAIN);
         ops[1].op = XR_XIR_SCALAR_COPY;
-        CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_TYPE);
+        CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_TYPE);
         ops[1].op = XR_XIR_OWNED_RETAIN;
         ops[2].immediate = 3;
-        CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_STRUCTURE);
         ops[2].immediate = 1;
         ops[2].args[0] = 4;
-        CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_VALUE);
+        CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_VALUE);
         ops[2].args[0] = 3;
         char prefix[32];
         CHECK(snprintf(prefix, sizeof(prefix), "fixture_strings%u", mode) > 0);
-        XrXirCSource source;
-        CHECK(xr_xir_emit_leaf_c(artifact, prefix, 65536, &source) == XR_XIR_BAD_STAGE);
-        CHECK(xr_xir_emit_c(artifact, prefix, 1, &source) == XR_XIR_BUDGET);
+        XrXirCSource source = {0};
+        CHECK(xr_xir_compile_emit_leaf_c(artifact, prefix, 65536, &source) == XR_XIR_BAD_STAGE);
+        CHECK(xr_xir_compile_emit_c(artifact, prefix, 1, &source) == XR_XIR_BUDGET);
         CHECK(!source.text && !source.length);
-        CHECK(xr_xir_emit_c(artifact, prefix, 65536, &source) == XR_XIR_OK);
+        CHECK(xr_xir_compile_emit_c(artifact, prefix, 65536, &source) == XR_XIR_OK);
         CHECK(strstr(source.text, "xr_xir_owned_slot_clear") && !strstr(source.text, "({"));
-        xr_xir_artifact_free(artifact);
+        xr_xir_compile_artifact_free(artifact);
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
-        xr_xir_c_source_free(&source);
+        xr_xir_compile_c_source_free(&source);
+        source_fixture_owner_free(&owner);
     }
     if (file) CHECK(fclose(file) == 0);
     puts("String XIR admission, ownership verification and native emission passed");

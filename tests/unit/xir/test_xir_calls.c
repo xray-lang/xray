@@ -19,6 +19,7 @@
 #include <intrin.h>
 #endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_source_fixture_owner.h"
 #include "xir_call_fixture.h"
 
 typedef struct Witness {
@@ -108,7 +109,7 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
         return returned((XrXirValue) {XR_XIR_I64, 0, 7});
     XrXirRunContext context = {2, 24, 0, 0, 0, 0};
     XrXirValue result;
-    CHECK(xr_xir_vm_run(witness->comparator, 0, &context, view->arguments, 2, &result) == XR_XIR_RUN_OK);
+    CHECK(xr_xir_compile_vm_run(witness->comparator, 0, &context, view->arguments, 2, &result) == XR_XIR_RUN_OK);
     CHECK(context.live_bytes == 0 && context.allocations == context.frees);
     return returned(result);
 }
@@ -123,7 +124,7 @@ static void cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     witness->cleanup_ids[witness->cleaned++] = *(const uint32_t *) view->environment;
 }
 
-static XrXirArtifact *comparator_artifact(void) {
+static XrXirArtifact *comparator_artifact(const XrXirCompileContext *context) {
     XrXirInstruction instructions[] = {
         {XR_XIR_LT_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
@@ -133,14 +134,14 @@ static XrXirArtifact *comparator_artifact(void) {
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     return lowered;
 }
 
-static void callback_cases(void) {
-    XrXirArtifact *artifact = comparator_artifact();
+static void callback_cases(const XrXirCompileContext *context) {
+    XrXirArtifact *artifact = comparator_artifact(context);
     for (uint32_t mode = 0; mode < 11; ++mode) {
         Witness witness = {0};
         witness.comparator = artifact;
@@ -151,7 +152,8 @@ static void callback_cases(void) {
             {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_BOOL, sizeof(uint32_t), comparator_resume, cleanup, &identities[2], 0, 0}
         };
         XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
-        XrXirTypeArena *arena=error_fixture_arena(domain);
+        XrXirTypeArena *arena=NULL;
+        CHECK(error_fixture_arena(context, &arena)==XR_XIR_VALUE_OK);
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         config.admission=error_fixture_admission(domain,arena);
@@ -194,9 +196,9 @@ static void callback_cases(void) {
             if (mode == 0 || mode == 1 || mode == 5) CHECK(witness.comparisons == 3 && witness.cleaned == 5);
         }
         CHECK(accounting.live_bytes == 0 && accounting.depth == 0 && accounting.allocations == accounting.frees);
-        xr_xir_value_drop(&witness.error); xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+        xr_xir_value_drop(&witness.error); xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     }
-    xr_xir_artifact_free(artifact);
+    xr_xir_compile_artifact_free(artifact);
 }
 
 typedef struct RecursiveState { uint32_t entered; XrXirValue child; } RecursiveState;
@@ -260,21 +262,22 @@ XR_DATA const XrXirCallEntry fixture_calls11_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls12_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls13_entries[5];
 
-static void xir_instruction_calls(void) {
+static void xir_instruction_calls(const XrXirCompileContext *context) {
     for (uint32_t mode = 0; mode < 14; ++mode) for (uint32_t native = 0; native < 2; ++native) {
         uint32_t kind = mode >= 12 ? mode - 12 : mode >= 10 ? mode - 10 : mode % 4;
-        XrXirArtifact *artifact = call_fixture(mode);
+        XrXirArtifact *artifact = call_fixture(context, mode);
         XrXirVmBinding bindings[5];
         XrXirCallEntry entries[5];
         for (uint32_t i = 0; i < 5; ++i)
-            CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
+            CHECK(xr_xir_compile_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
         if (native) {
             const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries, fixture_calls3_entries, fixture_calls4_entries, fixture_calls5_entries, fixture_calls6_entries, fixture_calls7_entries, fixture_calls8_entries, fixture_calls9_entries, fixture_calls10_entries, fixture_calls11_entries, fixture_calls12_entries, fixture_calls13_entries};
             uint32_t callee = mode >= 12 ? 4u : 1u;
             entries[callee] = tables[mode][callee];
         }
         XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
-        XrXirTypeArena *arena=error_fixture_arena(domain);
+        XrXirTypeArena *arena=NULL;
+        CHECK(error_fixture_arena(context, &arena)==XR_XIR_VALUE_OK);
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         config.admission=error_fixture_admission(domain,arena);
@@ -300,48 +303,48 @@ static void xir_instruction_calls(void) {
         if (kind == 3) CHECK(result.status == XR_XIR_CALL_MATCH_FAILURE && result.value.type == XR_XIR_UNIT && xr_xir_fault_match_valid(result.panic.detail));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
-        xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
-        xr_xir_artifact_free(artifact);
+        xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
+        xr_xir_compile_artifact_free(artifact);
     }
 }
 static XrXirAction wrong_comparator(XrXirCallView *view) {
     (void) view;
     return returned((XrXirValue) {XR_XIR_I64, 0, 2});
 }
-static void call_admission(void) {
-    XrXirArtifact *artifact = call_fixture(0);
-    const XrXirModule *module = xr_xir_artifact_module(artifact);
+static void call_admission(const XrXirCompileContext *context) {
+    XrXirArtifact *artifact = call_fixture(context, 0);
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     XrXirInstruction *throw_op=(XrXirInstruction *)&module->functions[2].instructions[3];
     XrXirInstruction saved=*throw_op;
     *throw_op=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{4},{0},0, {0}};
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_artifact_verify(artifact,NULL)==XR_XIR_BAD_TYPE);
     *throw_op=saved;
     XrXirInstruction *op = (XrXirInstruction *) module->functions[0].instructions;
     op[0].immediate = -1;
-    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_STRUCTURE);
     op[0].immediate = 3;
-    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_STRUCTURE);
     op[0].immediate = 1;
     op[0].type = XR_XIR_BOOL;
-    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_TYPE);
     op[0].type = XR_XIR_I64;
     op[0].args[0] = 99;
-    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_STRUCTURE);
     op[0].args[0] = 0;
     uint32_t *operands = (uint32_t *) module->functions[0].operands;
     operands[0] = 99;
-    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_VALUE);
     operands[0] = 0;
-    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_OK);
     XrXirVmBinding bindings[3];
     XrXirCallEntry entries[3];
     for (uint32_t i = 0; i < 3; ++i)
-        CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
+        CHECK(xr_xir_compile_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
     XrXirCallAccounting accounting = {0};
     XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
     XrXirCall *call = NULL;
-    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, XR_XIR_CALL_ABI_VERSION + 1};
+    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, XR_XIR_CALL_ABI_VERSION + 1};
     for (size_t i = 0; i < sizeof(rejected_abis) / sizeof(rejected_abis[0]); ++i) {
         entries[1].abi_version = rejected_abis[i];
         CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_BAD_ABI);
@@ -367,7 +370,7 @@ static void call_admission(void) {
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
     }
-    xr_xir_artifact_free(artifact);
+    xr_xir_compile_artifact_free(artifact);
 }
 typedef struct FaultWitness {
     XrXirRunStatus failure;
@@ -434,13 +437,15 @@ static void fault_boundary(void) {
 #include "xir_bounds_call_cases.h"
 
 int main(void) {
+    SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     bounds_fault_boundary();
     match_fault_boundary();
     fault_boundary();
-    callback_cases();
+    callback_cases(&compiler.context);
     bounded_stack();
-    xir_instruction_calls();
-    call_admission();
+    xir_instruction_calls(&compiler.context);
+    call_admission(&compiler.context);
+    source_fixture_owner_free(&compiler);
     puts("Resumable native-to-Lowered-VM comparator and bounded trampoline witnesses passed");
     return 0;
 }

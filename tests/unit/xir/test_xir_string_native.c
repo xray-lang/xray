@@ -22,13 +22,18 @@ XR_DATA const XrXirCallEntry fixture_strings1_entries[5];
 int main(void) {
     const XrXirCallEntry *tables[] = {fixture_strings0_entries, fixture_strings1_entries};
     for (uint32_t variant = 0; variant < 2; ++variant) for (uint32_t mode = 0; mode < 9; ++mode) {
-        XrXirValue value = string_cases(tables[variant], variant, mode);
+        SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
+        XrXirValue value = string_cases(&owner.context,tables[variant],variant,mode);
         if (value.type == XR_XIR_STRING) string_bytes(&value, string_expected, sizeof(string_expected) - 1);
         else if (value.type) {
+            XrCompileResourceStats held={0};
+            CHECK(xr_compile_resources_stats(owner.context.resources,&held)==XR_COMPILE_RESOURCE_OK);
+            CHECK(held.live_bytes > owner.baseline.live_bytes);
             XrXirDomain *reader=NULL; CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
             string_error_bytes(&value,reader); xr_xir_domain_drop(reader);
         }
         xr_xir_value_drop(&value);
+        source_fixture_owner_free(&owner);
     }
     puts("Native Unicode string calls, output, suspension, failure and owned results passed");
     return 0;

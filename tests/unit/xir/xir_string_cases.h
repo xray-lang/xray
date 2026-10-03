@@ -14,6 +14,7 @@
 #ifndef XIR_STRING_CASES_H
 #define XIR_STRING_CASES_H
 #include "xir_error_fixture.h"
+#include "xir_source_fixture_owner.h"
 #include "xir/xxir_call.h"
 static const char string_left[] = "A\0\xE4\xB8\xAD";
 static const char string_right[] = "\xF0\x9F\x98\x80!";
@@ -46,11 +47,11 @@ static void string_error_bytes(const XrXirValue *value, XrXirDomain *domain) {
     XrXirValue field={0}; CHECK(xr_xir_enum_get(value,1,0,&admission,&field)==XR_XIR_VALUE_OK);
     string_bytes(&field,string_expected,sizeof(string_expected)-1); xr_xir_value_drop(&field);
 }
-static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, uint32_t mode) {
+static XrXirValue string_cases(const XrXirCompileContext *context, const XrXirCallEntry *entries, uint32_t variant, uint32_t mode) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(mode == 8 ? 240 : 65536, &domain) == XR_XIR_VALUE_OK);
-    XrXirDomain *metadata=NULL; CHECK(xr_xir_domain_new(65536,&metadata)==XR_XIR_VALUE_OK);
-    XrXirTypeArena *arena=error_fixture_arena(metadata);
+    XrXirTypeArena *arena=NULL;
+    CHECK(error_fixture_arena(context,&arena)==XR_XIR_VALUE_OK);
     XrXirDomainStats baseline = xr_xir_domain_stats(domain);
     XrXirValue arguments[2] = {{0}, {0}};
     CHECK(xr_xir_string_new(domain, string_left, sizeof(string_left) - 1, &arguments[0]) == XR_XIR_VALUE_OK);
@@ -102,7 +103,7 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
         else string_error_bytes(&owned,domain);
         CHECK(xr_xir_domain_stats(domain).live_bytes > baseline.live_bytes);
     }
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(metadata);
+    xr_xir_compile_type_arena_drop(arena);
     xr_xir_domain_drop(domain);
     return owned;
 }

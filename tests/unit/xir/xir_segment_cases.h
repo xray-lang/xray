@@ -11,6 +11,7 @@
  */
 #ifndef XIR_SEGMENT_CASES_H
 #define XIR_SEGMENT_CASES_H
+#include "xir_source_fixture_owner.h"
 typedef struct SegmentState { uint32_t phase; XrXirValue child; } SegmentState;
 typedef struct SegmentWitness {
     XrXirValue error;
@@ -84,8 +85,11 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
     XrXirCallEntry entry = segment_entry(bytes); XrXirCallAccounting accounting = {0};
     XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = &witness; config.byte_limit = 2 * 1024 * 1024; config.poll_limit = 100000; config.depth_limit = 64; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirDomain *domain=NULL; XrXirTypeArena *arena=NULL;
+    SourceFixtureOwner owner={0};
     if (mode==2) {
-        CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK); arena=error_fixture_arena(domain);
+        CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+        source_fixture_owner_new(&owner);
+        CHECK(error_fixture_arena(&owner.context,&arena)==XR_XIR_VALUE_OK);
         config.admission=error_fixture_admission(domain,arena);
         witness.error=error_fixture_code(&config.admission,71);
     }
@@ -113,7 +117,8 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
     } else if (!call) CHECK(fail_at != SIZE_MAX && status == XR_XIR_CALL_OOM);
     size_t sites = calls;
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-    xr_xir_value_drop(&witness.error); xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&witness.error); xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    if (owner.context.resources) source_fixture_owner_free(&owner);
     CHECK(!live && !accounting.live_bytes && !accounting.depth && accounting.allocations == accounting.frees);
     if (fail_at == SIZE_MAX) {
         CHECK(witness.cleanups == (mode == 3 ? 1u : mode ? 49u : 48 * passes + 1));

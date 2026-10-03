@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_error_fixture.h"
+#include "xir_source_fixture_owner.h"
 static size_t attempts, fail_at = SIZE_MAX, live;
 static void *exit_calloc(size_t count, size_t size) {
     if (attempts++ == fail_at) return NULL;
@@ -114,11 +115,11 @@ static void exit_release(XrXirCallView *view, XrXirCallStatus reason) {
     if (view->state == w->owner) xr_xir_value_drop(&w->owner->value);
 }
 static size_t exit_run(uint32_t mode, uint64_t polls, uint32_t depth) {
-    XrXirDomain *domain = NULL, *metadata = NULL;
+    XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_domain_new(65536,&metadata) == XR_XIR_VALUE_OK);
-    uint64_t domain_base = xr_xir_domain_stats(domain).live_bytes, metadata_base = xr_xir_domain_stats(metadata).live_bytes;
-    XrXirTypeArena *arena = error_fixture_arena(metadata);
+    uint64_t domain_base = xr_xir_domain_stats(domain).live_bytes;
+    SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
+    XrXirTypeArena *arena=NULL; CHECK(error_fixture_arena(&owner.context,&arena)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = error_fixture_admission(domain,arena);
     ExitWitness w = {0}; w.domain = domain; w.mode = mode; w.error = error_fixture_code(&admission,91);
     const XrXirType argument = XR_XIR_I64;
@@ -158,9 +159,10 @@ static size_t exit_run(uint32_t mode, uint64_t polls, uint32_t depth) {
     size_t sites = attempts;
     CHECK(!live && !accounting.live_bytes && accounting.allocations == accounting.frees && !accounting.depth);
     if (owned.type) { const char *bytes; size_t length; CHECK(xr_xir_string_view(&owned,&bytes,&length) && length == 5 && !memcmp(bytes,"saved",5)); }
-    xr_xir_value_drop(&owned); xr_xir_value_drop(&w.error); xr_xir_type_arena_drop(arena);
-    CHECK(xr_xir_domain_stats(domain).live_bytes == domain_base && xr_xir_domain_stats(metadata).live_bytes == metadata_base);
-    xr_xir_domain_drop(domain); xr_xir_domain_drop(metadata);
+    xr_xir_value_drop(&owned); xr_xir_value_drop(&w.error); xr_xir_compile_type_arena_drop(arena);
+    CHECK(xr_xir_domain_stats(domain).live_bytes == domain_base);
+    xr_xir_domain_drop(domain);
+    source_fixture_owner_free(&owner);
     return sites;
 }
 #include "xir_cleanup_instance_cases.h"

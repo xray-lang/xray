@@ -238,7 +238,7 @@ static XrXirOutputStatus allocation_output(void *context, const XrXirOutputGroup
     (void) context; (void) stream;
     return (value->type == XR_XIR_STRING) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
-static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
+static void managed_allocation_run(const XrXirCompileContext *context, XrXirArtifact *artifact, bool throwing) {
     XrXirDomain *domain = NULL; XrXirTypeArena *arena=NULL;
     XrXirValue arguments[2] = {{0}, {0}}, owned = {0};
     XrXirCall *call = NULL;
@@ -247,13 +247,12 @@ static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
     XrXirCallAccounting accounting = {0};
     XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, allocation_output, NULL}; config.admission = (XrXirValueAdmission) {0};
     for (uint32_t i = 0; i < 3; ++i) {
-        XrXirStatus status = xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]);
+        XrXirStatus status = xr_xir_compile_vm_bind(artifact, i, &bindings[i], &entries[i]);
         if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
     }
     XrXirValueStatus status = xr_xir_domain_new(65536, &domain);
     if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
-    XrXirBudget budget=xr_xir_default_budget();
-    status=xr_xir_type_arena_new(domain,xr_xir_artifact_module(artifact)->types,&budget,&arena);
+    status=xr_xir_compile_type_arena_new(context,xr_xir_compile_artifact_module(artifact)->types,&arena);
     if (status!=XR_XIR_VALUE_OK) { CHECK(status==XR_XIR_VALUE_OOM); goto done; }
     config.admission=error_fixture_admission(domain,arena);
     for (uint32_t i = 0; i < 2; ++i) {
@@ -277,7 +276,7 @@ static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
  done:
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]); xr_xir_value_drop(&owned);
 }
 static bool invoke_allocation_run(XrXirArtifact *artifact, uint32_t mode, uint32_t cancel_at) {
@@ -287,13 +286,13 @@ static bool invoke_allocation_run(XrXirArtifact *artifact, uint32_t mode, uint32
     XrXirCallAccounting accounting = {0}; bool completed = false;
     XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     for (uint32_t i = 0; i < 5; ++i) {
-        XrXirStatus status = xr_xir_vm_bind(artifact,i,&bindings[i],&entries[i]);
+        XrXirStatus status = xr_xir_compile_vm_bind(artifact,i,&bindings[i],&entries[i]);
         if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
     }
     XrXirValueStatus status = xr_xir_domain_new(65536,&domain);
     if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
-    XrXirBudget budget = xr_xir_default_budget();
-    status = xr_xir_type_arena_new(domain,xr_xir_artifact_module(artifact)->types,&budget,&arena);
+    status = xr_xir_compile_type_arena_new(xr_xir_compile_artifact_context(artifact),
+        xr_xir_compile_artifact_module(artifact)->types, &arena);
     if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
     config.admission = error_fixture_admission(domain,arena);
     XrXirValue args[] = {{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
@@ -318,37 +317,41 @@ static bool invoke_allocation_run(XrXirArtifact *artifact, uint32_t mode, uint32
  done:
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees && !accounting.depth);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     xr_xir_value_drop(&owned);
     return completed;
 }
 static void invoke_allocation_failures(void) {
+    SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     const uint32_t modes[] = {5,9,10,11};
     for (uint32_t m = 0; m < 4; ++m) for (uint32_t cancel = 0; cancel < 3; ++cancel) {
         fail_at = SIZE_MAX;
-        XrXirArtifact *artifact = call_fixture(modes[m]); size_t baseline = live;
+        XrXirArtifact *artifact = call_fixture(&compiler.context, modes[m]); size_t baseline = live;
         calls = 0; CHECK(invoke_allocation_run(artifact,modes[m],cancel)); size_t sites = calls;
         CHECK(live == baseline && sites);
         for (size_t i = 0; i < sites; ++i) {
             fail_at = i; calls = 0;
             CHECK(!invoke_allocation_run(artifact,modes[m],cancel) && live == baseline);
         }
-        fail_at = SIZE_MAX; xr_xir_artifact_free(artifact); CHECK(!live);
+        fail_at = SIZE_MAX; xr_xir_compile_artifact_free(artifact); CHECK(!live);
         printf("Invoke physical release: mode=%u cancel=%u allocation failure sites=%zu\n",modes[m],cancel,sites);
     }
+    source_fixture_owner_free(&compiler);
 }
 
 static size_t managed_allocation_failures(void) {
     size_t total=0;
     for (uint32_t mode=0;mode<2;++mode) {
         fail_at=SIZE_MAX;
-        XrXirArtifact *artifact=string_fixture(mode); size_t baseline=live;
-        calls=0; managed_allocation_run(artifact,mode!=0); size_t sites=calls;
+        SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
+        XrXirArtifact *artifact=string_fixture(&owner.context,mode); size_t baseline=live;
+        calls=0; managed_allocation_run(&owner.context,artifact,mode!=0); size_t sites=calls;
         CHECK(live==baseline);
         for (size_t i=0;i<sites;++i) {
-            fail_at=i; calls=0; managed_allocation_run(artifact,mode!=0); CHECK(live==baseline);
+            fail_at=i; calls=0; managed_allocation_run(&owner.context,artifact,mode!=0); CHECK(live==baseline);
         }
-        fail_at=SIZE_MAX; xr_xir_artifact_free(artifact); CHECK(!live); total+=sites;
+        fail_at=SIZE_MAX; xr_xir_compile_artifact_free(artifact);
+        source_fixture_owner_free(&owner); CHECK(!live); total+=sites;
         printf("Managed call release: throw=%u allocation failure sites=%zu\n",mode,sites);
     }
     return total;

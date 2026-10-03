@@ -415,6 +415,7 @@ add_executable(test_xir_string_native xir/test_xir_string_native.c ${XIR_STRING_
 target_link_libraries(test_xir_string_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_string_vm xir/test_xir_string_vm.c ${XIR_STRING_GENERATED})
 target_link_libraries(test_xir_string_vm PRIVATE xray_xir_vm)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/string_allocation_owner.cmake")
 add_executable(test_xir_emit_output xir/test_xir_emit_output.c)
 target_link_libraries(test_xir_emit_output PRIVATE xray_xir_cgen)
 set(XIR_OUTPUT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_output_fixture.c)

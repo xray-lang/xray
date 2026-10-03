@@ -12,6 +12,7 @@
  */
 #include "base/xmalloc.h"
 #include "../xir/xir_execution_fixture.h"
+#include "../xir/xir_source_fixture_owner.h"
 #include "../xir/xir_call_fixture.h"
 #include "xir/xxir_emit_c.h"
 #include "aot/xi_cgen_verify_output.h"
@@ -104,6 +105,8 @@ int main(int argc,char **argv) {
     CHECK(xi_cgen_verify_output(body,sizeof(body)-1,NULL)==XI_CGEN_VERIFY_PASSED && !live && !bytes_live);
     XrXirArtifact *artifact=fixture_lowered();emission_scan(artifact,false);xr_xir_artifact_free(artifact);
     artifact=uninitialized_leaf_fixture();emission_scan(artifact,false);xr_xir_artifact_free(artifact);
-    artifact=call_fixture(0);emission_scan(artifact,true);xr_xir_artifact_free(artifact);
+    SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+    artifact=call_fixture(&owner.context,0);emission_scan(artifact,true);xr_xir_compile_artifact_free(artifact);
+    source_fixture_owner_free(&owner);
     puts("typed verifier OOM, unchanged outputs and physical release PASS");return 0;
 }

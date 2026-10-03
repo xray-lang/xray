@@ -18,7 +18,8 @@
 #include "xir/xxir_checked.h"
 #include "xir_error_fixture.h"
 
-static XrXirArtifact *call_fixture(uint32_t mode) {
+static XrXirArtifact *call_fixture(const XrXirCompileContext *context, uint32_t mode) {
+    CHECK(context && context->resources);
     bool guarded = mode >= 4, rethrow = mode >= 8 && mode < 10, unit = mode >= 10 && mode < 12, generic = mode >= 12;
     mode = generic ? mode - 12 : unit ? mode - 10 : mode % 4;
     const uint32_t operands[] = {0, 1};
@@ -107,20 +108,21 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_check(&module,NULL,&checked,&diagnostic);
+    XrXirStatus status=xr_xir_compile_check(context,&module,&checked,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"call fixture mode=%u status=%u function=%u block=%u instruction=%u\n",
         mode,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(checked); checked=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&checked,NULL)==XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked); checked=NULL;
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *closed=NULL;
-    CHECK(xr_xir_specialize(checked,NULL,&closed,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_artifact_context(lowered)->resources == context->resources);
     return lowered;
 }
 #endif // XIR_CALL_FIXTURE_H

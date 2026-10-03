@@ -40,12 +40,10 @@ static inline void error_fixture_init(ErrorFixture *f, bool runtime) {
     if (runtime) { f->node.nominal.fields=f->field_types; f->node.nominal.field_count=2; }
     f->types = (XrXirTypes) {&f->node,1,&f->table, NULL};
 }
-static inline XrXirTypeArena *error_fixture_arena(XrXirDomain *domain) {
+static inline XrXirValueStatus error_fixture_arena(const XrXirCompileContext *context, XrXirTypeArena **output) {
     ErrorFixture f; error_fixture_init(&f,true);
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters=100; budget.metadata_bytes=65536; budget.work=10000;
-    XrXirTypeArena *arena=NULL;
-    CHECK(xr_xir_type_arena_new(domain,&f.types,&budget,&arena)==XR_XIR_VALUE_OK);
-    memset(&f,0xCC,sizeof(f)); return arena;
+    XrXirValueStatus status=xr_xir_compile_type_arena_new(context,&f.types,output);
+    memset(&f,0xCC,sizeof(f)); return status;
 }
 static inline XrXirValueAdmission error_fixture_admission(XrXirDomain *domain, XrXirTypeArena *arena) {
     return (XrXirValueAdmission) {arena,domain,NULL,NULL,1000000,65536};

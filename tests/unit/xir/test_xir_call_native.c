@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_source_fixture_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_error_fixture.h"
 XR_DATA const XrXirCallEntry fixture_calls0_entries[5];
@@ -31,16 +32,15 @@ XR_DATA const XrXirCallEntry fixture_calls11_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls12_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls13_entries[5];
 
-static bool native_invoke_allocation_run(const XrXirCallEntry *entries, uint32_t mode, uint32_t cancel_at) {
+static bool native_invoke_allocation_run(const XrXirCompileContext *context,
+    const XrXirCallEntry *entries, uint32_t mode, uint32_t cancel_at) {
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     XrXirCall *call = NULL; XrXirValue owned = {0};
     XrXirCallAccounting accounting = {0}; bool completed = false;
     XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirValueStatus status = xr_xir_domain_new(65536,&domain);
     if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
-    ErrorFixture fixture; error_fixture_init(&fixture,true);
-    XrXirBudget budget = xr_xir_default_budget();
-    status = xr_xir_type_arena_new(domain,&fixture.types,&budget,&arena);
+    status = error_fixture_arena(context, &arena);
     if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
     config.admission = error_fixture_admission(domain,arena);
     XrXirValue args[] = {{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
@@ -65,19 +65,20 @@ static bool native_invoke_allocation_run(const XrXirCallEntry *entries, uint32_t
  done:
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees && !accounting.depth);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     xr_xir_value_drop(&owned);
     return completed;
 }
-static void native_invoke_allocation_failures(const XrXirCallEntry *const *tables) {
+static void native_invoke_allocation_failures(const XrXirCompileContext *context,
+    const XrXirCallEntry *const *tables) {
     const uint32_t modes[] = {5,9,10,11};
     for (uint32_t m = 0; m < 4; ++m) for (uint32_t cancel = 0; cancel < 3; ++cancel) {
         runtime_fail_at = SIZE_MAX; runtime_attempts = 0;
-        CHECK(native_invoke_allocation_run(tables[modes[m]],modes[m],cancel));
+        CHECK(native_invoke_allocation_run(context, tables[modes[m]],modes[m],cancel));
         size_t sites = runtime_attempts; CHECK(sites && !runtime_live && !runtime_bytes);
         for (size_t i = 0; i < sites; ++i) {
             runtime_fail_at = i; runtime_attempts = 0;
-            CHECK(!native_invoke_allocation_run(tables[modes[m]],modes[m],cancel));
+            CHECK(!native_invoke_allocation_run(context, tables[modes[m]],modes[m],cancel));
             CHECK(!runtime_live && !runtime_bytes);
         }
         runtime_fail_at = SIZE_MAX;
@@ -86,11 +87,13 @@ static void native_invoke_allocation_failures(const XrXirCallEntry *const *table
 }
 
 int main(void) {
+    SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries, fixture_calls3_entries, fixture_calls4_entries, fixture_calls5_entries, fixture_calls6_entries, fixture_calls7_entries, fixture_calls8_entries, fixture_calls9_entries, fixture_calls10_entries, fixture_calls11_entries, fixture_calls12_entries, fixture_calls13_entries};
     for (uint32_t mode = 0; mode < 14; ++mode) for (uint32_t cancel = 0; cancel < 2; ++cancel) {
         uint32_t kind = mode >= 12 ? mode - 12 : mode >= 10 ? mode - 10 : mode % 4;
         XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
-        XrXirTypeArena *arena=error_fixture_arena(domain);
+        XrXirTypeArena *arena=NULL;
+        CHECK(error_fixture_arena(&compiler.context, &arena)==XR_XIR_VALUE_OK);
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = tables[mode]; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         config.admission=error_fixture_admission(domain,arena);
@@ -121,15 +124,22 @@ int main(void) {
         if ((mode==1 || mode==9) && !cancel) CHECK(xr_xir_call_take_result(call,&escaped)==XR_XIR_CALL_THROWN);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees && accounting.depth == 0);
-        xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+        xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
         if (escaped.type) {
+            XrCompileResourceStats pinned = {0};
+            CHECK(xr_compile_resources_stats(compiler.context.resources, &pinned)==XR_COMPILE_RESOURCE_OK);
+            CHECK(pinned.live_bytes > compiler.baseline.live_bytes);
             XrXirDomain *reader=NULL; CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
             CHECK(error_fixture_is_code(&escaped,reader,91));
             xr_xir_value_drop(&escaped); xr_xir_domain_drop(reader);
         }
+        XrCompileResourceStats released = {0};
+        CHECK(xr_compile_resources_stats(compiler.context.resources, &released)==XR_COMPILE_RESOURCE_OK);
+        CHECK(released.live_bytes == compiler.baseline.live_bytes);
     }
     CHECK(!runtime_live && !runtime_bytes);
-    native_invoke_allocation_failures(tables);
+    native_invoke_allocation_failures(&compiler.context, tables);
+    source_fixture_owner_free(&compiler);
     puts("Native resumable calls, error propagation, cancellation and physical release passed");
     return 0;
 }
