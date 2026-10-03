@@ -1,0 +1,41 @@
+// Presence tests, force unwrap and ?? look only at the outermost nullable layer, so a class element
+// needs no equality, and ?? evaluates its default only when the left side is absent.
+class Node {
+    v: i64
+    constructor(v: i64) { this.v = v }
+}
+fn pick(a: i64?, b: i64?) -> i64 {
+    return (a ?? 100) + (b ?? 1)
+}
+fn name(s: string?) -> string {
+    return s ?? "none"
+}
+var calls = 0
+fn fallback() -> i64 {
+    calls = calls + 1
+    return 7
+}
+fn main() {
+    var n: i64? = 5
+    var m: i64? = null
+    print(pick(n, m))
+    print(pick(null, 7))
+    print(n != null)
+    print(m == null)
+    print(n == null)
+    print(n!)
+    print(name("abc"))
+    print(name(null))
+    var c: Node? = Node(9)
+    var d: Node? = null
+    print(c != null)
+    print(d == null)
+    print(c!.v)
+    var e: i64? = n ?? m
+    print(e == 5)
+    var f: i64? = m ?? null
+    print(f == null)
+    print((n ?? fallback()) + (m ?? fallback()))
+    print(calls)
+}
+main()

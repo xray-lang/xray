@@ -862,6 +862,27 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             "        xr_xir_owned_slot_move(state->frame,%uu,&output); }\n",
             (uint32_t)op->type,op->op == XR_XIR_NULLABLE_SOME ? "&payload" : "NULL",destination);
         break;
+    case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP: {
+        bool owned_result = op->op == XR_XIR_NULLABLE_UNWRAP && xr_xir_type_is_owned(buffer->types, op->type);
+        append(buffer,"        { XrXirValue nullable = "); emit_value(buffer,function,layout,op->args[0]);
+        append(buffer,"; bool some = false; const XrXirValue *payload = NULL;\n"
+            "        if (!xr_xir_nullable_view(&nullable,&some,&payload)) goto invalid;\n");
+        if (op->op == XR_XIR_NULLABLE_IS_SOME)
+            append(buffer,"        xr_xir_scalar_store(state->frame,%uu,%ssome); }\n", destination, op->immediate ? "!" : "");
+        else {
+            append(buffer,"        if (!some || !payload) ");
+            emit_fault_return(buffer, function, layout, index, "xr_xir_call_fault(XR_XIR_RUN_NULL_UNWRAP)");
+            if (owned_result)
+                append(buffer,"\n        { XrXirValue owned = {0};\n"
+                    "        XrXirValueStatus copied = xr_xir_value_copy(payload,&owned);\n"
+                    "        if (copied != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
+                    "            copied == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+                    "            copied == XR_XIR_VALUE_LIMIT || copied == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+                    "        xr_xir_owned_slot_move(state->frame,%uu,&owned); } }\n", destination);
+            else append(buffer,"\n        xr_xir_scalar_store(state->frame,%uu,payload->payload); }\n", destination);
+        }
+        break;
+    }
     case XR_XIR_ARRAY_REPEAT:
         append(buffer,"        { XrXirValue fill = "); emit_value(buffer,function,layout,op->args[1]);
         append(buffer,"; XrXirValue output = {0};\n"
@@ -1281,3 +1302,4 @@ XR_FUNC void xr_xir_compile_c_source_free(XrXirCSource *source) {
     xr_compile_resources_free(source->text);
     *source = (XrXirCSource) {NULL, 0};
 }
+

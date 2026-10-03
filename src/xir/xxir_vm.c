@@ -628,6 +628,20 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         xr_xir_owned_slot_move(run->frame, run->layout->offsets[result_id], &output);
         return XR_XIR_RUN_OK;
     }
+    case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP: {
+        XrXirValue nullable = vm_value_operand(run, op->args[0]);
+        bool some = false; const XrXirValue *payload = NULL;
+        if (!xr_xir_nullable_view(&nullable, &some, &payload)) return XR_XIR_RUN_BAD_ARTIFACT;
+        if (op->op == XR_XIR_NULLABLE_IS_SOME) { value = op->immediate ? !some : some; break; }
+        if (!some || !payload) return XR_XIR_RUN_NULL_UNWRAP;
+        if (!xr_xir_type_is_owned(run->module->types, op->type)) { value = payload->payload; break; }
+        XrXirValue owned = {0};
+        XrXirValueStatus copied = xr_xir_value_copy(payload, &owned);
+        if (copied != XR_XIR_VALUE_OK) return value_run_status(copied);
+        state->instruction = next;
+        xr_xir_owned_slot_move(run->frame, run->layout->offsets[result_id], &owned);
+        return XR_XIR_RUN_OK;
+    }
     case XR_XIR_ARRAY_REPEAT: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
         state->instruction = next;

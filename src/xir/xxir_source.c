@@ -1269,6 +1269,7 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     body->recipes[branch].instruction.targets[1] = conjunction ? join : rhs;
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0, {0}}, value);
 }
+#include "xxir_source_nullable.inc.c"
 /* The text of a bool or number, as `print` writes it; a string converts to itself. */
 static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value) {
     if (input.type == XR_XIR_STRING) { *value = input; return true; }
@@ -1297,6 +1298,8 @@ static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *v
 #include "xxir_source_binary_plan.inc.c"
 static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     SourceValue left, right;
+    if ((node->type == AST_BINARY_EQ || node->type == AST_BINARY_NE) && source_null_comparison(ctx->active_expression))
+        return source_null_test(ctx, node, value);
     if (node->type == AST_UNARY_NEG || node->type == AST_UNARY_BNOT) {
         SourceInteger literal;
         if (!source_direct_integer(ctx, node->as.unary.operand, &literal) ||
@@ -1484,6 +1487,8 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_ENUM_CONSTRUCT: return source_enum_literal(ctx, node, value);
     case AST_MEMBER_SET: return source_struct_set(ctx, node, value);
     case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);
+    case AST_NULLISH_COALESCE: return source_coalesce(ctx, node, context, value);
+    case AST_FORCE_UNWRAP: return source_force_unwrap(ctx, node, value);
     case AST_MEMBER_ACCESS: {
         MemberAccessNode *member = &node->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;

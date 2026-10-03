@@ -68,6 +68,7 @@ XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
         case XR_XIR_RUN_NUMERIC_RANGE: reason = XR_XIR_CALL_NUMERIC_RANGE; break;
         case XR_XIR_RUN_OUT_OF_MEMORY: reason = XR_XIR_CALL_OOM; break;
         case XR_XIR_RUN_HOST_ERROR: reason = XR_XIR_CALL_HOST_ERROR; break;
+        case XR_XIR_RUN_NULL_UNWRAP: reason = XR_XIR_CALL_RUNTIME_PANIC; break;
         case XR_XIR_RUN_STEP_LIMIT:
         case XR_XIR_RUN_FRAME_LIMIT: reason = XR_XIR_CALL_LIMIT; break;
         default: reason = XR_XIR_CALL_BAD_STATE; break;
@@ -75,6 +76,7 @@ XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
     XrXirAction action = {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, reason}, {0}, 0};
     if (reason == XR_XIR_CALL_DIVIDE_BY_ZERO) action.panic.detail.code = XR_XIR_PANIC_DIVIDE;
     else if (reason == XR_XIR_CALL_NUMERIC_RANGE) action.panic.detail.code = XR_XIR_PANIC_RANGE;
+    else if (reason == XR_XIR_CALL_RUNTIME_PANIC) action.panic.detail.code = XR_XIR_PANIC_NULL_UNWRAP;
     return action;
 }
 XrXirAction xr_xir_call_numeric_fault(XrXirRunStatus status, bool remainder) {
@@ -84,7 +86,8 @@ XrXirAction xr_xir_call_numeric_fault(XrXirRunStatus status, bool remainder) {
 }
 bool xr_xir_call_panic_status(XrXirCallStatus status) {
     return status == XR_XIR_CALL_DIVIDE_BY_ZERO || status == XR_XIR_CALL_NUMERIC_RANGE ||
-        status == XR_XIR_CALL_BOUNDS || status == XR_XIR_CALL_MATCH_FAILURE || status == XR_XIR_CALL_DEFER_ASYNC || status == XR_XIR_CALL_ASSERTION;
+        status == XR_XIR_CALL_BOUNDS || status == XR_XIR_CALL_MATCH_FAILURE || status == XR_XIR_CALL_DEFER_ASYNC || status == XR_XIR_CALL_ASSERTION ||
+        status == XR_XIR_CALL_RUNTIME_PANIC;
 }
 XR_FUNCDEF bool xr_xir_call_panic_payload(XrXirCallStatus status, const XrXirPanicPayload *panic) {
     if (!xr_xir_panic_valid(panic) || xr_xir_panic_empty(panic)) return false;
@@ -96,6 +99,7 @@ XR_FUNCDEF bool xr_xir_call_panic_payload(XrXirCallStatus status, const XrXirPan
     case XR_XIR_CALL_MATCH_FAILURE: return xr_xir_fault_match_valid(detail);
     case XR_XIR_CALL_DEFER_ASYNC: return xr_xir_fault_defer_async_valid(detail);
     case XR_XIR_CALL_ASSERTION: return detail.code == XR_XIR_PANIC_ASSERTION;
+    case XR_XIR_CALL_RUNTIME_PANIC: return xr_xir_fault_runtime_valid(detail);
     default: return false;
     }
 }
@@ -141,7 +145,7 @@ static bool boundary_value(XrXirValue value, XrXirType type) {
 static bool fault_panics(const XrXirAction *action) {
     return (action->kind == XR_XIR_ACTION_FAULT ||
         (action->kind == XR_XIR_ACTION_LEAVE && action->flags == XR_XIR_ACTION_LEAVE_PANIC)) && boundary_value(action->value, XR_XIR_I64) &&
-        action->value.payload >= XR_XIR_CALL_READY && action->value.payload <= XR_XIR_CALL_ASSERTION &&
+        action->value.payload >= XR_XIR_CALL_READY && action->value.payload <= XR_XIR_CALL_RUNTIME_PANIC &&
         xr_xir_call_panic_status((XrXirCallStatus) action->value.payload);
 }
 bool xr_xir_call_panic_action(const XrXirAction *action) {

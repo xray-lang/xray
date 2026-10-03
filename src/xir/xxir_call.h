@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 23u
+#define XR_XIR_CALL_ABI_VERSION 24u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -28,7 +28,9 @@ typedef enum XrXirCallStatus {
     XR_XIR_CALL_BOUNDS, XR_XIR_CALL_MATCH_FAILURE, XR_XIR_CALL_DEFER_ASYNC,
     XR_XIR_CALL_CANCEL_REQUESTED, XR_XIR_CALL_ASSERTION = 19,
     /* A host service failed. It is never a language panic and no handler observes it. */
-    XR_XIR_CALL_HOST_ERROR
+    XR_XIR_CALL_HOST_ERROR,
+    /* A language panic whose detail code alone names it, such as unwrapping null. */
+    XR_XIR_CALL_RUNTIME_PANIC
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;

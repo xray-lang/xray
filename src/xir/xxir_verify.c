@@ -241,7 +241,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             return XR_XIR_BAD_STRUCTURE;
     if (!xr_xir_op_uses_type_arguments(op->op) &&
         (op->type_arguments[0] || op->type_arguments[1])) return XR_XIR_BAD_STRUCTURE;
-    if (op->op == XR_XIR_CONST_BOOL || op->op == XR_XIR_LOCAL_UNINIT || op->op == XR_XIR_EQUAL) {
+    if (op->op == XR_XIR_CONST_BOOL || op->op == XR_XIR_LOCAL_UNINIT || op->op == XR_XIR_EQUAL || op->op == XR_XIR_NULLABLE_IS_SOME) {
         if (op->immediate != 0 && op->immediate != 1)
             return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_CONST_INT) {
@@ -811,6 +811,12 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
         if (op->op == XR_XIR_ATOMIC_I64_NEW || op->op == XR_XIR_TIMER_AFTER_MS) expected = XR_XIR_I64;
+        if (op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            if (!xr_xir_type_is_nullable(context->module->types, expected) ||
+                (op->op == XR_XIR_NULLABLE_UNWRAP && xr_xir_nullable_element(context->module->types, expected) != op->type))
+                return XR_XIR_BAD_TYPE;
+        }
         if (op->op == XR_XIR_TO_STRING) {
             expected = xr_xir_operand_type(function, op->args[0]);
             if (expected != XR_XIR_BOOL && !xr_xir_type_is_number(expected)) return XR_XIR_BAD_TYPE;

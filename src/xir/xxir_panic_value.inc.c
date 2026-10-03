@@ -24,6 +24,7 @@ XR_FUNCDEF size_t xr_xir_panic_message_format(XrXirFaultDetail detail, char *buf
             detail.index, detail.length);
         break;
     case XR_XIR_PANIC_MATCH: written = snprintf(buffer, capacity, "non-exhaustive match"); break;
+    case XR_XIR_PANIC_NULL_UNWRAP: written = snprintf(buffer, capacity, "cannot unwrap a null value"); break;
     default: return 0;
     }
     return written > 0 && (size_t) written < capacity ? (size_t) written : 0;
