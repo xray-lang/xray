@@ -9,10 +9,14 @@ foreach(target build_source_driver build_source_faults)
         ${build_source_cli_sources}
         "${PROJECT_SOURCE_DIR}/src/os/win/fd_win.c"
         "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
-    target_link_libraries(${target} PRIVATE xray_cli_source xray_xir_native_projection)
+    target_link_libraries(${target} PRIVATE xray_cli_source xray_xir_native_projection
+        xray_xir_local_toolchain xray_xir_native_admission)
+    set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endforeach()
 target_link_libraries(build_source_driver PRIVATE xray_xir_publication)
-target_compile_definitions(build_source_faults PRIVATE BUILD_SOURCE_INJECTED=1)
+target_compile_definitions(build_source_faults PRIVATE BUILD_SOURCE_INJECTED=1
+    xtc_xir_native_operation_close=xr_cli_test_operation_close
+    xtc_xir_native_operation_cleanup_diagnostic=xr_cli_test_operation_cleanup_diagnostic)
 target_link_libraries(build_source_faults PRIVATE xray_xir_target bcrypt)
 add_executable(test_publication_owner "${CMAKE_CURRENT_LIST_DIR}/build_source_owner/test_publication_owner.c")
 target_link_libraries(test_publication_owner PRIVATE xray_xir_publication)
@@ -46,3 +50,10 @@ add_test(NAME build_source_native_c11 COMMAND ${XRAY_PYTHON} -X utf8
     --cc "${XIR_INVOCATION_MSVC}" --linker "${XIR_INVOCATION_LINKER}")
 set_tests_properties(build_source_native_c11 PROPERTIES TIMEOUT 180 COST 5
     LABELS "unit;cli;xir;generated-c")
+add_test(NAME build_source_native_admission COMMAND ${XRAY_PYTHON} -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/build_source_owner/build_source_native_admission.py"
+    --root "${PROJECT_SOURCE_DIR}" --driver $<TARGET_FILE:build_source_driver>
+    --output "${CMAKE_CURRENT_BINARY_DIR}/build-source-native-admission"
+    --cc "${XIR_INVOCATION_MSVC}" --fault-driver $<TARGET_FILE:build_source_faults>)
+set_tests_properties(build_source_native_admission PROPERTIES TIMEOUT 300 COST 130 RUN_SERIAL TRUE
+    LABELS "unit;cli;xir;ownership;generated-c")

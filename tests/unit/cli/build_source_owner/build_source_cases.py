@@ -17,7 +17,7 @@ run('explicit',a.driver,['--native','--c-only',source,'-o',output],0);original=o
 run('overwrite',a.driver,['--c-only',source,'-o',output],0);assert output.read_bytes()==original
 bad=a.output/'bad.xr';bad.write_text('var value = missing_symbol\n',encoding='utf-8')
 run('source-rejection',a.driver,['--c-only',bad,'-o',output],1);assert output.read_bytes()==original
-run('native-unavailable',a.driver,[source],1)
+run('native-explicit-missing',a.driver,['--cc',a.output/'missing-cl.exe',source],1)
 run('option-not-ignored',a.driver,['--c-only','-O2',source],1)
 readonly_path=a.output/'readonly.stdout';readonly_path.write_bytes(b'untouched')
 with readonly_path.open('rb') as readonly:

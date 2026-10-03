@@ -352,6 +352,10 @@ XR_FUNC const XrXirInvocationFacts *xtc_xir_native_operation_facts(const XtcXirN
 XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_native_operation_provider(const XtcXirNativeOperation *owner) {
     return owner && owner->phase == XTC_XIR_NATIVE_READY ? xtc_xir_invocation_provider(owner->invocation) : NULL;
 }
+XR_FUNC const XrProcessView *xtc_xir_native_operation_command(const XtcXirNativeOperation *owner,
+    XrXirInvocationStage stage) {
+    return owner && owner->phase == XTC_XIR_NATIVE_READY ? xtc_xir_invocation_command(owner->invocation, stage) : NULL;
+}
 XR_FUNC const XrXirInvocationFile *xtc_xir_native_operation_file(const XtcXirNativeOperation *owner, uint32_t index) {
     return owner && owner->phase == XTC_XIR_NATIVE_READY ? xtc_xir_invocation_file(owner->invocation, index) : NULL;
 }

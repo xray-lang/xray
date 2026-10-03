@@ -14,6 +14,7 @@
 #if BUILD_SOURCE_INJECTED
 #define CHECK(c) do { if(!(c)){fprintf(stderr,"injection invariant line=%d\n",__LINE__);exit(90);} } while(0)
 #include "publication_faults.inc.h"
+#include "native_cleanup_faults.inc.h"
 #endif
 XR_FUNC int cmd_build(const XrCliInvocation *inv);
 int wmain(int argc, wchar_t **wide) {
@@ -22,6 +23,7 @@ int wmain(int argc, wchar_t **wide) {
     if(mode && !strcmp(mode,"published-close"))permanent_close=true;
     else if(mode && !strcmp(mode,"unpublished-close")){force_flush_failure=true;fail_disposition=true;}
     else if(mode && !strcmp(mode,"transient-close"))fail_close=0;
+    native_cleanup_mode=getenv("XR_NATIVE_CLEANUP_TEST_FAILURE");
 #endif
     XrWinPathStatus status;
     char **argv=xr_win_utf16_arguments(argc,wide,&status);

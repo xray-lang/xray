@@ -1,0 +1,25 @@
+if(NOT WIN32)
+    return()
+endif()
+foreach(mode production injected)
+    set(target test_local_toolchain_${mode})
+    add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/local_toolchain_owner/test_local_toolchain.c")
+    target_link_libraries(${target} PRIVATE xray_xir_local_toolchain)
+    target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
+    target_compile_definitions(${target} PRIVATE NDEBUG WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    if(mode STREQUAL "production")
+        target_compile_definitions(${target} PRIVATE LOCAL_PRODUCTION)
+    endif()
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(${target} PRIVATE /experimental:c11atomics)
+    endif()
+endforeach()
+add_test(NAME local_toolchain_faults COMMAND test_local_toolchain_injected)
+add_test(NAME local_toolchain_real COMMAND ${XRAY_PYTHON} -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/local_toolchain_owner/test_local_toolchain.py"
+    $<TARGET_FILE:test_local_toolchain_production> "${CMAKE_BINARY_DIR}/xir-runtime-sdk"
+    "${XIR_INVOCATION_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/local-toolchain-owner")
+set_tests_properties(local_toolchain_faults local_toolchain_real PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE
+    COST 35 LABELS "unit;cli;xir;toolchain;ownership;budget")

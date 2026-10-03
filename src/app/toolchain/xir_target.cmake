@@ -71,4 +71,22 @@ if(WIN32)
     else()
         target_compile_options(xray_xir_native_operation PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
+    add_library(xray_xir_native_admission STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_native_admission.c)
+    target_link_libraries(xray_xir_native_admission PUBLIC xray_xir_native_operation)
+    add_library(xray_xir_local_toolchain STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_local_toolchain.c
+        ${CMAKE_CURRENT_LIST_DIR}/../../base/xio_policy.c
+        ${CMAKE_CURRENT_LIST_DIR}/../../base/xfileio.c
+        ${CMAKE_CURRENT_LIST_DIR}/../../os/win/fs_win.c)
+    target_link_libraries(xray_xir_local_toolchain PUBLIC xray_toolchain_process
+        xray_xir_target xray_xir_runtime_sdk xray_json_cursor)
+    foreach(target xray_xir_native_admission xray_xir_local_toolchain)
+        target_compile_features(${target} PUBLIC c_std_11)
+        set_target_properties(${target} PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+        target_compile_definitions(${target} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+        if(MSVC)
+            target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+        else()
+            target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+        endif()
+    endforeach()
 endif()

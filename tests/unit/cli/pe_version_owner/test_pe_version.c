@@ -186,6 +186,44 @@ static void work_cases(void) {
     printf("synthetic_work=%llu all_work_limits=%llu parser_allocations=0\n", (unsigned long long)work,
         (unsigned long long)work);
 }
+static XtcXirPeVersionStatus image_case(uint8_t *bytes, size_t length, uint64_t budget, uint64_t *work) {
+    XrCompileResources *r=ledger(budget); XrCompileResourceStats before,after;
+    CHECK(xr_compile_resources_stats(r,&before)==XR_COMPILE_RESOURCE_OK);
+    XtcXirPeImage image,saved; memset(&image,0xa7,sizeof(image)); saved=image;
+    XtcXirPeVersionStatus status=xtc_xir_pe_image_parse(r,bytes,length,&image);
+    if(status!=XTC_XIR_PE_VERSION_OK) CHECK(!memcmp(&saved,&image,sizeof(image)));
+    else CHECK(image.machine==0x8664 && image.optional_magic==0x20b && image.entry_rva==0x1000 &&
+        image.size_of_image==0x2000 && image.size_of_headers==512 && image.subsystem==3 &&
+        image.entry_section_characteristics==0x60000020);
+    CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.allocation_count==before.allocation_count && after.live_bytes==before.live_bytes);
+    *work=after.work-before.work; xr_compile_resources_release(r); return status;
+}
+static void image_fixture(uint8_t *bytes) {
+    fixture(bytes);put16(bytes,PE+22,0x22);put32(bytes,OPT+16,0x1000);put32(bytes,OPT+56,0x2000);
+    put32(bytes,OPT+60,512);put16(bytes,OPT+68,3);put32(bytes,SECTION+36,0x60000020);
+    put32(bytes,OPT+128,0);put32(bytes,OPT+132,0);
+}
+static void image_cases(void) {
+    uint8_t bytes[FRAME]; image_fixture(bytes);uint64_t work,used;
+    CHECK(image_case(bytes,FRAME,UINT64_MAX,&work)==XTC_XIR_PE_VERSION_OK);
+    XrCompileResources *r=ledger(UINT64_MAX);XtcXirPeVersion version;
+    CHECK(xtc_xir_pe_version_parse(r,bytes,FRAME,&version)==XTC_XIR_PE_VERSION_NOT_FOUND);
+    xr_compile_resources_release(r);
+    for(uint64_t limit=0;limit<=work;++limit)
+        CHECK(image_case(bytes,FRAME,1+limit,&used)==(limit==work?XTC_XIR_PE_VERSION_OK:XTC_XIR_PE_VERSION_BUDGET));
+    for(size_t length=0;length<FRAME;++length)CHECK(image_case(bytes,length,UINT64_MAX,&used)!=XTC_XIR_PE_VERSION_OK);
+    put32(bytes,OPT+16,0);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_INVALID);
+    image_fixture(bytes);put32(bytes,OPT+16,0x2000);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_INVALID);
+    image_fixture(bytes);put32(bytes,OPT+60,SECTION);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_INVALID);
+    image_fixture(bytes);put32(bytes,OPT+60,FRAME+1);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_INVALID);
+    image_fixture(bytes);put32(bytes,SECTION+16,0);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_INVALID);
+    image_fixture(bytes);put16(bytes,PE+6,2);memcpy(bytes+SECTION+40,bytes+SECTION,40);
+    CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_AMBIGUOUS);
+    image_fixture(bytes);put16(bytes,PE+4,0x14c);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_UNSUPPORTED);
+    image_fixture(bytes);put16(bytes,OPT,0x10b);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_UNSUPPORTED);
+    printf("image_without_version_work=%llu all_image_limits/truncations/rva/header=PASS allocations=0\n",(unsigned long long)work);
+}
 static int real_file(const char *path, const char *file, const char *product) {
     FILE *stream = fopen(path, "rb"); CHECK(stream); CHECK(!fseek(stream, 0, SEEK_END));
     long length = ftell(stream); CHECK(length > 0); rewind(stream);
@@ -201,7 +239,7 @@ static int real_file(const char *path, const char *file, const char *product) {
 }
 int main(int argc, char **argv) {
     if (argc == 4) return real_file(argv[1], argv[2], argv[3]);
-    CHECK(argc == 1); reject_cases(); value_cases(); work_cases();
+    CHECK(argc == 1); reject_cases(); value_cases(); work_cases(); image_cases();
 #ifndef PE_VERSION_PRODUCTION
     CHECK(live == 0); printf("physical_live=0 ledger_allocations=%zu\n", allocation_calls);
 #endif

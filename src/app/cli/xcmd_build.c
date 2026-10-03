@@ -4,12 +4,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_build.c - One Source product and owned C output publication
+ * xcmd_build.c - One Source product and admitted output publication
  */
 #include "xcli.h"
 #include "xcli_canonical_source.h"
 #include "xcli_source_paths.h"
 #include "../toolchain/xtc_xir_publication.h"
+#include "../toolchain/xtc_xir_local_toolchain.h"
+#include "../toolchain/xtc_xir_native_admission.h"
 #include "../../aot/program/xr_xir_native_projection.h"
 #include "../../shared/xr_path_limit.h"
 #include <stdio.h>
@@ -30,10 +32,16 @@ static int build_publication_exit(XtcXirPublicationStatus status) {
         XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
 }
 static bool build_options_supported(const XrCliInvocation *inv) {
+    bool c_only = xr_cli_opt_bool(&inv->options,"c-only");
     for (int i = 0; i < inv->options.count; ++i) {
         if (!inv->options.present[i]) continue;
         const char *name = inv->options.spec[i].long_name;
         if (!strcmp(name,"output") || !strcmp(name,"c-only") || !strcmp(name,"native") || !strcmp(name,"verbose")) continue;
+        if (!c_only && !strcmp(name,"cc")) continue;
+        if (!c_only && !strcmp(name,"toolchain")) {
+            const char *provider = xr_cli_opt_string(&inv->options,name,"");
+            if (!strcmp(provider,"auto") || !strcmp(provider,"msvc")) continue;
+        }
         const char *expected = !strcmp(name,"profile") ? "hosted" : !strcmp(name,"artifact") ? "executable" :
             !strcmp(name,"c-dialect") ? "c11" : !strcmp(name,"target") ? "native" : NULL;
         if (expected && !strcmp(xr_cli_opt_string(&inv->options,name,""),expected)) continue;
@@ -68,6 +76,9 @@ static int build_publication_close(XtcXirPublication **owner) {
      * Process termination is explicit here; the publication API never exits. */
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
+#if defined(XR_ARCH_X86_64) && XR_OS_WINDOWS
+#include "xcmd_build_native.inc.c"
+#endif
 XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!inv || (inv->options.count && (!inv->options.spec || !inv->options.present))) return XR_CLI_EXIT_INTERNAL;
 #if XR_OS_WINDOWS
@@ -83,13 +94,11 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr,"XR_BUILD_6001: Source build requires an exact .xr source file\n"); return XR_CLI_EXIT_FAIL;
     }
     if (!build_options_supported(inv)) return XR_CLI_EXIT_FAIL;
-    if (!xr_cli_opt_bool(&inv->options,"c-only")) {
-        fprintf(stderr,"XR_BUILD_6001: native Target admission is unsupported\n"); return XR_CLI_EXIT_FAIL;
-    }
 #if !defined(XR_ARCH_X86_64) || !XR_OS_WINDOWS
     fprintf(stderr,"XR_BUILD_6001: this Source publication target is unsupported\n"); return XR_CLI_EXIT_FAIL;
 #else
-    const char *output=xr_cli_opt_string(&inv->options,"output","app.c");
+    bool c_only=xr_cli_opt_bool(&inv->options,"c-only");
+    const char *output=xr_cli_opt_string(&inv->options,"output",c_only ? "app.c" : "app.exe");
     XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
@@ -98,6 +107,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     XrCliSourcePaths paths={0}; XrCliSourcePathsDiagnostic path_diagnostic={0};
     XrCliCompileSourceDiagnostic diagnostic={0}; XrXirSourceProduct *product=NULL;
     XrXirNativeProjection *projection=NULL; XtcXirPublication *publication=NULL;
+    XrXirNativeArtifact *artifact=NULL;
     int result=XR_CLI_EXIT_FAIL;
     XrCliCompileSourceStatus source=xr_cli_compile_source_paths(resources,input,&paths,&path_diagnostic);
     if (source!=XR_CLI_COMPILE_SOURCE_OK) {
@@ -117,12 +127,22 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         result=projected==XR_XIR_OUT_OF_MEMORY || projected==XR_XIR_BAD_STRUCTURE ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
         goto cleanup;
     }
+    if (!c_only) {
+        result=build_native_prepare(resources,inv,projection,&artifact);
+        if (result!=XR_CLI_EXIT_OK) goto cleanup;
+    }
     XtcXirPublicationRequest publish={output,{XR_PATH_LIMIT_MAX_PATH,8,BUILD_C_LIMIT}};
     XtcXirPublicationStatus status=xtc_xir_publication_new(resources,&publish,&publication);
     if (status==XTC_XIR_PUBLICATION_OK) {
-        const XrXirNativeProjectionSource *c=xr_compile_native_projection_source(projection);
-        status=xtc_xir_publication_write(publication,c->text,c->length);
+        if (c_only) {
+            const XrXirNativeProjectionSource *c=xr_compile_native_projection_source(projection);
+            status=xtc_xir_publication_write(publication,c->text,c->length);
+        } else {
+            const XrXirNativeArtifactView *native=xr_compile_native_artifact_view(artifact);
+            status=xtc_xir_publication_write(publication,native->bytes,native->size);
+        }
     }
+    xr_compile_native_artifact_free(artifact);artifact=NULL;
     xr_compile_native_projection_owner_free(projection);projection=NULL;
     xr_xir_compile_source_product_free(product);product=NULL;
     xr_cli_compile_source_diagnostic_free(&diagnostic);
@@ -136,6 +156,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         result=build_publication_exit(status);
     } else result=XR_CLI_EXIT_OK;
 cleanup:
+    xr_compile_native_artifact_free(artifact);
     xr_compile_native_projection_owner_free(projection);
     xr_xir_compile_source_product_free(product);
     xr_cli_compile_source_diagnostic_free(&diagnostic);
@@ -144,7 +165,7 @@ cleanup:
     bool published=publication && xtc_xir_publication_diagnostic(publication)->published;
     int closed=build_publication_close(&publication);
     if (closed>result) result=closed;
-    bool report_failed=result==XR_CLI_EXIT_OK && printf("Generated: %s\n",output)<0;
+    bool report_failed=result==XR_CLI_EXIT_OK && printf("%s: %s\n",c_only ? "Generated" : "Built",output)<0;
     if (fflush(stdout)) report_failed=true;
     if (report_failed) {
         fprintf(stderr,"XR_BUILD_6005: stdout reporting failed (published=%u)\n",(unsigned)published);

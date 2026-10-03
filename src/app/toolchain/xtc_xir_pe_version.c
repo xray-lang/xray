@@ -13,8 +13,8 @@
 typedef struct PeVersionReader {
     XrCompileResources *resources;
     const uint8_t *bytes;
-    size_t length, sections, resource;
-    uint32_t resource_size;
+    size_t length, sections, resource, pe, optional, mapped_section;
+    uint32_t resource_size, directories;
     uint16_t section_count;
     XtcXirPeVersionStatus status;
     bool found;
@@ -63,6 +63,7 @@ static bool pe_rva(PeVersionReader *reader, uint32_t rva, uint32_t length, size_
             return pe_fail(reader, XTC_XIR_PE_VERSION_TRUNCATED);
         result = (size_t)raw + (rva - address);
         if (!pe_range(reader, result, length)) return false;
+        reader->mapped_section = entry;
         found = true;
     }
     if (!found) return pe_fail(reader, XTC_XIR_PE_VERSION_INVALID);
@@ -99,9 +100,13 @@ static bool pe_header(PeVersionReader *reader) {
         if (mapped > UINT32_MAX - address) return pe_fail(reader, XTC_XIR_PE_VERSION_INVALID);
         if (raw_size && !pe_range(reader, raw, raw_size)) return false;
     }
-    if (directories < 3) return pe_fail(reader, XTC_XIR_PE_VERSION_NOT_FOUND);
+    reader->pe = pe; reader->optional = optional; reader->directories = directories;
+    return true;
+}
+static bool pe_resource(PeVersionReader *reader) {
+    if (reader->directories < 3) return pe_fail(reader, XTC_XIR_PE_VERSION_NOT_FOUND);
     uint32_t rva, bytes;
-    if (!pe_read(reader, optional + 128, 4, &rva) || !pe_read(reader, optional + 132, 4, &bytes)) return false;
+    if (!pe_read(reader, reader->optional + 128, 4, &rva) || !pe_read(reader, reader->optional + 132, 4, &bytes)) return false;
     if (!rva && !bytes) return pe_fail(reader, XTC_XIR_PE_VERSION_NOT_FOUND);
     if (!rva || bytes < 16 || (rva & 3)) return pe_fail(reader, XTC_XIR_PE_VERSION_INVALID);
     reader->resource_size = bytes;
@@ -218,7 +223,7 @@ XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(XrCompileResources *resou
     PeVersionReader reader = {0};
     reader.resources = resources; reader.bytes = bytes; reader.length = length;
     uint32_t ancestors[3];
-    if (!pe_header(&reader) || !pe_directory(&reader, 0, 0, ancestors)) return reader.status;
+    if (!pe_header(&reader) || !pe_resource(&reader) || !pe_directory(&reader, 0, 0, ancestors)) return reader.status;
     if (!reader.found) return XTC_XIR_PE_VERSION_NOT_FOUND;
     if (!pe_work(&reader, sizeof(XtcXirPeVersion))) return reader.status;
     XtcXirPeVersion result = {0};
@@ -230,6 +235,33 @@ XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(XrCompileResources *resou
     }
     if (!pe_decimal(&reader, result.file, result.file_text) || !pe_decimal(&reader, result.product, result.product_text) ||
         !pe_work(&reader, sizeof(result))) return reader.status;
+    memcpy(output, &result, sizeof(result));
+    return XTC_XIR_PE_VERSION_OK;
+}
+XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(XrCompileResources *resources,
+    const uint8_t *bytes, size_t length, XtcXirPeImage *output) {
+    if (!resources || !bytes || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
+    PeVersionReader reader = {0};
+    reader.resources = resources; reader.bytes = bytes; reader.length = length;
+    if (!pe_header(&reader)) return reader.status;
+    uint32_t machine, magic, characteristics, subsystem, entry, image, headers, flags;
+    if (!pe_read(&reader, reader.pe + 4, 2, &machine) ||
+        !pe_read(&reader, reader.optional, 2, &magic) ||
+        !pe_read(&reader, reader.pe + 22, 2, &characteristics) ||
+        !pe_read(&reader, reader.optional + 68, 2, &subsystem) ||
+        !pe_read(&reader, reader.optional + 16, 4, &entry) ||
+        !pe_read(&reader, reader.optional + 56, 4, &image) ||
+        !pe_read(&reader, reader.optional + 60, 4, &headers)) return reader.status;
+    if (!entry || entry >= image || headers > length ||
+        headers < reader.sections + (size_t)reader.section_count * 40)
+        return XTC_XIR_PE_VERSION_INVALID;
+    size_t offset;
+    if (!pe_rva(&reader, entry, 1, &offset) ||
+        !pe_read(&reader, reader.mapped_section + 36, 4, &flags)) return reader.status;
+    if (!pe_work(&reader, sizeof(XtcXirPeImage))) return reader.status;
+    XtcXirPeImage result = {(uint16_t)machine, (uint16_t)magic, (uint16_t)characteristics,
+        (uint16_t)subsystem, entry, image, headers, flags};
+    if (!pe_work(&reader, sizeof(result))) return reader.status;
     memcpy(output, &result, sizeof(result));
     return XTC_XIR_PE_VERSION_OK;
 }
