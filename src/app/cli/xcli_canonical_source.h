@@ -69,4 +69,10 @@ XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
     XrCliCompileSourceDiagnostic *diagnostic);
 XR_FUNC void xr_cli_compile_source_diagnostic_free(XrCliCompileSourceDiagnostic *diagnostic);
 XR_FUNC const char *xr_cli_compile_source_status_name(XrCliCompileSourceStatus status);
+/* Renders one failed build. A located semantic failure becomes
+ * "path:line:column: error: message" and returns true; any other failure is
+ * "source build failed (stage=N status=NAME)[: message]" and returns false.
+ * The text is truncated to fit. SIZE must be nonzero. */
+XR_FUNC bool xr_cli_compile_source_diagnostic_format(
+    const XrCliCompileSourceDiagnostic *diagnostic, char *out, size_t size);
 #endif // XCLI_CANONICAL_SOURCE_H

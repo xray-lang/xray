@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Single entry point that routes argv to the correct command handler.
- *   Handles: zero-arg REPL, global flags, command routing,
+ *   Handles: zero-arg usage, global flags, command routing,
  *   .xr script shortcut, and "did you mean?" suggestions.
  */
 

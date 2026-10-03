@@ -2500,8 +2500,31 @@ endif()
 # ============================================================================
 
 # Base CLI source files
-set(XRAY_CLI_SOURCES ${NEW_CLI_SRC} ${APP_TOOLCHAIN_SRC})
-list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli/xcmd_builtin_dump.c)
+# The public executable is composed only from consumers of the single
+# Source -> Checked -> Lowered pipeline. The Source adapter, path policy and
+# graph authority live in xray_cli_source and are linked, not recompiled here.
+set(XRAY_CLI_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli)
+set(XRAY_CLI_SOURCES
+    ${XRAY_CLI_ROOT}/xcli.c
+    ${XRAY_CLI_ROOT}/xcli_dispatch.c
+    ${XRAY_CLI_ROOT}/xcli_spec.c
+    ${XRAY_CLI_ROOT}/xcli_parser.c
+    ${XRAY_CLI_ROOT}/xcli_help.c
+    ${XRAY_CLI_ROOT}/xcli_diag.c
+    ${XRAY_CLI_ROOT}/xcli_output.c
+    ${XRAY_CLI_ROOT}/xcli_installation.c
+    ${XRAY_CLI_ROOT}/xcmd_run.c
+    ${XRAY_CLI_ROOT}/xcmd_build.c
+    ${XRAY_CLI_ROOT}/xcmd_check.c
+    ${XRAY_CLI_ROOT}/xcmd_fmt.c
+    ${XRAY_CLI_ROOT}/xcmd_test.c
+    ${XRAY_CLI_ROOT}/xcmd_self.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/toolchain/xtc_discovery.c)
+if(WIN32)
+    list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/os/win/thread_win.c)
+else()
+    list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/os/unix/thread_unix.c)
+endif()
 list(REMOVE_DUPLICATES XRAY_CLI_SOURCES)
 set(XRAY_CLI_INCLUDES
     ${XRAY_COMMON_INCLUDES}
@@ -2510,11 +2533,10 @@ set(XRAY_CLI_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/toolchain
 )
 
-# LSP optional module
+# LSP optional module. The server still consumes the retired analyzer snapshot,
+# so its sources are not part of the public executable until they are migrated
+# to the single Source query owner.
 if(XR_BUILD_LSP)
-    file(GLOB LSP_SRC CONFIGURE_DEPENDS "src/app/lsp/*.c")
-    list(FILTER LSP_SRC EXCLUDE REGEX "xlsp_main\.c$")
-    list(APPEND XRAY_CLI_SOURCES ${LSP_SRC})
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp)
     add_compile_definitions(XR_HAS_LSP=1)
     message(STATUS "LSP: enabled")
@@ -2522,14 +2544,9 @@ else()
     message(STATUS "LSP: disabled")
 endif()
 
-# DAP optional module
+# DAP optional module. The adapter drives the retired bytecode VM debug hooks
+# and is likewise excluded until a XIR execution debug interface exists.
 if(XR_BUILD_DAP)
-    file(GLOB DAP_SRC CONFIGURE_DEPENDS "src/app/dap/*.c")
-    list(FILTER DAP_SRC EXCLUDE REGEX "xdap_main\.c$")
-
-    # All DAP files (including xdap_debug.c) are in DAP module, not added to xray_core
-    # VM communicates with DAP through debug_hooks callback interface
-    list(APPEND XRAY_CLI_SOURCES ${DAP_SRC})
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/dap)
 
     add_compile_definitions(XR_HAS_DAP=1)
@@ -2582,10 +2599,9 @@ else()
     message(STATUS "Spec source not found — using committed generated files")
 endif()
 
-# MCP optional module
+# MCP optional module. The tool surface runs the retired analyzer and VM, so
+# it is not linked into the public executable until it is migrated.
 if(XR_BUILD_MCP)
-    file(GLOB MCP_SRC CONFIGURE_DEPENDS "src/app/mcp/*.c")
-    list(APPEND XRAY_CLI_SOURCES ${MCP_SRC})
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
     add_compile_definitions(XR_HAS_MCP=1)
@@ -2643,7 +2659,6 @@ else()
 endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
-add_dependencies(xray xray_aot_core xray_rt_coro xray_vm)
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so
@@ -2652,9 +2667,13 @@ if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     target_link_options(xray PRIVATE "LINKER:/STACK:8388608")
 endif()
 
-target_link_libraries(xray PRIVATE xray_core)
-if(READLINE_LIB)
-    target_link_libraries(xray PRIVATE ${READLINE_LIB})
+# The executable links only the single-pipeline libraries; none of them reach
+# the retired analyzer/Xi/Program core.
+target_link_libraries(xray PRIVATE xray_cli_source xray_xir_runtime_host xray_frontend_format
+    xray_compile_resources)
+if(WIN32)
+    target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
+        xray_xir_publication xray_toolchain_dependencies)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})

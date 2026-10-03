@@ -103,7 +103,6 @@ void xr_cli_print_usage(void) {
     printf("\nUsage:\n");
     printf("  xray <file.xr> [-- args...]       Run script\n");
     printf("  xray <command> [options] [args...] Execute command\n");
-    printf("  xray                               Start REPL\n");
 
     printf("\nCommands:\n");
     const XrCliCommandSpec *cmds = xr_cli_get_commands();

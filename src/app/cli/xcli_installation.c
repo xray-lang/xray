@@ -23,6 +23,12 @@ typedef struct XrInstallationInfo {
     char payload_manifest[XR_PATH_MAX];
 } XrInstallationInfo;
 
+static bool installation_is_file(const char *path) {
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    bool is_file = false;
+    return xr_os_io_is_file(&policy, path, &is_file) == XR_OS_IO_OK && is_file;
+}
+
 static bool path_dirname(char *path) {
     size_t len = strlen(path);
     while (len > 1 && (path[len - 1] == '/' || path[len - 1] == '\\'))
@@ -79,8 +85,8 @@ static void detect_installation(XrInstallationInfo *info) {
         info->root[0] = '\0';
         return;
     }
-    info->installed = xr_fs_is_file(info->marker);
-    info->payload_manifest_present = xr_fs_is_file(info->payload_manifest);
+    info->installed = installation_is_file(info->marker);
+    info->payload_manifest_present = installation_is_file(info->payload_manifest);
 }
 
 static void print_json_string(FILE *out, const char *value) {

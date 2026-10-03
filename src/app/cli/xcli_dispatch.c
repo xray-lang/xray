@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Routes argv to the correct command handler via spec-driven dispatch.
- *   Zero-arg -> REPL, .xr suffix -> implicit "run", unknown -> suggest.
+ *   Zero-arg -> usage, .xr suffix -> implicit "run", unknown -> suggest.
  *   Every command goes through the unified parser before reaching its handler.
  */
 
@@ -17,7 +17,6 @@
 #include "xcli_parser.h"
 #include "xcli_help.h"
 #include "xcli_diag.h"
-#include "xcli_fs.h"
 #include "xcli_installation.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
@@ -64,66 +63,28 @@ static int string_distance(const char *s1, const char *s2) {
 /* ========== Handler Forward Declarations ========== */
 
 XR_FUNC int cmd_run(const XrCliInvocation *inv);
-XR_FUNC int cmd_repl(const XrCliInvocation *inv);
 XR_FUNC int cmd_test(const XrCliInvocation *inv);
 XR_FUNC int cmd_check(const XrCliInvocation *inv);
 XR_FUNC int cmd_fmt(const XrCliInvocation *inv);
-XR_FUNC int cmd_compile(const XrCliInvocation *inv);
 XR_FUNC int cmd_build(const XrCliInvocation *inv);
-XR_FUNC int cmd_deps(const XrCliInvocation *inv);
-XR_FUNC int cmd_explain(const XrCliInvocation *inv);
-XR_FUNC int cmd_toolchain(const XrCliInvocation *inv);
-XR_FUNC int cmd_language(const XrCliInvocation *inv);
-XR_FUNC int cmd_verify(const XrCliInvocation *inv);
-XR_FUNC int cmd_plan(const XrCliInvocation *inv);
-XR_FUNC int cmd_pkg(const XrCliInvocation *inv);
-XR_FUNC int cmd_builtin_dump(const XrCliInvocation *inv);
 /* Defined below in this file */
 XR_FUNC int cmd_info(const XrCliInvocation *inv);
 XR_FUNC int cmd_self(const XrCliInvocation *inv);
 XR_FUNC int cmd_doctor(const XrCliInvocation *inv);
 XR_FUNC int cmd_help(const XrCliInvocation *inv);
-#ifdef XR_HAS_LSP
-XR_FUNC int cmd_lsp(const XrCliInvocation *inv);
-#endif
-#ifdef XR_HAS_DAP
-XR_FUNC int cmd_dap(const XrCliInvocation *inv);
-#endif
-#ifdef XR_HAS_MCP
-XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv);
-#endif
 
 /* Register all command handlers into the spec table.
  * Must be called once before xr_cli_main(). */
 void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("run", cmd_run);
-    xr_cli_register_handler("repl", cmd_repl);
     xr_cli_register_handler("test", cmd_test);
     xr_cli_register_handler("check", cmd_check);
     xr_cli_register_handler("fmt", cmd_fmt);
-    xr_cli_register_handler("compile", cmd_compile);
     xr_cli_register_handler("build", cmd_build);
-    xr_cli_register_handler("deps", cmd_deps);
-    xr_cli_register_handler("explain", cmd_explain);
-    xr_cli_register_handler("toolchain", cmd_toolchain);
-    xr_cli_register_handler("language", cmd_language);
-    xr_cli_register_handler("verify", cmd_verify);
-    xr_cli_register_handler("plan", cmd_plan);
-    xr_cli_register_handler("pkg", cmd_pkg);
     xr_cli_register_handler("info", cmd_info);
     xr_cli_register_handler("self", cmd_self);
     xr_cli_register_handler("doctor", cmd_doctor);
-    xr_cli_register_handler("builtin-dump", cmd_builtin_dump);
     xr_cli_register_handler("help", cmd_help);
-#ifdef XR_HAS_LSP
-    xr_cli_register_handler("lsp", cmd_lsp);
-#endif
-#ifdef XR_HAS_DAP
-    xr_cli_register_handler("dap", cmd_dap);
-#endif
-#ifdef XR_HAS_MCP
-    xr_cli_register_handler("mcp-server", cmd_mcp_server);
-#endif
 }
 
 /* ========== Handler Dispatch ========== */
@@ -237,12 +198,10 @@ int xr_cli_main(int argc, char **argv) {
     int cmd_argc = argc - 1 - consumed; /* skip argv[0] + consumed flags */
     char **cmd_argv = argv + 1 + consumed;
 
-    /* Zero arguments after global flags -> default to REPL */
+    /* Zero arguments after global flags: there is no interactive default. */
     if (cmd_argc < 1) {
-        const XrCliCommandSpec *spec = xr_cli_find_command("repl");
-        XR_DCHECK(spec != NULL, "repl command not found");
-        XR_DCHECK(spec->handler != NULL, "repl handler not found");
-        return dispatch_new_handler(spec, spec->handler, 0, NULL, &ctx);
+        xr_cli_print_usage();
+        return XR_CLI_EXIT_USAGE;
     }
 
     const char *cmd_name = cmd_argv[0];

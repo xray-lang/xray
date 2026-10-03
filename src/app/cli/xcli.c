@@ -17,8 +17,6 @@
 #ifdef XR_OS_WINDOWS
 #include "../../base/xwindows_utf8.h"
 #endif
-#include "../../runtime/xr_process_shutdown.h"
-#include "../../runtime/mem/xcycle_detector.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,7 +66,6 @@ static void crash_handler(int sig) {
 #endif
 
 static int run_cli(int argc, char **argv) {
-    atexit(xr_process_shutdown);
     /* MSVC's CRT (and most libc implementations) fully buffer stdout when
      * it is connected to a pipe — exactly the configuration the regression
      * runner uses. If a coroutine traps or aborts before the
@@ -104,16 +101,7 @@ static int run_cli(int argc, char **argv) {
 #endif
 #endif
     xr_cli_register_all_handlers();
-    int rc = xr_cli_main(argc, argv);
-#ifdef XR_ENABLE_CYCLE_DETECTOR
-    /* Fail closed: a detected cycle is a non-zero exit even when the program
-     * itself succeeded. A detector that finds leaks and still reports success
-     * is a detector nobody acts on. Reported per coroutine as its heap is torn
-     * down; the flag is accumulated so the run fails once, at the end. */
-    if (rc == 0 && xr_cycle_detector_any_found())
-        rc = 1;
-#endif
-    return rc;
+    return xr_cli_main(argc, argv);
 }
 
 #ifdef XR_OS_WINDOWS

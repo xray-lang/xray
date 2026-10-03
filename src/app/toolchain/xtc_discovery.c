@@ -46,7 +46,9 @@ XR_FUNC bool xtc_active_apple_sdk(XrToolchainProcessContext *process_context, ch
     bool ok = result.exit_code == 0 &&
               xtc_process_copy_utf8_line(&result.stdout_bytes, out, out_size);
     if (ok) {
-        ok = xr_fs_is_dir(out);
+        XrOsIoPolicy policy = xr_os_io_system_policy();
+        bool is_dir = false;
+        ok = xr_os_io_is_dir(&policy, out, &is_dir) == XR_OS_IO_OK && is_dir;
     }
     xtc_process_result_free(&result);
     if (!ok)
@@ -99,7 +101,8 @@ static bool xtc_is_executable(const char *path) {
 }
 
 static bool xtc_copy_canonical_path(const char *path, char *out, size_t out_size) {
-    if (xr_fs_realpath(path, out, out_size))
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_os_io_realpath(&policy, path, out, out_size) == XR_OS_IO_OK)
         return true;
     int written = snprintf(out, out_size, "%s", path);
     return written >= 0 && (size_t) written < out_size;

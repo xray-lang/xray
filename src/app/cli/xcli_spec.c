@@ -22,12 +22,6 @@
 
 static const XrCliOptionSpec run_options[] = {XR_CLI_OPT_END};
 
-static const XrCliOptionSpec repl_options[] = {
-    {"module-id", 0, XR_CLI_VALUE_STRING, true, false, "ID",
-     "Explicit memory-module identity for this REPL session"},
-    {"no-color", 'n', XR_CLI_VALUE_NONE, false, false, NULL, "Disable color output"},
-    XR_CLI_OPT_END};
-
 static const XrCliOptionSpec test_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     {"fail-fast", 'F', XR_CLI_VALUE_NONE, false, false, NULL, "Stop on first failure"},
@@ -63,14 +57,6 @@ static const XrCliOptionSpec fmt_options[] = {
      "Wrap long literals/calls exceeding --line-length"},
     {"no-trailing-comma", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Omit trailing `,` when wrapping to multi-line (default: keep)"},
-    XR_CLI_OPT_END};
-
-static const XrCliOptionSpec compile_options[] = {
-    {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
-    {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: c"},
-    {"strip-debug", 's', XR_CLI_VALUE_NONE, false, false, NULL, "Remove debug info"},
-    {"strip-source", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Remove source file path"},
-    {"name", 'n', XR_CLI_VALUE_STRING, false, false, "NAME", "C variable name prefix"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec build_options[] = {
@@ -134,34 +120,6 @@ static const XrCliOptionSpec build_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 
-static const XrCliOptionSpec deps_options[] = {
-    {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
-    {"shell", 's', XR_CLI_VALUE_NONE, false, false, NULL, "Shell script format"},
-    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "JSON format"},
-    {"list", 'l', XR_CLI_VALUE_NONE, false, false, NULL, "Simple list format"},
-    XR_CLI_OPT_END};
-
-static const XrCliOptionSpec toolchain_options[] = {
-    {"target", 0, XR_CLI_VALUE_STRING, false, false, "TARGET", "AOT target or native"},
-    {"provider", 0, XR_CLI_VALUE_STRING, false, false, "SELECTOR",
-     "Provider selector: auto, host, clang, gcc, msvc, or zig"},
-    {"profile", 0, XR_CLI_VALUE_STRING, false, false, "PROFILE",
-     "Capability profile: hosted or freestanding"},
-    {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to system C compiler"},
-    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to zig executable"},
-    {"no-run", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Skip native executable run stage"},
-    {"refresh", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Bypass cached probe result"},
-    {"keep-probe", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Keep the private probe directory for debugging"},
-    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit schema-v1 JSON"},
-    XR_CLI_OPT_END};
-
-static const XrCliOptionSpec language_options[] = {
-    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
-    XR_CLI_OPT_END};
-
-static const XrCliOptionSpec pkg_options[] = {XR_CLI_OPT_END};
-
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec info_options[] = {
@@ -186,127 +144,16 @@ static const XrCliCommandSpec doctor_subcommands[] = {
      false, NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
-static const XrCliOptionSpec explain_options[] = {
-    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
-    XR_CLI_OPT_END};
-
-static const XrCliOptionSpec verify_options[] = {
-    {"contract", 0, XR_CLI_VALUE_STRING, true, false, "FILE",
-     "Verify a versioned semantic/backend contract"},
-    {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH",
-     "Explicit native compiler for realized code-shape verification"},
-    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH",
-     "Explicit Zig executable available as a capability fallback"},
-    {"refresh", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Bypass cached provider probes for realized verification"},
-    XR_CLI_OPT_END};
-
-static const XrCliOptionSpec plan_options[] = {
-    {"semantic-plan", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
-     "Exact XSM semantic authority required to verify a plan"},
-    {"context", 0, XR_CLI_VALUE_INT, false, false, "N",
-     "Rows shown around the first difference (default 3)"},
-    XR_CLI_OPT_END};
-
-static const XrCliCommandSpec plan_subcommands[] = {
-    {"dump", "Render a TargetPlan artifact as deterministic text", NULL, plan_options, 1, 1, false,
-     false, NULL, NULL, 0},
-    {"verify", "Run the complete TargetPlan verification chain", NULL, plan_options, 1, 1, false,
-     false, NULL, NULL, 0},
-    {"diff", "Report the first difference between two TargetPlan artifacts", NULL, plan_options, 2,
-     2, false, false, NULL, NULL, 0},
-    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
-
-#ifdef XR_HAS_LSP
-static const XrCliOptionSpec lsp_options[] = {
-    {"stdio", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Use stdio transport (default)"},
-    XR_CLI_OPT_END};
-#endif
-
-#ifdef XR_HAS_DAP
-static const XrCliOptionSpec dap_options[] = {
-    {"port", 'p', XR_CLI_VALUE_INT, false, false, "PORT",
-     "TCP port (0 for random, omit for stdio)"},
-    {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL,
-     "Debug a native AOT binary via the lldb/gdb backend"},
-    {"debugger", 0, XR_CLI_VALUE_STRING, false, false, "PATH",
-     "Path to lldb-dap for native mode (default: autodetect)"},
-    XR_CLI_OPT_END};
-#endif
-
-#ifdef XR_HAS_MCP
-static const XrCliOptionSpec mcp_options[] = {
-    {"log-level", 'l', XR_CLI_VALUE_STRING, false, false, "LEVEL",
-     "Log level: error,warn,info,debug"},
-    {"log-file", 'f', XR_CLI_VALUE_STRING, false, false, "PATH", "Log to file"},
-    {"enable-runner", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Enable xray_run tool"},
-    XR_CLI_OPT_END};
-#endif
-
-/* ========== pkg Subcommands ========== */
-
-static const XrCliCommandSpec pkg_subcommands[] = {
-    {"init", "Initialize new project", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
-    {"add", "Add dependency", NULL, empty_options, 1, -1, false, false, NULL, NULL, 0},
-    {"remove", "Remove dependency", NULL, empty_options, 1, -1, false, false, NULL, NULL, 0},
-    {"install", "Install all dependencies", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
-    {"update", "Update dependencies", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
-    {"tree", "Show dependency tree", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
-    {"login", "Login to registry", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
-    {"publish", "Publish package", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
-    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
-
-static const XrCliCommandSpec toolchain_subcommands[] = {
-    {"list", "List providers, configuration, and cached status", NULL, empty_options, 0, 0, false,
-     false, NULL, NULL, 0},
-    {"detect", "Discover provider candidates and read their versions", NULL, empty_options, 0, 0,
-     false, false, NULL, NULL, 0},
-    {"probe", "Run compile, SDK, runtime-link, and native-run capability probes", NULL,
-     empty_options, 0, 0, false, false, NULL, NULL, 0},
-    {"doctor", "Select a provider and diagnose the first failing capability", NULL, empty_options,
-     0, 0, false, false, NULL, NULL, 0},
-    {"use", "Persist a user provider preference", NULL, empty_options, 1, 1, false, false, NULL,
-     NULL, 0},
-    {"reset", "Reset a user preference and related probe cache", NULL, empty_options, 0, 0, false,
-     false, NULL, NULL, 0},
-    {"config-path", "Print the user toolchain configuration path", NULL, empty_options, 0, 0, false,
-     false, NULL, NULL, 0},
-    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
-
-static const XrCliCommandSpec language_subcommands[] = {
-    {"attributes", "List the complete public attribute registry", NULL, language_options, 0, 0,
-     false, false, NULL, NULL, 0},
-    {"conversions", "Inventory analyzer-classified source conversions", NULL, language_options, 1,
-     1, false, false, NULL, NULL, 0},
-    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
-
 /* ========== Top-level Command Table ========== */
 
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, true, false, NULL, NULL, 0},
-    {"repl", "Interactive environment", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
     /* Artifact commands */
-    {"compile", "Compile to a C bytecode container", NULL, compile_options, 1, 1, false, false,
-     NULL, NULL, 0},
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
-    {"deps", "Analyze dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
-    {"toolchain", "Inspect AOT toolchains", NULL, toolchain_options, 0, -1, false, false, NULL,
-     toolchain_subcommands, 7},
-    {"language", "Inspect the public language surface", NULL, language_options, 0, -1, false, false,
-     NULL, language_subcommands, 2},
-    {"explain", "Explain compiler evidence and native provenance", NULL, explain_options, 1, 2,
-     false, false, NULL, NULL, 0},
-    {"verify", "Verify semantic and backend contracts", NULL, verify_options, 0, 0, false, false,
-     NULL, NULL, 0},
-    {"plan", "Inspect, verify, and compare exact TargetPlan artifacts", NULL, plan_options, 1, -1,
-     false, false, NULL, plan_subcommands, 3},
-
-    /* Package management (has subcommands) */
-    {"pkg", "Package management", NULL, pkg_options, 0, -1, false, false, NULL, pkg_subcommands, 8},
 
     /* Utility commands */
     {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,
@@ -315,20 +162,7 @@ static XrCliCommandSpec cli_commands[] = {
      doctor_subcommands, 1},
     {"self", "Update or uninstall through the active provider", NULL, self_options, 0, 1, false,
      false, NULL, self_subcommands, 2},
-    {"builtin-dump", "Dump analyzer builtin metadata", NULL, empty_options, 0, 0, false, true, NULL,
-     NULL, 0},
     {"help", "Show help for a command", NULL, empty_options, 0, 1, false, false, NULL, NULL, 0},
-
-/* IDE integration (conditional compilation) */
-#ifdef XR_HAS_LSP
-    {"lsp", "Start LSP server", NULL, lsp_options, 0, 0, false, false, NULL, NULL, 0},
-#endif
-#ifdef XR_HAS_DAP
-    {"dap", "Start DAP debug server", NULL, dap_options, 0, 0, false, false, NULL, NULL, 0},
-#endif
-#ifdef XR_HAS_MCP
-    {"mcp-server", "Start MCP server", NULL, mcp_options, 0, 0, false, false, NULL, NULL, 0},
-#endif
 
     /* Sentinel */
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};

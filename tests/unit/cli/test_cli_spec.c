@@ -42,42 +42,21 @@ TEST(spec_retired_eval_command_removed) {
     ASSERT_NULL(xr_cli_find_command("eval"));
 }
 
-TEST(spec_find_command_repl) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("repl");
+TEST(spec_find_command_test_options) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("test");
     ASSERT_NOT_NULL(spec);
-    ASSERT_STR_EQ(spec->name, "repl");
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 5);
+    ASSERT_EQ_INT(spec->positional_min, 0);
+    ASSERT_EQ_INT(spec->positional_max, -1);
 }
 
-TEST(spec_find_command_pkg) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("pkg");
-    ASSERT_NOT_NULL(spec);
-    ASSERT_NOT_NULL(spec->subcommands);
-    ASSERT_GT(spec->subcommand_count, 0);
-}
-
-TEST(spec_find_command_toolchain) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("toolchain");
-    ASSERT_NOT_NULL(spec);
-    ASSERT_NOT_NULL(spec->subcommands);
-    ASSERT_EQ_INT(spec->subcommand_count, 7);
-    ASSERT_STR_EQ(spec->subcommands[0].name, "list");
-    ASSERT_STR_EQ(spec->subcommands[1].name, "detect");
-    ASSERT_STR_EQ(spec->subcommands[2].name, "probe");
-    ASSERT_STR_EQ(spec->subcommands[3].name, "doctor");
-    ASSERT_STR_EQ(spec->subcommands[4].name, "use");
-    ASSERT_STR_EQ(spec->subcommands[5].name, "reset");
-    ASSERT_STR_EQ(spec->subcommands[6].name, "config-path");
-}
-
-TEST(spec_find_command_language_attributes) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("language");
+TEST(spec_find_command_self_subcommands) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("self");
     ASSERT_NOT_NULL(spec);
     ASSERT_NOT_NULL(spec->subcommands);
     ASSERT_EQ_INT(spec->subcommand_count, 2);
-    ASSERT_STR_EQ(spec->subcommands[0].name, "attributes");
-    ASSERT_STR_EQ(spec->subcommands[1].name, "conversions");
-    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 1);
-    ASSERT_STR_EQ(spec->options[0].long_name, "json");
+    ASSERT_STR_EQ(spec->subcommands[0].name, "update");
+    ASSERT_STR_EQ(spec->subcommands[1].name, "uninstall");
 }
 
 TEST(spec_retired_fix_command_removed) {
@@ -170,7 +149,7 @@ TEST(optmap_present_flag) {
 }
 
 TEST(optmap_present_string) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("compile");
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
 
     int count = xr_cli_option_count(spec->options);
@@ -565,23 +544,6 @@ TEST(parse_build_global_summary_dump_rejected) {
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
 }
 
-TEST(parse_toolchain_doctor_with_zig) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("toolchain");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"doctor", "--zig", "/opt/zig"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_EQ_INT(inv.positional_count, 1);
-    ASSERT_STR_EQ(inv.positionals[0], "doctor");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "zig", NULL), "/opt/zig");
-
-    xr_cli_invocation_free(&inv);
-}
-
 TEST(parse_fmt_branch_arrow_options) {
     const XrCliCommandSpec *spec = xr_cli_find_command("fmt");
     ASSERT_NOT_NULL(spec);
@@ -612,17 +574,17 @@ TEST(parse_fmt_legacy_align_match_rejected) {
 }
 
 TEST(parse_cmd_long_option_with_value) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("compile");
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
 
     XrCliContext ctx = {.program = "xray"};
     XrCliInvocation inv;
-    char *argv[] = {"--output", "out.c", "--format", "c", "input.xr"};
+    char *argv[] = {"--output", "out.c", "--c-dialect", "c11", "input.xr"};
 
     XrCliExitCode rc = xr_cli_parse_command(spec, 5, argv, &ctx, &inv);
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
     ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.c");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "format", NULL), "c");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "c-dialect", NULL), "c11");
     ASSERT_EQ_INT(inv.positional_count, 1);
     ASSERT_STR_EQ(inv.positionals[0], "input.xr");
 
@@ -630,7 +592,7 @@ TEST(parse_cmd_long_option_with_value) {
 }
 
 TEST(parse_cmd_long_option_eq_form) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("compile");
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
 
     XrCliContext ctx = {.program = "xray"};
@@ -645,7 +607,7 @@ TEST(parse_cmd_long_option_eq_form) {
 }
 
 TEST(parse_cmd_short_with_value) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("compile");
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
 
     XrCliContext ctx = {.program = "xray"};
@@ -672,7 +634,7 @@ TEST(parse_cmd_unknown_option) {
 }
 
 TEST(parse_cmd_missing_value) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("compile");
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
 
     XrCliContext ctx = {.program = "xray"};
@@ -684,7 +646,7 @@ TEST(parse_cmd_missing_value) {
 }
 
 TEST(parse_cmd_no_positionals) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("repl");
+    const XrCliCommandSpec *spec = xr_cli_find_command("info");
     ASSERT_NOT_NULL(spec);
 
     XrCliContext ctx = {.program = "xray"};
@@ -803,7 +765,7 @@ TEST(help_print_command_help_no_crash) {
 }
 
 TEST(help_print_subcommand_help_no_crash) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("pkg");
+    const XrCliCommandSpec *spec = xr_cli_find_command("self");
     ASSERT_NOT_NULL(spec);
 
     SUPPRESS_STDOUT_BEGIN();
@@ -826,10 +788,8 @@ RUN_TEST_SUITE("Command Registry");
 RUN_TEST(spec_get_commands_not_null);
 RUN_TEST(spec_find_command_run);
 RUN_TEST(spec_retired_eval_command_removed);
-RUN_TEST(spec_find_command_repl);
-RUN_TEST(spec_find_command_pkg);
-RUN_TEST(spec_find_command_toolchain);
-RUN_TEST(spec_find_command_language_attributes);
+RUN_TEST(spec_find_command_test_options);
+RUN_TEST(spec_find_command_self_subcommands);
 RUN_TEST(spec_retired_fix_command_removed);
 RUN_TEST(spec_find_command_unknown);
 RUN_TEST(spec_aliases_removed);
@@ -877,7 +837,6 @@ RUN_TEST(parse_build_cross_toolchain_options);
 RUN_TEST(parse_build_global_evidence_dump_option);
 RUN_TEST(parse_build_xi_evidence_dump_option);
 RUN_TEST(parse_build_global_summary_dump_rejected);
-RUN_TEST(parse_toolchain_doctor_with_zig);
 RUN_TEST(parse_fmt_branch_arrow_options);
 RUN_TEST(parse_fmt_legacy_align_match_rejected);
 RUN_TEST(parse_cmd_long_option_with_value);

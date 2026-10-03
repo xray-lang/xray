@@ -167,6 +167,25 @@ rejected:
     else xr_cli_compile_source_diagnostic_free(&detail);
     return status;
 }
+XR_FUNC bool xr_cli_compile_source_diagnostic_format(
+    const XrCliCompileSourceDiagnostic *diagnostic, char *out, size_t size) {
+    if (!diagnostic || !out || !size) return false;
+    const XrXirSourceDiagnostic *source = &diagnostic->source.source;
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic->source.snapshot);
+    const char *path = diagnostic->source.source_path;
+    if (!path && view && view->modules && source->module < view->module_count)
+        path = view->modules[source->module].path;
+    if (path && path[0] && source->line > 0) {
+        snprintf(out, size, "%s:%d:%d: error: %s", path, source->line, source->column,
+            source->message[0] ? source->message : xr_cli_compile_source_status_name(diagnostic->status));
+        return true;
+    }
+    int written = snprintf(out, size, "source build failed (stage=%u status=%s)",
+        (unsigned)diagnostic->stage, xr_cli_compile_source_status_name(diagnostic->status));
+    if (source->message[0] && written > 0 && (size_t)written < size)
+        snprintf(out + written, size - (size_t)written, ": %s", source->message);
+    return false;
+}
 XR_FUNC const char *xr_cli_compile_source_status_name(XrCliCompileSourceStatus status) {
     switch (status) {
     case XR_CLI_COMPILE_SOURCE_OK: return "ok";

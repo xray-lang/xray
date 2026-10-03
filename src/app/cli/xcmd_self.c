@@ -36,6 +36,12 @@ static bool self_parent(char *path) {
     return true;
 }
 
+static bool self_is_file(const char *path) {
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    bool is_file = false;
+    return xr_os_io_is_file(&policy, path, &is_file) == XR_OS_IO_OK && is_file;
+}
+
 static bool self_join(char *out, size_t out_size, const char *root, const char *relative) {
     int written = snprintf(out, out_size, "%s/%s", root, relative);
     return written >= 0 && (size_t) written < out_size;
@@ -57,7 +63,7 @@ static bool self_find_managed(const char *executable, char *manager, size_t mana
                       "bin/xrayup"
 #endif
                       ) &&
-            xr_fs_is_file(state) && xr_fs_is_file(candidate)) {
+            self_is_file(state) && self_is_file(candidate)) {
             snprintf(manager, manager_size, "%s", candidate);
             return true;
         }

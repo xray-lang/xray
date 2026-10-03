@@ -36,20 +36,9 @@ static int source_exit(XrCliCompileSourceStatus status) {
 }
 
 static int report_source_failure(const XrCliCompileSourceDiagnostic *diagnostic) {
-    const XrXirSourceDiagnostic *source = &diagnostic->source.source;
-    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic->source.snapshot);
-    const char *path = diagnostic->source.source_path;
-    if (!path && view && view->modules && source->module < view->module_count)
-        path = view->modules[source->module].path;
-    if (path && path[0] && source->line > 0) {
-        fprintf(stderr, "%s:%d:%d: error: %s\n", path, source->line, source->column,
-            source->message[0] ? source->message : xr_cli_compile_source_status_name(diagnostic->status));
-    } else {
-        fprintf(stderr, "XR_RUN_6001: source build failed (stage=%u status=%s)",
-            (unsigned)diagnostic->stage, xr_cli_compile_source_status_name(diagnostic->status));
-        if (source->message[0]) fprintf(stderr, ": %s", source->message);
-        fputc('\n', stderr);
-    }
+    char text[1024];
+    bool located = xr_cli_compile_source_diagnostic_format(diagnostic, text, sizeof(text));
+    fprintf(stderr, located ? "%s\n" : "XR_RUN_6001: %s\n", text);
     return source_exit(diagnostic->status);
 }
 #endif
