@@ -76,6 +76,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cli/check_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/build_source_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/windows_path_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/cgen_bytes_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/test_declarations_owner/gates.cmake)
 
 macro(add_xray_unit_test name source)
     add_executable(${name} ${source} ${ARGN})

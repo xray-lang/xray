@@ -5972,7 +5972,7 @@ main()
 
 ## 12. Testing
 
-> Source of truth: `src/app/cli/xcmd_test.c`, `src/program/xr_program_source_build.c`, `src/frontend/parser/xparse_decl.c`, and the analyzer's global assertion-builtin table.
+> Declaration sources of truth: `src/frontend/parser/xparse_decl.c`, `src/xir/xxir_source.c`, `src/xir/xxir_declarations.h`, `src/program/xr_xir_source_product.c`, and `src/xir/xxir_instance.c`. Public runner scheduling, timeouts, and asynchronous behavior below remain requirements of the complete test system; declaration discovery and restricted starts alone do not complete the public runner.
 
 ### 12.1 Declaring Tests: the `@test` Attribute
 
@@ -6000,6 +6000,8 @@ fn test_with_assertions() {
 - Functions annotated with `@test` are auto-discovered and run by `xray test`; ordinary functions are not.
 - Test naming convention: `test_xxx` (snake_case), descriptive.
 - Test functions take no parameters and return nothing; expectations are expressed via the `assert*` family.
+- Tests and hooks must be non-generic top-level functions with bodies, not methods, nested functions, or closures. A function that only throws is valid. A role does not change export permissions or effects and does not imply `no_suspend`.
+- Discovery selects declarations in the current entry module only. Imported tests do not run automatically. Each test file may own module state when used as an entry; this does not relax the state restrictions on imported modules.
 - A file may contain **any number** of `@test` functions; they run in declaration order within that file. Multiple files may run in parallel with `-j N`, each in its own isolate.
 
 ### 12.2 Test Entry Points
@@ -6051,6 +6053,10 @@ Public Xray attributes come from one registry, exposed by `xray language attribu
 | `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in seconds |
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
+
+`N` is an integer literal in `0..2147483647`; zero leaves the file deadline unchanged. Empty parentheses, unknown parameters, and repeated or conflicting roles are invalid. `@test(skip)` prevents automatic test-entry execution, but its body is still fully type checked and otherwise valid ordinary calls remain legal. Test roles grant no additional ordinary function-call permission.
+
+Hooks and tests within a file share one Instance. The first selected call runs normal module initialization once; later calls retain that Instance's state. Failed initialization remains sticky and cannot be retried or bypassed by starting the next item. The Source-owned directory records actual specialized function identities. The directory grants no authority: restricted starts still validate the sealed Program's role and root-module identity.
 
 Other public attributes include `@deprecated("...")`, `@derive(Inspect, JSON, Eq, Hash, Clone)` (`Hash` requires `Eq`), plus the stable, low-level AOT code-shape directives `@inline` / `@noinline`. The public surface is seven ordinary/test/metadata attributes plus two code-shape directives; the count is not a compatibility goal, while category and semantic orthogonality are constraints. The latter two apply only to functions or methods, take no arguments, and cannot annotate the same declaration together. They do not change language semantics, effects, or ABI: the VM ignores them, while AOT respectively prefers expansion or preservation of a native call boundary. They are only for low-level hot paths backed by real benchmarks and generated-code shape gates; they neither unlock ordinary optimization nor guarantee that every call edge is eligible.
 
