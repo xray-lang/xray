@@ -628,6 +628,18 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         xr_xir_owned_slot_move(run->frame, run->layout->offsets[result_id], &output);
         return XR_XIR_RUN_OK;
     }
+    case XR_XIR_ARRAY_REPEAT: {
+        if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+        state->instruction = next;
+        XrXirValue fill = vm_value_operand(run, op->args[1]), output = {0};
+        XrXirCallStatus status = xr_xir_instance_array_repeat(run->view, op->type,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &fill, &output);
+        if (status == XR_XIR_CALL_NUMERIC_RANGE) return XR_XIR_RUN_NUMERIC_RANGE;
+        if (status != XR_XIR_CALL_READY) return status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :
+            status == XR_XIR_CALL_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT;
+        xr_xir_owned_slot_move(run->frame, run->layout->offsets[result_id], &output);
+        return XR_XIR_RUN_OK;
+    }
     case XR_XIR_EQUAL: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
         XrXirValue left = vm_value_operand(run,op->args[0]);

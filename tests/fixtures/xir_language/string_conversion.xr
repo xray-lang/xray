@@ -1,0 +1,14 @@
+// string(x), x as string and x.toString() spell a bool or number as print writes it.
+fn main() {
+    var max: u64 = 9223372036854775807
+    var high: u64 = max + 1
+    var all: u64 = 0 - 1
+    print(string(high))
+    print(high as string)
+    print("u=" + string(high) + ":" + string(all))
+    print(string(true) + string("x") + string(1.5))
+    const n: i32 = -42
+    print(n.toString() + "|" + (3.25).toString() + "|" + false.toString())
+    print(string(n) == n.toString())
+}
+main()

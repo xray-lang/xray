@@ -1,0 +1,7 @@
+fn make(n: i64) -> i64 {
+    var a = Array<i64>(n)
+    return len(a)
+}
+print(make(1048576))
+print(make(-1))
+print(make(2))

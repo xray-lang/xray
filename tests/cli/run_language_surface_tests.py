@@ -4,6 +4,9 @@ Every `<name>.xr` under tests/fixtures/xir_language is paired with exactly one
 expectation file:
   <name>.out     exact stdout; the program exits 0 under `xray run` and as a
                  natively built executable
+  <name>.fault   one line that must appear on stderr when the program fails at
+                 run time with a nonzero status on both back ends; an optional
+                 <name>.out gives the exact stdout printed before the fault
   <name>.reject  one line that must appear in the `xray check` diagnostic; the
                  program is rejected with a nonzero status and builds nothing
 The expectations are written from the language rules, not captured from a run.
@@ -37,6 +40,22 @@ class LanguageSurface(unittest.TestCase):
             self.assertEqual(native.returncode, 0, native.stderr.decode(errors="replace"))
             self.assertEqual(native.stdout.decode(), expected)
 
+    def check_fault(self, source, fragment, expected):
+        result = run([XRAY, "run", str(source)])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(fragment, result.stderr.decode(errors="replace"))
+        if expected is not None:
+            self.assertEqual(result.stdout.decode(), expected)
+        with tempfile.TemporaryDirectory(prefix="xray-lang-") as directory:
+            exe = Path(directory) / "program.exe"
+            built = run([XRAY, "build", str(source), "-o", str(exe)])
+            self.assertEqual(built.returncode, 0, built.stderr.decode(errors="replace"))
+            native = run([str(exe)])
+            self.assertNotEqual(native.returncode, 0)
+            self.assertIn(fragment, native.stderr.decode(errors="replace"))
+            if expected is not None:
+                self.assertEqual(native.stdout.decode(), expected)
+
     def check_reject(self, source, fragment):
         result = run([XRAY, "check", str(source)])
         self.assertNotEqual(result.returncode, 0)
@@ -47,8 +66,17 @@ def add_cases():
     for source in sorted(FIXTURES.glob("*.xr")):
         out = source.with_suffix(".out")
         reject = source.with_suffix(".reject")
+        fault = source.with_suffix(".fault")
+        if fault.is_file():
+            if reject.is_file():
+                raise SystemExit(f"{source.name}: .fault and .reject are exclusive")
+            fragment = fault.read_text(encoding="utf-8").strip()
+            expected = out.read_text(encoding="utf-8").replace("\r\n", "\n") if out.is_file() else None
+            setattr(LanguageSurface, f"test_{source.stem}",
+                    lambda self, s=source, f=fragment, e=expected: self.check_fault(s, f, e))
+            continue
         if out.is_file() == reject.is_file():
-            raise SystemExit(f"{source.name}: exactly one of .out and .reject is required")
+            raise SystemExit(f"{source.name}: exactly one of .out, .fault and .reject is required")
         if out.is_file():
             expected = out.read_text(encoding="utf-8").replace("\r\n", "\n")
             setattr(LanguageSurface, f"test_{source.stem}",

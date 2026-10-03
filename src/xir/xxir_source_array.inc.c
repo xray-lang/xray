@@ -115,6 +115,43 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     return source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
         ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
 }
+static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType type, SourceValue *value);
+/* `Array<T>()` is empty, `Array<T>(n)` and `Array<T>(n, fill)` hold n copies of the fill or of the
+ * element default, and `Array<T>([...])` is the literal. Other built-in construction is not admitted. */
+static bool source_array_construct(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    NewExprNode *call = &node->as.new_expr;
+    if (call->is_type_namespace || call->module_name || !call->class_name ||
+        !source_text_same(ctx, NULL, call->class_name, "Array") || source_native_type_shadowed(ctx, "Array"))
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "built-in construction is not implemented in XIR");
+    if (call->type_arg_count != 1 || !call->type_args || call->arg_count < 0 || call->arg_count > 2 ||
+        (call->arg_count && !call->arguments))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array construction takes one element type and at most a length and a fill");
+    for (int a = 0; a < call->arg_count; ++a)
+        if (call->arg_accesses && call->arg_accesses[a] != XR_CALL_ARG_PLAIN)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array construction arguments are values");
+    XrXirType element, array;
+    if (!source_type(ctx, call->type_args[0], &element) || !source_array_element_type(ctx, element, &array) ||
+        !source_native_array_declaration(ctx)) return false;
+    if (call->arg_count == 1 && call->arguments[0]->type == AST_ARRAY_LITERAL) {
+        if (!source_array_literal(ctx, call->arguments[0], (SourceExpectedType){true, array}, value)) return false;
+        if (value->type != array) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal does not match the constructed element type");
+        return true;
+    }
+    bool ok;
+    if (!call->arg_count) ok = source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}}, NULL, 0, value);
+    else {
+        SourceValue length, fill;
+        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){true, XR_XIR_I64}, &length)) return false;
+        if (length.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array length must be i64");
+        if (call->arg_count == 2) {
+            if (!source_plan_expression(ctx, call->arguments[1], (SourceExpectedType){true, element}, &fill)) return false;
+            if (fill.type != element) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill must have the element type");
+        } else if (!source_default_value(ctx, node, element, &fill)) return false;
+        ok = source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_REPEAT, array, {length.id, fill.id}, {0}, 0, {0}}, value);
+    }
+    return ok && source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
+        ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
+}
 static bool source_array_get(SourceContext *ctx, AstNode *node, AstNode *receiver, AstNode *index,
     const SourceValue *evaluated, const XrNativeMemberDeclaration *member, SourceValue *value) {
     SourceValue array = {0}, at;

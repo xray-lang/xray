@@ -862,6 +862,18 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             "        xr_xir_owned_slot_move(state->frame,%uu,&output); }\n",
             (uint32_t)op->type,op->op == XR_XIR_NULLABLE_SOME ? "&payload" : "NULL",destination);
         break;
+    case XR_XIR_ARRAY_REPEAT:
+        append(buffer,"        { XrXirValue fill = "); emit_value(buffer,function,layout,op->args[1]);
+        append(buffer,"; XrXirValue output = {0};\n"
+            "        XrXirCallStatus status = xr_xir_instance_array_repeat(view,(XrXirType)%uu,\n"
+            "            xr_xir_scalar_load(state->frame,%uu),&fill,&output);\n"
+            "        if (status == XR_XIR_CALL_NUMERIC_RANGE) ", (uint32_t)op->type, layout->offsets[op->args[0]]);
+        emit_fault_return(buffer, function, layout, index, "xr_xir_call_fault(XR_XIR_RUN_NUMERIC_RANGE)");
+        append(buffer,"\n        if (status != XR_XIR_CALL_READY) return xr_xir_call_fault(\n"
+            "            status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+            "            status == XR_XIR_CALL_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            "        xr_xir_owned_slot_move(state->frame,%uu,&output); }\n", destination);
+        break;
     case XR_XIR_EQUAL:
         append(buffer,"        { XrXirValue left = "); emit_value(buffer,function,layout,op->args[0]);
         append(buffer,"; XrXirValue right = "); emit_value(buffer,function,layout,op->args[1]);

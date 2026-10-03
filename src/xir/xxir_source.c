@@ -1018,6 +1018,7 @@ static bool finish_body(SourceContext *ctx);
 #include "xxir_source_requirement_values.inc.c"
 #include "xxir_source_methods.inc.c"
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic);
+static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value);
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -1052,6 +1053,14 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_length(ctx, node, intrinsic, value);
             if (source_text_same(ctx, NULL, name, "PanicInfo"))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo construction requires class support");
+            if (source_text_same(ctx, NULL, name, "string")) {
+                SourceValue input;
+                if (call->arg_count != 1 || call->type_arg_count || !call->arguments ||
+                    (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
+                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string conversion takes one value");
+                return source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){false, XR_XIR_UNIT}, &input) &&
+                    source_text_conversion(ctx, node, input, value);
+            }
             print = source_text_same(ctx, NULL, name, "print"); atomic = source_text_same(ctx, NULL, name, "Atomic"); stream = stream_primitive(ctx, name);
             host_time = host_time_primitive(ctx, name);
         }
@@ -1091,6 +1100,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (!expression(ctx, member->object, &receiver)) return false;
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
+            if ((receiver.type == XR_XIR_BOOL || xr_xir_type_is_number(receiver.type)) &&
+                source_text_same(ctx, NULL, member->name, "toString")) {
+                if (call->arg_count || call->type_arg_count)
+                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "toString accepts no value or type arguments");
+                return source_text_conversion(ctx, node, receiver, value);
+            }
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
             if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
@@ -1254,9 +1269,21 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     body->recipes[branch].instruction.targets[1] = conjunction ? join : rhs;
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0, {0}}, value);
 }
+/* The text of a bool or number, as `print` writes it; a string converts to itself. */
+static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value) {
+    if (input.type == XR_XIR_STRING) { *value = input; return true; }
+    if (input.type != XR_XIR_BOOL && !xr_xir_type_is_number(input.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "value has no admitted string conversion");
+    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {input.id, 0}, {0}, 0, {0}}, value);
+}
 static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *value) {
     AsExprNode *cast = &node->as.as_expr;
     XrXirType target; SourceValue input;
+    if (!cast->is_safe && source_type(ctx, cast->type, &target) && target == XR_XIR_STRING) {
+        return source_plan_expression(ctx, cast->expr, (SourceExpectedType){false, XR_XIR_UNIT}, &input) &&
+            source_text_conversion(ctx, node, input, value);
+    }
+    if (ctx->diagnostic.status != XR_XIR_OK) return false;
     if (cast->is_safe || !source_type(ctx, cast->type, &target) || !xr_xir_type_is_number(target))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete nonnullable numeric target");
     SourceInteger literal;
@@ -1437,6 +1464,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
         return source_literal(ctx, node, value);
     case AST_TEMPLATE_STRING: return source_template(ctx, node, value);
+    case AST_NEW_EXPR: return source_array_construct(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, context, value);
     case AST_MATCH_EXPR: return source_match(ctx, node, context, !ctx->active_expression->statement_match, value);

@@ -1,0 +1,16 @@
+fn main() {
+    var a = Array<u8>()
+    a.push(3)
+    var b = Array<u8>(4, 7)
+    var z = Array<i64>(3)
+    var s = Array<string>(2, "x")
+    var l = Array<u8>([72, 101])
+    print(len(a))
+    print(len(b))
+    print(b[3])
+    print(len(z))
+    print(z[2])
+    print(s[1])
+    print(l[1])
+}
+main()

@@ -878,6 +878,36 @@ XR_FUNC XrXirValueStatus xr_xir_array_new(XrXirType type, const XrXirValue *valu
     return XR_XIR_VALUE_OK;
 }
 
+XR_FUNC XrXirValueStatus xr_xir_array_repeat(XrXirType type, int64_t length, const XrXirValue *fill,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    XrXirType element = XR_XIR_UNIT; uint32_t stride = 0;
+    if (!unit_value(output) || !fill || length < 0 || !admission || !admission->domain ||
+        !array_layout(admission->arena, type, &element, &stride)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    size_t capacity = 0;
+    if (!array_capacity((size_t) length, stride, &capacity) || !admission->work || (uint64_t) length >= admission->work)
+        return XR_XIR_VALUE_LIMIT;
+    --admission->work;
+    XrXirValueStatus status = xr_xir_value_admit(fill, element, admission);
+    if (status != XR_XIR_VALUE_OK) return status;
+    XirArray *array = NULL;
+    status = array_allocate(type, capacity, admission, &array);
+    if (status != XR_XIR_VALUE_OK) return status;
+    XrXirValue result = array_value(array);
+    StoragePack pack = {0};
+    status = storage_pack_begin(admission, element, &pack);
+    if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&result); return status; }
+    for (int64_t i = 0; i < length; ++i) {
+        status = storage_pack_value(&pack, fill, array_slot(array, (size_t) i));
+        if (status != XR_XIR_VALUE_OK) {
+            storage_pack_end(&pack); xr_xir_value_drop(&result); return status;
+        }
+        ++array->length;
+    }
+    storage_pack_end(&pack);
+    *output = result;
+    return XR_XIR_VALUE_OK;
+}
+
 XR_FUNC XrXirValueStatus xr_xir_array_len(const XrXirValue *array,
     XrXirValueAdmission *admission, int64_t *output) {
     if (!array || !admission || !output) return XR_XIR_VALUE_BAD_ARGUMENT;

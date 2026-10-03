@@ -17,6 +17,9 @@
 XR_FUNC XrXirValueStatus xr_xir_array_new(XrXirType array_type,
     const XrXirValue *values, size_t count, XrXirValueAdmission *admission,
     XrXirValue *output);
+/* A new array of `length` copies of `fill`; the caller rejects a negative length. */
+XR_FUNC XrXirValueStatus xr_xir_array_repeat(XrXirType array_type, int64_t length,
+    const XrXirValue *fill, XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_array_len(const XrXirValue *array,
     XrXirValueAdmission *admission, int64_t *output);
 XR_FUNC XrXirValueStatus xr_xir_array_get(const XrXirValue *array, int64_t index,
