@@ -12,7 +12,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     SourceFunction *owner = &ctx->bodies[outer];
     if (!block || block->type != AST_BLOCK || !owner->lexical_depth)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "defer requires an enclosing real block and a block body");
-    SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0};
+    SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0, NULL, NULL, false};
     if (!capture_scan(block, &scan)) return false;
     for (SourceCapture *p = scan.captures; p; p = p->next) if (p->source->construction) {
         uint32_t fields = xr_xir_type_node(&ctx->types, p->source->type)->nominal.field_count;
