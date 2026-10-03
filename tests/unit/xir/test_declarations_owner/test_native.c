@@ -22,6 +22,15 @@ static XrXirOutputStatus bytes(void *context,XrXirOutputStream stream,const char
 static XrXirOutputStatus group(void *context,const XrXirOutputGroup *out) {
     return xr_xir_output_render(&((Output *)context)->sink,out);
 }
+static XrXirCallStatus finish_test(XrXirInstance *instance) {
+    XrXirInstanceResult result;
+    unsigned slices=0;
+    do {
+        CHECK(++slices<=1024);
+        result=xr_xir_instance_poll_bounded(instance,1);
+    } while(result.outcome.status==XR_XIR_CALL_READY);
+    return result.outcome.status;
+}
 int main(void) {
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
@@ -42,12 +51,31 @@ int main(void) {
         if(i==3) {CHECK(xr_xir_instance_start_test(instance,test_role_functions[i])==XR_XIR_CALL_BAD_ARGUMENT);continue;}
         CHECK(xr_xir_instance_start_test(instance,test_role_functions[i])==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start_test(instance,test_role_functions[i])==XR_XIR_CALL_BUSY);
-        CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(finish_test(instance)==XR_XIR_CALL_RETURNED);
+        XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
+        CHECK(value.type==XR_XIR_UNIT);xr_xir_value_drop(&value);
+    }
+    size_t before_cancel=out.length;
+    CHECK(xr_xir_instance_start_test(instance,test_role_functions[2])==XR_XIR_CALL_READY);
+    for(unsigned slices=0;out.length==before_cancel;++slices) {
+        CHECK(slices<1024);
+        CHECK(xr_xir_instance_poll_bounded(instance,1).outcome.status==XR_XIR_CALL_READY);
+    }
+    CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
+    CHECK(xr_xir_instance_start_test(instance,test_role_functions[5])==XR_XIR_CALL_BUSY);
+    CHECK(finish_test(instance)==XR_XIR_CALL_CANCELLED);
+    XrXirValue cancelled={0};
+    CHECK(xr_xir_instance_take_result(instance,&cancelled)==XR_XIR_CALL_BAD_STATE);
+    CHECK(!cancelled.type && !cancelled.reserved && !cancelled.payload);
+    const uint32_t after_cancel[]={test_role_functions[5],test_role_functions[4]};
+    for(unsigned i=0;i<2;++i) {
+        CHECK(xr_xir_instance_start_test(instance,after_cancel[i])==XR_XIR_CALL_READY);
+        CHECK(finish_test(instance)==XR_XIR_CALL_RETURNED);
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
         CHECK(value.type==XR_XIR_UNIT);xr_xir_value_drop(&value);
     }
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
-    const char expected[]="init\nbefore_all\nbefore_each\n1\n2\nafter_each\nafter_all\n";
+    const char expected[]="init\nbefore_all\nbefore_each\n1\n2\nafter_each\nafter_all\n3\nafter_each\n4\n";
     CHECK(out.length==sizeof(expected)-1 && !memcmp(out.bytes,expected,sizeof(expected)-1));
     puts("native independent hook/test output oracle PASS");return 0;
 }
