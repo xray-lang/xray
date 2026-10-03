@@ -16,37 +16,45 @@
 
 static void array_stage_layout(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
-    CHECK(xr_xir_verify(&f.module, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     CHECK(xr_xir_place_kind(&f.functions[1], 3) == XR_XIR_PLACE_LOCAL);
     CHECK(xr_xir_place_kind(&f.functions[1], 5) == XR_XIR_PLACE_CELL);
     CHECK(xr_xir_place_kind(&f.functions[1], 6) == XR_XIR_PLACE_SLOT);
     CHECK(xr_xir_place_kind(&f.functions[1], UINT32_MAX) == XR_XIR_PLACE_NONE);
     CHECK(xr_xir_place_kind(&f.functions[2], 0) == XR_XIR_PLACE_NONE);
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_check(&f.module, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(&stage_context, &f.module, &checked, NULL) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f));
-    CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
-    const XrXirFunctionLayout *layout = xr_xir_artifact_layout(lowered, 1);
+    CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+    const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 1);
     CHECK(layout->slot_count == 14 && layout->frame_bytes == 72 && layout->outgoing_count == 2);
     CHECK(layout->offsets[5] == UINT32_MAX && layout->offsets[6] == UINT32_MAX);
     CHECK(layout->owned_count == 3 && layout->owned_offsets[0] == 16 &&
         layout->owned_offsets[1] == 24 && layout->owned_offsets[2] == 32);
-    CHECK(xr_xir_artifact_module(lowered)->functions[1].instructions[3].op == XR_XIR_OWNED_LOCAL_NEW);
+    CHECK(xr_xir_compile_artifact_module(lowered)->functions[1].instructions[3].op == XR_XIR_OWNED_LOCAL_NEW);
     uint32_t *offsets = (uint32_t *) layout->offsets;
     offsets[5] = 40;
-    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_LAYOUT);
     offsets[5] = UINT32_MAX;
     uint32_t *owned = (uint32_t *) layout->owned_offsets;
     owned[0] = UINT32_MAX;
-    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_LAYOUT);
     owned[0] = 16;
-    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(lowered); lowered = NULL;
-    XrXirBudget budget = xr_xir_default_budget(); budget.frame_bytes = 103;
-    CHECK(xr_xir_lower(checked, &fixture_target, &budget, &lowered, NULL) == XR_XIR_BUDGET && !lowered);
-    budget.frame_bytes = 104;
-    CHECK(xr_xir_lower(checked, &fixture_target, &budget, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(lowered); xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(lowered); lowered = NULL;
+    xr_xir_compile_artifact_free(checked);
+    checked = NULL;
+    for (uint64_t frame = 103; frame <= 104; ++frame) {
+        xir_array_metadata_init(&f);
+        XrXirCompileContext context = stage_context_default(); context.limits.frame_bytes = frame;
+        CHECK(xr_xir_compile_check(&context, &f.module, &checked, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_artifact_context(checked)->limits.frame_bytes == frame);
+        CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) ==
+            (frame == 103 ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK((lowered != NULL) == (frame == 104));
+        xr_xir_compile_artifact_free(lowered); lowered = NULL;
+        xr_xir_compile_artifact_free(checked); checked = NULL;
+    }
 }
 
 static void array_stage_attacks(void) {
@@ -86,19 +94,19 @@ static void array_stage_attacks(void) {
         if (attack == 27) f.ops[8].args[1] = UINT32_MAX;
         if (attack == 28) f.ops[2].immediate = 1;
         if (attack == 29) f.init[0].args[0] = 1;
-        XrXirStatus status = xr_xir_verify(&f.module, NULL, NULL);
+        XrXirStatus status = xr_xir_compile_verify(&stage_context, &f.module, NULL);
         if (status == XR_XIR_OK) fprintf(stderr, "array metadata attack accepted: %u\n", attack);
         CHECK(status != XR_XIR_OK);
-        XrXirArtifact *artifact = (XrXirArtifact *) (uintptr_t) 1;
-        CHECK(xr_xir_check(&f.module, NULL, &artifact, NULL) != XR_XIR_OK && !artifact);
+        XrXirArtifact *artifact = NULL;
+        CHECK(xr_xir_compile_check(&stage_context, &f.module, &artifact, NULL) != XR_XIR_OK && !artifact);
     }
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     f.operands[2] = 6; /* A mutable slot is independently a writable receiver. */
-    CHECK(xr_xir_verify(&f.module, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     f.ops[8].args[0] = 2; /* Ordinary values remain readable snapshots. */
-    CHECK(xr_xir_verify(&f.module, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     f.slot.mutable = 0; f.operands[2] = 3;
-    CHECK(xr_xir_verify(&f.module, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
 }
 
 static void array_phi_place_rejection(void) {
@@ -117,9 +125,9 @@ static void array_phi_place_rejection(void) {
     f.functions[1].blocks = blocks; f.functions[1].block_count = 4;
     f.functions[1].instruction_count = 10; f.functions[1].operand_count = 4;
     f.operands[0] = 1; f.operands[1] = 1; f.operands[2] = 2; f.operands[3] = 1;
-    CHECK(xr_xir_verify(&f.module, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     f.operands[1] = 3;
-    CHECK(xr_xir_verify(&f.module, NULL, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_BAD_VALUE);
 }
 
 static void array_compact_layout(void) {
@@ -130,9 +138,9 @@ static void array_compact_layout(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     for (uint32_t i = 0; i < sizeof(types) / sizeof(types[0]); ++i) {
         XrXirLayout layout = {0};
-        CHECK(xr_xir_layout(&f.types, types[i], &fixture_target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);
+        CHECK(xr_xir_compile_layout(&stage_context, &f.types, types[i], &fixture_target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);
         CHECK(layout.size == widths[i] && layout.alignment == widths[i]);
-        CHECK(xr_xir_layout(&f.types, types[i], &fixture_target, XR_XIR_LAYOUT_BOXED, &layout) == XR_XIR_OK);
+        CHECK(xr_xir_compile_layout(&stage_context, &f.types, types[i], &fixture_target, XR_XIR_LAYOUT_BOXED, &layout) == XR_XIR_OK);
         CHECK(layout.size == 16 && layout.alignment == 8);
     }
 }
