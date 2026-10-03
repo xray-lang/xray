@@ -154,6 +154,12 @@
 04_control_flow/0420_for.xr::test_for_start_from_one
 04_control_flow/0420_for.xr::test_for_step_three
 04_control_flow/0420_for.xr::test_for_step_two
+04_control_flow/0460_early_return.xr::test_early_return
+04_control_flow/0460_early_return.xr::test_guard_clause
+04_control_flow/0460_early_return.xr::test_multiple_guards
+04_control_flow/0460_early_return.xr::test_nested_return
+04_control_flow/0460_early_return.xr::test_recursive_return
+04_control_flow/0460_early_return.xr::test_void_return
 05_functions/0520_closure.xr::test_accumulator
 05_functions/0520_closure.xr::test_capture_multiple_params
 05_functions/0520_closure.xr::test_capture_param
@@ -211,6 +217,10 @@
 09_advanced/0956_enum_typed_catch.xr::test_typed_enum_then_catchall_fallthrough
 09_advanced/0956_enum_typed_catch.xr::test_typed_enum_then_catchall_match
 09_advanced/0960_error_set_not_in_type.xr::test_error_set_not_in_function_type
+10_stdlib/1010_time.xr::test_time_clock
+10_stdlib/1010_time.xr::test_time_monotonic
+10_stdlib/1010_time.xr::test_time_now
+10_stdlib/1010_time.xr::test_time_sleep
 10_stdlib/1011_time_edge.xr::test_clock_non_negative
 10_stdlib/1011_time_edge.xr::test_monotonic_ordering
 10_stdlib/1011_time_edge.xr::test_now_advances

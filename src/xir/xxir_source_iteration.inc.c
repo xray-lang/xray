@@ -33,6 +33,16 @@ static bool source_for_in_body(SourceContext *ctx, AstNode *node,
     ctx->locals = saved; ctx->scope = scope;
     return ok;
 }
+/* `a..b` and `a..=b` count an i64 cursor; both endpoints are evaluated once, start first. */
+static bool source_range_bounds(SourceContext *ctx, AstNode *node, SourceValue *start, SourceValue *end) {
+    RangeNode *range = &node->as.for_in_stmt.collection->as.range;
+    if (!range->start || !range->end) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"range requires both endpoints");
+    SourceExpectedType expected = {true,XR_XIR_I64};
+    if (!source_plan_expression(ctx,range->start,expected,start) || !source_plan_expression(ctx,range->end,expected,end)) return false;
+    if (start->type != XR_XIR_I64 || end->type != XR_XIR_I64)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoints must be i64");
+    return true;
+}
 static bool source_for_in(SourceContext *ctx, AstNode *node) {
     ForInStmtNode *syntax = &node->as.for_in_stmt;
     if (syntax->label || syntax->is_tuple_head || syntax->item_type)
@@ -42,32 +52,50 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"for-in binding shape is invalid");
     if (syntax->is_keyvalue && !source_text_same(ctx, NULL, syntax->item_name, "_") && source_text_same(ctx, NULL, syntax->item_name, syntax->value_name))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"for-in binding names must be distinct");
-    SourceValue array, length, zero, cursor;
-    if (!expression(ctx,syntax->collection,&array)) return false;
-    if (!xr_xir_type_is_array(&ctx->types,array.type))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"for-in requires a proved built-in Array value");
-    XrXirType element_type = xr_xir_array_element(&ctx->types,array.type), cursor_type;
-    if (!source_native_array_declaration(ctx) || !source_cell_type(ctx,XR_XIR_I64,&cursor_type) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,{array.id},{0},0,{0}},&length) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cursor_type,{zero.id},{0},0,{0}},&cursor)) return false;
+    bool counting = syntax->collection && syntax->collection->type == AST_RANGE;
+    bool inclusive = counting && syntax->collection->as.range.inclusive_end;
+    if (counting && syntax->is_keyvalue)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"a range for-in binds one name");
+    SourceValue array = {0}, bound, first, cursor;
+    XrXirType element_type = XR_XIR_I64, cursor_type;
+    if (counting) {
+        if (!source_range_bounds(ctx,node,&first,&bound)) return false;
+    } else {
+        if (!expression(ctx,syntax->collection,&array)) return false;
+        if (!xr_xir_type_is_array(&ctx->types,array.type))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"for-in requires a proved built-in Array value");
+        element_type = xr_xir_array_element(&ctx->types,array.type);
+        if (!source_native_array_declaration(ctx) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,{array.id},{0},0,{0}},&bound) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&first)) return false;
+    }
+    if (!source_cell_type(ctx,XR_XIR_I64,&cursor_type) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cursor_type,{first.id},{0},0,{0}},&cursor)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     uint32_t head = body->block_count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{head},0,{0}},NULL) || !begin_block(ctx)) return false;
     SourceValue index, condition;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,XR_XIR_I64,{cursor.id},{0},0,{0}},&index) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{index.id,length.id},{0},0,{0}},&condition)) return false;
+        !source_recipe_record(ctx,(XrXirInstruction){inclusive ? XR_XIR_LE_INT : XR_XIR_LT_INT,XR_XIR_BOOL,{index.id,bound.id},{0},0,{0}},&condition)) return false;
     uint32_t branch = body->count, entry = body->block_count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{condition.id},{entry,0},0,{0}},NULL) || !begin_block(ctx)) return false;
-    SourceValue element;
-    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element_type,{array.id,index.id},{0},0,{0}},&element)) return false;
+    SourceValue element = index;
+    if (!counting && !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element_type,{array.id,index.id},{0},0,{0}},&element)) return false;
     SourceLoop loop = {ctx->loop,NULL,NULL,body->frontier}; ctx->loop = &loop;
     bool ok = source_for_in_body(ctx,node,index,element); ctx->loop = loop.parent;
     if (!ok) return false;
+    uint32_t last_branch = 0;
     if (!ctx->returned || loop.continues) {
         uint32_t step = body->block_count;
         if ((!ctx->returned && !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{step},0,{0}},NULL)) ||
             !patch_exits(ctx,loop.continues,step) || !begin_block(ctx)) return false;
+        if (inclusive) {
+            /* The end bound itself may be the largest i64, so stop before stepping past it. */
+            SourceValue more; uint32_t next_block;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{index.id,bound.id},{0},0,{0}},&more)) return false;
+            last_branch = body->count; next_block = body->block_count;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{more.id},{next_block,0},0,{0}},NULL) || !begin_block(ctx)) return false;
+        }
         SourceValue one, next;
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},1,{0}},&one) ||
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ADD_INT,XR_XIR_I64,{index.id,one.id},{0},0,{0}},&next) ||
@@ -77,5 +105,6 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
     uint32_t exit = body->block_count;
     if (!begin_block(ctx)) return false;
     body->recipes[branch].instruction.targets[1] = exit;
+    if (last_branch) body->recipes[last_branch].instruction.targets[1] = exit;
     return patch_exits(ctx,loop.breaks,exit);
 }

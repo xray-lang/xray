@@ -1,0 +1,62 @@
+fn sum(from: i64, to: i64) -> i64 {
+    var total = 0
+    for (i in from..to) {
+        total = total + i
+    }
+    return total
+}
+fn main() {
+    print(sum(0, 5))
+    print(sum(5, 5))
+    print(sum(7, 3))
+    var closed = 0
+    for (i in 1..=4) {
+        closed = closed + i
+    }
+    print(closed)
+    var calls = 0
+    fn bound() -> i64 {
+        calls = calls + 1
+        return 3
+    }
+    var visits = 0
+    for (i in 0..bound()) {
+        visits = visits + 1
+    }
+    print(visits)
+    print(calls)
+    var skipped = 0
+    for (i in 0..10) {
+        if (i == 2) { continue }
+        if (i == 5) { break }
+        skipped = skipped + i
+    }
+    print(skipped)
+    var inner = 0
+    for (i in 0..3) {
+        for (j in i..=2) {
+            inner = inner + 1
+        }
+    }
+    print(inner)
+    var steps = 0
+    for (i in 9223372036854775805..=9223372036854775807) {
+        steps = steps + 1
+        if (i == 9223372036854775807) { print("max") }
+    }
+    print(steps)
+    var empty = 0
+    for (i in 4..=3) { empty = empty + 1 }
+    print(empty)
+    var captured = Array<fn() -> i64>()
+    for (i in 0..3) { captured.push(fn() -> i64 { return i * 10 }) }
+    print(captured[0]())
+    print(captured[2]())
+    var arr = [10, 20, 30, 40, 50]
+    var weighted = 0
+    for (i in 0..len(arr) - 1) {
+        weighted = weighted + arr[i]
+    }
+    print(weighted)
+}
+main()
