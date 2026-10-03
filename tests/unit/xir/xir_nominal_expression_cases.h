@@ -23,14 +23,14 @@ static void nominal_expression_failure_attempt(XrXirProgram *program) {
     config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, nominal_expression_output, &outputs};
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, 0, NULL, 0);
-    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
     if (status == XR_XIR_CALL_RETURNED) {
         CHECK(outputs == 1);
         CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
         CHECK(result.type == XR_XIR_I64 && result.payload == 7);
         xr_xir_value_drop(&result);
         status = xr_xir_instance_start(instance, 2, NULL, 0);
-        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
         if (status == XR_XIR_CALL_RETURNED)
             CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
     }
@@ -65,13 +65,13 @@ static void nominal_expression_cases(XrXirProgram *program) {
     XrXirValue escaped[2] = {{0}};
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], 0, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue value = {0};
         CHECK(xr_xir_instance_take_result(instances[i], &value) == XR_XIR_CALL_RETURNED);
         CHECK(value.type == XR_XIR_I64 && value.payload == 7 && calls == i + 1);
         xr_xir_value_drop(&value);
         CHECK(xr_xir_instance_start(instances[i], 2, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &escaped[i]) == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     }

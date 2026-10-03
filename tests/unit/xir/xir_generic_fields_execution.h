@@ -22,12 +22,12 @@ static GenericFieldEntries generic_fields_entries(const XrXirModule *module){
 }
 static XrXirCallStatus generic_fields_run(XrXirInstance *instance,GenericFieldEntries e,XrXirValue *held){
  XrXirCallStatus s=xr_xir_instance_start(instance,e.answer,NULL,0);
- if(s==XR_XIR_CALL_READY)s=xr_xir_instance_poll(instance).outcome.status;
+ if(s==XR_XIR_CALL_READY)s=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
  if(s!=XR_XIR_CALL_RETURNED)return s;
  XrXirValue number={0};CHECK(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);
  CHECK(number.type==XR_XIR_I64&&number.payload==41);xr_xir_value_drop(&number);
  s=xr_xir_instance_start(instance,e.text,NULL,0);
- if(s==XR_XIR_CALL_READY)s=xr_xir_instance_poll(instance).outcome.status;
+ if(s==XR_XIR_CALL_READY)s=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
  if(s==XR_XIR_CALL_RETURNED)CHECK(xr_xir_instance_take_result(instance,held)==XR_XIR_CALL_RETURNED);
  return s;
 }

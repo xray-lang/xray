@@ -40,13 +40,13 @@ static XrXirValue nominal_transport_cases(const XrXirCallEntry *entries, const X
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config,2,arguments,2,&call) == XR_XIR_CALL_READY);
     xr_xir_value_drop(&arguments[0]);
-    XrXirCallResult wait = xr_xir_call_poll(call);
+    XrXirCallResult wait = xr_xir_call_poll_bounded(call, UINT64_MAX);
     CHECK(wait.status == XR_XIR_CALL_SUSPENDED);
     XrXirValue escaped = {0};
-    if (mode == 1) CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+    if (mode == 1) { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
     else if (!mode) {
         CHECK(xr_xir_call_resume(call,wait.wake) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_call_take_result(call,&escaped) == XR_XIR_CALL_RETURNED);
         CHECK(escaped.type == (XrXirType)256);
         XrXirValue field = {0};

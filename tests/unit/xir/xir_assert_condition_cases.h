@@ -18,11 +18,11 @@ static void assert_initialization_trace(void *context,XrXirLifecycleEvent event,
     CHECK(event==(*count%2 ? XR_XIR_MODULE_READY : XR_XIR_MODULE_BEGIN));++*count;
 }
 static XrXirCallStatus assert_poll(XrXirInstance *instance, unsigned *suspensions) {
-    XrXirInstanceResult result=xr_xir_instance_poll(instance);
+    XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     while (result.outcome.status==XR_XIR_CALL_SUSPENDED) {
         CHECK(++*suspensions<=2);
         CHECK(xr_xir_instance_resume(instance,result.epoch,result.outcome.wake)==XR_XIR_CALL_READY);
-        result=xr_xir_instance_poll(instance);
+        result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     }
     return result.outcome.status;
 }

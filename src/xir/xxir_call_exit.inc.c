@@ -14,6 +14,7 @@ static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
     xr_xir_call_result_drop(&frame->pending);
     xr_xir_call_result_move(result, &frame->pending);
     frame->exiting = true;
+    frame->exit_done = false;
     frame->scope_exit = scope;
 }
 static void request_exit_status(XrXirCall *call, XrXirCallStatus status) {
@@ -47,7 +48,7 @@ static void finish_exit(XrXirCall *call) {
     if (frame->cleanup_call && !frame->scope_exit && (result.status == XR_XIR_CALL_THROWN || xr_xir_call_panic_status(result.status)))
         cleanup_escape(call, result);
     if (frame->scope_exit) {
-        frame->exiting = frame->scope_exit = false;
+        frame->exiting = frame->scope_exit = frame->exit_done = false;
         xr_xir_call_result_drop(&frame->inbox);
         xr_xir_call_result_move(&result, &frame->inbox);
         if (call->cancel_requested && !frame->in_cleanup)

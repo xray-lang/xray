@@ -16,7 +16,7 @@ static void nominal_generic_cases(XrXirProgram *program) {
     xr_xir_program_drop(program);
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], 0, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue value = {0};
         CHECK(xr_xir_instance_take_result(instances[i], &value) == XR_XIR_CALL_RETURNED);
         CHECK(value.type == XR_XIR_I64 && value.payload == 7);

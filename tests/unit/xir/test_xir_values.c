@@ -187,7 +187,7 @@ static void typed_output(void) {
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = mode == 2 ? (XrXirOutputProvider) {0} : (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_call_poll(call).status == (mode ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_RETURNED));
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == (mode ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_RETURNED));
         CHECK(output.seen == (mode == 2 ? 0u : mode == 1 ? 1u : 2u));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
@@ -216,7 +216,7 @@ static void atomic_boundaries(void) {
     XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = (XrXirValueAdmission) {0};
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, 0, &cell, 1, &call) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_BAD_STATE && !output.seen);
+    CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_BAD_STATE && !output.seen);
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     xr_xir_domain_drop(domain); xr_xir_value_drop(&cell);
     CHECK(xr_xir_atomic_i64_load(&copy, &value) && value == INT64_MIN);

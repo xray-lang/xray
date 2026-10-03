@@ -93,16 +93,16 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
     XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
     uint32_t wakes = 0;
     if (status == XR_XIR_CALL_READY && mode != 3) {
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         while (result.status == XR_XIR_CALL_SUSPENDED) {
             CHECK(accounting.depth == 49 && ++wakes <= passes);
             if (mode == 1) {
-                CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
-                result = xr_xir_call_poll(call); break;
+                { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
+                result = xr_xir_call_poll_bounded(call, UINT64_MAX); break;
             }
             if (mode == 4) break;
             CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_call_poll(call);
+            result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         }
         status = result.status;
         if (fail_at != SIZE_MAX) CHECK(status == XR_XIR_CALL_OOM);
@@ -140,7 +140,7 @@ static void segment_budget_cases(void) {
         else {
             CHECK(status == XR_XIR_CALL_READY && accounting.live_bytes <= limits[i]);
             CHECK(call->segment->allocation_bytes == (limits[i] - metadata) / 16 * 16);
-            CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_SUSPENDED);
+            CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_SUSPENDED);
         }
         witness.cleanups = 0; witness.last_cleanup = UINT32_MAX;
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
@@ -175,7 +175,7 @@ static void segment_copy_failure(void) {
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 4; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_LIMIT && witness.cleanups == large + 1);
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_LIMIT && witness.cleanups == large + 1);
         CHECK(!call->segment && accounting.live_bytes == call->allocation_bytes);
         CHECK(atomic_load(&first->references) == 1 && atomic_load(&second->references) == UINT32_MAX);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY && live == baseline);

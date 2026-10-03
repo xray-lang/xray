@@ -13,7 +13,7 @@
 static XrXirCallStatus ready_call(XrXirInstance *instance,uint32_t function,XrXirValue *value){
  XrXirCallStatus status=xr_xir_instance_start(instance,function,NULL,0);
 
- if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;
+ if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
 
  if(status==XR_XIR_CALL_RETURNED)status=xr_xir_instance_take_result(instance,value);
 return status;

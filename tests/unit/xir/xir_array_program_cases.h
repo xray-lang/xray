@@ -43,7 +43,7 @@ static void array_program_trace(void *context, XrXirLifecycleEvent event, uint32
 }
 static XrXirValue array_program_result(XrXirInstance *instance, uint32_t entry) {
     CHECK(xr_xir_instance_start(instance,entry,NULL,0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue value = {0};
     CHECK(xr_xir_instance_take_result(instance,&value) == XR_XIR_CALL_RETURNED);
     return value;
@@ -67,7 +67,7 @@ static void array_program_cases(XrXirProgram *program, bool fail_init) {
     xr_xir_program_drop(program);
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i],2,NULL,0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         if (fail_init) {
             CHECK(result.outcome.status == XR_XIR_CALL_BOUNDS && !logs[i].length);
             CHECK(result.outcome.panic.detail.code == 430 && result.outcome.panic.detail.index == -1 && result.outcome.panic.detail.length == 2);
@@ -92,7 +92,7 @@ static void array_program_cases(XrXirProgram *program, bool fail_init) {
             for (uint32_t index = 0; index < 4; ++index) {
                 XrXirValue argument = {XR_XIR_I64,0,bad[index]};
                 CHECK(xr_xir_instance_start(instances[i],5,&argument,1) == XR_XIR_CALL_READY);
-                XrXirCallResult failed = xr_xir_instance_poll(instances[i]).outcome;
+                XrXirCallResult failed = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
                 CHECK(failed.status == XR_XIR_CALL_BOUNDS && failed.panic.detail.code == 430 &&
                     failed.panic.detail.index == bad[index] && failed.panic.detail.length == 3 &&
                     failed.value.type == XR_XIR_UNIT && !failed.value.payload && !failed.wake);

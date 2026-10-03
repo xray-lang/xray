@@ -41,16 +41,16 @@ int main(int argc,char **argv){
  XrXirValue saved[2]={{0},{0}};
  for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
- C(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+ C(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
  XrXirValue number={0};C(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);C(number.type==XR_XIR_I64 && number.payload==41);xr_xir_value_drop(&number);
- C(xr_xir_instance_start(instance,4,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+ C(xr_xir_instance_start(instance,4,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
  C(xr_xir_instance_take_result(instance,&saved[i])==XR_XIR_CALL_RETURNED);C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
  for(unsigned cancel=0;cancel<2;++cancel){
  XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);IterationTrace trace={0};config.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, iteration_trace, &trace};
  C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
  C(xr_xir_instance_start(instance,5,NULL,0)==XR_XIR_CALL_READY);
- XrXirInstanceResult resumed=xr_xir_instance_poll(instance);C(resumed.outcome.status==XR_XIR_CALL_SUSPENDED);
- if(!cancel){unsigned pauses=1;while(resumed.outcome.status==XR_XIR_CALL_SUSPENDED){C(pauses<=3);C(xr_xir_instance_resume(instance,resumed.epoch,resumed.outcome.wake)==XR_XIR_CALL_READY);resumed=xr_xir_instance_poll(instance);++pauses;}C(pauses==4 && resumed.outcome.status==XR_XIR_CALL_RETURNED);XrXirValue n={0};C(xr_xir_instance_take_result(instance,&n)==XR_XIR_CALL_RETURNED && n.type==XR_XIR_I64 && n.payload==41);xr_xir_value_drop(&n);}
+ XrXirInstanceResult resumed=xr_xir_instance_poll_bounded(instance, UINT64_MAX);C(resumed.outcome.status==XR_XIR_CALL_SUSPENDED);
+ if(!cancel){unsigned pauses=1;while(resumed.outcome.status==XR_XIR_CALL_SUSPENDED){C(pauses<=3);C(xr_xir_instance_resume(instance,resumed.epoch,resumed.outcome.wake)==XR_XIR_CALL_READY);resumed=xr_xir_instance_poll_bounded(instance, UINT64_MAX);++pauses;}C(pauses==4 && resumed.outcome.status==XR_XIR_CALL_RETURNED);XrXirValue n={0};C(xr_xir_instance_take_result(instance,&n)==XR_XIR_CALL_RETURNED && n.type==XR_XIR_I64 && n.payload==41);xr_xir_value_drop(&n);}
  C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);C(trace.count==(cancel?1u:3u));
  }
  xr_xir_program_drop(program);xr_xir_artifact_free(lowered);

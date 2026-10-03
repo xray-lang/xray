@@ -115,9 +115,9 @@ static void class_exit_cases(void) {
  for(size_t pass=0;pass<=sites;++pass){runtime_fail_at=pass?pass-1:SIZE_MAX;runtime_attempts=0;XrXirInstance *instance=NULL;XrXirValue value={0};
  XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,entry,NULL,0);
- if(status==XR_XIR_CALL_READY){XrXirInstanceResult result=xr_xir_instance_poll(instance);status=result.outcome.status;
+ if(status==XR_XIR_CALL_READY){XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);status=result.outcome.status;
  if(status==XR_XIR_CALL_SUSPENDED){if(mode==0)status=xr_xir_instance_stop(instance);
- else {status=xr_xir_instance_resume(instance,result.epoch,result.outcome.wake);if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;}}}
+ else {status=xr_xir_instance_resume(instance,result.epoch,result.outcome.wake);if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;}}}
  if(!pass){CHECK(status==(mode==0?XR_XIR_CALL_READY:mode==1?XR_XIR_CALL_DIVIDE_BY_ZERO:XR_XIR_CALL_RETURNED));sites=runtime_attempts;CHECK(sites>0);}
  else CHECK(status==XR_XIR_CALL_OOM);
  if(status==XR_XIR_CALL_RETURNED){CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);XrXirValue count={0};CHECK(xr_xir_class_get(&value,0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&value),.work=10000},&count)==XR_XIR_VALUE_OK&&count.payload==40);xr_xir_value_drop(&count);}
@@ -130,9 +130,9 @@ static void class_program_retained_case(void) {
  XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
  CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
- XrXirInstanceResult result=xr_xir_instance_poll(instance);CHECK(result.outcome.status==XR_XIR_CALL_SUSPENDED);
+ XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);CHECK(result.outcome.status==XR_XIR_CALL_SUSPENDED);
  CHECK(xr_xir_instance_resume(instance,result.epoch,result.outcome.wake)==XR_XIR_CALL_READY);
- CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+ CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
  XrXirValue object={0},count={0},text={0};CHECK(xr_xir_instance_take_result(instance,&object)==XR_XIR_CALL_RETURNED);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
  CHECK(xr_xir_class_get(&object,0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&count)==XR_XIR_VALUE_OK&&count.type==XR_XIR_I64&&count.payload==40);

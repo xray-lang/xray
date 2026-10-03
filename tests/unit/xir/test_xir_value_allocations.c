@@ -173,7 +173,7 @@ static void fail_sequence(void) {
     XrXirCallStatus admitted = xr_xir_call_new(&config, 0, &left, 1, &call);
     if (admitted == XR_XIR_CALL_READY) {
         xr_xir_value_drop(&left);
-        CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_call_take_result(call, &left) == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     } else CHECK(admitted == XR_XIR_CALL_OOM && !call);

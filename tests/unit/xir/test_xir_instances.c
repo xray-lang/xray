@@ -175,7 +175,7 @@ static XrXirInstance *new_instance(XrXirProgram *program, Trace *log) {
 }
 static XrXirValue run(XrXirInstance *instance, uint32_t entry) {
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue value = {0};
     CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
     XrXirValue second = {0};
@@ -200,23 +200,23 @@ static void isolation(void) {
     xr_xir_program_drop(program);
     CHECK(!f.witness.releases);
     CHECK(xr_xir_instance_start(first, 3, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirInstanceResult suspended = xr_xir_instance_poll(first);
+    XrXirInstanceResult suspended = xr_xir_instance_poll_bounded(first, UINT64_MAX);
     CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_state(first) == XR_XIR_INSTANCE_INITIALIZING);
     CHECK(xr_xir_instance_start(first, 3, NULL, 0) == XR_XIR_CALL_BUSY);
     CHECK(a.count == 2 && a.events[0] == 2 && a.events[1] == 20);
     CHECK(xr_xir_instance_start(second, 3, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirInstanceResult other = xr_xir_instance_poll(second);
+    XrXirInstanceResult other = xr_xir_instance_poll_bounded(second, UINT64_MAX);
     CHECK(other.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(first, suspended.epoch + 1, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_resume(first, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(first).outcome.value.payload == 30);
+    CHECK(xr_xir_instance_poll_bounded(first, UINT64_MAX).outcome.value.payload == 30);
     CHECK(xr_xir_instance_state(first) == XR_XIR_INSTANCE_READY);
     XrXirValue value = {0};
     CHECK(xr_xir_instance_take_result(first, &value) == XR_XIR_CALL_RETURNED);
     CHECK(run(first, 3).payload == 32);
     CHECK(xr_xir_instance_resume(second, other.epoch, other.outcome.wake) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(second).outcome.value.payload == 30);
+    CHECK(xr_xir_instance_poll_bounded(second, UINT64_MAX).outcome.value.payload == 30);
     const uint32_t expected[] = {2, 20, 12, 1, 21, 11, 0, 22, 10};
     CHECK(a.count == 9 && !memcmp(a.events, expected, sizeof(expected)));
     CHECK(b.count == 9 && !memcmp(b.events, expected, sizeof(expected)));
@@ -239,24 +239,24 @@ static void borrowed_restart(void) {
     xr_xir_artifact_free(f.proof); f.proof = NULL;
     Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
     CHECK(xr_xir_instance_start(instance, 8, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirInstanceResult old = xr_xir_instance_poll(instance);
+    XrXirInstanceResult old = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(old.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(instance, old.epoch, old.outcome.wake) == XR_XIR_CALL_READY);
-    XrXirInstanceResult borrowed = xr_xir_instance_poll(instance);
+    XrXirInstanceResult borrowed = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(borrowed.outcome.status == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_start(instance, 7, &borrowed.outcome.value, 1) == XR_XIR_CALL_READY);
-    XrXirInstanceResult echoed = xr_xir_instance_poll(instance);
+    XrXirInstanceResult echoed = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(echoed.outcome.status == XR_XIR_CALL_RETURNED);
     strings_equal(&echoed.outcome.value, "independent", 11);
     XrXirValue result = {0};
     CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_start(instance, 8, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirInstanceResult fresh = xr_xir_instance_poll(instance);
+    XrXirInstanceResult fresh = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(fresh.outcome.status == XR_XIR_CALL_SUSPENDED && fresh.epoch != old.epoch);
     CHECK(fresh.outcome.wake == old.outcome.wake);
     CHECK(xr_xir_instance_resume(instance, old.epoch, old.outcome.wake) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_CANCELLED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
     CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
@@ -270,10 +270,10 @@ static void failed_initialization(void) {
     xr_xir_artifact_free(f.proof); f.proof = NULL;
         Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
         CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult result = xr_xir_instance_poll(instance);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         if (mode == 1) CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
         if (mode == 2) CHECK(xr_xir_instance_resume(instance, result.epoch, result.outcome.wake) == XR_XIR_CALL_READY);
-        result = xr_xir_instance_poll(instance);
+        result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         XrXirCallStatus expected = mode == 1 ? XR_XIR_CALL_CANCELLED : mode == 2 ? XR_XIR_CALL_THROWN :
             mode == 4 ? XR_XIR_CALL_BOUNDS : XR_XIR_CALL_BAD_STATE;
         CHECK(result.outcome.status == expected);
@@ -292,7 +292,7 @@ static void failed_initialization(void) {
                 escaped = copy;
             } else CHECK(xr_xir_fault_empty(copy.panic.detail));
             xr_xir_value_drop(&copy.value);
-            XrXirCallResult repeated = xr_xir_instance_poll(instance).outcome;
+            XrXirCallResult repeated = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
             CHECK(repeated.status == expected && !memcmp(&repeated.panic.detail, &copy.panic.detail, sizeof(copy.panic.detail)));
         }
         CHECK(f.witness.begins[2] == 1 && !f.witness.begins[0] && !f.witness.begins[1]);

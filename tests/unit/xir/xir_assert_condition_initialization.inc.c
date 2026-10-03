@@ -17,7 +17,7 @@ static void assert_initialization(const char *directory,const char *path) {
         XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-        XrXirInstanceResult result=xr_xir_instance_poll(instance);
+        XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         CHECK(result.outcome.status==XR_XIR_CALL_ASSERTION && result.outcome.panic.detail.code==445);
         CHECK(result.outcome.value.type==XR_XIR_UNIT && !result.outcome.value.payload && !result.outcome.wake);
         CHECK(xr_xir_instance_state(instance)==XR_XIR_INSTANCE_FAILED);

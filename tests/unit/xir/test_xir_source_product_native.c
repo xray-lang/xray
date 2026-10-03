@@ -38,7 +38,7 @@ int main(void) {
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance,linked_source_program.declarations->entry_function,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
     XrXirValue result={0};
     CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
     CHECK(result.type==XR_XIR_I64 && !result.reserved && !result.payload);

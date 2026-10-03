@@ -31,7 +31,7 @@ static void source_float_text(const XrXirValue *value, const char *expected) {
 }
 static XrXirValue source_float_run(XrXirInstance *instance, uint32_t function) {
     CHECK(xr_xir_instance_start(instance, function, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirCallResult outcome = xr_xir_instance_poll(instance).outcome;
+    XrXirCallResult outcome = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
     if (outcome.status != XR_XIR_CALL_RETURNED)
         fprintf(stderr, "float function %u status %u fault %u\n", function, (unsigned) outcome.status, outcome.panic.detail.code);
     CHECK(outcome.status == XR_XIR_CALL_RETURNED);
@@ -41,17 +41,17 @@ static XrXirValue source_float_run(XrXirInstance *instance, uint32_t function) {
 }
 static XrXirValue source_float_resume_one(XrXirInstance *instance, uint32_t function) {
     CHECK(xr_xir_instance_start(instance, function, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirInstanceResult paused = xr_xir_instance_poll(instance);
+    XrXirInstanceResult paused = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(paused.outcome.status == XR_XIR_CALL_SUSPENDED && paused.outcome.wake && paused.epoch);
     CHECK(paused.outcome.value.type == XR_XIR_UNIT && !paused.outcome.value.payload);
-    XrXirInstanceResult repeated = xr_xir_instance_poll(instance);
+    XrXirInstanceResult repeated = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(repeated.outcome.status == XR_XIR_CALL_SUSPENDED && repeated.epoch == paused.epoch &&
         repeated.outcome.wake == paused.outcome.wake);
     CHECK(xr_xir_instance_resume(instance, paused.epoch + 1, paused.outcome.wake) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_resume(instance, paused.epoch, paused.outcome.wake + 1) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_resume(instance, paused.epoch, paused.outcome.wake) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_resume(instance, paused.epoch, paused.outcome.wake) == XR_XIR_CALL_BAD_STATE);
-    XrXirCallResult outcome = xr_xir_instance_poll(instance).outcome;
+    XrXirCallResult outcome = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
     CHECK(outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue value = {0};
     CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
@@ -87,7 +87,7 @@ static void source_float_runtime_failures(XrXirProgram *program, uint32_t entry)
         const char *phase = "new";
         XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
         if (status == XR_XIR_CALL_READY) { phase = "start"; status = xr_xir_instance_start(instance, entry, NULL, 0); }
-        if (status == XR_XIR_CALL_READY) { phase = "poll"; status = xr_xir_instance_poll(instance).outcome.status; }
+        if (status == XR_XIR_CALL_READY) { phase = "poll"; status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status; }
         if (!site) { CHECK(status == XR_XIR_CALL_RETURNED && output.count == 3); sites = runtime_attempts; }
         else {
             XrXirCallStatus expected = XR_XIR_CALL_OOM;
@@ -117,14 +117,14 @@ static void source_float_output_failures(XrXirProgram *program, uint32_t entry) 
         XrXirInstance *instance = NULL;
         CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == expected);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == expected);
         CHECK(output.count == mode);
         for (unsigned again = 0; again < 2; ++again) {
             XrXirCallResult failure = {0};
             CHECK(xr_xir_instance_copy_failure(instance, &failure) == expected);
             CHECK(failure.status == expected);
             CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == expected);
-            CHECK(xr_xir_instance_poll(instance).outcome.status == expected);
+            CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == expected);
             CHECK(output.count == mode);
         }
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
@@ -149,11 +149,11 @@ static void source_float_call_failures(XrXirProgram *program, const uint32_t *fu
             runtime_attempts = 0; runtime_fail_at = site ? site - 1 : SIZE_MAX;
             XrXirCallStatus status = xr_xir_instance_start(instance, functions[calls[f]], NULL, 0);
             if (status == XR_XIR_CALL_READY) {
-                XrXirInstanceResult outcome = xr_xir_instance_poll(instance);
+                XrXirInstanceResult outcome = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 if (outcome.outcome.status == XR_XIR_CALL_SUSPENDED) {
                     CHECK(calls[f] == FLOAT_SUSPENDED);
                     CHECK(xr_xir_instance_resume(instance, outcome.epoch, outcome.outcome.wake) == XR_XIR_CALL_READY);
-                    outcome = xr_xir_instance_poll(instance);
+                    outcome = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 }
                 status = outcome.outcome.status;
             }
@@ -202,10 +202,10 @@ static void source_float_program_cases(XrXirProgram *program, const uint32_t *fu
         source_float_bits(source_float_run(instances[i], functions[FLOAT_CAPTURED]), XR_XIR_F32, UINT64_C(0x3fa00000));
         source_float_bits(source_float_resume_one(instances[i], functions[FLOAT_SUSPENDED]), XR_XIR_F32, UINT64_C(0x40600000));
         CHECK(xr_xir_instance_start(instances[i], functions[FLOAT_SUSPENDED], NULL, 0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult paused = xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult paused = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         CHECK(paused.outcome.status == XR_XIR_CALL_SUSPENDED && paused.epoch && paused.outcome.wake);
         CHECK(xr_xir_instance_stop(instances[i]) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_CANCELLED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
         CHECK(xr_xir_instance_resume(instances[i], paused.epoch, paused.outcome.wake) == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     }

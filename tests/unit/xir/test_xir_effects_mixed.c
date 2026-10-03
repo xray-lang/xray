@@ -74,7 +74,7 @@ static void effect_mixed(bool callback_native, bool methods) {
     const int64_t expected[] = {11, 13, 36};
     for (unsigned i = 0; i < (methods ? 3u : 2u); ++i) {
         CHECK(xr_xir_instance_start(instance, methods ? method_source_selected_entries[i] : i ? effect_source_captured : effect_source_entry, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue value = {0};
         CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
         CHECK(value.type == XR_XIR_I64 && value.payload == (methods ? expected[i] : 7)); xr_xir_value_drop(&value);

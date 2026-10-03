@@ -216,11 +216,11 @@ static void array_instance_cases(void) {
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
         xr_xir_program_drop(program);
         CHECK(xr_xir_instance_start(instance,1,NULL,0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult result = xr_xir_instance_poll(instance);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         if (mode == 2 || mode == 4) {
             CHECK(result.outcome.status == XR_XIR_CALL_SUSPENDED && witness.reads == (mode == 4 ? 8u : 32u));
             CHECK(xr_xir_instance_resume(instance,result.epoch,result.outcome.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_instance_poll(instance);
+            result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         }
         CHECK(result.outcome.status == (mode ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_RETURNED));
         CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY && witness.cleanups == (mode ? 2u : 4u));

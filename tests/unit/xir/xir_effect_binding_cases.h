@@ -68,13 +68,13 @@ static void effect_binding_cases(void) {
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, 2, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue result = {0};
         CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
         CHECK(witness.binding_status == (promised ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_ARGUMENT));
         CHECK(!witness.target_calls && !witness.consumer_calls);
         CHECK(xr_xir_instance_start(instance, 5, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
         CHECK(witness.binding_status == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, 4, &witness.ordinary, 1) == XR_XIR_CALL_BAD_ARGUMENT);
@@ -87,7 +87,7 @@ static void effect_binding_cases(void) {
             CHECK(!witness.target_calls && !witness.consumer_calls);
             binding->entry = 3;
             CHECK(xr_xir_instance_start(instance, 4, &witness.strong, 1) == XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
             CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
             CHECK(result.type == XR_XIR_I64 && result.payload == 42);
             CHECK(witness.target_calls == 1 && witness.consumer_calls == 1);

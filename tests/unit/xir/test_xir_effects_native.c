@@ -38,7 +38,7 @@ static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expect
     XrXirInstance *instance = NULL;
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entry, NULL, 0);
-    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
     XrXirValue value = {0};
     if (status == XR_XIR_CALL_RETURNED) {
         CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);

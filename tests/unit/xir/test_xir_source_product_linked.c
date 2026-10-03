@@ -109,7 +109,7 @@ int main(int argc,char **argv) {
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,linked_group,&output};
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
     CHECK(result.type==XR_XIR_I64 && !result.reserved && !result.payload);xr_xir_value_drop(&result);
     const char *expected=multi ? "owner\xe4\xb8\xad-ok 42 true\n" : "source-product-ok\n";

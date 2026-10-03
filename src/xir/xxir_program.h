@@ -77,7 +77,9 @@ XR_FUNC XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t 
  * Skipped tests and ordinary functions receive no additional authority. The
  * same initialization and call lifecycle apply as for ordinary entry starts. */
 XR_FUNC XrXirCallStatus xr_xir_instance_start_test(XrXirInstance *instance, uint32_t entry);
-XR_FUNC XrXirInstanceResult xr_xir_instance_poll(XrXirInstance *instance);
+XR_FUNC XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64_t quantum);
+/* Cancels only the current activation; initialized module state remains usable. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, uint64_t wake);
 /* Transfers ordinary entry outcomes. Initialization failure stays instance-owned:
  * take_result returns BAD_STATE without changing output; use copy_failure. */

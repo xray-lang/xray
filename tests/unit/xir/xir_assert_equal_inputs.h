@@ -13,7 +13,7 @@ static XrXirCallStatus equal_instance_bounded(XrXirProgram *program,uint32_t fun
     XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);config.poll_limit=limit;
     XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
     if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,function,NULL,0);
-    if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll(instance).outcome.status;
+    if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
     if (status==XR_XIR_CALL_RETURNED) {
         XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
         CHECK(result.type==XR_XIR_I64 && result.payload==3);xr_xir_value_drop(&result);
@@ -40,7 +40,7 @@ static void equal_instance_oom(XrXirProgram *program,uint32_t function) {
         XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,function,NULL,0);
-        if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll(instance).outcome.status;
+        if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
         if (!point) {CHECK(status==XR_XIR_CALL_RETURNED);sites=runtime_attempts;}
         else CHECK(status==XR_XIR_CALL_OOM && runtime_attempts>runtime_fail_at);
         runtime_fail_at=SIZE_MAX;
@@ -67,7 +67,7 @@ static void equal_owned_inputs(XrXirInstance *instance,uint32_t relation,uint32_
             } else CHECK(xr_xir_value_copy(&inputs[0],&inputs[1])==XR_XIR_VALUE_OK);
             CHECK(xr_xir_instance_start(instance,relation,inputs,2)==XR_XIR_CALL_READY);
             xr_xir_value_drop(&inputs[0]);xr_xir_value_drop(&inputs[1]);xr_xir_domain_drop(domain);
-            CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
             XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
             CHECK(value.type==XR_XIR_BOOL && value.payload==(int64_t)(!different || !length));xr_xir_value_drop(&value);
         }
@@ -75,7 +75,7 @@ static void equal_owned_inputs(XrXirInstance *instance,uint32_t relation,uint32_
         XrXirValue input={0};CHECK(xr_xir_string_new(domain,expected,length,&input)==XR_XIR_VALUE_OK);
         CHECK(xr_xir_instance_start(instance,assertion,&input,1)==XR_XIR_CALL_READY);
         xr_xir_value_drop(&input);xr_xir_domain_drop(domain);
-        CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue info={0};CHECK(xr_xir_instance_take_result(instance,&info)==XR_XIR_CALL_RETURNED);
         XrXirFaultDetail detail={0};CHECK(xr_xir_panic_info_detail(&info,&detail) && detail.code==445);
         if (i) held[i-1]=info;

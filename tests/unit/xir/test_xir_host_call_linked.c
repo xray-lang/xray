@@ -23,8 +23,12 @@ static XrXirOutputStatus linked_output(void *context, const XrXirOutputGroup *gr
 }
 int main(void) {
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&host_call_source_program,
-        (XrXirProgramBudget){16777216, 64000000}, &program) == XR_XIR_OK);
+    XrCompileResources *resources=NULL;
+    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    CHECK(xr_xir_compile_program_seal(&context,&host_call_source_program,&program) == XR_XIR_OK);
+    xr_compile_resources_release(resources);
     XrXirHostCall *calls[2] = {0}; LinkedTrace traces[2] = {0};
     for (unsigned i = 0; i < 2; ++i) {
         XrXirInstanceConfig config;
@@ -33,17 +37,17 @@ int main(void) {
         XrXirHostExecutionRequest request = {program, &config, host_call_entries[0], NULL, 0};
         CHECK(xr_xir_host_call_begin(&request, &calls[i]) == XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
-    XrXirInstanceResult first = xr_xir_host_call_step(calls[0]), second = xr_xir_host_call_step(calls[1]);
+    xr_xir_compile_program_drop(program);
+    XrXirInstanceResult first = xr_xir_host_call_step_bounded(calls[0], UINT64_MAX), second = xr_xir_host_call_step_bounded(calls[1], UINT64_MAX);
     CHECK(first.outcome.status == XR_XIR_CALL_SUSPENDED && second.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(traces[0].count == 1 && traces[1].count == 1 && traces[0].values[0] == 1 && traces[1].values[0] == 1);
-    CHECK(xr_xir_host_call_cancel(calls[0]) == XR_XIR_CALL_CANCELLED);
+    { CHECK(xr_xir_host_call_request_cancel(calls[0]) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_host_call_step_bounded(calls[0], UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED); }
     CHECK(traces[0].count == 2 && traces[0].values[1] == 1);
     XrXirCallResult results[2] = {0};
     CHECK(xr_xir_host_call_take(calls[0], &results[0]) == XR_XIR_CALL_CANCELLED);
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(xr_xir_host_call_resume(calls[1], second.epoch, second.outcome.wake) == XR_XIR_CALL_READY);
-        second = xr_xir_host_call_step(calls[1]);
+        second = xr_xir_host_call_step_bounded(calls[1], UINT64_MAX);
         CHECK(second.outcome.status == (i ? XR_XIR_CALL_RETURNED : XR_XIR_CALL_SUSPENDED));
     }
     CHECK(traces[1].count == 3 && traces[1].values[1] == 11 && traces[1].values[2] == 11);

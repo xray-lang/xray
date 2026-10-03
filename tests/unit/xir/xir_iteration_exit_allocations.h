@@ -23,11 +23,11 @@ static void iteration_exit_allocations(XrXirProgram *program) {
             config.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, iteration_trace, &trace};
             C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
             C(xr_xir_instance_start(instance,5,NULL,0)==XR_XIR_CALL_READY);
-            XrXirInstanceResult paused=xr_xir_instance_poll(instance);
+            XrXirInstanceResult paused=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
             C(paused.outcome.status==XR_XIR_CALL_SUSPENDED && trace.count==0);
             if (mode==1) {
                 C(xr_xir_instance_resume(instance,paused.epoch,paused.outcome.wake)==XR_XIR_CALL_READY);
-                paused=xr_xir_instance_poll(instance);
+                paused=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 C(paused.outcome.status==XR_XIR_CALL_SUSPENDED && trace.count==1);
             }
             unsigned prefix=trace.count;
@@ -40,7 +40,7 @@ static void iteration_exit_allocations(XrXirProgram *program) {
                     C(++resumes<=3);
                     status=xr_xir_instance_resume(instance,paused.epoch,paused.outcome.wake);
                     if (status!=XR_XIR_CALL_READY) break;
-                    paused=xr_xir_instance_poll(instance);status=paused.outcome.status;
+                    paused=xr_xir_instance_poll_bounded(instance, UINT64_MAX);status=paused.outcome.status;
                 } while (status==XR_XIR_CALL_SUSPENDED);
             }
             if (!pass || !sites) {

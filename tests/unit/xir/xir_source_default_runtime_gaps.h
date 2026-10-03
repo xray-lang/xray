@@ -67,11 +67,11 @@ static void default_gap_execute(XrXirArtifact *checked) {
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         for(uint32_t e=0;e<3;++e){
             CHECK(xr_xir_instance_start(instance,entries[e],NULL,0)==XR_XIR_CALL_READY);
-            XrXirInstanceResult run=xr_xir_instance_poll(instance);uint32_t yields=0;
+            XrXirInstanceResult run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);uint32_t yields=0;
             while(run.outcome.status==XR_XIR_CALL_SUSPENDED){
                 CHECK(e==2 && ++yields==1);
                 CHECK(xr_xir_instance_resume(instance,run.epoch,run.outcome.wake)==XR_XIR_CALL_READY);
-                run=xr_xir_instance_poll(instance);
+                run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
             }
             CHECK(run.outcome.status==XR_XIR_CALL_RETURNED && yields==(e==2 ? 1u : 0u));
             XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);

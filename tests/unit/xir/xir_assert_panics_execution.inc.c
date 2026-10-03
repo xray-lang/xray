@@ -61,11 +61,11 @@ static void panics_execution(const char *directory,const char *path,const char *
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     for (uint32_t i=0;i<14;++i) {
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);
-        XrXirInstanceResult polled=xr_xir_instance_poll(instance);uint32_t suspended=0;
+        XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);uint32_t suspended=0;
         while (polled.outcome.status==XR_XIR_CALL_SUSPENDED) {
             CHECK(++suspended==1 && i>=12);
             CHECK(xr_xir_instance_resume(instance,polled.epoch,polled.outcome.wake)==XR_XIR_CALL_READY);
-            polled=xr_xir_instance_poll(instance);
+            polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         }
         CHECK(suspended==(uint32_t)(i>=12));
         if (polled.outcome.status!=XR_XIR_CALL_RETURNED) fprintf(stderr,"panics execution %s status=%u\n",names[i],polled.outcome.status);

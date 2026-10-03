@@ -149,7 +149,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     for (uint32_t i=0;i<4;++i) {
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);
-        XrXirInstanceResult polled=xr_xir_instance_poll(instance);
+        XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         CHECK(polled.outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
         if (i==0 || i==2) CHECK(value.type==XR_XIR_I64 && value.payload==(i==0 ? 7 : 445));

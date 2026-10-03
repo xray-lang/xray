@@ -11,7 +11,7 @@ xr_xir_type_is_nullable xr_xir_nullable_element xr_xir_type_is_cell
 xr_xir_type_is_nominal xr_xir_type_is_struct xr_xir_type_is_enum xr_xir_type_is_class
 xr_xir_type_is_owned xr_xir_cell_element xr_xir_array_element xr_xir_type_span xr_xir_operand_type
 xr_xir_instance_config_init xr_xir_instance_weaken_function xr_xir_instance_new
-xr_xir_instance_state xr_xir_instance_start xr_xir_instance_poll xr_xir_instance_resume
+xr_xir_instance_state xr_xir_instance_start xr_xir_instance_resume
 xr_xir_instance_take_result xr_xir_instance_copy_failure xr_xir_instance_stop xr_xir_instance_free
 xr_xir_instance_start_function xr_xir_instance_function xr_xir_instance_resolve_function
 xr_xir_instance_literal xr_xir_instance_atomic xr_xir_instance_cell xr_xir_instance_cell_read
@@ -44,7 +44,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     baseline = json.loads((old / 'baseline.json').read_text())
     assert baseline['head'] == '3c0bce6c7480126e4bcd55a5727a4224132c2b2b'
-    assert len(baseline['objects']) == 139 and len(RETAINED) == 41
+    assert len(baseline['objects']) == 139 and len(RETAINED) == 40
     assert RETAINED <= baseline['objects'].keys()
     protected = dict(baseline['files'])
     protected.update({row['object']: row['sha256'] for row in baseline['objects'].values()})
@@ -64,7 +64,7 @@ def main():
         assert code == 0, text
         exports.update(re.findall(r'\b(xr_\w+)\b', text))
     retired = set(baseline['objects']) - RETAINED
-    assert len(retired) == 98 and not retired.intersection(exports), sorted(retired.intersection(exports))
+    assert len(retired) == 99 and not retired.intersection(exports), sorted(retired.intersection(exports))
     assert RETAINED <= exports, sorted(RETAINED - exports)
     assert {'xr_compile_resources_new', 'xr_compile_resources_free', 'xr_xir_compile_program_seal',
             'xr_xir_compile_program_drop', 'xr_xir_compile_default_limits'} <= exports

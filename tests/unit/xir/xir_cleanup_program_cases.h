@@ -23,11 +23,11 @@ static void cleanup_program_cases(XrXirProgram *program, unsigned mode) {
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance, 1, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirInstanceResult result = xr_xir_instance_poll(instance);
+    XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     if (mode == 1) {
         CHECK(result.outcome.status == XR_XIR_CALL_SUSPENDED && !log.count);
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_CANCELLED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
     } else {
         CHECK(result.outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue owned = {0};

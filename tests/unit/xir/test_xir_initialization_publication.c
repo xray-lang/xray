@@ -30,7 +30,7 @@ static void ordinary_throw_take(void) {
     CHECK(xr_xir_program_seal(&data.spec,(XrXirProgramBudget){2097152,16000000},&program)==XR_XIR_OK);
     xr_xir_artifact_free(data.proof);Trace log={0};XrXirInstance *instance=new_instance(program,&log);
     CHECK(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_THROWN);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_THROWN);
     CHECK(xr_xir_instance_state(instance)==XR_XIR_INSTANCE_READY);
     XrXirValue error={0};CHECK(xr_xir_instance_take_result(instance,&error)==XR_XIR_CALL_THROWN);
     XrXirValue number=run(instance,4);CHECK(number.type==XR_XIR_I64&&number.payload==10);xr_xir_value_drop(&number);
@@ -46,15 +46,15 @@ int main(void) {
     xr_xir_artifact_free(fixture_data.proof);fixture_data.proof=NULL;
     Trace trace_data={0};XrXirInstance *instance=new_instance(program,&trace_data);
     CHECK(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);
-    XrXirInstanceResult paused=xr_xir_instance_poll(instance);CHECK(paused.outcome.status==XR_XIR_CALL_SUSPENDED);
+    XrXirInstanceResult paused=xr_xir_instance_poll_bounded(instance, UINT64_MAX);CHECK(paused.outcome.status==XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(instance,paused.epoch,paused.outcome.wake)==XR_XIR_CALL_READY);
     /* Execute the real active callback driver, then inject at the exact gap
      * before Instance copies/publishes its terminal result. */
-    instance->driving=true;XrXirCallResult terminal=xr_xir_call_poll(instance->call);instance->driving=false;
+    instance->driving=true;XrXirCallResult terminal=xr_xir_call_poll_bounded(instance->call, UINT64_MAX);instance->driving=false;
     CHECK(terminal.status==XR_XIR_CALL_THROWN&&instance->state==XR_XIR_INSTANCE_INITIALIZING);
     XirObject *object=object_pointer(&terminal.value);uint32_t references=atomic_load(&object->references);
     CHECK(references==1);atomic_store(&object->references,UINT32_MAX);
-    XrXirInstanceResult first=xr_xir_instance_poll(instance),again=xr_xir_instance_poll(instance);
+    XrXirInstanceResult first=xr_xir_instance_poll_bounded(instance, UINT64_MAX),again=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     printf("first=%u cached=%u state=%u epoch=%llu\n",first.outcome.status,again.outcome.status,instance->state,(unsigned long long)first.epoch);fflush(stdout);
     CHECK(first.outcome.status==XR_XIR_CALL_LIMIT);
     CHECK(again.outcome.status==XR_XIR_CALL_LIMIT&&instance->state==XR_XIR_INSTANCE_FAILED);
@@ -71,9 +71,9 @@ int main(void) {
     /* A second real initialization publishes an ordinary owned failure. */
     trace_data=(Trace){0};instance=new_instance(program,&trace_data);
     CHECK(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);
-    paused=xr_xir_instance_poll(instance);CHECK(paused.outcome.status==XR_XIR_CALL_SUSPENDED);
+    paused=xr_xir_instance_poll_bounded(instance, UINT64_MAX);CHECK(paused.outcome.status==XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(instance,paused.epoch,paused.outcome.wake)==XR_XIR_CALL_READY);
-    first=xr_xir_instance_poll(instance);CHECK(first.outcome.status==XR_XIR_CALL_THROWN);
+    first=xr_xir_instance_poll_bounded(instance, UINT64_MAX);CHECK(first.outcome.status==XR_XIR_CALL_THROWN);
     object=object_pointer(&first.outcome.value);
     references=atomic_load(&object->references);atomic_store(&object->references,UINT32_MAX);
     copy=(XrXirCallResult){0};XrXirCallResult unchanged=copy;

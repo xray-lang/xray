@@ -19,12 +19,12 @@ static bool gap_pair(XrXirProgram *program,const uint32_t ids[3],XrXirValue held
             CHECK(status==XR_XIR_CALL_READY || status==XR_XIR_CALL_RETURNED);
             status=xr_xir_instance_start(instance,ids[e],NULL,0);
             if(status==XR_XIR_CALL_READY){
-                XrXirInstanceResult run=xr_xir_instance_poll(instance);uint32_t yields=0;
+                XrXirInstanceResult run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);uint32_t yields=0;
                 while(run.outcome.status==XR_XIR_CALL_SUSPENDED){
                     CHECK(e==2 && ++yields==1);
                     status=xr_xir_instance_resume(instance,run.epoch,run.outcome.wake);
                     if(status!=XR_XIR_CALL_READY)break;
-                    run=xr_xir_instance_poll(instance);
+                    run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 }
                 if(status==XR_XIR_CALL_READY)status=run.outcome.status;
                 if(status==XR_XIR_CALL_RETURNED)CHECK(yields==(e==2 ? 1u : 0u));

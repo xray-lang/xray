@@ -323,7 +323,7 @@ static void specialized_result(XrXirArtifact *lowered) {
     XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 8; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_call_take_result(call, &result) == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);

@@ -58,11 +58,11 @@ static void source_unit_local_run(XrXirSourceRequest *request, const char *sourc
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         for (uint32_t e=0;e<2;++e) {
             CHECK(xr_xir_instance_start(instance,entries[e],NULL,0)==XR_XIR_CALL_READY);
-            XrXirInstanceResult step=xr_xir_instance_poll(instance);
+            XrXirInstanceResult step=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
             if (!e) {
                 CHECK(step.outcome.status==XR_XIR_CALL_SUSPENDED);
                 CHECK(xr_xir_instance_resume(instance,step.epoch,step.outcome.wake)==XR_XIR_CALL_READY);
-                step=xr_xir_instance_poll(instance);
+                step=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
             }
             CHECK(step.outcome.status==XR_XIR_CALL_RETURNED);
             XrXirValue value={0};

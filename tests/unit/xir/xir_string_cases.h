@@ -34,11 +34,11 @@ static XrXirOutputStatus string_output(void *context, const XrXirOutputGroup *gr
     CHECK(stream == (output->mode == 5 || output->mode == 6 || output->calls ? XR_XIR_STDOUT : XR_XIR_STDERR));
     ++output->calls;
     XrXirValue owned = {0};
-    CHECK(xr_xir_call_poll(output->call).status == XR_XIR_CALL_BUSY);
+    CHECK(xr_xir_call_poll_bounded(output->call, UINT64_MAX).status == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_call_take_result(output->call, &owned) == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_call_free(output->call) == XR_XIR_CALL_BUSY);
     if (output->mode == 6 && output->calls == 3)
-        CHECK(xr_xir_call_cancel(output->call) == XR_XIR_CALL_CANCEL_REQUESTED);
+        CHECK(xr_xir_call_request_cancel(output->call) == XR_XIR_CALL_CANCEL_REQUESTED);
     return (output->mode != 3) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 static void string_error_bytes(const XrXirValue *value, XrXirDomain *domain) {
@@ -66,17 +66,17 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
     xr_xir_value_drop(&arguments[1]);
     XrXirValue owned = {0};
     CHECK(xr_xir_call_take_result(call, &owned) == XR_XIR_CALL_BAD_STATE);
-    XrXirCallResult result = xr_xir_call_poll(call);
+    XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
     if (mode == 3 || mode == 4) CHECK(result.status == XR_XIR_CALL_OUTPUT_ERROR);
     else if (mode == 5 || mode == 8) CHECK(result.status == XR_XIR_CALL_LIMIT);
     else if (mode == 6) CHECK(result.status == XR_XIR_CALL_CANCELLED && output.calls == 3);
     else {
         CHECK(result.status == XR_XIR_CALL_SUSPENDED && output.calls == 1);
         CHECK(xr_xir_call_take_result(call, &owned) == XR_XIR_CALL_BAD_STATE);
-        if (mode == 1) CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+        if (mode == 1) { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
         else if (mode != 2) {
             CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_call_poll(call);
+            result = xr_xir_call_poll_bounded(call, UINT64_MAX);
             if (variant) {
                 CHECK(result.status == XR_XIR_CALL_THROWN); string_error_bytes(&result.value,domain);
             }
@@ -86,7 +86,7 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
             }
             if (mode != 7) {
                 CHECK(xr_xir_call_take_result(call, &owned) == result.status);
-                CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_CONSUMED);
+                CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CONSUMED);
                 XrXirValue second = {0};
                 CHECK(xr_xir_call_take_result(call, &second) == XR_XIR_CALL_BAD_STATE);
             }

@@ -152,10 +152,13 @@ static inline bool xr_xir_output_provider_valid(const XrXirOutputProvider *provi
 }
 XR_FUNC XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     const XrXirValue *arguments, uint32_t count, XrXirCall **output);
-XR_FUNC XrXirCallResult xr_xir_call_poll(XrXirCall *activation);
+/* Each resume, completed exit or aborted frame consumes one quantum unit.
+ * READY means more work remains; cumulative resume limits never reset. */
+XR_FUNC XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *activation, uint64_t quantum);
 XR_FUNC XrXirCallStatus xr_xir_call_take_result(XrXirCall *activation, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_call_resume(XrXirCall *activation, uint64_t wake);
-XR_FUNC XrXirCallStatus xr_xir_call_cancel(XrXirCall *activation);
+/* Queues cancellation without callbacks or reclamation; poll drains cleanup. */
+XR_FUNC XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *activation);
 /* Consumes the activation except on BUSY; reports a failed language cleanup. */
 XR_FUNC XrXirCallStatus xr_xir_call_free(XrXirCall *activation);
 XR_FUNC uint32_t xr_xir_call_current_entry(const XrXirCall *activation);

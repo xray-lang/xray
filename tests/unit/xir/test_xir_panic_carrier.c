@@ -53,7 +53,7 @@ static XrXirAction carrier_child(XrXirCallView *view) {
     if (w->mode == 8) { action.value.payload = XR_XIR_CALL_OOM; }
     if (w->mode == 9) { action.kind = XR_XIR_ACTION_RETURN; action.value = (XrXirValue){0}; }
     if (w->mode == 10) { action.flags = XR_XIR_ACTION_PROTECTED; }
-    if (w->mode == 11) { CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED); }
+    if (w->mode == 11) { CHECK(xr_xir_call_request_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED); }
     return action;
 }
 static XrXirAction carrier_cleanup(XrXirCallView *view) {
@@ -74,7 +74,7 @@ static XrXirAction carrier_parent(XrXirCallView *view) {
         }
         CHECK(view->exit.status == XR_XIR_CALL_ASSERTION && !view->exit.value.type);
         expect_bytes(&view->exit.panic.message, expected_bytes, sizeof(expected_bytes));
-        if (w->mode == 3) CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
+        if (w->mode == 3) CHECK(xr_xir_call_request_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
         if (frame->phase++ == 2 || w->mode == 12)
             return (XrXirAction){XR_XIR_ACTION_CALL, 2, NULL, 0, {0}, {0}, XR_XIR_ACTION_CLEANUP};
         return control(XR_XIR_ACTION_EXIT_DONE);
@@ -110,11 +110,11 @@ static XrXirCallStatus carrier_run(uint32_t mode) {
     XrXirCall *call = NULL;
     XrXirCallStatus status = xr_xir_call_new(&config, 0, NULL, 0, &call);
     if (status == XR_XIR_CALL_READY) {
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         status = result.status;
         CHECK(xr_xir_call_result_valid(&result) && result.value.type == XR_XIR_UNIT);
         size_t attempts = runtime_attempts;
-        CHECK(xr_xir_call_poll(call).status == status && runtime_attempts == attempts);
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == status && runtime_attempts == attempts);
         if (status == XR_XIR_CALL_ASSERTION) {
             CHECK(mode == 4);
             CHECK(xr_xir_call_result_copy(&result, &witness.held) == XR_XIR_VALUE_OK);

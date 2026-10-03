@@ -42,7 +42,7 @@ static void source_method_promise_execute(XrXirArtifact *checked, const char *ou
     for (uint32_t i = 0; i < 3; ++i) {
         CHECK(entries[i] != UINT32_MAX);
         CHECK(xr_xir_instance_start(instance, entries[i], NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue value = {0};
         CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
         CHECK(value.type == XR_XIR_I64 && value.payload == expected[i]); xr_xir_value_drop(&value);

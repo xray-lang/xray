@@ -131,12 +131,12 @@ static XrXirCallStatus instance_once(PanicProgramFixture *f, size_t fault_index,
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, 1, NULL, 0);
     XrXirCallResult held = {0}, again = {0};
     if (status == XR_XIR_CALL_READY) {
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         status = result.status;
         CHECK(status == XR_XIR_CALL_ASSERTION || status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
         CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED && result.value.type == XR_XIR_UNIT);
         size_t attempts = runtime_attempts;
-        CHECK(xr_xir_instance_poll(instance).outcome.status == status && runtime_attempts == attempts);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == status && runtime_attempts == attempts);
         CHECK(xr_xir_instance_copy_failure(instance, &held) == status);
         CHECK(xr_xir_instance_copy_failure(instance, &again) == status);
         if (status == XR_XIR_CALL_ASSERTION) {
@@ -181,7 +181,7 @@ static XrXirCallStatus handler_once(PanicProgramFixture *f, size_t point, size_t
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, 1, NULL, 0);
     if (status == XR_XIR_CALL_READY) {
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         status = result.status;
         CHECK(xr_xir_call_result_valid(&result));
         if (status == XR_XIR_CALL_RETURNED) {

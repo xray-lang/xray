@@ -25,13 +25,13 @@ int main(void) {
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance,1,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
     XrXirValue value={0};
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(value.type==XR_XIR_I64 && value.payload==42);
     xr_xir_value_drop(&value);
     CHECK(xr_xir_instance_start(instance,2,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     const char *bytes=NULL; size_t length=0;

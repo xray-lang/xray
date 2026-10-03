@@ -308,15 +308,15 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     if (instance->state == XR_XIR_INSTANCE_NEW) instance->state = XR_XIR_INSTANCE_INITIALIZING;
     return status;
 }
-XrXirInstanceResult xr_xir_instance_poll(XrXirInstance *instance) {
-    if (!instance) return (XrXirInstanceResult) {instance_result(XR_XIR_CALL_BAD_ARGUMENT), 0};
+XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64_t quantum) {
+    if (!instance || !quantum) return (XrXirInstanceResult) {instance_result(XR_XIR_CALL_BAD_ARGUMENT), 0};
     if (instance->driving || instance->observing)
         return (XrXirInstanceResult) {instance_result(XR_XIR_CALL_BUSY), instance->epoch};
     if (instance->state == XR_XIR_INSTANCE_FAILED)
         return (XrXirInstanceResult) {instance->failure, instance->epoch};
     if (!instance->call) return (XrXirInstanceResult) {instance_result(XR_XIR_CALL_BAD_STATE), instance->epoch};
     instance->driving = true;
-    XrXirCallResult result = xr_xir_call_poll(instance->call);
+    XrXirCallResult result = xr_xir_call_poll_bounded(instance->call, quantum);
     if (instance->state == XR_XIR_INSTANCE_INITIALIZING &&
         result.status != XR_XIR_CALL_READY && result.status != XR_XIR_CALL_SUSPENDED) {
         fail_initialization(instance, result);
@@ -349,6 +349,12 @@ XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallR
     xr_xir_call_result_move(&copy, output);
     return failure_status;
 }
+XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance) {
+    if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
+    if (instance->stopping || !instance->call) return XR_XIR_CALL_BAD_STATE;
+    return xr_xir_call_request_cancel(instance->call);
+}
 XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->observing) return XR_XIR_CALL_BUSY;
@@ -359,7 +365,11 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
         return XR_XIR_CALL_READY;
     bool driving = instance->driving;
     instance->driving = true;
-    XrXirCallStatus status = instance->call ? xr_xir_call_cancel(instance->call) : XR_XIR_CALL_READY;
+    XrXirCallStatus status = instance->call ? xr_xir_call_request_cancel(instance->call) : XR_XIR_CALL_READY;
+    if (instance->call && !driving) {
+        do { status = xr_xir_call_poll_bounded(instance->call, 256).status; }
+        while (status == XR_XIR_CALL_READY);
+    }
     instance->driving = driving;
     return status == XR_XIR_CALL_CANCELLED || status == XR_XIR_CALL_CANCEL_REQUESTED ? XR_XIR_CALL_READY : status;
 }

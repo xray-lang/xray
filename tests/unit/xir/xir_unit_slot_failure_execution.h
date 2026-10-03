@@ -43,16 +43,16 @@ static void init_pair(XrXirProgram *program,uint32_t entry,XrXirValue held[3]){
     for(unsigned i=0;i<2;++i){XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &traces[i]};c.trace=init_trace;c.trace_context=&traces[i];
         CHECK(xr_xir_instance_new(program,&c,&instances[i])==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_READY);
-        paused[i]=xr_xir_instance_poll(instances[i]);CHECK(paused[i].outcome.status==XR_XIR_CALL_SUSPENDED);
+        paused[i]=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);CHECK(paused[i].outcome.status==XR_XIR_CALL_SUSPENDED);
         CHECK(traces[i].output==2&&traces[i].begins==2&&traces[i].ready==1&&!traces[i].released);
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_BUSY);
     }
     for(unsigned i=0;i<2;++i){CHECK(xr_xir_instance_resume(instances[i],paused[i].epoch,paused[i].outcome.wake)==XR_XIR_CALL_READY);
-        XrXirInstanceResult failed=xr_xir_instance_poll(instances[i]);CHECK(failed.outcome.status==XR_XIR_CALL_THROWN);init_failure_value(&failed.outcome.value);
+        XrXirInstanceResult failed=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);CHECK(failed.outcome.status==XR_XIR_CALL_THROWN);init_failure_value(&failed.outcome.value);
         CHECK(traces[i].released==traces[i].published&&traces[i].published==5&&traces[i].output==2&&traces[i].ready==1);
         if(!i)CHECK(xr_xir_instance_state(instances[1])==XR_XIR_INSTANCE_INITIALIZING&&!traces[1].released);
         for(unsigned n=0;n<3;++n){CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_THROWN);
-            CHECK(xr_xir_instance_poll(instances[i]).outcome.status==XR_XIR_CALL_THROWN&&traces[i].output==2);}
+            CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status==XR_XIR_CALL_THROWN&&traces[i].output==2);}
         XrXirValue no_take={XR_XIR_I64,0,73};CHECK(xr_xir_instance_take_result(instances[i],&no_take)==XR_XIR_CALL_BAD_STATE&&no_take.type==XR_XIR_I64&&no_take.payload==73);
         XrXirCallResult copy={0};CHECK(xr_xir_instance_copy_failure(instances[i],&copy)==XR_XIR_CALL_THROWN);held[i]=copy.value;
         CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
@@ -60,9 +60,9 @@ static void init_pair(XrXirProgram *program,uint32_t entry,XrXirValue held[3]){
     /* A new instance retries; none of the two failed instances is revived. */
     InitTrace trace={0};XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
     XrXirInstance *retry=NULL;CHECK(xr_xir_instance_new(program,&c,&retry)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_start(retry,entry,NULL,0)==XR_XIR_CALL_READY);XrXirInstanceResult r=xr_xir_instance_poll(retry);
+    CHECK(xr_xir_instance_start(retry,entry,NULL,0)==XR_XIR_CALL_READY);XrXirInstanceResult r=xr_xir_instance_poll_bounded(retry, UINT64_MAX);
     CHECK(r.outcome.status==XR_XIR_CALL_SUSPENDED);CHECK(xr_xir_instance_resume(retry,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);
-    r=xr_xir_instance_poll(retry);CHECK(r.outcome.status==XR_XIR_CALL_THROWN);init_failure_value(&r.outcome.value);
+    r=xr_xir_instance_poll_bounded(retry, UINT64_MAX);CHECK(r.outcome.status==XR_XIR_CALL_THROWN);init_failure_value(&r.outcome.value);
     XrXirCallResult copy={0};CHECK(xr_xir_instance_copy_failure(retry,&copy)==XR_XIR_CALL_THROWN);held[2]=copy.value;
     CHECK(trace.output==2&&trace.released==trace.published&&xr_xir_instance_free(retry)==XR_XIR_CALL_READY);
 }
@@ -71,9 +71,9 @@ static void init_protocol_failures(XrXirProgram *program,uint32_t entry){
     for(unsigned mode=0;mode<2;++mode){InitTrace trace={0};trace.reject=mode!=0;
         XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
         XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&c,&instance)==XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);XrXirInstanceResult r=xr_xir_instance_poll(instance);
+        CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);XrXirInstanceResult r=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         if(!mode){CHECK(r.outcome.status==XR_XIR_CALL_SUSPENDED);CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_BAD_STATE);r=xr_xir_instance_poll(instance);}
+            CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_BAD_STATE);r=xr_xir_instance_poll_bounded(instance, UINT64_MAX);}
         XrXirCallStatus expected=mode?XR_XIR_CALL_OUTPUT_ERROR:XR_XIR_CALL_CANCELLED;
         CHECK(r.outcome.status==expected&&trace.output==(mode?1u:2u)&&trace.released==trace.published);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==expected);XrXirCallResult copy={0};
@@ -88,8 +88,8 @@ static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
         InitTrace trace={0};XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
         XrXirInstance *instance=NULL;XrXirCallResult held={0};XrXirCallStatus status=xr_xir_instance_new(program,&c,&instance);
         if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,entry,NULL,0);
-        if(status==XR_XIR_CALL_READY){XrXirInstanceResult r=xr_xir_instance_poll(instance);status=r.outcome.status;
-            if(status==XR_XIR_CALL_SUSPENDED){CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);status=xr_xir_instance_poll(instance).outcome.status;}}
+        if(status==XR_XIR_CALL_READY){XrXirInstanceResult r=xr_xir_instance_poll_bounded(instance, UINT64_MAX);status=r.outcome.status;
+            if(status==XR_XIR_CALL_SUSPENDED){CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;}}
         if(status==XR_XIR_CALL_THROWN)status=xr_xir_instance_copy_failure(instance,&held);
         if(!pass){CHECK(status==XR_XIR_CALL_THROWN);sites=runtime_attempts;CHECK(sites);}
         else {if(status!=XR_XIR_CALL_OOM)fprintf(stderr,"init runtime failure %zu/%zu status %u\n",pass-1,sites,status);CHECK(status==XR_XIR_CALL_OOM);}

@@ -42,7 +42,7 @@ int main(void) {
         if(i==3) {CHECK(xr_xir_instance_start_test(instance,test_role_functions[i])==XR_XIR_CALL_BAD_ARGUMENT);continue;}
         CHECK(xr_xir_instance_start_test(instance,test_role_functions[i])==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start_test(instance,test_role_functions[i])==XR_XIR_CALL_BUSY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
         CHECK(value.type==XR_XIR_UNIT);xr_xir_value_drop(&value);
     }

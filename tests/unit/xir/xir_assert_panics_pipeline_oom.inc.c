@@ -44,7 +44,7 @@ static void panics_pipeline_oom(const char *directory,const char *path) {
         XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,entry,NULL,0);
-        if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll(instance).outcome.status;
+        if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
         if (!point) {CHECK(status==XR_XIR_CALL_ASSERTION);sites=runtime_attempts;}
         else {
             if (status!=XR_XIR_CALL_OOM) fprintf(stderr,"panics runtime OOM point=%zu/%zu status=%u\n",point-1,sites,status);

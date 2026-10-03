@@ -116,11 +116,11 @@ static void initialization(void) {
     }
     xr_xir_compile_program_drop(program);
     for(unsigned i=0;i<2;++i) {
-        XrXirInstanceResult result=xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult result=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         CHECK(result.outcome.status==XR_XIR_CALL_SUSPENDED);
         CHECK(traces[i].begins==2 && traces[i].ready==1 && traces[i].outputs==2);
         CHECK(xr_xir_instance_resume(instances[i],result.epoch,result.outcome.wake)==XR_XIR_CALL_READY);
-        result=xr_xir_instance_poll(instances[i]);CHECK(result.outcome.status==XR_XIR_CALL_THROWN);
+        result=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);CHECK(result.outcome.status==XR_XIR_CALL_THROWN);
         CHECK(traces[i].published==3 && traces[i].released==3);
         for(unsigned attempt=0;attempt<3;++attempt)
             CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_THROWN && traces[i].outputs==2);

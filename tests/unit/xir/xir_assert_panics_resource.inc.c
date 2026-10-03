@@ -34,14 +34,14 @@ static void panics_resource(const char *directory,const char *path) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);config.depth_limit=3;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,limited,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_LIMIT);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_LIMIT);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(runtime_live==live && runtime_bytes==bytes);
     CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,cancelled,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_SUSPENDED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_CANCELLED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_CANCELLED);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(runtime_live==live && runtime_bytes==bytes);xr_xir_program_drop(program);
     CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);

@@ -34,7 +34,7 @@ static void module_forest_cases(XrXirProgram *program) {
     const uint32_t entries[] = {3, 5};
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instance, entries[i], NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue result = {0};
         CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
         CHECK(result.type == XR_XIR_I64 && result.payload == 41); xr_xir_value_drop(&result);
@@ -42,7 +42,7 @@ static void module_forest_cases(XrXirProgram *program) {
     }
     CHECK(log.outputs == 2 && !log.begins[0] && log.begins[1] == 1 && log.begins[2] == 1);
     CHECK(xr_xir_instance_start(instance, 6, NULL, 0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue function = {0};
     CHECK(xr_xir_instance_take_result(instance, &function) == XR_XIR_CALL_RETURNED);
     XrXirFunctionBinding *binding = (XrXirFunctionBinding *)xr_xir_function_binding(&function);
@@ -53,7 +53,7 @@ static void module_forest_cases(XrXirProgram *program) {
     CHECK(log.outputs == 2 && !log.begins[0]);
     binding->entry = 5;
     CHECK(xr_xir_instance_start(instance, 7, &function, 1) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue result = {0};
     CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
     CHECK(result.type == XR_XIR_I64 && result.payload == 41);

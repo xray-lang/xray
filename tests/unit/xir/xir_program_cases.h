@@ -58,7 +58,7 @@ static void check_program_output(const ProgramLog *log, uint32_t run) {
 }
 static XrXirValue program_result(XrXirInstance *instance, uint32_t entry) {
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue value = {0}; CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
     return value;
 }
@@ -74,14 +74,14 @@ static void program_cases(XrXirProgram *program, uint32_t mode) {
         config.trace = program_trace; config.trace_context = &logs[i];
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i], 3, NULL, 0) == XR_XIR_CALL_READY);
-        suspended[i] = xr_xir_instance_poll(instances[i]);
+        suspended[i] = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         CHECK(suspended[i].outcome.status == (mode ? XR_XIR_CALL_SUSPENDED : XR_XIR_CALL_RETURNED));
         if (mode) CHECK(logs[i].outputs == 1);
     }
     xr_xir_program_drop(program);
     for (uint32_t i = 0; i < 2; ++i) {
         if (mode) CHECK(xr_xir_instance_resume(instances[i], suspended[i].epoch, suspended[i].outcome.wake) == XR_XIR_CALL_READY);
-        XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         if (mode == 2) {
             CHECK(result.outcome.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.outcome.value,reader,91));
             CHECK(xr_xir_value_copy(&result.outcome.value,&errors[i])==XR_XIR_VALUE_OK);

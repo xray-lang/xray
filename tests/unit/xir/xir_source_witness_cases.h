@@ -133,7 +133,7 @@ static void source_witness_cases(XrXirSourceRequest *request) {
         uint32_t entries[] = {initialized,measured};
         for (uint32_t call = 0; call < 2; ++call) {
             CHECK(xr_xir_instance_start(instance,entries[call],NULL,0) == XR_XIR_CALL_READY);
-            XrXirCallResult outcome = xr_xir_instance_poll(instance).outcome;
+            XrXirCallResult outcome = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
             CHECK(outcome.status == XR_XIR_CALL_RETURNED && outcome.value.payload == 41);
         }
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);

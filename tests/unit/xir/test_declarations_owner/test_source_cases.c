@@ -26,11 +26,11 @@ static void initialization(XrXirSourceProduct *product) {
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start_test(instance,before)==XR_XIR_CALL_READY);
-    XrXirInstanceResult result=xr_xir_instance_poll(instance);CHECK(result.outcome.status==XR_XIR_CALL_THROWN && outputs==1);
+    XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance,UINT64_MAX);CHECK(result.outcome.status==XR_XIR_CALL_THROWN && outputs==1);
     for(unsigned i=0;i<3;++i) {
         CHECK(xr_xir_instance_start_test(instance,test)==XR_XIR_CALL_THROWN);
         CHECK(xr_xir_instance_start_test(instance,before)==XR_XIR_CALL_THROWN);
-        CHECK(xr_xir_instance_poll(instance).epoch==result.epoch && outputs==1);
+        CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).epoch==result.epoch && outputs==1);
     }
     XrXirCallResult owned={0};CHECK(xr_xir_instance_copy_failure(instance,&owned)==XR_XIR_CALL_THROWN);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
@@ -72,7 +72,7 @@ int main(int argc,char **argv) {
         XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         xr_xir_compile_program_drop(program);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
         xr_xir_value_drop(&value);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
