@@ -1,0 +1,34 @@
+// A struct method declared ref receives the caller's mutable binding as its receiver.
+struct Counter {
+    n: i64
+    ref bump() { this.n = this.n + 1 }
+    ref add(k: i64) {
+        this.n = this.n + k
+        this.bump()
+    }
+    get() -> i64 { return this.n }
+}
+struct Stack {
+    items: Array<i64>
+    ref push(v: i64) { this.items.push(v) }
+    size() -> i64 { return len(this.items) }
+}
+fn fill(s: ref Stack) {
+    s.push(10)
+    s.push(20)
+}
+fn main() {
+    var c = Counter{n: 1}
+    c.bump()
+    c.add(5)
+    print(c.get())
+    var s = Stack{items: []}
+    fill(ref s)
+    s.push(30)
+    print(s.size())
+    const before = c
+    c.bump()
+    print(before.get())
+    print(c.get())
+}
+main()

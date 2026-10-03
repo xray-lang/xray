@@ -1,0 +1,13 @@
+export fn add_squares(target: ref Array<i64>, n: i64) {
+    for (var i = 0; i < n; i++) { target.push(i * i) }
+}
+export fn swap_ends<T>(items: ref Array<T>) {
+    const last = len(items) - 1
+    const held = items[0]
+    items[0] = items[last]
+    items[last] = held
+}
+export struct Gauge {
+    level: i64
+    ref raise(by: i64) { this.level = this.level + by }
+}

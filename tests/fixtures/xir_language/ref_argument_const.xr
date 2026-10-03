@@ -1,0 +1,6 @@
+fn f(x: ref i64) { x = 1 }
+fn main() {
+    const a = 1
+    f(ref a)
+}
+main()

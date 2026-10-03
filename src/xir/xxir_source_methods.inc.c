@@ -7,7 +7,8 @@
  * xxir_source_methods.inc.c - Declaration-owned instance and static methods
  *
  * KEY CONCEPT:
- *   The receiver is one ordinary owned parameter, never a writable caller root.
+ *   A READ receiver is one ordinary owned parameter. A struct or enum ref receiver is the
+ *   caller's mutable cell, like any ref parameter; class methods never take one.
  */
 static SourceName *source_method_find(SourceContext *ctx, XrXirType type, const char *name) {
     const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
@@ -40,6 +41,11 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
     SourceExpectedType expected, SourceValue *value) {
     const XrXirFunction *function = &ctx->functions[selected->method->index];
     uint32_t count = function->parameter_count;
+    for (uint32_t p = 0; p < count; ++p) {
+        if (!source_work(ctx, node)) return false;
+        if (xr_xir_type_is_cell(&ctx->types, function->parameters[p]))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "a method with ref parameters cannot be used as a value");
+    }
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p)
@@ -61,7 +67,9 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its declaration owner");
-    const XrXirTypeNode *type = xr_xir_type_node(&ctx->types,receiver.type);
+    XrXirType receiver_type = xr_xir_type_is_cell(&ctx->types,receiver.type) ?
+        xr_xir_cell_element(&ctx->types,receiver.type) : receiver.type;
+    const XrXirTypeNode *type = xr_xir_type_node(&ctx->types,receiver_type);
     SourceDirectRequest direct = {method->index,
         {type->nominal.arguments,type->nominal.argument_count},&receiver,result_context};
     SourceDirectArguments prepared = {0};
@@ -71,6 +79,24 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         source_query_target_reference(ctx,source_query_range(ctx,call->callee,NULL),
             method->declaration,XR_XIR_SOURCE_CALL) &&
         source_recipe_group(ctx,op,prepared.values,prepared.count,value);
+}
+/* A ref receiver is the named mutable local's own cell; any other receiver place would need a
+ * write-back contract and is rejected instead of mutating a temporary copy. */
+static bool source_ref_method_call(SourceContext *ctx, AstNode *node, AstNode *object,
+    SourceName *method, SourceExpectedType result_context, SourceValue *value) {
+    if (object->type != AST_VARIABLE && object->type != AST_THIS_EXPR)
+        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver place is not implemented in XIR");
+    SourceName *symbol = visible_name(ctx, object->type == AST_THIS_EXPR ? "this" : object->as.variable.name);
+    if (!symbol) return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver does not name a binding");
+    if (symbol->kind == SOURCE_SLOT || symbol->kind == SOURCE_UNIT_SLOT)
+        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver of module state is not implemented in XIR");
+    if (symbol->kind != SOURCE_LOCAL || !symbol->mutable || symbol->construction)
+        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver requires a mutable local binding");
+    SourceValue receiver;
+    if (!source_cell_type(ctx, symbol->type, &receiver.type) ||
+        !source_query_reference(ctx, object, symbol, symbol, XR_XIR_SOURCE_READ_WRITE)) return false;
+    receiver.id = symbol->index;
+    return source_method_call(ctx, node, receiver, method, result_context, value);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
     SourceExpectedType expected, SourceValue *value) {
@@ -184,9 +210,11 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 if (!source_constructor_declare(ctx, owner, node, next)) return false;
                 continue;
             }
+            bool by_reference = method->receiver_mode == XR_PARAM_REF && !method->is_static &&
+                owner->node->type != AST_CLASS_DECL;
             if ((method->is_private && method->is_protected) ||
                 method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
-                method->is_variadic || method->is_operator || method->receiver_mode != XR_PARAM_READ ||
+                method->is_variadic || method->is_operator || (method->receiver_mode != XR_PARAM_READ && !by_reference) ||
                 method->attr_count || method->borrow_origin_count ||
                 method->borrow_origin_syntax || !method->body || method->param_count < 0 || method->param_count >= 65536)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method declaration contract is not admitted");
@@ -216,17 +244,24 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             uint32_t count = (uint32_t)method->param_count + offset;
             body->parameters = count ? source_alloc(ctx, count, sizeof(*body->parameters)) : NULL;
             if (count && !body->parameters) return false;
-            if (offset) body->parameters[0] = owner->type;
+            if (offset) {
+                body->parameters[0] = owner->type;
+                if (by_reference && !source_cell_type(ctx, owner->type, &body->parameters[0])) return false;
+            }
             XrXirFunction *function = &ctx->functions[index];
             *function = (XrXirFunction) {method->name, (uint32_t)source_text_size(ctx, method->name), body->parameters,
                 count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
             if (!source_type(ctx, method->return_type, &function->result)) return false;
             for (int i = 0; i < method->param_count; ++i) {
                 XrParamNode *param = method->params[i];
-                if (!param->type || param->passing_mode != XR_PARAM_READ ||
+                bool parameter_reference = param->passing_mode == XR_PARAM_REF;
+                if (!param->type || (param->passing_mode != XR_PARAM_READ && !parameter_reference) ||
+                    (parameter_reference && param->default_value) ||
                     param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this") ||
                     !source_type(ctx, param->type, &body->parameters[i + offset]) || body->parameters[i + offset] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
+                if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
+                    return false;
                 for (int j = 0; j < i; ++j) {
                     if (!source_work(ctx, node)) return false;
                     if (source_text_same(ctx, NULL, param->name, method->params[j]->name))
@@ -251,6 +286,10 @@ static bool source_method_body(SourceContext *ctx) {
         SourceName *symbol = add_name(ctx, &ctx->locals, name, body->node);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = i; symbol->type = body->parameters[i];
+        if (xr_xir_type_is_cell(&ctx->types, symbol->type)) {
+            symbol->type = xr_xir_cell_element(&ctx->types, symbol->type);
+            symbol->mutable = true;
+        }
         XrXirSourceRange range = source_query_range(ctx, body->node, NULL);
         if (i >= offset) {
             const XrParamNode *parameter = method->params[i - offset];

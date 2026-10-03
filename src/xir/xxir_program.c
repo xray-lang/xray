@@ -63,9 +63,8 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         if (entry->parameter_count > context->limits.parameters) return XR_XIR_BUDGET;
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
             if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
-            if (!program_value_type(spec, entry->parameters[p]) ||
-                (xr_xir_type_is_cell(spec->types, entry->parameters[p]) &&
-                 spec->declarations->functions[i].exported)) return XR_XIR_BAD_TYPE;
+            /* A cell parameter is a ref parameter: only the program's own functions can build one. */
+            if (!program_value_type(spec, entry->parameters[p])) return XR_XIR_BAD_TYPE;
         }
     }
     const XrXirDeclarations *d = spec->declarations;

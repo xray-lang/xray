@@ -1,0 +1,9 @@
+struct S {
+    n: i64
+}
+fn f(x: ref i64) { x = 1 }
+fn main() {
+    var s = S{n: 1}
+    f(ref s.n)
+}
+main()

@@ -1,0 +1,12 @@
+import { add_squares, swap_ends, Gauge } from "./lib/ref_lib"
+fn run() {
+    var xs: Array<i64> = []
+    add_squares(ref xs, 4)
+    swap_ends(ref xs)
+    print(xs[0])
+    print(xs[3])
+    var g = Gauge{level: 5}
+    g.raise(4)
+    print(g.level)
+}
+run()

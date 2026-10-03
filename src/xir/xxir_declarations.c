@@ -49,6 +49,8 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (identity->method_kind == XR_XIR_READ_METHOD) {
         if (!function->parameter_count || !function->parameters) return XR_XIR_BAD_TYPE;
         subject = function->parameters[0];
+        /* A ref receiver is the caller's mutable cell of the owner value. */
+        if (xr_xir_type_is_cell(module->types, subject)) subject = xr_xir_cell_element(module->types, subject);
     } else if (identity->method_kind == XR_XIR_CONSTRUCTOR) {
         subject = function->result;
     } else return XR_XIR_OK;

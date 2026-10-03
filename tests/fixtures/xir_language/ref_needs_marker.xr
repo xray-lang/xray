@@ -1,0 +1,6 @@
+fn f(x: ref i64) { x = 1 }
+fn main() {
+    var a = 1
+    f(a)
+}
+main()

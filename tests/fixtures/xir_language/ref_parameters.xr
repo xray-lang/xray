@@ -1,0 +1,54 @@
+// A ref argument is the caller's own binding: writes in the callee are the caller's
+// writes, through forwarding and for generic callees.
+fn bump(x: ref i64) { x = x + 1 }
+fn twice(x: ref i64) {
+    bump(ref x)
+    bump(ref x)
+}
+fn push_n(target: ref Array<i64>, n: i64) {
+    for (var i = 0; i < n; i++) { target.push(i * i) }
+}
+fn swap<T>(items: ref Array<T>, i: i64, j: i64) {
+    const held = items[i]
+    items[i] = items[j]
+    items[j] = held
+}
+struct Vec2 {
+    x: f64
+    y: f64
+}
+fn translate(v: ref Vec2, dx: f64, dy: f64) {
+    v.x = v.x + dx
+    v.y = v.y + dy
+}
+fn fill(slot: ref i64?) { slot = 7 }
+fn keep(read: i64, write: ref i64) { write = read + write }
+
+fn main() {
+    var a = 1
+    twice(ref a)
+    print(a)
+    var xs: Array<i64> = []
+    push_n(ref xs, 4)
+    swap(ref xs, 0, 3)
+    print(xs[0])
+    print(xs[3])
+    var names: Array<string> = ["a", "b", "c"]
+    swap(ref names, 0, 2)
+    print(names[0])
+    var p = Vec2{x: 1.0, y: 2.0}
+    translate(ref p, 2.5, -1.0)
+    print(p.x)
+    print(p.y)
+    var maybe: i64? = null
+    fill(ref maybe)
+    print(maybe == 7)
+    var total = 10
+    keep(total, ref total)
+    print(total)
+    const snapshot = p
+    translate(ref p, 1.0, 1.0)
+    print(snapshot.x)
+    print(p.x)
+}
+main()

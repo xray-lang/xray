@@ -314,8 +314,10 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             return XR_XIR_BAD_TYPE;
         visibility = type_use_context(context, function_id, function->parameters[p]);
         if (visibility != XR_XIR_OK) return visibility;
-        if (xr_xir_type_is_cell(context->module->types, function->parameters[p]) && (!context->module->declarations ||
-            context->module->declarations->functions[function_id].exported)) return XR_XIR_BAD_TYPE;
+        /* A cell parameter is a ref parameter or a closure capture, both internal to the module
+         * graph; it needs the declaration table to know which functions are entries. */
+        if (xr_xir_type_is_cell(context->module->types, function->parameters[p]) && !context->module->declarations)
+            return XR_XIR_BAD_TYPE;
     }
     uint32_t end = 0, operand_end = 0, type_end = 0;
     for (uint32_t b = 0; b < function->block_count; ++b) {

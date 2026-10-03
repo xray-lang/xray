@@ -1,0 +1,10 @@
+class Box {
+    n: i64
+    constructor() { this.n = 0 }
+    ref bump() { this.n = this.n + 1 }
+}
+fn main() {
+    var b = Box()
+    b.bump()
+}
+main()

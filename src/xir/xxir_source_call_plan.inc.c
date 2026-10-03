@@ -74,6 +74,36 @@ static bool source_call_observe(SourceContext *ctx,AstNode *node,XrXirInferenceS
                 "method type evidence is inconsistent" : "direct call type evidence is inconsistent"); return false; }
     return true;
 }
+/* A ref argument names a mutable local binding; the callee receives that binding's cell,
+ * so its writes are the caller's writes. Other places need a write-back contract and are
+ * rejected rather than mutated through a temporary copy. */
+static bool source_reference_argument(SourceContext *ctx, AstNode *node, uint32_t index,
+    const bool *references, const SourceValue *values, SourceValue *value) {
+    CallExprNode *call=&node->as.call_expr;
+    AstNode *argument=call->arguments[index];
+    if (!call->arg_accesses || call->arg_accesses[index]!=XR_CALL_ARG_REF)
+        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"a ref parameter requires a ref argument");
+    if (argument->type!=AST_VARIABLE)
+        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument place is not implemented in XIR");
+    SourceName *symbol=visible_name(ctx,argument->as.variable.name);
+    if (!symbol) return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument does not name a binding");
+    if (symbol->kind==SOURCE_SLOT || symbol->kind==SOURCE_UNIT_SLOT)
+        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument of module state is not implemented in XIR");
+    if (symbol->kind!=SOURCE_LOCAL || !symbol->mutable || symbol->construction)
+        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument requires a mutable local binding");
+    for (uint32_t earlier=0;earlier<index;++earlier) {
+        if (!source_work(ctx,node)) return false;
+        if (references[earlier] && call->arguments[earlier]->type==AST_VARIABLE &&
+            visible_name(ctx,call->arguments[earlier]->as.variable.name)==symbol)
+            return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref arguments of one call must not alias");
+    }
+    (void)values;
+    XrXirType cell;
+    if (!source_cell_type(ctx,symbol->type,&cell) ||
+        !source_query_reference(ctx,argument,symbol,symbol,XR_XIR_SOURCE_READ_WRITE)) return false;
+    *value=(SourceValue){symbol->index,cell};
+    return true;
+}
 static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const SourceCallPlan *plan) {
     CallExprNode *call=&node->as.call_expr;
     bool requirement=plan->family==SOURCE_CALL_REQUIREMENT;
@@ -91,9 +121,14 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         if (!source_work(ctx,node) || !source_type(ctx,call->type_args[p],&types[prefix+p])) return false;
     uint32_t argument_count=(uint32_t)call->arg_count;
     SourceExpressionPlan **arguments=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*arguments)) : NULL;
-    if (argument_count && !arguments) goto done;
+    bool *references=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*references)) : NULL;
+    if (argument_count && (!arguments || !references)) goto done;
     for (uint32_t a=0;a<argument_count;++a) {
         if (!source_work(ctx,node)) goto done;
+        uint32_t parameter=a+plan->parameter_offset;
+        references[a]=!requirement && xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
+        arguments[a]=NULL;
+        if (references[a]) continue;
         arguments[a]=source_plan_collect(ctx,call->arguments[a],(SourceExpectedType){false,XR_XIR_UNIT});
         if (!arguments[a]) goto done;
     }
@@ -103,6 +138,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
          * evaluation remains in the ordered completion loop below. */
         for (uint32_t a=0;a<argument_count;++a) {
             SourceExpressionPlan *argument=arguments[a];
+            if (references[a]) continue;
             uint32_t parameter=a+plan->parameter_offset;
             XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
             uint32_t id=(uint32_t)formal;
@@ -113,7 +149,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         }
         for (uint32_t a=0;a<argument_count;++a) {
             SourceExpressionPlan *argument=arguments[a];
-            if (!argument->type_ready) continue;
+            if (references[a] || !argument->type_ready) continue;
             uint32_t parameter=a+plan->parameter_offset;
             XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
             XrXirInferenceKnown known={0};
@@ -136,7 +172,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         if (!source_inference_result(ctx,node,state,plan->result,plan->expected_result)) goto done;
         for (uint32_t a=0;a<argument_count;++a) {
             SourceExpressionPlan *argument=arguments[a];
-            if (argument->conversion_ready) continue;
+            if (references[a] || argument->conversion_ready) continue;
             bool soft=false;
             if (!source_plan_soft_numeric(ctx,argument,&soft)) goto done;
             if (!soft) continue;
@@ -159,12 +195,18 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         }
     }
     for (uint32_t a=0;a<argument_count;++a) {
-        if (call->arg_accesses && call->arg_accesses[a]!=XR_CALL_ARG_PLAIN) {
+        if (!references[a] && call->arg_accesses && call->arg_accesses[a]!=XR_CALL_ARG_PLAIN) {
             source_fail(ctx,node,XR_XIR_BAD_TYPE,requirement ? "interface method argument must be read" :
                 "direct call arguments must use the declared READ contract"); goto done;
         }
         uint32_t parameter=a+plan->parameter_offset;
         XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
+        if (references[a]) {
+            SourceValue *reference=&plan->values[a+plan->value_offset];
+            if (!source_reference_argument(ctx,node,a,references,plan->values,reference)) goto done;
+            if (inferred && !source_call_observe(ctx,node,state,formal,reference->type,requirement)) goto done;
+            continue;
+        }
         SourceExpectedType expected={false,XR_XIR_UNIT};
         if (inferred) {
             XrXirInferenceKnown known={0};

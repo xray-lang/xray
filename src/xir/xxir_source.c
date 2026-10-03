@@ -466,7 +466,9 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
     if (function->parameter_count && !parameters) return false;
     for (uint32_t p = 0; p < function->parameter_count; ++p) {
         if (!source_work(ctx, NULL)) return false;
-        parameters[p] = source_query_type(ctx, function->parameters[p]);
+        XrXirType shown = function->parameters[p];
+        if (xr_xir_type_is_cell(&ctx->types, shown)) shown = xr_xir_cell_element(&ctx->types, shown);
+        parameters[p] = source_query_type(ctx, shown);
     }
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[declaration - 1];
     record->type = source_query_type(ctx, function->result);
@@ -1080,6 +1082,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (xr_xir_type_is_array(&ctx->types,path_type) &&
                 (source_text_same(ctx, NULL, member->name, "set") || source_text_same(ctx, NULL, member->name, "push")))
                 return source_array_call(ctx,node,NULL,value);
+            if (xr_xir_type_is_nominal(&ctx->types, path_type)) {
+                SourceName *ref_method = source_method_find(ctx, path_type, member->name);
+                if (ref_method && !ref_method->node->as.method_decl.is_static &&
+                    ref_method->node->as.method_decl.receiver_mode == XR_PARAM_REF)
+                    return source_ref_method_call(ctx, node, member->object, ref_method, result_context, value);
+            }
             if (!expression(ctx, member->object, &receiver)) return false;
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
@@ -1372,6 +1380,11 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a declared function");
     if (!source_query_reference(ctx, node, binding, symbol, XR_XIR_SOURCE_FUNCTION_VALUE)) return false;
     const XrXirFunction *function = &ctx->functions[symbol->index];
+    for (uint32_t p = 0; p < function->parameter_count; ++p) {
+        if (!source_work(ctx, node)) return false;
+        if (xr_xir_type_is_cell(&ctx->types, function->parameters[p]))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "a function with ref parameters cannot be used as a value");
+    }
     SourceTypeArguments arguments = {0};
     if (node->type == AST_FUNCTION_REF) {
         arguments.refs = node->as.function_ref.type_args;
@@ -2102,9 +2115,14 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "test functions and hooks cannot return a value");
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
-        if (!param->type || param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest ||
+        bool by_reference = param->passing_mode == XR_PARAM_REF;
+        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || param->is_rest ||
+            (by_reference && param->default_value) ||
             !source_type(ctx, param->type, &body->parameters[i]) || body->parameters[i] == XR_XIR_UNIT)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
+        /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
+         * caller's binding through it, exactly as a captured mutable variable does. */
+        if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
         for (int j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (source_text_same(ctx, NULL, param->name, decl->params[j]->name))
@@ -2784,6 +2802,10 @@ static bool build_bodies(SourceContext *ctx) {
             if (!symbol) return false;
             symbol->kind = SOURCE_LOCAL; symbol->index = (uint32_t) i; symbol->type = ctx->bodies[f].parameters[i];
             XrParamNode *param = decl->params[i];
+            if (param->passing_mode == XR_PARAM_REF) {
+                symbol->type = xr_xir_cell_element(&ctx->types, symbol->type);
+                symbol->mutable = true;
+            }
             XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
             if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t) (INT_MAX - param->column))
                 range.end_column = param->column + (int) source_text_size(ctx, param->name);
