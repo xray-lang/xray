@@ -30,18 +30,21 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
         return edits;
     }
 
-    // Get isolate from server
-    XrVMRuntime *X = doc->server ? doc->server->isolate : NULL;
-    if (!X) {
-        return edits;
-    }
-
-    // Parse with trivia collection (preserves comments)
-    AstNode *ast =
-        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(X), doc->content, doc->uri);
-    if (!ast) {
-        // Parse failed, return empty edits
-        return edits;
+    if (!doc->server) return edits;
+    XrCompileResourceLimits limits = {UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    XrCompileResources *resources = NULL;
+    XrCompilerSession *session = NULL;
+    AstNode *ast = NULL;
+    XrFmtOutput output = {0};
+    unsigned stage = 0, failure = 0;
+    XrCompileResourceStatus created = xr_compile_resources_new(&limits, &resources);
+    if (created != XR_COMPILE_RESOURCE_OK) { stage=1; failure=(unsigned)created; goto cleanup; }
+    XrCompilerSessionStatus opened = xr_compile_session_new(resources, &session);
+    if (opened != XR_COMPILER_SESSION_OK) { stage=2; failure=(unsigned)opened; goto cleanup; }
+    XrParseStatus parsed = xr_compile_parse_with_trivia(session, doc->content, doc->uri, NULL, &ast);
+    if (parsed != XR_PARSE_OK) {
+        if (parsed != XR_PARSE_SYNTAX) { stage=3; failure=(unsigned)parsed; }
+        goto cleanup;
     }
 
     // Format AST using server-configured tab size / spaces
@@ -58,22 +61,26 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
         config.wrap_long_lines = sc->format_wrap_long_lines ? 1 : 0;
         config.multiline_trailing_comma = sc->format_multiline_trailing_comma ? 1 : 0;
     }
-    char *formatted = xfmt_format_ast(ast, &config, X);
-
-    // Free AST
-    xr_program_destroy(ast);
-
-    if (!formatted) {
-        return edits;
-    }
+    XrFmtStatus formatted = xr_compile_format_ast(xr_compile_session_compile_state(session), ast, &config, &output);
+    if (formatted != XR_FMT_OK) { stage=4; failure=(unsigned)formatted; goto cleanup; }
 
     // Create single edit that replaces entire document
     XrJsonValue *edit = xjson_new_object();
     xjson_object_set(edit, "range", xjson_make_range(0, 0, doc->line_count, 0));
-    xjson_object_set(edit, "newText", xjson_new_string(formatted));
+    xjson_object_set(edit, "newText", xjson_new_string(output.text));
 
     xjson_array_push(edits, edit);
 
-    xr_free(formatted);
+cleanup:
+    xr_program_destroy(ast);
+    xr_compile_session_free(session);
+    xr_compile_resources_release(resources);
+    xr_compile_format_output_free(&output);
+    if (stage) {
+        doc->server->formatting_failure.stage = stage;
+        doc->server->formatting_failure.status = failure;
+        xjson_free(edits);
+        return NULL;
+    }
     return edits;
 }

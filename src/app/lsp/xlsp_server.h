@@ -236,6 +236,9 @@ struct XrLspServer {
     XlspWorkspaceFolder workspace_folders[MAX_WORKSPACE_FOLDERS];
     int workspace_folder_count;
 
+    /* Synchronous formatting failure; reset before every request handler. */
+    struct { unsigned stage, status; } formatting_failure;
+
     // Server configuration
     XlspConfig config;
 

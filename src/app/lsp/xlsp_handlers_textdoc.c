@@ -352,6 +352,8 @@ XrJsonValue *xlsp_handle_td_prepare_rename(XrLspServer *server, XrJsonValue *par
 }
 
 XrJsonValue *xlsp_handle_td_formatting(XrLspServer *server, XrJsonValue *params) {
+    /* Direct handler callers have the same request-local error lifetime. */
+    server->formatting_failure.stage = server->formatting_failure.status = 0;
     XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
     if (!textDocument)
         return xjson_new_array();

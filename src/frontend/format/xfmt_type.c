@@ -9,13 +9,11 @@
  *
  * KEY CONCEPT:
  *   The non-recursive structural helpers used by both expr and decl
- *   modules. Type printing delegates to xr_type_to_string (the runtime
- *   type printer) so the formatter does not need to mirror the type
- *   grammar.
+ *   modules. Type printing uses the single metered syntax-type printer.
  */
 
 #include "xfmt_internal.h"
-#include "../../runtime/value/xtype.h"
+#include <limits.h>
 #include "../parser/xtype_ref.h"
 #include <string.h>
 
@@ -97,32 +95,32 @@ const char *xfmt_compound_op(XrTokenType type) {
 // Type
 // ----------------------------------------------------------------------------
 
-void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref) {
-    if (!tref)
-        return;
-    /* Use the buffer variant — no arena required at format time. */
-    char buf[256];
-    int n = xr_tref_to_string_buf(tref, buf, (int) sizeof(buf));
-    if (n > 0) {
-        xfmt_write_str(ctx, buf);
-    } else {
-        xfmt_write_str(ctx, "<error>");
+static void fmt_type_text(XrFmtContext *ctx, XrTypeRef *type, bool structural) {
+    if (!xfmt_step(ctx)) return;
+    if (!type || !xfmt_healthy(ctx)) return;
+    size_t capacity = 256;
+    void *scratch = NULL;
+    while ( xfmt_step(ctx) && (xfmt_healthy(ctx))) {
+        if (xr_compile_state_resize(ctx->state, &scratch, capacity) != XR_COMPILE_RESOURCE_OK) break;
+        int length = structural ? xr_compile_tref_to_string_structural(ctx->state, type, scratch, (int)capacity) :
+            xr_compile_tref_to_string_buf(ctx->state, type, scratch, (int)capacity);
+        if (length < 0 || !xfmt_healthy(ctx)) break;
+        if ((size_t)length < capacity - 1) {
+            xfmt_write_bytes(ctx, scratch, (size_t)length);
+            break;
+        }
+        if (capacity > INT_MAX / 2u) { xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET); break; }
+        capacity *= 2;
     }
+    xr_compile_state_free(scratch);
 }
+XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *type) {
+    if (!xfmt_step(ctx)) return; fmt_type_text(ctx, type, false); }
+XR_FUNC void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *type) {
+    if (!xfmt_step(ctx)) return; fmt_type_text(ctx, type, true); }
 
-void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *tref) {
-    if (!tref)
-        return;
-    char buf[256];
-    int n = xr_tref_to_string_buf_structural(tref, buf, (int) sizeof(buf));
-    if (n > 0) {
-        xfmt_write_str(ctx, buf);
-    } else {
-        xfmt_write_str(ctx, "<error>");
-    }
-}
-
-void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref) {
+XR_FUNC void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref) {
+    if (!xfmt_step(ctx)) return;
     if (!tref)
         return;
     xfmt_write_str(ctx, ": ");
@@ -134,18 +132,19 @@ void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *
 }
 
 // Format generic type parameters <T, U: A & B & ...>
-void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count) {
+XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count) {
+    if (!xfmt_step(ctx)) return;
     if (count <= 0)
         return;
 
     xfmt_write_char(ctx, '<');
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; xfmt_step(ctx) && (i < count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, params[i]->name);
         if (params[i]->constraint_count > 0 && params[i]->constraints) {
             xfmt_write_str(ctx, ": ");
-            for (int j = 0; j < params[i]->constraint_count; j++) {
+            for (int j = 0; xfmt_step(ctx) && (j < params[i]->constraint_count); j++) {
                 if (j > 0)
                     xfmt_write_str(ctx, " & ");
                 xfmt_emit_type(ctx, params[i]->constraints[j]);
@@ -156,12 +155,13 @@ void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int co
 }
 
 // Format generic type arguments <int, string>
-void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count) {
+XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count) {
+    if (!xfmt_step(ctx)) return;
     if (count <= 0)
         return;
 
     xfmt_write_char(ctx, '<');
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; xfmt_step(ctx) && (i < count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_emit_type(ctx, args[i]);
@@ -173,7 +173,8 @@ void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count) {
 // Destructure patterns (used by var/const declarations and multi-assign)
 // ----------------------------------------------------------------------------
 
-void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
+XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
+    if (!xfmt_step(ctx)) return;
     if (!pattern)
         return;
 
@@ -188,7 +189,7 @@ void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
 
         case PATTERN_ARRAY:
             xfmt_write_char(ctx, '[');
-            for (int i = 0; i < pattern->as.array.element_count; i++) {
+            for (int i = 0; xfmt_step(ctx) && (i < pattern->as.array.element_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_pattern(ctx, pattern->as.array.elements[i]);
@@ -198,7 +199,7 @@ void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
 
         case PATTERN_TUPLE:
             xfmt_write_char(ctx, '(');
-            for (int i = 0; i < pattern->as.array.element_count; i++) {
+            for (int i = 0; xfmt_step(ctx) && (i < pattern->as.array.element_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_pattern(ctx, pattern->as.array.elements[i]);
@@ -213,14 +214,14 @@ void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
 
         case PATTERN_OBJECT:
             xfmt_write_char(ctx, '{');
-            for (int i = 0; i < pattern->as.object.field_count; i++) {
+            for (int i = 0; xfmt_step(ctx) && (i < pattern->as.object.field_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 const char *field =
                     pattern->as.object.field_names ? pattern->as.object.field_names[i] : NULL;
                 XrDestructurePattern *sub = pattern->as.object.patterns[i];
                 if (field && sub && sub->type == PATTERN_IDENTIFIER && sub->as.identifier.name &&
-                    strcmp(field, sub->as.identifier.name) == 0) {
+                    xfmt_compare(ctx, field, sub->as.identifier.name) == 0) {
                     xfmt_write_str(ctx, field);
                 } else {
                     if (field)

@@ -180,8 +180,9 @@ static AstNode *parse_body(Parser *parser, bool expression, bool trivia) {
 
 static XrParseStatus parse_owned(XrCompilerSession *session, const char *source,
                                   const char *file, bool observed, bool trivia,
-                                  bool expression, AstNode **output) {
-    if (!session || !source || !output || *output) return XR_PARSE_BAD_ARGUMENT;
+                                  bool expression, const XrParseDiagnostics *diagnostics, AstNode **output) {
+    if (!session || !source || !output || *output ||
+        (diagnostics && diagnostics->max_errors < 0)) return XR_PARSE_BAD_ARGUMENT;
     XrCompileState *state = xr_compile_session_compile_state(session);
     XrParseStatus status = parse_resource_status(state);
     if (status != XR_PARSE_OK) return status;
@@ -200,7 +201,9 @@ static XrParseStatus parse_owned(XrCompilerSession *session, const char *source,
     status = parser_init(&parser, session, source, file, arena, trivia);
     if (status != XR_PARSE_OK) goto failure;
     parser.expr_value_observed = observed;
-    parser.max_errors = 20;
+    parser.max_errors = diagnostics ? diagnostics->max_errors : 20;
+    if (diagnostics)
+        xr_parser_set_error_callback(&parser, diagnostics->callback, diagnostics->user_data, diagnostics->max_errors);
     AstNode *program = parse_body(&parser, expression, trivia);
     status = xr_compile_parser_status(&parser);
     if (status == XR_PARSE_OK && !program) status = XR_PARSE_SYNTAX;
@@ -222,26 +225,26 @@ failure:
 }
 
 XrParseStatus xr_compile_parse(XrCompilerSession *session, const char *source, AstNode **output) {
-    return parse_owned(session, source, NULL, false, false, false, output);
+    return parse_owned(session, source, NULL, false, false, false, NULL, output);
 }
 
 XrParseStatus xr_compile_parse_repl_unit(XrCompilerSession *session, const char *source, AstNode **output) {
-    return parse_owned(session, source, "<repl>", true, false, false, output);
+    return parse_owned(session, source, "<repl>", true, false, false, NULL, output);
 }
 
 XrParseStatus xr_compile_parse_with_source(XrCompilerSession *session, const char *source,
                                    const char *file, AstNode **output) {
-    return parse_owned(session, source, file, false, false, false, output);
+    return parse_owned(session, source, file, false, false, false, NULL, output);
 }
 
 XrParseStatus xr_compile_parse_with_trivia(XrCompilerSession *session, const char *source,
-                                   const char *file, AstNode **output) {
-    return parse_owned(session, source, file, false, true, false, output);
+                                   const char *file, const XrParseDiagnostics *diagnostics, AstNode **output) {
+    return parse_owned(session, source, file, false, true, false, diagnostics, output);
 }
 
 XrParseStatus xr_compile_parse_expression_string(XrCompilerSession *session, const char *source,
                                           const char *file, AstNode **output) {
-    return parse_owned(session, source, file, false, false, true, output);
+    return parse_owned(session, source, file, false, false, true, NULL, output);
 }
 
 XrParseStatus xr_compile_parse_recoverable(Parser *parser, AstNode **output) {

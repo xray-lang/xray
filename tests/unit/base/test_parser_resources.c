@@ -81,7 +81,7 @@ static XrCompileResourceStatus pipeline(const XrCompileResourceLimits *limits, X
                  opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
         goto done;
     }
-    XrParseStatus parsed = xr_compile_parse_with_trivia(session, source, "resource-owner.xr", &program);
+    XrParseStatus parsed = xr_compile_parse_with_trivia(session, source, "resource-owner.xr", NULL, &program);
     status = xr_compile_session_resource_status(session);
     if (status == XR_COMPILE_RESOURCE_OK) {
         CHECK(parsed == XR_PARSE_OK && program && program->as.program.owns_arena);
@@ -293,7 +293,7 @@ static XrParseStatus fixture(const char *text, const XrCompileResourceLimits *li
         return created == XR_COMPILE_RESOURCE_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_OUT_OF_MEMORY;
     XrCompilerSessionStatus opened = xr_compile_session_new(resources, &session);
     XrParseStatus status = opened == XR_COMPILER_SESSION_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_OUT_OF_MEMORY;
-    if (opened == XR_COMPILER_SESSION_OK) status = xr_compile_parse_with_trivia(session, text, "fixture.xr", &program);
+    if (opened == XR_COMPILER_SESSION_OK) status = xr_compile_parse_with_trivia(session, text, "fixture.xr", NULL, &program);
     CHECK((status == XR_PARSE_OK) == (program != NULL));
     OK(xr_compile_resources_stats(resources, observed));
     if (program) xr_program_destroy(program);
@@ -441,7 +441,39 @@ static void growth_and_arguments(void) {
     CHECK(!physical_live && !allocation_count);
 }
 
+
+typedef struct TriviaDiagnostics { unsigned count; char last[512]; } TriviaDiagnostics;
+static void trivia_diagnostic(void *data,int line,int column,int end_line,int end_column,const char *message) {
+    TriviaDiagnostics *capture=data;
+    CHECK(line>0 && column>=0 && end_line>=line && end_column>=0 && message && *message);
+    ++capture->count; snprintf(capture->last,sizeof(capture->last),"%s",message);
+}
+static void owning_trivia_diagnostics(void) {
+    for(int maximum=0;maximum<3;++maximum) {
+        reset(); XrCompileResources *resources=NULL; XrCompilerSession *session=NULL; AstNode *out=NULL;
+        OK(xr_compile_resources_new(&unlimited,&resources));
+        CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+        TriviaDiagnostics capture={0}; XrParseDiagnostics diagnostics={trivia_diagnostic,&capture,maximum};
+        CHECK(xr_compile_parse_with_trivia(session,"const first =\nconst second =\nconst third =\n","bad.xr",&diagnostics,&out)==XR_PARSE_SYNTAX);
+        CHECK(!out && capture.count>0 && capture.last[0]);
+        if(maximum) CHECK(capture.count<=(unsigned)maximum);
+        XrCompileResourceStats before,after; OK(xr_compile_resources_stats(resources,&before));
+        diagnostics.max_errors=-1;
+        CHECK(xr_compile_parse_with_trivia(session,"const good=1","good.xr",&diagnostics,&out)==XR_PARSE_BAD_ARGUMENT);
+        OK(xr_compile_resources_stats(resources,&after)); CHECK(after.work==before.work && !out);
+        out=(AstNode *)(uintptr_t)1; diagnostics.max_errors=1;
+        CHECK(xr_compile_parse_with_trivia(session,"bad","bad.xr",&diagnostics,&out)==XR_PARSE_BAD_ARGUMENT);
+        CHECK(out==(AstNode *)(uintptr_t)1); out=NULL;
+        fail_at=attempt_count;
+        CHECK(xr_compile_parse_with_trivia(session,"const good=1","good.xr",&diagnostics,&out)==XR_PARSE_OUT_OF_MEMORY);
+        CHECK(!out);
+        xr_compile_session_free(session); xr_compile_resources_release(resources); CHECK(!physical_live);
+    }
+    puts("owned trivia: bounded/unlimited callback, invalid count, failure output and physical zero PASS");
+}
+
 int main(void) {
+    owning_trivia_diagnostics();
     faults();
     recoverable_and_rollback();
     scopes();

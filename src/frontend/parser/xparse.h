@@ -66,6 +66,12 @@ struct XrArena;                          // Defined in base/xarena.h
 typedef void (*XrParseErrorCallback)(void *user_data, int line, int column, int end_line,
                                      int end_column, const char *message);
 
+typedef struct XrParseDiagnostics {
+    XrParseErrorCallback callback;
+    void *user_data;
+    int max_errors;
+} XrParseDiagnostics;
+
 /* ========== Parser State ==========
  *
  * Callers stack-allocate this struct. After parsing, callers may read:
@@ -211,7 +217,7 @@ XR_FUNC XrParseStatus xr_compile_parse_repl_unit(XrCompilerSession *session, con
 XR_FUNC XrParseStatus xr_compile_parse_with_source(XrCompilerSession *session, const char *source,
                                            const char *source_file, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_with_trivia(XrCompilerSession *session, const char *source,
-                                           const char *source_file, AstNode **output);
+    const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_expression_string(XrCompilerSession *session, const char *source,
                                                   const char *source_file, AstNode **output);
 

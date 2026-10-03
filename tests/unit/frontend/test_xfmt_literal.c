@@ -28,31 +28,34 @@
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/format/xfmt.h"
-#include "xray.h"
-#include "xray_vm.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 
 /* ========== Test infrastructure ========== */
 
-static XrVMRuntime *X = NULL;
-static XrCompilerSession *X_session = NULL;
-
+static XrCompileResources *g_resources;
+static XrCompilerSession *g_session;
 static void setup(void) {
-    XrVMConfig params = {0};
-    X = xray_vm_new_full(&params);
-    ASSERT_NOT_NULL(X);
-    X_session = xr_compiler_session_current_for_isolate(X);
-    ASSERT_NOT_NULL(X_session);
+    if (g_session) return;
+    XrCompileResourceLimits limits = {UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &g_resources), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_compile_session_new(g_resources, &g_session), XR_COMPILER_SESSION_OK);
+}
+static void teardown(void) {
+    xr_compile_session_free(g_session); g_session = NULL;
+    xr_compile_resources_release(g_resources); g_resources = NULL;
+}
+static AstNode *fixture_parse(XrCompilerSession *session, const char *source, const char *path) {
+    AstNode *ast = NULL;
+    (void)xr_compile_parse_with_trivia(session, source, path, NULL, &ast);
+    return ast;
+}
+static char *fixture_format(AstNode *ast, const XrFmtConfig *config) {
+    XrFmtOutput output = {0};
+    (void)xr_compile_format_ast(xr_compile_session_compile_state(g_session), ast, config, &output);
+    return output.text;
 }
 
-static void teardown(void) {
-    if (X) {
-        xray_vm_delete(X);
-        X = NULL;
-        X_session = NULL;
-    }
-}
 
 // Walk a `var _ = <expr>` program down to the initializer expression.
 // Returns NULL if the shape is unexpected (caller should ASSERT).
@@ -70,17 +73,17 @@ static AstNode *first_initializer(AstNode *program) {
 // Format the AST then re-parse the result. Returns NULL if either
 // step fails; callers ASSERT on the return.
 static AstNode *format_and_reparse(AstNode *program) {
-    char *formatted = xfmt_format_ast(program, &xfmt_default_config, X);
+    char *formatted = fixture_format(program, &xfmt_default_config);
     if (!formatted)
         return NULL;
-    AstNode *reparsed = xr_parse(xr_compiler_session_current_for_isolate(X), formatted);
-    xr_free(formatted);
+    AstNode *reparsed = fixture_parse(g_session, formatted, "<literal>");
+    xr_compile_resources_free(formatted);
     return reparsed;
 }
 
 // Format the AST and return the formatted source string. Caller frees.
 static char *format_only(AstNode *program) {
-    return xfmt_format_ast(program, &xfmt_default_config, X);
+    return fixture_format(program, &xfmt_default_config);
 }
 
 /* ========== simple ASCII strings round-trip ========== */
@@ -88,7 +91,7 @@ static char *format_only(AstNode *program) {
 TEST(xfmt_string_simple_ascii) {
     setup();
     AstNode *prog =
-        xr_parse(xr_compiler_session_current_for_isolate(X), "var s = \"hello world\"\n");
+        fixture_parse(g_session, "var s = \"hello world\"\n", "<literal>");
     ASSERT_NOT_NULL(prog);
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -104,8 +107,7 @@ TEST(xfmt_string_simple_ascii) {
 
 TEST(xfmt_string_embedded_quote) {
     setup();
-    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X),
-                             "var s = \"a\\\"b\"\n");  // source: "a\"b"
+    AstNode *prog = fixture_parse(g_session, "var s = \"a\\\"b\"\n", "<literal>");  // source: "a\"b"
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_STR_EQ(init0->as.literal.raw_value.string_val, "a\"b");
@@ -116,7 +118,7 @@ TEST(xfmt_string_embedded_quote) {
     // the previous-formatter bug surfaces: an unescaped `"` would make
     // re-parse fail.
     ASSERT(strstr(formatted, "\\\"") != NULL);
-    xr_free(formatted);
+    xr_compile_resources_free(formatted);
 
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -133,7 +135,7 @@ TEST(xfmt_string_backslash_and_newline) {
     setup();
     // source string contains \\ and \n
     AstNode *prog =
-        xr_parse(xr_compiler_session_current_for_isolate(X), "var s = \"line1\\nline2\\\\end\"\n");
+        fixture_parse(g_session, "var s = \"line1\\nline2\\\\end\"\n", "<literal>");
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_STR_EQ(init0->as.literal.raw_value.string_val, "line1\nline2\\end");
@@ -144,7 +146,7 @@ TEST(xfmt_string_backslash_and_newline) {
     // (which would terminate the string at parse time).
     ASSERT(strstr(formatted, "\\n") != NULL);
     ASSERT(strstr(formatted, "\\\\") != NULL);
-    xr_free(formatted);
+    xr_compile_resources_free(formatted);
 
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -159,7 +161,7 @@ TEST(xfmt_string_backslash_and_newline) {
 TEST(xfmt_template_no_backticks) {
     setup();
     AstNode *prog =
-        xr_parse(xr_compiler_session_current_for_isolate(X), "var s = \"hi ${name}!\"\n");
+        fixture_parse(g_session, "var s = \"hi ${name}!\"\n", "<literal>");
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_EQ_INT(init0->type, AST_TEMPLATE_STRING);
@@ -172,7 +174,7 @@ TEST(xfmt_template_no_backticks) {
     // Must contain `${` somewhere because the template has an
     // interpolation slot.
     ASSERT(strstr(formatted, "${") != NULL);
-    xr_free(formatted);
+    xr_compile_resources_free(formatted);
 
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -184,8 +186,7 @@ TEST(xfmt_template_no_backticks) {
 
 TEST(xfmt_template_expr_string_uses_double_quotes) {
     setup();
-    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X),
-                             "var s = \"${\"inner\".toUpperCase()}\"\n");
+    AstNode *prog = fixture_parse(g_session, "var s = \"${\"inner\".toUpperCase()}\"\n", "<literal>");
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_EQ_INT(init0->type, AST_TEMPLATE_STRING);
@@ -194,7 +195,7 @@ TEST(xfmt_template_expr_string_uses_double_quotes) {
     ASSERT_NOT_NULL(formatted);
     ASSERT(strstr(formatted, "${\"inner\".toUpperCase()}") != NULL);
     ASSERT(strstr(formatted, "${'inner'.toUpperCase()}") == NULL);
-    xr_free(formatted);
+    xr_compile_resources_free(formatted);
 
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -217,7 +218,7 @@ TEST(xfmt_template_dollar_escaped) {
     // ${name} interpolation. After format+reparse, the literal part
     // must still be a literal `$`, NOT a second interpolation.
     AstNode *prog =
-        xr_parse(xr_compiler_session_current_for_isolate(X), "var s = \"price=\\$${amount}\"\n");
+        fixture_parse(g_session, "var s = \"price=\\$${amount}\"\n", "<literal>");
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_EQ_INT(init0->type, AST_TEMPLATE_STRING);
@@ -228,7 +229,7 @@ TEST(xfmt_template_dollar_escaped) {
     // The literal `$` MUST be re-escaped — otherwise reparse would
     // greedily consume `${` as a second interpolation opener.
     ASSERT(strstr(formatted, "\\$") != NULL);
-    xr_free(formatted);
+    xr_compile_resources_free(formatted);
 
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -240,30 +241,24 @@ TEST(xfmt_template_dollar_escaped) {
     teardown();
 }
 
-/* ========== control-byte escape via \xHH ========== */
-
+/* Control characters in text use Unicode escapes, not byte escapes. */
 TEST(xfmt_string_control_byte_hex_escape) {
     setup();
-    // \x01 is below 0x20 and not in the named-escape table; the
-    // formatter is expected to emit a \xHH escape so re-parse gets a
-    // non-empty (or at least non-error) translation. We assert two
-    // things: (a) the output contains `\x01` (case-insensitive hex),
-    // (b) the re-parse succeeds.
-    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X), "var s = \"\\x01end\"\n");
-    if (!prog) {
-        // If the parser rejects \x escapes today this test simply
-        // verifies the formatter does not crash on control bytes by
-        // skipping; once \xHH lands in the parser this branch will go
-        // away. Mark as PASS by returning early.
-        teardown();
-        return;
-    }
-    char *formatted = format_only(prog);
+    AstNode *program = fixture_parse(g_session, "var s = \"\\u{1}end\"\n", "<literal>");
+    ASSERT_NOT_NULL(program);
+    char *formatted = format_only(program);
     ASSERT_NOT_NULL(formatted);
-    // No raw 0x01 byte may leak into the output stream.
     ASSERT(strchr(formatted, 0x01) == NULL);
-    xr_free(formatted);
-    xr_program_destroy(prog);
+    AstNode *again = fixture_parse(g_session, formatted, "<formatted>");
+    ASSERT_NOT_NULL(again);
+    AstNode *literal = first_initializer(again);
+    ASSERT_NOT_NULL(literal);
+    const unsigned char expected[] = {1,'e','n','d'};
+    ASSERT_EQ_INT(literal->as.literal.string_length, sizeof(expected));
+    ASSERT(memcmp(literal->as.literal.raw_value.string_val, expected, sizeof(expected)) == 0);
+    xr_compile_resources_free(formatted);
+    xr_program_destroy(again);
+    xr_program_destroy(program);
     teardown();
 }
 
@@ -272,7 +267,7 @@ TEST(xfmt_string_control_byte_hex_escape) {
 TEST(xfmt_rune_literal_roundtrip) {
     setup();
     AstNode *prog =
-        xr_parse(xr_compiler_session_current_for_isolate(X), "var c: char = '\\u{1F600}'\n");
+        fixture_parse(g_session, "var c: char = '\\u{1F600}'\n", "<literal>");
     ASSERT_NOT_NULL(prog);
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -286,12 +281,12 @@ TEST(xfmt_rune_literal_roundtrip) {
 
 TEST(xfmt_rune_literal_named_escape) {
     setup();
-    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X), "var c = '\\n'\n");
+    AstNode *prog = fixture_parse(g_session, "var c = '\\n'\n", "<literal>");
     ASSERT_NOT_NULL(prog);
     char *formatted = format_only(prog);
     ASSERT_NOT_NULL(formatted);
     ASSERT(strstr(formatted, "'\\n'") != NULL);
-    xr_free(formatted);
+    xr_compile_resources_free(formatted);
     xr_program_destroy(prog);
     teardown();
 }

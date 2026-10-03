@@ -45,7 +45,6 @@
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
 #include "toolchain/xcompiler_session.h"
-#include "xray_vm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,34 +54,38 @@
 /* Fixtures                                                                */
 /* ====================================================================== */
 
-static XrVMRuntime *g_iso = NULL;
-static XrCompilerSession *g_session = NULL;
-
+static XrCompileResources *g_resources;
+static XrCompilerSession *g_session;
 static void setup(void) {
-    if (!g_iso) {
-        XrVMConfig p = {0};
-        g_iso = xray_vm_new_full(&p);
-        g_session = xr_compiler_session_current_for_isolate(g_iso);
-        ASSERT_NOT_NULL(g_session);
-    }
+    if (g_session) return;
+    XrCompileResourceLimits limits = {UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &g_resources), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_compile_session_new(g_resources, &g_session), XR_COMPILER_SESSION_OK);
+}
+static void teardown(void) {
+    xr_compile_session_free(g_session); g_session = NULL;
+    xr_compile_resources_release(g_resources); g_resources = NULL;
+}
+static AstNode *fixture_parse(XrCompilerSession *session, const char *source, const char *path) {
+    AstNode *ast = NULL;
+    (void)xr_compile_parse_with_trivia(session, source, path, NULL, &ast);
+    return ast;
+}
+static char *fixture_format(AstNode *ast, const XrFmtConfig *config) {
+    XrFmtOutput output = {0};
+    (void)xr_compile_format_ast(xr_compile_session_compile_state(g_session), ast, config, &output);
+    return output.text;
 }
 
-static void teardown(void) {
-    if (g_iso) {
-        xray_vm_delete(g_iso);
-        g_iso = NULL;
-        g_session = NULL;
-    }
-}
 
 // Parse + format a snippet, returning a heap string the caller frees.
 // Returns NULL if the parser rejects the source (caller asserts).
 static char *parse_and_format(const char *source) {
     AstNode *ast =
-        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), source, "<test>");
+        fixture_parse(g_session, source, "<test>");
     if (!ast)
         return NULL;
-    char *out = xfmt_format_ast(ast, NULL, g_iso);
+    char *out = fixture_format(ast, NULL);
     xr_program_destroy(ast);
     return out;
 }
@@ -99,7 +102,7 @@ static char *assert_round_trip(const char *src, const char *label) {
     char *second = parse_and_format(first);
     if (!second) {
         fprintf(stderr, "[%s] parse failed on first formatted output:\n%s\n", label, first);
-        free(first);
+        xr_compile_resources_free(first);
         return NULL;
     }
     if (strcmp(first, second) != 0) {
@@ -109,11 +112,11 @@ static char *assert_round_trip(const char *src, const char *label) {
                 "--- first  ---\n%s\n"
                 "--- second ---\n%s\n",
                 label, src, first, second);
-        free(first);
-        free(second);
+        xr_compile_resources_free(first);
+        xr_compile_resources_free(second);
         return NULL;
     }
-    free(second);
+    xr_compile_resources_free(second);
     return first;  // caller frees
 }
 
@@ -168,7 +171,7 @@ TEST(regular_string_round_trip_basic) {
         // never raw-string `r"`.
         ASSERT_FALSE(strstr(out, "`") != NULL);
         ASSERT_FALSE(strstr(out, " r\"") != NULL);
-        free(out);
+        xr_compile_resources_free(out);
     }
 }
 
@@ -187,7 +190,7 @@ TEST(raw_string_form_is_preserved) {
         char *out = assert_round_trip(src, "raw_preserved");
         ASSERT_NOT_NULL(out);
         ASSERT_TRUE(strstr(out, " r\"") != NULL || strstr(out, "=r\"") != NULL);
-        free(out);
+        xr_compile_resources_free(out);
         free(src);
     }
 }
@@ -211,7 +214,7 @@ TEST(template_string_round_trip) {
         char *out = assert_round_trip(kSources[i], "template");
         ASSERT_NOT_NULL(out);
         ASSERT_FALSE(strstr(out, "`") != NULL);  // backticks gone
-        free(out);
+        xr_compile_resources_free(out);
     }
 }
 
@@ -237,9 +240,9 @@ TEST(idempotence_after_two_passes) {
     ASSERT_STR_EQ(first, second);
     ASSERT_STR_EQ(second, third);
 
-    free(first);
-    free(second);
-    free(third);
+    xr_compile_resources_free(first);
+    xr_compile_resources_free(second);
+    xr_compile_resources_free(third);
 }
 
 /* ====================================================================== */
@@ -303,7 +306,7 @@ TEST(random_regular_string_round_trip) {
         char *out = assert_round_trip(src, "random_regular");
         if (out) {
             verified++;
-            free(out);
+            xr_compile_resources_free(out);
         } else {
             rejected++;
         }
@@ -333,7 +336,7 @@ TEST(random_raw_string_round_trip) {
         char *out = assert_round_trip(src, "random_raw");
         ASSERT_NOT_NULL(out);
         ASSERT_TRUE(strstr(out, " r\"") != NULL || strstr(out, "=r\"") != NULL);
-        free(out);
+        xr_compile_resources_free(out);
         free(src);
         verified++;
     }
@@ -361,7 +364,7 @@ TEST(block_and_fixed_bytes_round_trip) {
     ASSERT_TRUE(strstr(out, "r\"\"\"") != NULL);
     ASSERT_TRUE(strstr(out, "br\"\"\"") != NULL);
     ASSERT_TRUE(strstr(out, "cr\"\"\"") != NULL);
-    free(out);
+    xr_compile_resources_free(out);
 }
 
 TEST(block_closer_stays_on_own_line_before_punctuation) {
@@ -376,7 +379,7 @@ TEST(block_closer_stays_on_own_line_before_punctuation) {
     ASSERT_NOT_NULL(out);
     ASSERT_FALSE(strstr(out, "\"\"\",") != NULL);
     ASSERT_FALSE(strstr(out, "\"\"\"]") != NULL);
-    free(out);
+    xr_compile_resources_free(out);
 }
 
 TEST(block_formatter_raises_quote_count_for_quote_only_payload_line) {
@@ -397,8 +400,8 @@ TEST(block_formatter_raises_quote_count_for_quote_only_payload_line) {
     char *third = parse_and_format(first);
     ASSERT_NOT_NULL(third);
     ASSERT_STR_EQ(first, third);
-    free(third);
-    free(first);
+    xr_compile_resources_free(third);
+    xr_compile_resources_free(first);
 }
 
 TEST(indented_block_template_keeps_margin_outside_interpolation) {
@@ -413,7 +416,7 @@ TEST(indented_block_template_keeps_margin_outside_interpolation) {
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(strstr(out, "\n    ${name}!\n    \"\"\"") != NULL);
     ASSERT_FALSE(strstr(out, "${    name}") != NULL);
-    free(out);
+    xr_compile_resources_free(out);
 }
 
 /* ====================================================================== */
@@ -428,7 +431,7 @@ TEST(decimal_spelling_round_trip) {
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(strstr(out, spelling) != NULL);
     ASSERT_TRUE(strstr(out, "1_234.5_678e-0_2") != NULL);
-    free(out);
+    xr_compile_resources_free(out);
 }
 
 TEST(formatter_preserves_binary_ast_payload) {
@@ -441,10 +444,10 @@ TEST(formatter_preserves_binary_ast_payload) {
     AstNode statement = {0};
     statement.type = AST_EXPR_STMT;
     statement.as.expr_stmt = &literal;
-    char *formatted=xfmt_format_ast(&statement,NULL,g_iso);
+    char *formatted=fixture_format(&statement, NULL);
     ASSERT_NOT_NULL(formatted);
     ASSERT_STR_EQ(formatted,"\"a\\0b\"\n");
-    free(formatted);
+    xr_compile_resources_free(formatted);
 }
 
 TEST_MAIN_BEGIN()

@@ -18,10 +18,7 @@
 
 #include "../parser/xast.h"
 
-// Forward declaration: the formatter only stores an XrVMRuntime pointer
-// in XrFmtContext (used by xtype printing). Pulling in xray_isolate.h
-// here would couple the frontend to the public API header.
-typedef struct XrVMRuntime XrVMRuntime;
+#include "../../base/xcompile_state.h"
 
 // Format configuration
 typedef struct XrFmtConfig {
@@ -50,34 +47,17 @@ typedef struct XrFmtConfig {
 // Default configuration
 extern XrFmtConfig xfmt_default_config;
 
-// Format context
-typedef struct XrFmtContext {
-    char *output;               // Output buffer
-    size_t capacity;            // Buffer capacity
-    size_t length;              // Current length
-    int indent_level;           // Current indent level
-    int line_start;             // At line start flag
-    int column;                 // Current column (for line length tracking)
-    bool block_literal_closed;  // Next non-space token must start on a new line
-    bool force_fn_expr;         // Context requires `fn` to avoid grammar ambiguity
-    XrFmtConfig *config;        // Configuration
-    XrVMRuntime *X;             // Isolate for type printing
-} XrFmtContext;
+typedef enum XrFmtStatus {
+    XR_FMT_OK, XR_FMT_BAD_ARGUMENT, XR_FMT_BUDGET, XR_FMT_OUT_OF_MEMORY
+} XrFmtStatus;
+typedef struct XrFmtOutput { char *text; size_t length; } XrFmtOutput;
 
-// Initialize formatter context
-XR_FUNC void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrVMRuntime *X);
+/* Synchronously borrows syntax and configuration. Only success publishes an
+ * independent ledger allocation into an empty output. A program arena must
+ * belong to the exact state; borrowed non-program nodes remain caller-owned. */
+XR_FUNC XrFmtStatus xr_compile_format_ast(XrCompileState *state, AstNode *ast,
+    const XrFmtConfig *config, XrFmtOutput *output);
+/* Unconditional physical cleanup; no work admission or allocation. */
+XR_FUNC void xr_compile_format_output_free(XrFmtOutput *output);
 
-// Free formatter context
-XR_FUNC void xfmt_free(XrFmtContext *ctx);
-
-// Format AST to string
-// Returns newly allocated string (caller must free)
-XR_FUNC char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrVMRuntime *X);
-
-// Format a single AST node
-XR_FUNC void xfmt_node(XrFmtContext *ctx, AstNode *node);
-
-// Format type annotation
-XR_FUNC void xfmt_type(XrFmtContext *ctx, XrTypeRef *tref);
-
-#endif  // XFMT_H
+#endif // XFMT_H
