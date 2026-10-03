@@ -1,0 +1,92 @@
+// Flow-sensitive null narrowing of simple local bindings: conditions, short circuit, early exit,
+// loops, joins and assignments (spec 2.13 N-4 .. N-11).
+class Node {
+    v: i64
+    next: Node?
+    constructor(v: i64, next: Node?) {
+        this.v = v
+        this.next = next
+    }
+}
+fn viaIf(s: string?) -> i64 {
+    if (s != null) { return len(s) }
+    return -1
+}
+fn earlyExit(s: string?) -> i64 {
+    if (s == null) { return 0 }
+    return len(s)
+}
+fn shortCircuit(a: string?) -> bool {
+    if (a != null && len(a) > 0) { return true }
+    if (a == null || len(a) == 0) { return false }
+    return true
+}
+fn walk(n: Node?) -> i64 {
+    var cur = n
+    var total = 0
+    while (cur != null) {
+        total = total + cur.v
+        cur = cur.next
+    }
+    return total
+}
+fn drain(first: string?) -> i64 {
+    var cur = first
+    var count = 0
+    while (cur != null) {
+        count = count + len(cur)
+        cur = null
+    }
+    return count
+}
+fn ternary(x: i64?) -> i64 {
+    return x != null ? x + 1 : -1
+}
+fn assigned(x: i64?) -> i64 {
+    var y = x
+    if (y == null) { y = 41 }
+    return y + 1
+}
+fn joined(x: i64?, flag: bool) -> i64 {
+    var y = x
+    if (flag) {
+        if (y == null) { y = 10 }
+    } else {
+        if (y == null) { y = 20 }
+    }
+    return y
+}
+fn elseBranch(x: i64?) -> i64 {
+    if (x == null) {
+        return 0
+    } else {
+        return x * 2
+    }
+}
+fn notForm(x: i64?) -> i64 {
+    if (!(x == null)) { return x + 100 }
+    return 0
+}
+fn main() {
+    print(viaIf("abc"))
+    print(viaIf(null))
+    print(earlyExit("hello"))
+    print(earlyExit(null))
+    print(shortCircuit("x"))
+    print(shortCircuit(null))
+    print(shortCircuit(""))
+    print(walk(Node(1, Node(2, Node(3, null)))))
+    print(drain("abcd"))
+    print(ternary(5))
+    print(ternary(null))
+    print(assigned(null))
+    print(assigned(1))
+    print(joined(null, true))
+    print(joined(null, false))
+    print(joined(7, true))
+    print(elseBranch(4))
+    print(elseBranch(null))
+    print(notForm(1))
+    print(notForm(null))
+}
+main()

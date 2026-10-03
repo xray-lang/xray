@@ -102,7 +102,8 @@ static bool source_reference_argument(SourceContext *ctx, AstNode *node, uint32_
     if (!source_cell_type(ctx,symbol->type,&cell) ||
         !source_query_reference(ctx,argument,symbol,symbol,XR_XIR_SOURCE_READ_WRITE)) return false;
     *value=(SourceValue){symbol->index,cell};
-    return true;
+    /* A callee may rebind the binding, so nothing is known about it afterwards. */
+    return source_fact_push(ctx,symbol,false);
 }
 static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const SourceCallPlan *plan) {
     CallExprNode *call=&node->as.call_expr;

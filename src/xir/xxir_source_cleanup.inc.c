@@ -51,7 +51,9 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     ctx->identities[index].exported = 0; ctx->identities[index].cleanup_owner = outer + 1;
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
+    SourceFact *facts = ctx->facts; uint32_t alternatives = ctx->flow_alternatives;
     ctx->function = index; ctx->locals = ctx->scope = NULL; ctx->loop = NULL; ctx->returned = false;
+    ctx->facts = NULL; ctx->flow_alternatives = 0;
     bool ok = source_capture_parameters(ctx, node, &scan) && statement(ctx, block, false) && finish_body(ctx);
     if (ok) {
         XrXirSourceDeclaration *query = (XrXirSourceDeclaration *)&ctx->query.declarations[body->declaration - 1];
@@ -60,6 +62,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
         query->generic_constraints = ctx->generics[index].constraints;
     }
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
+    ctx->facts = facts; ctx->flow_alternatives = alternatives;
     if (!ok) return false;
     for (SourceCapture *p = scan.captures; p; p = p->next) {
         if (p->source->kind == SOURCE_UNIT_LOCAL) continue;

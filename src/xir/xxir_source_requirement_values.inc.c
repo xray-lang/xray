@@ -90,9 +90,12 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     ++ctx->function_count;
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
+    SourceFact *facts = ctx->facts; uint32_t alternatives = ctx->flow_alternatives;
     ctx->function = index; ctx->locals = ctx->scope = NULL; ctx->loop = NULL; ctx->returned = false;
+    ctx->facts = NULL; ctx->flow_alternatives = 0;
     bool ok = source_query_parameters(ctx,body->declaration) && source_requirement_helper_body(ctx,site,request);
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
+    ctx->facts = facts; ctx->flow_alternatives = alternatives;
     if (ok) *output = index;
     return ok;
 }

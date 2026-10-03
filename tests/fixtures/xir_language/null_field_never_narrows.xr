@@ -1,0 +1,11 @@
+class Box {
+    item: Box?
+    constructor(item: Box?) { this.item = item }
+}
+fn f(b: Box) -> Box? {
+    if (b.item != null) {
+        return b.item.item
+    }
+    return null
+}
+f(Box(null))

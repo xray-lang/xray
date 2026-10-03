@@ -1,0 +1,8 @@
+class Node {
+    v: i64
+    constructor(v: i64) { this.v = v }
+}
+fn f(n: Node?) -> i64 {
+    return n.v
+}
+f(null)

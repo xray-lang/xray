@@ -14,7 +14,7 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR) {
         SourceName *binding=visible_name(ctx,node->type==AST_VARIABLE ? node->as.variable.name : "this");
         if (binding && (binding->kind==SOURCE_LOCAL || binding->kind==SOURCE_SLOT))
-            *output=(SourceExpectedType){true,binding->type};
+            *output=(SourceExpectedType){true,source_symbol_type(ctx,binding)};
         return true;
     }
     if (node->type==AST_INDEX_GET) {

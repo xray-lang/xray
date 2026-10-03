@@ -36,16 +36,19 @@ static bool source_unwrap_value(SourceContext *ctx, AstNode *node, SourceValue n
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_NULLABLE_UNWRAP, xr_xir_nullable_element(&ctx->types, nullable.type),
         {nullable.id, 0}, {0}, 0, {0}}, value);
 }
+/* A binding already narrowed to hold a value unwraps to itself. */
 static bool source_force_unwrap(SourceContext *ctx, AstNode *node, SourceValue *value) {
     SourceValue operand;
-    return expression(ctx, node->as.unary.operand, &operand) && source_unwrap_value(ctx, node, operand, value);
+    if (!expression(ctx, node->as.unary.operand, &operand)) return false;
+    if (!xr_xir_type_is_nullable(&ctx->types, operand.type)) { *value = operand; return true; }
+    return source_unwrap_value(ctx, node, operand, value);
 }
 /* `a ?? b`: the element when present, otherwise b; b is evaluated only when a is absent. */
 static bool source_coalesce(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     SourceValue subject, some;
     if (!expression(ctx, node->as.binary.left, &subject)) return false;
-    if (!xr_xir_type_is_nullable(&ctx->types, subject.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "?? requires a nullable left operand");
+    /* A left side already narrowed to hold a value is the result; its default is never evaluated. */
+    if (!xr_xir_type_is_nullable(&ctx->types, subject.type)) { *value = subject; return true; }
     XrXirType element = xr_xir_nullable_element(&ctx->types, subject.type), result = element;
     AstNode *right = node->as.binary.right;
     if (right->type == AST_LITERAL_NULL ||

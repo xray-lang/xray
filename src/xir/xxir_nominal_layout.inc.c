@@ -61,7 +61,9 @@ static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirCompileCo
             XrXirType field = nullable ? type_node->element : d ? d->fields[frame->next].type : node->fields[frame->next];
             ++frame->next;
             const XrXirTypeNode *child = xr_xir_type_node(types, field);
-            if (!child || (child->kind != XR_XIR_TYPE_NOMINAL && child->kind != XR_XIR_TYPE_NULLABLE)) continue;
+            /* A class field is an identity handle, so a cycle through one is finite and ends the walk. */
+            if (!child || (child->kind != XR_XIR_TYPE_NOMINAL && child->kind != XR_XIR_TYPE_NULLABLE) ||
+                xr_xir_type_is_class(types, field)) continue;
             uint32_t index = (uint32_t) field - XR_XIR_CONSTRUCTED_TYPE_BASE;
             if (state[index] == 1) { status = XR_XIR_BAD_TYPE; break; }
             if (state[index] == 2) continue;

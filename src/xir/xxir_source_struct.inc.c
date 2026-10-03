@@ -254,6 +254,8 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
 static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType type,
     const char *name, unsigned write, uint32_t *index, XrXirType *field_type) {
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
+    if (xr_xir_type_is_nullable(&ctx->types, type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "receiver may be null: check it for null, unwrap it with !, or use ?.");
     if (!found || (!xr_xir_type_is_struct(&ctx->types, type) && !xr_xir_type_is_class(&ctx->types, type)))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "member receiver is not a nominal value");
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[found->nominal.declaration];

@@ -46,6 +46,7 @@ typedef struct SourceManifest {
     XrDeclarationManifest *declarations;
 } SourceManifest;
 typedef enum SourceKind { SOURCE_SLOT, SOURCE_UNIT_SLOT, SOURCE_FUNCTION, SOURCE_MODULE, SOURCE_IMPORT, SOURCE_LOCAL, SOURCE_UNIT_LOCAL, SOURCE_NOMINAL, SOURCE_INTERFACE, SOURCE_PENDING } SourceKind;
+typedef struct SourceFact SourceFact;
 typedef struct SourceName {
     struct SourceName *next;
     const char *name, *imported;
@@ -189,6 +190,8 @@ typedef struct SourceContext {
     XrXirSlot *slots;
     XrXirLiteral *literals;
     SourceName **names, *locals, *scope;
+    SourceFact *facts;
+    uint32_t flow_alternatives;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
     uint32_t module_count, entry_function;
     bool core_factory;
@@ -929,6 +932,7 @@ static bool source_type_arguments(SourceContext *ctx, AstNode *node, const XrXir
     if (count && !source_copy_bytes(ctx, node, (XrXirType *) caller->arguments + caller->argument_count, types, count * sizeof(*types))) return false;
     caller->argument_count = needed; return true;
 }
+#include "xxir_source_flow.inc.c"
 static bool source_instantiation_prove(SourceContext *ctx, AstNode *node,
     XrXirDeclarationContext callee, SourceSubstitution substitution) {
     XrXirDeclarations declarations;
@@ -1257,9 +1261,17 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     SourceFunction *body = &ctx->bodies[ctx->function];
     uint32_t branch = body->count, rhs = body->block_count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {left.id, 0}, {0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
+    /* The right operand runs only when the left was true for && and false for || (N-5). */
+    SourceFact *entry_facts = ctx->facts;
+    if (!negate) {
+        SourceFactSet right_facts = {0};
+        if (!source_condition_facts(ctx, node->as.binary.left, node->type == AST_BINARY_AND, &right_facts, 0) ||
+            !source_facts_apply(ctx, &right_facts)) return false;
+    }
     if (negate) {
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}}, &right)) return false;
     } else if (!expression(ctx, node->as.binary.right, &right)) return false;
+    ctx->facts = entry_facts;
     if (right.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "logical operand must be bool");
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place.id, right.id}, {0}, 0, {0}}, NULL)) return false;
     uint32_t join = body->block_count;
@@ -1371,12 +1383,18 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, SourceExpected
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t branch = body->count, yes_block = body->block_count;
+    SourceFact *entry_facts = ctx->facts; SourceFactSet arm_facts = {0};
+    if (!source_condition_facts(ctx, node->as.ternary.condition, true, &arm_facts, 0)) return false;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id}, {0}, 0, {0}}, NULL) ||
-        !begin_block(ctx) || !source_plan_complete(ctx,plan->left,&yes)) return false;
+        !begin_block(ctx) || !source_facts_apply(ctx, &arm_facts) || !source_plan_complete(ctx,plan->left,&yes)) return false;
+    ctx->facts = entry_facts;
     uint32_t yes_end = body->current_block.identity, yes_jump = body->count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0, {0}}, NULL)) return false;
     uint32_t no_block = body->block_count;
-    if (!begin_block(ctx) || !source_plan_complete(ctx,plan->right,&no)) return false;
+    arm_facts = (SourceFactSet) {0};
+    if (!source_condition_facts(ctx, node->as.ternary.condition, false, &arm_facts, 0)) return false;
+    if (!begin_block(ctx) || !source_facts_apply(ctx, &arm_facts) || !source_plan_complete(ctx,plan->right,&no)) return false;
+    ctx->facts = entry_facts;
     SourceConditionalRecipe local;
     const SourceConditionalRecipe *recipe=plan->conditional;
     if (!recipe) {
@@ -1470,7 +1488,13 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_NEW_EXPR: return source_array_construct(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, context, value);
-    case AST_MATCH_EXPR: return source_match(ctx, node, context, !ctx->active_expression->statement_match, value);
+    case AST_MATCH_EXPR: {
+        ++ctx->flow_alternatives;
+        bool matched = source_facts_kill(ctx, node) &&
+            source_match(ctx, node, context, !ctx->active_expression->statement_match, value);
+        --ctx->flow_alternatives;
+        return matched && source_facts_kill(ctx, node);
+    }
     case AST_GROUPING: {
         SourceExpressionPlan *child=ctx->active_expression->left;
         if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"group has no collected expression");
@@ -1521,9 +1545,12 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
                 if (xr_xir_type_is_class(&ctx->types,symbol->type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class this cannot escape before constructor completion");
                 return source_constructor_value(ctx,node,value);
             }
-            if (symbol->mutable) return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type,
-                {symbol->index, 0}, {0}, 0, {0}}, value);
-            *value = (SourceValue) {symbol->index, symbol->type}; return true;
+            SourceValue read = {symbol->index, symbol->type};
+            if (symbol->mutable && !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type,
+                {symbol->index, 0}, {0}, 0, {0}}, &read)) return false;
+            /* A binding known to hold a value reads as its element. */
+            if (source_fact_known(ctx, symbol)) return source_unwrap_value(ctx, node, read, value);
+            *value = read; return true;
         }
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0, 0}, {0, 0}, symbol->index, {0}}, value);
     }
@@ -1542,6 +1569,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_WRITE)) return false;
         if (!source_plan_expression(ctx, node->as.assignment.value, (SourceExpectedType){true,symbol->type}, &assigned)) return false;
         if (assigned.type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "assignment type mismatch");
+        if (symbol->kind == SOURCE_LOCAL && !source_facts_assign(ctx, symbol, source_value_is_some(ctx, assigned))) return false;
         if (symbol->kind == SOURCE_UNIT_LOCAL) {
             *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true;
         }
@@ -1645,7 +1673,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     if (node->type==AST_THIS_EXPR || node->type==AST_VARIABLE) {
         plan->binding=visible_name(ctx,node->type==AST_THIS_EXPR ? "this" : node->as.variable.name);
         if (source_name_ready(plan->binding)) {
-            plan->type_ready=true;plan->ground_type=plan->binding->type;
+            plan->type_ready=true;plan->ground_type=source_symbol_type(ctx,plan->binding);
         }
     } else if (node->type==AST_LITERAL_TRUE || node->type==AST_LITERAL_FALSE || node->type==AST_LITERAL_STRING) {
         plan->type_ready=true;plan->ground_type=node->type==AST_LITERAL_STRING ? XR_XIR_STRING : XR_XIR_BOOL;
@@ -1679,8 +1707,18 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
         plan->condition=source_plan_collect(ctx,node->as.ternary.condition,(SourceExpectedType){false,XR_XIR_UNIT});
-        if (plan->condition) plan->left=source_plan_collect(ctx,node->as.ternary.true_expr,(SourceExpectedType){false,XR_XIR_UNIT});
-        if (plan->left) plan->right=source_plan_collect(ctx,node->as.ternary.false_expr,(SourceExpectedType){false,XR_XIR_UNIT});
+        {
+            /* Each arm is typed under the facts of its own direction (N-7). */
+            SourceFact *entry_facts=ctx->facts; SourceFactSet arm_facts={0};
+            if (plan->condition && source_condition_facts(ctx,node->as.ternary.condition,true,&arm_facts,0) &&
+                source_facts_apply(ctx,&arm_facts))
+                plan->left=source_plan_collect(ctx,node->as.ternary.true_expr,(SourceExpectedType){false,XR_XIR_UNIT});
+            ctx->facts=entry_facts; arm_facts=(SourceFactSet){0};
+            if (plan->left && source_condition_facts(ctx,node->as.ternary.condition,false,&arm_facts,0) &&
+                source_facts_apply(ctx,&arm_facts))
+                plan->right=source_plan_collect(ctx,node->as.ternary.false_expr,(SourceExpectedType){false,XR_XIR_UNIT});
+            ctx->facts=entry_facts;
+        }
         --ctx->depth;ctx->active_expression=parent;
         if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT},false)) return NULL;
         break;
@@ -1767,6 +1805,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     if (decl->type_annotation && annotation != initial.type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "binding annotation mismatch");
     SourceName *symbol;
+    bool initial_some = false;
     if (top) {
         symbol = find_name(ctx, ctx->names[ctx->module], decl->name);
         if (!symbol || symbol->kind != SOURCE_SLOT) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "binding declaration missing");
@@ -1795,7 +1834,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
         source_query_range(ctx, node, symbol->name))) return false;
     source_query_binding_type(ctx, symbol);
-    return true;
+    return source_facts_assign(ctx, symbol, initial_some);
 }
 /* A nested function is a closure value bound immutably from its declaration on. */
 static bool source_nested_function(SourceContext *ctx, AstNode *node) {
@@ -1850,13 +1889,19 @@ static bool scoped_statement(SourceContext *ctx, AstNode *node) {
 }
 static bool source_if(SourceContext *ctx, AstNode *node) {
     SourceValue condition;
+    SourceFactSet yes_facts = {0}, no_facts = {0};
+    if (!source_condition_facts(ctx, node->as.if_stmt.condition, true, &yes_facts, 0) ||
+        !source_condition_facts(ctx, node->as.if_stmt.condition, false, &no_facts, 0)) return false;
     if (!expression(ctx, node->as.if_stmt.condition, &condition)) return false;
     if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "if requires bool");
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t branch = body->count, yes = body->block_count;
+    SourceFact *entry_facts = ctx->facts;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {0}, 0, {0}}, NULL) ||
-        !begin_block(ctx) || !scoped_statement(ctx, node->as.if_stmt.then_branch)) return false;
+        !begin_block(ctx) || !source_facts_apply(ctx, &yes_facts) ||
+        !scoped_statement(ctx, node->as.if_stmt.then_branch)) return false;
+    SourceFact *yes_end = ctx->facts; bool yes_returned = ctx->returned;
     uint32_t yes_jump = UINT32_MAX, no_jump = UINT32_MAX;
     if (!ctx->returned) {
         yes_jump = body->count;
@@ -1864,13 +1909,21 @@ static bool source_if(SourceContext *ctx, AstNode *node) {
     }
     uint32_t no = body->block_count;
     if (!begin_block(ctx)) return false;
+    ctx->facts = entry_facts;
+    if (!source_facts_apply(ctx, &no_facts)) return false;
     if (node->as.if_stmt.else_branch && !scoped_statement(ctx, node->as.if_stmt.else_branch)) return false;
+    SourceFact *no_end = ctx->facts; bool no_returned = ctx->returned;
     if (!ctx->returned) {
         no_jump = body->count;
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0, {0}}, NULL)) return false;
     }
     body->recipes[branch].instruction.targets[0] = yes; body->recipes[branch].instruction.targets[1] = no;
     ctx->returned = yes_jump == UINT32_MAX && no_jump == UINT32_MAX;
+    /* A path that exits leaves its opposite's facts behind (N-8); otherwise both paths must agree (N-9). */
+    if (yes_returned && no_returned) ctx->facts = entry_facts;
+    else if (yes_returned) ctx->facts = no_end;
+    else if (no_returned) ctx->facts = yes_end;
+    else if (!source_facts_join(ctx, yes_end, no_end, &ctx->facts)) return false;
     if (!ctx->returned) {
         uint32_t join = body->block_count;
         if (!begin_block(ctx)) return false;
@@ -1926,6 +1979,14 @@ static bool patch_exits(SourceContext *ctx, SourcePatch *patch, uint32_t target)
 }
 static bool source_loop(SourceContext *ctx, AstNode *node, AstNode *condition_node, AstNode *loop_body, AstNode *step) {
     SourceFunction *body = &ctx->bodies[ctx->function];
+    /* The header joins the entry edge and the back edge, so facts about bindings the loop writes are gone. */
+    SourceFactSet yes_facts = {0}, no_facts = {0};
+    bool has_break;
+    if ((condition_node && !source_facts_kill(ctx, condition_node)) || (loop_body && !source_facts_kill(ctx, loop_body)) ||
+        (step && !source_facts_kill(ctx, step)) || !source_has_break(ctx, loop_body, &has_break)) return false;
+    if (condition_node && (!source_condition_facts(ctx, condition_node, true, &yes_facts, 0) ||
+        !source_condition_facts(ctx, condition_node, false, &no_facts, 0))) return false;
+    SourceFact *header_facts = ctx->facts;
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t condition_block = body->block_count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {condition_block, 0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
@@ -1934,10 +1995,12 @@ static bool source_loop(SourceContext *ctx, AstNode *node, AstNode *condition_no
     else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}}, &condition)) return false;
     if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "loop condition requires bool");
     uint32_t branch = body->count, entry = body->block_count;
-    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {entry, 0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {entry, 0}, 0, {0}}, NULL) || !begin_block(ctx) ||
+        !source_facts_apply(ctx, &yes_facts)) return false;
     SourceLoop loop = {ctx->loop, NULL, NULL, body->frontier}; ctx->loop = &loop;
     bool ok = scoped_statement(ctx, loop_body); ctx->loop = loop.parent;
     if (!ok) return false;
+    ctx->facts = header_facts;
     if (!ctx->returned || loop.continues) {
         uint32_t next = step ? body->block_count : condition_block;
         if (!ctx->returned && !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {next, 0}, 0, {0}}, NULL)) return false;
@@ -1948,6 +2011,8 @@ static bool source_loop(SourceContext *ctx, AstNode *node, AstNode *condition_no
     uint32_t exit = body->block_count;
     if (!begin_block(ctx)) return false;
     body->recipes[branch].instruction.targets[1] = exit;
+    ctx->facts = header_facts;
+    if (!has_break && !source_facts_apply(ctx, &no_facts)) return false;
     return patch_exits(ctx, loop.breaks, exit);
 }
 static bool source_for(SourceContext *ctx, AstNode *node) {
@@ -1981,13 +2046,24 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     if (ctx->returned) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unreachable statements are not admitted");
     switch (node->type) {
     case AST_DEFER_STMT: return source_defer(ctx, node);
-    case AST_TRY_CATCH: return source_try(ctx, node);
+    case AST_TRY_CATCH: {
+        /* Handlers are alternative paths: no fact about a binding they write survives, and none is learned inside. */
+        ++ctx->flow_alternatives;
+        bool tried = source_facts_kill(ctx, node) && source_try(ctx, node);
+        --ctx->flow_alternatives;
+        return tried && source_facts_kill(ctx, node);
+    }
     case AST_IF_STMT: return source_if(ctx, node);
     case AST_WHILE_STMT:
         if (node->as.while_stmt.label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "labelled loops are not admitted");
         return source_loop(ctx, node, node->as.while_stmt.condition, node->as.while_stmt.body, NULL);
     case AST_FOR_STMT: return source_for(ctx, node);
-    case AST_FOR_IN_STMT: return source_for_in(ctx, node);
+    case AST_FOR_IN_STMT: {
+        ++ctx->flow_alternatives;
+        bool iterated = source_facts_kill(ctx, node) && source_for_in(ctx, node);
+        --ctx->flow_alternatives;
+        return iterated && source_facts_kill(ctx, node);
+    }
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
     case AST_FUNCTION_DECL: return top || source_nested_function(ctx, node);
@@ -2741,7 +2817,9 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     ctx->identities[index].promises = no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0;
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
+    SourceFact *facts = ctx->facts; uint32_t alternatives = ctx->flow_alternatives;
     ctx->function = index; ctx->locals = ctx->scope = NULL; ctx->loop = NULL; ctx->returned = false;
+    ctx->facts = NULL; ctx->flow_alternatives = 0;
     XrXirType type = XR_XIR_UNIT;
     bool ok = closure_parameters(ctx, node, &scan, parameters, context);
     if (ok) {
@@ -2780,6 +2858,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         query_declaration->type_parameter_kinds = ctx->generics[index].parameter_kinds;
     }
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
+    ctx->facts = facts; ctx->flow_alternatives = alternatives;
     if (!ok) return false;
     for (SourceCapture *p = scan.captures; p; p = p->next) {
         if (p->source->kind == SOURCE_UNIT_LOCAL) continue;
@@ -2802,7 +2881,7 @@ static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
     for (int t = 0; t < ctx->graph->topo_count; ++t) {
         ctx->module = (uint32_t) ctx->graph->topo_order[t]; ctx->function = ctx->module;
-        ctx->locals = ctx->scope = NULL; ctx->returned = false;
+        ctx->locals = ctx->scope = NULL; ctx->returned = false; ctx->facts = NULL; ctx->flow_alternatives = 0;
         AstNode *ast = ctx->graph->specs[ctx->module].ast;
         if(ctx->graph->specs[ctx->module].representation==XR_MODULE_CHECKED_LIBRARY)continue;
         for (int i = 0; i < ast->as.program.count; ++i) if (!statement(ctx, ast->as.program.statements[i], true)) return false;
@@ -2811,7 +2890,7 @@ static bool build_bodies(SourceContext *ctx) {
     for (uint32_t f = count; f < ctx->first_closure; ++f) {
         if(ctx->bodies[f].checked_library)continue;
         ctx->function = f; ctx->module = ctx->bodies[f].module; ctx->returned = false;
-        ctx->locals = ctx->scope = NULL;
+        ctx->locals = ctx->scope = NULL; ctx->facts = NULL; ctx->flow_alternatives = 0;
         if (ctx->bodies[f].node->type == AST_STRUCT_DECL || ctx->bodies[f].node->type == AST_CLASS_DECL) {
             if (!source_struct_constructor_body(ctx) || !finish_body(ctx)) return false;
             continue;

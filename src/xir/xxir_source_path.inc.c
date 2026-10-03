@@ -27,7 +27,7 @@ static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type)
     *type = XR_XIR_UNIT;
     if (!source_path_nodes(ctx,node,steps,&count,&root)) return false;
     if (!root || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT)) return true;
-    *type = root->type;
+    *type = source_symbol_type(ctx, root);
     while (count) {
         AstNode *step = steps[--count];
         if (step->type == AST_INDEX_GET) {
@@ -58,8 +58,10 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
     AstNode *steps[128]; uint32_t count; SourceName *root;
     if (!source_path_nodes(ctx,node,steps,&count,&root)) return false;
     /* An unrebindable class binding still lets its fields change: the identity roots the path. */
+    XrXirType root_type = root ? source_symbol_type(ctx,root) : XR_XIR_UNIT;
+    bool narrowed = root && root_type != root->type;
     bool object_root = root && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT) &&
-        xr_xir_type_is_class(&ctx->types,root->type) && !root->mutable;
+        xr_xir_type_is_class(&ctx->types,root_type) && (!root->mutable || narrowed);
     if (!root || (!root->mutable && !object_root) || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"value mutation requires a mutable named root");
     if (object_root && root->construction)
@@ -72,7 +74,11 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
         SourceValue handle = {saved.index,saved.type};
         if (saved.kind == SOURCE_SLOT &&
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_SLOT_LOAD,saved.type,{0,0},{0,0},saved.index,{0}},&handle)) return false;
-        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,saved.type,{handle.id,0},{0},0,{0}},place)) return false;
+        if (saved.kind == SOURCE_LOCAL && saved.mutable &&
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,saved.type,{saved.index,0},{0},0,{0}},&handle)) return false;
+        /* A binding narrowed to hold a value roots the path at that value. */
+        if (narrowed && !source_unwrap_value(ctx,node,handle,&handle)) return false;
+        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,root_type,{handle.id,0},{0},0,{0}},place)) return false;
     } else if (!source_recipe_record(ctx,(XrXirInstruction){saved.kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
             saved.type,{saved.kind == SOURCE_SLOT ? 0 : saved.index,0},{0},
             saved.kind == SOURCE_SLOT ? saved.index : 0,{0}},place)) return false;
