@@ -17,6 +17,7 @@ struct Array<T> {
     mutPtr() -> MutPtr<T>
     ref pop() -> T?
     ref shift() -> T?
+    // @native-operation ARRAY_UNSHIFT allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref unshift(value: T)
     // @native-operation ARRAY_CLEAR allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref clear()
@@ -29,6 +30,7 @@ struct Array<T> {
     contains(value: T) -> bool
     // @native-operation ARRAY_JOIN allocation=may_heap failures=allocation,retain,limit ownership=owned
     join(separator?: string) -> string
+    // @native-operation ARRAY_REVERSE allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref reverse() -> Array<T>
     ref sort(compareFn?: fn(a: T, b: T) -> i64) -> Array<T>
     // U is inferred only from the checked callback signature, not a receiver type parameter.

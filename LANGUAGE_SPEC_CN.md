@@ -6306,6 +6306,10 @@ print(a[0], a[1])           // head head
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
+下一声明片冻结 `ref unshift(value: T)`（普通 READ 的精确 T，返回 unit）和 `ref reverse() -> Array<T>`（零参数，拥有式结果）；冻结不表示已准入或验证。两者只要求 Array 原有的可复制、可保存能力，不额外要求 Equal、Compare 或 ToString；普通泛型在定义处检查，不从未来实例补权限。receiver 必须是可写逻辑 place，root/path 的选择器只求一次；unshift 实参成功后读取 binding 的当前 Array，实参的已完成副作用不回滚。负整数 T 是普通元素，不是长度参数。
+
+两方法先准备独立拥有式候选，reverse 取反向排列，unshift 将输入置于原元素之前；空 reverse 返回空 Array，空 unshift 得到单元素 Array。元素复制在 class 身份处停止。reverse 的结果拥有关系在最终单次回写前准备完成，发布后结果与 receiver 是独立逻辑副本；方法准备或发布失败、发布前取消不改变提交前的逻辑值，临时拥有关系正常释放。方法发布后的后续语句、整个函数的结果交接失败或取消遵循普通调用规则，不撤销已完成的方法副作用；内部循环不新增语言挂起点或用户回调。私有候选构造可能重选 backing 容量，不能声称保持旧容量；capacity/withCapacity/reserve 的公开增长与分离保证仍在该声明族准入时另冻。
+
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `i64` 全局查询 |

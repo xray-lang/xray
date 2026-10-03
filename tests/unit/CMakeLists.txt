@@ -601,33 +601,41 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/unit_slot_failure.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/generic_fields.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/unit_locals.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_iteration.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_reorder_owner.cmake)
 add_executable(test_xir_source_arrays xir/test_xir_source_arrays.c)
 target_link_libraries(test_xir_source_arrays PRIVATE xray_xir_source xray_xir_vm)
-target_compile_definitions(test_xir_source_arrays PRIVATE XR_ARRAY_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source")
+target_compile_definitions(test_xir_source_arrays PRIVATE XR_ARRAY_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source"
+    XR_ARRAY_REORDER_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_reordering_source")
 set(XIR_ARRAY_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_source.xrc)
 set(XIR_ARRAY_BOUNDS_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_bounds.xrc)
 set(XIR_ARRAY_SOURCE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_source.c)
-add_custom_command(OUTPUT ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}
+set(XIR_ARRAY_REORDER_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_reorder.xrc)
+set(XIR_ARRAY_REORDER_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_reorder.c)
+add_custom_command(OUTPUT ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_source_arrays> ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_source_arrays> ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
     DEPENDS test_xir_source_arrays
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/producer.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/bounds.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_reordering_source/root.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_reordering_source/producer.xr
     VERBATIM)
-add_executable(test_xir_array_packet_vm xir/test_xir_array_packet_vm.c ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED})
+add_executable(test_xir_array_packet_vm xir/test_xir_array_packet_vm.c ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED})
 target_link_libraries(test_xir_array_packet_vm PRIVATE xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}")
-target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_BOUNDS_CHECKED_FIXTURE="${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}")
-add_custom_command(OUTPUT ${XIR_ARRAY_SOURCE_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_array_packet_vm> ${XIR_ARRAY_SOURCE_GENERATED}
-    DEPENDS test_xir_array_packet_vm ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}
+target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_BOUNDS_CHECKED_FIXTURE="${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}"
+    XR_ARRAY_REORDER_CHECKED_FIXTURE="${XIR_ARRAY_REORDER_CHECKED_GENERATED}")
+add_custom_command(OUTPUT ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_array_packet_vm> ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
+    DEPENDS test_xir_array_packet_vm ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
     VERBATIM)
-add_executable(test_xir_source_array_native xir/test_xir_source_array_native.c ${XIR_ARRAY_SOURCE_GENERATED})
+add_executable(test_xir_source_array_native xir/test_xir_source_array_native.c ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED})
 target_link_libraries(test_xir_source_array_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_source_array_mixed xir/test_xir_source_array_mixed.c ${XIR_ARRAY_SOURCE_GENERATED})
+add_executable(test_xir_source_array_mixed xir/test_xir_source_array_mixed.c ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED})
 target_link_libraries(test_xir_source_array_mixed PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_source_array_mixed PRIVATE XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}")
+target_compile_definitions(test_xir_source_array_mixed PRIVATE XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}"
+    XR_ARRAY_REORDER_CHECKED_FIXTURE="${XIR_ARRAY_REORDER_CHECKED_GENERATED}")
 add_executable(test_xir_source_floats xir/test_xir_source_floats.c)
 target_link_libraries(test_xir_source_floats PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_floats PRIVATE XR_FLOAT_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_float_source")

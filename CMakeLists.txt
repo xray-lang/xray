@@ -2605,19 +2605,14 @@ if(XR_BUILD_MCP)
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
     add_compile_definitions(XR_HAS_MCP=1)
-    set(_xmcp_builtin_dump ${CMAKE_CURRENT_BINARY_DIR}/xmcp_builtin_dump.json)
-    set(_xray_api_inventory_builtin_dump ${CMAKE_CURRENT_BINARY_DIR}/xray_api_inventory_builtin_dump.json)
     set(_xmcp_api_inventory ${CMAKE_CURRENT_BINARY_DIR}/xray_api_inventory.json)
     set(_xmcp_api_inventory_html ${CMAKE_CURRENT_BINARY_DIR}/xray_api_inventory.html)
     add_custom_target(api-inventory
-        COMMAND $<TARGET_FILE:xray> builtin-dump > ${_xray_api_inventory_builtin_dump}
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_api_inventory.py
             --root ${CMAKE_CURRENT_SOURCE_DIR}
-            --builtin-dump ${_xray_api_inventory_builtin_dump}
             --json ${_xmcp_api_inventory}
             --html ${_xmcp_api_inventory_html}
-        DEPENDS xray
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         VERBATIM
         COMMENT "Generating source-derived Xray API inventory JSON and HTML"
@@ -2626,11 +2621,9 @@ if(XR_BUILD_MCP)
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
             --root ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMAND $<TARGET_FILE:xray> builtin-dump > ${_xmcp_builtin_dump}
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_api_inventory.py
             --root ${CMAKE_CURRENT_SOURCE_DIR}
-            --builtin-dump ${_xmcp_builtin_dump}
             --json ${_xmcp_api_inventory}
             --check-docs
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
@@ -2639,7 +2632,6 @@ if(XR_BUILD_MCP)
             --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC_CN.md
             --api-inventory ${_xmcp_api_inventory}
             --out ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp/xmcp_knowledge_generated.c
-        DEPENDS xray
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         VERBATIM
         COMMENT "Regenerating language docs, source API inventory, and MCP knowledge tables"
@@ -3340,8 +3332,6 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_module_merge.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 postmerge
-                --xray $<TARGET_FILE:xray>
-        DEPENDS xray
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         VERBATIM
         COMMENT "Checking task-196 S0 integrated stdlib metadata and generated artifacts"
@@ -3352,9 +3342,7 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_module_merge.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 regenerate
-                --xray $<TARGET_FILE:xray>
                 --artifact-dir ${CMAKE_CURRENT_BINARY_DIR}/stdlib-governance
-        DEPENDS xray
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         VERBATIM
         COMMENT "Regenerating task-196 S0 stdlib metadata, API/MCP artifacts and report"
@@ -3869,7 +3857,6 @@ if(BUILD_TESTS)
         NAME api_inventory_docs_coverage
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_api_inventory.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --xray $<TARGET_FILE:xray>
                 --check-docs
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )

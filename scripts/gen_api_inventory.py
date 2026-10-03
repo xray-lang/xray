@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Generate a source-derived Xray API inventory.
 
-The inventory is intentionally broader than `xray builtin-dump`: it merges
-analyzer-visible stdlib modules, pure-Xray stdlib exports, native type
-declarations, global builtins, prelude names, builtin interfaces, keywords, and
-IR intrinsics into one machine-readable list.  The same JSON can drive a human
+The inventory merges source declarations, including private provider metadata,
+pure-Xray stdlib exports, native type declarations, global builtins, prelude
+names, builtin interfaces, keywords, and IR intrinsics. Declaration presence
+does not grant access, prove Source admission, or authorize execution.  The same JSON can drive a human
 HTML explorer and documentation coverage checks.
 """
 
@@ -15,7 +15,6 @@ import ast
 import html
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -603,28 +602,6 @@ def parse_xray_type_aliases(
     return out
 
 
-def load_builtin_dump(root: Path, xray: Path | None, builtin_dump: Path | None) -> dict[str, Any]:
-    if builtin_dump:
-        return json.loads(builtin_dump.read_text(encoding="utf-8"))
-    if xray is None:
-        candidate = root / "build" / "xray"
-        if candidate.exists():
-            xray = candidate
-    if xray is None:
-        return {"modules": []}
-    proc = subprocess.run(
-        [str(xray), "builtin-dump"],
-        cwd=str(root),
-        text=True,
-        encoding="utf-8",
-        errors="strict",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=20,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr or proc.stdout)
-    return json.loads(proc.stdout)
 
 
 def load_stdlibgen(root: Path):
@@ -707,12 +684,13 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
         semantic_source = str(getattr(entry, "semantic_source", "") or "")
         if semantic_source:
             return semantic_source, int(getattr(entry, "source_line", 0) or 1)
-        return locations.get((kind, module, name), ("stdlib/defs/core.def", 1))
+        location = locations.get((kind, module, name))
+        if location is None:
+            raise ValueError(f"missing source declaration for {module}.{name} ({kind})")
+        return location
 
     out: list[dict[str, Any]] = []
     for entry in entries:
-        if entry.is_internal:
-            continue
         source, line = source_for("fn", entry.module, entry.name)
         category, surface, doc_module = module_inventory_surface(entry.module)
         surface, doc_module = stdlib_doc_surface_for_name(surface, doc_module, entry.name)
@@ -731,8 +709,6 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
             )
         )
     for const in constants:
-        if const.is_internal:
-            continue
         source, line = source_for("const", const.module, const.name)
         category, surface, doc_module = module_inventory_surface(const.module)
         surface, doc_module = stdlib_doc_surface_for_name(surface, doc_module, const.name)
@@ -751,8 +727,6 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
             )
         )
     for handle in handles:
-        if handle.is_internal:
-            continue
         source, line = source_for("handle", handle.module, handle.name)
         category, surface, doc_module = module_inventory_surface(handle.module)
         out.append(
@@ -785,8 +759,6 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
                 )
             )
     for object_shape in object_shapes:
-        if object_shape.is_internal:
-            continue
         source, line = source_for("object", object_shape.module, object_shape.name, object_shape)
         category, surface, doc_module = module_inventory_surface(object_shape.module)
         out.append(
@@ -821,8 +793,6 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
                 )
             )
     for enum in enums:
-        if enum.is_internal:
-            continue
         source, line = source_for("enum", enum.module, enum.name, enum)
         category, surface, doc_module = module_inventory_surface(enum.module)
         out.append(
@@ -859,6 +829,15 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
                     doc_module=doc_module,
                 )
             )
+    internal_owners = {
+        (entry.module, entry.name)
+        for group in (entries, constants, handles, object_shapes, enums)
+        for entry in group if entry.is_internal
+    }
+    for row in out:
+        row["internal"] = (row["namespace"], row["name"].split(".", 1)[0]) in internal_owners
+        if row["internal"]:
+            row["doc_surface"] = row["doc_module"] = ""
     return out
 
 
@@ -936,29 +915,6 @@ def collect_runtime_intrinsic_modules(root: Path) -> list[dict[str, Any]]:
     return out
 
 
-def collect_builtin_modules(root: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    source = "xray builtin-dump"
-    for mod in data.get("modules", []):
-        module = mod.get("name", "")
-        for sym in mod.get("symbols", []):
-            name = sym.get("name", "")
-            surface, doc_module = stdlib_doc_surface_for_name("stdlib", module, name)
-            out.append(
-                item(
-                    category="stdlib-module",
-                    namespace=module,
-                    name=name,
-                    kind=sym.get("kind", "function"),
-                    signature=sym.get("signature", ""),
-                    summary=sym.get("summary", ""),
-                    source=source,
-                    line=1,
-                    doc_surface=surface,
-                    doc_module=doc_module,
-                )
-            )
-    return out
 
 
 def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
@@ -1562,23 +1518,12 @@ def compare_api_inventories(
     }
 
 
-def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) -> dict[str, Any]:
-    builtin_data = load_builtin_dump(root, xray, builtin_dump)
+def build_inventory(root: Path) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     metadata_items = collect_stdlib_metadata(root)
     runtime_intrinsic_items = collect_runtime_intrinsic_modules(root)
-    source_module_symbols = {
-        (entry.get("namespace", ""), entry.get("name", ""))
-        for entry in [*metadata_items, *runtime_intrinsic_items]
-        if entry.get("category") == "stdlib-module"
-    }
     items.extend(metadata_items)
     items.extend(runtime_intrinsic_items)
-    items.extend(
-        entry
-        for entry in collect_builtin_modules(root, builtin_data)
-        if (entry.get("namespace", ""), entry.get("name", "")) not in source_module_symbols
-    )
     items.extend(collect_pure_stdlib(root))
     items.extend(collect_native_types(root))
     items.extend(collect_globals(root))
@@ -1591,6 +1536,8 @@ def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) ->
     items = dedupe(items)
     return {
         "schema": 1,
+        "scope": "source-declarations",
+        "execution_authority": False,
         "root": str(root),
         "counts": {
             "items": len(items),
@@ -1975,8 +1922,6 @@ render();
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("."))
-    parser.add_argument("--xray", type=Path, default=None, help="xray executable for builtin-dump")
-    parser.add_argument("--builtin-dump", type=Path, default=None, help="JSON from `xray builtin-dump`")
     parser.add_argument("--json", type=Path, default=None, help="write inventory JSON")
     parser.add_argument("--html", type=Path, default=None, help="write interactive HTML inventory")
     parser.add_argument("--compare-json", type=Path, default=None, help="baseline inventory JSON to diff")
@@ -1986,7 +1931,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     root = args.root.resolve()
-    inventory = build_inventory(root, args.xray, args.builtin_dump)
+    inventory = build_inventory(root)
 
     if args.json:
         args.json.parent.mkdir(parents=True, exist_ok=True)

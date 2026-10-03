@@ -1,0 +1,1 @@
+fn bad<T>(items: Array<T>, head: T) { items.unshift(head) }

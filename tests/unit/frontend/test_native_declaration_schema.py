@@ -54,11 +54,18 @@ class NativeDeclarations(unittest.TestCase):
                     self.assertNotEqual(schema.simple_term(parameter[1], 'T'), 'UNADMITTED')
         reduce = next(member for member in members if member.name == 'reduce')
         self.assertEqual(schema.simple_term(reduce.parameters[1][1], 'T'), 'RESULT_VARIABLE')
+        reverse = next(member for member in members if member.name == 'reverse')
+        unshift = next(member for member in members if member.name == 'unshift')
+        self.assertEqual((reverse.receiver, reverse.ownership, len(reverse.parameters),
+                          schema.simple_term(reverse.result, 'T')), ('REF', 'owned', 0, 'ARRAY_ELEMENT'))
+        self.assertEqual((unshift.receiver, unshift.ownership, len(unshift.parameters),
+                          schema.simple_term(unshift.parameters[0][1], 'T'),
+                          schema.simple_term(unshift.result, 'T')), ('REF', 'unit', 1, 'ELEMENT', 'UNIT'))
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr', 'pop', 'shift', 'unshift',
-                          'reserve', 'resize', 'concat', 'reverse', 'sort', 'fill', 'toString',
+                         {'withCapacity', 'capacity', 'ptr', 'mutPtr', 'pop', 'shift',
+                          'reserve', 'resize', 'concat', 'sort', 'fill', 'toString',
                           'iterator', 'entriesIterator', 'entries'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
@@ -89,6 +96,16 @@ class NativeDeclarations(unittest.TestCase):
             ('join(separator?: string)', 'join(separator?: T)'),
             ('ref clear()', 'clear()'),
             ('ref clear()', 'ref clear(value: T)'),
+            ('ref reverse() -> Array<T>', 'reverse() -> Array<T>'),
+            ('ref reverse() -> Array<T>', 'ref reverse() -> T'),
+            ('ref reverse() -> Array<T>', 'ref reverse() -> Array<Unknown>'),
+            ('ref reverse() -> Array<T>', 'ref reverse(value: T) -> Array<T>'),
+            ('ref unshift(value: T)', 'unshift(value: T)'),
+            ('ref unshift(value: T)', 'ref unshift(value?: T)'),
+            ('ref unshift(value: T)', 'ref unshift(...value: T)'),
+            ('ref unshift(value: T)', 'ref unshift(value: Unknown)'),
+            ('ref unshift(value: T)', 'ref unshift(value: T) -> Array<T>'),
+            ('ref unshift(value: T)', 'ref unshift(value: T, index: i64)'),
             ('struct Array<T>', 'struct Array<U>'),
         ]
         for before, after in cases:

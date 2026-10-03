@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -83,6 +84,20 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
 
     def test_api_classification_is_canonical(self) -> None:
         self.assertTrue(all(item.ok for item in readiness.check_api_classification(ROOT)))
+
+    def test_private_inventory_does_not_hide_public_classification_failure(self) -> None:
+        public = {"namespace": "crypto", "category": "stdlib-module",
+                  "doc_surface": "stdlib", "qualified": "crypto.digest"}
+        private = {"namespace": "crypto", "category": "stdlib-module",
+                   "doc_surface": "", "internal": True, "qualified": "crypto._provider"}
+        with patch.object(readiness, "collect_stdlib_metadata", return_value=[private]), \
+             patch.object(readiness, "collect_pure_stdlib", return_value=[public]):
+            self.assertTrue(all(item.ok for item in readiness.check_api_classification(ROOT)))
+            public["doc_surface"] = ""
+            failures = [item for item in readiness.check_api_classification(ROOT) if not item.ok]
+            self.assertEqual(1, len(failures))
+            self.assertIn("misclassified API: crypto.digest", failures[0].detail)
+            self.assertNotIn("crypto._provider", failures[0].detail)
 
 
 if __name__ == "__main__":

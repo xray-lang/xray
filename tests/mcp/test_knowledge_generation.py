@@ -178,13 +178,7 @@ def generated_symbol_index(generated: Path) -> dict[str, set[str]]:
     return result
 
 
-def source_symbol_index(root: Path, xray: Path) -> dict[str, set[str]]:
-    proc = run([str(xray), "builtin-dump"], root)
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr or proc.stdout)
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
-        tmp.write(proc.stdout)
-        builtins_path = Path(tmp.name)
+def source_symbol_index(root: Path) -> dict[str, set[str]]:
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
         inventory_path = Path(tmp.name)
     try:
@@ -194,8 +188,6 @@ def source_symbol_index(root: Path, xray: Path) -> dict[str, set[str]]:
                 str(root / "scripts/gen_api_inventory.py"),
                 "--root",
                 str(root),
-                "--builtin-dump",
-                str(builtins_path),
                 "--json",
                 str(inventory_path),
                 "--check-docs",
@@ -206,7 +198,6 @@ def source_symbol_index(root: Path, xray: Path) -> dict[str, set[str]]:
             raise RuntimeError(inv.stderr or inv.stdout)
         data = json.loads(inventory_path.read_text(encoding="utf-8"))
     finally:
-        builtins_path.unlink(missing_ok=True)
         inventory_path.unlink(missing_ok=True)
 
     index: dict[str, set[str]] = {}
@@ -225,9 +216,9 @@ def source_symbol_index(root: Path, xray: Path) -> dict[str, set[str]]:
     return index
 
 
-def check_symbol_subset(root: Path, xray: Path) -> list[str]:
+def check_symbol_subset(root: Path) -> list[str]:
     generated = generated_symbol_index(root / "src/app/mcp/xmcp_knowledge_generated.c")
-    source = source_symbol_index(root, xray)
+    source = source_symbol_index(root)
     errors: list[str] = []
     for module, symbols in sorted(generated.items()):
         extra = symbols - source.get(module, set())
@@ -268,13 +259,7 @@ def check_generated_stdlib_api_tables(root: Path) -> list[str]:
     return [f"generated stdlib API table missing {needle}" for needle in required if needle not in text]
 
 
-def check_generated_is_current(root: Path, xray: Path) -> list[str]:
-    proc = run([str(xray), "builtin-dump"], root)
-    if proc.returncode != 0:
-        return [proc.stderr or proc.stdout]
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
-        tmp.write(proc.stdout)
-        builtins_path = Path(tmp.name)
+def check_generated_is_current(root: Path) -> list[str]:
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
         inventory_path = Path(tmp.name)
     try:
@@ -284,8 +269,6 @@ def check_generated_is_current(root: Path, xray: Path) -> list[str]:
                 str(root / "scripts/gen_api_inventory.py"),
                 "--root",
                 str(root),
-                "--builtin-dump",
-                str(builtins_path),
                 "--json",
                 str(inventory_path),
                 "--check-docs",
@@ -311,7 +294,6 @@ def check_generated_is_current(root: Path, xray: Path) -> list[str]:
             root,
         )
     finally:
-        builtins_path.unlink(missing_ok=True)
         inventory_path.unlink(missing_ok=True)
     if check.returncode != 0:
         return [check.stderr or check.stdout]
@@ -423,10 +405,10 @@ def main(argv: list[str]) -> int:
     if has_knowledge:
         errors.extend(check_xray_fences(root, xray))
     if has_docs and has_knowledge:
-        errors.extend(check_generated_is_current(root, xray))
+        errors.extend(check_generated_is_current(root))
 
     errors.extend(check_spec_quality_gate(root))
-    errors.extend(check_symbol_subset(root, xray))
+    errors.extend(check_symbol_subset(root))
     errors.extend(check_generated_symbol_names(root))
     errors.extend(check_generated_stdlib_api_tables(root))
     errors.extend(check_prompt_smoke_examples(root, xray))

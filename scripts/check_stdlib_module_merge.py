@@ -423,13 +423,11 @@ def run_source_checks(root: Path, modules: list[str], require_complete: bool) ->
     run_step(root, "stdlib self-hosting report", report_command)
 
 
-def run_tooling_check(root: Path, xray: Path) -> None:
+def run_tooling_check(root: Path) -> None:
     python = sys.executable
     with tempfile.TemporaryDirectory(prefix="xray-stdlib-intake-") as tmp:
         temp = Path(tmp)
-        builtin_dump = temp / "builtin_dump.json"
         inventory = temp / "api_inventory.json"
-        run_step(root, "builtin API dump", [str(xray), "builtin-dump"], stdout=builtin_dump)
         run_step(
             root,
             "source API inventory and docs coverage",
@@ -438,8 +436,6 @@ def run_tooling_check(root: Path, xray: Path) -> None:
                 "scripts/gen_api_inventory.py",
                 "--root",
                 str(root),
-                "--builtin-dump",
-                str(builtin_dump),
                 "--json",
                 str(inventory),
                 "--check-docs",
@@ -464,16 +460,14 @@ def run_tooling_check(root: Path, xray: Path) -> None:
         )
 
 
-def regenerate(root: Path, xray: Path, artifact_dir: Path) -> None:
+def regenerate(root: Path, artifact_dir: Path) -> None:
     python = sys.executable
     run_step(root, "regenerate stdlib declarative metadata", [python, "tools/stdlibgen/stdlibgen.py", "--root", str(root)])
     run_step(root, "regenerate analyzer/LSP stdlib metadata", [python, "scripts/gen_stdlib_types.py"])
     run_step(root, "regenerate language and knowledge docs", [python, "scripts/gen_language_docs.py", "--root", str(root)])
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    builtin_dump = artifact_dir / "builtin_dump.json"
     inventory = artifact_dir / "api_inventory.json"
     inventory_html = artifact_dir / "api_inventory.html"
-    run_step(root, "regenerate builtin API dump", [str(xray), "builtin-dump"], stdout=builtin_dump)
     run_step(
         root,
         "regenerate source API inventory",
@@ -482,8 +476,6 @@ def regenerate(root: Path, xray: Path, artifact_dir: Path) -> None:
             "scripts/gen_api_inventory.py",
             "--root",
             str(root),
-            "--builtin-dump",
-            str(builtin_dump),
             "--json",
             str(inventory),
             "--html",
@@ -541,11 +533,9 @@ def main() -> int:
 
     postmerge_parser = subparsers.add_parser("postmerge", help="check integrated S0 source and generated artifacts")
     postmerge_parser.add_argument("--module", action="append", default=[])
-    postmerge_parser.add_argument("--xray", type=Path)
     postmerge_parser.add_argument("--require-complete", action="store_true")
 
     regen_parser = subparsers.add_parser("regenerate", help="regenerate all S0-owned stdlib artifacts")
-    regen_parser.add_argument("--xray", required=True, type=Path)
     regen_parser.add_argument("--artifact-dir", default="build/stdlib-governance", type=Path)
     regen_parser.add_argument("--module", action="append", default=[])
 
@@ -582,17 +572,16 @@ def main() -> int:
             return 0 if audit["status"] in {"ready", "needs-sync"} else 1
         if args.command == "postmerge":
             run_source_checks(root, args.module, args.require_complete)
-            if args.xray:
-                run_tooling_check(root, args.xray.resolve())
+            run_tooling_check(root)
             print("OK: task-196 stdlib module post-merge gate passed")
             return 0
         if args.command == "regenerate":
             artifact_dir = args.artifact_dir
             if not artifact_dir.is_absolute():
                 artifact_dir = root / artifact_dir
-            regenerate(root, args.xray.resolve(), artifact_dir.resolve())
+            regenerate(root, artifact_dir.resolve())
             run_source_checks(root, args.module, False)
-            run_tooling_check(root, args.xray.resolve())
+            run_tooling_check(root)
             print(f"OK: task-196 S0 artifacts regenerated under {artifact_dir}")
             return 0
     except (RuntimeError, subprocess.CalledProcessError) as exc:

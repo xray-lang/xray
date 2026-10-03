@@ -1,0 +1,60 @@
+import "./producer" as producer
+
+var a = ["init"]
+var trace = 0
+struct Item { text:string; values:Array<i64> }
+var pathItems = [Item{text:"old", values:[11]}]
+fn pathIndex() -> i64 { trace = trace * 10 + 1; return 0 }
+fn pathAppend() -> i64 {
+    trace = trace * 10 + 2
+    pathItems = [Item{text:"new", values:[73]}]
+    return 61
+}
+export fn current() -> string { return a[0] }
+export fn orderTrace() -> i64 { return trace }
+
+export fn reorderNumbers() -> Array<i64> {
+    var empty: Array<i64> = []
+    const emptyResult = empty.reverse()
+    empty.unshift(-7)
+    var one = [9]
+    const oneResult = one.reverse()
+    var even = [1, 2, 3, 4]
+    const old = even
+    const reversed = even.reverse()
+    even.unshift(even[0])
+    var odd = [5, 6, 7]
+    odd.reverse()
+    return [len(emptyResult), empty[0], oneResult[0], even[0], even[4], reversed[0], old[0], odd[0], len(even)]
+}
+export fn reorderText() -> Array<string> {
+    var values = producer.reordered<string>(["a\0中", "尾"], "first")
+    const retained = values.reverse()
+    values[0] = "changed"
+    return retained
+}
+export fn reorderNested() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    pathItems[pathIndex()].values.unshift(pathAppend())
+    pathItems[0].values.reverse()
+    return trace * 10000 + len(pathItems[0].values) * 1000 + pathItems[0].values[0] * 10 + pathItems[0].values[1]
+}
+fn unshiftSuspendedValue() -> string {
+    trace = trace * 10 + 1
+    Coro.yield()
+    a = ["newUnshift"]
+    trace = trace * 10 + 2
+    return "head"
+}
+export fn reorderSuspended() -> string {
+    trace = 0
+    a = ["oldUnshift"]
+    a.unshift(unshiftSuspendedValue())
+    return a[1]
+}
+
+var reorderRoot = [1, 2, 3]
+export fn reorderRootReverse() -> Array<i64> { return reorderRoot.reverse() }
+export fn reorderRootUnshift() { reorderRoot.unshift(-7) }
+export fn reorderRootState() -> Array<i64> { return reorderRoot }

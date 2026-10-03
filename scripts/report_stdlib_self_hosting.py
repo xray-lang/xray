@@ -120,7 +120,7 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
     owners: dict[str, list[str]] = defaultdict(list)
     boundary_names = set(manifest.by_name)
     for item in api_inventory(root).get("items", []):
-        if item.get("category") != "stdlib-module":
+        if item.get("internal") or item.get("category") != "stdlib-module":
             continue
         module = str(item.get("doc_module") or item.get("namespace") or "")
         if module not in boundary_names:

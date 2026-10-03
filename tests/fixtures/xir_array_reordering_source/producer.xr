@@ -1,0 +1,5 @@
+export fn reordered<T>(items: Array<T>, head: T) -> Array<T> {
+    var values = items
+    values.unshift(head)
+    return values.reverse()
+}

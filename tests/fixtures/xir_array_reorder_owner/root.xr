@@ -1,0 +1,11 @@
+var values: Array<i64?> = [1, null, 3]
+export fn saved() -> Array<i64?> { return values }
+export fn reverse() -> Array<i64?> { return values.reverse() }
+export fn unshift() -> Array<i64?> {
+    values.unshift(7)
+    return values
+}
+export fn state() -> i64 {
+    if (len(values) == 3) { return (values[0] ?? 0) * 100 + (values[2] ?? 0) }
+    return (values[0] ?? 0) * 1000 + (values[1] ?? 0) * 100 + (values[3] ?? 0)
+}

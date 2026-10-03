@@ -1,0 +1,111 @@
+struct Entry { text: string; values: Array<i64> }
+struct Empty {}
+enum Choice { Empty, Text { text: string } }
+class RefItem { value: i64 = 0 }
+class Buffer { items: Array<i64> = [] }
+fn change_read_handle(buffer: Buffer) { buffer.items.unshift(8); buffer.items.reverse() }
+fn reorder<T>(items: Array<T>, head: T) -> Array<T> {
+    var copy = items
+    copy.unshift(head)
+    return copy.reverse()
+}
+fn main() {
+    var empty: Array<i64> = []
+    const empty_result = empty.reverse()
+    empty.unshift(-7)
+    print(len(empty_result))
+    print(empty[0])
+    var one = [9]
+    print(one.reverse()[0])
+    var numbers = [1, 2, 3, 4]
+    const old = numbers
+    const result = numbers.reverse()
+    numbers.unshift(numbers[0])
+    print(numbers[0])
+    print(numbers[4])
+    print(result[0])
+    print(old[0])
+    var odd = [5, 6, 7]
+    odd.reverse()
+    print(odd[0])
+    var text = reorder<string>(["a\0中", "尾"], "first")
+    const retained = text.reverse()
+    text[0] = "changed"
+    print(retained[0])
+    print(len(retained[1]))
+    print(retained[2])
+    print(reorder<i8>([1, 2], 3)[0])
+    print(reorder<i16>([1, 2], 3)[0])
+    print(reorder<i32>([1, 2], 3)[0])
+    print(reorder<u16>([1, 2], 3)[0])
+    print(reorder<u32>([1, 2], 3)[0])
+    print(reorder<u64>([1, 2], 3)[0])
+    var bools = reorder<bool>([true, false], false)
+    print(bools[0])
+    print(bools[1])
+    print(bools[2])
+    var bytes: Array<u8> = [2, 3]
+    bytes.unshift(1)
+    bytes.reverse()
+    print(bytes[0])
+    var small: Array<f32> = [1.5, 2.5]
+    small.unshift(0.5)
+    print(small.reverse()[0])
+    var wide: Array<f64> = [3.5, 4.5]
+    wide.unshift(2.5)
+    print(wide.reverse()[2])
+    var nested = [[1, 2], [3]]
+    const nested_old = nested
+    nested.unshift(nested[0])
+    const nested_result = nested.reverse()
+    nested[0][0] = 99
+    print(nested_result[0][0])
+    print(nested_old[0][0])
+    var entries = [Entry{text: "left", values: [4]}, Entry{text: "right", values: [6]}]
+    const entries_old = entries
+    entries.unshift(entries[0])
+    const entries_result = entries.reverse()
+    entries[0].text = "changed"
+    entries[0].values[0] = 99
+    print(entries_result[0].text)
+    print(entries_result[0].values[0])
+    print(entries_old[0].text)
+    var zero = [Empty{}, Empty{}]
+    const zero_result = zero.reverse()
+    zero.unshift(Empty{})
+    print(len(zero_result))
+    print(len(zero))
+    var choices = [Choice.Empty, Choice.Text{text: "enum"}]
+    choices.unshift(Choice.Empty)
+    const choices_result = choices.reverse()
+    print(match(choices_result[0]) { Choice.Empty -> "wrong", Choice.Text{text} -> text })
+    var maybe: Array<i64?> = [null, 5]
+    maybe.unshift(null)
+    const maybe_result = maybe.reverse()
+    print(maybe_result[0] ?? -1)
+    print(maybe_result[2] ?? -1)
+    var actions = Array<fn() -> i64>()
+    for (i in 1..=2) { actions.push(fn() -> i64 { return i * 10 }) }
+    actions.unshift(fn() -> i64 { return 30 })
+    const action_result = actions.reverse()
+    print(action_result[0]())
+    print(action_result[2]())
+    var left = RefItem()
+    var right = RefItem()
+    left.value = 1
+    right.value = 2
+    var identities = [left, right]
+    const identity_old = identities
+    identities.unshift(left)
+    const identity_result = identities.reverse()
+    right.value = 7
+    print(identity_result[0].value)
+    print(identity_old[1].value)
+    const handle = Buffer()
+    handle.items.unshift(6)
+    handle.items.reverse()
+    change_read_handle(handle)
+    print(handle.items[0])
+    print(handle.items[1])
+}
+main()

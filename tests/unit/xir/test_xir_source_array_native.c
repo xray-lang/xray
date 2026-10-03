@@ -13,7 +13,10 @@
 #include "xir_source_fixture_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_source_array_cases.h"
+#include "xir_source_array_reordering_cases.h"
 XR_DATA const XrXirProgramSpec array_source_program;
+XR_DATA const XrXirProgramSpec array_reorder_program;
+XR_DATA const uint32_t array_reorder_functions[REORDER_FUNCTION_COUNT];
 XR_DATA const XrXirProgramSpec array_bounds_program;
 XR_DATA const uint32_t array_source_functions[ARRAY_FUNCTION_COUNT];
 int main(void) {
@@ -23,6 +26,11 @@ int main(void) {
     source_array_program_cases(program, array_source_functions); program = NULL;
     CHECK(xr_xir_compile_program_seal(&compiler.context, &array_bounds_program, &program) == XR_XIR_OK);
     source_array_sticky_bounds(program, array_bounds_program.declarations->entry_function); program = NULL;
+    source_fixture_owner_free(&compiler);
+    source_fixture_owner_new(&compiler);
+    program = NULL;
+    CHECK(xr_xir_compile_program_seal(&compiler.context, &array_reorder_program, &program) == XR_XIR_OK);
+    source_array_reordering_program_cases(program, array_reorder_functions); program = NULL;
     source_fixture_owner_free(&compiler);
     puts("Native Array source matched independent value, order, ownership and physical-release expectations");
     return 0;

@@ -141,14 +141,14 @@ def api_inventory(root: Path) -> dict[str, Any]:
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module.build_inventory(root, None, None)
+    return module.build_inventory(root)
 
 
 def dynamic_public_items(root: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for item in api_inventory(root).get("items", []):
         signature = str(item.get("signature", ""))
-        if item.get("category") != "stdlib-module":
+        if item.get("internal") or item.get("category") != "stdlib-module":
             continue
         if not re.search(r"\b(?:Json|unknown)\b", signature):
             continue

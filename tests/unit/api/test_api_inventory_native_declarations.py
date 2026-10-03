@@ -41,7 +41,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual("Array<T>", declaration["signature"])
         self.assertEqual("struct", declaration["declaration_kind"])
 
-    def test_fifteen_operations_have_exact_admission_contracts(self) -> None:
+    def test_seventeen_operations_have_exact_admission_contracts(self) -> None:
         members = [entry for entry in self.items if entry["kind"] != "type"]
         admitted = {entry["name"]: entry for entry in members if entry["xir_admitted"]}
         ordinary = ["allocation", "retain", "limit"]
@@ -51,6 +51,8 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("set", "ARRAY_SET", "ref", "unit", ["bounds", "allocation", "retain", "limit"]),
             ("push", "ARRAY_PUSH", "ref", "unit", ordinary),
             ("clear", "ARRAY_CLEAR", "ref", "unit", ordinary),
+            ("reverse", "ARRAY_REVERSE", "ref", "owned", ordinary),
+            ("unshift", "ARRAY_UNSHIFT", "ref", "unit", ordinary),
             ("contains", "ARRAY_CONTAINS", "read", "owned", ordinary),
             ("indexOf", "ARRAY_INDEX_OF", "read", "owned", ordinary),
             ("join", "ARRAY_JOIN", "read", "owned", ordinary),
@@ -63,7 +65,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("every", "ARRAY_EVERY", "read", "owned", callback),
             ("some", "ARRAY_SOME", "read", "owned", callback),
         )
-        self.assertEqual(15, len(admitted))
+        self.assertEqual(17, len(admitted))
         self.assertEqual({row[0] for row in expected}, set(admitted))
         for name, operation, receiver, ownership, failures in expected:
             with self.subTest(name=name):
@@ -74,9 +76,9 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                 self.assertEqual(ownership, entry["ownership"])
                 self.assertEqual(failures, entry["failures"])
         unadmitted = [entry for entry in members if not entry["xir_admitted"]]
-        self.assertEqual(17, len(unadmitted))
-        self.assertEqual({"withCapacity", "capacity", "ptr", "mutPtr", "pop", "shift", "unshift",
-                          "reserve", "resize", "concat", "reverse", "sort", "fill", "toString",
+        self.assertEqual(15, len(unadmitted))
+        self.assertEqual({"withCapacity", "capacity", "ptr", "mutPtr", "pop", "shift",
+                          "reserve", "resize", "concat", "sort", "fill", "toString",
                           "iterator", "entriesIterator", "entries"}, {entry["name"] for entry in unadmitted})
         self.assertTrue(all(entry["operation"] == "NONE" for entry in unadmitted))
         self.assertTrue(all(entry["allocation"] == "unknown" for entry in unadmitted))

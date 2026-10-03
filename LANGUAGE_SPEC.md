@@ -6298,6 +6298,10 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 
 ### 14.5 `string` Methods
 
+The next declaration slice freezes `ref unshift(value: T)` (one ordinary READ argument of exactly T, returning unit) and `ref reverse() -> Array<T>` (no explicit arguments, an owned result). Freezing does not establish admission or qualification. Both require only the existing copyable/storable Array element capabilities, without Equal, Compare or ToString. Ordinary generic definitions are checked under their declared capabilities; future instances grant no missing authority. The receiver must be a writable logical place whose root/path selectors are evaluated once. unshift reads that binding's current Array after its argument succeeds; completed argument side effects are not rolled back. A negative integer T is an ordinary element, not a length argument.
+
+Both methods prepare a private owned candidate: reverse reverses the element order, while unshift places the input before the original elements. Empty reverse returns an empty Array; unshift on an empty Array creates one element. Element copying stops at class identity. reverse prepares its result ownership before the final single writeback; its result and receiver are independent logical copies after publication. Failure during method preparation/publication, or cancellation before publication, preserves the pre-commit logical value and releases temporary ownership normally. Later statements, whole-function result handoff failures, and cancellation after method publication follow ordinary call semantics without undoing completed method effects. Internal loops introduce no language suspension point or user callback. Candidate construction may choose a different backing capacity and does not promise to preserve the old capacity; public growth/detachment guarantees for capacity/withCapacity/reserve remain subject to their separate declaration-family admission.
+
 | Member | Type / Description |
 |--|--|
 | `len(s)` | O(1) Unicode scalar count |

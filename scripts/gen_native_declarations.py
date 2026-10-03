@@ -186,6 +186,8 @@ def array_recipe_contracts(binder):
         'ARRAY_INDEX_OF': ('indexOf', 'READ', f'(value: {binder}) -> i64', ordinary, 'owned'),
         'ARRAY_JOIN': ('join', 'READ', '(separator?: string) -> string', ordinary, 'owned'),
         'ARRAY_CLEAR': ('clear', 'REF', '()', ordinary, 'unit'),
+        'ARRAY_REVERSE': ('reverse', 'REF', f'() -> Array<{binder}>', ordinary, 'owned'),
+        'ARRAY_UNSHIFT': ('unshift', 'REF', f'(value: {binder})', ordinary, 'unit'),
     }
 
 

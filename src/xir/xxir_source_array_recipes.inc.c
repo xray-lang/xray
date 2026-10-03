@@ -24,6 +24,8 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation) {
     case XR_NATIVE_OPERATION_ARRAY_INDEX_OF: return SOURCE_ARRAY_INDEX_OF;
     case XR_NATIVE_OPERATION_ARRAY_JOIN: return SOURCE_ARRAY_JOIN;
     case XR_NATIVE_OPERATION_ARRAY_CLEAR: return SOURCE_ARRAY_CLEAR;
+    case XR_NATIVE_OPERATION_ARRAY_REVERSE: return SOURCE_ARRAY_REVERSE;
+    case XR_NATIVE_OPERATION_ARRAY_UNSHIFT: return SOURCE_ARRAY_UNSHIFT;
     default: return SOURCE_ARRAY_NONE;
     }
 }
@@ -190,8 +192,68 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
     return source_counter_close(ctx, &counter) &&
         source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, store_type, {store.id, 0}, {0}, 0, {0}}, value);
 }
+/* REF recipes prepare an owned replacement before publishing the current root once. */
+static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
+    SourceValue *value) {
+    CallExprNode *call = &node->as.call_expr;
+    MemberAccessNode *access = &call->callee->as.member_access;
+    int arity = recipe == SOURCE_ARRAY_UNSHIFT ? 1 : 0;
+    if (call->type_arg_count || call->default_arg_count || call->arg_count != arity ||
+        (arity && !call->arguments))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");
+    if (arity && call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method arguments use ordinary READ values");
+    SourceValue root, input = {0}, array, empty, store, candidate, length, zero;
+    if (!source_value_place(ctx, access->object, &root)) return false;
+    if (!xr_xir_type_is_array(&ctx->types, root.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method receiver is not an Array place");
+    XrXirType element_type = xr_xir_array_element(&ctx->types, root.type), cell_type;
+    /* The input may rebind the root or suspend; only afterwards read its current value. */
+    if (arity) {
+        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false}, &input))
+            return false;
+        if (input.type != element_type)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array unshift input must have the element type");
+    }
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
+        !source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, root.type, {0}, {0}, 0, {0}}, NULL, 0, &empty) ||
+        !source_cell_type(ctx, root.type, &cell_type) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, cell_type, {empty.id}, {0}, 0, {0}}, &store) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_PLACE, root.type, {store.id}, {0}, 0, {0}}, &candidate))
+        return false;
+    if (arity && !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT,
+        {candidate.id, input.id}, {0}, 0, {0}}, NULL)) return false;
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id}, {0}, 0, {0}}, &length) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;
+    SourceValue last = {0};
+    if (recipe == SOURCE_ARRAY_REVERSE) {
+        SourceValue one;
+        if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1, {0}}, &one) ||
+            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SUB_INT, XR_XIR_I64, {length.id, one.id}, {0}, 0, {0}}, &last))
+            return false;
+    }
+    SourceCounter counter;
+    if (!source_counter_open(ctx, zero, length, false, &counter)) return false;
+    SourceValue index = counter.index, element;
+    if (recipe == SOURCE_ARRAY_REVERSE &&
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SUB_INT, XR_XIR_I64, {last.id, counter.index.id}, {0}, 0, {0}}, &index))
+        return false;
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_GET, element_type, {array.id, index.id}, {0}, 0, {0}}, &element) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {candidate.id, element.id}, {0}, 0, {0}}, NULL) ||
+        !source_counter_close(ctx, &counter)) return false;
+    SourceValue result;
+    /* The expression result is independently owned before the sole fallible root write. */
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, root.type, {store.id}, {0}, 0, {0}}, &result) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {root.id, result.id}, {0}, 0, {0}}, NULL))
+        return false;
+    *value = recipe == SOURCE_ARRAY_REVERSE ? result : (SourceValue) {UINT32_MAX, XR_XIR_UNIT};
+    return true;
+}
+
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value) {
+    if (recipe == SOURCE_ARRAY_REVERSE || recipe == SOURCE_ARRAY_UNSHIFT)
+        return source_array_reorder_call(ctx, node, recipe, value);
     if (recipe >= SOURCE_ARRAY_CONTAINS) return source_array_query_call(ctx, node, recipe, evaluated, value);
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;

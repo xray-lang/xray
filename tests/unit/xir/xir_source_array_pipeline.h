@@ -41,4 +41,16 @@ static void source_array_find(const XrXirModule *module, uint32_t *functions) {
         CHECK(functions[n] != UINT32_MAX);
     }
 }
+static void source_array_reorder_find(const XrXirModule *module, uint32_t *functions) {
+    static const char *const names[] = {NULL, "current", "orderTrace", "reorderNumbers", "reorderText",
+        "reorderNested", "reorderSuspended", "reorderRootReverse", "reorderRootUnshift", "reorderRootState"};
+    functions[REORDER_ENTRY] = module->declarations->entry_function;
+    for (unsigned n = 1; n < REORDER_FUNCTION_COUNT; ++n) {
+        functions[n] = UINT32_MAX;
+        for (uint32_t f = 0; f < module->function_count; ++f)
+            if (module->functions[f].name_length == strlen(names[n]) &&
+                !memcmp(module->functions[f].name, names[n], strlen(names[n]))) functions[n] = f;
+        CHECK(functions[n] != UINT32_MAX);
+    }
+}
 #endif // XIR_SOURCE_ARRAY_PIPELINE_H

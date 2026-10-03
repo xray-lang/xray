@@ -177,7 +177,7 @@ static XrXirOutputStatus source_array_fault_render(void *pointer, const XrXirOut
     }
     return status;
 }
-static void source_array_runtime_failures(XrXirProgram *program, uint32_t entry) {
+static void source_array_runtime_failures(XrXirProgram *program, uint32_t entry, unsigned expected_outputs) {
     const size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
@@ -191,7 +191,7 @@ static void source_array_runtime_failures(XrXirProgram *program, uint32_t entry)
         XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
         if (status == XR_XIR_CALL_READY) { phase = "start"; status = xr_xir_instance_start(instance, entry, NULL, 0); }
         if (status == XR_XIR_CALL_READY) { phase = "poll"; status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status; }
-        if (!site) { CHECK(status == XR_XIR_CALL_RETURNED && output.count == 7); sites = runtime_attempts; }
+        if (!site) { CHECK(status == XR_XIR_CALL_RETURNED && output.count == expected_outputs); sites = runtime_attempts; }
         else {
             XrXirCallStatus expected = XR_XIR_CALL_OOM;
             if (status != expected) fprintf(stderr,
@@ -227,12 +227,12 @@ static void source_array_sticky_bounds(XrXirProgram *program, uint32_t entry) {
     CHECK(!runtime_live && !runtime_bytes);
 }
 static void source_array_program_cases(XrXirProgram *program, const uint32_t *functions) {
-    source_array_runtime_failures(program, functions[ARRAY_ENTRY]);
+    source_array_runtime_failures(program, functions[ARRAY_ENTRY], 7);
     const unsigned aggregates[] = {ARRAY_AGGREGATE, ARRAY_AGGREGATE_NESTED, ARRAY_EMPTY_AGGREGATE,
         ARRAY_ENUM_AGGREGATE, ARRAY_AGGREGATE_RESULT, ARRAY_PATH, ARRAY_PATH_SET, ARRAY_PATH_PUSH, ARRAY_PATH_COMPOUND,
         ARRAY_PATH_CAUGHT};
     for (unsigned i = 0; i < sizeof(aggregates) / sizeof(aggregates[0]); ++i)
-        source_array_runtime_failures(program, functions[aggregates[i]]);
+        source_array_runtime_failures(program, functions[aggregates[i]], 7);
     const unsigned cancelled[] = {ARRAY_SUSPENDED_SNAPSHOT, ARRAY_SUSPENDED_SET, ARRAY_PATH_SUSPENDED};
     const size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
     for (unsigned i = 0; i < sizeof(cancelled) / sizeof(cancelled[0]); ++i) {

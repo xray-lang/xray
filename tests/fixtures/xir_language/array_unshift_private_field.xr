@@ -1,0 +1,3 @@
+class Buffer { private items: Array<i64> = [] }
+const buffer = Buffer()
+buffer.items.unshift(1)

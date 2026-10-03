@@ -977,7 +977,8 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
 typedef enum SourceArrayRecipe {
     SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,
     SOURCE_ARRAY_FIND, SOURCE_ARRAY_FIND_INDEX, SOURCE_ARRAY_EVERY, SOURCE_ARRAY_SOME,
-    SOURCE_ARRAY_CONTAINS, SOURCE_ARRAY_INDEX_OF, SOURCE_ARRAY_JOIN, SOURCE_ARRAY_CLEAR
+    SOURCE_ARRAY_CONTAINS, SOURCE_ARRAY_INDEX_OF, SOURCE_ARRAY_JOIN, SOURCE_ARRAY_CLEAR,
+    SOURCE_ARRAY_REVERSE, SOURCE_ARRAY_UNSHIFT
 } SourceArrayRecipe;
 static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
@@ -1115,10 +1116,13 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_array_call(ctx, node, NULL, value);
             XrXirType path_type;
             if (!source_path_type(ctx,member->object,&path_type)) return false;
-            if (xr_xir_type_is_array(&ctx->types,path_type) &&
-                (source_text_same(ctx, NULL, member->name, "set") || source_text_same(ctx, NULL, member->name, "push") ||
-                 source_text_same(ctx, NULL, member->name, "clear")))
-                return source_array_call(ctx,node,NULL,value);
+            if (xr_xir_type_is_array(&ctx->types,path_type)) {
+                const XrNativeMemberDeclaration *native_member = source_array_member(ctx, callee, member->name);
+                if (!native_member) return false;
+                /* A REF member binds the logical path without evaluating its selectors twice. */
+                if (native_member->receiver == XR_NATIVE_RECEIVER_REF)
+                    return source_array_call(ctx,node,NULL,value);
+            }
             if (xr_xir_type_is_nominal(&ctx->types, path_type)) {
                 SourceName *ref_method = source_method_find(ctx, path_type, member->name);
                 if (ref_method && !ref_method->node->as.method_decl.is_static &&

@@ -196,8 +196,9 @@ def check_api_classification(root: Path) -> list[CheckResult]:
         owned = [
             item
             for item in items
-            if item.get("namespace") == module
-            or str(item.get("namespace", "")).startswith(module + ".")
+            if not item.get("internal")
+            and (item.get("namespace") == module
+                 or str(item.get("namespace", "")).startswith(module + "."))
         ]
         failures = []
         if not owned:

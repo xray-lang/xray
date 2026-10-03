@@ -1,0 +1,1 @@
+fn bad(items: Array<i64>) { items.reverse() }
