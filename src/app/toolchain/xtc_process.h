@@ -13,6 +13,7 @@
 
 #include "../../base/xdefs.h"
 #include "../../base/xcompile_resources.h"
+#include "../../os/os_proc.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -50,6 +51,12 @@ typedef struct XrProcessSpec {
     const char *cwd;
     uint32_t timeout_ms;
     size_t output_limit;
+    XrProcImageMode image_mode;
+    /* Copied by prepare; context is borrowed only throughout each run and
+     * its cleanup. Callback work and retained records use this process ledger.
+     * Observations are provisional until run succeeds; the callback owns its
+     * rollback. No image callback occurs during failure cleanup. */
+    XrProcImageObserver image_observer;
 } XrProcessSpec;
 
 typedef struct XrProcessByteBuffer {
@@ -65,6 +72,18 @@ typedef struct XrProcessResult {
     XrProcessByteBuffer stderr_bytes;
 } XrProcessResult;
 
+typedef struct XrProcessView {
+    const char *executable, *cwd;
+    const char *const *argv;
+    size_t argc;
+    const char *const *env_keys;
+    const char *const *env_values;
+    size_t env_count;
+    uint32_t timeout_ms;
+    size_t output_limit;
+    XrProcImageMode image_mode;
+} XrProcessView;
+
 XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,
                                    uint32_t timeout_ms);
 /* Prepare freezes all text and the explicitly selected environment source.
@@ -72,6 +91,23 @@ XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,
  * captures cwd when omitted. The executable must always be absolute. */
 XR_FUNC XrProcessStatus xtc_process_prepare(XrCompileResources *resources,
     const XrProcessSpec *spec, XrToolchainProcess **output);
+/* Deep-copy an actual prepared owner on its original ledger, including system
+ * environment keys and an executable distinct from argv[0]. Only observation
+ * changes: WINDOWS_TREE uses the new callback/context, borrowed during run and
+ * cleanup. No ambient environment or cwd is captured. Source may then be freed.
+ * Non-Windows returns UNSUPPORTED. Output must be empty; failure preserves it.
+ * Work covers text scans including NUL, copied bytes, copied policy fields and
+ * the ledger's actual allocation/zeroing work. Cleanup consumes no new work. */
+XR_FUNC XrProcessStatus xtc_process_clone_observed(const XrToolchainProcess *source,
+    const XrProcImageObserver *observer, XrToolchainProcess **output);
+/* Borrow the exact frozen inputs used by run until process_free. These queries
+ * do not scan text, allocate, capture ambient state or consume work. The view
+ * describes a complete environment, including captured system-reserved keys.
+ * Invalid arguments preserve the entire output. No execution authority is
+ * issued; recipients must copy borrowed inputs into their own resource owner. */
+XR_FUNC XrCompileResources *xtc_process_resources(const XrToolchainProcess *process);
+XR_FUNC XrProcessStatus xtc_process_view(const XrToolchainProcess *process,
+    XrProcessView *output);
 XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *process,
     XrProcessCancelled cancelled, void *context, XrProcessResult *output);
 XR_FUNC void xtc_process_free(XrToolchainProcess *process);

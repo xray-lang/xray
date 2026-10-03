@@ -87,7 +87,7 @@ static void witness_promise_execute(XrXirArtifact *checked,
         if (started != XR_XIR_CALL_READY)
             fprintf(stderr,"witness execute %s run=%u entry=%u start=%u\n",prefix,run,entry,started);
         CHECK(started == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue result = {0};
         CHECK(xr_xir_instance_take_result(instance,&result) == XR_XIR_CALL_RETURNED);
         CHECK(result.type == XR_XIR_I64 && result.payload == 41); xr_xir_value_drop(&result);

@@ -62,12 +62,12 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_begin(const XrXirHostExecutionRequest *
     *output = call;
     return XR_XIR_CALL_READY;
 }
-XR_FUNC XrXirInstanceResult xr_xir_host_call_step(XrXirHostCall *call) {
-    if (!call) return host_status(XR_XIR_CALL_BAD_ARGUMENT);
+XR_FUNC XrXirInstanceResult xr_xir_host_call_step_bounded(XrXirHostCall *call, uint64_t quantum) {
+    if (!call || !quantum) return host_status(XR_XIR_CALL_BAD_ARGUMENT);
     if (call->busy) return host_status(XR_XIR_CALL_BUSY);
     if (call->consumed) return host_status(XR_XIR_CALL_BAD_STATE);
     call->busy = true;
-    call->observed = xr_xir_instance_poll(call->instance);
+    call->observed = xr_xir_instance_poll_bounded(call->instance, quantum);
     call->busy = false;
     return call->observed;
 }
@@ -80,16 +80,16 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_resume(XrXirHostCall *call, uint64_t ep
     if (status == XR_XIR_CALL_READY) call->observed = host_status(status);
     return status;
 }
-XR_FUNC XrXirCallStatus xr_xir_host_call_cancel(XrXirHostCall *call) {
+XR_FUNC XrXirCallStatus xr_xir_host_call_request_cancel(XrXirHostCall *call) {
     if (!call) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->busy) return XR_XIR_CALL_BUSY;
     if (call->consumed || (call->observed.outcome.status != XR_XIR_CALL_READY &&
         call->observed.outcome.status != XR_XIR_CALL_SUSPENDED)) return XR_XIR_CALL_BAD_STATE;
     call->busy = true;
-    XrXirCallStatus status = xr_xir_instance_stop(call->instance);
-    call->observed = xr_xir_instance_poll(call->instance);
+    XrXirCallStatus status = xr_xir_instance_cancel_current(call->instance);
+    if (status == XR_XIR_CALL_CANCEL_REQUESTED) call->observed = host_status(XR_XIR_CALL_READY);
     call->busy = false;
-    return status == XR_XIR_CALL_READY ? call->observed.outcome.status : status;
+    return status;
 }
 XR_FUNC XrXirCallStatus xr_xir_host_call_take(XrXirHostCall *call, XrXirCallResult *output) {
     if (!call || !xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -116,12 +116,15 @@ XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *req
     XrXirHostCall *call = NULL;
     XrXirCallStatus status = xr_xir_host_call_begin(request, &call);
     if (status != XR_XIR_CALL_READY) return status;
-    XrXirInstanceResult observed = xr_xir_host_call_step(call);
-    while (observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
-        xr_time_sleep_ns(0);
-        status = xr_xir_host_call_resume(call, observed.epoch, observed.outcome.wake);
-        if (status != XR_XIR_CALL_READY) break;
-        observed = xr_xir_host_call_step(call);
+    XrXirInstanceResult observed = xr_xir_host_call_step_bounded(call, 256);
+    while (observed.outcome.status == XR_XIR_CALL_READY ||
+        observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
+        if (observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
+            xr_time_sleep_ns(0);
+            status = xr_xir_host_call_resume(call, observed.epoch, observed.outcome.wake);
+            if (status != XR_XIR_CALL_READY) break;
+        }
+        observed = xr_xir_host_call_step_bounded(call, 256);
     }
     XrXirCallResult owned = {0};
     if (status == XR_XIR_CALL_READY) status = xr_xir_host_call_take(call, &owned);

@@ -1,0 +1,182 @@
+{
+  "source_commit": "e3062076df96408ee6a9cc839b282615961d0f22",
+  "wire": 22,
+  "semantic": 58,
+  "value_abi": 18,
+  "call_abi": 22,
+  "program_abi": 27,
+  "source": {
+    "path": "old_program27.c",
+    "sha256": "7036a73b01d449b653d8df4959bf3846067f4d4e46028e3bce2831b83d352cbd",
+    "bytes": 16262
+  },
+  "archive": {
+    "path": "old_program27_headers.zip",
+    "sha256": "e9c5fba1d75d38a59ce62e1e8dcf2fda0f01c43ced6ec4aea17dc44b3eed67c8",
+    "members": [
+      {
+        "path": "src/base/xcompile_resources.h",
+        "sha256": "48b54ec11fac82a16268859c236efe9ba8a3e8c7295f538c0251f615e97f92bf",
+        "bytes": 3536
+      },
+      {
+        "path": "src/base/xdefs.h",
+        "sha256": "3373a78ba65d4a985692d68e715c26306f73c8cc39163aa8d3cfd5a948c3c533",
+        "bytes": 7284
+      },
+      {
+        "path": "src/base/xplatform.h",
+        "sha256": "5a820a5ad14298cbb811368faaf509d8f4b7765cc7ba38f98b5196c6bbc0005e",
+        "bytes": 4868
+      },
+      {
+        "path": "src/base/xposix_compat.h",
+        "sha256": "661abd2d7cc81abe599723bc95331605eaf1e71553fabcdbad73bfba84bac87f",
+        "bytes": 5283
+      },
+      {
+        "path": "src/shared/xr_error_core.h",
+        "sha256": "10b1f08584f258e1de1c84aae9ab891a628ffe8d1d14cb01aef7dd5319d383fb",
+        "bytes": 5023
+      },
+      {
+        "path": "src/shared/xr_error_messages.h",
+        "sha256": "f18e487b8404343395a28870bff0033f95b30bb170d7695c5b7e22d2eb586711",
+        "bytes": 12363
+      },
+      {
+        "path": "src/xir/xxir.h",
+        "sha256": "bc348c915d1f45d0346593128f3308763194dedef1cf56d56d69f0519fbbfe7d",
+        "bytes": 9641
+      },
+      {
+        "path": "src/xir/xxir_array.h",
+        "sha256": "927c34fea9eeee4275dba731634d15ff76d12e2ed9733f4a58faef3eb1c7bf1d",
+        "bytes": 1266
+      },
+      {
+        "path": "src/xir/xxir_call.h",
+        "sha256": "a245d59bdfc2120badd9b0dacb161e203541b523e52b8ffdc22b50b4d3dd7121",
+        "bytes": 7465
+      },
+      {
+        "path": "src/xir/xxir_class.h",
+        "sha256": "ffbcf5cba77f6356479df7d0a6427d1b87e83999ab7d56ac0ca2379e9a179b8b",
+        "bytes": 1301
+      },
+      {
+        "path": "src/xir/xxir_compile_context.h",
+        "sha256": "acf27ce6cf7cd8874d35a6fe97646f4ecf414f850ee63d62589f10e47e715ade",
+        "bytes": 1015
+      },
+      {
+        "path": "src/xir/xxir_declarations.h",
+        "sha256": "19a663d773e4158fa187149cdc406c22ea7638db6ccad6cd263d59d5ae7821a9",
+        "bytes": 1979
+      },
+      {
+        "path": "src/xir/xxir_enum.h",
+        "sha256": "b092d364f25a906b8373eacf0d6085c637f30524526cfa1b98ce3d3d510f859e",
+        "bytes": 1293
+      },
+      {
+        "path": "src/xir/xxir_equal.h",
+        "sha256": "439df1af4b75b3fd59b3ceee770f5662d511ecde2da3696ae226c0ed8090b237",
+        "bytes": 718
+      },
+      {
+        "path": "src/xir/xxir_error.h",
+        "sha256": "2ecd6ffb9f5571b3b9ea41963d1b3f25ff3cbf06892e931278fa2693b8d92c05",
+        "bytes": 1238
+      },
+      {
+        "path": "src/xir/xxir_fault.h",
+        "sha256": "2dd25c32b7eb85e4a284a516723d326e0a96c9a971b9b77fe03acec9d6b82303",
+        "bytes": 2561
+      },
+      {
+        "path": "src/xir/xxir_float.h",
+        "sha256": "d948816f55899b548df70fdcf2c38cf0f59d0990d1eb9dd21db5d7472839e480",
+        "bytes": 2522
+      },
+      {
+        "path": "src/xir/xxir_instance_value.h",
+        "sha256": "ebe549852502c077b3bcd10d594e8db472e8b6a2517e0ff8c58557481d56237f",
+        "bytes": 2430
+      },
+      {
+        "path": "src/xir/xxir_nominal.h",
+        "sha256": "9dfec6a46728ce13addbfe441795618aa6eefcdaeaaf6d9e906a5046af89dabd",
+        "bytes": 3408
+      },
+      {
+        "path": "src/xir/xxir_nullable.h",
+        "sha256": "8fc74a814b27904c034ca534a795cb209ce479859a0c72b2ada6ece417381883",
+        "bytes": 861
+      },
+      {
+        "path": "src/xir/xxir_ops.def",
+        "sha256": "030b194362a465eb404066ba4e3838f404f1f4f48b88514639daf49e6db1d478",
+        "bytes": 4685
+      },
+      {
+        "path": "src/xir/xxir_output_status.h",
+        "sha256": "98a2f51f41f649ea9b09673ad0a235e0fc641188ffbf3e69498820f75aed330b",
+        "bytes": 673
+      },
+      {
+        "path": "src/xir/xxir_panic.h",
+        "sha256": "2016ad30d34814980eb68b581231ec2bb88d3b8fc9a2637509b72b2fce788e4b",
+        "bytes": 2126
+      },
+      {
+        "path": "src/xir/xxir_program.h",
+        "sha256": "1e69a59948f915be6f4973d90af6295a44f9452661c7559a88360ea49933ef2e",
+        "bytes": 5767
+      },
+      {
+        "path": "src/xir/xxir_scalar.h",
+        "sha256": "7e661cf2f3b075243fd3b53228a757dc7c4465252a4ac7cc10cd9a9508bd9a61",
+        "bytes": 2966
+      },
+      {
+        "path": "src/xir/xxir_storage.h",
+        "sha256": "45222c45d1e5542a00c4bedef636432f800014386e40450c12e5f5826bbd1d8b",
+        "bytes": 1229
+      },
+      {
+        "path": "src/xir/xxir_struct.h",
+        "sha256": "5674711a3a87bdef9ae2965bbae55e864e6f17d43320aa04002652d1d15bc3f8",
+        "bytes": 911
+      },
+      {
+        "path": "src/xir/xxir_type_arena.h",
+        "sha256": "aa283b684789bc5787c16aa1b4929f42afdbc06f86249edebd4c9faad0c775d9",
+        "bytes": 1512
+      },
+      {
+        "path": "src/xir/xxir_types.h",
+        "sha256": "ca826c0363e5a9808cf6fb7a4892e752ff01c36ce523cc6cb20a9c5971354d5f",
+        "bytes": 4377
+      },
+      {
+        "path": "src/xir/xxir_value.h",
+        "sha256": "daf7cc958185e322a2d3289339bba02380f30d01fa60377c8bfa02b6e107bcc3",
+        "bytes": 7762
+      },
+      {
+        "path": "src/xir/xxir_value_place.h",
+        "sha256": "3cb6407b8edcc5f81803f3b5d131951b60fde1bb7094c6e72cc8c70dc9cfc0a5",
+        "bytes": 1841
+      }
+    ]
+  },
+  "provenance": "Exact generated C and actual Ninja header dependencies preserved before changing the identity layout. No runtime implementation is included.",
+  "generation": [
+    "cmake -S tests/unit/xir/compile_owner -B <build> -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+    "cmake --build <build> --target test_xir_compile_native_owner -j2",
+    "ctest --test-dir <build> -R ^test_xir_compile_native_owner$ --output-on-failure"
+  ],
+  "original_execution": "The actual Program27 generated object executed the independent 42 and UTF8/NUL ownership oracle successfully before preservation; both MSVC and Clang ASan baselines passed.",
+  "compile_context": "Windows vcvars64, chcp 65001, C11, /W4 /WX /utf-8; MSVC Release /MT or Clang22 ASan/UBSan Debug /MD. Current tests compile this source against only its preserved private headers, then link the current runtime to reject it before metadata traversal."
+}

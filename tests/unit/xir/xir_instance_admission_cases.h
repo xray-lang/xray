@@ -20,10 +20,10 @@ static void admission_case_setup(unsigned *releases, XrXirProgram **program,
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(*program, &config, instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(*instance, 2, NULL, 0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(*instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(*instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(*instance, function) == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_start(*instance, 1, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirInstanceResult previous = xr_xir_instance_poll(*instance);
+    XrXirInstanceResult previous = xr_xir_instance_poll_bounded(*instance, UINT64_MAX);
     CHECK(previous.outcome.status == XR_XIR_CALL_RETURNED && previous.outcome.value.payload == 17);
 }
 
@@ -116,7 +116,7 @@ static void admission_replacement_budget_case(void) {
     CHECK(instance->call == previous_call && instance->epoch == epoch && instance->requested == requested &&
         xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY);
     CHECK(atomic_load(&object_pointer(&function)->references) == references);
-    XrXirInstanceResult previous = xr_xir_instance_poll(instance);
+    XrXirInstanceResult previous = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(previous.epoch == epoch && previous.outcome.status == XR_XIR_CALL_RETURNED &&
         previous.outcome.value.type == XR_XIR_I64 && previous.outcome.value.payload == 17);
     XrXirValue result = {0};
@@ -133,10 +133,10 @@ static void admission_replacement_budget_case(void) {
         instance->accounting[pending].live_bytes <= instance->config.call_limit);
     CHECK(!instance->accounting[current].live_bytes && !instance->accounting[current].depth &&
         instance->accounting[current].allocations == instance->accounting[current].frees);
-    XrXirInstanceResult wait = xr_xir_instance_poll(instance);
+    XrXirInstanceResult wait = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(wait.epoch == epoch + 1 && wait.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(instance, wait.epoch, wait.outcome.wake) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
     CHECK(instance->accounting[pending].live_bytes == descriptor_bytes && !instance->accounting[pending].depth);
     const char *bytes = NULL; size_t length = 0;

@@ -37,7 +37,6 @@
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
 #include "toolchain/xcompiler_session.h"
-#include "xray_vm.h"
 #include "xmalloc.h"
 
 #include <stdlib.h>
@@ -47,34 +46,39 @@
 /* Fixtures                                                                */
 /* ====================================================================== */
 
-static XrVMRuntime *g_iso = NULL;
-static XrCompilerSession *g_session = NULL;
-
+static XrCompileResources *g_resources;
+static XrCompilerSession *g_session;
 static void setup(void) {
-    XrVMConfig p = {0};
-    g_iso = xray_vm_new_full(&p);
-    ASSERT_NOT_NULL(g_iso);
-    g_session = xr_compiler_session_current_for_isolate(g_iso);
-    ASSERT_NOT_NULL(g_session);
+    if (g_session) return;
+    XrCompileResourceLimits limits = {UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &g_resources), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_compile_session_new(g_resources, &g_session), XR_COMPILER_SESSION_OK);
+}
+static void teardown(void) {
+    xr_compile_session_free(g_session); g_session = NULL;
+    xr_compile_resources_release(g_resources); g_resources = NULL;
+}
+static AstNode *fixture_parse(XrCompilerSession *session, const char *source, const char *path) {
+    AstNode *ast = NULL;
+    (void)xr_compile_parse_with_trivia(session, source, path, NULL, &ast);
+    return ast;
+}
+static char *fixture_format(AstNode *ast, const XrFmtConfig *config) {
+    XrFmtOutput output = {0};
+    (void)xr_compile_format_ast(xr_compile_session_compile_state(g_session), ast, config, &output);
+    return output.text;
 }
 
-static void teardown(void) {
-    if (g_iso) {
-        xray_vm_delete(g_iso);
-        g_iso = NULL;
-        g_session = NULL;
-    }
-}
 
 // Parse + format a snippet, returning a heap string the caller frees.
 // On parse failure returns NULL so the test fails fast with a clear
 // message via ASSERT_NOT_NULL().
 static char *parse_and_format(const char *source) {
     AstNode *ast =
-        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), source, "<test>");
+        fixture_parse(g_session, source, "<test>");
     if (!ast)
         return NULL;
-    char *out = xfmt_format_ast(ast, NULL, g_iso);
+    char *out = fixture_format(ast, NULL);
     xr_program_destroy(ast);
     return out;
 }
@@ -98,8 +102,8 @@ TEST(override_modifier_round_trip) {
     char *second = parse_and_format(first);
     ASSERT_NOT_NULL(second);
     ASSERT_STR_EQ(first, second);
-    xr_free(first);
-    xr_free(second);
+    xr_compile_resources_free(first);
+    xr_compile_resources_free(second);
     teardown();
 }
 
@@ -111,7 +115,7 @@ TEST(leading_line_comment_preserved) {
     ASSERT_NOT_NULL(out);
     // The pre-amble comment must precede the var on its own line.
     ASSERT_TRUE(contains(out, "// pre-amble\nvar x"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -126,7 +130,7 @@ TEST(trailing_line_comment_preserved) {
     ASSERT_TRUE(contains(out, "  // tail\n"));
     // No second copy on a separate line.
     ASSERT_FALSE(contains(out, "// tail\nvar"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -144,7 +148,7 @@ TEST(trailing_comment_does_not_steal_next_line_leading) {
     ASSERT_FALSE(contains(out, "x = 5  // belongs"));
     // It must precede `y` on its own line.
     ASSERT_TRUE(contains(out, "// belongs to y\nvar y"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -163,7 +167,7 @@ TEST(multiline_block_comment_stays_leading) {
     ASSERT_FALSE(contains(out, "x = 5  /*"));
     // It must appear before `y`.
     ASSERT_TRUE(contains(out, "*/\nvar y"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -185,8 +189,8 @@ TEST(format_is_idempotent_with_comments) {
     // produce byte-identical bytes (canonical form is a fixed point).
     ASSERT_STR_EQ(second, first);
 
-    free(first);
-    free(second);
+    xr_compile_resources_free(first);
+    xr_compile_resources_free(second);
     teardown();
 }
 
@@ -200,7 +204,7 @@ TEST(trailing_comment_on_block_decl) {
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "}  // end-foo\n"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -212,7 +216,7 @@ TEST(reexport_format_preserves_module_identity_kind) {
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "export { U32x4 } from simd\n"));
     ASSERT_TRUE(contains(out, "export * from \"./local_vectors\"\n"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -231,8 +235,8 @@ TEST(conditional_method_requirements_round_trip) {
     char *second = parse_and_format(first);
     ASSERT_NOT_NULL(second);
     ASSERT_STR_EQ(second, first);
-    free(second);
-    free(first);
+    xr_compile_resources_free(second);
+    xr_compile_resources_free(first);
     teardown();
 }
 

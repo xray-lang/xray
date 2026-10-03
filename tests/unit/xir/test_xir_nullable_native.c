@@ -30,7 +30,7 @@ static void nullable_native_failures(XrXirProgram *program,uint32_t entry) {
         runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;XrXirInstance *instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,entry,NULL,0);
-        if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll(instance).outcome.status;
+        if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
         if (!point) {CHECK(status==XR_XIR_CALL_RETURNED);sites=runtime_attempts;CHECK(sites>0);}
         else {
             if (status!=XR_XIR_CALL_OOM) fprintf(stderr,"Nullable native fault=%zu/%zu status=%u\n",point-1,sites,status);
@@ -50,7 +50,7 @@ static void nullable_native_run(const XrXirProgramSpec *spec) {
     CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance,spec->declarations->entry_function,NULL,0)==XR_XIR_CALL_READY);
-    XrXirCallResult result=xr_xir_instance_poll(instance).outcome;
+    XrXirCallResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
     if (result.status!=XR_XIR_CALL_RETURNED) fprintf(stderr,"Nullable native status=%u\n",result.status);
     CHECK(result.status==XR_XIR_CALL_RETURNED);XrXirValue value={0};
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
@@ -78,7 +78,7 @@ static void nullable_native_mixed(const XrXirProgramSpec *native,bool root_nativ
 }
 int main(void) {
     _Static_assert(XR_XIR_VALUE_ABI_VERSION==17 && XR_XIR_CALL_ABI_VERSION==21 &&
-        XR_XIR_PROGRAM_ABI_VERSION==26,"sum values require current consumers");
+        XR_XIR_PROGRAM_ABI_VERSION==28,"sum values require current consumers");
     const XrXirProgramSpec *spec=&nullable_checked_program;XrXirProgramSpec old=*spec;
     old.target.abi_version=16;XrXirProgram *program=(XrXirProgram *)(uintptr_t)1;
     size_t before=runtime_attempts;

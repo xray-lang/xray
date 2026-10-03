@@ -8,8 +8,7 @@
  * xstdlib_embedded.h - Embedded stdlib lookup API
  *
  * KEY CONCEPT:
- *   Provides access to pre-compiled stdlib modules embedded as C arrays.
- *   Two lookup modes: bytecode (preferred) and source fallback.
+ *   Exposes immutable source authority and separate runtime loading queries.
  *
  *   The descriptor table below is the whole answer to "which modules does this
  *   binary have, and what does loading one involve". It is generated from the
@@ -24,14 +23,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "../base/xdefs.h"
+#include "../base/xio_policy.h"
 
 struct XrModule;
 struct XrVMRuntime;
-
-/* Installs a module's declared native entries. Generated per module by
- * tools/stdlibgen/stdlibgen.py; answers false when the installed export count
- * is not the declared one, so a partial install fails the load. */
-typedef bool (*XrStdlibNativeEntryBinder)(struct XrVMRuntime *isolate, struct XrModule *module);
 
 typedef struct {
     const char *name;
@@ -39,13 +34,21 @@ typedef struct {
      * semantics are still entirely native. A module with a source requires it:
      * loading fails rather than publishing an empty export table. */
     const char *source;
-    XrStdlibNativeEntryBinder bind_native_entries;
-} XrStdlibModuleDescriptor;
+    bool has_native_entries;
+} XrStdlibSourceDescriptor;
 
 /* Look one module up in the generated table. NULL means this binary has no
  * such standard library module, which is what makes an import fall through to
  * the script and package resolvers. */
-XR_FUNC const XrStdlibModuleDescriptor *xr_stdlib_module_descriptor(const char *module_name);
+XR_FUNC const XrStdlibSourceDescriptor *xr_stdlib_source_descriptor(const char *module_name);
+
+/* Compiler queries admit each table entry and compared byte before reading it.
+ * Missing or ambiguous names publish NULL on OK; failures preserve output. */
+XR_FUNC XrOsIoStatus xr_stdlib_source_descriptor_work(void *owner,
+    XrOsIoStatus (*work)(void *, uint64_t), const char *name,
+    const XrStdlibSourceDescriptor **output);
+XR_FUNC XrOsIoStatus xr_get_embedded_stdlib_work(void *owner,
+    XrOsIoStatus (*work)(void *, uint64_t), const char *name, const char **output);
 
 // Get pre-compiled bytecode for a stdlib module.
 // Returns NULL if module not found or no bytecode available.

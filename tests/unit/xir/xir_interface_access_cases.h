@@ -25,7 +25,7 @@ static void interface_access_cases(void) {
         };
         uint32_t dependency = 1;
         XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0},{"other",5,NULL,0,1}};
-        XrXirFunctionIdentity identities[] = {{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER},{0}};
+        XrXirFunctionIdentity identities[] = {{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0},{0}};
         XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2, NULL};
         XrXirNominalDeclaration nominal = {{"other",5},{"Payload",7},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0};
         XrXirNominalTable nominals = {&nominal,1,NULL};

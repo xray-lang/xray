@@ -26,6 +26,7 @@
 #include <stdint.h>
 
 #include "../base/xdefs.h"
+#include "../base/xio_policy.h"
 #include "os_pipe.h"
 
 #ifdef __cplusplus
@@ -53,7 +54,8 @@ typedef enum XrOsProcStatus {
     XR_PROC_OUT_OF_MEMORY, XR_PROC_IO, XR_PROC_UNSUPPORTED
 } XrOsProcStatus;
 
-/* Callbacks are mandatory. The context is borrowed only during spawn.
+/* Callbacks are mandatory. The context is borrowed during spawn, and until
+ * close when image observation is enabled.
  * Compiler callers pass their ledger; execution callers explicitly choose
  * their allocation policy. No allocation policy is selected implicitly. */
 typedef struct XrProcMemory {
@@ -64,6 +66,24 @@ typedef struct XrProcMemory {
 } XrProcMemory;
 XR_FUNC XrProcMemory xr_proc_system_memory(void);
 XR_FUNC XrOsProcStatus xr_proc_last_error(void);
+
+typedef enum XrProcImageMode {
+    XR_PROC_IMAGES_NONE, XR_PROC_IMAGES_WINDOWS_TREE
+} XrProcImageMode;
+typedef enum XrProcImageKind {
+    XR_PROC_IMAGE_EXECUTABLE, XR_PROC_IMAGE_DLL
+} XrProcImageKind;
+typedef struct XrProcImageEvent {
+    XrProcId pid;
+    XrProcImageKind kind;
+    /* A real Windows file HANDLE, borrowed only during observe. Duplicate it
+     * inside the callback to retain it; never close this borrowed handle. */
+    intptr_t file_handle;
+} XrProcImageEvent;
+typedef struct XrProcImageObserver {
+    void *context;
+    XrOsProcStatus (*observe)(void *context, const XrProcImageEvent *event);
+} XrProcImageObserver;
 
 typedef struct XrProcSpawnOptions {
     XrProcMemory memory;
@@ -82,7 +102,25 @@ typedef struct XrProcSpawnOptions {
     XrPipeHandle stderr_write;
     bool detached;
     bool new_process_group;
+    XrProcImageMode image_mode;
+    XrProcImageObserver image_observer;
 } XrProcSpawnOptions;
+
+typedef struct XrProcImagePumpResult {
+    bool drained;
+    bool progressed;
+} XrProcImagePumpResult;
+
+/* Image observation requires a non-detached owned group. Its memory policy
+ * and observer are copied, and their contexts remain borrowed until close.
+ * Spawn/pump/wait/close use the creating thread. A thread cannot own two
+ * active image roots; callbacks cannot recursively pump or close their root.
+ * Each pump requests at most a 1 ms event wait and processes at most one event.
+ * OS scheduling can exceed that request. Progressed means one
+ * event was continued; idle polls can sleep without throttling queued events.
+ * Failure preserves the entire output and is sticky until close. Drained means all observed debuggees
+ * exited, not that these facts confer target authority. */
+XR_FUNC XrOsProcStatus xr_proc_pump_images(XrProcId pid, XrProcImagePumpResult *output);
 
 /* Failure preserves output. Successful waits consume ordinary child owners. Group IDs require close
  * after wait, including failed waits; close terminates remaining descendants.
@@ -130,6 +168,15 @@ XR_FUNC int64_t xr_proc_self_pid(void);
 // /proc/self/exe). Callers use this to locate resources shipped
 // alongside the binary (e.g. the stdlib directory).
 XR_FUNC int xr_proc_self_exe_path(char *buf, size_t size);
+
+/* Owned UTF-8 process queries use the caller's mandatory I/O policy. Output
+ * must be NULL and changes only on OK. Free through that same policy. Empty
+ * environment values are owned empty strings; an absent key is NOT_FOUND.
+ * The OS environment is observed during this call, not retained or frozen as
+ * a whole. OS/libc internal storage is outside the caller allocation domain. */
+XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **output);
+XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
+    const char *name, char **output);
 
 // Returns true if a debugger (lldb / gdb / Visual Studio) is
 // attached to the current process at the time of the call. Best

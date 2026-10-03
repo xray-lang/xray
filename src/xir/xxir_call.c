@@ -45,7 +45,7 @@ typedef struct CallFrame {
     uint64_t allocation_bytes;
     void *state;
     XrXirValue *arguments;
-    bool protected_call, entered, exiting, scope_exit, cleanup_call, in_cleanup;
+    bool protected_call, entered, exiting, scope_exit, cleanup_call, in_cleanup, exit_done;
 } CallFrame;
 
 struct XrXirCall {
@@ -56,6 +56,8 @@ struct XrXirCall {
     XrXirCallResult result;
     uint64_t allocation_bytes, polls_left, next_wake;
     bool driving, cleaning, admitting, cancel_requested;
+    bool aborting;
+    XrXirCallStatus abort_reason;
 };
 
 XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
@@ -327,10 +329,9 @@ static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
 }
 
 static void abort_frames(XrXirCall *call, XrXirCallStatus reason) {
-    while (call->top)
-        pop_frame(call, reason);
-    xr_xir_call_result_drop(&call->result);
-    call->result = call_result(reason);
+    if (call->aborting) return;
+    call->aborting = true;
+    call->abort_reason = reason;
 }
 #include "xxir_call_exit.inc.c"
 
@@ -353,7 +354,7 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
     *bytes = sizeof(XrXirCall) + (uint64_t) config->entry_count * sizeof(XrXirCallEntry);
     if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
         return XR_XIR_CALL_LIMIT;
-    const XrXirTypes *types = xr_xir_type_arena_types(config->admission.arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(config->admission.arena);
     for (uint32_t i = 0; i < config->entry_count; ++i) {
         const XrXirCallEntry *entry = &config->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION)
@@ -395,10 +396,10 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     status = entry_arguments(&config->entries[entry], arguments, count, NULL, &admission);
     if (status != XR_XIR_CALL_READY) return status;
     XrXirTypeArena *arena = (XrXirTypeArena *) admission.arena;
-    if (arena && !xr_xir_type_arena_retain(arena)) return XR_XIR_CALL_LIMIT;
+    if (arena && !xr_xir_compile_type_arena_retain(arena)) return XR_XIR_CALL_LIMIT;
     XrXirCall *call = call_allocate(config, bytes, &status);
     if (!call) {
-        xr_xir_type_arena_drop(arena);
+        xr_xir_compile_type_arena_drop(arena);
         return status;
     }
     call->config = *config;
@@ -419,7 +420,7 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     }
     status = push_frame(call, entry, arguments, count, NULL, true);
     if (status != XR_XIR_CALL_READY) {
-        xr_xir_type_arena_drop(arena);
+        xr_xir_compile_type_arena_drop(arena);
         call_deallocate(config->accounting, call, bytes);
         return status;
     }
@@ -538,7 +539,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_LEAVE) { accept_scope_exit(call, action, panic); return; }
     if (action.kind == XR_XIR_ACTION_EXIT_DONE) {
         if (!call->top->exiting || !boundary_value(action.value, XR_XIR_UNIT)) abort_frames(call, XR_XIR_CALL_BAD_STATE);
-        else finish_exit(call);
+        else call->top->exit_done = true;
         return;
     }
     if (action.kind == XR_XIR_ACTION_CONTINUE) {
@@ -582,7 +583,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         return;
     }
     XrXirType result_type = returning ? call->top->entry->result : (XrXirType) action.value.type;
-    if (!returning && !xr_xir_type_is_enum(xr_xir_type_arena_types(call->config.admission.arena), result_type)) {
+    if (!returning && !xr_xir_type_is_enum(xr_xir_compile_type_arena_types(call->config.admission.arena), result_type)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
@@ -601,24 +602,36 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     request_exit(call, &result, false);
 }
 
-XrXirCallResult xr_xir_call_poll(XrXirCall *call) {
-    if (!call)
+XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
+    if (!call || !quantum)
         return call_result(XR_XIR_CALL_BAD_ARGUMENT);
     if (call->driving)
         return call_result(XR_XIR_CALL_BUSY);
     if (call->result.status != XR_XIR_CALL_READY)
         return call->result;
     call->driving = true;
-    while (call->top && call->result.status == XR_XIR_CALL_READY) {
+    while (call->top && call->result.status == XR_XIR_CALL_READY && quantum) {
+        if (call->aborting) {
+            --quantum;
+            pop_frame(call, call->abort_reason);
+            if (!call->top) {
+                xr_xir_call_result_drop(&call->result);
+                call->result = call_result(call->abort_reason);
+            }
+            continue;
+        }
         if (call->cancel_requested && !cleanup_active(call))
             request_exit_status(call, XR_XIR_CALL_CANCELLED);
-        if (call->top->exiting && (!call->top->entered || !(call->top->entry->flags & XR_XIR_ENTRY_EXIT))) {
+        if (call->top->exiting && (call->top->exit_done || !call->top->entered ||
+            !(call->top->entry->flags & XR_XIR_ENTRY_EXIT))) {
+            --quantum;
             finish_exit(call); continue;
         }
         if (!call->polls_left || call->config.accounting->polls == UINT64_MAX) {
             abort_frames(call, XR_XIR_CALL_LIMIT);
-            break;
+            continue;
         }
+        --quantum;
         --call->polls_left;
         ++call->config.accounting->polls;
         XrXirCallView view = frame_view(call);
@@ -655,17 +668,17 @@ XrXirCallStatus xr_xir_call_take_result(XrXirCall *call, XrXirValue *output) {
     return status;
 }
 
-XrXirCallStatus xr_xir_call_cancel(XrXirCall *call) {
+XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
     if (!call)
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->cleaning)
         return XR_XIR_CALL_BUSY;
-    if (call->result.status != XR_XIR_CALL_READY && call->result.status != XR_XIR_CALL_SUSPENDED)
+    if (call->aborting || (call->result.status != XR_XIR_CALL_READY && call->result.status != XR_XIR_CALL_SUSPENDED))
         return XR_XIR_CALL_BAD_STATE;
     call->cancel_requested = true;
-    if (call->driving) return XR_XIR_CALL_CANCEL_REQUESTED;
-    call->result = call_result(XR_XIR_CALL_READY);
-    return xr_xir_call_poll(call).status;
+    if (call->result.status == XR_XIR_CALL_SUSPENDED)
+        call->result = call_result(XR_XIR_CALL_READY);
+    return XR_XIR_CALL_CANCEL_REQUESTED;
 }
 
 XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
@@ -675,12 +688,14 @@ XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
         return XR_XIR_CALL_BUSY;
     XrXirCallStatus status = XR_XIR_CALL_READY;
     if (call->top) {
-        status = xr_xir_call_cancel(call);
+        if (!call->aborting) (void)xr_xir_call_request_cancel(call);
+        do { status = xr_xir_call_poll_bounded(call, 256).status; }
+        while (status == XR_XIR_CALL_READY);
         if (status == XR_XIR_CALL_CANCELLED) status = XR_XIR_CALL_READY;
     }
     call->driving = true;
     xr_xir_call_result_drop(&call->result);
-    xr_xir_type_arena_drop((XrXirTypeArena *) call->config.admission.arena);
+    xr_xir_compile_type_arena_drop((XrXirTypeArena *) call->config.admission.arena);
     call_deallocate(call->config.accounting, call, call->allocation_bytes);
     return status;
 }

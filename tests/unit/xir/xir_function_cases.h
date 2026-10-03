@@ -53,7 +53,7 @@ static void function_case_release(void *owner) { ++*(unsigned *) owner; }
 #include "xir_native_metadata_fixture.h"
 static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program) {
     XrXirSourceModule module = {"root", 4, NULL, 0, 0};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirSlot slot = {0, XR_XIR_STRING, 1};
     XrXirLiteral literal = {"owned callback result", 21};
     XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1, NULL};
@@ -94,7 +94,7 @@ static bool function_case_run(bool cancel) {
     if (status != XR_XIR_CALL_READY) goto failed;
     status = xr_xir_instance_start(instance, 2, NULL, 0);
     if (status != XR_XIR_CALL_READY) goto failed;
-    status = xr_xir_instance_poll(instance).outcome.status;
+    status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
     if (status != XR_XIR_CALL_RETURNED) goto failed;
     CHECK(xr_xir_instance_take_result(instance, &function) == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_function_binding(&function) && xr_xir_function_binding(&function)->entry == 3);
@@ -103,21 +103,21 @@ static bool function_case_run(bool cancel) {
     CHECK(xr_xir_instance_start(other, 4, &function, 1) == XR_XIR_CALL_BAD_ARGUMENT);
     status = xr_xir_instance_start_function(instance, &function, NULL, 0);
     if (status != XR_XIR_CALL_READY) goto failed;
-    XrXirInstanceResult wait = xr_xir_instance_poll(instance);
+    XrXirInstanceResult wait = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(wait.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(instance, wait.epoch, wait.outcome.wake) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
     status = xr_xir_instance_start(instance, 4, &function, 1);
     if (status != XR_XIR_CALL_READY) goto failed;
-    wait = xr_xir_instance_poll(instance);
+    wait = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     if (wait.outcome.status != XR_XIR_CALL_SUSPENDED) { status = wait.outcome.status; goto failed; }
     if (cancel) {
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_CANCELLED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
     } else {
         CHECK(xr_xir_instance_resume(instance, wait.epoch, wait.outcome.wake) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instance, &second) == XR_XIR_CALL_RETURNED);
     }
     CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);

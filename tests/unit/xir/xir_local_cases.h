@@ -25,13 +25,13 @@ static void phi_cases(const XrXirCallEntry *entry) {
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
         xr_xir_value_drop(&args[0]); xr_xir_value_drop(&args[1]);
-        XrXirCallResult outcome = xr_xir_call_poll(call);
+        XrXirCallResult outcome = xr_xir_call_poll_bounded(call, UINT64_MAX);
         unsigned suspensions = 0;
         while (outcome.status == XR_XIR_CALL_SUSPENDED) {
             ++suspensions;
-            if (mode == 6) { CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED); break; }
+            if (mode == 6) { { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); } break; }
             CHECK(xr_xir_call_resume(call, outcome.wake) == XR_XIR_CALL_READY);
-            outcome = xr_xir_call_poll(call);
+            outcome = xr_xir_call_poll_bounded(call, UINT64_MAX);
         }
         if (mode < 6) {
             CHECK(outcome.status == XR_XIR_CALL_RETURNED && suspensions == mode);
@@ -62,7 +62,7 @@ static void numeric_cleanup(const XrXirCallEntry *entry) {
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
         xr_xir_value_drop(&args[0]); xr_xir_value_drop(&args[1]);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         CHECK(result.status == (mode ? XR_XIR_CALL_RETURNED : XR_XIR_CALL_DIVIDE_BY_ZERO));
         CHECK(result.value.payload == (mode ? 2 : 0));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
@@ -84,15 +84,15 @@ static void local_cases(const XrXirCallEntry *entry) {
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = mode == 3 ? 3 : 100; config.depth_limit = 4; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, arguments, 3, &call) == XR_XIR_CALL_READY);
-        XrXirCallResult outcome = xr_xir_call_poll(call);
+        XrXirCallResult outcome = xr_xir_call_poll_bounded(call, UINT64_MAX);
         xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]);
         if (mode == 3) CHECK(outcome.status == XR_XIR_CALL_LIMIT);
         else {
             CHECK(outcome.status == XR_XIR_CALL_SUSPENDED);
-            if (mode == 2) CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+            if (mode == 2) { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
             else {
                 CHECK(xr_xir_call_resume(call, outcome.wake) == XR_XIR_CALL_READY);
-                CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_RETURNED);
+                CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_RETURNED);
                 CHECK(xr_xir_call_take_result(call, &result) == XR_XIR_CALL_RETURNED);
             }
         }

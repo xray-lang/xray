@@ -65,7 +65,7 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instance, i ? captured : entry, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         XrXirValue value = {0};
         CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
         CHECK(value.type == XR_XIR_I64 && value.payload == 7); xr_xir_value_drop(&value);

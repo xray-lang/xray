@@ -44,7 +44,7 @@ static void source_requirement_value_ownership(const XrXirSourceRequest *request
         for (uint32_t call=0;call<3;++call) {
             uint32_t entry=call==1 ? entries[0] : entries[1];
             CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
             XrXirValue value={0};
             CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
             if (call==1) retained[run]=value;

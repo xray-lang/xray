@@ -1425,6 +1425,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     const LspMethodEntry *entry = find_method(server, method);
     if (entry) {
         if (entry->request_handler) {
+            server->formatting_failure.stage = server->formatting_failure.status = 0;
             // Check if already cancelled before executing
             if (pending_request_is_cancelled(server, &id)) {
                 lsp_log("Request %s was cancelled before execution", xlsp_request_id_debug(&id));
@@ -1438,6 +1439,13 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
                     send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
                     if (result)
                         xjson_free(result);
+                } else if (entry->request_handler == xlsp_handle_td_formatting &&
+                           server->formatting_failure.stage) {
+                    char message[128];
+                    snprintf(message, sizeof(message), "Formatting failed (stage=%u status=%u)",
+                        server->formatting_failure.stage, server->formatting_failure.status);
+                    send_error(server, &id, -32603, message);
+                    xjson_free(result);
                 } else {
                     send_response(server, &id, result);
                 }

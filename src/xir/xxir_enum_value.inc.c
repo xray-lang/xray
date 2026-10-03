@@ -10,7 +10,7 @@ XR_FUNC XrXirValueStatus xr_xir_enum_new(XrXirType type, uint32_t variant,
     const XrXirValue *fields, uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||
         (count != 0) != (fields != NULL)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     if (!xr_xir_type_is_enum(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
@@ -20,9 +20,9 @@ XR_FUNC XrXirValueStatus xr_xir_enum_new(XrXirType type, uint32_t variant,
     admission->work -= (uint64_t) count + 1;
     XrXirTypeArena *arena = (XrXirTypeArena *) admission->arena;
     if (!count) {
-        const XirNominalValue *record = xr_xir_type_arena_empty_variant(arena, type, variant);
+        const XirNominalValue *record = xr_xir_compile_type_arena_empty_variant(arena, type, variant);
         if (!record) return XR_XIR_VALUE_BAD_ARGUMENT;
-        if (!xr_xir_type_arena_retain(arena)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+        if (!xr_xir_compile_type_arena_retain(arena)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
         *output = (XrXirValue) {(uint32_t) type, 0, 0};
         memcpy(&output->payload, &record, sizeof(record)); return XR_XIR_VALUE_OK;
     }
@@ -53,7 +53,7 @@ XR_FUNC XrXirValueStatus xr_xir_enum_variant(const XrXirValue *value, uint32_t *
         !owned_carrier_type((XrXirType) value->type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     const XirObject *object = object_pointer(value);
-    if (!xr_xir_type_is_enum(xr_xir_type_arena_types(object->arena), object->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena), object->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output = ((const XirNominalValue *) object)->variant;
     return XR_XIR_VALUE_OK;
 }
@@ -66,4 +66,16 @@ XR_FUNC XrXirValueStatus xr_xir_enum_get(const XrXirValue *value, uint32_t varia
     if (field >= record->count) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = xr_xir_value_admit(value, (XrXirType) value->type, admission);
     return status == XR_XIR_VALUE_OK ? xr_xir_value_copy(&record->fields[field], output) : status;
+}
+XR_FUNC XrXirValueStatus xr_xir_enum_borrow(const XrXirValue *value, XrXirEnumBorrow *output) {
+    uint32_t variant = 0;
+    if (!output || xr_xir_enum_variant(value, &variant) != XR_XIR_VALUE_OK)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirNominalValue *record = (const XirNominalValue *)object_pointer(value);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(record->object.arena);
+    const XrXirTypeNode *node = xr_xir_type_node(types, record->object.type);
+    const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
+    *output = (XrXirEnumBorrow){identity->name, identity->variants[variant].name,
+        record->fields, record->count};
+    return XR_XIR_VALUE_OK;
 }

@@ -23,12 +23,14 @@
 
 #include "xtype.h"
 #include "../../base/xarena.h"
+#include "../../base/xcompile_state.h"
 #include <stdbool.h>
 #include <stdint.h>
 
 // Type pool structure
 typedef struct XrTypePool {
     bool initialized;
+    XrCompileState *state; /* retained by arena backing for the entire pool lifetime */
 
     // Per-pool ID counter (no global state)
     uint32_t next_type_id;
@@ -39,7 +41,7 @@ typedef struct XrTypePool {
 } XrTypePool;
 
 // Pool lifecycle
-XR_FUNC XrTypePool *xr_type_pool_new(void);
+XR_FUNC XrCompileResourceStatus xr_compile_type_pool_open(XrCompileState *state, XrTypePool **output);
 XR_FUNC void xr_type_pool_free(XrTypePool *pool);
 XR_FUNC void xr_type_pool_reset(XrTypePool *pool);
 

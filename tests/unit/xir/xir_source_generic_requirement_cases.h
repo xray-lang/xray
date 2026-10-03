@@ -60,7 +60,7 @@ static void source_generic_requirement_run(XrXirSourceRequest *request, const ch
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         for (uint32_t e=0;e<2;++e) {
             CHECK(xr_xir_instance_start(instance,entries[e],NULL,0)==XR_XIR_CALL_READY);
-            XrXirCallResult outcome=xr_xir_instance_poll(instance).outcome;
+            XrXirCallResult outcome=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
             CHECK(outcome.status==XR_XIR_CALL_RETURNED);
             XrXirValue value={0};
             CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);

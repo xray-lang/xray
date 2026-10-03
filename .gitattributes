@@ -44,3 +44,6 @@ src/vm/xvm_template_compare_gen.inc.c text eol=lf
 src/aot/xi_to_c_dispatch_gen.h text eol=lf
 src/aot/xi_to_c_stmt_dispatch_gen.h text eol=lf
 tests/unit/ir/test_xi_lowering_gen.c text eol=lf
+
+# The preserved generated C is verified against its original byte digest.
+tests/unit/xir/test_declarations_owner/old_program27.c text eol=lf

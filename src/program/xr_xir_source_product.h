@@ -18,6 +18,15 @@
 #include "../xir/xxir_program.h"
 
 typedef struct XrXirSourceProduct XrXirSourceProduct;
+typedef struct XrXirSourceTestEntry {
+    uint32_t function, role, timeout_seconds;
+    const char *name;
+    size_t name_length;
+} XrXirSourceTestEntry;
+typedef struct XrXirSourceTests {
+    const XrXirSourceTestEntry *entries;
+    uint32_t count;
+} XrXirSourceTests;
 typedef struct XrXirSourceProductFacts {
     XrXirTarget target;
     uint32_t entry, function_count, module_count;
@@ -50,26 +59,34 @@ typedef struct XrXirSourceProductDiagnostic {
     XrXirSourceDiagnostic source;
     XrXirDiagnostic xir;
     XrXirSourceSnapshot *snapshot;
+    char *source_path;
 } XrXirSourceProductDiagnostic;
-/* Failure preserves output. Diagnostics own any partial query snapshot. */
-XR_FUNC XrXirStatus xr_xir_source_product_build(const XrXirSourceProductRequest *request,
+/* Failure preserves output. Diagnostics own their semantic failure path and
+ * any complete query snapshot retained after a later projection failure. */
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic);
-XR_FUNC void xr_xir_source_product_free(XrXirSourceProduct *product);
-XR_FUNC void xr_xir_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
+XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);
+XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
 /* Borrowed immutable facts and packets remain valid after VM code transfer. */
-XR_FUNC const XrXirSourceProductFacts *xr_xir_source_product_facts(const XrXirSourceProduct *product);
-XR_FUNC XrXirStatus xr_xir_source_product_packet(const XrXirSourceProduct *product,
+XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
+/* The borrowed context is the owner's actual ledger, including after VM take. */
+XR_FUNC const XrXirCompileContext *xr_xir_compile_source_product_context(const XrXirSourceProduct *product);
+/* Root-module roles use actual closed function indexes. Entries and names are
+ * product-owned on its original ledger, survive VM transfer and producer
+ * destruction, and are borrowed until product free. They confer no authority. */
+XR_FUNC const XrXirSourceTests *xr_xir_compile_source_product_tests(const XrXirSourceProduct *product);
+XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output);
-XR_FUNC const XrXirSourceView *xr_xir_source_product_view(const XrXirSourceProduct *product);
+XR_FUNC const XrXirSourceView *xr_xir_compile_source_product_view(const XrXirSourceProduct *product);
 /* Layout borrows end when the Lowered artifact transfers to a VM program. */
-XR_FUNC XrXirStatus xr_xir_source_product_layout(const XrXirSourceProduct *product,
+XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduct *product,
     uint32_t function,XrXirSourceProductLayoutView *output);
 /* Rebuild packet correspondence and compare the complete native projection. */
-XR_FUNC XrXirStatus xr_xir_source_product_verify(const XrXirSourceProduct *product,
-    const XrXirBudget *budget,size_t code_limit,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduct *product,
+    size_t code_limit,XrXirDiagnostic *diagnostic);
 /* Successful VM projection transfers code ownership and leaves queries owned. */
-XR_FUNC XrXirStatus xr_xir_source_product_vm_take(XrXirSourceProduct *product,
-    XrXirProgramBudget budget,XrXirProgram **output);
-XR_FUNC XrXirStatus xr_xir_source_product_emit(const XrXirSourceProduct *product,
+XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *product,
+    XrXirProgram **output);
+XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct *product,
     const char *prefix,size_t byte_limit,XrXirCSource *output);
 #endif // XR_XIR_SOURCE_PRODUCT_H

@@ -53,17 +53,17 @@ static void cleanup_source_cases(XrXirProgram *program, const uint32_t *function
     xr_xir_program_drop(program);
     for (unsigned i = 0; i < CLEANUP_SOURCE_FUNCTIONS; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions[i], NULL, 0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult step = xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult step = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         XrXirCallResult outcome = step.outcome;
         if (i == CLEANUP_CANCELLED || i == CLEANUP_MEMBER_CANCEL) {
             CHECK(outcome.status == XR_XIR_CALL_SUSPENDED && !logs[i].at);
             CHECK(xr_xir_instance_stop(instances[i]) == XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_CANCELLED);
+            CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
         } else {
             if (i == CLEANUP_MEMBER_RESUME) {
                 CHECK(outcome.status == XR_XIR_CALL_SUSPENDED && !logs[i].at);
                 CHECK(xr_xir_instance_resume(instances[i], step.epoch, outcome.wake) == XR_XIR_CALL_READY);
-                outcome = xr_xir_instance_poll(instances[i]).outcome;
+                outcome = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
             }
             if (outcome.status != XR_XIR_CALL_RETURNED) fprintf(stderr, "cleanup source case %u failed: %u\n", i, outcome.status);
             CHECK(outcome.status == XR_XIR_CALL_RETURNED);
@@ -105,16 +105,16 @@ static void cleanup_source_allocations(XrXirProgram *program, const uint32_t *fu
             XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
             if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, functions[f], NULL, 0);
             XrXirInstanceResult step = {0};
-            if (status == XR_XIR_CALL_READY) { step = xr_xir_instance_poll(instance); status = step.outcome.status; }
+            if (status == XR_XIR_CALL_READY) { step = xr_xir_instance_poll_bounded(instance, UINT64_MAX); status = step.outcome.status; }
             if (status == XR_XIR_CALL_SUSPENDED) {
                 CHECK(f == CLEANUP_CANCELLED || f == CLEANUP_MEMBER_CANCEL || f == CLEANUP_MEMBER_RESUME);
                 if (f == CLEANUP_MEMBER_RESUME) {
                     status = xr_xir_instance_resume(instance, step.epoch, step.outcome.wake);
-                    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+                    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
                 }
                 else {
                     status = xr_xir_instance_stop(instance);
-                    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+                    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
                 }
             }
             if (status == XR_XIR_CALL_RETURNED) status = xr_xir_instance_take_result(instance, &value);
@@ -139,10 +139,10 @@ static void cleanup_source_fatal(XrXirProgram *program, uint32_t function) {
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance, function, NULL, 0) == XR_XIR_CALL_READY);
-    XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+    XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
     if (result.status == XR_XIR_CALL_SUSPENDED) {
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
-        result = xr_xir_instance_poll(instance).outcome;
+        result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
     }
     fprintf(stderr, "cleanup escape incorrectly returned status %u\n", result.status);
     exit(1);

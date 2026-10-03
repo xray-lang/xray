@@ -24,7 +24,6 @@
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/parser/xast_walk.h"
-#include "xray_vm.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 
@@ -42,32 +41,37 @@
 /* Fixtures                                                                */
 /* ====================================================================== */
 
-static XrVMRuntime *g_iso = NULL;
-static XrCompilerSession *g_session = NULL;
-
+static XrCompileResources *g_resources;
+static XrCompilerSession *g_session;
 static void setup(void) {
-    XrVMConfig p = {0};
-    g_iso = xray_vm_new_full(&p);
-    ASSERT_NOT_NULL(g_iso);
-    g_session = xr_compiler_session_current_for_isolate(g_iso);
-    ASSERT_NOT_NULL(g_session);
+    if (g_session) return;
+    XrCompileResourceLimits limits = {UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &g_resources), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_compile_session_new(g_resources, &g_session), XR_COMPILER_SESSION_OK);
+}
+static void teardown(void) {
+    xr_compile_session_free(g_session); g_session = NULL;
+    xr_compile_resources_release(g_resources); g_resources = NULL;
+}
+static AstNode *fixture_parse(XrCompilerSession *session, const char *source, const char *path) {
+    AstNode *ast = NULL;
+    (void)xr_compile_parse_with_trivia(session, source, path, NULL, &ast);
+    return ast;
+}
+static char *fixture_format(AstNode *ast, const XrFmtConfig *config) {
+    XrFmtOutput output = {0};
+    (void)xr_compile_format_ast(xr_compile_session_compile_state(g_session), ast, config, &output);
+    return output.text;
 }
 
-static void teardown(void) {
-    if (g_iso) {
-        xray_vm_delete(g_iso);
-        g_iso = NULL;
-        g_session = NULL;
-    }
-}
 
 /* Parse with trivia and format to a heap string. Returns NULL on error. */
 static char *parse_and_format(const char *source, const char *filename) {
     AstNode *ast =
-        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), source, filename);
+        fixture_parse(g_session, source, filename);
     if (!ast)
         return NULL;
-    char *out = xfmt_format_ast(ast, NULL, g_iso);
+    char *out = fixture_format(ast, NULL);
     xr_program_destroy(ast);
     return out;
 }
@@ -123,7 +127,7 @@ static int check_idempotent(const char *path) {
     char *fmt2 = parse_and_format(fmt1, path);
     if (!fmt2) {
         fprintf(stderr, "  SKIP (re-parse): %s\n", path);
-        free(fmt1);
+        xr_compile_resources_free(fmt1);
         return -1; /* skip */
     }
 
@@ -143,8 +147,8 @@ static int check_idempotent(const char *path) {
         fprintf(stderr, "    fmt2: \"%.40s\"\n", b);
     }
 
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     return ok;
 }
 
@@ -412,8 +416,8 @@ static int check_ast_preserved(const char *path) {
     if (!src)
         return -1;
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
-    AstNode *before = xr_parse_with_trivia(session, src, path);
+    XrCompilerSession *session = g_session;
+    AstNode *before = fixture_parse(session, src, path);
     if (!before) {
         xr_free(src);
         return -1;
@@ -421,25 +425,25 @@ static int check_ast_preserved(const char *path) {
 
     /* The AST points into `src` for literal payloads and comment trivia, so
      * the source must outlive both the formatter and the digest. */
-    char *formatted = xfmt_format_ast(before, NULL, g_iso);
+    char *formatted = fixture_format(before, NULL);
     char *digest_before = formatted ? ast_digest(before) : NULL;
     xr_program_destroy(before);
     xr_free(src);
     if (!formatted || !digest_before) {
-        free(formatted);
+        xr_compile_resources_free(formatted);
         xr_free(digest_before);
         return formatted ? 0 : -1;
     }
 
-    AstNode *after = xr_parse_with_trivia(session, formatted, path);
+    AstNode *after = fixture_parse(session, formatted, path);
     if (!after) {
-        free(formatted);
+        xr_compile_resources_free(formatted);
         xr_free(digest_before);
         return -1;
     }
     char *digest_after = ast_digest(after);
     xr_program_destroy(after);
-    free(formatted);
+    xr_compile_resources_free(formatted);
 
     bool preserved = digest_after && strcmp(digest_before, digest_after) == 0;
     int result = 1;
@@ -456,36 +460,35 @@ TEST(tuple_iteration_surface_and_identity_roundtrip) {
     setup();
     const char *src = "fn pairs() {\nfor ((i, e) in xs.entries()) {print(i)}; "
                       "for ((j, v) in ys.entries()) {print(v)};\n}\n";
-    AstNode *before = xr_parse_with_trivia(g_session, src, "tuple_heads.xr");
+    AstNode *before = fixture_parse(g_session, src, "tuple_heads.xr");
     ASSERT_NOT_NULL(before);
     char *digest_before = ast_digest(before);
-    char *formatted = xfmt_format_ast(before, NULL, g_iso);
+    char *formatted = fixture_format(before, NULL);
     ASSERT_NOT_NULL(digest_before);
     ASSERT_NOT_NULL(formatted);
     ASSERT_TRUE(contains(formatted, "for ((i, e) in xs.entries())"));
     ASSERT_TRUE(contains(formatted, "for ((j, v) in ys.entries())"));
     ASSERT_FALSE(contains(formatted, "__for_in_tuple_"));
     xr_program_destroy(before);
-    AstNode *after = xr_parse_with_trivia(g_session, formatted, "tuple_heads_formatted.xr");
+    AstNode *after = fixture_parse(g_session, formatted, "tuple_heads_formatted.xr");
     ASSERT_NOT_NULL(after);
     char *digest_after = ast_digest(after);
     ASSERT_NOT_NULL(digest_after);
     ASSERT_STR_EQ(digest_before, digest_after);
-    char *again = xfmt_format_ast(after, NULL, g_iso);
+    char *again = fixture_format(after, NULL);
     ASSERT_NOT_NULL(again);
     ASSERT_STR_EQ(formatted, again);
     xr_program_destroy(after);
     xr_free(digest_before);
     xr_free(digest_after);
-    xr_free(formatted);
-    xr_free(again);
+    xr_compile_resources_free(formatted);
+    xr_compile_resources_free(again);
     teardown();
 }
 
 TEST(tuple_iteration_binding_annotations_rejected) {
     setup();
-    AstNode *node = xr_parse_with_trivia(g_session,
-        "fn bad() { for ((i: i64, value) in xs) {} }", "tuple_annotation.xr");
+    AstNode *node = fixture_parse(g_session, "fn bad() { for ((i: i64, value) in xs) {} }", "tuple_annotation.xr");
     ASSERT_NULL(node);
     teardown();
 }
@@ -541,7 +544,7 @@ TEST(doc_comment_before_function) {
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "/// This is a doc comment"));
     ASSERT_TRUE(contains(out, "/// with two lines"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -552,7 +555,7 @@ TEST(block_comment_before_statement) {
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "/* block comment */"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -565,7 +568,7 @@ TEST(comment_before_class) {
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "// MyClass docs"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -583,8 +586,8 @@ TEST(string_escape_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -599,8 +602,8 @@ TEST(template_string_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -612,8 +615,8 @@ TEST(unicode_string_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -626,8 +629,8 @@ TEST(empty_string_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -644,7 +647,7 @@ TEST(arrow_return_type_emitted) {
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "-> i64"));
     ASSERT_FALSE(contains(out, "): i64"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -665,8 +668,8 @@ TEST(annotated_and_mode_lambda_remain_arrow) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -685,8 +688,8 @@ TEST(attribute_visibility_modifier_order_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -708,8 +711,8 @@ TEST(method_deprecated_attribute_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -728,8 +731,8 @@ TEST(inline_control_attributes_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -749,8 +752,8 @@ TEST(explicit_numeric_conversions_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -764,8 +767,8 @@ TEST(deprecated_message_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -780,8 +783,8 @@ TEST(object_destructure_rename_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -822,8 +825,8 @@ TEST(parameter_modes_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -850,8 +853,8 @@ TEST(borrow_origin_sets_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -877,8 +880,8 @@ TEST(extern_block_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "extern-block-formatted.xr");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -902,8 +905,8 @@ TEST(optional_chain_implicit_link_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "optional-chain-formatted.xr");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -941,8 +944,8 @@ TEST(parameter_modes_comments_roundtrip) {
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -952,10 +955,10 @@ TEST(parameter_modes_comments_roundtrip) {
 
 static char *format_with_config(const char *source, XrFmtConfig *cfg) {
     AstNode *ast =
-        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), source, "<test>");
+        fixture_parse(g_session, source, "<test>");
     if (!ast)
         return NULL;
-    char *out = xfmt_format_ast(ast, cfg, g_iso);
+    char *out = fixture_format(ast, cfg);
     xr_program_destroy(ast);
     return out;
 }
@@ -977,7 +980,7 @@ TEST(branch_arrows_default_aligned) {
     ASSERT_TRUE(contains(out, "n if (n < 0)   -> \"negative\""));
     ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
     ASSERT_TRUE(contains(out, "_              -> \"small positive\""));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1001,7 +1004,7 @@ TEST(branch_arrows_can_disable_alignment) {
     ASSERT_TRUE(contains(out, "_ -> \"small positive\""));
     ASSERT_FALSE(contains(out, "0  ->"));
     ASSERT_FALSE(contains(out, "_  ->"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1020,14 +1023,14 @@ TEST(branch_arrows_aligned_idempotent) {
     ASSERT_NOT_NULL(fmt1);
     /* fmt(fmt(src)) == fmt(src) — alignment must not drift on re-format. */
     AstNode *ast2 =
-        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), fmt1, "<test>");
+        fixture_parse(g_session, fmt1, "<test>");
     ASSERT_NOT_NULL(ast2);
-    char *fmt2 = xfmt_format_ast(ast2, &cfg, g_iso);
+    char *fmt2 = fixture_format(ast2, &cfg);
     xr_program_destroy(ast2);
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -1049,7 +1052,7 @@ TEST(select_branch_arrows_default_aligned) {
     ASSERT_TRUE(contains(out, "100 to ch2 -> {"));
     ASSERT_TRUE(contains(out, "after 10   -> {"));
     ASSERT_TRUE(contains(out, "_          -> {"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1066,7 +1069,7 @@ TEST(match_single_arm_no_padding) {
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "_ -> \"only\""));
     ASSERT_FALSE(contains(out, "_  ->"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1089,7 +1092,7 @@ TEST(enum_members_ignore_removed_value_alignment) {
     ASSERT_TRUE(contains(out, "Red"));
     ASSERT_TRUE(contains(out, "Transparent"));
     ASSERT_FALSE(contains(out, "="));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1104,7 +1107,7 @@ TEST(enum_payload_members_roundtrip) {
     ASSERT_TRUE(contains(out, "A"));
     ASSERT_TRUE(contains(out, "Bbb { x: i64, text: string }"));
     ASSERT_FALSE(contains(out, "="));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1127,8 +1130,8 @@ TEST(enum_record_construction_and_selective_pattern_are_idempotent) {
     char *again = parse_and_format(out, "enum_record_surface_formatted.xr");
     ASSERT_NOT_NULL(again);
     ASSERT_STR_EQ(out, again);
-    free(again);
-    free(out);
+    xr_compile_resources_free(again);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1154,8 +1157,8 @@ TEST(enum_static_iteration_roundtrip) {
     char *again = parse_and_format(out, "enum_static_iteration_formatted.xr");
     ASSERT_NOT_NULL(again);
     ASSERT_STR_EQ(out, again);
-    free(again);
-    free(out);
+    xr_compile_resources_free(again);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1178,7 +1181,7 @@ TEST(class_fields_aligned_when_enabled) {
     ASSERT_TRUE(contains(out, "name : string"));
     ASSERT_TRUE(contains(out, "age  : i64"));
     ASSERT_TRUE(contains(out, "email: string"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1193,7 +1196,7 @@ TEST(class_fields_default_single_space) {
     ASSERT_TRUE(contains(out, "a: i64"));
     ASSERT_TRUE(contains(out, "bbbb: string"));
     ASSERT_FALSE(contains(out, "a   :"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1214,7 +1217,7 @@ TEST(array_literal_wraps_when_too_long) {
     /* Multi-line: each element on its own line with trailing comma. */
     ASSERT_TRUE(contains(out, "\"alpha\",\n"));
     ASSERT_TRUE(contains(out, "\"zeta\",\n"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1229,7 +1232,7 @@ TEST(array_literal_inline_when_short) {
     /* Stays single-line: well below 100 columns. */
     ASSERT_TRUE(contains(out, "[1, 2, 3]"));
     ASSERT_FALSE(contains(out, "1,\n"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1244,7 +1247,7 @@ TEST(call_args_wrap_when_too_long) {
     /* Function call args broken across lines. */
     ASSERT_TRUE(contains(out, "foo(\n"));
     ASSERT_TRUE(contains(out, "\"alpha\",\n"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1260,7 +1263,7 @@ TEST(no_trailing_comma_when_disabled) {
     /* Last element should NOT carry a trailing `,` when disabled. */
     ASSERT_TRUE(contains(out, "10\n"));
     ASSERT_FALSE(contains(out, "10,\n"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1273,7 +1276,7 @@ TEST(wrap_long_lines_default_off) {
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
     ASSERT_FALSE(contains(out, "\n    1,"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1295,7 +1298,7 @@ TEST(trailing_comments_aligned_when_enabled) {
     ASSERT_TRUE(contains(out, "var radius = 5  // sphere radius"));
     ASSERT_TRUE(contains(out, "var mass = 100  // kg"));
     ASSERT_TRUE(contains(out, "var temp = 273  // Kelvin"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1310,7 +1313,7 @@ TEST(trailing_comments_default_unchanged) {
     ASSERT_TRUE(contains(out, "var yyyy = 22  // second"));
     /* Specifically: NO over-padding on the short line. */
     ASSERT_FALSE(contains(out, "var x = 1      // first"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 
@@ -1324,14 +1327,14 @@ TEST(trailing_comments_idempotent) {
     char *fmt1 = format_with_config(src, &cfg);
     ASSERT_NOT_NULL(fmt1);
     AstNode *ast2 =
-        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), fmt1, "<test>");
+        fixture_parse(g_session, fmt1, "<test>");
     ASSERT_NOT_NULL(ast2);
-    char *fmt2 = xfmt_format_ast(ast2, &cfg, g_iso);
+    char *fmt2 = fixture_format(ast2, &cfg);
     xr_program_destroy(ast2);
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    xr_compile_resources_free(fmt1);
+    xr_compile_resources_free(fmt2);
     teardown();
 }
 
@@ -1348,7 +1351,7 @@ TEST(trailing_comments_string_safe) {
     ASSERT_TRUE(contains(out, "\"https://example.com\""));
     ASSERT_TRUE(contains(out, "// homepage"));
     ASSERT_TRUE(contains(out, "// root"));
-    free(out);
+    xr_compile_resources_free(out);
     teardown();
 }
 

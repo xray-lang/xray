@@ -88,7 +88,7 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
     uint32_t *resumed = view->state;
     if (!*resumed)
         ++witness->comparisons;
-    CHECK(xr_xir_call_poll(view->activation).status == XR_XIR_CALL_BUSY);
+    CHECK(xr_xir_call_poll_bounded(view->activation, UINT64_MAX).status == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_call_resume(view->activation, 1) == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_call_free(view->activation) == XR_XIR_CALL_BUSY);
     uint32_t before = (*resumed)++;
@@ -103,7 +103,7 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
         return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,invalid,{0}, 0};
     }
     if (witness->mode == 3)
-        CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
+        CHECK(xr_xir_call_request_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
     if (witness->mode == 4)
         return returned((XrXirValue) {XR_XIR_I64, 0, 7});
     XrXirRunContext context = {2, 24, 0, 0, 0, 0};
@@ -116,9 +116,9 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
 static void cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     Witness *witness = view->instance;
     CHECK(reason != XR_XIR_CALL_READY && reason != XR_XIR_CALL_SUSPENDED);
-    CHECK(xr_xir_call_poll(view->activation).status == XR_XIR_CALL_BUSY);
+    CHECK(xr_xir_call_poll_bounded(view->activation, UINT64_MAX).status == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_call_free(view->activation) == XR_XIR_CALL_BUSY);
-    CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_BUSY);
+    CHECK(xr_xir_call_request_cancel(view->activation) == XR_XIR_CALL_BUSY);
     CHECK(witness->cleaned < 16);
     witness->cleanup_ids[witness->cleaned++] = *(const uint32_t *) view->environment;
 }
@@ -165,23 +165,23 @@ static void callback_cases(void) {
             CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
             CHECK(witness.cleaned == 1 && witness.cleanup_ids[0] == 0);
         } else {
-            XrXirCallResult result = xr_xir_call_poll(call);
+            XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
             uint64_t old_wake = 0;
             while (result.status == XR_XIR_CALL_SUSPENDED) {
                 CHECK(result.wake > old_wake);
                 uint64_t polls = accounting.polls;
-                CHECK(xr_xir_call_poll(call).wake == result.wake && accounting.polls == polls);
+                CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).wake == result.wake && accounting.polls == polls);
                 CHECK(xr_xir_call_resume(call, old_wake) == XR_XIR_CALL_BAD_STATE);
                 if (mode == 6 || mode == 7) break;
                 old_wake = result.wake;
                 CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
                 CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_BAD_STATE);
-                result = xr_xir_call_poll(call);
+                result = xr_xir_call_poll_bounded(call, UINT64_MAX);
             }
             if (mode == 6) {
-                CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+                { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
                 CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_BAD_STATE);
-                result = xr_xir_call_poll(call);
+                result = xr_xir_call_poll_bounded(call, UINT64_MAX);
             }
             if (mode == 2) CHECK(result.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.value,domain,91));
             else if (mode == 3 || mode == 6) CHECK(result.status == XR_XIR_CALL_CANCELLED);
@@ -235,7 +235,7 @@ static void bounded_stack(void) {
         XrXirValue argument = {XR_XIR_I64, 0, 10000};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, &argument, 1, &call) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         if (!variant) {
             CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 10000);
             CHECK(accounting.peak_depth == 10001 && witness.recursive_cleanups == 10001);
@@ -281,16 +281,16 @@ static void xir_instruction_calls(void) {
         XrXirValue args[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 2, &call) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         if (kind != 2) {
             CHECK(result.status == XR_XIR_CALL_SUSPENDED && accounting.depth == (mode >= 12 ? 2u : 3u));
             CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_call_poll(call);
+            result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         }
         if (mode == 9) {
             CHECK(result.status == XR_XIR_CALL_SUSPENDED && accounting.depth == 1);
             CHECK(xr_xir_call_resume(call,result.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_call_poll(call);
+            result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         }
         if (mode == 0 || mode == 4 || mode == 8 || mode == 12) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 4);
         if (mode == 10) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 44);
@@ -363,7 +363,7 @@ static void call_admission(void) {
     for (uint32_t native = 0; native < 2; ++native) {
         if (native) entries[1] = fixture_calls0_entries[1];
         CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_BAD_STATE);
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
     }
@@ -420,11 +420,11 @@ static void fault_boundary(void) {
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 2; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         CHECK(result.status == cases[i].reason);
         CHECK(result.value.type == XR_XIR_UNIT && !result.value.reserved && !result.value.payload);
         CHECK(result.wake == 0 && witness.cleanups == 2 && accounting.depth == 0);
-        CHECK(xr_xir_call_poll(call).status == cases[i].reason);
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == cases[i].reason);
         CHECK(witness.cleanups == 2);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);

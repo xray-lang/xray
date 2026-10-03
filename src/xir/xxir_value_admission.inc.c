@@ -41,7 +41,7 @@ static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissio
 static XrXirValueStatus array_needs_admission(const XirArray *array,
     XrXirValueAdmission *admission, bool *needed) {
     XrXirType type = array->object.type;
-    const XrXirTypes *types = xr_xir_type_arena_types(array->object.arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(array->object.arena);
     for (;;) {
         if (!admission->work) return XR_XIR_VALUE_LIMIT;
         --admission->work;
@@ -61,8 +61,8 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     size_t index = frame->next++;
     *inlined = frame->inline_storage || frame->object->kind == XR_XIR_TYPE_ARRAY;
     if (frame->inline_storage) {
-        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(arena), frame->storage.type);
-        const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, frame->storage.type);
+        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), frame->storage.type);
+        const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(arena, frame->storage.type);
         uint32_t field = frame->begin + (uint32_t)index;
         *span = (StorageSpan){node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field],
             frame->storage.bytes ? frame->storage.bytes +
@@ -75,9 +75,9 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
 static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     StorageSpan span, XrXirValueAdmission *admission) {
     if (!admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, span.type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, span.type);
     if (!layout || (layout->value.size && !span.bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     uint32_t begin = 0, count = node->nominal.field_count, variant = 0;
     if (node->kind == XR_XIR_TYPE_NULLABLE) {
@@ -101,13 +101,13 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
     for (;;) {
         if (!admission->work) { status = XR_XIR_VALUE_LIMIT; break; }
         --admission->work;
-        if (inlined && inline_nominal_type(xr_xir_type_arena_types(admission->arena), type)) {
+        if (inlined && inline_nominal_type(xr_xir_compile_type_arena_types(admission->arena), type)) {
             status = admission_inline(&stack, span, admission);
             if (status != XR_XIR_VALUE_OK) break;
         } else {
             if (inlined) {
                 XrXirLayout layout = {0};
-                if (!xr_xir_type_arena_layout(admission->arena, type, &layout) || !layout.size ||
+                if (!xr_xir_compile_type_arena_layout(admission->arena, type, &layout) || !layout.size ||
                     layout.size > sizeof(uint64_t) || !span.bytes) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 current = storage_leaf_value(type, span.bytes, layout.size);
             }
@@ -140,7 +140,7 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
                             &((XirFunction *) object)->binding, type, &admission->work);
                         if (status != XR_XIR_VALUE_OK) break;
                     } else if (object->kind == XR_XIR_TYPE_CELL) {
-                        type = xr_xir_cell_element(xr_xir_type_arena_types(object->arena), type);
+                        type = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), type);
                         current = ((XirCell *) object)->value; inlined = false; continue;
                     } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 }

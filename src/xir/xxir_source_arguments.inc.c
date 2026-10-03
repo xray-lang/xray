@@ -25,20 +25,18 @@ static bool source_default_binding_add(SourceContext *ctx, AstNode *node,
     if (count == UINT32_MAX)
         return source_fail(ctx, node, XR_XIR_BUDGET, "parameter default inventory exhausted");
     uint64_t moved = count - position;
-    if (moved > ctx->budget.work)
-        return source_fail(ctx, node, XR_XIR_BUDGET, "parameter default insertion exhausted");
-    ctx->budget.work -= moved;
+
     XrXirDefaultBinding *records = (XrXirDefaultBinding *)ctx->defaults.records;
     if (count == ctx->default_capacity) {
         uint32_t capacity = count > UINT32_MAX / 2 ? UINT32_MAX : count ? count * 2 : 8;
-        if (count > ctx->budget.work)
-            return source_fail(ctx, node, XR_XIR_BUDGET, "parameter default copy exhausted");
-        ctx->budget.work -= count;
+
         records = source_alloc(ctx, capacity, sizeof(*records));
         if (!records) return false;
+        if (!source_work_units(ctx, node, (uint64_t)count * sizeof(*records))) return false;
         if (count) memcpy(records, old, (size_t)count * sizeof(*records));
         ctx->default_capacity = capacity;
     }
+    if (!source_work_units(ctx, node, moved * sizeof(*records))) return false;
     if (moved) memmove(records + position + 1, records + position, (size_t)moved * sizeof(*records));
     records[position] = (XrXirDefaultBinding){XR_XIR_DEFAULT_PARAMETER, owner, ordinal, helper};
     ctx->defaults = (XrXirDefaultTable){records, count + 1};
@@ -48,7 +46,7 @@ static bool source_default_binding_get(SourceContext *ctx, AstNode *node,
     uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **binding) {
     XrXirDeclarations declarations;
     XrXirModule module = source_module_view(ctx, &declarations);
-    XrXirStatus status = xr_xir_default_lookup(&module, owner, ordinal, &ctx->budget, binding);
+    XrXirStatus status = xr_xir_compile_default_lookup(&ctx->compile, &module, owner, ordinal, binding);
     return status == XR_XIR_OK || source_fail(ctx, node, status, "parameter default lookup failed");
 }
 static bool source_argument_arity(SourceContext *ctx, AstNode *node, uint32_t index, uint32_t supplied) {
@@ -107,6 +105,8 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             target->default_expression = expression;
             ctx->generics[helper] = ctx->generics[f];
             ctx->identities[helper] = ctx->identities[f];
+            ctx->identities[helper].test_role = XR_XIR_TEST_ROLE_NONE;
+            ctx->identities[helper].test_timeout_seconds = 0;
             ctx->identities[helper].exported = false;
             ctx->identities[helper].promises = 0;
             ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;

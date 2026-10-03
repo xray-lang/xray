@@ -13,14 +13,12 @@ static XrXirStatus path_field_type(const XrXirInstruction *op,
     if (!node || !xr_xir_type_is_struct(types, parent) || op->immediate < 0 ||
         (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
     uint32_t field = (uint32_t)op->immediate;
-    XrXirStatus status = xr_xir_nominal_access(context->module, context->location.function,
-        node->nominal.declaration, field, XR_XIR_NOMINAL_READ, &context->remaining.work);
+    XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, node->nominal.declaration, field, XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;
     if (types->nominals->declarations) {
         const XrXirNominalDeclaration *declaration = &types->nominals->declarations[node->nominal.declaration];
         if (field >= declaration->field_count) return XR_XIR_BAD_STRUCTURE;
-        return xr_xir_type_substitution_matches(types, node->nominal.arguments, node->nominal.argument_count,
-            declaration->fields[field].type, op->type, &context->remaining);
+        return xr_xir_compile_type_substitution_matches(&context->remaining, types, node->nominal.arguments, node->nominal.argument_count, declaration->fields[field].type, op->type);
     }
     return field < node->nominal.field_count && node->nominal.fields[field] == op->type ? XR_XIR_OK : XR_XIR_BAD_TYPE;
 }

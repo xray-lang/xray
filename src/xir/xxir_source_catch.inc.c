@@ -75,7 +75,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
             error.id,ctx->module,error.type,false,false,0};
         ctx->locals = binding;
         XrXirSourceRange range = {ctx->module,clause->var_line,clause->var_column,
-            clause->var_line,clause->var_column+(uint32_t)strlen(clause->var_name)};
+            clause->var_line,clause->var_column+(uint32_t)source_text_size(ctx, clause->var_name)};
         if (!source_query_declare(ctx,binding,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,range)) return false;
         source_query_binding_type(ctx,binding);
     } else if (clause->pattern) {
@@ -192,8 +192,8 @@ static XrXirStatus source_catch_type_proof(SourceContext *ctx, XrXirType type) {
     XrXirDeclarations declarations;
     XrXirModule view = source_module_view(ctx,&declarations);
     XrXirProofContext context = {&view,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-    XrXirStatus status = xr_xir_type_markers_prove(&context,type,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
-    return status == XR_XIR_OK ? xr_xir_type_access(&view,ctx->function,type,&ctx->budget) : status;
+    XrXirStatus status = xr_xir_compile_type_markers_prove(&ctx->compile, &context, type, XR_XIR_CONSTRAINT_ERROR);
+    return status == XR_XIR_OK ? xr_xir_compile_type_access(&ctx->compile, &view, ctx->function, type) : status;
 }
 static bool source_try(SourceContext *ctx, AstNode *node) {
     TryCatchNode *attempt = &node->as.try_catch;

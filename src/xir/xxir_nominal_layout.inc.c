@@ -10,7 +10,7 @@
  *   Active paths reject infinite values; completed nodes permit shared fields.
  */
 typedef struct NominalLayoutFrame { uint32_t index, next; } NominalLayoutFrame;
-static XrXirStatus nominal_field_visibility(const XrXirTypes *types, XrXirBudget *budget) {
+static XrXirStatus nominal_field_visibility(const XrXirTypes *types, XrXirCompileContext *budget) {
     const XrXirNominalTable *table = types->nominals;
     if (!table->declarations) return XR_XIR_OK;
     for (uint32_t i = 0; i < table->count; ++i) {
@@ -33,14 +33,15 @@ static XrXirStatus nominal_field_visibility(const XrXirTypes *types, XrXirBudget
     }
     return XR_XIR_OK;
 }
-static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirBudget *budget) {
+static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirCompileContext *budget) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     if (!types->nominals) return XR_XIR_OK;
     XrXirStatus status = nominal_field_visibility(types, budget);
     if (status != XR_XIR_OK || !types->count) return status;
     uint64_t stack_bytes = (uint64_t) types->count * sizeof(NominalLayoutFrame);
     if (!nominal_charge(budget, stack_bytes + types->count, types->count)) return XR_XIR_BUDGET;
-    NominalLayoutFrame *stack = xr_malloc((size_t) (stack_bytes + types->count));
-    if (!stack) return XR_XIR_OUT_OF_MEMORY;
+    NominalLayoutFrame *stack = xir_compile_alloc(budget, (size_t) (stack_bytes + types->count), &allocation_status);
+    if (!stack) return allocation_status;
     unsigned char *state = (unsigned char *) stack + (size_t) stack_bytes;
     memset(state, 0, types->count);
     for (uint32_t root = 0; root < types->count && status == XR_XIR_OK; ++root) {
@@ -68,5 +69,5 @@ static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirBudget *b
             state[index] = 1; stack[depth++] = (NominalLayoutFrame) {index, 0};
         }
     }
-    xr_free(stack); return status;
+    xr_compile_resources_free(stack); return status;
 }

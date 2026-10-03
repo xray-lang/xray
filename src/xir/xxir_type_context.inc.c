@@ -12,12 +12,12 @@
 typedef struct TypeContextProof {
     const XrXirTypes *types;
     uint32_t parameter_count;
-    XrXirBudget *remaining;
+    XrXirCompileContext *remaining;
     unsigned char *pending;
 } TypeContextProof;
 static XrXirStatus type_context_edge(TypeContextProof *c, XrXirType type, uint32_t earlier) {
-    if (!c->remaining->work) return XR_XIR_BUDGET;
-    --c->remaining->work;
+    if (!xir_compile_work(c->remaining, 1)) return XR_XIR_BUDGET;
+
     uint32_t id = (uint32_t) type;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
         return id - XR_XIR_TYPE_PARAMETER_BASE < c->parameter_count ? XR_XIR_OK : XR_XIR_BAD_TYPE;
@@ -48,17 +48,18 @@ static XrXirStatus type_context_nominal(TypeContextProof *c, const XrXirTypeNode
     return XR_XIR_OK;
 }
 static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirTypes *types = proof->types;
-    XrXirBudget *remaining = proof->remaining;
+    XrXirCompileContext *remaining = proof->remaining;
     if (!remaining) return XR_XIR_BAD_STRUCTURE;
     TypeContextProof c = *proof;
     const XrXirTypeNode *root = xr_xir_type_node(types, type);
     if (!root) return type_context_edge(&c, type, 0);
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
-    if (count > remaining->scratch_bytes || count > remaining->work) return XR_XIR_BUDGET;
-    remaining->scratch_bytes -= count; remaining->work -= count;
-    c.pending = xr_calloc(count, 1);
-    if (!c.pending) { remaining->scratch_bytes += count; return XR_XIR_OUT_OF_MEMORY; }
+    if (!xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
+
+    c.pending = xir_compile_calloc(proof->remaining, count, 1, &allocation_status);
+    if (!c.pending) {  return allocation_status; }
     XrXirStatus status = type_context_edge(&c, type, count);
     /* Descending expression IDs visit each reachable node once without recursion. */
     for (uint32_t at = count; at && status == XR_XIR_OK; --at) {
@@ -76,10 +77,12 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) 
                 status = type_context_edge(&c, node->parameters[p].type, i);
         } else status = XR_XIR_BAD_TYPE;
     }
-    xr_free(c.pending); remaining->scratch_bytes += count; return status;
+    xr_compile_resources_free(c.pending);  return status;
 }
-XR_FUNC XrXirStatus xr_xir_type_expression_shape(const XrXirTypes *types, XrXirType type,
-    uint32_t parameter_count, XrXirBudget *remaining) {
+XR_FUNC XrXirStatus xr_xir_compile_type_expression_shape(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type, uint32_t parameter_count) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
     TypeContextProof proof = {types, parameter_count, remaining, NULL};
     return type_context_verify(&proof, type);
 }

@@ -33,7 +33,7 @@ static void struct_set_cases(XrXirProgram *program) {
     for (unsigned i = 0; i < 2; ++i) {
         for (unsigned run = 0; run < (i ? 1u : 2u); ++run) {
             CHECK(xr_xir_instance_start(instances[i],1,NULL,0) == XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
             XrXirValue result = {0};
             CHECK(xr_xir_instance_take_result(instances[i],&result) == XR_XIR_CALL_RETURNED);
             CHECK(result.type == XR_XIR_I64 && result.payload == (run ? 143 : 109));

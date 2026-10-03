@@ -27,10 +27,8 @@ typedef struct XrXirWitness {
 } XrXirWitness;
 /* Requires descriptor/declaration shape admission. Reads signatures and
  * declaration facts only; function body/effect validation remains mandatory. */
-XR_FUNC XrXirStatus xr_xir_implementations_verify(const XrXirModule *module,
-    XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_implementations_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 /* Output arguments borrow the receiver pool; function belongs to the request's
  * declaration module. No scratch type IDs escape this operation. */
-XR_FUNC XrXirStatus xr_xir_witness_resolve(const XrXirProofContext *context,
-    const XrXirWitnessRequest *request, XrXirBudget *budget, XrXirWitness *output);
+XR_FUNC XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirWitnessRequest *request, XrXirWitness *output);
 #endif // XXIR_IMPLEMENTATION_VERIFY_H

@@ -271,43 +271,46 @@ typedef struct XrNativePackagePlan {
     char *error;
 } XrNativePackagePlan;
 
-/* Parse the already-built TOML DOM.  A present but invalid [native] section
- * returns an owned plan with valid=false and a stable diagnostic in error. */
-XR_FUNC XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
-                                                          const char *project_root);
-XR_FUNC void xr_native_package_plan_free(XrNativePackagePlan *plan);
+/* Owners retain the exact allocation policy in private aligned storage. */
+typedef enum XrManifestStatus {
+    XR_MANIFEST_OK, XR_MANIFEST_NOT_FOUND, XR_MANIFEST_INVALID,
+    XR_MANIFEST_BAD_ARGUMENT, XR_MANIFEST_LIMIT, XR_MANIFEST_BUDGET,
+    XR_MANIFEST_OUT_OF_MEMORY, XR_MANIFEST_IO, XR_MANIFEST_UNSUPPORTED
+} XrManifestStatus;
+typedef struct XrManifestDiagnostic { char message[256]; } XrManifestDiagnostic;
 
-XR_FUNC const XrNativeUnit *xr_native_package_find_unit(const XrNativePackagePlan *plan,
-                                                        const char *name);
-/* Lookup accepts either an exact manifest name (module.symbol) or a unique
- * final component (symbol).  Ambiguous short names fail closed. */
-XR_FUNC const XrNativeSymbol *xr_native_package_find_symbol(const XrNativePackagePlan *plan,
-                                                            const char *xray_name);
-XR_FUNC const XrCExportPlan *xr_native_package_find_export(const XrNativePackagePlan *plan,
-                                                           const char *xray_name);
-XR_FUNC const XrLinkSymbolPlan *xr_native_package_find_link_symbol(const XrNativePackagePlan *plan,
-                                                                   const char *xray_name);
-XR_FUNC const XrFreestandingEntryPlan *xr_native_package_find_entry(const XrNativePackagePlan *plan,
-                                                                    const char *xray_name);
-/* Apply build-local C ABI shaping after a manifest has been validated. Prefixing
- * affects public exports only; excluded symbols are removed from the export
- * roots so ordinary AOT reachability can discard their implementation too. */
-XR_FUNC bool xr_native_package_configure_c_exports(XrNativePackagePlan *plan,
-                                                   const char *public_prefix,
-                                                   const char *exclude_csv, char *error,
-                                                   size_t error_size);
+/* Missing native/export/link/freestanding tables return NOT_FOUND. No failed
+ * parse publishes a partial plan. The DOM must use the same exact policy.
+ * Constructors require an initially NULL output. Queries return OK with NULL
+ * for missing or ambiguous short names; failures preserve their output. */
+XR_FUNC XrManifestStatus xr_native_package_plan_parse_owned(const XrOsIoPolicy *policy,
+    XrTomlValue *document, const char *absolute_root, XrNativePackagePlan **output,
+    XrManifestDiagnostic *diagnostic);
+XR_FUNC void xr_native_package_plan_free_owned(XrNativePackagePlan *plan);
+XR_FUNC bool xr_native_package_plan_uses_policy(const XrNativePackagePlan *plan,
+    const XrOsIoPolicy *policy);
+XR_FUNC XrManifestStatus xr_native_package_find_unit_owned(const XrNativePackagePlan *,
+    const char *name, const XrNativeUnit **output);
+XR_FUNC XrManifestStatus xr_native_package_find_symbol_owned(const XrNativePackagePlan *,
+    const char *name, const XrNativeSymbol **output);
+XR_FUNC XrManifestStatus xr_native_package_find_export_owned(const XrNativePackagePlan *,
+    const char *name, const XrCExportPlan **output);
+XR_FUNC XrManifestStatus xr_native_package_find_link_symbol_owned(const XrNativePackagePlan *,
+    const char *name, const XrLinkSymbolPlan **output);
+XR_FUNC XrManifestStatus xr_native_package_find_entry_owned(const XrNativePackagePlan *,
+    const char *name, const XrFreestandingEntryPlan **output);
+/* Failure preserves the entire previous plan. Cleanup never charges work. */
+XR_FUNC XrManifestStatus xr_native_package_configure_c_exports_owned(XrNativePackagePlan *,
+    const char *public_prefix, const char *exclude_csv, XrManifestDiagnostic *diagnostic);
 XR_FUNC const char *xr_native_symbol_library(const XrNativeSymbol *symbol);
 struct XrAggregateLayout;
-XR_FUNC bool xr_native_package_resolve_layout(XrNativePackagePlan *plan, const char *xray_type,
-                                              const struct XrAggregateLayout *layout);
-/* Record that the program declares an aggregate named `xray_type`, whether or
- * not it turned out to have a fixed layout. */
-XR_FUNC void xr_native_package_note_layout_subject(XrNativePackagePlan *plan,
-                                                   const char *xray_type);
-XR_FUNC bool xr_native_package_validate_symbol_arity(const XrNativePackagePlan *plan,
-                                                     const char *xray_name, uint32_t arity,
-                                                     char *errbuf, size_t errbuf_len);
-XR_FUNC void xr_native_package_explain(const XrNativePackagePlan *plan, FILE *out);
+XR_FUNC XrManifestStatus xr_native_package_resolve_layout_owned(XrNativePackagePlan *,
+    const char *xray_type, const struct XrAggregateLayout *layout, bool *matched);
+XR_FUNC XrManifestStatus xr_native_package_note_layout_subject_owned(XrNativePackagePlan *,
+    const char *xray_type);
+XR_FUNC XrManifestStatus xr_native_package_validate_symbol_arity_owned(const XrNativePackagePlan *,
+    const char *xray_name, uint32_t arity, XrManifestDiagnostic *diagnostic);
+XR_FUNC XrManifestStatus xr_native_package_explain_owned(const XrNativePackagePlan *, FILE *out);
 
 XR_FUNC const char *xr_native_audit_mode_name(XrNativeAuditMode mode);
 XR_FUNC const char *xr_native_unit_kind_name(XrNativeUnitKind kind);

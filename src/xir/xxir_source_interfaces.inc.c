@@ -22,7 +22,7 @@ static bool source_interface_declare(SourceContext *ctx, AstNode *node) {
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface type parameter is malformed");
         for (int earlier = 0; earlier < p; ++earlier) {
             if (!source_work(ctx, node)) return false;
-            if (!strcmp(parameter->name, declaration->type_params[earlier]->name))
+            if (source_text_same(ctx, NULL, parameter->name, declaration->type_params[earlier]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate interface type parameter");
         }
     }
@@ -35,8 +35,8 @@ static bool source_interface_declare(SourceContext *ctx, AstNode *node) {
     ctx->interface_sources[symbol->index] = symbol;
     const char *module = ctx->graph->specs[ctx->module].canonical;
     XrXirInterfaceDeclaration *record = (XrXirInterfaceDeclaration *)&ctx->interfaces.declarations[symbol->index];
-    *record = (XrXirInterfaceDeclaration){{module,(uint32_t)strlen(module)},
-        {declaration->name,(uint32_t)strlen(declaration->name)},node->is_exported,constraints,count,NULL,0,NULL,0};
+    *record = (XrXirInterfaceDeclaration){{module,(uint32_t)source_text_size(ctx, module)},
+        {declaration->name,(uint32_t)source_text_size(ctx, declaration->name)},node->is_exported,constraints,count,NULL,0,NULL,0};
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_TYPE, 0,
         source_query_range(ctx, node, declaration->name))) return false;
     XrXirSourceDeclaration *query = (XrXirSourceDeclaration *)&ctx->query.declarations[symbol->declaration - 1];
@@ -83,7 +83,7 @@ static bool source_interface_method_scope(SourceContext *ctx, SourceName *owner,
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method type parameter is malformed");
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
             if (!source_work(ctx,node)) return false;
-            if (!strcmp(parameter->name,parameters[earlier]->name))
+            if (source_text_same(ctx, NULL, parameter->name, parameters[earlier]->name))
                 return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method type parameter duplicates or shadows a parameter");
         }
         parameters[p] = parameter;
@@ -152,13 +152,13 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *parameter = method->params[p];
         if (!source_work(ctx, node)) return false;
-        if (!parameter || !parameter->name || !*parameter->name || !strcmp(parameter->name,"this") ||
+        if (!parameter || !parameter->name || !*parameter->name || source_text_same(ctx, NULL, parameter->name, "this") ||
             !parameter->type || parameter->passing_mode != XR_PARAM_READ || parameter->pattern ||
             parameter->is_rest || parameter->default_value)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method parameter contract is not admitted");
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
             if (!source_work(ctx, node)) return false;
-            if (!strcmp(parameter->name, method->params[earlier]->name))
+            if (source_text_same(ctx, NULL, parameter->name, method->params[earlier]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate interface method parameter");
         }
         if (!source_type(ctx, parameter->type, &parameters[p].type)) return false;
@@ -168,7 +168,7 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     XrXirType result, signature;
     if (!source_type(ctx, method->return_type, &result) ||
         !source_signature(ctx, parameters, count, result, &signature)) return false;
-    *output = (XrXirInterfaceMethod){{method->name,(uint32_t)strlen(method->name)},signature,0,own,constraints};
+    *output = (XrXirInterfaceMethod){{method->name,(uint32_t)source_text_size(ctx, method->name)},signature,0,own,constraints};
     return source_interface_method_query(ctx, owner, member, output);
 }
 static bool source_interface_signature(SourceContext *ctx, SourceName *owner) {

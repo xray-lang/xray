@@ -17,6 +17,7 @@
 
 #include <stddef.h>
 #include "xdefs.h"
+#include "xio_policy.h"
 
 /*
  * Read entire file into xr_malloc'd buffer (NUL-terminated).
@@ -29,16 +30,17 @@ XR_FUNC char *xr_file_read_all(const char *path, const char *mode, size_t *out_s
 /*
  * Return the directory component of a file path.
  * E.g. "/a/b/c.xr" -> "/a/b", "file.xr" -> "."
- * Returns xr_malloc'd string. Caller must xr_free().
+ * Root anchors and repeated trailing separators are preserved lexically.
+ * Success transfers policy-owned storage; failure preserves output.
  */
-XR_FUNC char *xr_path_dirname(const char *path);
+XR_FUNC XrOsIoStatus xr_path_dirname_owned(const XrOsIoPolicy *policy, const char *path, char **output);
 
 /*
  * Join directory and filename into a single path.
- * Handles trailing '/' on dir. Returns xr_malloc'd string.
- * E.g. xr_path_join("/a/b/", "c.xr") -> "/a/b/c.xr"
+ * Handles platform separators and root anchors without granting authority.
+ * E.g. ("/a/b/", "c.xr") -> "/a/b/c.xr". The result is policy-owned.
  */
-XR_FUNC char *xr_path_join(const char *dir, const char *name);
+XR_FUNC XrOsIoStatus xr_path_join_owned(const XrOsIoPolicy *policy, const char *dir, const char *name, char **output);
 
 /*
  * Return the basename (filename) component of a path.
@@ -47,20 +49,14 @@ XR_FUNC char *xr_path_join(const char *dir, const char *name);
  */
 XR_FUNC char *xr_path_basename(const char *path);
 
-/*
- * Return realpath() result as an xr_malloc'd string.
- * System realpath() uses libc malloc; this function converts to xr_malloc.
- * Returns NULL if realpath() fails. Caller must xr_free().
- */
-typedef enum XrPathStatus {
-    XR_PATH_OK, XR_PATH_INVALID, XR_PATH_BUDGET, XR_PATH_IO, XR_PATH_OUT_OF_MEMORY, XR_PATH_NOT_FOUND
-} XrPathStatus;
 /* Probe a non-directory file candidate. Source resolution allows link locators
  * for its later canonicalization; archive admission requires a regular file.
- * Only NOT_FOUND permits trying another candidate. Other kinds are INVALID;
+ * Only NOT_FOUND permits trying another candidate. Other kinds are BAD_ARGUMENT;
  * conversion/allocation and OS failures retain their exact category. */
-XR_FUNC XrPathStatus xr_file_probe(const char *path, bool allow_links);
-/* Optional status preserves the cause even when no diagnostic can be allocated. */
-XR_FUNC char *xr_realpath(const char *path, XrPathStatus *status);
+XR_FUNC XrOsIoStatus xr_file_probe_owned(const XrOsIoPolicy *policy, const char *path, bool allow_links);
+/* Policy-owned absolute path. POSIX uses realpath; Windows retains the
+ * existing lexical GetFullPathName behavior, not handle-based canonicalization.
+ * Failure preserves output. */
+XR_FUNC XrOsIoStatus xr_realpath_owned(const XrOsIoPolicy *policy, const char *path, char **output);
 
 #endif  // XFILEIO_H

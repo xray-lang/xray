@@ -25,10 +25,10 @@ static void enum_ops_cases(XrXirProgram *program) {
     xr_xir_program_drop(program);
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i],2,NULL,0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult wait = xr_xir_instance_poll(instances[i]); CHECK(wait.outcome.status == XR_XIR_CALL_SUSPENDED);
+        XrXirInstanceResult wait = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX); CHECK(wait.outcome.status == XR_XIR_CALL_SUSPENDED);
         if (!i) {
             CHECK(xr_xir_instance_resume(instances[i],wait.epoch,wait.outcome.wake) == XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
             CHECK(xr_xir_instance_take_result(instances[i],&escaped) == XR_XIR_CALL_RETURNED);
         }
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
@@ -50,7 +50,7 @@ static void enum_wrong_variant_cases(XrXirProgram *program) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, enum_ops_output, &outputs};
     CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY); xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance,2,NULL,0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_BAD_STATE && outputs == 0);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_BAD_STATE && outputs == 0);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
 }
 #endif // XIR_ENUM_OPS_CASES_H

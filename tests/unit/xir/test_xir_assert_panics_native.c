@@ -29,11 +29,11 @@ static void panics_native_cases(XrXirProgram *program,bool matrix) {
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     for (uint32_t i=0;i<(matrix ? 14u : 4u);++i) {
         CHECK(xr_xir_instance_start(instance,functions[i],NULL,0)==XR_XIR_CALL_READY);
-        XrXirInstanceResult polled=xr_xir_instance_poll(instance);uint32_t suspended=0;
+        XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);uint32_t suspended=0;
         while (polled.outcome.status==XR_XIR_CALL_SUSPENDED) {
             CHECK(++suspended==1 && matrix && i>=12);
             CHECK(xr_xir_instance_resume(instance,polled.epoch,polled.outcome.wake)==XR_XIR_CALL_READY);
-            polled=xr_xir_instance_poll(instance);
+            polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         }
         CHECK(suspended==(uint32_t)(matrix && i>=12));CHECK(polled.outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
@@ -68,7 +68,7 @@ int main(void) {
     _Static_assert(XR_XIR_VALUE_ABI_VERSION==17 && sizeof(XrXirValue)==16,"public value ABI");
     _Static_assert(XR_XIR_CALL_ABI_VERSION==21 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
-    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==26 && sizeof(XrXirProgramSpec)==96,"public program ABI");
+    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==28 && sizeof(XrXirProgramSpec)==96,"public program ABI");
     for (uint32_t matrix=0;matrix<2;++matrix) {
         const XrXirProgramSpec *spec=matrix ? &panics_matrix_program : &panics_checked_program;
         XrXirProgram *program=NULL;CHECK(xr_xir_program_seal(spec,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);

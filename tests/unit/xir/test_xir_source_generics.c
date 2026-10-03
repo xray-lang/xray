@@ -31,12 +31,15 @@ static bool reference_child(AstNode *child, void *user) {
     CHECK(child && child->type == AST_VARIABLE); ++*(unsigned *) user; return true;
 }
 static void reference_syntax(void) {
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    XrCompileResourceLimits limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    XrCompileResources *resources=NULL; XrCompilerSession *session=NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
     const char *sources[] = {"const f = identity<string>\n", "const f = mod.identity<fn(i64)->string>\n",
         "consume(identity<string>, true)\n", "const f = true ? identity<i64> : identity<i64>\n",
         "const f = (identity<i64>)\n", "(identity<i64>)(7)\n", "identity<i64>(7)\n", "const result = a<b>c\n", "const result = a < b\n"};
     for (unsigned i = 0; i < sizeof(sources)/sizeof(sources[0]); ++i) {
-        AstNode *ast = xr_parse(session,sources[i]); CHECK(ast);
+        AstNode *ast = NULL; CHECK(xr_compile_parse(session,sources[i],&ast)==XR_PARSE_OK);
         AstNode *statement = ast->as.program.statements[0];
         if (i == 0) {
             AstNode *ref = statement->as.var_decl.initializer;
@@ -49,14 +52,17 @@ static void reference_syntax(void) {
         if (i == 6) CHECK(statement->as.expr_stmt->type == AST_CALL_EXPR);
         if (i == 7) CHECK(statement->as.var_decl.initializer->type == AST_BINARY_GT);
         if (i == 8) CHECK(statement->as.var_decl.initializer->type == AST_BINARY_LT);
-        char *formatted = xfmt_format_ast(ast,NULL,NULL); CHECK(formatted);
-        xr_program_destroy(ast); ast = xr_parse(session,formatted); CHECK(ast);
-        char *again = xfmt_format_ast(ast,NULL,NULL); CHECK(again && !strcmp(formatted,again));
+        XrFmtOutput first={0}, second={0};
+        CHECK(xr_compile_format_ast(xr_compile_session_compile_state(session),ast,NULL,&first)==XR_FMT_OK);
+        char *formatted=first.text;
+        xr_program_destroy(ast); ast=NULL; CHECK(xr_compile_parse(session,formatted,&ast)==XR_PARSE_OK);
+        CHECK(xr_compile_format_ast(xr_compile_session_compile_state(session),ast,NULL,&second)==XR_FMT_OK);
+        CHECK(!strcmp(formatted,second.text));
         if (i == 0) CHECK(strstr(formatted,"identity<string>") && !strstr(formatted,"identity<string>()"));
-        xr_free(again); xr_free(formatted); xr_program_destroy(ast);
+        xr_compile_format_output_free(&second); xr_compile_format_output_free(&first); xr_program_destroy(ast);
     }
-    CHECK(!xr_parse(session,"identity<i64>\n"));
-    xr_compiler_session_delete(session);
+    AstNode *rejected=NULL; CHECK(xr_compile_parse(session,"identity<i64>\n",&rejected)==XR_PARSE_SYNTAX);
+    xr_compile_session_free(session); xr_compile_resources_release(resources);
 }
 #include "xir_source_closure_cases.h"
 /* Characterize the open specialization authority gap without granting access. */

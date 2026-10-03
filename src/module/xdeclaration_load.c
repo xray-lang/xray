@@ -12,7 +12,7 @@
  */
 #include "xdeclaration_load.h"
 #include "../os/os_file_read.h"
-#include "../base/xmalloc.h"
+#include "../base/xio_policy.h"
 
 static XrDeclarationStatus file_status(XrFileReadStatus status) {
     switch (status) {
@@ -22,33 +22,37 @@ static XrDeclarationStatus file_status(XrFileReadStatus status) {
         case XR_FILE_READ_LIMIT: return XR_DECLARATION_LIMIT;
         case XR_FILE_READ_OUT_OF_MEMORY: return XR_DECLARATION_OUT_OF_MEMORY;
         case XR_FILE_READ_IO: return XR_DECLARATION_IO;
+        case XR_FILE_READ_BAD_ARGUMENT: return XR_DECLARATION_BAD_ARGUMENT;
     }
     return XR_DECLARATION_IO;
 }
 
-XR_FUNC XrDeclarationStatus xr_declaration_manifest_load(const char *physical_root,
-    XrDeclarationInputBudget budget, XrDeclarationManifest **output, size_t *work_used) {
-    if (work_used) *work_used = 0;
-    if (output) *output = NULL;
-    if (!output) return XR_DECLARATION_INVALID;
-    XrFileBytes bytes = {0};
-    XrDeclarationStatus status = file_status(xr_file_read_under_root(physical_root, "xray.toml",
-        budget.parsing.input_bytes, &bytes));
-    if (status != XR_DECLARATION_OK) return status;
-    XrTomlParseStatus parsed;
-    size_t parsed_work = 0, record_work = 0;
-    XrTomlValue *document = xtoml_parse_limited(bytes.data, bytes.size, budget.parsing, &parsed, &parsed_work);
-    xr_free(bytes.data);
-    if (work_used) *work_used = parsed_work;
-    if (!document) {
-        if (parsed == XR_TOML_PARSE_LIMIT) return XR_DECLARATION_LIMIT;
-        if (parsed == XR_TOML_PARSE_OUT_OF_MEMORY) return XR_DECLARATION_OUT_OF_MEMORY;
-        return XR_DECLARATION_INVALID;
+static XrDeclarationStatus parse_status(XrTomlParseStatus status) {
+    switch (status) {
+    case XR_TOML_PARSE_OK: return XR_DECLARATION_OK;
+    case XR_TOML_PARSE_INVALID: return XR_DECLARATION_INVALID;
+    case XR_TOML_PARSE_LIMIT: case XR_TOML_PARSE_BUDGET: return XR_DECLARATION_LIMIT;
+    case XR_TOML_PARSE_OUT_OF_MEMORY: return XR_DECLARATION_OUT_OF_MEMORY;
+    case XR_TOML_PARSE_IO: return XR_DECLARATION_IO;
+    case XR_TOML_PARSE_BAD_ARGUMENT: return XR_DECLARATION_BAD_ARGUMENT;
     }
-    size_t remaining = budget.parsing.work - parsed_work;
-    if (remaining < budget.records.work) budget.records.work = (uint32_t)remaining;
-    status = xr_declaration_manifest_read(document, budget.records, output, &record_work);
-    if (work_used) *work_used = parsed_work + record_work;
-    xtoml_free(document);
+    return XR_DECLARATION_INVALID;
+}
+XR_FUNC XrDeclarationStatus xr_compile_declaration_manifest_load(
+    XrCompileResources *resources, const char *physical_root,
+    const XrDeclarationInputLimits *limits, XrDeclarationManifest **output) {
+    if (!resources || !physical_root || !limits || !output) return XR_DECLARATION_BAD_ARGUMENT;
+    XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    XrFileBytes bytes = {0};
+    XrDeclarationStatus status = file_status(xr_os_io_read_under_root(&policy,
+        physical_root, "xray.toml", limits->parsing.input_bytes, &bytes));
+    if (status != XR_DECLARATION_OK) return status;
+    XrTomlValue *document = NULL;
+    status = parse_status(xtoml_parse_owned(&policy, bytes.data, bytes.size,
+        &limits->parsing, &document));
+    policy.free(policy.context, bytes.data);
+    if (status != XR_DECLARATION_OK) return status;
+    status = xr_compile_declaration_manifest_read(resources, document, limits->records, output);
+    xtoml_owned_free(document);
     return status;
 }

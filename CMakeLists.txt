@@ -1378,7 +1378,7 @@ file(GLOB FRONTEND_PARSER_SRC CONFIGURE_DEPENDS "src/frontend/parser/*.c")
 file(GLOB FRONTEND_CODEGEN_SRC CONFIGURE_DEPENDS "src/frontend/codegen/*.c")
 file(GLOB FRONTEND_ANALYZER_SRC CONFIGURE_DEPENDS "src/frontend/analyzer/*.c")
 file(GLOB FRONTEND_CANONICAL_SRC CONFIGURE_DEPENDS "src/frontend/canonical/*.c")
-file(GLOB FRONTEND_FORMAT_SRC CONFIGURE_DEPENDS "src/frontend/format/*.c")
+set(FRONTEND_FORMAT_SRC) # The owned formatter has one production library.
 file(GLOB TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/toolchain/*.c")
 list(REMOVE_ITEM TOOLCHAIN_SRC "${CMAKE_SOURCE_DIR}/src/toolchain/xr_xir_runtime_sdk.c")
 file(GLOB VM_SRC CONFIGURE_DEPENDS "src/vm/*.c")
@@ -1409,6 +1409,12 @@ list(REMOVE_ITEM AOT_SRC
 file(GLOB API_SRC CONFIGURE_DEPENDS "src/api/*.c")
 file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
+# Native operation components are owned by their explicit production libraries.
+list(REMOVE_ITEM APP_TOOLCHAIN_SRC
+    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_invocation.c"
+    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_workspace.c"
+    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_native_admission.c"
+    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_local_toolchain.c")
 
 # Standard Library (Native modules) - modular conditional compilation
 # Core standard-library modules: time, math, log, regex, path, datetime,
@@ -1549,6 +1555,8 @@ foreach(XRAY_SOURCELESS_MODULE ${XRAY_STDLIB_SOURCELESS_MODULES})
 endforeach()
 set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
+set(XRAY_STDLIB_EMBEDDED_RUNTIME_INC
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_runtime.inc")
 set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/generated/bootstrap")
 set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC
@@ -1572,9 +1580,12 @@ set(XRAY_STDLIB_BYTECODE_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib-bytecode")
 set(XRAY_STDLIB_EMBED_GENERATOR
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py")
+file(GLOB XRAY_STDLIB_EMBED_GENERATOR_MODULES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/*.py")
 add_custom_command(
     OUTPUT
         ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
+        ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
         ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}"
@@ -1582,19 +1593,22 @@ add_custom_command(
             ${XRAY_STDLIB_EMBED_GENERATOR}
             --root ${CMAKE_CURRENT_SOURCE_DIR}
             --source-output ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
+            --runtime-output ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
             --bytecode-output ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
             ${XRAY_STDLIB_SOURCELESS_MODULE_ARGS}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
         ${XRAY_STDLIB_EMBED_GENERATOR}
-        ${STDLIBGEN}
+        ${XRAY_STDLIB_EMBED_GENERATOR_MODULES}
+        "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/stdlib_boundary.toml"
         ${XRAY_STDLIB_DEF_FILES}
         ${XRAY_STDLIB_SCRIPT_SOURCES}
     COMMENT "Generating embedded stdlib source table"
     VERBATIM
 )
 add_custom_target(gen-stdlib-embedded-sources
-    DEPENDS ${XRAY_STDLIB_EMBEDDED_SOURCE_INC} ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC})
+    DEPENDS ${XRAY_STDLIB_EMBEDDED_SOURCE_INC} ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
+        ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC})
 
 # C include fragments use *.inc.c for editor support, but they are included
 # from owning .c files and must never be compiled as standalone translation units.
@@ -1656,7 +1670,7 @@ set(CORE_ALL_SOURCES
 # to build the generator) and `final` (the real table the generator produced).
 # The ONLY thing that differs between the two stages is which
 # stdlib_embedded_bytecodes.inc is on the include path, and exactly one
-# translation unit includes it — src/module/stdlib_embedded.c.
+# translation unit includes it — src/module/xstdlib_embedded_runtime.c.
 #
 # So compile that one file per stage, and everything else exactly once. Building
 # the full source list twice (identical preprocessor input, byte-identical flags
@@ -1669,14 +1683,14 @@ list(APPEND CORE_ALL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_core_intrinsic_registry.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xnative_declaration.c")
 set(CORE_COMMON_SOURCES ${CORE_ALL_SOURCES})
-list(REMOVE_ITEM CORE_COMMON_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/module/stdlib_embedded.c")
+list(REMOVE_ITEM CORE_COMMON_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/module/xstdlib_embedded_runtime.c")
 list(LENGTH CORE_ALL_SOURCES _core_all_count)
 list(LENGTH CORE_COMMON_SOURCES _core_common_count)
 math(EXPR _core_removed "${_core_all_count} - ${_core_common_count}")
 if(NOT _core_removed EQUAL 1)
     message(FATAL_ERROR
         "CORE_COMMON_SOURCES must differ from CORE_ALL_SOURCES by exactly "
-        "src/module/stdlib_embedded.c (removed ${_core_removed}). The two-stage "
+        "src/module/xstdlib_embedded_runtime.c (removed ${_core_removed}). The two-stage "
         "stdlib embedding assumes that file is the sole stage-dependent unit.")
 endif()
 
@@ -1688,13 +1702,13 @@ add_dependencies(xray_core_objs
 
 # Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
 # table.
-add_library(xray_stdlib_bootstrap_core OBJECT src/module/stdlib_embedded.c)
+add_library(xray_stdlib_bootstrap_core OBJECT src/module/xstdlib_embedded_runtime.c)
 add_dependencies(xray_stdlib_bootstrap_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-target-query-registry gen-stdlib-embedded-sources)
 
 # Stage 2: the generated table. This is the core library everything else links.
-add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_core_objs>)
+add_library(xray_core STATIC src/module/xstdlib_embedded_runtime.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema)
@@ -2164,7 +2178,7 @@ add_compile_definitions(
 # Core library include paths (detailed configuration).
 # xray_core_objs holds the sources shared by both stdlib-embedding stages, so it
 # needs every setting the two stage libraries share — everything below except the
-# stage-specific bytecode directory, which only stdlib_embedded.c consumes.
+# stage-specific bytecode directory, which only xstdlib_embedded_runtime.c consumes.
 target_include_directories(xray_core_objs PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -2333,7 +2347,7 @@ add_executable(xray_stdlib_bcgen
     src/app/toolchain/xtc_target_profile.c
 )
 # Both halves of stage 1: the shared core objects plus the bootstrap-stage
-# stdlib_embedded.c (linking an OBJECT library contributes its objects).
+# xstdlib_embedded_runtime.c (linking an OBJECT library contributes its objects).
 target_link_libraries(xray_stdlib_bcgen PRIVATE xray_core_objs xray_stdlib_bootstrap_core)
 target_include_directories(xray_stdlib_bcgen PRIVATE
     ${XRAY_COMMON_INCLUDES}
@@ -2679,6 +2693,10 @@ target_link_libraries(xray PRIVATE xray_compile_resources)
 add_subdirectory(src/xir)
 add_subdirectory(src/execution)
 add_subdirectory(src/toolchain)
+include(src/frontend/format/xformatter.cmake)
+target_link_libraries(xray PRIVATE xray_frontend_format)
+include(src/app/cli/xir_compile_source.cmake)
+include(src/app/toolchain/xir_target.cmake)
 
 if(BUILD_TESTS)
     enable_testing()

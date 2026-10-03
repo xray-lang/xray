@@ -75,7 +75,7 @@ static XrXirAction exit_child_resume(XrXirCallView *view) {
     CHECK(xr_xir_call_cleanup_active(view->activation));
     exit_event(w,30);
     if (w->mode == 3 || w->mode == 15) {
-        CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
+        CHECK(xr_xir_call_request_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
         CHECK(xr_xir_call_state(view->activation) == XR_XIR_CALL_BUSY);
         CHECK(xr_xir_call_free(view->activation) == XR_XIR_CALL_BUSY);
     }
@@ -133,12 +133,13 @@ static size_t exit_run(uint32_t mode, uint64_t polls, uint32_t depth) {
     XrXirCallStatus status = xr_xir_call_new(&config,mode == 8 ? 3u : 0u,NULL,0,&call);
     XrXirValue owned = {0};
     if (status == XR_XIR_CALL_READY) {
-        if (mode == 13) status = xr_xir_call_cancel(call);
-        else status = xr_xir_call_poll(call).status;
+        if (mode == 13) status = xr_xir_call_request_cancel(call);
+        else status = xr_xir_call_poll_bounded(call, UINT64_MAX).status;
         if (status == XR_XIR_CALL_SUSPENDED) {
             if (mode == 14) { CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY); call = NULL; status = XR_XIR_CALL_CANCELLED; }
-            else status = xr_xir_call_cancel(call);
+            else status = xr_xir_call_request_cancel(call);
         }
+        if (status == XR_XIR_CALL_CANCEL_REQUESTED) status = xr_xir_call_poll_bounded(call, UINT64_MAX).status;
         if (status == XR_XIR_CALL_RETURNED) {
             CHECK(xr_xir_call_take_result(call,&owned) == XR_XIR_CALL_RETURNED);
             const uint32_t expected[] = {12,30,22,11,30,21};

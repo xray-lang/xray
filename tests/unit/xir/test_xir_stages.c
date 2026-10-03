@@ -764,7 +764,7 @@ static void error_filter_guards(void) {
             {"entry", 5, NULL, 0, XR_XIR_I64, &entry_block, 1, entry_ops, 2, NULL, 0}, function};
         uint32_t dependency = 0;
         XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0}, {"root", 4, &dependency, 1, 1}};
-        XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
+        XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
         XrXirDeclarations declarations = {modules, 2, identities, NULL, 0, NULL, 0, 1, 2, NULL};
         XrXirModule module = {XR_XIR_BUILT, functions, 4, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
         if (mode == 1) ops[2].args[0] = 1;

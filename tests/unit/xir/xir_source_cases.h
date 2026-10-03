@@ -358,7 +358,7 @@ static XrXirOutputStatus source_reject(void *context, const XrXirOutputGroup *gr
 static void source_resume_once(XrXirInstance *instance, XrXirInstanceResult suspended) {
     CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED && suspended.outcome.wake && suspended.epoch);
     CHECK(suspended.outcome.value.type == XR_XIR_UNIT && !suspended.outcome.value.payload);
-    XrXirInstanceResult repeated = xr_xir_instance_poll(instance);
+    XrXirInstanceResult repeated = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(repeated.epoch == suspended.epoch && repeated.outcome.wake == suspended.outcome.wake &&
         repeated.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(instance, suspended.epoch + 1, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
@@ -367,10 +367,10 @@ static void source_resume_once(XrXirInstance *instance, XrXirInstanceResult susp
     CHECK(xr_xir_instance_resume(instance, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
 }
 static XrXirCallResult source_drive(XrXirInstance *instance, unsigned expected_suspensions) {
-    XrXirInstanceResult result = xr_xir_instance_poll(instance);
+    XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     for (unsigned i = 0; i < expected_suspensions; ++i) {
         source_resume_once(instance, result);
-        result = xr_xir_instance_poll(instance);
+        result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     }
     CHECK(result.outcome.status != XR_XIR_CALL_SUSPENDED);
     return result.outcome;
@@ -382,7 +382,7 @@ static void source_resume_pair(XrXirInstance **instances, uint32_t entry, XrXirV
         CHECK(xr_xir_instance_start(instances[i], entry, &argument, 1) == XR_XIR_CALL_READY);
     }
     for (unsigned step = 0; step < 13; ++step) for (unsigned i = 0; i < 2; ++i) {
-        XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         if (step < 12) source_resume_once(instances[i], result);
         else {
             CHECK(result.outcome.status == XR_XIR_CALL_RETURNED);
@@ -408,29 +408,29 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
         }
         XrXirInstanceResult suspended = {0};
         if (mode) {
-            suspended = xr_xir_instance_poll(instance);
+            suspended = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
             CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
             if (mode == 2 || mode == 4) {
-                source_resume_once(instance, suspended); suspended = xr_xir_instance_poll(instance);
+                source_resume_once(instance, suspended); suspended = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
             }
             if (mode >= 5 && mode <= 7) {
                 for (unsigned wake = 1; wake < mode + 6; ++wake) {
-                    source_resume_once(instance, suspended); suspended = xr_xir_instance_poll(instance);
+                    source_resume_once(instance, suspended); suspended = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                     CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
                 }
                 CHECK(output.calls == (mode==7 ? 53 : mode+44));
             }
             if (mode >= 8) {
                 for (unsigned wake = 0; wake < mode; ++wake) {
-                    source_resume_once(instance, suspended); suspended = xr_xir_instance_poll(instance);
+                    source_resume_once(instance, suspended); suspended = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                     CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
                 }
                 CHECK(output.calls == 59);
             }
         }
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_CANCELLED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
         CHECK(xr_xir_instance_resume(instance, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
         if (mode <= 2 || (mode >= 5 && mode <= 7)) {
@@ -461,7 +461,7 @@ static void source_updates(XrXirInstance *instance, uint32_t update) {
         int64_t start = mode == 0 ? INT64_MAX : mode == 1 ? INT64_MIN : 4;
         XrXirValue args[] = {{XR_XIR_I64, 0, start}, {XR_XIR_BOOL, 0, mode % 2 == 0}};
         CHECK(xr_xir_instance_start(instance, update, args, 2) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED);
         CHECK(result.value.payload == (mode == 0 ? INT64_MIN : mode == 1 ? INT64_MAX : mode == 2 ? 5 : 3));
         CHECK(args[0].payload == start);
@@ -485,7 +485,7 @@ static void source_numeric(XrXirInstance *instance, uint32_t calculate) {
         XrXirValue args[] = {{XR_XIR_I64, 0, cases[i].kind}, {XR_XIR_I64, 0, cases[i].left},
             {XR_XIR_I64, 0, cases[i].right}};
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         CHECK(result.status == (cases[i].fault ? XR_XIR_CALL_DIVIDE_BY_ZERO : XR_XIR_CALL_RETURNED));
         CHECK(result.value.type == (uint32_t) (cases[i].fault ? XR_XIR_UNIT : XR_XIR_I64));
         CHECK(result.value.payload == cases[i].expected && result.value.reserved == 0);
@@ -497,7 +497,7 @@ static void source_numeric(XrXirInstance *instance, uint32_t calculate) {
         bool expected = kind == 6 ? i == j : kind == 7 ? i != j : kind == 8 ? i < j :
             kind == 9 ? i <= j : kind == 10 ? i > j : i >= j;
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == expected);
     }
 }
@@ -507,7 +507,7 @@ static void source_bitwise(XrXirInstance *instance, uint32_t calculate) {
         XrXirValue args[] = {{XR_XIR_I64, 0, 12 + row->operation},
             {XR_XIR_I64, 0, row->left}, {XR_XIR_I64, 0, row->right}};
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == row->expected);
         CHECK(args[1].payload == row->left && args[2].payload == row->right);
     }
@@ -516,7 +516,7 @@ static void source_bitwise(XrXirInstance *instance, uint32_t calculate) {
     for (unsigned i = 0; i < 6; ++i) {
         XrXirValue args[] = {{XR_XIR_I64, 0, 17}, {XR_XIR_I64, 0, inputs[i]}, {XR_XIR_I64, 0, 0}};
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected[i]);
     }
 }
@@ -524,7 +524,7 @@ static void source_default_fault(XrXirInstance *instance, uint32_t function) {
     for (unsigned path = 0; path < 2; ++path) {
         XrXirValue args[] = {{XR_XIR_I64, 0, path ? 25 : 23}, {XR_XIR_I64, 0, 0}, {XR_XIR_I64, 0, 0}};
         CHECK(xr_xir_instance_start(instance, function, args, 3) == XR_XIR_CALL_READY);
-        source_resume_once(instance, xr_xir_instance_poll(instance));
+        source_resume_once(instance, xr_xir_instance_poll_bounded(instance, UINT64_MAX));
         XrXirCallResult failed = source_drive(instance, 0);
         CHECK(failed.status == XR_XIR_CALL_DIVIDE_BY_ZERO && failed.value.type == XR_XIR_UNIT && !failed.value.payload);
         args[0].payload = 24;
@@ -537,7 +537,7 @@ static void source_constructor_fault(XrXirInstance *instance, uint32_t function)
     for (uint32_t i = 0; i < 2; ++i) {
         XrXirValue args[] = {{XR_XIR_I64, 0, 22}, {XR_XIR_I64, 0, 18}, {XR_XIR_I64, 0, i ? 3 : 0}};
         CHECK(xr_xir_instance_start(instance, function, args, 3) == XR_XIR_CALL_READY);
-        XrXirInstanceResult suspended = xr_xir_instance_poll(instance);
+        XrXirInstanceResult suspended = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
         source_resume_once(instance, suspended);
         XrXirCallResult result = source_drive(instance, 0);
@@ -550,12 +550,12 @@ static void source_compound_fault(XrXirInstance *instance, uint32_t calculate) {
     for (unsigned i = 0; i < 2; ++i) {
         XrXirValue args[] = {{XR_XIR_I64, 0, 18}, {XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, i ? 3 : 0}};
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instance).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         CHECK(result.status == (i ? XR_XIR_CALL_RETURNED : XR_XIR_CALL_DIVIDE_BY_ZERO));
         CHECK(result.value.payload == (i ? 3 : 0));
         args[0].payload = 19;
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
-        result = xr_xir_instance_poll(instance).outcome;
+        result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == (i ? 3 : 0));
     }
 }
@@ -582,9 +582,9 @@ static void source_deep_pair(XrXirInstance **instances, uint32_t function, XrXir
         XrXirValue argument = {XR_XIR_I64, 0, 64 + i};
         CHECK(xr_xir_instance_start(instances[i], function, &argument, 1) == XR_XIR_CALL_READY);
     }
-    for (unsigned i = 0; i < 2; ++i) source_resume_once(instances[i], xr_xir_instance_poll(instances[i]));
+    for (unsigned i = 0; i < 2; ++i) source_resume_once(instances[i], xr_xir_instance_poll_bounded(instances[i], UINT64_MAX));
     for (unsigned i = 0; i < 2; ++i) {
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
     }
 }
@@ -593,7 +593,7 @@ static void source_numeric_pair(XrXirInstance **instances, uint32_t function) {
         XrXirValue argument = {XR_XIR_BOOL, 0, i};
         CHECK(xr_xir_instance_start(instances[i], function, &argument, 1) == XR_XIR_CALL_READY);
     }
-    for (unsigned step = 0; step < 2; ++step) for (uint32_t i = 0; i < 2; ++i) source_resume_once(instances[i], xr_xir_instance_poll(instances[i]));
+    for (unsigned step = 0; step < 2; ++step) for (uint32_t i = 0; i < 2; ++i) source_resume_once(instances[i], xr_xir_instance_poll_bounded(instances[i], UINT64_MAX));
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(source_drive(instances[i], 0).status == XR_XIR_CALL_RETURNED);
         XrXirValue value = {0};
@@ -631,16 +631,16 @@ static void source_match_faults(XrXirInstance *instance, uint32_t function) {
     for (int64_t kind=27;kind<=31;++kind) for (int64_t input=0;input<2;++input) {
         XrXirValue args[]={{XR_XIR_I64,0,kind},{XR_XIR_I64,0,input},{XR_XIR_I64,0,0}};
         CHECK(xr_xir_instance_start(instance,function,args,3)==XR_XIR_CALL_READY);
-        XrXirInstanceResult result=xr_xir_instance_poll(instance);
+        XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         if (kind==31) {
             CHECK(result.outcome.status==XR_XIR_CALL_SUSPENDED);
-            source_resume_once(instance,result); result=xr_xir_instance_poll(instance);
+            source_resume_once(instance,result); result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         }
         if (input) CHECK(result.outcome.status==XR_XIR_CALL_RETURNED && result.outcome.value.type==XR_XIR_I64 && result.outcome.value.payload==kind+44);
         else {
             CHECK(result.outcome.status==XR_XIR_CALL_MATCH_FAILURE && result.outcome.value.type==XR_XIR_UNIT && !result.outcome.value.payload);
             CHECK(xr_xir_fault_match_valid(result.outcome.panic.detail));
-            XrXirInstanceResult repeated=xr_xir_instance_poll(instance);
+            XrXirInstanceResult repeated=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
             CHECK(repeated.outcome.status==XR_XIR_CALL_MATCH_FAILURE && xr_xir_fault_match_valid(repeated.outcome.panic.detail));
         }
     }
@@ -649,10 +649,10 @@ typedef struct SourceFunctions { uint32_t result, advance, update, calculate, re
 static XrXirValue source_error(XrXirInstance *instance, uint32_t function) {
     XrXirValue args[]={{XR_XIR_I64,0,32},{XR_XIR_I64,0,0},{XR_XIR_I64,0,0}}, error={0};
     CHECK(xr_xir_instance_start(instance,function,args,3)==XR_XIR_CALL_READY);
-    XrXirInstanceResult result=xr_xir_instance_poll(instance);
+    XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(result.outcome.status==XR_XIR_CALL_SUSPENDED);
     source_resume_once(instance,result);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_THROWN);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_THROWN);
     CHECK(xr_xir_instance_take_result(instance,&error)==XR_XIR_CALL_THROWN);
     return error;
 }
@@ -702,7 +702,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
     }
     for (unsigned step = 0; step < 14; ++step) for (unsigned i = 0; i < 2; ++i) {
-        XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         if (step < 13) {
             CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_INITIALIZING && outputs[i].calls == (step >= 12 ? 53u : step >= 11 ? 50u : step >= 10 ? 49u : step >= 9 ? 48u : step >= 8 ? 47u : step >= 4 ? 40u : step >= 2 ? 25u + step : 0u));
             source_resume_once(instances[i], result);
@@ -734,40 +734,40 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
     for (unsigned i = 0; i < 2; ++i) source_updates(instances[i], functions.update);
     for (int64_t expected = 15; expected < 17; ++expected) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.advance, NULL, 0) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 59);
     }
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.witness_result, NULL, 0) == XR_XIR_CALL_READY);
-        XrXirCallResult witness = xr_xir_instance_poll(instances[i]).outcome;
+        XrXirCallResult witness = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
         CHECK(witness.status == XR_XIR_CALL_RETURNED && witness.value.payload == 41);
     }
     uint32_t enum_entries[] = {functions.enum_witness_result,functions.enum_generic_witness_result};
     for (uint32_t f = 0; f < 2; ++f) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i],enum_entries[f],NULL,0) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
+        XrXirCallResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 41);
     }
     XrXirValue generic_results[2][3] = {{{0}}};
     uint32_t generic_entries[] = {functions.generic_method_number,functions.generic_method_text,functions.generic_method_array};
     for (uint32_t f = 0; f < 3; ++f) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i],generic_entries[f],NULL,0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i],&generic_results[i][f]) == XR_XIR_CALL_RETURNED);
     }
     XrXirValue bound[2] = {{0}, {0}}, bound_text[2] = {{0}, {0}};
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.bound_result, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &bound[i]) == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_start_function(instances[1 - i], &bound[i], NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
         CHECK(xr_xir_instance_start_function(instances[i], &bound[i], NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &bound_text[i]) == XR_XIR_CALL_RETURNED);
     }
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.result, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_stop(instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start_function(instances[i], &bound[i], NULL, 0) == XR_XIR_CALL_BAD_STATE);

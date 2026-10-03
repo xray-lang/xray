@@ -34,7 +34,7 @@ static ProbeRun probe_once(XrXirProgram *program,uint32_t entry,const char *expe
         status=xr_xir_instance_start(instance,entry,NULL,0);
         if (status==XR_XIR_CALL_READY) {
             if (mode==2) CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
-            XrXirInstanceResult polled=xr_xir_instance_poll(instance);status=polled.outcome.status;
+            XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);status=polled.outcome.status;
             CHECK(xr_xir_call_result_valid(&polled.outcome));
             if (status==XR_XIR_CALL_RETURNED) {
                 XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==status);

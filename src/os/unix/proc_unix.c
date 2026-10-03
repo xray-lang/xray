@@ -23,12 +23,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#if defined(XR_OS_MACOS)
-#include <limits.h>
-#include <mach-o/dyld.h>
-#include <stdlib.h>
-#include <sys/sysctl.h>
-#endif
 
 #define PROC_GROUP_CAPACITY 64
 static atomic_int proc_groups[PROC_GROUP_CAPACITY];
@@ -130,6 +124,10 @@ static bool proc_read_i64(int fd, int64_t *out) {
 
 XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
+    if (o && o->image_mode != XR_PROC_IMAGES_NONE)
+        return o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE ? XR_PROC_UNSUPPORTED : XR_PROC_INVALID_ARGUMENT;
+    if (o && o->image_observer.observe) return XR_PROC_INVALID_ARGUMENT;
+
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free || !o->memory.work ||
         (o->detached && o->new_process_group)) return XR_PROC_INVALID_ARGUMENT;
@@ -316,77 +314,6 @@ int xr_proc_kill_tree(XrProcId pid, int signal) {
     return kill((pid_t) -pid, signal) == 0 ? 0 : -1;
 }
 
-int64_t xr_proc_self_pid(void) {
-    return (int64_t) getpid();
-}
-
-int xr_proc_self_exe_path(char *buf, size_t size) {
-    if (buf == NULL || size == 0) {
-        return -1;
-    }
-#if defined(XR_OS_MACOS)
-    char raw[PATH_MAX];
-    uint32_t raw_size = (uint32_t) sizeof(raw);
-    if (_NSGetExecutablePath(raw, &raw_size) != 0) {
-        return -1;
-    }
-    char resolved[PATH_MAX];
-    const char *src = realpath(raw, resolved) ? resolved : raw;
-    size_t len = strlen(src);
-    if (len + 1 > size) {
-        return -1;
-    }
-    memcpy(buf, src, len + 1);
-    return 0;
-#elif defined(XR_OS_LINUX)
-    ssize_t n = readlink("/proc/self/exe", buf, size - 1);
-    if (n <= 0) {
-        return -1;
-    }
-    buf[n] = '\0';
-    return 0;
-#else
-    /* BSDs vary (sysctl KERN_PROC_PATHNAME vs /proc); no in-tree
-     * caller targets them yet, so report unsupported rather than
-     * guess a wrong path. */
-    return -1;
-#endif
-}
-
-bool xr_proc_debugger_attached(void) {
-#if defined(XR_OS_MACOS)
-    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
-    struct kinfo_proc info;
-    memset(&info, 0, sizeof(info));
-    size_t size = sizeof(info);
-    if (sysctl(mib, 4, &info, &size, NULL, 0) != 0) {
-        return false;
-    }
-    return (info.kp_proc.p_flag & P_TRACED) != 0;
-#elif defined(XR_OS_LINUX)
-    // /proc/self/status has a "TracerPid:\t<n>\n" line; non-zero
-    // means a debugger is attached.
-    FILE *f = fopen("/proc/self/status", "r");
-    if (!f) {
-        return false;
-    }
-    char line[256];
-    bool attached = false;
-    while (fgets(line, sizeof(line), f)) {
-        if (strncmp(line, "TracerPid:", 10) == 0) {
-            const char *p = line + 10;
-            while (*p == ' ' || *p == '\t') {
-                p++;
-            }
-            if (*p && *p != '0') {
-                attached = true;
-            }
-            break;
-        }
-    }
-    fclose(f);
-    return attached;
-#else
-    return false;
-#endif
+XR_FUNC XrOsProcStatus xr_proc_pump_images(XrProcId pid, XrProcImagePumpResult *output) {
+    (void)pid; (void)output; return XR_PROC_UNSUPPORTED;
 }

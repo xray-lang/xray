@@ -49,7 +49,7 @@ static void assert_core_packet(const XrXirSourceResult *source) {
         }
     }
     CHECK(helper_function<parent->function_count);
-    XrXirFunctionIdentity identities[3]={{0},{0,1,0,0,0,0,0},{0}};
+    XrXirFunctionIdentity identities[3]={{0},{0,1,0,0,0,0,0, 0, 0},{0}};
     XrXirSourceModule module=parent->declarations->modules[1];module.initializer=0;
     const XrXirLiteral literal={NULL,0};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,&literal,1,UINT32_MAX,UINT32_MAX,NULL};

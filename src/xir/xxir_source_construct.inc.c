@@ -6,7 +6,7 @@
  *
  * xxir_source_construct.inc.c - Ordinary Built checking for every source origin
  */
-static void source_construct(SourceContext *ctx, XrXirBudget *checking, XrXirSourceResult *output) {
+static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     ctx->query_ready = true;
     ctx->declarations_building = true;
     bool declarations_ready = source_query_modules(ctx) && collect_declarations(ctx);
@@ -16,18 +16,20 @@ static void source_construct(SourceContext *ctx, XrXirBudget *checking, XrXirSou
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
-        XrXirStatus status = xr_xir_check(&built, checking, &output->checked, &location);
+        XrXirStatus status = xr_xir_compile_check(&ctx->compile, &built, &output->checked, &location);
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;
             location.function=f;
-            status=xr_xir_initialization_check(&built,f,
-                ctx->bodies[f].initialization_regions,checking,&location);
+            status=xr_xir_compile_initialization_check(&ctx->compile, &built, f, ctx->bodies[f].initialization_regions, &location);
         }
         if (status != XR_XIR_OK) {
-            xr_xir_artifact_free(output->checked); output->checked=NULL;
-            char message[128];
-            snprintf(message, sizeof(message), "constructed XIR failed checking at function %u block %u instruction %u",
-                location.function, location.block, location.instruction);
+            xr_xir_compile_artifact_free(output->checked); output->checked=NULL;
+            char message[128] = {0};
+            if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
+                source_format(ctx, message, sizeof(message),
+                    "constructed XIR failed checking at function %u block %u instruction %u",
+                    location.function, location.block, location.instruction) != XR_DIAG_OK)
+                status = XR_XIR_BUDGET;
             AstNode *site = NULL;
             if (location.function < ctx->function_count) {
                 site = ctx->bodies[location.function].node;

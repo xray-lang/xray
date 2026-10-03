@@ -12,6 +12,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_compile_memory.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
@@ -27,17 +28,12 @@ static XrXirType slot_type(const XrXirFunction *function, uint32_t slot) {
     return op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT ? XR_XIR_UNIT : op->type;
 }
 
-static bool subtract_bytes(uint64_t *remaining, uint64_t amount) {
-    if (amount > *remaining)
-        return false;
-    *remaining -= amount;
-    return true;
-}
 
-static XrXirStatus path_capacity(const XrXirFunction *function, uint64_t *work, uint32_t *capacity) {
+
+static XrXirStatus path_capacity(const XrXirFunction *function, const XrXirCompileContext *work, uint32_t *capacity) {
     *capacity = 0;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
-        if (!subtract_bytes(work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
         if (op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_INDEX_PLACE ||
             xr_xir_operand_role(op->op, 0) == XR_XIR_OPERAND_VALUE) continue;
@@ -46,7 +42,7 @@ static XrXirStatus path_capacity(const XrXirFunction *function, uint64_t *work, 
         for (;;) {
             XrXirPlaceKind kind = xr_xir_place_kind(function, id);
             if (kind != XR_XIR_PLACE_FIELD && kind != XR_XIR_PLACE_INDEX) break;
-            if (!subtract_bytes(work, 1)) return XR_XIR_BUDGET;
+            if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
             if (depth == function->instruction_count) return XR_XIR_BAD_VALUE;
             ++depth; id = function->instructions[id - function->parameter_count].args[0];
         }
@@ -58,53 +54,36 @@ static XrXirStatus path_capacity(const XrXirFunction *function, uint64_t *work, 
     }
     return XR_XIR_OK;
 }
-static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *budget) {
-    uint64_t bytes = budget->metadata_bytes, work = budget->work;
-    if (!subtract_bytes(&bytes, sizeof(XrXirArtifact)))
-        return XR_XIR_BUDGET;
-    XrXirBudget signature_budget = *budget;
-    signature_budget.metadata_bytes = bytes; signature_budget.work = work;
-    XrXirStatus signature_status = xr_xir_types_structure_verify(module->types, &signature_budget);
-    if (signature_status != XR_XIR_OK) return signature_status;
-    XrXirStatus declaration_status = xr_xir_declarations_verify(module->declarations, module->types,
-        module->function_count, module->linkage_kind, &signature_budget);
-    if (declaration_status != XR_XIR_OK) return declaration_status;
-    bytes = signature_budget.metadata_bytes; work = signature_budget.work;
+static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompileContext *context) {
+    XrXirStatus status = xr_xir_compile_types_structure_verify(context, module->types);
+    if (status == XR_XIR_OK) status = xr_xir_compile_declarations_verify(context,
+        module->declarations, module->types, module->function_count, module->linkage_kind);
+    if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         const XrXirFunction *function = &module->functions[f];
-        uint32_t paths = 0;
-        XrXirStatus path_status = path_capacity(function, &work, &paths);
-        if (path_status != XR_XIR_OK) return path_status;
-        uint64_t slots = (uint64_t) function->parameter_count + function->instruction_count;
-        uint64_t required = sizeof(*function) + sizeof(XrXirFunctionLayout) +
-            function->name_length +
-            (uint64_t) function->parameter_count * (sizeof(XrXirType) + sizeof(XrXirLayout)) +
-            (uint64_t) function->block_count * sizeof(XrXirBlock) +
-            (uint64_t) function->instruction_count * sizeof(XrXirInstruction) +
-            (uint64_t) function->operand_count * sizeof(uint32_t) +
-            slots * sizeof(uint32_t) * 3;
-        if (slots > UINT32_MAX / 2 || required > SIZE_MAX ||
-            !subtract_bytes(&bytes, required) || !subtract_bytes(&work, slots + 1))
-            return XR_XIR_BUDGET;
+        uint64_t slots = (uint64_t)function->parameter_count + function->instruction_count;
+        if (slots > UINT32_MAX / 2 || slots > SIZE_MAX / (sizeof(uint32_t) * 2)) return XR_XIR_BUDGET;
     }
     return XR_XIR_OK;
 }
 
 static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
-                                   const XrXirBudget *budget, bool create) {
+                                   const XrXirCompileContext *budget, bool create) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirFunction *function = &artifact->module.functions[index];
     XrXirFunctionLayout *layout = &artifact->layouts[index];
     uint32_t slots = function->parameter_count + function->instruction_count;
     if (create) {
         layout->slot_count = slots;
-        layout->offsets = xr_calloc(slots, sizeof(*layout->offsets));
-        layout->owned_offsets = xr_calloc((size_t) slots * 2, sizeof(*layout->owned_offsets));
+        layout->offsets = xir_compile_calloc(budget, slots, sizeof(*layout->offsets), &allocation_status);
+        layout->owned_offsets = xir_compile_calloc(budget, (size_t) slots * 2, sizeof(*layout->owned_offsets), &allocation_status);
         if (!layout->offsets || !layout->owned_offsets)
-            return XR_XIR_OUT_OF_MEMORY;
+            return allocation_status;
         if (function->parameter_count) {
-            layout->parameters = xr_calloc(function->parameter_count, sizeof(*layout->parameters));
+            layout->parameters = xir_compile_calloc(budget, function->parameter_count, sizeof(*layout->parameters), &allocation_status);
             if (!layout->parameters)
-                return XR_XIR_OUT_OF_MEMORY;
+                return allocation_status;
         }
     } else if (layout->slot_count != slots || !layout->offsets || !layout->owned_offsets ||
                (function->parameter_count && !layout->parameters) ||
@@ -113,6 +92,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     }
     uint32_t bytes = 0, owned = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
+        if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
         XrXirPlaceKind place = xr_xir_place_kind(function, slot);
         if (place == XR_XIR_PLACE_CELL || place == XR_XIR_PLACE_SLOT ||
             place == XR_XIR_PLACE_FIELD || place == XR_XIR_PLACE_INDEX) {
@@ -122,7 +102,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         }
         XrXirLayout physical;
         XrXirType type = slot_type(function, slot);
-        XrXirStatus status = xr_xir_layout(artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_FRAME, &physical);
+        XrXirStatus status = xr_xir_compile_layout(budget, artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_FRAME, &physical);
         if (status != XR_XIR_OK)
             return status;
         bool phi = slot >= function->parameter_count &&
@@ -131,7 +111,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         uint32_t stride = physical.size;
         if (phi) physical.size *= 2;
         if (physical.size > UINT32_MAX - bytes ||
-            (uint64_t) bytes + physical.size > budget->frame_bytes)
+            (uint64_t) bytes + physical.size > budget->limits.frame_bytes)
             return XR_XIR_BUDGET;
         bytes += physical.size;
         if (create)
@@ -151,7 +131,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             }
         }
         if (slot < function->parameter_count) {
-            status = xr_xir_layout(artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_PARAMETER, &physical);
+            status = xr_xir_compile_layout(budget, artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_PARAMETER, &physical);
             if (status != XR_XIR_OK)
                 return status;
             if (create)
@@ -163,6 +143,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     XrXirLayout result;
     uint32_t outgoing = 0;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
@@ -170,13 +151,13 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;
     }
-    uint64_t path_work = budget->work; uint32_t paths = 0;
-    XrXirStatus path_status = path_capacity(function, &path_work, &paths);
+    uint32_t paths = 0;
+    XrXirStatus path_status = path_capacity(function, budget, &paths);
     if (path_status != XR_XIR_OK) return path_status;
     uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue) +
         (uint64_t) paths * sizeof(XrXirValuePathStep);
-    if (physical_bytes > UINT32_MAX || physical_bytes > budget->frame_bytes) return XR_XIR_BUDGET;
-    XrXirStatus status = xr_xir_layout(artifact->module.types, function->result, &artifact->target, XR_XIR_LAYOUT_RESULT, &result);
+    if (physical_bytes > UINT32_MAX || physical_bytes > budget->limits.frame_bytes) return XR_XIR_BUDGET;
+    XrXirStatus status = xr_xir_compile_layout(budget, artifact->module.types, function->result, &artifact->target, XR_XIR_LAYOUT_RESULT, &result);
     if (status != XR_XIR_OK)
         return status;
     if (create) {
@@ -192,13 +173,17 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     return XR_XIR_OK;
 }
 
-XrXirStatus xr_xir_layout_build(XrXirArtifact *artifact, const XrXirBudget *budget) {
-    XrXirStatus status = layout_budget(&artifact->module, budget);
+XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = artifact->context;
+    XrXirCompileContext *budget = &compile_state;
+    XrXirStatus status = layout_structure(&artifact->module, budget);
     if (status != XR_XIR_OK)
         return status;
-    artifact->layouts = xr_calloc(artifact->module.function_count, sizeof(*artifact->layouts));
+    artifact->layouts = xir_compile_calloc(&artifact->context, artifact->module.function_count, sizeof(*artifact->layouts), &allocation_status);
     if (!artifact->layouts)
-        return XR_XIR_OUT_OF_MEMORY;
+        return allocation_status;
     for (uint32_t f = 0; f < artifact->module.function_count; ++f) {
         status = function_layout(artifact, f, budget, true);
         if (status != XR_XIR_OK)
@@ -207,13 +192,16 @@ XrXirStatus xr_xir_layout_build(XrXirArtifact *artifact, const XrXirBudget *budg
     return XR_XIR_OK;
 }
 
-XrXirStatus xr_xir_layout_verify(const XrXirArtifact *artifact, const XrXirBudget *budget) {
+XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact) {
+    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = artifact->context;
+    XrXirCompileContext *budget = &compile_state;
     if (artifact->module.stage != XR_XIR_LOWERED)
         return (!artifact->layouts && !artifact->target.architecture && !artifact->target.abi_version)
             ? XR_XIR_OK : XR_XIR_BAD_LAYOUT;
     if (!artifact->layouts)
         return XR_XIR_BAD_LAYOUT;
-    XrXirStatus status = layout_budget(&artifact->module, budget);
+    XrXirStatus status = layout_structure(&artifact->module, budget);
     if (status != XR_XIR_OK)
         return status;
     for (uint32_t f = 0; f < artifact->module.function_count; ++f) {

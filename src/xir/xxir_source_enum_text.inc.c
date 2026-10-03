@@ -14,17 +14,18 @@ static bool source_enum_text_literal(SourceContext *ctx, AstNode *node,
     const XrXirLiteral *name = &declaration->variants[variant].name;
     uint64_t length = name->length;
     if (qualified) length += (uint64_t)declaration->name.length + 1;
-    if (length > UINT32_MAX || length >= SIZE_MAX || length > ctx->budget.work)
+    if (length > UINT32_MAX || length >= SIZE_MAX)
         return source_fail(ctx, node, XR_XIR_BUDGET, "enum identity string budget exhausted");
-    ctx->budget.work -= length;
+
     char *bytes = source_alloc(ctx, (size_t)length + 1, 1);
     if (!bytes) return false;
     size_t prefix = 0;
     if (qualified) {
-        memcpy(bytes, declaration->name.bytes, declaration->name.length);
+        if (!source_copy_bytes(ctx,node,bytes,declaration->name.bytes,declaration->name.length) ||
+            !source_work(ctx,node)) return false;
         prefix = declaration->name.length; bytes[prefix++] = '.';
     }
-    memcpy(bytes + prefix, name->bytes, name->length);
+    if (!source_copy_bytes(ctx,node,bytes+prefix,name->bytes,name->length)) return false;
     return source_string_literal(ctx, node, bytes, (size_t)length, value);
 }
 static bool source_enum_text(SourceContext *ctx, AstNode *node, SourceValue receiver,

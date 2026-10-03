@@ -13,7 +13,7 @@ static const XrNativeMemberDeclaration *source_array_member(SourceContext *ctx,
     AstNode *node, const char *name) {
     if (!source_native_array_declaration(ctx)) return NULL;
     const XrNativeTypeDeclaration *array = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
-    const XrNativeMemberDeclaration *member = xr_native_declaration_member(array, name);
+    const XrNativeMemberDeclaration *member = source_native_member(ctx,array,name);
     if (!source_work(ctx, node)) return NULL;
     if (!member || !member->is_public || member->operation == XR_NATIVE_OPERATION_NONE) {
         source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array member has no admitted value-operation contract");
@@ -36,7 +36,7 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
         SourceName symbol = {0}; symbol.name = source_owned_text(ctx, member->name);
         if (!symbol.name) return false;
         XrXirSourceRange range = {ctx->array_module, (int) member->line, (int) member->column,
-            (int) member->line, (int) (member->column + strlen(member->name))};
+            (int) member->line, (int) (member->column + source_text_size(ctx, member->name))};
         if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_MEMBER, ctx->array_declaration, range)) return false;
         ctx->array_members[operation] = symbol.declaration;
         XrXirSourceType *parameters = member->parameter_count ? source_alloc(ctx, member->parameter_count, sizeof(*parameters)) : NULL;

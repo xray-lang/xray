@@ -27,9 +27,9 @@ static XrXirOutputStatus host_output(void *context, const XrXirOutputGroup *grou
     }
     if (trace->call) {
         XrXirCallResult result = {0};
-        CHECK(xr_xir_host_call_step(trace->call).outcome.status == XR_XIR_CALL_BUSY);
+        CHECK(xr_xir_host_call_step_bounded(trace->call, UINT64_MAX).outcome.status == XR_XIR_CALL_BUSY);
         CHECK(xr_xir_host_call_resume(trace->call, 1, 1) == XR_XIR_CALL_BUSY);
-        CHECK(xr_xir_host_call_cancel(trace->call) == XR_XIR_CALL_BUSY);
+        CHECK(xr_xir_host_call_request_cancel(trace->call) == XR_XIR_CALL_BUSY);
         CHECK(xr_xir_host_call_take(trace->call, &result) == XR_XIR_CALL_BUSY);
         CHECK(xr_xir_host_call_drop(trace->call) == XR_XIR_CALL_BUSY);
         CHECK(xr_xir_call_result_empty(&result));
@@ -48,8 +48,8 @@ static void host_fatal_cleanup(XrXirProgram *program, uint32_t entry) {
     XrXirHostExecutionRequest request = {program, &config, entry, NULL, 0};
     XrXirHostCall *call = NULL;
     CHECK(xr_xir_host_call_begin(&request, &call) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
-    CHECK(xr_xir_host_call_step(call).outcome.status == XR_XIR_CALL_SUSPENDED);
+    xr_xir_compile_program_drop(program);
+    CHECK(xr_xir_host_call_step_bounded(call, UINT64_MAX).outcome.status == XR_XIR_CALL_SUSPENDED);
     (void)xr_xir_host_call_drop(call);
     fputs("fatal cleanup incorrectly returned to the host\n", stderr);
     exit(99);
@@ -71,11 +71,11 @@ static XrXirInstanceResult host_resume(XrXirHostCall *call, XrXirInstanceResult 
     CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED && suspended.epoch && suspended.outcome.wake);
     CHECK(xr_xir_host_call_resume(call, suspended.epoch + 1, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_host_call_resume(call, suspended.epoch, suspended.outcome.wake + 1) == XR_XIR_CALL_BAD_STATE);
-    XrXirInstanceResult repeated = xr_xir_host_call_step(call);
+    XrXirInstanceResult repeated = xr_xir_host_call_step_bounded(call, UINT64_MAX);
     CHECK(repeated.epoch == suspended.epoch && repeated.outcome.wake == suspended.outcome.wake);
     CHECK(xr_xir_host_call_resume(call, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_READY);
     CHECK(xr_xir_host_call_resume(call, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
-    return xr_xir_host_call_step(call);
+    return xr_xir_host_call_step_bounded(call, UINT64_MAX);
 }
 static void host_faults(XrXirProgram *program, const uint32_t entries[3], unsigned mode) {
     size_t live = runtime_live, bytes = runtime_bytes, sites = 0;
@@ -87,10 +87,13 @@ static void host_faults(XrXirProgram *program, const uint32_t entries[3], unsign
         XrXirCallStatus status = xr_xir_host_call_begin(&request, &call);
         trace.call = call;
         if (status == XR_XIR_CALL_READY) {
-            XrXirInstanceResult result = xr_xir_host_call_step(call);
+            XrXirInstanceResult result = xr_xir_host_call_step_bounded(call, UINT64_MAX);
             status = result.outcome.status;
             if (status == XR_XIR_CALL_SUSPENDED && (mode == 1 || mode == 2 || mode == 4)) {
-                if (mode == 1) status = xr_xir_host_call_cancel(call);
+                if (mode == 1) {
+                    CHECK(xr_xir_host_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED);
+                    status = xr_xir_host_call_step_bounded(call, UINT64_MAX).outcome.status;
+                }
                 else { status = xr_xir_host_call_drop(call); call = NULL; }
             } else {
                 while (result.outcome.status == XR_XIR_CALL_SUSPENDED) result = host_resume(call, result);
@@ -127,8 +130,9 @@ static void host_rejections(XrXirProgram *program, uint32_t entry) {
     CHECK(xr_xir_host_call_begin(&request, &call) == XR_XIR_CALL_BAD_ARGUMENT && call == before && runtime_attempts == attempts);
     XrXirCallResult owned = {0};
     CHECK(xr_xir_host_call_take(call, &owned) == XR_XIR_CALL_BAD_STATE && xr_xir_call_result_empty(&owned));
-    CHECK(xr_xir_host_call_cancel(call) == XR_XIR_CALL_CANCELLED && !trace.count);
-    CHECK(xr_xir_host_call_cancel(call) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_host_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED && !trace.count);
+    CHECK(xr_xir_host_call_step_bounded(call, UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED && !trace.count);
+    CHECK(xr_xir_host_call_request_cancel(call) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_host_call_take(call, &owned) == XR_XIR_CALL_CANCELLED);
     CHECK(xr_xir_host_call_drop(call) == XR_XIR_CALL_READY); call = NULL;
     xr_xir_call_result_drop(&owned);
@@ -136,7 +140,7 @@ static void host_rejections(XrXirProgram *program, uint32_t entry) {
     CHECK(xr_xir_host_call_begin(&request, &call) == XR_XIR_CALL_LIMIT && !call);
     config = host_config(&trace); request.entry = UINT32_MAX;
     CHECK(xr_xir_host_call_begin(&request, &call) == XR_XIR_CALL_BAD_ARGUMENT && !call);
-    CHECK(xr_xir_host_call_step(NULL).outcome.status == XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_host_call_step_bounded(NULL, UINT64_MAX).outcome.status == XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(xr_xir_host_call_drop(NULL) == XR_XIR_CALL_READY);
 }
 /* Consumes the producer's Program reference before either instance executes. */
@@ -148,14 +152,14 @@ static void host_lifetimes(XrXirProgram *program, const uint32_t entries[3]) {
         CHECK(xr_xir_host_call_begin(&request, &calls[i]) == XR_XIR_CALL_READY);
         traces[i].call = calls[i]; memset(&config, 0xCC, sizeof(config)); memset(&request, 0xCC, sizeof(request));
     }
-    xr_xir_program_drop(program);
-    XrXirInstanceResult first = xr_xir_host_call_step(calls[0]), second = xr_xir_host_call_step(calls[1]);
+    xr_xir_compile_program_drop(program);
+    XrXirInstanceResult first = xr_xir_host_call_step_bounded(calls[0], UINT64_MAX), second = xr_xir_host_call_step_bounded(calls[1], UINT64_MAX);
     CHECK(first.outcome.status == XR_XIR_CALL_SUSPENDED && second.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(traces[0].count == 1 && traces[0].values[0] == 1 && traces[1].count == 1 && traces[1].values[0] == 1);
-    CHECK(xr_xir_host_call_cancel(calls[0]) == XR_XIR_CALL_CANCELLED);
+    { CHECK(xr_xir_host_call_request_cancel(calls[0]) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_host_call_step_bounded(calls[0], UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED); }
     CHECK(traces[0].count == 2 && traces[0].values[1] == 1);
     CHECK(xr_xir_host_call_resume(calls[0], first.epoch, first.outcome.wake) == XR_XIR_CALL_BAD_STATE);
-    CHECK(xr_xir_host_call_step(calls[0]).outcome.status == XR_XIR_CALL_CANCELLED && traces[0].count == 2);
+    CHECK(xr_xir_host_call_step_bounded(calls[0], UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED && traces[0].count == 2);
     XrXirCallResult owned[3] = {0};
     CHECK(xr_xir_host_call_take(calls[0], &owned[0]) == XR_XIR_CALL_CANCELLED);
     second = host_resume(calls[1], second);
@@ -168,8 +172,8 @@ static void host_lifetimes(XrXirProgram *program, const uint32_t entries[3]) {
     CHECK(xr_xir_host_call_take(calls[1], &owned[1]) == XR_XIR_CALL_RETURNED);
     XrXirCallResult duplicate = {0};
     CHECK(xr_xir_host_call_take(calls[1], &duplicate) == XR_XIR_CALL_BAD_STATE && xr_xir_call_result_empty(&duplicate));
-    CHECK(xr_xir_host_call_step(calls[1]).outcome.status == XR_XIR_CALL_BAD_STATE);
-    XrXirInstanceResult panic = host_resume(calls[2], xr_xir_host_call_step(calls[2]));
+    CHECK(xr_xir_host_call_step_bounded(calls[1], UINT64_MAX).outcome.status == XR_XIR_CALL_BAD_STATE);
+    XrXirInstanceResult panic = host_resume(calls[2], xr_xir_host_call_step_bounded(calls[2], UINT64_MAX));
     CHECK(panic.outcome.status == XR_XIR_CALL_ASSERTION && traces[2].count == 1 && traces[2].values[0] == 7);
     host_copy_limit(calls[2], &panic.outcome.panic.message);
     CHECK(xr_xir_host_call_take(calls[2], &owned[2]) == XR_XIR_CALL_ASSERTION);

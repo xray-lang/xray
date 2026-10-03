@@ -6,12 +6,14 @@
  *
  * xxir_nominal_access.inc.c - Declaration-bound field and construction authority
  */
-static bool nominal_access_work(uint64_t *work, uint64_t amount) {
-    if (!work || amount > *work) return false;
-    *work -= amount; return true;
+static bool nominal_access_work(const XrXirCompileContext *work, uint64_t amount) {
+    if (!work ||!xir_compile_work(work, amount)) return false;
+     return true;
 }
-XR_FUNC XrXirStatus xr_xir_nominal_access(const XrXirModule *module, uint32_t function,
-    uint32_t declaration, uint32_t field, XrXirNominalAccess access, uint64_t *work) {
+XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, uint32_t declaration, uint32_t field, XrXirNominalAccess access) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *work = &compile_state;
     if (!nominal_access_work(work, 1)) return XR_XIR_BUDGET;
     if (!module || !module->declarations || !module->types || !module->types->nominals ||
         function >= module->function_count || declaration >= module->types->nominals->count ||
@@ -53,24 +55,27 @@ XR_FUNC XrXirStatus xr_xir_nominal_access(const XrXirModule *module, uint32_t fu
 }
 
 static XrXirStatus type_access_edge(const XrXirTypes *types, XrXirType type,
-    uint32_t earlier, unsigned char *pending, XrXirBudget *remaining) {
-    if (!remaining->work) return XR_XIR_BUDGET;
-    --remaining->work;
+    uint32_t earlier, unsigned char *pending, XrXirCompileContext *remaining) {
+    if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
     if (!xr_xir_type_node(types, type)) return XR_XIR_OK;
     uint32_t index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (index >= earlier) return XR_XIR_BAD_TYPE;
     pending[index] = 1; return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_type_access(const XrXirModule *module, uint32_t function,
-    XrXirType type, XrXirBudget *remaining) {
+XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
     if (!module || !remaining || function >= module->function_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirTypes *types = module->types;
     if (!types || !types->nominals || !xr_xir_type_node(types, type)) return XR_XIR_OK;
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
-    if (count > remaining->scratch_bytes || count > remaining->work) return XR_XIR_BUDGET;
-    remaining->scratch_bytes -= count; remaining->work -= count;
-    unsigned char *pending = xr_calloc(count, 1);
-    if (!pending) { remaining->scratch_bytes += count; return XR_XIR_OUT_OF_MEMORY; }
+    if (!xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
+
+    unsigned char *pending = xir_compile_calloc(compile_context, count, 1, &allocation_status);
+    if (!pending) {  return allocation_status; }
     pending[count - 1] = 1;
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t at = count; at && status == XR_XIR_OK; --at) {
@@ -78,8 +83,7 @@ XR_FUNC XrXirStatus xr_xir_type_access(const XrXirModule *module, uint32_t funct
         if (!pending[i]) continue;
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL) {
-            status = xr_xir_nominal_access(module, function, node->nominal.declaration,
-                0, XR_XIR_NOMINAL_TYPE, &remaining->work);
+            status = xr_xir_compile_nominal_access(remaining, module, function, node->nominal.declaration, 0, XR_XIR_NOMINAL_TYPE);
             for (uint32_t a = 0; a < node->nominal.argument_count && status == XR_XIR_OK; ++a)
                 status = type_access_edge(types, node->nominal.arguments[a], i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_CALLABLE) {
@@ -90,5 +94,5 @@ XR_FUNC XrXirStatus xr_xir_type_access(const XrXirModule *module, uint32_t funct
             status = type_access_edge(types, node->element, i, pending, remaining);
         else status = XR_XIR_BAD_TYPE;
     }
-    xr_free(pending); remaining->scratch_bytes += count; return status;
+    xr_compile_resources_free(pending);  return status;
 }

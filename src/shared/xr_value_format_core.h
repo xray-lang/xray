@@ -74,11 +74,12 @@ typedef struct XrValueFormatView {
     uint64_t unsigned_value;
     const char *name;
     const char *member;
+    size_t name_size, member_size;
     const unsigned char *bytes;
     size_t size;
     uint32_t children;
     char quote;
-    unsigned char scalar_bytes[4];
+    unsigned char scalar_bytes[32];
 } XrValueFormatView;
 
 typedef struct XrValueFormatReader {
@@ -104,14 +105,21 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_file_write(void *context, const voi
     return context && (size == 0u || fwrite(bytes, 1u, size, (FILE *)context) == size);
 }
 
+XR_VALUE_FORMAT_FUNCTION int xr_value_format_label(XrValueFormatSink sink, const char *label, int color) {
+    return (!color || xr_value_format_text(sink, "\033[1;31m")) &&
+        xr_value_format_text(sink, label) &&
+        (!color || xr_value_format_text(sink, "\033[0m"));
+}
+
 /* Borrow the message while its panic owner is alive; preserve every byte. */
 XR_VALUE_FORMAT_FUNCTION int xr_value_format_panic(XrValueFormatSink sink, uint32_t code,
                                                    int has_bounds, int64_t index, uint64_t length,
                                                    int has_message, const uint8_t *message,
-                                                   size_t message_size) {
+                                                    size_t message_size, int color) {
     char prefix[128];
-    int size = snprintf(prefix, sizeof(prefix), "[Uncaught Panic] E%04u: ", code);
+    int size = snprintf(prefix, sizeof(prefix), " E%04u: ", code);
     if (size < 0 || (size_t)size >= sizeof(prefix) ||
+        !xr_value_format_label(sink, "[Uncaught Panic]", color) ||
         !xr_value_format_write(sink, prefix, (size_t)size))
         return 0;
     if (has_message)
@@ -150,13 +158,13 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
                    (!quoted || xr_value_format_write(sink, &view.quote, 1u));
         }
         case XR_VALUE_FORMAT_LITERAL:
-            return xr_value_format_text(sink, view.name);
+            return xr_value_format_write(sink, view.name, view.name_size);
         case XR_VALUE_FORMAT_ENUM:
             if (xr_value_format_depth_exceeded(depth))
                 return xr_value_format_text(sink, "...");
-            if (!xr_value_format_text(sink, view.name ? view.name : "<enum>") ||
+            if (!xr_value_format_write(sink, view.name, view.name_size) ||
                 !xr_value_format_text(sink, ".") ||
-                !xr_value_format_text(sink, view.member ? view.member : "<variant>"))
+                !xr_value_format_write(sink, view.member, view.member_size))
                 return 0;
             if (!view.children)
                 return 1;
@@ -178,9 +186,10 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
 }
 
 XR_VALUE_FORMAT_FUNCTION int xr_value_format_uncaught(XrValueFormatReader reader, XrValueFormatNode node,
-                                           XrValueFormatSink sink, int in_go) {
-    return xr_value_format_text(sink, in_go ? "[Uncaught Error in go coroutine] "
-                                           : "[Uncaught Error] ") &&
+                                            XrValueFormatSink sink, int in_go, int color) {
+    return xr_value_format_label(sink, in_go ? "[Uncaught Error in go coroutine]"
+                                            : "[Uncaught Error]", color) &&
+           xr_value_format_text(sink, " ") &&
            xr_value_format_value(reader, node, sink, 0) && xr_value_format_text(sink, "\n");
 }
 

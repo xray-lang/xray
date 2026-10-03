@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "xdefs.h"
+#include "xio_policy.h"
 
 /* ========== TOML Value Types ========== */
 
@@ -77,46 +78,36 @@ struct XrTomlValue {
 
 /* ========== Parse / Free ========== */
 
-typedef struct XrTomlParseBudget {
+typedef struct XrTomlParseLimits {
     size_t input_bytes;
-    size_t allocation_bytes; /* Cumulative requested bytes, including each realloc. */
-    size_t work; /* Input bytes plus one and compared key length per table candidate. */
-    uint32_t depth; /* Effective maximum is capped at 128 for recursive destruction. */
-} XrTomlParseBudget;
+    uint32_t depth; /* Effective maximum is 128 for recursive destruction. */
+} XrTomlParseLimits;
 
 typedef enum XrTomlParseStatus {
     XR_TOML_PARSE_OK,
     XR_TOML_PARSE_INVALID,
     XR_TOML_PARSE_LIMIT,
-    XR_TOML_PARSE_OUT_OF_MEMORY
+    XR_TOML_PARSE_OUT_OF_MEMORY,
+    XR_TOML_PARSE_BUDGET,
+    XR_TOML_PARSE_IO,
+    XR_TOML_PARSE_BAD_ARGUMENT
 } XrTomlParseStatus;
 
-/* Both entry points use the same parser. The default budget is 16 MiB of input
- * and 64 MiB each of cumulative allocations and work, with depth 128.
- * Optional work_used receives consumed work on success and failure.
- * No partial DOM escapes on failure. */
-XR_FUNC XrTomlValue *xtoml_parse_limited(const char *data, size_t len,
-    XrTomlParseBudget budget, XrTomlParseStatus *status, size_t *work_used);
+/* Policy and limits are mandatory. All DOM blocks and temporary buffers use the
+ * same policy; their private headers retain the allocation policy for release.
+ * Compile-ledger blocks keep that ledger alive through the final free. Other
+ * policy contexts must outlive their blocks. Work and cumulative allocations
+ * are never refunded. Failure preserves output and frees the partial DOM. */
+XR_FUNC XrTomlParseStatus xtoml_parse_owned(const XrOsIoPolicy *policy,
+    const char *data, size_t len, const XrTomlParseLimits *limits, XrTomlValue **output);
+XR_FUNC void xtoml_owned_free(XrTomlValue *value);
+/* Only accepts an owned DOM node; compares its actual allocation policy. */
+XR_FUNC bool xtoml_owned_uses_policy(const XrTomlValue *value, const XrOsIoPolicy *policy);
 
-/* Parse TOML text into a DOM tree. Returns root table, or NULL on
- * fatal error. The returned tree must be freed with xtoml_free(). */
-XR_FUNC XrTomlValue *xtoml_parse(const char *data, size_t len);
-
-/* Free a DOM tree (recursive). */
-XR_FUNC void xtoml_free(XrTomlValue *v);
-
-/* ========== Table Accessors ========== */
-
-XR_FUNC XrTomlValue *xtoml_get(XrTomlValue *table, const char *key);
-XR_FUNC const char *xtoml_get_string(XrTomlValue *table, const char *key);
-XR_FUNC int64_t xtoml_get_int(XrTomlValue *table, const char *key);
-XR_FUNC int64_t xtoml_get_int_or(XrTomlValue *table, const char *key, int64_t default_val);
-XR_FUNC double xtoml_get_float(XrTomlValue *table, const char *key);
-XR_FUNC bool xtoml_get_bool(XrTomlValue *table, const char *key);
-XR_FUNC bool xtoml_get_bool_or(XrTomlValue *table, const char *key, bool default_val);
-XR_FUNC XrTomlValue *xtoml_get_table(XrTomlValue *table, const char *key);
-XR_FUNC XrTomlValue *xtoml_get_array(XrTomlValue *table, const char *key);
-
+/* Key scanning and candidate comparisons use the table's allocation policy.
+ * A missing key returns OK with NULL. Failure preserves output. */
+XR_FUNC XrTomlParseStatus xtoml_owned_get(XrTomlValue *table,
+    const char *key, XrTomlValue **output);
 /* ========== Array Accessors ========== */
 
 XR_FUNC int xtoml_array_len(XrTomlValue *arr);

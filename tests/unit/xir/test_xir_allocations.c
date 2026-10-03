@@ -214,7 +214,7 @@ static size_t write_allocation_failures(void) {
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
         XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
         if (status == XR_XIR_CALL_READY) {
-            XrXirCallResult result = xr_xir_call_poll(call);
+            XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
             if (attempt) CHECK(result.status == XR_XIR_CALL_OOM && result.value.type == XR_XIR_UNIT);
             else CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_BOOL && result.value.payload == 1);
         } else CHECK(attempt && status == XR_XIR_CALL_OOM && !call);
@@ -259,10 +259,10 @@ static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
     }
     XrXirCallStatus admitted = xr_xir_call_new(&config, 0, arguments, 2, &call);
     if (admitted != XR_XIR_CALL_READY) { CHECK(admitted == XR_XIR_CALL_OOM); goto done; }
-    XrXirCallResult result = xr_xir_call_poll(call);
+    XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
     if (result.status == XR_XIR_CALL_SUSPENDED) {
         CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
-        result = xr_xir_call_poll(call);
+        result = xr_xir_call_poll_bounded(call, UINT64_MAX);
     }
     if (result.status == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED)) {
         CHECK(xr_xir_call_take_result(call,&owned)==result.status);
@@ -296,13 +296,13 @@ static bool invoke_allocation_run(XrXirArtifact *artifact, uint32_t mode, uint32
     XrXirValue args[] = {{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
     XrXirCallStatus admitted = xr_xir_call_new(&config,0,args,2,&call);
     if (admitted != XR_XIR_CALL_READY) { CHECK(admitted == XR_XIR_CALL_OOM); goto done; }
-    XrXirCallResult result = xr_xir_call_poll(call);
+    XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
     uint32_t suspensions = 0;
     while (result.status == XR_XIR_CALL_SUSPENDED) {
         CHECK(++suspensions <= 2);
-        if (suspensions == cancel_at) CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+        if (suspensions == cancel_at) { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
         else CHECK(xr_xir_call_resume(call,result.wake) == XR_XIR_CALL_READY);
-        result = xr_xir_call_poll(call);
+        result = xr_xir_call_poll_bounded(call, UINT64_MAX);
     }
     if (result.status == XR_XIR_CALL_OOM) goto done;
     if (cancel_at && suspensions == cancel_at) CHECK(result.status == XR_XIR_CALL_CANCELLED);
@@ -376,7 +376,7 @@ static size_t call_allocation_failures(void) {
         XrXirCall *call = NULL;
         XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
         if (status == XR_XIR_CALL_READY) {
-            XrXirCallResult result = xr_xir_call_poll(call);
+            XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
             CHECK(result.status == (attempt ? XR_XIR_CALL_OOM : XR_XIR_CALL_RETURNED));
             if (!attempt) CHECK(result.value.payload == 3);
             CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
@@ -414,7 +414,7 @@ static size_t program_allocation_failures(void) {
             if (status != XR_XIR_CALL_READY) CHECK(attempt && status == XR_XIR_CALL_OOM && !instance);
             else {
                 status = xr_xir_instance_start(instance, 3, NULL, 0);
-                if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+                if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
                 CHECK(status == (attempt ? XR_XIR_CALL_OOM : XR_XIR_CALL_RETURNED));
                 if (xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED)
                     CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_OOM);

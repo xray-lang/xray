@@ -84,16 +84,18 @@ TEST(value_format_preserves_typed_error_payload) {
         {.view = {.kind = XR_VALUE_FORMAT_BOOL, .unsigned_value = 1}},
         {.view = {.kind = XR_VALUE_FORMAT_BYTES, .bytes = (const unsigned char *) "detail",
                   .size = 6u, .quote = '"'}},
-        {.view = {.kind = XR_VALUE_FORMAT_ENUM, .name = "Nested", .member = "Empty"}},
+        {.view = {.kind = XR_VALUE_FORMAT_ENUM, .name = "Nested", .member = "Empty",
+                  .name_size = 6, .member_size = 5}},
     };
     const FormatFixture root = {
-        .view = {.kind = XR_VALUE_FORMAT_ENUM, .name = "Failure", .member = "Failed", .children = 5},
+        .view = {.kind = XR_VALUE_FORMAT_ENUM, .name = "Failure", .member = "Failed",
+                 .name_size = 7, .member_size = 6, .children = 5},
         .children = payload,
     };
     XrValueFormatReader reader = {NULL, read_fixture, child_fixture};
     FormatCapture capture = {.capacity = sizeof(capture.bytes)};
     XrValueFormatSink sink = {&capture, capture_bytes};
-    ASSERT_TRUE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0}, sink, 0));
+    ASSERT_TRUE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0}, sink, 0, 0));
     ASSERT_STR_EQ(capture.bytes,
         "[Uncaught Error] Failure.Failed(-9223372036854775808, 18446744073709551615, true, "
         "\"detail\", Nested.Empty)\n");
@@ -102,7 +104,7 @@ TEST(value_format_preserves_typed_error_payload) {
     ASSERT_STR_EQ(capture.bytes, "...");
     capture.size = 0;
     capture.capacity = 8;
-    ASSERT_FALSE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0}, sink, 0));
+    ASSERT_FALSE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0}, sink, 0, 0));
     ASSERT_EQ_INT(capture.size, 0);
     ASSERT_FALSE(xr_value_format_value(reader, (XrValueFormatNode) {NULL, 0}, sink, 0));
 }
@@ -126,6 +128,30 @@ TEST(value_format_streams_long_and_embedded_zero_strings) {
     ASSERT_TRUE(memcmp(capture.bytes + 1, bytes, sizeof(bytes)) == 0);
 }
 
+TEST(value_format_names_are_spans_and_style_only_colors_labels) {
+    const char name[] = {'A', 'B', 'X'};
+    const char member[] = {'C', '\0', 'Z', 'X'};
+    FormatFixture value = {.view = {.kind = XR_VALUE_FORMAT_ENUM,
+        .name = name, .name_size = 2, .member = member, .member_size = 3}};
+    FormatCapture capture = {.capacity = sizeof(capture.bytes)};
+    XrValueFormatReader reader = {NULL, read_fixture, child_fixture};
+    XrValueFormatSink sink = {&capture, capture_bytes};
+    ASSERT_TRUE(xr_value_format_uncaught(reader, (XrValueFormatNode){&value, 0}, sink, 0, 1));
+    const char expected[] = "\033[1;31m[Uncaught Error]\033[0m AB.C\0Z\n";
+    ASSERT_EQ_INT(capture.size, sizeof(expected) - 1);
+    ASSERT_TRUE(!memcmp(capture.bytes, expected, sizeof(expected) - 1));
+    capture.size = 0;
+    value.view.kind = XR_VALUE_FORMAT_LITERAL;
+    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode){&value, 0}, sink, 0));
+    ASSERT_EQ_INT(capture.size, 2);
+    ASSERT_TRUE(!memcmp(capture.bytes, "AB", 2));
+    capture.size = 0;
+    ASSERT_TRUE(xr_value_format_panic(sink, 445, 0, 0, 0, 1, (const uint8_t *)"a\0b", 3, 1));
+    const char panic[] = "\033[1;31m[Uncaught Panic]\033[0m E0445: a\0b\n";
+    ASSERT_EQ_INT(capture.size, sizeof(panic) - 1);
+    ASSERT_TRUE(!memcmp(capture.bytes, panic, sizeof(panic) - 1));
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Value Format Core");
@@ -134,5 +160,6 @@ RUN_TEST(value_format_core_clamps_counts_and_depth);
 RUN_TEST(value_format_core_writes_more_suffix);
 RUN_TEST(value_format_preserves_typed_error_payload);
 RUN_TEST(value_format_streams_long_and_embedded_zero_strings);
+RUN_TEST(value_format_names_are_spans_and_style_only_colors_labels);
 
 TEST_MAIN_END()

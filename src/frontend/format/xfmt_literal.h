@@ -15,7 +15,7 @@
 #ifndef XFMT_LITERAL_H
 #define XFMT_LITERAL_H
 
-#include "xfmt.h"
+#include "xfmt_internal.h"
 #include "../../base/xdefs.h"
 
 // Callback used by xfmt_emit_template_string to recurse into

@@ -15,11 +15,8 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 26u
+#define XR_XIR_PROGRAM_ABI_VERSION 28u
 typedef struct XrXirProgram XrXirProgram;
-typedef struct XrXirProgramBudget {
-    uint64_t metadata_bytes, work;
-} XrXirProgramBudget;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
     void *owner;
@@ -32,7 +29,7 @@ typedef struct XrXirProgramProof {
     const XrXirFunctionLayout *layouts;
 } XrXirProgramProof;
 /* Borrowed until the source artifact is destroyed. */
-XR_FUNC XrXirProgramProof xr_xir_program_proof(const XrXirArtifact *artifact);
+XR_FUNC XrXirProgramProof xr_xir_compile_program_proof(const XrXirArtifact *artifact);
 typedef struct XrXirProgramSpec {
     uint32_t abi_version;
     XrXirTarget target;
@@ -65,9 +62,9 @@ typedef struct XrXirInstanceResult {
 } XrXirInstanceResult;
 
 /* Successful sealing takes the code lease. A null lease declares static code. */
-XR_FUNC XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget budget,
-                                      XrXirProgram **output);
-XR_FUNC void xr_xir_program_drop(XrXirProgram *program);
+XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, XrXirProgram **output);
+XR_FUNC void xr_xir_compile_program_drop(XrXirProgram *program);
 XR_FUNC XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size);
 XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     XrXirType type, const XrXirValue *input, XrXirValue *output);
@@ -76,7 +73,13 @@ XR_FUNC XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirIn
 XR_FUNC XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t entry,
     const XrXirValue *arguments, uint32_t count);
-XR_FUNC XrXirInstanceResult xr_xir_instance_poll(XrXirInstance *instance);
+/* Starts an admitted root-module test or hook, including private declarations.
+ * Skipped tests and ordinary functions receive no additional authority. The
+ * same initialization and call lifecycle apply as for ordinary entry starts. */
+XR_FUNC XrXirCallStatus xr_xir_instance_start_test(XrXirInstance *instance, uint32_t entry);
+XR_FUNC XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64_t quantum);
+/* Cancels only the current activation; initialized module state remains usable. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, uint64_t wake);
 /* Transfers ordinary entry outcomes. Initialization failure stays instance-owned:
  * take_result returns BAD_STATE without changing output; use copy_failure. */

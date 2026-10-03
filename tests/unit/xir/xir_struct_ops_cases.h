@@ -29,11 +29,11 @@ static void struct_ops_cases(XrXirProgram *program) {
     CHECK(xr_xir_string_new(domain,"constructed",11,&arguments[1]) == XR_XIR_VALUE_OK);
     for (unsigned i = 0; i < 3; ++i) {
         CHECK(xr_xir_instance_start(instances[i],i ? 2 : 1,i ? arguments : NULL,i ? 2 : 0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult wait = xr_xir_instance_poll(instances[i]);
+        XrXirInstanceResult wait = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
         CHECK(wait.outcome.status == XR_XIR_CALL_SUSPENDED);
         if (i != 2) {
             CHECK(xr_xir_instance_resume(instances[i],wait.epoch,wait.outcome.wake) == XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
             CHECK(xr_xir_instance_take_result(instances[i],&escaped) == XR_XIR_CALL_RETURNED);
             if (!i) { CHECK(escaped.type == XR_XIR_I64 && escaped.payload == 23); xr_xir_value_drop(&escaped); }
         }

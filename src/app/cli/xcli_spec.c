@@ -16,12 +16,11 @@
 #include "xcli_spec.h"
 #include "xcli_diag.h"
 #include "../../base/xchecks.h"
-#include "../../ir/xi_pass_policy.h"
 #include <string.h>
 
 /* ========== Option Specs per Command ========== */
 
-static const XrCliOptionSpec run_options[] = {XR_CLI_XI_OPT_SPEC, XR_CLI_OPT_END};
+static const XrCliOptionSpec run_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec repl_options[] = {
     {"module-id", 0, XR_CLI_VALUE_STRING, true, false, "ID",
@@ -42,8 +41,6 @@ static const XrCliOptionSpec check_options[] = {
     {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Show errors only"},
     {"syntax-only", 'S', XR_CLI_VALUE_NONE, false, false, NULL,
      "Skip semantic analysis (parse only)"},
-    {"strict", 's', XR_CLI_VALUE_NONE, false, false, NULL,
-     "Enable strict analyzer mode (extra checks)"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec fmt_options[] = {
@@ -134,10 +131,7 @@ static const XrCliOptionSpec build_options[] = {
      "Whole-program link-time optimization (cross-module inlining)"},
     {"rc-guard", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Debug RC guard codegen: poison objects on release, abort on use-after-release (task 219)"},
-    {"verify-arc", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Force the RC/ownership verifier on after every lifetime/CFG-invalidating pass (task 219)"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
-    XR_CLI_XI_OPT_SPEC,
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec deps_options[] = {
@@ -422,22 +416,4 @@ int xr_cli_option_count(const XrCliOptionSpec *opts) {
         n++;
     }
     return n;
-}
-
-/* ========== Session Optimizer Policy ========== */
-
-bool xr_cli_apply_xi_opt(const XrCliInvocation *inv, const char *cmd) {
-    const char *spec;
-    char err[256];
-
-    XR_DCHECK(inv != NULL, "inv is NULL");
-    spec = xr_cli_opt_string(&inv->options, "xi-opt", NULL);
-    if (!spec)
-        return true;
-
-    err[0] = '\0';
-    if (xi_pass_session_policy_apply_spec(spec, "--xi-opt", err, sizeof(err)))
-        return true;
-    xr_cli_error(cmd, "%s", err);
-    return false;
 }

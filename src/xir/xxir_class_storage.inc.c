@@ -19,8 +19,8 @@ _Static_assert(_Alignof(XirClassObject) >= _Alignof(int64_t), "class body alignm
 _Static_assert((uint32_t)XR_XIR_TYPE_NOMINAL < (uint32_t)XIR_OBJECT_CLASS, "class object tag is not a type-node kind");
 static const XrXirStorageLayout *class_body_layout(const XirObject *object) {
     if (!object || object->kind != XIR_OBJECT_CLASS ||
-        !xr_xir_type_is_class(xr_xir_type_arena_types(object->arena),object->type)) return NULL;
-    const XrXirStorageLayout *layout=xr_xir_type_arena_storage(object->arena,object->type);
+        !xr_xir_type_is_class(xr_xir_compile_type_arena_types(object->arena),object->type)) return NULL;
+    const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(object->arena,object->type);
     return layout && layout->value.size == sizeof(uint64_t) &&
         layout->body.alignment && layout->body.alignment <= _Alignof(XirClassObject) ? layout : NULL;
 }

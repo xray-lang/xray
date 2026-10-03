@@ -27,3 +27,10 @@ export fn cleanupFatal()->i64 {
     Coro.yield()
     return 0
 }
+export fn current()->i64 { return state }
+export fn spin()->i64 {
+    var counter = 0
+    while (counter < 1000) { counter += 1 }
+    return counter
+}
+export fn reader()->fn()->i64 { return fn()->i64 { return state } }

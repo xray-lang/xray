@@ -28,7 +28,7 @@ static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType oper
         XrXirDeclarations declarations;
         XrXirModule module=source_module_view(ctx,&declarations);
         XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status=xr_xir_type_markers_prove(&proof,target,XR_XIR_CONSTRAINT_EQUAL,&ctx->budget);
+        XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile, &proof, target, XR_XIR_CONSTRAINT_EQUAL);
         if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"equality requires its declaration predicate");
         recipe.operation=XR_XIR_EQUAL; recipe.result=XR_XIR_BOOL; recipe.immediate=operation==AST_BINARY_NE;
     } else if (left==XR_XIR_STRING && right==XR_XIR_STRING && operation==AST_BINARY_ADD) {

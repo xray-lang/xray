@@ -28,6 +28,7 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #define CreateFileW(...) (sdk_io_fault() ? INVALID_HANDLE_VALUE : CreateFileW(__VA_ARGS__))
 #define ReadFile sdk_test_read
 #define GetFileInformationByHandle(...) (sdk_io_fault() ? FALSE : GetFileInformationByHandle(__VA_ARGS__))
+#define GetFileInformationByHandleEx(...) (sdk_io_fault() ? FALSE : GetFileInformationByHandleEx(__VA_ARGS__))
 #define GetFinalPathNameByHandleW(...) (sdk_io_fault() ? 0u : GetFinalPathNameByHandleW(__VA_ARGS__))
 #define GetFileSizeEx(...) (sdk_io_fault() ? FALSE : GetFileSizeEx(__VA_ARGS__))
 #define GetFileType(...) (sdk_io_fault() ? FILE_TYPE_UNKNOWN : GetFileType(__VA_ARGS__))
@@ -36,9 +37,11 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #include "toolchain/xr_xir_runtime_sdk.c"
 #include "app/toolchain/xtc_xir_target.c"
 #include "app/toolchain/xtc_xir_sysroot.c"
+#include "app/toolchain/xtc_xir_images.c"
 #undef CreateFileW
 #undef ReadFile
 #undef GetFileInformationByHandle
+#undef GetFileInformationByHandleEx
 #undef GetFinalPathNameByHandleW
 #undef GetFileSizeEx
 #undef GetFileType
@@ -47,14 +50,14 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #include "sdk_identity_golden.h"
 
 static void sdk_known_bytes(void) {
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,22,58,17,21,26,1,1,1,11,2,0,1,0,3,1,1};
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,23,59,18,22,28,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";
     manifest.file_count=1;manifest.files[0]=(XrXirSdkFile){"lib/test.lib",5,2,{0},NULL,NULL};
     memcpy(manifest.files[0].digest,sdk_kat_file_digest,32);
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
-    SdkJson json={NULL,NULL,NULL,resources,XR_XIR_SDK_OK};
+    XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
     CHECK(sdk_identity(&json,&manifest) && !memcmp(manifest.digest,sdk_kat_digest,32));
     uint64_t work=sdk_stats(resources).work;
     const uint64_t encoded_integers=4*(17+3+1+2*(sizeof(sdk_abi_fields)/sizeof(sdk_abi_fields[0]))+1+1+1+1+1)+8;
@@ -65,9 +68,9 @@ static void sdk_known_bytes(void) {
     uint8_t hash[32];xr_sha256(sdk_kat_preimage,sizeof(sdk_kat_preimage),hash);
     CHECK(!memcmp(hash,sdk_kat_digest,32));
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,work-1};
-    resources=sdk_ledger(&limits);json.resources=resources;
+    resources=sdk_ledger(&limits);json.context=resources;
     memset(manifest.digest,0,32);
-    CHECK(!sdk_identity(&json,&manifest) && json.status==XR_XIR_SDK_BUDGET);
+    CHECK(!sdk_identity(&json,&manifest) && json.status==XR_JSON_CURSOR_BUDGET);
     for (size_t i=0;i<32;++i) CHECK(!manifest.digest[i]);
     xr_compile_resources_release(resources);CHECK(!runtime_live && !runtime_bytes);
 }
@@ -143,10 +146,21 @@ static void sdk_actual_faults(const XrXirRuntimeSdkRequest *original) {
 }
 #include "xir_sdk_shared_resources.inc.c"
 int main(int argc,char **argv) {
-    sdk_known_bytes();
-    CHECK(argc==3 || argc==4);size_t length=0;char *manifest=sdk_input(argv[2],&length);
+    if ((argc!=3 && argc!=4) || (argc==4 && strcmp(argv[3],"status") && strcmp(argv[3],"--shared-resources"))) {
+        fputs("usage: sdk-test ROOT MANIFEST [status|--shared-resources]\n",stderr);return 2;
+    }
+    bool shared_only=argc==4 && !strcmp(argv[3],"--shared-resources");
+    if (!shared_only) sdk_known_bytes();
+    size_t length=0;char *manifest=sdk_input(argv[2],&length);
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirRuntimeSdkRequest request={argv[1],manifest,length,resources};
+    DWORD initial_handles=sdk_handles();
+    if (shared_only) {
+        sdk_shared_resources(&request,false);
+        xr_free(manifest);xr_compile_resources_release(resources);
+        CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
+        puts("SDK/Target shared-resources mode PASS; exhaustive SDK faults require the default mode");return 0;
+    }
     if (argc==4) {
         XrXirRuntimeSdk *sdk=NULL;XrXirRuntimeSdkStatus status=xr_xir_runtime_sdk_load(&request,&sdk);
         printf("%u",(unsigned)status);
@@ -156,9 +170,9 @@ int main(int argc,char **argv) {
             for (size_t i=0;i<32;++i) printf("%02x",facts->identity[i]);
         }
         puts("");xr_xir_runtime_sdk_free(sdk);xr_free(manifest);xr_compile_resources_release(resources);
-        CHECK(!runtime_live && !runtime_bytes);return 0;
+        CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);return 0;
     }
-    sdk_shared_resources(&request);sdk_fixed_work();sdk_bounded_scanning();
+    sdk_shared_resources(&request,true);sdk_fixed_work();sdk_bounded_scanning();
     XrXirRuntimeSdkRequest too_large=request;too_large.manifest_length=XR_XIR_SDK_MANIFEST_LIMIT+1;
     XrXirRuntimeSdk *empty=NULL;CHECK(xr_xir_runtime_sdk_load(&too_large,&empty)==XR_XIR_SDK_BUDGET && !empty);
     XrXirRuntimeSdkRequest no_resources=request;no_resources.resources=NULL;
@@ -173,7 +187,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_runtime_sdk_file(sdk,"ignored",&existing)==XR_XIR_SDK_INVALID &&
         existing==(const char *)(uintptr_t)1 && sdk_stats(resources).work==query_work);
     xr_free(manifest);xr_free(producer_root);xr_compile_resources_release(resources);
-    CHECK(xr_xir_runtime_sdk_root(sdk) && xr_xir_runtime_sdk_facts(sdk)->value_abi==17);
-    sdk_locked_files(sdk);xr_xir_runtime_sdk_free(sdk);CHECK(!runtime_live && !runtime_bytes);
+    CHECK(xr_xir_runtime_sdk_root(sdk) && xr_xir_runtime_sdk_facts(sdk)->value_abi==18);
+    sdk_locked_files(sdk);xr_xir_runtime_sdk_free(sdk);CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
     puts("SDK producer destroyed, immutable same-source facts and locked actual bundle PASS");return 0;
 }

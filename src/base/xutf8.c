@@ -318,3 +318,8 @@ XrUtf8Step xr_utf8_decode_step(const uint8_t *data, size_t len) {
 bool xr_utf8_validate(const char *str, size_t len) {
     return xr_utf8_scan_strict((const uint8_t *) str, len).error == XR_UTF8_OK;
 }
+
+XR_FUNC bool xr_utf8_scan_strict_read(const uint8_t *data, size_t len, XrUtf8ReadByte read,
+                                      void *context, XrUtf8ScanResult *output) {
+    return xr_utf8_core_scan_strict_read(data, len, read, context, output) != 0;
+}

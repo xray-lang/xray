@@ -27,7 +27,7 @@ static bool source_enum_fields(SourceContext *ctx) {
         for (int v = 0; v < source->member_count; ++v) {
             AstNode *member = source->members[v];
             if (!source_work(ctx, member)) return false;
-            if (member->type == AST_ENUM_MEMBER && !strcmp(member->as.enum_member.name,"variants"))
+            if (member->type == AST_ENUM_MEMBER && source_text_same(ctx, NULL, member->as.enum_member.name, "variants"))
                 return source_fail(ctx,member,XR_XIR_BAD_TYPE,"variant conflicts with enum type metadata member");
             if (member->type != AST_ENUM_MEMBER || member->as.enum_member.payload_count < 0 ||
                 (uint32_t)member->as.enum_member.payload_count > UINT32_MAX - count)
@@ -48,7 +48,7 @@ static bool source_enum_fields(SourceContext *ctx) {
         for (uint32_t v = 0; v < record->variant_count; ++v) {
             AstNode *node = source->members[v]; EnumMemberNode *member = &node->as.enum_member;
             if (!source_work(ctx, node)) return false;
-            variants[v] = (XrXirNominalVariant) {{member->name,(uint32_t)strlen(member->name)},next,(uint32_t)member->payload_count};
+            variants[v] = (XrXirNominalVariant) {{member->name,(uint32_t)source_text_size(ctx, member->name)},next,(uint32_t)member->payload_count};
             SourceName variant = {0}; variant.name = source_owned_text(ctx, member->name); variant.node = node; variant.type = owner->type;
             if (!variant.name || !source_query_declare(ctx, &variant, XR_XIR_SOURCE_MEMBER, owner->declaration,
                 source_query_range(ctx, node, member->name))) return false;
@@ -57,11 +57,11 @@ static bool source_enum_fields(SourceContext *ctx) {
                 if (!source_work(ctx, node) || !source_type(ctx, member->payload_types[f], &types[next]) || types[next] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum payload requires an admitted value type");
                 const char *name = member->payload_names[f];
-                fields[next] = (XrXirNominalField) {{name,(uint32_t)strlen(name)},types[next],0};
+                fields[next] = (XrXirNominalField) {{name,(uint32_t)source_text_size(ctx, name)},types[next],0};
                 SourceName field = {0}; field.name = source_owned_text(ctx, name); field.node = node; field.type = types[next];
                 XrNameSpan span = member->payload_name_spans[f];
                 XrXirSourceRange range = {ctx->module,span.line,span.column,span.line,span.column};
-                if (span.column > 0 && strlen(name) <= (size_t)(INT_MAX - span.column)) range.end_column += (int)strlen(name);
+                if (span.column > 0 && source_text_size(ctx, name) <= (size_t)(INT_MAX - span.column)) range.end_column += (int)source_text_size(ctx, name);
                 if (!field.name || !source_query_declare(ctx, &field, XR_XIR_SOURCE_MEMBER, variant.declaration, range)) return false;
                 source_query_binding_type(ctx, &field); members[next] = field.declaration;
             }
@@ -126,7 +126,7 @@ static bool source_enum_select(SourceContext *ctx, AstNode *node, SourceEnumSele
     for (uint32_t v = 0; v < d->variant_count; ++v) {
         if (!source_work(ctx, node)) return false;
         const XrXirLiteral name = d->variants[v].name;
-        if (strlen(node->as.member_access.name) != name.length || memcmp(node->as.member_access.name,name.bytes,name.length)) continue;
+        if (source_text_size(ctx, node->as.member_access.name) != name.length || !source_span_same(ctx, NULL, node->as.member_access.name, name.bytes, name.length)) continue;
         if (!source_nominal_apply(ctx, owner, arguments.refs, arguments.count, &selected->type)) return false;
         selected->owner = owner; selected->binding = binding; selected->path = path; selected->variant = v; return true;
     }
@@ -151,7 +151,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
         for (; at < variant.field_count; ++at) {
             if (!source_work(ctx,node)) return false;
             XrXirLiteral name = d->fields[variant.field_begin + at].name;
-            if (strlen(provided->names[i]) == name.length && !memcmp(provided->names[i],name.bytes,name.length)) break;
+            if (source_text_size(ctx, provided->names[i]) == name.length && source_span_same(ctx, NULL, provided->names[i], name.bytes, name.length)) break;
         }
         if (at == variant.field_count || seen[at]) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown or duplicate enum payload field");
         seen[at] = true; XrXirType type;
@@ -162,7 +162,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
         if (provided->spans) {
             XrNameSpan span = provided->spans[i];
             range = (XrXirSourceRange){ctx->module,span.line,span.column,span.line,span.column};
-            if (span.column > 0 && strlen(provided->names[i]) <= (size_t)(INT_MAX-span.column)) range.end_column += (int)strlen(provided->names[i]);
+            if (span.column > 0 && source_text_size(ctx, provided->names[i]) <= (size_t)(INT_MAX-span.column)) range.end_column += (int)source_text_size(ctx, provided->names[i]);
         }
         if (!source_query_target_reference(ctx,range,ctx->nominal_members[selected->owner->index][variant.field_begin+at],XR_XIR_SOURCE_READ)) return false;
     }

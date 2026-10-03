@@ -13,17 +13,17 @@
  *
  *     - 4 entry points that take a source string and return an AST_PROGRAM
  *       node whose owning arena is released by `xr_program_destroy()`:
- *         * xr_parse
- *         * xr_parse_with_source
- *         * xr_parse_with_trivia
- *         * xr_parse_expression_string  (REPL / DAP eval)
+ *         * xr_compile_parse
+ *         * xr_compile_parse_with_source
+ *         * xr_compile_parse_with_trivia
+ *         * xr_compile_parse_expression_string  (REPL / DAP eval)
  *
  *     - 1 LSP recovery entry that takes a pre-initialised Parser:
- *         * xr_parse_recoverable
+ *         * xr_compile_parse_recoverable
  *
  *     - The Parser struct (callers stack-allocate it) plus the two LSP
  *       setup helpers it needs:
- *         * xr_parser_init
+ *         * xr_compile_parser_open
  *         * xr_parser_set_error_callback
  *
  *   All Pratt-table internals (Precedence, ParseRule, parse-helper fns,
@@ -47,6 +47,15 @@
 /* ========== Public Forward Declarations ========== */
 
 typedef struct Parser Parser;
+typedef enum XrParseStatus {
+    XR_PARSE_OK,
+    XR_PARSE_SYNTAX,
+    XR_PARSE_RECOVERED,
+    XR_PARSE_BAD_ARGUMENT,
+    XR_PARSE_BUDGET,
+    XR_PARSE_OUT_OF_MEMORY,
+    XR_PARSE_IO
+} XrParseStatus;
 typedef struct XrTypeScope XrTypeScope;  // Defined in xtype_scope.h
 struct XrArena;                          // Defined in base/xarena.h
 
@@ -56,6 +65,12 @@ struct XrArena;                          // Defined in base/xarena.h
 // only valid for the duration of the call.
 typedef void (*XrParseErrorCallback)(void *user_data, int line, int column, int end_line,
                                      int end_column, const char *message);
+
+typedef struct XrParseDiagnostics {
+    XrParseErrorCallback callback;
+    void *user_data;
+    int max_errors;
+} XrParseDiagnostics;
 
 /* ========== Parser State ==========
  *
@@ -67,13 +82,15 @@ typedef void (*XrParseErrorCallback)(void *user_data, int line, int column, int 
  * Every other field is parser-internal and should not be touched.
  */
 struct Parser {
+    XrCompileState *state;                 // Borrowed from the exact parse arena.
+    struct XrParserOwner *owner;           // Shared ownership record; copies only borrow it.
     Scanner scanner;                      // Lexical scanner
     Token current;                        // Current token
     Token previous;                       // Previous token
     int had_error;                        // Whether there was a syntax error
     int panic_mode;                       // Whether in panic mode (error recovery)
     XrCompilerSession *compiler_session;  // Active toolchain session for AST allocation.
-    struct XrArena *arena;                // Optional arena for AST allocation (NULL = use malloc)
+    struct XrArena *arena;                // Required owner of AST, strings and trivia.
     XrTypeScope *type_scope;              // Parser-owned scope for type aliases / generic params
     const char *source_file;              // Source file path (for error reporting)
 
@@ -192,58 +209,34 @@ XR_FUNC void xr_parser_stream_restore(Parser *parser, const XrParserStreamState 
 
 /* ========== Public Entry Points ========== */
 
-// Parse a complete program. Returns AST_PROGRAM node owning its arena;
-// release with xr_program_destroy(). Returns NULL on parse error.
-XR_FUNC AstNode *xr_parse(XrCompilerSession *session, const char *source);
+// Owning entry points require an empty output. Only OK publishes an AST;
+// syntax or resource failure preserves it. The returned program owns its arena
+// and keeps the shared state/ledger alive until xr_program_destroy().
+XR_FUNC XrParseStatus xr_compile_parse(XrCompilerSession *session, const char *source, AstNode **output);
+XR_FUNC XrParseStatus xr_compile_parse_repl_unit(XrCompilerSession *session, const char *source, AstNode **output);
+XR_FUNC XrParseStatus xr_compile_parse_with_source(XrCompilerSession *session, const char *source,
+                                           const char *source_file, AstNode **output);
+XR_FUNC XrParseStatus xr_compile_parse_with_trivia(XrCompilerSession *session, const char *source,
+    const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output);
+XR_FUNC XrParseStatus xr_compile_parse_expression_string(XrCompilerSession *session, const char *source,
+                                                  const char *source_file, AstNode **output);
 
-// Parse one REPL input unit. Same as xr_parse except that a bare expression
-// statement is allowed: the REPL prints the value of a trailing expression, so
-// the result is observed rather than discarded (E0208 does not apply).
-XR_FUNC AstNode *xr_parse_repl_unit(XrCompilerSession *session, const char *source);
-
-// Same as xr_parse but tags diagnostics with the given file path.
-XR_FUNC AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
-                                      const char *source_file);
-
-// Parse a program AND collect comments as trivia attached to AST nodes.
-// Used by the formatter; otherwise prefer xr_parse_with_source.
-XR_FUNC AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
-                                      const char *source_file);
-
-// Parse a single expression as a self-contained translation unit.
-// Returns an AST_PROGRAM node whose first declaration is the expression
-// (so xr_program_destroy() releases everything uniformly). Returns NULL
-// on parse error. Used by REPL completeness check and DAP eval.
-XR_FUNC AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *source,
-                                            const char *source_file);
-
-/* ========== LSP Recoverable Parsing ==========
- *
- * For the LSP path the caller wants to keep parsing across errors and
- * receive structured diagnostics via callback. Sequence:
- *
- *   Parser parser;
- *   xr_parser_init(&parser, session, source, source_file, arena);
- *   xr_parser_set_error_callback(&parser, cb, user_data, max_errors);
- *   AstNode *program = xr_parse_recoverable(&parser);
- *   ... inspect program / parser.had_error ...
- */
-
-// Initialise a stack-allocated Parser. `arena` is the arena to use for
-// AST allocation. The caller must pass an explicit compiler session.
-XR_FUNC void xr_parser_init(Parser *parser, XrCompilerSession *session, const char *source,
-                            const char *source_file, struct XrArena *arena);
+// Initialize a zeroed parser borrowing the explicit arena. The session must
+// remain alive until destroy or parse_recoverable closes the parser scope.
+// Copies borrow the owner and must not be independently destroyed. Failure
+// preserves the zeroed parser and leaves no active session scope.
+XR_FUNC XrParseStatus xr_compile_parser_open(Parser *parser, XrCompilerSession *session, const char *source,
+                                      const char *source_file, struct XrArena *arena);
+XR_FUNC void xr_compile_parser_close(Parser *parser);
+XR_FUNC XrParseStatus xr_compile_parser_status(const Parser *parser);
 
 // Install a diagnostic callback. Pass NULL to disable. `max_errors == 0`
 // means "no limit".
 XR_FUNC void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
                                           void *user_data, int max_errors);
 
-// Parse with error recovery. Returns a (possibly partial) AST_PROGRAM
-// even when errors are present; callers should consult parser.had_error
-// before using the result. For the LSP / incremental path the caller
-// owns the arena, so the returned node is NOT auto-released by
-// xr_program_destroy.
-XR_FUNC AstNode *xr_parse_recoverable(Parser *parser);
+// Consumes the parser scope. OK or RECOVERED publishes an AST borrowing the
+// caller's exact arena; resource failure never publishes a partial AST.
+XR_FUNC XrParseStatus xr_compile_parse_recoverable(Parser *parser, AstNode **output);
 
 #endif  // XPARSE_H

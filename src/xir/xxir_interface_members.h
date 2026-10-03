@@ -48,11 +48,8 @@ typedef struct XrXirInterfaceClosureRoots {
 } XrXirInterfaceClosureRoots;
 /* Root expressions and the interface catalog belong to source_types. The
  * complete substitution belongs to actual_types, whose pool is borrowed. */
-XR_FUNC XrXirStatus xr_xir_interface_closure_substitute(
-    const XrXirInterfaceClosureRequest *request, XrXirBudget *budget,
-    XrXirInterfaceClosure **output);
-XR_FUNC XrXirStatus xr_xir_interface_closure_build(const XrXirInterfaceClosureRoots *request,
-    XrXirBudget *budget, XrXirInterfaceClosure **output);
+XR_FUNC XrXirStatus xr_xir_compile_interface_closure_substitute(const XrXirCompileContext *compile_context, const XrXirInterfaceClosureRequest *request, XrXirInterfaceClosure **output);
+XR_FUNC XrXirStatus xr_xir_compile_interface_closure_build(const XrXirCompileContext *compile_context, const XrXirInterfaceClosureRoots *request, XrXirInterfaceClosure **output);
 XR_FUNC const XrXirTypes *xr_xir_interface_closure_types(const XrXirInterfaceClosure *closure);
 XR_FUNC uint32_t xr_xir_interface_closure_application_count(const XrXirInterfaceClosure *closure);
 XR_FUNC const XrXirInterfaceApplication *xr_xir_interface_closure_application(
@@ -60,12 +57,11 @@ XR_FUNC const XrXirInterfaceApplication *xr_xir_interface_closure_application(
 XR_FUNC uint32_t xr_xir_interface_closure_requirement_count(const XrXirInterfaceClosure *closure);
 XR_FUNC const XrXirInterfaceRequirement *xr_xir_interface_closure_requirement(
     const XrXirInterfaceClosure *closure, uint32_t index);
-XR_FUNC void xr_xir_interface_closure_free(XrXirInterfaceClosure *closure);
+XR_FUNC void xr_xir_compile_interface_closure_free(XrXirInterfaceClosure *closure);
 
 /* Requires structurally verified descriptors and acyclic interface declarations.
  * Checks every declaration, including unused ones. Original declarations retain
  * all distinct obligations; temporary application deduplication loses no identity.
  * Failure preserves the caller budget and publishes no partial result. */
-XR_FUNC XrXirStatus xr_xir_interfaces_verify_members_verified(
-    const XrXirInterfaceTable *table, const XrXirTypes *types, XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_interfaces_verify_members_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, const XrXirTypes *types);
 #endif // XXIR_INTERFACE_MEMBERS_H

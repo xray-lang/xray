@@ -32,6 +32,11 @@ typedef enum XrXirMethodKind {
     XR_XIR_NON_MEMBER, XR_XIR_READ_METHOD, XR_XIR_STATIC_METHOD,
     XR_XIR_CONSTRUCTOR, XR_XIR_MEMBER_HELPER
 } XrXirMethodKind;
+typedef enum XrXirTestRole {
+    XR_XIR_TEST_ROLE_NONE, XR_XIR_TEST_ROLE_TEST, XR_XIR_TEST_ROLE_SKIP,
+    XR_XIR_TEST_ROLE_BEFORE_ALL, XR_XIR_TEST_ROLE_AFTER_ALL,
+    XR_XIR_TEST_ROLE_BEFORE_EACH, XR_XIR_TEST_ROLE_AFTER_EACH
+} XrXirTestRole;
 typedef struct XrXirImplementationTable XrXirImplementationTable;
 
 typedef struct XrXirFunctionIdentity {
@@ -40,6 +45,7 @@ typedef struct XrXirFunctionIdentity {
     uint32_t cleanup_owner;
     uint32_t promises;
     uint32_t method_kind;
+    uint32_t test_role, test_timeout_seconds;
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u

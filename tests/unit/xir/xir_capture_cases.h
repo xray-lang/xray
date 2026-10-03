@@ -34,7 +34,7 @@ static void capture_cases(XrXirProgram *program, bool throwing) {
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_new(program,&config,&other) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,2,NULL,0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult made = xr_xir_instance_poll(instance);
+        XrXirInstanceResult made = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         CHECK(made.outcome.status == XR_XIR_CALL_RETURNED);
         const XrXirFunctionBinding *outer = xr_xir_function_binding(&made.outcome.value);
         CHECK(outer && outer->capture_count == 1);
@@ -53,13 +53,13 @@ static void capture_cases(XrXirProgram *program, bool throwing) {
             CHECK(xr_xir_instance_start(instance,4,args,2) == XR_XIR_CALL_READY);
         }
         for (unsigned suspension = 0; suspension < 2; ++suspension) {
-            XrXirInstanceResult wait = xr_xir_instance_poll(instance);
+            XrXirInstanceResult wait = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
             CHECK(wait.outcome.status == XR_XIR_CALL_SUSPENDED);
             if (mode == 2 && suspension == 1) break;
             CHECK(xr_xir_instance_resume(instance,wait.epoch,wait.outcome.wake) == XR_XIR_CALL_READY);
         }
         if (mode != 2) {
-            CHECK(xr_xir_instance_poll(instance).outcome.status == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED));
+            CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED));
             CHECK(xr_xir_instance_take_result(instance,&result) == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED));
         }
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);

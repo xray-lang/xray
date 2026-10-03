@@ -66,7 +66,7 @@ static void source_parameter_defaults_execute(XrXirArtifact *owned) {
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue value={0};
         CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
         CHECK(value.type==XR_XIR_I64 && value.payload==41);xr_xir_value_drop(&value);

@@ -76,4 +76,21 @@ XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char 
 XR_FUNC const XrNativeMemberDeclaration *xr_native_declaration_member(
     const XrNativeTypeDeclaration *declaration, const char *name);
 XR_FUNC bool xr_native_declaration_validate(const XrNativeTypeDeclaration *declaration);
+typedef struct XrNativeDeclarationWork {
+    void *context;
+    bool (*charge)(void *context, uint64_t units);
+} XrNativeDeclarationWork;
+typedef enum XrNativeDeclarationStatus {
+    XR_NATIVE_DECLARATION_OK, XR_NATIVE_DECLARATION_NOT_FOUND,
+    XR_NATIVE_DECLARATION_INVALID, XR_NATIVE_DECLARATION_WORK_LIMIT
+} XrNativeDeclarationStatus;
+/* Work callbacks are borrowed for this synchronous operation. Every input
+ * comparison is admitted before reading; failures leave output unchanged. */
+XR_FUNC XrNativeDeclarationStatus xr_native_declaration_admit(
+    const XrNativeDeclarationWork *work, const XrNativeTypeDeclaration *declaration);
+XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find(
+    const XrNativeDeclarationWork *work, const char *name, const XrNativeTypeDeclaration **output);
+XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find_member(
+    const XrNativeDeclarationWork *work, const XrNativeTypeDeclaration *declaration,
+    const char *name, const XrNativeMemberDeclaration **output);
 #endif // XNATIVE_DECLARATION_H

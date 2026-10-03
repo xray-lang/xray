@@ -1,0 +1,85 @@
+get_filename_component(CACHE_RESOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+include(CheckCSourceCompiles)
+include(CMakePushCheckState)
+function(cache_reject_unowned_calls)
+    cmake_push_check_state(RESET)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+    set(CMAKE_REQUIRED_INCLUDES "${CACHE_RESOURCE_ROOT}/src")
+    set(CMAKE_REQUIRED_DEFINITIONS -D_CRT_SECURE_NO_WARNINGS)
+    if(MSVC)
+        set(CMAKE_REQUIRED_FLAGS "/std:c11 /W4 /WX /utf-8")
+    else()
+        set(CMAKE_REQUIRED_FLAGS "-std=c11 -Werror")
+    endif()
+    unset(CACHE_RESOURCE_CURRENT_COMPILES CACHE)
+    check_c_source_compiles("#include <incremental/xr_cache_store.h>\n#include <os/os_fs.h>\n#include <base/xfileio.h>\nvoid accepted(XrCompileResources *r, XrOsIoPolicy *p) { (void)xr_compile_cache_store_open(r, 0, 0); (void)xr_os_io_stat(p, 0, 0); (void)xr_file_probe_owned(p, 0, false); }" CACHE_RESOURCE_CURRENT_COMPILES)
+    if(NOT CACHE_RESOURCE_CURRENT_COMPILES)
+        message(FATAL_ERROR "Owned cache and OS signatures must compile before rejection checks")
+    endif()
+    foreach(kind cache_missing io_missing retired_cache retired_io probe_missing retired_probe)
+        if(kind STREQUAL "cache_missing")
+            set(source "#include <incremental/xr_cache_store.h>\nvoid bad(void) { (void)xr_compile_cache_store_open(0, 0); }")
+        elseif(kind STREQUAL "io_missing")
+            set(source "#include <os/os_fs.h>\nvoid bad(void) { (void)xr_os_io_stat(0, 0); }")
+        elseif(kind STREQUAL "retired_cache")
+            set(source "#include <incremental/xr_cache_store.h>\nvoid bad(void) { (void)xr_cache_store_open(0); }")
+        elseif(kind STREQUAL "probe_missing")
+            set(source "#include <base/xfileio.h>\nvoid bad(void) { (void)xr_file_probe_owned(0, 0); }")
+        elseif(kind STREQUAL "retired_probe")
+            set(source "#include <base/xfileio.h>\nvoid bad(void) { (void)xr_file_probe(0, 0); }")
+        else()
+            set(source "#include <os/os_fs.h>\nvoid bad(void) { (void)xr_fs_stat(0, 0); }")
+        endif()
+        unset(CACHE_RESOURCE_${kind}_COMPILES CACHE)
+        check_c_source_compiles("${source}" CACHE_RESOURCE_${kind}_COMPILES)
+        if(CACHE_RESOURCE_${kind}_COMPILES)
+            message(FATAL_ERROR "Unowned call ${kind} compiled")
+        endif()
+    endforeach()
+    cmake_pop_check_state()
+endfunction()
+cache_reject_unowned_calls()
+set(CACHE_RESOURCE_SOURCES
+    "${CACHE_RESOURCE_ROOT}/src/base/xio_policy.c"
+    "${CACHE_RESOURCE_ROOT}/src/base/xsha256.c"
+    "${CACHE_RESOURCE_ROOT}/src/incremental/xr_cache_key.c"
+    "${CACHE_RESOURCE_ROOT}/src/incremental/xr_cache_store.c")
+if(WIN32)
+    list(APPEND CACHE_RESOURCE_SOURCES
+        "${CACHE_RESOURCE_ROOT}/src/os/win/thread_win.c"
+        "${CACHE_RESOURCE_ROOT}/src/os/win/time_win.c"
+        "${CACHE_RESOURCE_ROOT}/src/os/win/random_win.c")
+else()
+    list(APPEND CACHE_RESOURCE_SOURCES
+        "${CACHE_RESOURCE_ROOT}/src/os/unix/thread_unix.c"
+        "${CACHE_RESOURCE_ROOT}/src/os/unix/time_unix.c"
+        "${CACHE_RESOURCE_ROOT}/src/os/unix/random_unix.c")
+endif()
+add_executable(test_cache_compile_resources
+    "${CMAKE_CURRENT_LIST_DIR}/test_cache_compile_resources.c" ${CACHE_RESOURCE_SOURCES})
+if(WIN32)
+    set(CACHE_OS_PLATFORM win)
+else()
+    set(CACHE_OS_PLATFORM unix)
+endif()
+# Build unchanged production translation units as well as the instrumented owner.
+add_library(cache_resource_production OBJECT
+    "${CACHE_RESOURCE_ROOT}/src/base/xfileio.c"
+    "${CACHE_RESOURCE_ROOT}/src/base/xcompile_resources.c"
+    "${CACHE_RESOURCE_ROOT}/src/os/${CACHE_OS_PLATFORM}/fs_${CACHE_OS_PLATFORM}.c"
+    "${CACHE_RESOURCE_ROOT}/src/os/${CACHE_OS_PLATFORM}/dir_${CACHE_OS_PLATFORM}.c")
+foreach(CACHE_RESOURCE_TARGET test_cache_compile_resources cache_resource_production)
+target_include_directories(${CACHE_RESOURCE_TARGET} PRIVATE "${CACHE_RESOURCE_ROOT}/src" "${CACHE_RESOURCE_ROOT}/src/base")
+target_compile_definitions(${CACHE_RESOURCE_TARGET} PRIVATE _CRT_SECURE_NO_WARNINGS)
+if(MSVC)
+    target_compile_options(${CACHE_RESOURCE_TARGET} PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(${CACHE_RESOURCE_TARGET} PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_definitions(${CACHE_RESOURCE_TARGET} PRIVATE _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE)
+    target_compile_options(${CACHE_RESOURCE_TARGET} PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+endforeach()
+add_test(NAME test_cache_compile_resources COMMAND test_cache_compile_resources)
+set_tests_properties(test_cache_compile_resources PROPERTIES LABELS "unit;incremental;ownership;budget" TIMEOUT 120)

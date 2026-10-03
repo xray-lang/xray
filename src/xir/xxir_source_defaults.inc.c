@@ -40,7 +40,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
                 }
             }
             if (!available) continue;
-            if (ctx->function_count == ctx->budget.functions)
+            if (ctx->function_count == ctx->compile.limits.functions)
                 return source_fail(ctx, symbol->node, XR_XIR_BUDGET, "default constructor function budget exhausted");
             ctx->nominal_defaultable[d] = true; changed = true;
             ++ctx->function_count; ++ctx->first_closure; ++ctx->next_closure;
@@ -61,7 +61,7 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
         ctx->bodies[index].node = symbol->node; ctx->bodies[index].module = symbol->module;
         ctx->bodies[index].declaration = symbol->declaration;
         if (!source_nominal_function_scope(ctx,index,symbol)) return false;
-        ctx->identities[index] = (XrXirFunctionIdentity) {symbol->module, ctx->nominals.declarations[d].exported, d + 1, 0, 0, 0, XR_XIR_CONSTRUCTOR};
+        ctx->identities[index] = (XrXirFunctionIdentity) {symbol->module, ctx->nominals.declarations[d].exported, d + 1, 0, 0, 0, XR_XIR_CONSTRUCTOR, 0, 0};
     }
     return true;
 }

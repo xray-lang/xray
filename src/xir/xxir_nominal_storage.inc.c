@@ -22,7 +22,7 @@ static bool nominal_storage_align(uint32_t size, uint32_t alignment, uint32_t *o
     *output = size + padding; return true;
 }
 static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarget *target,
-    XrXirBudget *budget, NominalStorageNode *nodes, uint32_t *stack, uint32_t root_index) {
+    XrXirCompileContext *budget, NominalStorageNode *nodes, uint32_t *stack, uint32_t root_index) {
     uint32_t depth = 1;
     XrXirStatus status = XR_XIR_OK;
     stack[0] = root_index;
@@ -30,8 +30,8 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
     nodes[root_index].layout.size = types->nodes[root_index].kind == XR_XIR_TYPE_NULLABLE ? 1 : 0;
     nodes[root_index].depth = 1;
     while (depth && status == XR_XIR_OK) {
-        if (!budget->work) { status = XR_XIR_BUDGET; break; }
-        --budget->work;
+        if (!xir_compile_work(budget, 1)) { status = XR_XIR_BUDGET; break; }
+
         uint32_t index = stack[depth - 1];
         NominalStorageNode *current = &nodes[index];
         if (types->nodes[index].parameter_span) return XR_XIR_BAD_LAYOUT;
@@ -66,8 +66,8 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
                 if (tag > current->layout.alignment) current->layout.alignment = tag;
                 if (current->offsets != NULL)
                     for (uint32_t f = 0; f < nominal->field_count; ++f) {
-                        if (!budget->work) { status = XR_XIR_BUDGET; break; }
-                        --budget->work; current->offsets[f] += base;
+                        if (!xir_compile_work(budget, 1)) { status = XR_XIR_BUDGET; break; }
+                         current->offsets[f] += base;
                     }
                 if (status != XR_XIR_OK) break;
             }
@@ -79,8 +79,8 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
         if (is_enum) {
             while (current->variant < variant_count && current->next >=
                 variants[current->variant].field_begin + variants[current->variant].field_count) {
-                if (!budget->work) { status = XR_XIR_BUDGET; break; }
-                --budget->work; ++current->variant;
+                if (!xir_compile_work(budget, 1)) { status = XR_XIR_BUDGET; break; }
+                 ++current->variant;
             }
             if (status != XR_XIR_OK) break;
             if (current->variant >= variant_count) { status = XR_XIR_BAD_LAYOUT; break; }
@@ -105,7 +105,7 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
             if (nodes[child_index].owned_depth && nodes[child_index].owned_depth >= current->owned_depth)
                 current->owned_depth = nodes[child_index].owned_depth + 1;
         } else {
-            status = xr_xir_layout(types, field, target, XR_XIR_LAYOUT_STORAGE, &physical);
+            status = xr_xir_compile_layout(budget, types, field, target, XR_XIR_LAYOUT_STORAGE, &physical);
             if (status != XR_XIR_OK) break;
             if (xr_xir_type_is_owned(types, field) && !current->owned_depth) current->owned_depth = 1;
         }
@@ -125,16 +125,17 @@ typedef struct InlineLayoutOutput {
     uint32_t *field_offsets, field_count;
 } InlineLayoutOutput;
 static XrXirStatus inline_layout_query(const XrXirTypes *types, XrXirType type,
-    const XrXirTarget *target, XrXirBudget *remaining, InlineLayoutOutput output) {
+    const XrXirTarget *target, XrXirCompileContext *remaining, InlineLayoutOutput output) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     XrXirLayout *layout=output.layout;
     uint32_t *field_offsets=output.field_offsets,field_count=output.field_count;
     if (!layout) return XR_XIR_BAD_LAYOUT;
-    *layout = (XrXirLayout) {0, 0};
+
     if (!remaining || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         (field_count != 0) != (field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
-    XrXirBudget budget = *remaining;
-    XrXirStatus status = xr_xir_types_structure_verify(types, &budget);
+    XrXirCompileContext budget = *remaining;
+    XrXirStatus status = xr_xir_compile_types_structure_verify(&budget, types);
     if (status != XR_XIR_OK) return status;
     const XrXirTypeNode *root = xr_xir_type_node(types, type);
     if (!root || (root->kind != XR_XIR_TYPE_NOMINAL && root->kind != XR_XIR_TYPE_NULLABLE) ||
@@ -142,33 +143,36 @@ static XrXirStatus inline_layout_query(const XrXirTypes *types, XrXirType type,
         root->nominal.field_count != field_count) return XR_XIR_BAD_LAYOUT;
     uint64_t bytes = (uint64_t) types->count * (sizeof(NominalStorageNode) + sizeof(uint32_t)) +
         (uint64_t) field_count * sizeof(uint32_t);
-    if (bytes > SIZE_MAX || bytes > budget.metadata_bytes || types->count > budget.work) return XR_XIR_BUDGET;
-    budget.metadata_bytes -= bytes; budget.work -= types->count;
-    NominalStorageNode *nodes = xr_calloc(1, (size_t) bytes);
-    if (!nodes) return XR_XIR_OUT_OF_MEMORY;
+    if (bytes > SIZE_MAX ||!xir_compile_work(&budget, types->count)) return XR_XIR_BUDGET;
+
+    NominalStorageNode *nodes = xir_compile_calloc(remaining, 1, (size_t) bytes, &allocation_status);
+    if (!nodes) return allocation_status;
     uint32_t *stack = (uint32_t *) (nodes + types->count), *offsets = stack + types->count;
     uint32_t root_index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE;
     nodes[root_index].offsets = field_count ? offsets : NULL;
     status = nominal_storage_walk(types, target, &budget, nodes, stack, root_index);
+    if (status == XR_XIR_OK && !xir_compile_work(remaining,
+        (uint64_t)field_count * sizeof(*offsets))) status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
         *layout = nodes[root_index].layout;
         if (field_count) memcpy(field_offsets, offsets, (size_t) field_count * sizeof(*offsets));
         *remaining = budget;
     }
-    xr_free(nodes); return status;
+    xr_compile_resources_free(nodes); return status;
 }
-XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType type,
-    const XrXirTarget *target, XrXirBudget *remaining, XrXirLayout *layout,
-    uint32_t *field_offsets, uint32_t field_count) {
+XR_FUNC XrXirStatus xr_xir_compile_nominal_layout(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type, const XrXirTarget *target, XrXirLayout *layout, uint32_t *field_offsets, uint32_t field_count) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
     if (!xr_xir_type_is_nominal(types, type)) {
-        if (layout) *layout = (XrXirLayout){0};
+
         return XR_XIR_BAD_LAYOUT;
     }
     return inline_layout_query(types, type, target, remaining,
         (InlineLayoutOutput){layout,field_offsets,field_count});
 }
-static XrXirStatus nullable_storage_layout(const XrXirTypes *types, XrXirType type,
-    const XrXirTarget *target, XrXirLayout *layout) {
-    XrXirBudget budget = xr_xir_default_budget();
-    return inline_layout_query(types, type, target, &budget, (InlineLayoutOutput){layout,NULL,0});
+static XrXirStatus nullable_storage_layout(const XrXirCompileContext *compile_context,
+    const XrXirTypes *types, XrXirType type, const XrXirTarget *target, XrXirLayout *layout) {
+    XrXirCompileContext context = *compile_context;
+    return inline_layout_query(types, type, target, &context, (InlineLayoutOutput){layout,NULL,0});
 }

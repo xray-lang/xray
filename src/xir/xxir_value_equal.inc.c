@@ -28,7 +28,7 @@ static bool equal_work(XrXirValueAdmission *admission, uint64_t count) {
     return true;
 }
 static XrXirValueStatus equal_closed_type(XrXirType type, XrXirValueAdmission *admission) {
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     for (;;) {
         if (!equal_work(admission, 1)) return XR_XIR_VALUE_LIMIT;
         if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING)
@@ -88,11 +88,11 @@ static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack 
     XrXirValue *left=&cursor->left,*right=&cursor->right;
     StorageSpan *a_span=&cursor->left_span,*b_span=&cursor->right_span;
     bool *inlined=&cursor->inlined,*descend=&cursor->descend;
-    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     XrXirType type = *inlined ? a_span->type : (XrXirType)left->type;
     *descend = false;
     if (*inlined && xr_xir_type_is_nullable(types, type)) {
-        const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, type);
+        const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, type);
         if (b_span->type != type || !layout || !a_span->bytes || !b_span->bytes ||
             a_span->bytes[0] > 1 || b_span->bytes[0] > 1) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (a_span->bytes[0] != b_span->bytes[0]) { *equal = false; return XR_XIR_VALUE_OK; }
@@ -106,7 +106,7 @@ static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack 
     }
     if (*inlined) {
         XrXirLayout layout = {0};
-        if (b_span->type != type || !xr_xir_type_arena_layout(admission->arena,type,&layout) ||
+        if (b_span->type != type || !xr_xir_compile_type_arena_layout(admission->arena,type,&layout) ||
             !layout.size || layout.size > sizeof(uint64_t) || !a_span->bytes || !b_span->bytes)
             return XR_XIR_VALUE_BAD_ARGUMENT;
         *left = storage_leaf_value(type,a_span->bytes,layout.size);

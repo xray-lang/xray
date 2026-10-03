@@ -22,7 +22,7 @@ static XrXirOutputStatus path_program_output(void *context, const XrXirOutputGro
 }
 static XrXirValue path_program_result(XrXirInstance *instance, uint32_t entry) {
     CHECK(xr_xir_instance_start(instance,entry,NULL,0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue result = {0};
     CHECK(xr_xir_instance_take_result(instance,&result) == XR_XIR_CALL_RETURNED);
     return result;
@@ -62,7 +62,7 @@ static void path_program_cases(XrXirProgram *program, unsigned kind) {
         for (uint32_t f = 5; f < 7; ++f) for (unsigned bad = 0; bad < 2; ++bad) {
             XrXirValue argument = {XR_XIR_I64,0,bad ? INT64_MAX : -1};
             CHECK(xr_xir_instance_start(instances[i],f,&argument,1) == XR_XIR_CALL_READY);
-            XrXirCallResult failure = xr_xir_instance_poll(instances[i]).outcome;
+            XrXirCallResult failure = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
             CHECK(failure.status == XR_XIR_CALL_BOUNDS && failure.panic.detail.code == 430);
             CHECK(failure.panic.detail.index == argument.payload && failure.panic.detail.length == (kind ? 1 : 2));
             CHECK(failure.value.type == XR_XIR_UNIT && !failure.value.payload && !failure.wake);

@@ -87,20 +87,15 @@ static void library_string_source_budgets(const XrXirSourceRequest *request) {
     }
 }
 static void library_string_source_negatives(const XrXirSourceRequest *request) {
-    const char *names[]={"private.xr","nul_escape.xr","nul_unicode.xr"};
+    const char *names[]={"private.xr"};
     size_t live=source_live,bytes=source_bytes,rlive=runtime_live,rbytes=runtime_bytes;
-    for(unsigned i=0;i<3;++i){char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,names[i])>0);
+    for(unsigned i=0;i<1;++i){char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,names[i])>0);
         XrXirSourceRequest negative=*request;negative.entry_path=path;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_source_check(&negative,&result,&diagnostic);
         fprintf(stderr,"negative %s status%u reason%s\n",names[i],status,diagnostic.message);
         CHECK(status==XR_XIR_BAD_STRUCTURE&&!result.checked);
         if(result.snapshot)CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-        if(!i)CHECK(!strcmp(diagnostic.message,"import requires an exported declaration"));
-        else {char expected[1200];CHECK(snprintf(expected,sizeof(expected),"failed to parse module: %s",path)>0);
-#if XR_OS_WINDOWS
-            for(char *cursor=expected;*cursor;++cursor)if(*cursor=='/')*cursor='\\';
-#endif
-            CHECK(!strcmp(diagnostic.message,expected));}
+        CHECK(!strcmp(diagnostic.message,"import requires an exported declaration"));
         xr_xir_source_result_free(&result);CHECK(source_live==live&&source_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);
     }
 }

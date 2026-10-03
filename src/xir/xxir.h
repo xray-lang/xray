@@ -16,6 +16,7 @@
 #define XXIR_H
 
 #include "xxir_scalar.h"
+#include "xxir_compile_context.h"
 #include "xxir_declarations.h"
 
 typedef enum XrXirStage {
@@ -211,16 +212,6 @@ typedef struct XrXirModule {
     const XrXirDefaultTable *defaults;
 } XrXirModule;
 
-typedef struct XrXirBudget {
-    uint32_t functions;
-    uint32_t parameters;
-    uint32_t blocks;
-    uint32_t instructions;
-    uint64_t metadata_bytes;
-    uint64_t scratch_bytes;
-    uint64_t work;
-    uint64_t frame_bytes;
-} XrXirBudget;
 
 typedef enum XrXirDiagnosticReason {
     XR_XIR_DIAGNOSTIC_NONE, XR_XIR_DIAGNOSTIC_CLEANUP_THROW, XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND,
@@ -238,39 +229,30 @@ typedef struct XrXirDiagnostic {
 
 typedef struct XrXirArtifact XrXirArtifact;
 
-XR_FUNC XrXirBudget xr_xir_default_budget(void);
+
 XR_FUNC const char *xr_xir_op_name(XrXirOp op);
-XR_FUNC XrXirStatus xr_xir_defaults_verify(const XrXirModule *module, XrXirBudget *budget);
-XR_FUNC XrXirStatus xr_xir_default_lookup(const XrXirModule *module, uint32_t owner,
-                                        uint32_t ordinal, XrXirBudget *budget,
-                                        const XrXirDefaultBinding **binding);
-XR_FUNC XrXirStatus xr_xir_verify(const XrXirModule *module,
-                                const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_check(const XrXirModule *built, const XrXirBudget *budget,
-                               XrXirArtifact **output, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_lower(const XrXirArtifact *checked, const XrXirTarget *target,
-                               const XrXirBudget *budget,
-                               XrXirArtifact **output, XrXirDiagnostic *diagnostic);
-XR_FUNC const XrXirModule *xr_xir_artifact_module(const XrXirArtifact *artifact);
-XR_FUNC const XrXirTarget *xr_xir_artifact_target(const XrXirArtifact *artifact);
-XR_FUNC const XrXirFunctionLayout *xr_xir_artifact_layout(const XrXirArtifact *artifact,
-                                                       uint32_t function);
-XR_FUNC XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
+XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
+XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **binding);
+XR_FUNC XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_check(const XrXirCompileContext *compile_context, const XrXirModule *built, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget *target, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+XR_FUNC const XrXirCompileContext *xr_xir_compile_artifact_context(const XrXirArtifact *artifact);
+XR_FUNC const XrXirModule *xr_xir_compile_artifact_module(const XrXirArtifact *artifact);
+XR_FUNC const XrXirTarget *xr_xir_compile_artifact_target(const XrXirArtifact *artifact);
+XR_FUNC const XrXirFunctionLayout *xr_xir_compile_artifact_layout(const XrXirArtifact *artifact, uint32_t function);
+XR_FUNC XrXirStatus xr_xir_builtin_layout(XrXirType type, const XrXirTarget *target,
+    XrXirLayoutContext context, XrXirLayout *layout);
+XR_FUNC XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
                                 XrXirLayoutContext context, XrXirLayout *layout);
-XR_FUNC XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact,
-                                        const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
-XR_FUNC void xr_xir_artifact_free(XrXirArtifact *artifact);
-XR_FUNC XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *declarations,
-    const XrXirTypes *types, uint32_t functions, XrXirLinkageKind kind, XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_artifact_verify(const XrXirArtifact *artifact, XrXirDiagnostic *diagnostic);
+XR_FUNC void xr_xir_compile_artifact_free(XrXirArtifact *artifact);
+XR_FUNC XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compile_context, const XrXirDeclarations *declarations, const XrXirTypes *types, uint32_t functions, XrXirLinkageKind kind);
 /* Module-owned signatures follow descriptor/identity structure admission. */
-XR_FUNC XrXirStatus xr_xir_method_signature_verify(const XrXirModule *module,
-    uint32_t function, XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function);
 /* Internal snapshot helpers require successful declaration verification first. */
-XR_FUNC XrXirStatus xr_xir_declarations_order(const XrXirDeclarations *declarations,
-    uint32_t *order, uint64_t *work);
-XR_FUNC XrXirStatus xr_xir_declarations_clone(const XrXirDeclarations *source,
-    uint32_t functions, XrXirDeclarations **output);
-XR_FUNC void xr_xir_declarations_free(XrXirDeclarations *declarations);
+XR_FUNC XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile_context, const XrXirDeclarations *declarations, uint32_t *order);
+XR_FUNC XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile_context, const XrXirDeclarations *source, uint32_t functions, XrXirDeclarations **output);
+XR_FUNC void xr_xir_compile_declarations_free(XrXirDeclarations *declarations);
 XR_FUNC bool xr_xir_module_imports(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);
 
 #endif // XXIR_H

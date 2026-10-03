@@ -42,6 +42,9 @@ typedef struct XrXirRuntimeSdkFacts {
 XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_load(const XrXirRuntimeSdkRequest *request,
     XrXirRuntimeSdk **output);
 XR_FUNC const XrXirRuntimeSdkFacts *xr_xir_runtime_sdk_facts(const XrXirRuntimeSdk *sdk);
+/* Borrow the owner's original ledger; NULL is returned for a NULL owner.
+ * This query does not allocate, scan or consume work. */
+XR_FUNC XrCompileResources *xr_xir_runtime_sdk_resources(const XrXirRuntimeSdk *sdk);
 XR_FUNC const char *xr_xir_runtime_sdk_root(const XrXirRuntimeSdk *sdk);
 /* Lookup charges comparisons to the same ledger. Success borrows a path; failure
  * preserves output, which must initially be NULL. Unknown paths are UNRESOLVED. */

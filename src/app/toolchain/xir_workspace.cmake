@@ -1,0 +1,12 @@
+add_library(xray_xir_workspace STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_workspace.c)
+target_link_libraries(xray_xir_workspace PUBLIC xray_xir_target xray_compile_resources ntdll bcrypt)
+target_include_directories(xray_xir_workspace PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_compile_features(xray_xir_workspace PUBLIC c_std_11)
+set_target_properties(xray_xir_workspace PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+target_compile_definitions(xray_xir_workspace PRIVATE
+    WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+if(MSVC)
+    target_compile_options(xray_xir_workspace PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(xray_xir_workspace PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()

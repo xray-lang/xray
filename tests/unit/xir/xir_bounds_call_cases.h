@@ -76,7 +76,7 @@ static void bounds_fault_boundary(void) {
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 2; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, bounds_output, &witness}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         CHECK(result.status == witness.expected && result.value.type == XR_XIR_UNIT &&
             !result.value.reserved && !result.value.payload && !result.wake);
         CHECK(witness.cleanups == 2 && !witness.outputs && !accounting.depth);
@@ -84,7 +84,7 @@ static void bounds_fault_boundary(void) {
         if (variant < 5) CHECK(result.panic.detail.code == 430 && !result.panic.detail.reserved &&
             result.panic.detail.index == index && result.panic.detail.length == length);
         else CHECK(xr_xir_fault_empty(result.panic.detail));
-        XrXirCallResult repeated = xr_xir_call_poll(call);
+        XrXirCallResult repeated = xr_xir_call_poll_bounded(call, UINT64_MAX);
         CHECK(!memcmp(&result.panic.detail, &repeated.panic.detail, sizeof(result.panic.detail)));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
@@ -117,11 +117,11 @@ static void match_fault_boundary(void) {
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 2; config.instance = &witness; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 2; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, bounds_output, &witness}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call=NULL;
         CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_READY);
-        XrXirCallResult result=xr_xir_call_poll(call);
+        XrXirCallResult result=xr_xir_call_poll_bounded(call, UINT64_MAX);
         CHECK(result.status==witness.expected && result.value.type==XR_XIR_UNIT && !result.value.payload && !result.wake);
         CHECK(witness.cleanups==2 && !witness.outputs && !accounting.depth && accounting.allocations==witness.fault_allocations);
         CHECK(variant ? xr_xir_fault_empty(result.panic.detail) : xr_xir_fault_match_valid(result.panic.detail));
-        XrXirCallResult repeated=xr_xir_call_poll(call);
+        XrXirCallResult repeated=xr_xir_call_poll_bounded(call, UINT64_MAX);
         CHECK(repeated.status==result.status && !memcmp(&result.panic.detail,&repeated.panic.detail,sizeof(result.panic.detail)));
         CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
         CHECK(!accounting.live_bytes && accounting.allocations==accounting.frees);

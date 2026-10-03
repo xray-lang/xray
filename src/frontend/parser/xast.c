@@ -17,76 +17,114 @@
 #include <stdio.h>
 #include <string.h>
 #include "xast.h"
+#include "xparse_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
 #include "../../base/xutf8.h"
 #include "../../runtime/value/xtype.h"
 #include "xstring_pool.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../toolchain/xcompiler_arena_backing.h"
+#include <limits.h>
 
 #define INITIAL_CAPACITY 8
 
 // Get the parser arena from the active compiler session.
 static inline XrArena *get_arena(XrCompilerSession *session) {
-    return session ? xr_compiler_session_current_arena(session) : NULL;
+    return session ? xr_compile_session_current_arena(session) : NULL;
 }
 
-// Arena-mandatory allocation helpers.
-// All parser/AST allocations must go through these; a missing arena is a
-// programming error and aborts via XR_CHECK.
+// Arena identity and the first resource failure are shared with the session.
 
 XR_FUNC void *ast_alloc(XrCompilerSession *session, size_t size) {
-    XR_DCHECK(session != NULL, "ast_alloc: NULL compiler session");
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return NULL;
     XrArena *arena = get_arena(session);
-    XR_CHECK(arena != NULL, "ast_alloc: parser requires an arena to be set "
-                            "on the compiler session before parsing)");
+    if (!xr_compiler_arena_matches_state(arena, state)) {
+        xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
     void *p = xr_arena_alloc(arena, size);
-    XR_CHECK(p != NULL, "ast_alloc: arena allocation failed (out of memory)");
-    return p;
+    return xr_compiler_arena_capture_status(arena, state) == XR_COMPILE_RESOURCE_OK ? p : NULL;
 }
 
 XR_FUNC void *ast_alloc_array(XrCompilerSession *session, size_t elem_size, size_t count) {
-    XR_DCHECK(session != NULL, "ast_alloc_array: NULL compiler session");
     if (count == 0)
         return NULL;
-    XR_CHECK(elem_size != 0 && count <= SIZE_MAX / elem_size, "ast_alloc_array: array size overflow");
+    if (!elem_size || count > SIZE_MAX / elem_size) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session),
+            !elem_size ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_BUDGET);
+        return NULL;
+    }
     return ast_alloc(session, elem_size * count);
 }
 
 XR_FUNC char *ast_strdup(XrCompilerSession *session, const char *s) {
     if (!s)
         return NULL;
-    /* Deduplicate via compile-time pool when available. */
-    XrCompileStringPool *pool = xr_compiler_session_string_pool(session);
-    if (pool) {
-        return (char *) xr_string_pool_intern(pool, s);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    XrCompileStringPool *pool = xr_compile_session_string_pool(session);
+    if (!pool) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
     }
-    XrArena *arena = get_arena(session);
-    XR_CHECK(arena != NULL, "ast_strdup: parser requires an arena");
-    char *dup = xr_arena_strdup(arena, s);
-    XR_CHECK(dup != NULL, "ast_strdup: arena allocation failed (out of memory)");
-    return dup;
+    return (char *) xr_string_pool_intern(pool, s);
+}
+
+XR_FUNC char *ast_strndup(XrCompilerSession *session, const char *text, size_t length) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    XrCompileStringPool *pool = xr_compile_session_string_pool(session);
+    if (!pool) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    return (char *) xr_string_pool_intern_len(pool, text, length);
+}
+
+XR_FUNC void *ast_array_grow(XrCompilerSession *session, const void *old, size_t element,
+                             size_t old_count, size_t new_count) {
+    if (new_count < old_count || (!old && old_count)) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    void *memory = ast_alloc_array(session, element, new_count);
+    if (!memory) return NULL;
+    if (!ast_copy(session, memory, old, old_count * element)) return NULL;
+    return memory;
+}
+
+XR_FUNC bool ast_work(XrCompilerSession *session, size_t units) {
+    return xr_compile_state_work(xr_compile_session_compile_state(session), units) == XR_COMPILE_RESOURCE_OK;
+}
+
+XR_FUNC bool ast_copy(XrCompilerSession *session, void *destination, const void *source, size_t bytes) {
+    return xr_compile_state_copy(xr_compile_session_compile_state(session), destination, source, bytes) == XR_COMPILE_RESOURCE_OK;
 }
 
 // Allocate zero-initialized AST node through the current arena.
 static AstNode *alloc_node(XrCompilerSession *session, AstNodeType type, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     XR_DCHECK(session != NULL, "alloc_node: NULL compiler session");
     XR_DCHECK(line >= 0, "alloc_node: negative line");
     AstNode *node = (AstNode *) ast_alloc(session, sizeof(AstNode));
-    memset(node, 0, sizeof(AstNode));
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    if (!node) return NULL;
     node->type = type;
     node->line = line;
-    XR_CHECK(session != NULL, "alloc_node: AST node allocation requires a compiler session");
-    node->node_id = xr_compiler_session_next_ast_node_id(session);
+    node->node_id = xr_compile_session_next_ast_node_id(session);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     return node;
 }
 AstNode *xr_ast_literal_int(XrCompilerSession *session, xr_Integer value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     return xr_ast_literal_int_bits(session, (uint64_t) value, false, line);
 }
 
 AstNode *xr_ast_literal_int_bits(XrCompilerSession *session, uint64_t bits, bool overflows_i64,
                                  int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_LITERAL_INT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_INT;
     node->as.literal.int_bits = bits;
     node->as.literal.int_overflows_i64 = overflows_i64;
@@ -97,7 +135,9 @@ AstNode *xr_ast_literal_int_bits(XrCompilerSession *session, uint64_t bits, bool
 // Create float literal node
 // Store raw value directly, no Runtime encoding dependency
 AstNode *xr_ast_literal_float(XrCompilerSession *session, xr_Number value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_LITERAL_FLOAT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_FLOAT;
     node->as.literal.raw_value.float_val = value;  // Store raw value directly
     return node;
@@ -106,9 +146,14 @@ AstNode *xr_ast_literal_float(XrCompilerSession *session, xr_Number value, int l
 // Create bigint literal node
 // Store text representation (without 'n' suffix)
 AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_LITERAL_BIGINT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_BIGINT;
-    node->as.literal.raw_value.bigint_val = ast_strdup(session, value);
+    do {
+        node->as.literal.raw_value.bigint_val = ast_strdup(session, value);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
@@ -116,21 +161,25 @@ AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, in
 AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, size_t length,
                                XrLiteralEscapeMode escape_mode, XrLiteralSourceForm source_form,
                                int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_LITERAL_STRING, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_STRING;
     node->as.literal.escape_mode = escape_mode;
     node->as.literal.source_form = source_form;
-    XR_CHECK(length != SIZE_MAX && (value || !length), "invalid string literal payload");
-    node->as.literal.string_length = length;
-    XrCompileStringPool *pool = xr_compiler_session_string_pool(session);
-    if (pool) node->as.literal.raw_value.string_val = xr_string_pool_intern_len(pool, value ? value : "", length);
-    else {
-        char *copy = ast_alloc(session, length + 1);
-        if (length) memcpy(copy, value, length);
-        copy[length] = '\0';
-        node->as.literal.raw_value.string_val = copy;
+    if (length == SIZE_MAX || (!value && length)) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session),
+            length == SIZE_MAX ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
     }
-    XR_CHECK(node->as.literal.raw_value.string_val, "string literal allocation failed");
+    node->as.literal.string_length = length;
+    XrCompileStringPool *pool = xr_compile_session_string_pool(session);
+    if (!pool) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    node->as.literal.raw_value.string_val = xr_string_pool_intern_len(pool, value ? value : "", length);
+    if (!node->as.literal.raw_value.string_val) return NULL;
     return node;
 }
 
@@ -138,11 +187,16 @@ AstNode *xr_ast_fixed_bytes_literal(XrCompilerSession *session, const uint8_t *p
                                     size_t payload_length, bool append_nul,
                                     XrLiteralEscapeMode escape_mode,
                                     XrLiteralSourceForm source_form, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_FIXED_BYTES_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     uint8_t *copy = NULL;
     if (payload_length > 0) {
-        copy = (uint8_t *) ast_alloc_array(session, sizeof(uint8_t), payload_length);
-        memcpy(copy, payload, payload_length);
+        do {
+            copy = (uint8_t *) ast_alloc_array(session, sizeof(uint8_t), payload_length);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        if (!ast_copy(session, copy, payload, payload_length)) return NULL;
     }
     node->as.fixed_bytes_literal.payload = copy;
     node->as.fixed_bytes_literal.payload_length = payload_length;
@@ -154,7 +208,9 @@ AstNode *xr_ast_fixed_bytes_literal(XrCompilerSession *session, const uint8_t *p
 
 // Create char literal node
 AstNode *xr_ast_literal_rune(XrCompilerSession *session, uint32_t value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_LITERAL_RUNE, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_RUNE;
     node->as.literal.raw_value.rune_val = value;
     return node;
@@ -164,11 +220,19 @@ AstNode *xr_ast_literal_rune(XrCompilerSession *session, uint32_t value, int lin
 // Store pattern and flags
 AstNode *xr_ast_literal_regex(XrCompilerSession *session, const char *pattern, const char *flags,
                               int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_LITERAL_REGEX, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_REGEX;
 
-    node->as.literal.raw_value.regex.pattern = ast_strdup(session, pattern);
-    node->as.literal.raw_value.regex.flags = ast_strdup(session, flags ? flags : "");
+    do {
+        node->as.literal.raw_value.regex.pattern = ast_strdup(session, pattern);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    do {
+        node->as.literal.raw_value.regex.flags = ast_strdup(session, flags ? flags : "");
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
 
     return node;
 }
@@ -176,7 +240,9 @@ AstNode *xr_ast_literal_regex(XrCompilerSession *session, const char *pattern, c
 // Create null literal node
 // null doesn't need a value, only type marker
 AstNode *xr_ast_literal_null(XrCompilerSession *session, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_LITERAL_NULL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_NULL;
     // null doesn't need a value
     return node;
@@ -188,13 +254,18 @@ AstNode *xr_ast_literal_null(XrCompilerSession *session, int line) {
 AstNode *xr_ast_template_string(XrCompilerSession *session, AstNode **parts, int part_count,
                                 XrLiteralEscapeMode escape_mode, XrLiteralSourceForm source_form,
                                 int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_TEMPLATE_STRING, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
 
     // Allocate and copy parts array
-    node->as.template_str.parts =
+    do {
+        node->as.template_str.parts =
         (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) part_count);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     for (int i = 0; i < part_count; i++) {
-        node->as.template_str.parts[i] = parts[i];
+        if (!ast_copy(session, &node->as.template_str.parts[i], &parts[i], sizeof(node->as.template_str.parts[i]))) return NULL;
     }
     node->as.template_str.part_count = part_count;
     node->as.template_str.escape_mode = escape_mode;
@@ -206,7 +277,9 @@ AstNode *xr_ast_template_string(XrCompilerSession *session, AstNode **parts, int
 // Create bool literal node
 // value: 0 for false, non-zero for true
 AstNode *xr_ast_literal_bool(XrCompilerSession *session, int value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, value ? AST_LITERAL_TRUE : AST_LITERAL_FALSE, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.literal.kind = LITERAL_KIND_BOOL;
     node->as.literal.raw_value.bool_val = (value != 0);  // Store bool value directly
     return node;
@@ -220,7 +293,9 @@ AstNode *xr_ast_literal_bool(XrCompilerSession *session, int value, int line) {
 // right: right operand
 AstNode *xr_ast_binary(XrCompilerSession *session, AstNodeType type, AstNode *left, AstNode *right,
                        int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, type, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.binary.left = left;
     node->as.binary.right = right;
     return node;
@@ -230,7 +305,9 @@ AstNode *xr_ast_binary(XrCompilerSession *session, AstNodeType type, AstNode *le
 // type: operator type (negation, logical not)
 // operand: operand
 AstNode *xr_ast_unary(XrCompilerSession *session, AstNodeType type, AstNode *operand, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, type, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.unary.operand = operand;
     return node;
 }
@@ -239,14 +316,18 @@ AstNode *xr_ast_unary(XrCompilerSession *session, AstNodeType type, AstNode *ope
 
 // Create grouping node (parenthesized expression)
 AstNode *xr_ast_grouping(XrCompilerSession *session, AstNode *expr, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_GROUPING, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.grouping = expr;
     return node;
 }
 
 // Create expression statement node
 AstNode *xr_ast_expr_stmt(XrCompilerSession *session, AstNode *expr, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_EXPR_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.expr_stmt = expr;
     return node;
 }
@@ -256,7 +337,9 @@ AstNode *xr_ast_expr_stmt(XrCompilerSession *session, AstNode *expr, int line) {
 // Create program node
 // Program node contains multiple statements
 AstNode *xr_ast_program(XrCompilerSession *session) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PROGRAM, 0);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.program.statements = NULL;
     node->as.program.count = 0;
     node->as.program.capacity = 0;
@@ -266,32 +349,47 @@ AstNode *xr_ast_program(XrCompilerSession *session) {
 // Add statement to program node
 // Uses arena-based dynamic array; old buffer is not freed (arena bulk release).
 void xr_ast_program_add(XrCompilerSession *session, AstNode *program, AstNode *stmt) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return;
     /* Declaration groups such as `extern "C" { ... }` are parsed into a
      * transient AST_PROGRAM so the public AST remains a flat module item
      * list.  Flatten here rather than teaching every analyzer/lowering pass
      * about a second declaration-container node. */
     if (stmt && stmt != program && stmt->type == AST_PROGRAM) {
-        for (int i = 0; i < stmt->as.program.count; i++)
+        for (int i = 0; i < stmt->as.program.count; i++) {
+            if (!ast_work(session, 1)) return;
             xr_ast_program_add(session, program, stmt->as.program.statements[i]);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return;
+        }
         return;
     }
 
     // Ensure enough space
-    if (program->as.program.count >= program->as.program.capacity) {
+    if (!program || program->as.program.count < 0 || program->as.program.capacity < 0 ||
+        program->as.program.count > program->as.program.capacity) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return;
+    }
+    if (program->as.program.count == program->as.program.capacity) {
         int old_capacity = program->as.program.capacity;
+        if (old_capacity > INT_MAX / 2) {
+            xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BUDGET);
+            return;
+        }
         int new_capacity = old_capacity < INITIAL_CAPACITY ? INITIAL_CAPACITY : old_capacity * 2;
 
         AstNode **new_stmts =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) new_capacity);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return;
         if (old_capacity > 0 && program->as.program.statements) {
-            memcpy(new_stmts, program->as.program.statements,
-                   sizeof(AstNode *) * (size_t) old_capacity);
+            if (!ast_copy(session, new_stmts, program->as.program.statements,
+                   sizeof(AstNode *) * (size_t) old_capacity)) return;
         }
         program->as.program.statements = new_stmts;
         program->as.program.capacity = new_capacity;
     }
 
     // Add statement
+    if (!ast_work(session, sizeof(*program->as.program.statements))) return;
     program->as.program.statements[program->as.program.count++] = stmt;
 }
 
@@ -300,7 +398,9 @@ void xr_ast_program_add(XrCompilerSession *session, AstNode *program, AstNode *s
 // Create block node
 // Block contains multiple statements
 AstNode *xr_ast_block(XrCompilerSession *session, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_BLOCK, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.block.statements = NULL;
     node->as.block.count = 0;
     node->as.block.capacity = 0;
@@ -310,22 +410,34 @@ AstNode *xr_ast_block(XrCompilerSession *session, int line) {
 // Add statement to block
 // Uses arena-based dynamic array; old buffer is not freed (arena bulk release).
 void xr_ast_block_add(XrCompilerSession *session, AstNode *block, AstNode *stmt) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return;
     // Ensure enough space
-    if (block->as.block.count >= block->as.block.capacity) {
+    if (!block || block->as.block.count < 0 || block->as.block.capacity < 0 ||
+        block->as.block.count > block->as.block.capacity) {
+        xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return;
+    }
+    if (block->as.block.count == block->as.block.capacity) {
         int old_capacity = block->as.block.capacity;
+        if (old_capacity > INT_MAX / 2) {
+            xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BUDGET);
+            return;
+        }
         int new_capacity = old_capacity < INITIAL_CAPACITY ? INITIAL_CAPACITY : old_capacity * 2;
 
         AstNode **new_stmts =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) new_capacity);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return;
         if (old_capacity > 0 && block->as.block.statements) {
-            memcpy(new_stmts, block->as.block.statements,
-                   sizeof(AstNode *) * (size_t) old_capacity);
+            if (!ast_copy(session, new_stmts, block->as.block.statements,
+                   sizeof(AstNode *) * (size_t) old_capacity)) return;
         }
         block->as.block.statements = new_stmts;
         block->as.block.capacity = new_capacity;
     }
 
     // Add statement
+    if (!ast_work(session, sizeof(*block->as.block.statements))) return;
     block->as.block.statements[block->as.block.count++] = stmt;
 }
 
@@ -337,8 +449,13 @@ void xr_ast_block_add(XrCompilerSession *session, AstNode *block, AstNode *stmt)
 // is_const: whether it's a constant
 AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *initializer,
                          bool is_const, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, is_const ? AST_CONST_DECL : AST_VAR_DECL, line);
-    node->as.var_decl.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.var_decl.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.var_decl.initializer = initializer;
     node->as.var_decl.is_const = is_const;
     node->as.var_decl.type_annotation = NULL;
@@ -350,8 +467,13 @@ AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *
 // Create variable reference node
 // name: variable name
 AstNode *xr_ast_variable(XrCompilerSession *session, const char *name, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_VARIABLE, line);
-    node->as.variable.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.variable.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
@@ -359,8 +481,13 @@ AstNode *xr_ast_variable(XrCompilerSession *session, const char *name, int line)
 // name: variable name
 // value: assignment expression
 AstNode *xr_ast_assignment(XrCompilerSession *session, const char *name, AstNode *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ASSIGNMENT, line);
-    node->as.assignment.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.assignment.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.assignment.value = value;
     return node;
 }
@@ -371,8 +498,13 @@ AstNode *xr_ast_assignment(XrCompilerSession *session, const char *name, AstNode
 // value: right-hand side expression
 AstNode *xr_ast_compound_assignment(XrCompilerSession *session, const char *name, XrTokenType op,
                                     AstNode *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_COMPOUND_ASSIGNMENT, line);
-    node->as.compound_assignment.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.compound_assignment.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.compound_assignment.op = op;
     node->as.compound_assignment.value = value;
     node->as.compound_assignment.object = NULL;  // Regular variable compound assignment, no object
@@ -387,8 +519,13 @@ AstNode *xr_ast_compound_assignment(XrCompilerSession *session, const char *name
 AstNode *xr_ast_member_compound_assignment(XrCompilerSession *session, AstNode *object,
                                            const char *name, XrTokenType op, AstNode *value,
                                            int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_COMPOUND_ASSIGNMENT, line);
-    node->as.compound_assignment.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.compound_assignment.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.compound_assignment.op = op;
     node->as.compound_assignment.value = value;
     node->as.compound_assignment.object = object;  // Member compound assignment, has object
@@ -398,16 +535,26 @@ AstNode *xr_ast_member_compound_assignment(XrCompilerSession *session, AstNode *
 // Create increment node
 // name: variable name
 AstNode *xr_ast_inc(XrCompilerSession *session, const char *name, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_INC, line);
-    node->as.inc.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.inc.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
 // Create decrement node
 // name: variable name
 AstNode *xr_ast_dec(XrCompilerSession *session, const char *name, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_DEC, line);
-    node->as.dec.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.dec.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
@@ -419,7 +566,9 @@ AstNode *xr_ast_dec(XrCompilerSession *session, const char *name, int line) {
 // else_branch: else branch (optional, can be block or if)
 AstNode *xr_ast_if_stmt(XrCompilerSession *session, AstNode *condition, AstNode *then_branch,
                         AstNode *else_branch, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_IF_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.if_stmt.condition = condition;
     node->as.if_stmt.then_branch = then_branch;
     node->as.if_stmt.else_branch = else_branch;
@@ -431,8 +580,13 @@ AstNode *xr_ast_if_stmt(XrCompilerSession *session, AstNode *condition, AstNode 
 // body: loop body (must be block)
 AstNode *xr_ast_while_stmt(XrCompilerSession *session, const char *label, AstNode *condition,
                            AstNode *body, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_WHILE_STMT, line);
-    node->as.while_stmt.label = label ? ast_strdup(session, label) : NULL;
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.while_stmt.label = label ? ast_strdup(session, label) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.while_stmt.condition = condition;
     node->as.while_stmt.body = body;
     return node;
@@ -445,8 +599,13 @@ AstNode *xr_ast_while_stmt(XrCompilerSession *session, const char *label, AstNod
 // body: loop body (must be block)
 AstNode *xr_ast_for_stmt(XrCompilerSession *session, const char *label, AstNode *initializer,
                          AstNode *condition, AstNode *increment, AstNode *body, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_FOR_STMT, line);
-    node->as.for_stmt.label = label ? ast_strdup(session, label) : NULL;
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.for_stmt.label = label ? ast_strdup(session, label) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.for_stmt.initializer = initializer;
     node->as.for_stmt.condition = condition;
     node->as.for_stmt.increment = increment;
@@ -461,10 +620,18 @@ AstNode *xr_ast_for_stmt(XrCompilerSession *session, const char *label, AstNode 
 // body: loop body (must be block)
 AstNode *xr_ast_for_in_stmt(XrCompilerSession *session, const char *label, const char *item_name,
                             XrTypeRef *item_type, AstNode *collection, AstNode *body, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_FOR_IN_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
 
-    node->as.for_in_stmt.label = label ? ast_strdup(session, label) : NULL;
-    node->as.for_in_stmt.item_name = ast_strdup(session, item_name);
+    do {
+        node->as.for_in_stmt.label = label ? ast_strdup(session, label) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    do {
+        node->as.for_in_stmt.item_name = ast_strdup(session, item_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.for_in_stmt.value_name = NULL;  // Single variable mode
     node->as.for_in_stmt.is_keyvalue = false;
     node->as.for_in_stmt.item_type = item_type;
@@ -479,11 +646,22 @@ AstNode *xr_ast_for_in_keyvalue_stmt(XrCompilerSession *session, const char *key
                                      const char *value_name, const char *label,
                                      XrTypeRef *item_type, AstNode *collection, AstNode *body,
                                      int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_FOR_IN_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
 
-    node->as.for_in_stmt.label = label ? ast_strdup(session, label) : NULL;
-    node->as.for_in_stmt.item_name = ast_strdup(session, key_name);
-    node->as.for_in_stmt.value_name = ast_strdup(session, value_name);
+    do {
+        node->as.for_in_stmt.label = label ? ast_strdup(session, label) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    do {
+        node->as.for_in_stmt.item_name = ast_strdup(session, key_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    do {
+        node->as.for_in_stmt.value_name = ast_strdup(session, value_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.for_in_stmt.is_keyvalue = true;  // Key-value pair mode
     node->as.for_in_stmt.item_type = item_type;
     node->as.for_in_stmt.collection = collection;
@@ -493,15 +671,25 @@ AstNode *xr_ast_for_in_keyvalue_stmt(XrCompilerSession *session, const char *key
 
 // Create break statement node
 AstNode *xr_ast_break_stmt(XrCompilerSession *session, const char *label, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_BREAK_STMT, line);
-    node->as.break_stmt.label = label ? ast_strdup(session, label) : NULL;
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.break_stmt.label = label ? ast_strdup(session, label) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
 // Create continue statement node
 AstNode *xr_ast_continue_stmt(XrCompilerSession *session, const char *label, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_CONTINUE_STMT, line);
-    node->as.continue_stmt.label = label ? ast_strdup(session, label) : NULL;
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.continue_stmt.label = label ? ast_strdup(session, label) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
@@ -509,9 +697,14 @@ AstNode *xr_ast_continue_stmt(XrCompilerSession *session, const char *label, int
 
 // Create parameter node
 XrParamNode *xr_param_node_new(XrCompilerSession *session, const char *name, int line, int column) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     (void) session;  // May be used for arena allocation in future
     XrParamNode *param = (XrParamNode *) ast_alloc(session, sizeof(XrParamNode));
-    param->name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        param->name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     param->line = line;
     param->column = column;
     param->passing_mode = XR_PARAM_READ;
@@ -525,10 +718,15 @@ XrParamNode *xr_param_node_new(XrCompilerSession *session, const char *name, int
 // Create function declaration node
 AstNode *xr_ast_function_decl(XrCompilerSession *session, const char *name, XrParamNode **params,
                               int param_count, AstNode *body, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_FUNCTION_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
 
     // Copy function name
-    node->as.function_decl.name = ast_strdup(session, name);
+    do {
+        node->as.function_decl.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
 
     // Set parameters
     node->as.function_decl.params = params;
@@ -553,7 +751,9 @@ AstNode *xr_ast_function_decl(XrCompilerSession *session, const char *name, XrPa
 // Create function expression node (arrow function/anonymous function)
 AstNode *xr_ast_function_expr(XrCompilerSession *session, XrParamNode **params, int param_count,
                               AstNode *body, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_FUNCTION_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
 
     // Anonymous function has no name
     node->as.function_expr.name = NULL;
@@ -580,12 +780,17 @@ AstNode *xr_ast_function_expr(XrCompilerSession *session, XrParamNode **params, 
 
 AstNode *xr_ast_function_ref(XrCompilerSession *session, AstNode *callee,
     XrTypeRef **type_args, int type_arg_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     XR_CHECK(callee && type_args && type_arg_count > 0, "function reference requires explicit types");
     AstNode *node = alloc_node(session, AST_FUNCTION_REF, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.function_ref.callee = callee;
     node->as.function_ref.type_arg_count = type_arg_count;
-    node->as.function_ref.type_args = ast_alloc_array(session, sizeof(*type_args), (size_t) type_arg_count);
-    memcpy(node->as.function_ref.type_args, type_args, (size_t) type_arg_count * sizeof(*type_args));
+    do {
+        node->as.function_ref.type_args = ast_alloc_array(session, sizeof(*type_args), (size_t) type_arg_count);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    if (!ast_copy(session, node->as.function_ref.type_args, type_args, (size_t) type_arg_count * sizeof(*type_args))) return NULL;
     return node;
 }
 
@@ -595,26 +800,35 @@ AstNode *xr_ast_function_ref(XrCompilerSession *session, AstNode *callee,
 // arg_count: argument count
 AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode **arguments,
                           XrCallArgAccess *arg_accesses, int arg_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_CALL_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
     node->as.call_expr.supplied_arg_count = arg_count;
 
     // Copy parameter list
     if (arg_count > 0) {
-        node->as.call_expr.arguments =
+        do {
+            node->as.call_expr.arguments =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < arg_count; i++) {
-            node->as.call_expr.arguments[i] = arguments[i];
+            if (!ast_copy(session, &node->as.call_expr.arguments[i], &arguments[i], sizeof(node->as.call_expr.arguments[i]))) return NULL;
         }
     } else {
         node->as.call_expr.arguments = NULL;
     }
     if (arg_count > 0) {
-        node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+        do {
+            node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < arg_count; i++) {
             XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
+            if (!ast_work(session, sizeof(node->as.call_expr.arg_accesses[i]))) return NULL;
             node->as.call_expr.arg_accesses[i] =
                 xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }
@@ -637,26 +851,35 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
 AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, AstNode **arguments,
                                   XrCallArgAccess *arg_accesses, int arg_count,
                                   XrTypeRef **type_args, int type_arg_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_CALL_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
     node->as.call_expr.supplied_arg_count = arg_count;
 
     // Copy parameter list
     if (arg_count > 0) {
-        node->as.call_expr.arguments =
+        do {
+            node->as.call_expr.arguments =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < arg_count; i++) {
-            node->as.call_expr.arguments[i] = arguments[i];
+            if (!ast_copy(session, &node->as.call_expr.arguments[i], &arguments[i], sizeof(node->as.call_expr.arguments[i]))) return NULL;
         }
     } else {
         node->as.call_expr.arguments = NULL;
     }
     if (arg_count > 0) {
-        node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+        do {
+            node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < arg_count; i++) {
             XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
+            if (!ast_work(session, sizeof(node->as.call_expr.arg_accesses[i]))) return NULL;
             node->as.call_expr.arg_accesses[i] =
                 xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }
@@ -667,10 +890,13 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
     // Copy generic type arguments
     node->as.call_expr.type_arg_count = type_arg_count;
     if (type_arg_count > 0) {
-        node->as.call_expr.type_args =
+        do {
+            node->as.call_expr.type_args =
             (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) type_arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < type_arg_count; i++) {
-            node->as.call_expr.type_args[i] = type_args[i];
+            if (!ast_copy(session, &node->as.call_expr.type_args[i], &type_args[i], sizeof(node->as.call_expr.type_args[i]))) return NULL;
         }
     } else {
         node->as.call_expr.type_args = NULL;
@@ -686,7 +912,9 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
 // values: return value expression array
 // count: return value count (0 means no return value)
 AstNode *xr_ast_return_stmt(XrCompilerSession *session, AstNode **values, int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_RETURN_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.return_stmt.values = values;
     node->as.return_stmt.value_count = count;
     return node;
@@ -694,7 +922,9 @@ AstNode *xr_ast_return_stmt(XrCompilerSession *session, AstNode **values, int co
 
 // Create is expression node (runtime type check)
 AstNode *xr_ast_is_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *type, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_IS_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.is_expr.expr = expr;
     node->as.is_expr.type = type;
     return node;
@@ -702,7 +932,9 @@ AstNode *xr_ast_is_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *ty
 
 AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *type, bool is_safe,
                         int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_AS_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.as_expr.expr = expr;
     node->as.as_expr.type = type;
     node->as.as_expr.is_safe = is_safe;
@@ -710,7 +942,9 @@ AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *ty
 }
 
 AstNode *xr_ast_comptime_expr(XrCompilerSession *session, AstNode *expr, int line, int column) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_COMPTIME_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->column = column;
     node->as.comptime_expr.expr = expr;
     if (expr && expr->end_line > 0) {
@@ -726,7 +960,9 @@ AstNode *xr_ast_comptime_expr(XrCompilerSession *session, AstNode *expr, int lin
 // elements: element expression array
 // count: element count
 AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ARRAY_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.array_literal.count = count;
     node->as.array_literal.is_repeat = false;
     node->as.array_literal.repeat_value = NULL;
@@ -734,10 +970,13 @@ AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, in
 
     // Copy element array
     if (count > 0) {
-        node->as.array_literal.elements =
+        do {
+            node->as.array_literal.elements =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < count; i++) {
-            node->as.array_literal.elements[i] = elements[i];
+            if (!ast_copy(session, &node->as.array_literal.elements[i], &elements[i], sizeof(node->as.array_literal.elements[i]))) return NULL;
         }
     } else {
         node->as.array_literal.elements = NULL;
@@ -750,7 +989,9 @@ AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, in
 
 AstNode *xr_ast_array_repeat_literal(XrCompilerSession *session, AstNode *value, AstNode *count,
                                      int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ARRAY_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.array_literal.elements = NULL;
     node->as.array_literal.count = 1;
     node->as.array_literal.repeat_value = value;
@@ -761,7 +1002,9 @@ AstNode *xr_ast_array_repeat_literal(XrCompilerSession *session, AstNode *value,
 
 // Create spread expression node: `...expr`.
 AstNode *xr_ast_spread_expr(XrCompilerSession *session, AstNode *expr, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_SPREAD_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.spread_expr.expr = expr;
     return node;
 }
@@ -770,14 +1013,19 @@ AstNode *xr_ast_spread_expr(XrCompilerSession *session, AstNode *expr, int line)
 // inference fills in compile_type from the inferred element types
 // (or the unit singleton for count == 0).
 AstNode *xr_ast_tuple_literal(XrCompilerSession *session, AstNode **elements, int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_TUPLE_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.tuple_literal.count = count;
 
     if (count > 0) {
-        node->as.tuple_literal.elements =
+        do {
+            node->as.tuple_literal.elements =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < count; i++) {
-            node->as.tuple_literal.elements[i] = elements[i];
+            if (!ast_copy(session, &node->as.tuple_literal.elements[i], &elements[i], sizeof(node->as.tuple_literal.elements[i]))) return NULL;
         }
     } else {
         node->as.tuple_literal.elements = NULL;
@@ -791,18 +1039,26 @@ AstNode *xr_ast_tuple_literal(XrCompilerSession *session, AstNode **elements, in
 // count: key-value pair count
 AstNode *xr_ast_object_literal(XrCompilerSession *session, AstNode **keys, AstNode **values,
                                int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_OBJECT_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.object_literal.count = count;
 
     // Copy key-value pair array
     if (count > 0) {
-        node->as.object_literal.keys =
+        do {
+            node->as.object_literal.keys =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
-        node->as.object_literal.values =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.object_literal.values =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < count; i++) {
-            node->as.object_literal.keys[i] = keys[i];
-            node->as.object_literal.values[i] = values[i];
+            if (!ast_copy(session, &node->as.object_literal.keys[i], &keys[i], sizeof(node->as.object_literal.keys[i]))) return NULL;
+            if (!ast_copy(session, &node->as.object_literal.values[i], &values[i], sizeof(node->as.object_literal.values[i]))) return NULL;
         }
     } else {
         node->as.object_literal.keys = NULL;
@@ -818,18 +1074,26 @@ AstNode *xr_ast_object_literal(XrCompilerSession *session, AstNode **keys, AstNo
 // count: key-value pair count
 AstNode *xr_ast_map_literal(XrCompilerSession *session, AstNode **keys, AstNode **values, int count,
                             int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_MAP_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.map_literal.count = count;
 
     // Copy key array
     if (count > 0) {
-        node->as.map_literal.keys =
+        do {
+            node->as.map_literal.keys =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
-        node->as.map_literal.values =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.map_literal.values =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < count; i++) {
-            node->as.map_literal.keys[i] = keys[i];
-            node->as.map_literal.values[i] = values[i];
+            if (!ast_copy(session, &node->as.map_literal.keys[i], &keys[i], sizeof(node->as.map_literal.keys[i]))) return NULL;
+            if (!ast_copy(session, &node->as.map_literal.values[i], &values[i], sizeof(node->as.map_literal.values[i]))) return NULL;
         }
     } else {
         node->as.map_literal.keys = NULL;
@@ -845,15 +1109,20 @@ AstNode *xr_ast_map_literal(XrCompilerSession *session, AstNode **keys, AstNode 
 // elements: element expression array
 // count: element count
 AstNode *xr_ast_set_literal(XrCompilerSession *session, AstNode **elements, int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_SET_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.set_literal.count = count;
 
     // Copy element array
     if (count > 0) {
-        node->as.set_literal.elements =
+        do {
+            node->as.set_literal.elements =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < count; i++) {
-            node->as.set_literal.elements[i] = elements[i];
+            if (!ast_copy(session, &node->as.set_literal.elements[i], &elements[i], sizeof(node->as.set_literal.elements[i]))) return NULL;
         }
     } else {
         node->as.set_literal.elements = NULL;
@@ -866,7 +1135,9 @@ AstNode *xr_ast_set_literal(XrCompilerSession *session, AstNode **elements, int 
 // array: array expression
 // index: index expression
 AstNode *xr_ast_index_get(XrCompilerSession *session, AstNode *array, AstNode *index, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_INDEX_GET, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.index_get.array = array;
     node->as.index_get.index = index;
     return node;
@@ -878,7 +1149,9 @@ AstNode *xr_ast_index_get(XrCompilerSession *session, AstNode *array, AstNode *i
 // value: assignment expression
 AstNode *xr_ast_index_set(XrCompilerSession *session, AstNode *array, AstNode *index,
                           AstNode *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_INDEX_SET, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.index_set.array = array;
     node->as.index_set.index = index;
     node->as.index_set.value = value;
@@ -891,7 +1164,9 @@ AstNode *xr_ast_index_set(XrCompilerSession *session, AstNode *array, AstNode *i
 // end: end index expression (can be NULL)
 AstNode *xr_ast_slice_expr(XrCompilerSession *session, AstNode *source, AstNode *start,
                            AstNode *end, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_SLICE_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.slice_expr.source = source;
     node->as.slice_expr.start = start;
     node->as.slice_expr.end = end;
@@ -903,9 +1178,14 @@ AstNode *xr_ast_slice_expr(XrCompilerSession *session, AstNode *source, AstNode 
 // name: member name
 AstNode *xr_ast_member_access(XrCompilerSession *session, AstNode *object, const char *name,
                               int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_MEMBER_ACCESS, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.member_access.object = object;
-    node->as.member_access.name = ast_strdup(session, name);
+    do {
+        node->as.member_access.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
@@ -915,7 +1195,9 @@ AstNode *xr_ast_member_access(XrCompilerSession *session, AstNode *object, const
 // false_expr: false branch expression
 AstNode *xr_ast_ternary(XrCompilerSession *session, AstNode *condition, AstNode *true_expr,
                         AstNode *false_expr, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_TERNARY, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.ternary.condition = condition;
     node->as.ternary.true_expr = true_expr;
     node->as.ternary.false_expr = false_expr;
@@ -929,10 +1211,15 @@ AstNode *xr_ast_ternary(XrCompilerSession *session, AstNode *condition, AstNode 
 // chain_type: 0=property, 1=index, 2=method call
 AstNode *xr_ast_optional_chain(XrCompilerSession *session, AstNode *object, const char *name,
                                AstNode *index, int chain_type, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_OPTIONAL_CHAIN, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.optional_chain.object = object;
     if (name) {
-        node->as.optional_chain.name = ast_strdup(session, name);
+        do {
+            node->as.optional_chain.name = ast_strdup(session, name);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
     } else {
         node->as.optional_chain.name = NULL;
     }
@@ -948,7 +1235,9 @@ AstNode *xr_ast_optional_chain(XrCompilerSession *session, AstNode *object, cons
 // end: end value expression
 AstNode *xr_ast_range(XrCompilerSession *session, AstNode *start, AstNode *end, bool inclusive_end,
                       int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_RANGE, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.range.start = start;
     node->as.range.end = end;
     node->as.range.inclusive_end = inclusive_end;
@@ -963,7 +1252,9 @@ AstNode *xr_ast_range(XrCompilerSession *session, AstNode *start, AstNode *end, 
 AstNode *xr_ast_class_decl(XrCompilerSession *session, const char *name, const char *super_name,
                            AstNode **fields, int field_count, AstNode **methods, int method_count,
                            int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_CLASS_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.class_decl.name = (char *) name;
     node->as.class_decl.super_name = (char *) super_name;
     node->as.class_decl.super_module = NULL;  // No module prefix by default
@@ -983,7 +1274,9 @@ AstNode *xr_ast_class_decl(XrCompilerSession *session, const char *name, const c
 // Create struct declaration node (value type)
 AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name, AstNode **fields,
                             int field_count, AstNode **methods, int method_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_STRUCT_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.struct_decl.name = (char *) name;
     node->as.struct_decl.super_name = NULL;
     node->as.struct_decl.super_module = NULL;
@@ -1006,7 +1299,9 @@ AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name, AstNod
 // Create union declaration node (fixed-layout untagged overlay)
 AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode **fields,
                            int field_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_UNION_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.union_decl.name = (char *) name;
     node->as.union_decl.super_name = NULL;
     node->as.union_decl.super_module = NULL;
@@ -1029,14 +1324,19 @@ AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode
 // Create a struct literal with one authoritative nominal path.
 AstNode *xr_ast_struct_literal(XrCompilerSession *session, AstNode *type_path, char **field_names,
                                AstNode **field_values, int field_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_STRUCT_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     const char *name = NULL;
     if (type_path && type_path->type == AST_VARIABLE)
         name = type_path->as.variable.name;
     else if (type_path && type_path->type == AST_MEMBER_ACCESS)
         name = type_path->as.member_access.name;
     node->as.struct_literal.type_path = type_path;
-    node->as.struct_literal.struct_name = ast_strdup(session, name);
+    do {
+        node->as.struct_literal.struct_name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.struct_literal.field_names = field_names;
     node->as.struct_literal.field_values = field_values;
     node->as.struct_literal.field_count = field_count;
@@ -1046,20 +1346,34 @@ AstNode *xr_ast_struct_literal(XrCompilerSession *session, AstNode *type_path, c
 AstNode *xr_ast_enum_construct(XrCompilerSession *session, AstNode *variant_path,
                                char **field_names, const XrNameSpan *field_name_spans,
                                AstNode **field_values, int field_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ENUM_CONSTRUCT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.enum_construct.variant_path = variant_path;
     node->as.enum_construct.field_count = field_count;
     if (field_count > 0) {
-        node->as.enum_construct.field_names =
+        do {
+            node->as.enum_construct.field_names =
             (char **) ast_alloc_array(session, sizeof(char *), (size_t) field_count);
-        node->as.enum_construct.field_name_spans =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.enum_construct.field_name_spans =
             (XrNameSpan *) ast_alloc_array(session, sizeof(XrNameSpan), (size_t) field_count);
-        node->as.enum_construct.field_values =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.enum_construct.field_values =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) field_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < field_count; i++) {
-            node->as.enum_construct.field_names[i] = ast_strdup(session, field_names[i]);
-            node->as.enum_construct.field_name_spans[i] = field_name_spans[i];
-            node->as.enum_construct.field_values[i] = field_values[i];
+            do {
+                node->as.enum_construct.field_names[i] = ast_strdup(session, field_names[i]);
+                if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+            } while (0);
+            if (!ast_copy(session, &node->as.enum_construct.field_name_spans[i], &field_name_spans[i], sizeof(node->as.enum_construct.field_name_spans[i]))) return NULL;
+            if (!ast_copy(session, &node->as.enum_construct.field_values[i], &field_values[i], sizeof(node->as.enum_construct.field_values[i]))) return NULL;
         }
     }
     return node;
@@ -1070,7 +1384,9 @@ AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *name, XrT
                                int extends_count, AstNode **methods, int method_count,
                                AstNode **properties, int property_count,
                                XrGenericParam **type_params, int type_param_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_INTERFACE_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.interface_decl.name = (char *) name;
     node->as.interface_decl.extends = extends;
     node->as.interface_decl.extends_count = extends_count;
@@ -1086,7 +1402,9 @@ AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *name, XrT
 // Create interface method signature node
 AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, XrParamNode **params,
                                  int param_count, XrTypeRef *return_type, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_INTERFACE_METHOD, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.interface_method.name = (char *) name;
     node->as.interface_method.params = params;
     node->as.interface_method.param_count = param_count;
@@ -1102,7 +1420,9 @@ AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, X
 // Create interface property signature node
 AstNode *xr_ast_interface_property(XrCompilerSession *session, const char *name,
                                    XrTypeRef *prop_type, bool is_readonly, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_INTERFACE_PROPERTY, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.interface_property.name = (char *) name;
     node->as.interface_property.prop_type = prop_type;
     node->as.interface_property.is_readonly = is_readonly;
@@ -1112,7 +1432,9 @@ AstNode *xr_ast_interface_property(XrCompilerSession *session, const char *name,
 // Create field declaration node
 AstNode *xr_ast_field_decl(XrCompilerSession *session, const char *name, XrTypeRef *field_type,
                            bool is_private, bool is_static, AstNode *initializer, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_FIELD_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.field_decl.name = (char *) name;
     node->as.field_decl.field_type = field_type;
     node->as.field_decl.is_private = is_private;
@@ -1128,7 +1450,9 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, XrPara
                             int param_count, XrTypeRef *return_type, AstNode *body,
                             bool is_constructor, bool is_static, bool is_private, bool is_getter,
                             bool is_setter, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_METHOD_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.method_decl.name = (char *) name;
     node->as.method_decl.params = params;
     node->as.method_decl.param_count = param_count;
@@ -1171,14 +1495,22 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, XrPara
 AstNode *xr_ast_new_expr(XrCompilerSession *session, const char *module_name,
                          const char *class_name, AstNode **arguments, XrCallArgAccess *arg_accesses,
                          int arg_count, XrTypeRef **type_args, int type_arg_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_NEW_EXPR, line);
-    node->as.new_expr.module_name = ast_strdup(session, module_name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.new_expr.module_name = ast_strdup(session, module_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.new_expr.class_name = (char *) class_name;
     node->as.new_expr.arguments = arguments;
     node->as.new_expr.arg_count = arg_count;
     if (arg_count > 0) {
-        node->as.new_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+        do {
+            node->as.new_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < arg_count; i++) {
             XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
             node->as.new_expr.arg_accesses[i] =
@@ -1191,10 +1523,13 @@ AstNode *xr_ast_new_expr(XrCompilerSession *session, const char *module_name,
     // Copy generic type arguments
     node->as.new_expr.type_arg_count = type_arg_count;
     if (type_arg_count > 0 && type_args) {
-        node->as.new_expr.type_args =
+        do {
+            node->as.new_expr.type_args =
             (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) type_arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < type_arg_count; i++) {
-            node->as.new_expr.type_args[i] = type_args[i];
+            if (!ast_copy(session, &node->as.new_expr.type_args[i], &type_args[i], sizeof(node->as.new_expr.type_args[i]))) return NULL;
         }
     } else {
         node->as.new_expr.type_args = NULL;
@@ -1204,7 +1539,9 @@ AstNode *xr_ast_new_expr(XrCompilerSession *session, const char *module_name,
 
 // Create this expression node
 AstNode *xr_ast_this_expr(XrCompilerSession *session, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_THIS_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.this_expr.placeholder = 0;
     return node;
 }
@@ -1212,13 +1549,18 @@ AstNode *xr_ast_this_expr(XrCompilerSession *session, int line) {
 // Create super call node
 AstNode *xr_ast_super_call(XrCompilerSession *session, const char *method_name, AstNode **arguments,
                            XrCallArgAccess *arg_accesses, int arg_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_SUPER_CALL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.super_call.method_name = (char *) method_name;
     node->as.super_call.arguments = arguments;
     node->as.super_call.arg_count = arg_count;
     if (arg_count > 0) {
-        node->as.super_call.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+        do {
+            node->as.super_call.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < arg_count; i++) {
             XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
             node->as.super_call.arg_accesses[i] =
@@ -1233,10 +1575,15 @@ AstNode *xr_ast_super_call(XrCompilerSession *session, const char *method_name, 
 // Create member assignment node
 AstNode *xr_ast_member_set(XrCompilerSession *session, AstNode *object, const char *member,
                            AstNode *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_MEMBER_SET, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.member_set.object = object;
-    node->as.member_set.member =
-        ast_strdup(session, member);  // Copy string to avoid dangling pointer
+    do {
+        node->as.member_set.member =
+        ast_strdup(session, member);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);  // Copy string to avoid dangling pointer
     node->as.member_set.value = value;
     return node;
 }
@@ -1249,23 +1596,34 @@ AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, AstNode 
                           int member_count, AstNode **methods, int method_count,
                           XrGenericParam **type_params, int type_param_count,
                           XrTypeRef **interfaces, int interface_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ENUM_DECL, line);
-    node->as.enum_decl.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.enum_decl.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
 
     // Copy member array
-    node->as.enum_decl.members =
+    do {
+        node->as.enum_decl.members =
         (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) member_count);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     for (int i = 0; i < member_count; i++) {
-        node->as.enum_decl.members[i] = members[i];
+        if (!ast_copy(session, &node->as.enum_decl.members[i], &members[i], sizeof(node->as.enum_decl.members[i]))) return NULL;
     }
     node->as.enum_decl.member_count = member_count;
 
     // Copy method array
     if (method_count > 0 && methods) {
-        node->as.enum_decl.methods =
+        do {
+            node->as.enum_decl.methods =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) method_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < method_count; i++) {
-            node->as.enum_decl.methods[i] = methods[i];
+            if (!ast_copy(session, &node->as.enum_decl.methods[i], &methods[i], sizeof(node->as.enum_decl.methods[i]))) return NULL;
         }
     } else {
         node->as.enum_decl.methods = NULL;
@@ -1276,10 +1634,13 @@ AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, AstNode 
 
     // Copy type params
     if (type_param_count > 0 && type_params) {
-        node->as.enum_decl.type_params = (XrGenericParam **) ast_alloc_array(
+        do {
+            node->as.enum_decl.type_params = (XrGenericParam **) ast_alloc_array(
             session, sizeof(XrGenericParam *), (size_t) type_param_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < type_param_count; i++) {
-            node->as.enum_decl.type_params[i] = type_params[i];
+            if (!ast_copy(session, &node->as.enum_decl.type_params[i], &type_params[i], sizeof(node->as.enum_decl.type_params[i]))) return NULL;
         }
     } else {
         node->as.enum_decl.type_params = NULL;
@@ -1288,10 +1649,13 @@ AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, AstNode 
 
     // Copy interfaces
     if (interface_count > 0 && interfaces) {
-        node->as.enum_decl.interfaces =
+        do {
+            node->as.enum_decl.interfaces =
             (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) interface_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < interface_count; i++) {
-            node->as.enum_decl.interfaces[i] = interfaces[i];
+            if (!ast_copy(session, &node->as.enum_decl.interfaces[i], &interfaces[i], sizeof(node->as.enum_decl.interfaces[i]))) return NULL;
         }
     } else {
         node->as.enum_decl.interfaces = NULL;
@@ -1306,21 +1670,38 @@ AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, AstNode 
 AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name, char **payload_names,
                             const XrNameSpan *payload_name_spans, XrTypeRef **payload_types,
                             int payload_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ENUM_MEMBER, line);
-    node->as.enum_member.name = ast_strdup(session, name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.enum_member.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
 
     // Copy ADT payload fields
     if (payload_count > 0 && payload_types) {
-        node->as.enum_member.payload_types =
+        do {
+            node->as.enum_member.payload_types =
             (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) payload_count);
-        node->as.enum_member.payload_names =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.enum_member.payload_names =
             (char **) ast_alloc_array(session, sizeof(char *), (size_t) payload_count);
-        node->as.enum_member.payload_name_spans =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.enum_member.payload_name_spans =
             (XrNameSpan *) ast_alloc_array(session, sizeof(XrNameSpan), (size_t) payload_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < payload_count; i++) {
-            node->as.enum_member.payload_types[i] = payload_types[i];
-            node->as.enum_member.payload_names[i] = ast_strdup(session, payload_names[i]);
-            node->as.enum_member.payload_name_spans[i] = payload_name_spans[i];
+            if (!ast_copy(session, &node->as.enum_member.payload_types[i], &payload_types[i], sizeof(node->as.enum_member.payload_types[i]))) return NULL;
+            do {
+                node->as.enum_member.payload_names[i] = ast_strdup(session, payload_names[i]);
+                if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+            } while (0);
+            if (!ast_copy(session, &node->as.enum_member.payload_name_spans[i], &payload_name_spans[i], sizeof(node->as.enum_member.payload_name_spans[i]))) return NULL;
         }
     } else {
         node->as.enum_member.payload_types = NULL;
@@ -1336,16 +1717,26 @@ AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name, char *
 // Status.Success
 AstNode *xr_ast_enum_access(XrCompilerSession *session, const char *enum_name,
                             const char *member_name, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ENUM_ACCESS, line);
-    node->as.enum_access.enum_name = ast_strdup(session, enum_name);
-    node->as.enum_access.member_name = ast_strdup(session, member_name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.enum_access.enum_name = ast_strdup(session, enum_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    do {
+        node->as.enum_access.member_name = ast_strdup(session, member_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
 // Create enum index node (compiler-generated for for-in desugaring)
 AstNode *xr_ast_enum_index(XrCompilerSession *session, AstNode *collection, AstNode *index_expr,
                            int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_ENUM_INDEX, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.enum_index.collection = collection;
     node->as.enum_index.index_expr = index_expr;
     return node;
@@ -1357,7 +1748,9 @@ AstNode *xr_ast_enum_index(XrCompilerSession *session, AstNode *collection, AstN
 // match (x) { 1 -> "one", _ -> "other" }
 AstNode *xr_ast_match_expr(XrCompilerSession *session, AstNode *expr, AstNode **arms, int arm_count,
                            int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_MATCH_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.match_expr.expr = expr;
     node->as.match_expr.arms = arms;
     node->as.match_expr.arm_count = arm_count;
@@ -1368,7 +1761,9 @@ AstNode *xr_ast_match_expr(XrCompilerSession *session, AstNode *expr, AstNode **
 // 1 -> "one"
 AstNode *xr_ast_match_arm(XrCompilerSession *session, AstNode *pattern, AstNode *guard,
                           AstNode *body, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_MATCH_ARM, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.match_arm.pattern = pattern;
     node->as.match_arm.guard = guard;
     node->as.match_arm.body = body;
@@ -1378,7 +1773,9 @@ AstNode *xr_ast_match_arm(XrCompilerSession *session, AstNode *pattern, AstNode 
 // Create literal pattern node
 // 1, "hello", true, HttpStatus.OK
 AstNode *xr_ast_pattern_literal(XrCompilerSession *session, AstNode *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_LITERAL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_literal.value = value;
     return node;
 }
@@ -1387,7 +1784,9 @@ AstNode *xr_ast_pattern_literal(XrCompilerSession *session, AstNode *value, int 
 // 1..10 / 1..=10
 AstNode *xr_ast_pattern_range(XrCompilerSession *session, AstNode *start, AstNode *end,
                               bool inclusive_end, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_RANGE, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_range.start = start;
     node->as.pattern_range.end = end;
     node->as.pattern_range.inclusive_end = inclusive_end;
@@ -1397,14 +1796,18 @@ AstNode *xr_ast_pattern_range(XrCompilerSession *session, AstNode *start, AstNod
 // Create wildcard pattern node
 // _
 AstNode *xr_ast_pattern_wildcard(XrCompilerSession *session, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_WILDCARD, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     return node;
 }
 
 // Create multi-value pattern node
 // 1, 2, 3
 AstNode *xr_ast_pattern_multi(XrCompilerSession *session, AstNode **patterns, int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_MULTI, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_multi.patterns = patterns;
     node->as.pattern_multi.count = count;
     return node;
@@ -1413,7 +1816,9 @@ AstNode *xr_ast_pattern_multi(XrCompilerSession *session, AstNode **patterns, in
 // Create tuple pattern node — positional, fixed arity.
 // (a, b)  /  (0, _)  /  ((x, y), z)
 AstNode *xr_ast_pattern_tuple(XrCompilerSession *session, AstNode **patterns, int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_TUPLE, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_tuple.patterns = patterns;
     node->as.pattern_tuple.count = count;
     return node;
@@ -1423,20 +1828,34 @@ AstNode *xr_ast_pattern_tuple(XrCompilerSession *session, AstNode **patterns, in
 AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant, char **field_names,
                             const XrNameSpan *field_name_spans, AstNode **patterns, int count,
                             int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_ADT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_adt.variant = variant;
     node->as.pattern_adt.count = count;
     if (count > 0) {
-        node->as.pattern_adt.field_names =
+        do {
+            node->as.pattern_adt.field_names =
             (char **) ast_alloc_array(session, sizeof(char *), (size_t) count);
-        node->as.pattern_adt.field_name_spans =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.pattern_adt.field_name_spans =
             (XrNameSpan *) ast_alloc_array(session, sizeof(XrNameSpan), (size_t) count);
-        node->as.pattern_adt.patterns =
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        do {
+            node->as.pattern_adt.patterns =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < count; i++) {
-            node->as.pattern_adt.field_names[i] = ast_strdup(session, field_names[i]);
-            node->as.pattern_adt.field_name_spans[i] = field_name_spans[i];
-            node->as.pattern_adt.patterns[i] = patterns[i];
+            do {
+                node->as.pattern_adt.field_names[i] = ast_strdup(session, field_names[i]);
+                if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+            } while (0);
+            if (!ast_copy(session, &node->as.pattern_adt.field_name_spans[i], &field_name_spans[i], sizeof(node->as.pattern_adt.field_name_spans[i]))) return NULL;
+            if (!ast_copy(session, &node->as.pattern_adt.patterns[i], &patterns[i], sizeof(node->as.pattern_adt.patterns[i]))) return NULL;
         }
     }
     return node;
@@ -1445,7 +1864,9 @@ AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant, char *
 // Create object match pattern node: { x, y } / { x: sub }
 AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names, AstNode **patterns,
                                int count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_OBJECT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_object.field_names = field_names;
     node->as.pattern_object.patterns = patterns;
     node->as.pattern_object.count = count;
@@ -1455,7 +1876,9 @@ AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names, A
 // Create array match pattern node: [a, b, ..rest]
 AstNode *xr_ast_pattern_array(XrCompilerSession *session, AstNode **patterns, int count,
                               bool has_rest, char *rest_name, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_ARRAY, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_array.patterns = patterns;
     node->as.pattern_array.count = count;
     node->as.pattern_array.has_rest = has_rest;
@@ -1467,7 +1890,9 @@ AstNode *xr_ast_pattern_array(XrCompilerSession *session, AstNode **patterns, in
 // Create type pattern node: `is T` or `is T name`
 AstNode *xr_ast_pattern_type(XrCompilerSession *session, XrTypeRef *type, const char *binding_name,
                              int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_PATTERN_TYPE, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.pattern_type.type = type;
     node->as.pattern_type.binding_name = binding_name;
     node->as.pattern_type.symbol_id = 0;
@@ -1476,7 +1901,7 @@ AstNode *xr_ast_pattern_type(XrCompilerSession *session, XrTypeRef *type, const 
 
 // Destroy a program AST and its owning arena.
 // Releases every AST node, array, and string allocated during parsing in O(1).
-// For program nodes from xr_parse_recoverable (LSP), the caller owns the
+// For program nodes from xr_compile_parse_recoverable (LSP), the caller owns the
 // arena and this call is a no-op.
 // The program node itself lives inside the arena, so we capture the arena
 // pointer into a local BEFORE xr_arena_destroy frees the segments.
@@ -1489,7 +1914,7 @@ void xr_program_destroy(AstNode *program) {
     if (prog->owns_arena && prog->arena) {
         XrArena *arena = prog->arena;
         xr_arena_destroy(arena);
-        xr_free(arena);
+        xr_compile_state_free(arena);
     }
 }
 
@@ -2113,8 +2538,13 @@ void xr_ast_print(AstNode *node, int indent) {
 // Allocate a catch clause
 XrCatchClause *xr_ast_catch_clause(XrCompilerSession *session, const char *var_name, int var_line,
                                    int var_column, XrTypeRef *type, AstNode *body) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     XrCatchClause *c = (XrCatchClause *) ast_alloc(session, sizeof(XrCatchClause));
-    c->var_name = ast_strdup(session, var_name);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        c->var_name = ast_strdup(session, var_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     c->var_line = var_line;
     c->var_column = var_column;
     c->type = type;
@@ -2128,7 +2558,9 @@ XrCatchClause *xr_ast_catch_clause(XrCompilerSession *session, const char *var_n
 // Create try-catch statement node (multi-catch)
 AstNode *xr_ast_try_catch(XrCompilerSession *session, AstNode *try_body, XrCatchClause **clauses,
                           int catch_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_TRY_CATCH, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.try_catch.try_body = try_body;
     node->as.try_catch.catch_clauses = clauses;
     node->as.try_catch.catch_count = catch_count;
@@ -2137,7 +2569,9 @@ AstNode *xr_ast_try_catch(XrCompilerSession *session, AstNode *try_body, XrCatch
 
 // Create throw statement node
 AstNode *xr_ast_throw_stmt(XrCompilerSession *session, AstNode *expression, int line, int column) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_THROW_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->column = column;
     node->as.throw_stmt.expression = expression;
     return node;
@@ -2151,9 +2585,17 @@ AstNode *xr_ast_throw_stmt(XrCompilerSession *session, AstNode *expression, int 
 // import "alice/redis"     - third-party package (quoted path)
 AstNode *xr_ast_import_stmt(XrCompilerSession *session, const char *module_name, const char *alias,
                             bool is_quoted, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_IMPORT_STMT, line);
-    node->as.import_stmt.module_name = ast_strdup(session, module_name);
-    node->as.import_stmt.alias = ast_strdup(session, alias);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.import_stmt.module_name = ast_strdup(session, module_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    do {
+        node->as.import_stmt.alias = ast_strdup(session, alias);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.import_stmt.is_quoted = is_quoted;
     node->as.import_stmt.members = NULL;
     node->as.import_stmt.member_count = 0;
@@ -2165,9 +2607,17 @@ AstNode *xr_ast_import_stmt(XrCompilerSession *session, const char *module_name,
 AstNode *xr_ast_import_stmt_ex(XrCompilerSession *session, const char *module_name,
                                const char *alias, bool is_quoted, ImportMember *members,
                                int member_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_IMPORT_STMT, line);
-    node->as.import_stmt.module_name = ast_strdup(session, module_name);
-    node->as.import_stmt.alias = ast_strdup(session, alias);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.import_stmt.module_name = ast_strdup(session, module_name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
+    do {
+        node->as.import_stmt.alias = ast_strdup(session, alias);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.import_stmt.is_quoted = is_quoted;
     node->as.import_stmt.members = members;  // Take ownership, don't copy
     node->as.import_stmt.member_count = member_count;
@@ -2180,8 +2630,13 @@ AstNode *xr_ast_import_stmt_ex(XrCompilerSession *session, const char *module_na
 AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_path,
                                 bool from_is_quoted, ReexportMember *members, int count,
                                 bool is_all, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_EXPORT_STMT, line);
-    node->as.export_stmt.from_path = from_path ? ast_strdup(session, from_path) : NULL;
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.export_stmt.from_path = from_path ? ast_strdup(session, from_path) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.export_stmt.from_is_quoted = from_is_quoted;
     node->as.export_stmt.reexport_members = members;
     node->as.export_stmt.reexport_count = count;
@@ -2190,8 +2645,13 @@ AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_pat
 }
 
 AstNode *xr_ast_global_asm(XrCompilerSession *session, const char *text, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_GLOBAL_ASM, line);
-    node->as.global_asm.text = ast_strdup(session, text ? text : "");
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.global_asm.text = ast_strdup(session, text ? text : "");
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     return node;
 }
 
@@ -2201,9 +2661,11 @@ AstNode *xr_ast_global_asm(XrCompilerSession *session, const char *text, int lin
 // var [a, b, c] = arr
 XrDestructurePattern *xr_pattern_array(XrCompilerSession *session, XrDestructurePattern **elements,
                                        int count) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     (void) session;
     XrDestructurePattern *pattern =
         (XrDestructurePattern *) ast_alloc(session, sizeof(XrDestructurePattern));
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     pattern->type = PATTERN_ARRAY;
     pattern->as.array.elements = elements;
     pattern->as.array.element_count = count;
@@ -2218,9 +2680,11 @@ XrDestructurePattern *xr_pattern_array(XrCompilerSession *session, XrDestructure
 // lowerer to emit .N field reads instead of [i] index loads.
 XrDestructurePattern *xr_pattern_tuple(XrCompilerSession *session, XrDestructurePattern **elements,
                                        int count) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     (void) session;
     XrDestructurePattern *pattern =
         (XrDestructurePattern *) ast_alloc(session, sizeof(XrDestructurePattern));
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     pattern->type = PATTERN_TUPLE;
     pattern->as.array.elements = elements;
     pattern->as.array.element_count = count;
@@ -2232,9 +2696,11 @@ XrDestructurePattern *xr_pattern_tuple(XrCompilerSession *session, XrDestructure
 XrDestructurePattern *xr_pattern_object(XrCompilerSession *session, char **fields,
                                         XrDestructurePattern **patterns, int count,
                                         bool use_shorthand) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     (void) session;
     XrDestructurePattern *pattern =
         (XrDestructurePattern *) ast_alloc(session, sizeof(XrDestructurePattern));
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     pattern->type = PATTERN_OBJECT;
     pattern->as.object.field_names = fields;
     pattern->as.object.patterns = patterns;
@@ -2247,11 +2713,16 @@ XrDestructurePattern *xr_pattern_object(XrCompilerSession *session, char **field
 // a or a: int
 XrDestructurePattern *xr_pattern_identifier(XrCompilerSession *session, const char *name,
                                             XrTypeRef *type) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     (void) session;
     XrDestructurePattern *pattern =
         (XrDestructurePattern *) ast_alloc(session, sizeof(XrDestructurePattern));
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     pattern->type = PATTERN_IDENTIFIER;
-    pattern->as.identifier.name = ast_strdup(session, name);
+    do {
+        pattern->as.identifier.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     pattern->as.identifier.type = type;
     return pattern;
 }
@@ -2259,8 +2730,10 @@ XrDestructurePattern *xr_pattern_identifier(XrCompilerSession *session, const ch
 // Create skip element pattern
 // _
 XrDestructurePattern *xr_pattern_skip(XrCompilerSession *session) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     XrDestructurePattern *pattern =
         (XrDestructurePattern *) ast_alloc(session, sizeof(XrDestructurePattern));
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     pattern->type = PATTERN_SKIP;
     return pattern;
 }
@@ -2269,7 +2742,9 @@ XrDestructurePattern *xr_pattern_skip(XrCompilerSession *session) {
 // var [a, b] = arr or const {x, y} = obj
 AstNode *xr_ast_destructure_decl(XrCompilerSession *session, XrDestructurePattern *pattern,
                                  AstNode *initializer, bool is_const, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_DESTRUCTURE_DECL, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.destructure_decl.pattern = pattern;
     node->as.destructure_decl.initializer = initializer;
     node->as.destructure_decl.is_const = is_const;
@@ -2280,7 +2755,9 @@ AstNode *xr_ast_destructure_decl(XrCompilerSession *session, XrDestructurePatter
 // [a, b] = arr or {x, y} = obj
 AstNode *xr_ast_destructure_assign(XrCompilerSession *session, XrDestructurePattern *pattern,
                                    AstNode *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_DESTRUCTURE_ASSIGN, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.destructure_assign.pattern = pattern;
     node->as.destructure_assign.value = value;
     return node;
@@ -2294,24 +2771,38 @@ AstNode *xr_ast_destructure_assign(XrCompilerSession *session, XrDestructurePatt
 // type User = { name: string, age: int, email: string? }
 AstNode *xr_ast_type_alias(XrCompilerSession *session, const char *name, char **field_names,
                            XrTypeRef **field_types, int field_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_TYPE_ALIAS, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
 
     // Copy type name
-    node->as.type_alias.name = ast_strdup(session, name);
+    do {
+        node->as.type_alias.name = ast_strdup(session, name);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.type_alias.field_count = field_count;
 
     if (field_count > 0) {
         // Copy field names array
-        node->as.type_alias.field_names =
+        do {
+            node->as.type_alias.field_names =
             (char **) ast_alloc_array(session, sizeof(char *), (size_t) field_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
         for (int i = 0; i < field_count; i++) {
-            node->as.type_alias.field_names[i] = ast_strdup(session, field_names[i]);
+            do {
+                node->as.type_alias.field_names[i] = ast_strdup(session, field_names[i]);
+                if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+            } while (0);
         }
 
         // Copy field types array (shallow copy, types managed by type pool)
-        node->as.type_alias.field_types =
+        do {
+            node->as.type_alias.field_types =
             (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) field_count);
-        memcpy(node->as.type_alias.field_types, field_types, sizeof(XrTypeRef *) * field_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        if (!ast_copy(session, node->as.type_alias.field_types, field_types, sizeof(XrTypeRef *) * field_count)) return NULL;
 
     } else {
         node->as.type_alias.field_names = NULL;
@@ -2328,7 +2819,9 @@ AstNode *xr_ast_type_alias(XrCompilerSession *session, const char *name, char **
 // linked go call()
 AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const char *name,
                         uint8_t link_mode, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_GO_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.go_expr.expr = expr;
     node->as.go_expr.name = name;
     node->as.go_expr.link_mode = link_mode;
@@ -2337,7 +2830,9 @@ AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const char *n
 }
 
 AstNode *xr_ast_thread_spawn_expr(XrCompilerSession *session, AstNode *expr, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = xr_ast_go_expr(session, expr, NULL, XR_LINK_NONE, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     if (node)
         node->as.go_expr.spawn_kind = XR_SPAWN_THREAD;
     return node;
@@ -2347,7 +2842,9 @@ AstNode *xr_ast_thread_spawn_expr(XrCompilerSession *session, AstNode *expr, int
 // await task, await(timeout: N) task, await all/await any/await anySuccess [tasks]
 AstNode *xr_ast_await_expr(XrCompilerSession *session, AstNode *expr, AstNode *timeout,
                            AstNode *into, bool is_any, bool is_all, bool is_any_success, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_AWAIT_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.await_expr.expr = expr;
     node->as.await_expr.timeout = timeout;
     node->as.await_expr.into = into;
@@ -2360,7 +2857,9 @@ AstNode *xr_ast_await_expr(XrCompilerSession *session, AstNode *expr, AstNode *t
 // Create Channel creation node
 // Channel() or Channel(10)
 AstNode *xr_ast_channel_new(XrCompilerSession *session, AstNode *buffer_size, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_CHANNEL_NEW, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.channel_new.buffer_size = buffer_size;
     return node;
 }
@@ -2370,8 +2869,13 @@ AstNode *xr_ast_channel_new(XrCompilerSession *session, AstNode *buffer_size, in
 AstNode *xr_ast_select_case(XrCompilerSession *session, const char *var_name, AstNode *channel,
                             AstNode *value, AstNode *body, bool is_send, bool is_default,
                             bool is_timeout, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_SELECT_CASE, line);
-    node->as.select_case.var_name = var_name ? ast_strdup(session, var_name) : NULL;
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    do {
+        node->as.select_case.var_name = var_name ? ast_strdup(session, var_name) : NULL;
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+    } while (0);
     node->as.select_case.channel = channel;
     node->as.select_case.value = value;
     node->as.select_case.body = body;
@@ -2384,12 +2888,17 @@ AstNode *xr_ast_select_case(XrCompilerSession *session, const char *var_name, As
 // Create select statement node
 // select { msg from ch -> ..., _ -> ... }
 AstNode *xr_ast_select_stmt(XrCompilerSession *session, AstNode **cases, int case_count, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_SELECT_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
 
     if (case_count > 0 && cases != NULL) {
-        node->as.select_stmt.cases =
+        do {
+            node->as.select_stmt.cases =
             (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) case_count);
-        memcpy(node->as.select_stmt.cases, cases, sizeof(AstNode *) * case_count);
+            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
+        } while (0);
+        if (!ast_copy(session, node->as.select_stmt.cases, cases, sizeof(AstNode *) * case_count)) return NULL;
     } else {
         node->as.select_stmt.cases = NULL;
     }
@@ -2401,8 +2910,10 @@ AstNode *xr_ast_select_stmt(XrCompilerSession *session, AstNode **cases, int cas
 // Create defer statement node
 // defer { block }
 AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *body, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     XR_DCHECK(body != NULL && body->type == AST_BLOCK, "defer body must be a block");
     AstNode *node = alloc_node(session, AST_DEFER_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.defer_stmt.body = body;
     return node;
 }
@@ -2411,7 +2922,9 @@ AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *body, int line) 
 // scope { ... } or linked scope { ... }
 AstNode *xr_ast_scope_block(XrCompilerSession *session, AstNode *body, uint8_t scope_mode,
                             int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_SCOPE_BLOCK, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.scope_block.body = body;
     node->as.scope_block.scope_mode = scope_mode;
     return node;
@@ -2420,28 +2933,36 @@ AstNode *xr_ast_scope_block(XrCompilerSession *session, AstNode *body, uint8_t s
 // Create yield statement node
 // `yield value` - generator value production
 AstNode *xr_ast_yield_stmt(XrCompilerSession *session, AstNode *value, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_YIELD_STMT, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.yield_stmt.value = value;
     return node;
 }
 
 // Create cancelled() expression node
 AstNode *xr_ast_cancelled_expr(XrCompilerSession *session, int line) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_CANCELLED_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->as.cancelled_expr.placeholder = 0;
     return node;
 }
 
 // Create move expression node
 AstNode *xr_ast_move_expr(XrCompilerSession *session, AstNode *expr, int line, int column) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_MOVE_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->column = column;
     node->as.move_expr.expr = expr;
     return node;
 }
 
 AstNode *xr_ast_unsafe_expr(XrCompilerSession *session, AstNode *operand, int line, int column) {
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_UNSAFE_EXPR, line);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     node->column = column;
     node->as.unsafe_expr.operand = operand;
     return node;

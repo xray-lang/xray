@@ -46,13 +46,13 @@ static bool native_invoke_allocation_run(const XrXirCallEntry *entries, uint32_t
     XrXirValue args[] = {{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
     XrXirCallStatus admitted = xr_xir_call_new(&config,0,args,2,&call);
     if (admitted != XR_XIR_CALL_READY) { CHECK(admitted == XR_XIR_CALL_OOM); goto done; }
-    XrXirCallResult result = xr_xir_call_poll(call);
+    XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
     uint32_t suspensions = 0;
     while (result.status == XR_XIR_CALL_SUSPENDED) {
         CHECK(++suspensions <= 2);
-        if (suspensions == cancel_at) CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+        if (suspensions == cancel_at) { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
         else CHECK(xr_xir_call_resume(call,result.wake) == XR_XIR_CALL_READY);
-        result = xr_xir_call_poll(call);
+        result = xr_xir_call_poll_bounded(call, UINT64_MAX);
     }
     if (result.status == XR_XIR_CALL_OOM) goto done;
     if (cancel_at && suspensions == cancel_at) CHECK(result.status == XR_XIR_CALL_CANCELLED);
@@ -97,20 +97,20 @@ int main(void) {
         XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         if (kind != 2) {
             CHECK(result.status == XR_XIR_CALL_SUSPENDED && accounting.depth == (mode >= 12 ? 2u : 3u));
-            CHECK(xr_xir_call_poll(call).wake == result.wake);
+            CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).wake == result.wake);
             if (cancel) {
-                CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+                { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
                 CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_BAD_STATE);
             } else CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_call_poll(call);
+            result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         }
         if (mode == 9 && !cancel) {
             CHECK(result.status == XR_XIR_CALL_SUSPENDED && accounting.depth == 1);
             CHECK(xr_xir_call_resume(call,result.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_call_poll(call);
+            result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         }
         if (kind == 2) CHECK(result.status == XR_XIR_CALL_DIVIDE_BY_ZERO && result.value.type == XR_XIR_UNIT);
         else if (cancel) CHECK(result.status == XR_XIR_CALL_CANCELLED && result.value.type == XR_XIR_UNIT);

@@ -20,9 +20,9 @@ static XrXirOutputStatus output_bytes(void *context, XrXirOutputStream stream, c
     CHECK(probe->calls < 4);
     CHECK(stream == (probe->calls == 2 ? XR_XIR_STDERR : XR_XIR_STDOUT));
     CHECK(length == sizes[probe->calls] && !memcmp(bytes, expected[probe->calls], length));
-    CHECK(xr_xir_call_poll(probe->call).status == XR_XIR_CALL_BUSY);
+    CHECK(xr_xir_call_poll_bounded(probe->call, UINT64_MAX).status == XR_XIR_CALL_BUSY);
     ++probe->calls;
-    if (probe->mode == 3) CHECK(xr_xir_call_cancel(probe->call) == XR_XIR_CALL_CANCEL_REQUESTED);
+    if (probe->mode == 3) CHECK(xr_xir_call_request_cancel(probe->call) == XR_XIR_CALL_CANCEL_REQUESTED);
     return (probe->mode != 2) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
 static void output_cases(const XrXirCallEntry *entry) {
@@ -40,7 +40,7 @@ static void output_cases(const XrXirCallEntry *entry) {
         CHECK(xr_xir_call_new(&config, 0, args, 2, &call) == XR_XIR_CALL_READY);
         probe.call = call;
         xr_xir_value_drop(&args[1]);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         CHECK(result.status == (mode == 0 ? XR_XIR_CALL_RETURNED : mode == 3 ?
             XR_XIR_CALL_CANCELLED : mode == 1 ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_OUTPUT_ERROR));
         CHECK(probe.calls == (mode == 0 ? 4u : mode == 4 ? 0u : 1u));
@@ -54,9 +54,9 @@ static XrXirOutputStatus write_bytes(void *context, XrXirOutputStream stream, co
     OutputProbe *probe = context;
     CHECK(stream == (probe->mode == 5 || probe->mode == 6 ? XR_XIR_STDOUT : XR_XIR_STDERR));
     CHECK(length == 5 && !memcmp(bytes, "A\0\xE4\xB8\xAD", 5));
-    CHECK(xr_xir_call_poll(probe->call).status == XR_XIR_CALL_BUSY);
+    CHECK(xr_xir_call_poll_bounded(probe->call, UINT64_MAX).status == XR_XIR_CALL_BUSY);
     ++probe->calls;
-    if (probe->mode == 3) CHECK(xr_xir_call_cancel(probe->call) == XR_XIR_CALL_CANCEL_REQUESTED);
+    if (probe->mode == 3) CHECK(xr_xir_call_request_cancel(probe->call) == XR_XIR_CALL_CANCEL_REQUESTED);
     return (probe->mode != 1 && !(probe->mode == 5 && probe->calls == 2) &&
         !(probe->mode == 6 && probe->calls == 1)) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
@@ -74,7 +74,7 @@ static void write_cases(const XrXirCallEntry *entries) {
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, mode >= 5 ? 2 : 1, &argument, 1, &call) == XR_XIR_CALL_READY);
         probe.call = call; xr_xir_value_drop(&argument);
-        XrXirCallResult result = xr_xir_call_poll(call);
+        XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
         if (mode == 2) CHECK(result.status == XR_XIR_CALL_OUTPUT_ERROR);
         else if (mode == 3) CHECK(result.status == XR_XIR_CALL_CANCELLED);
         else if (mode == 4) CHECK(result.status == XR_XIR_CALL_LIMIT);
@@ -125,7 +125,7 @@ static void write_action_admission(void) {
         XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, unexpected_write, NULL}; config.admission = (XrXirValueAdmission) {0};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, &argument, 1, &call) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_BAD_STATE);
+        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
         CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);

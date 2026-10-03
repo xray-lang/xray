@@ -105,8 +105,8 @@ TEST(spec_option_count) {
     const XrCliCommandSpec *spec = xr_cli_find_command("run");
     ASSERT_NOT_NULL(spec);
     int count = xr_cli_option_count(spec->options);
-    /* Canonical source run exposes only the compiler optimization policy. */
-    ASSERT_EQ_INT(count, 1);
+    /* Source validation is mandatory; run has no legacy optimizer policy. */
+    ASSERT_EQ_INT(count, 0);
 }
 
 TEST(spec_option_count_empty) {
@@ -302,6 +302,34 @@ TEST(parse_global_command_not_consumed) {
     ASSERT_EQ_INT(consumed, 0);
 }
 
+TEST(parse_global_retired_verify_arc_not_consumed) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--no-color", "--verify-arc", "run", "file.xr"};
+    int consumed = xr_cli_parse_global(5, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    /* The dispatcher uses the first unconsumed token as its command name. */
+    ASSERT_NULL(xr_cli_find_command(argv[consumed + 1]));
+    ASSERT_FALSE(ctx.color);
+}
+
+TEST(parse_retired_verifier_options_rejected) {
+    const char *commands[] = {"run", "check", "build"};
+    XrCliContext ctx = {.program = "xray"};
+    for (size_t i = 0; i < sizeof(commands) / sizeof(*commands); ++i) {
+        const XrCliCommandSpec *spec = xr_cli_find_command(commands[i]);
+        ASSERT_NOT_NULL(spec);
+        XrCliInvocation inv;
+        char *argv[] = {"--verify-arc", "file.xr"};
+        ASSERT_EQ_INT(xr_cli_parse_command(spec, 2, argv, &ctx, &inv), XR_CLI_EXIT_USAGE);
+        char *policy[] = {"--xi-opt", "vm=full", "file.xr"};
+        ASSERT_EQ_INT(xr_cli_parse_command(spec, 3, policy, &ctx, &inv), XR_CLI_EXIT_USAGE);
+    }
+    XrCliInvocation inv;
+    const XrCliCommandSpec *check = xr_cli_find_command("check");
+    char *strict[] = {"--strict", "file.xr"};
+    ASSERT_EQ_INT(xr_cli_parse_command(check, 2, strict, &ctx, &inv), XR_CLI_EXIT_USAGE);
+}
+
 /* ========== Command Parser ========== */
 
 TEST(parse_cmd_simple_flag) {
@@ -327,12 +355,12 @@ TEST(parse_cmd_short_flag) {
 
     XrCliContext ctx = {.program = "xray"};
     XrCliInvocation inv;
-    char *argv[] = {"-v", "-s", "file.xr"};
+    char *argv[] = {"-v", "-S", "file.xr"};
 
     XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
     ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "verbose"));
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "strict"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "syntax-only"));
     ASSERT_EQ_INT(inv.positional_count, 1);
 
     xr_cli_invocation_free(&inv);
@@ -824,6 +852,8 @@ RUN_TEST(parse_global_version_json_any_order);
 RUN_TEST(parse_global_no_color);
 RUN_TEST(parse_global_color);
 RUN_TEST(parse_global_command_not_consumed);
+RUN_TEST(parse_global_retired_verify_arc_not_consumed);
+RUN_TEST(parse_retired_verifier_options_rejected);
 RUN_TEST(parse_global_verbose);
 RUN_TEST(parse_global_quiet);
 RUN_TEST(parse_global_quiet_short);

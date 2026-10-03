@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   Both tools share the parser-error capture pipeline.  analyze adds the
- *   semantic analyzer pass on top; format runs an additional trivia-aware
- *   parse, hands the AST to xfmt, and surfaces parser diagnostics in the
+ *   semantic analyzer pass on top; format uses one owned trivia-aware
+ *   parse, formats its AST, and surfaces parser diagnostics in the
  *   structured result.
  */
 
@@ -243,6 +243,27 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
     return result;
 }
 
+typedef struct FormatCapture {
+    ErrorCapture *capture;
+    XrCompileState *state;
+} FormatCapture;
+static void format_error_callback(void *data, int line, int column, int end_line,
+                                   int end_column, const char *message) {
+    FormatCapture *format = data;
+    ErrorCapture *capture = format->capture;
+    if (capture->count >= XMCP_TOOLS_MAX_CHECK_ERRORS) return;
+    size_t length = 0;
+    if (xr_compile_state_string_length(format->state, message, &length) != XR_COMPILE_RESOURCE_OK) return;
+    size_t copied = length < sizeof(capture->messages[0])-1 ? length : sizeof(capture->messages[0])-1;
+    int i=capture->count;
+    if (xr_compile_state_copy(format->state,capture->messages[i],message,copied) != XR_COMPILE_RESOURCE_OK ||
+        xr_compile_state_work(format->state,1) != XR_COMPILE_RESOURCE_OK) return;
+    capture->messages[i][copied]=0;
+    capture->lines[i]=line; capture->columns[i]=column;
+    capture->end_lines[i]=end_line; capture->end_columns[i]=end_column;
+    ++capture->count;
+}
+
 /* ---- Tool: xray_format ------------------------------------------------- */
 
 XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallContext *ctx,
@@ -251,6 +272,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     XR_DCHECK(ctx != NULL, "xmcp_tool_xray_format: NULL ctx");
     XR_DCHECK(arguments != NULL, "xmcp_tool_xray_format: NULL arguments");
     (void) ctx;
+    (void) server;
 
     const char *code = xjson_get_string(arguments, "code");
     if (!code || code[0] == '\0')
@@ -263,68 +285,54 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     if (xjson_get_bool(arguments, "useTabs"))
         config.use_tabs = 1;
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
-    if (!session)
-        return xmcp_make_error_result("Error: compiler session is required");
-
-    XrArena *arena = xr_malloc(sizeof(XrArena));
-    if (!arena)
-        return xmcp_make_error_result("Error: out of memory");
-    xr_arena_init(arena, 0);
-
-    XrCompilerSessionScope syntax_scope;
-    if (!xr_compiler_session_push_arena(session, arena, "<mcp-format>", &syntax_scope)) {
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        return xmcp_make_error_result("Error: failed to enter compiler session");
+    XrCompileResourceLimits limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    XrCompileResources *resources=NULL;
+    XrCompilerSession *session=NULL;
+    AstNode *ast=NULL;
+    XrFmtOutput output={0};
+    XrJsonValue *result=NULL;
+    unsigned stage=0, failure=0;
+    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    if(created!=XR_COMPILE_RESOURCE_OK) { stage=1; failure=(unsigned)created; goto cleanup; }
+    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
+    if(opened!=XR_COMPILER_SESSION_OK) { stage=2; failure=(unsigned)opened; goto cleanup; }
+    XrCompileState *state=xr_compile_session_compile_state(session);
+    ErrorCapture capture;
+    if(xr_compile_state_zero(state,&capture,sizeof(capture))!=XR_COMPILE_RESOURCE_OK) {
+        stage=3; failure=(unsigned)xr_compile_state_status(state); goto cleanup;
     }
-
-    ErrorCapture cap = {.count = 0};
-    Parser parser;
-    xr_parser_init(&parser, session, code, "<mcp-format>", arena);
-    xr_parser_set_error_callback(&parser, check_error_callback, &cap, XMCP_TOOLS_MAX_CHECK_ERRORS);
-    AstNode *syntax_ast = xr_parse_recoverable(&parser);
-    (void) syntax_ast;
-
-    if (cap.count > 0) {
-        int diagnostic_count = 0;
-        bool truncated = false;
-        XrJsonValue *diagnostics = make_parser_diagnostics(&cap, &diagnostic_count, &truncated);
-        XrJsonValue *structured = make_format_result_content(
-            "", false, config.indent_size, config.use_tabs != 0, false, truncated, diagnostics);
-        char text[128];
-        snprintf(text, sizeof(text), "Cannot format code with %d syntax diagnostic(s).",
-                 diagnostic_count);
-        XrJsonValue *result = xmcp_make_text_structured_result(text, structured, true);
-        xr_compiler_session_pop_arena(&syntax_scope);
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        return result;
+    FormatCapture format={&capture,state};
+    XrParseDiagnostics diagnostics={format_error_callback,&format,XMCP_TOOLS_MAX_CHECK_ERRORS};
+    XrParseStatus parsed=xr_compile_parse_with_trivia(session,code,"<mcp-format>",&diagnostics,&ast);
+    if(parsed==XR_PARSE_SYNTAX) {
+        int count=0; bool truncated=false;
+        XrJsonValue *items=make_parser_diagnostics(&capture,&count,&truncated);
+        XrJsonValue *structured=make_format_result_content("",false,config.indent_size,config.use_tabs!=0,false,truncated,items);
+        char message[128];
+        snprintf(message,sizeof(message),"Cannot format code with %d syntax diagnostic(s).",count);
+        result=xmcp_make_text_structured_result(message,structured,true);
+        goto cleanup;
     }
-    xr_compiler_session_pop_arena(&syntax_scope);
-    xr_arena_destroy(arena);
-    xr_free(arena);
-
-    AstNode *ast = xr_parse_with_trivia(session, code, "<mcp-format>");
-    if (!ast) {
-        XrJsonValue *diagnostics = xjson_new_array();
-        XrJsonValue *structured = make_format_result_content(
-            "", false, config.indent_size, config.use_tabs != 0, false, false, diagnostics);
-        return xmcp_make_text_structured_result("Error: formatting parser failed", structured,
-                                                true);
+    if(parsed!=XR_PARSE_OK) { stage=3; failure=(unsigned)parsed; goto cleanup; }
+    XrFmtStatus formatted=xr_compile_format_ast(state,ast,&config,&output);
+    if(formatted!=XR_FMT_OK) { stage=4; failure=(unsigned)formatted; goto cleanup; }
+    size_t length=0;
+    if(xr_compile_state_string_length(state,code,&length)!=XR_COMPILE_RESOURCE_OK ||
+        (length==output.length && xr_compile_state_work(state,length)!=XR_COMPILE_RESOURCE_OK)) {
+        stage=5; failure=(unsigned)xr_compile_state_status(state); goto cleanup;
     }
-
-    char *formatted = xfmt_format_ast(ast, &config, server->isolate);
-    xr_program_destroy(ast);
-    if (!formatted)
-        return xmcp_make_error_result("Error: formatting failed");
-
-    XrJsonValue *structured =
-        make_format_result_content(formatted, strcmp(code, formatted) != 0, config.indent_size,
-                                   config.use_tabs != 0, true, false, xjson_new_array());
-
-    XrJsonValue *result = xmcp_make_text_result(formatted, false);
-    xjson_object_set(result, "structuredContent", structured);
-    xr_free(formatted);
+    bool changed=length!=output.length || memcmp(code,output.text,length)!=0;
+    XrJsonValue *structured=make_format_result_content(output.text,changed,config.indent_size,
+        config.use_tabs!=0,true,false,xjson_new_array());
+    result=xmcp_make_text_result(output.text,false);
+    xjson_object_set(result,"structuredContent",structured);
+cleanup:
+    xr_program_destroy(ast); xr_compile_session_free(session);
+    xr_compile_resources_release(resources); xr_compile_format_output_free(&output);
+    if(stage) {
+        char message[128];
+        snprintf(message,sizeof(message),"Error: formatting failed (stage=%u status=%u)",stage,failure);
+        return xmcp_make_error_result(message);
+    }
     return result;
 }

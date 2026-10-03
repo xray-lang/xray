@@ -22,10 +22,8 @@ typedef struct XrXirStorageLayout {
     XrXirLayout body;
 } XrXirStorageLayout;
 
-/* Requires a verified pool and exact caller-owned destinations. Construction
- * may change destination bytes on failure; callers publish only on success.
- * Work is consumed on success; bounded temporary scratch is always released. */
-XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
-    const XrXirTarget *target, XrXirBudget *remaining,
-    XrXirStorageLayout *layouts, uint32_t count);
+/* Requires a verified pool and exact caller-owned destinations. Failure preserves destination bytes.
+ * Allocations and work share the caller ledger; temporary storage is physically
+ * released on every return, while cumulative allocation and work remain charged. */
+XR_FUNC XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *compile_context, const XrXirTypes *types, const XrXirTarget *target, XrXirStorageLayout *layouts, uint32_t count);
 #endif // XXIR_STORAGE_H

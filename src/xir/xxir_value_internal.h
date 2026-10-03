@@ -31,7 +31,7 @@ typedef struct XirNominalValue {
     uint32_t count, variant;
     XrXirValue *fields;
 } XirNominalValue;
-XR_FUNC const XirNominalValue *xr_xir_type_arena_empty_variant(
+XR_FUNC const XirNominalValue *xr_xir_compile_type_arena_empty_variant(
     const XrXirTypeArena *arena, XrXirType type, uint32_t variant);
 
 static inline bool xr_xir_reference_retain(_Atomic(uint32_t) *references) {

@@ -31,7 +31,7 @@ static bool pair(XrXirProgram *program){
  for(unsigned i=0;i<2;++i){XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
   XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
   if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,2,NULL,0);
-  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;
+  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
   if(status==XR_XIR_CALL_RETURNED){XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
    CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
   }else CHECK(status==XR_XIR_CALL_OOM);

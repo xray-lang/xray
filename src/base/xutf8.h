@@ -114,6 +114,9 @@ XR_FUNC size_t xr_utf8_byte_to_utf16_offset(const char *str, size_t len, size_t 
 
 // Diagnose the first malformed UTF-8 subsequence and count valid runes.
 XR_FUNC XrUtf8ScanResult xr_utf8_scan_strict(const uint8_t *data, size_t len);
+// The callback and context are borrowed; read failure preserves output.
+XR_FUNC bool xr_utf8_scan_strict_read(const uint8_t *data, size_t len, XrUtf8ReadByte read,
+                                      void *context, XrUtf8ScanResult *output);
 
 // Decode one scalar or one Unicode maximal subpart for lossy conversion.
 XR_FUNC XrUtf8Step xr_utf8_decode_step(const uint8_t *data, size_t len);

@@ -5,130 +5,136 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xstring_pool.c - Compile-time string deduplication pool
- *
- * KEY CONCEPT:
- *   Open-addressing hash table (Robin Hood probing) backed entirely
- *   by the parser arena. Deduplicates string literals and identifiers
- *   so that identical text shares a single pointer.
- *
- *   Rehash doubles the bucket array (arena-allocated; old array is
- *   abandoned in the arena — acceptable since the arena is freed
- *   wholesale after parsing).
+ * xstring_pool.c - Metered compile-time string interning with atomic publication
  */
-
 #include "xstring_pool.h"
 #include "../../base/xarena.h"
-#include "../../base/xchecks.h"
-#include "../../base/xhash.h"
+#include "../../toolchain/xcompiler_arena_backing.h"
 #include <string.h>
 
-/* Load factor threshold: rehash when count > capacity * 3/4. */
-#define POOL_LOAD_NUM 3
-#define POOL_LOAD_DEN 4
-#define POOL_INIT_CAP 64
+#define POOL_INIT_CAP 64u
 
-/* Each bucket stores a cached hash, string pointer, and length. */
-typedef struct {
-    uint32_t hash; /* 0 = empty */
+typedef struct PoolEntry {
+    uint32_t hash;
     const char *str;
     size_t len;
 } PoolEntry;
 
 struct XrCompileStringPool {
     XrArena *arena;
+    XrCompileState *state;
     PoolEntry *buckets;
-    size_t capacity; /* always a power of two */
+    size_t capacity;
     size_t count;
 };
 
-/* ------------------------------------------------------------------ */
+XR_FUNC bool xr_string_pool_matches(const XrCompileStringPool *pool,
+                                    XrCompileState *state, const XrArena *arena) {
+    return pool && pool->state == state && pool->arena == arena &&
+           xr_compiler_arena_matches_state(arena, state);
+}
 
-XR_FUNC XrCompileStringPool *xr_string_pool_new(XrArena *arena) {
-    XR_DCHECK(arena != NULL, "xr_string_pool_new: NULL arena");
+static bool pool_work(XrCompileStringPool *pool, size_t units) {
+    return xr_compile_state_work(pool->state, units) == XR_COMPILE_RESOURCE_OK;
+}
 
-    XrCompileStringPool *pool =
-        (XrCompileStringPool *) xr_arena_alloc(arena, sizeof(XrCompileStringPool));
+static void *pool_allocate(XrCompileStringPool *pool, size_t count, size_t size) {
+    if (xr_compile_state_status(pool->state) != XR_COMPILE_RESOURCE_OK) return NULL;
+    void *memory = xr_arena_alloc_array(pool->arena, size, count);
+    return xr_compiler_arena_capture_status(pool->arena, pool->state) == XR_COMPILE_RESOURCE_OK ? memory : NULL;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_string_pool_open(
+    XrCompileState *state, XrArena *arena, XrCompileStringPool **output) {
+    if (!output || *output || !xr_compiler_arena_matches_state(arena, state))
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    XrCompileResourceStatus status = xr_compiler_arena_capture_status(arena, state);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
+    XrCompileStringPool *pool = xr_arena_alloc(arena, sizeof(*pool));
+    status = xr_compiler_arena_capture_status(arena, state);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
     pool->arena = arena;
+    pool->state = state;
+    pool->buckets = pool_allocate(pool, POOL_INIT_CAP, sizeof(PoolEntry));
+    if (!pool->buckets) return xr_compile_state_status(state);
     pool->capacity = POOL_INIT_CAP;
-    pool->count = 0;
-    pool->buckets = (PoolEntry *) xr_arena_alloc(arena, sizeof(PoolEntry) * POOL_INIT_CAP);
-    memset(pool->buckets, 0, sizeof(PoolEntry) * POOL_INIT_CAP);
-    return pool;
+    *output = pool;
+    return XR_COMPILE_RESOURCE_OK;
 }
 
-/* Rehash into a new, larger bucket array. Old array stays in the arena. */
-static void pool_rehash(XrCompileStringPool *pool) {
-    size_t old_cap = pool->capacity;
-    PoolEntry *old = pool->buckets;
-
-    size_t new_cap = old_cap * 2;
-    PoolEntry *fresh = (PoolEntry *) xr_arena_alloc(pool->arena, sizeof(PoolEntry) * new_cap);
-    memset(fresh, 0, sizeof(PoolEntry) * new_cap);
-
-    size_t mask = new_cap - 1;
-    for (size_t i = 0; i < old_cap; i++) {
-        if (old[i].hash == 0)
-            continue;
-        uint32_t h = old[i].hash;
-        size_t idx = h & mask;
-        while (fresh[idx].hash != 0)
-            idx = (idx + 1) & mask;
-        fresh[idx] = old[i];
+static bool pool_rehash(XrCompileStringPool *pool) {
+    if (pool->capacity > SIZE_MAX / 2) {
+        xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_BUDGET);
+        return false;
     }
-
+    size_t capacity = pool->capacity * 2;
+    PoolEntry *fresh = pool_allocate(pool, capacity, sizeof(*fresh));
+    if (!fresh) return false;
+    for (size_t i = 0; i < pool->capacity; ++i) {
+        if (!pool_work(pool, 1)) return false;
+        if (!pool->buckets[i].hash) continue;
+        size_t slot = pool->buckets[i].hash & (capacity - 1);
+        for (;;) {
+            if (!pool_work(pool, 1)) return false;
+            if (!fresh[slot].hash) break;
+            slot = (slot + 1) & (capacity - 1);
+        }
+        if (xr_compile_state_copy(pool->state, &fresh[slot], &pool->buckets[i], sizeof(*fresh)) != XR_COMPILE_RESOURCE_OK)
+            return false;
+    }
     pool->buckets = fresh;
-    pool->capacity = new_cap;
+    pool->capacity = capacity;
+    return true;
 }
 
-/* Core lookup-or-insert.  Returns the canonical pointer. */
-static const char *pool_intern(XrCompileStringPool *pool, const char *str, size_t len) {
-    XR_DCHECK(pool != NULL, "pool_intern: NULL pool");
-
-    /* Rehash if above load threshold. */
-    if (pool->count * POOL_LOAD_DEN >= pool->capacity * POOL_LOAD_NUM)
-        pool_rehash(pool);
-
-    uint32_t h = xr_hash_bytes(str, len);
-    if (h == 0)
-        h = 1; /* reserve 0 as empty sentinel */
-
-    size_t mask = pool->capacity - 1;
-    size_t idx = h & mask;
-
+static const char *pool_intern(XrCompileStringPool *pool, const char *str, size_t length) {
+    if (!pool || xr_compile_state_status(pool->state) != XR_COMPILE_RESOURCE_OK) return NULL;
+    if ((!str && length) || length == SIZE_MAX) {
+        xr_compile_state_fail(pool->state, length == SIZE_MAX ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    if (pool->count >= pool->capacity - pool->capacity / 4 && !pool_rehash(pool)) return NULL;
+    uint32_t hash = UINT32_C(2166136261);
+    for (size_t i = 0; i < length; ++i) {
+        if (!pool_work(pool, 1)) return NULL;
+        hash = (hash ^ (uint8_t) str[i]) * UINT32_C(16777619);
+    }
+    if (!hash) hash = 1;
+    size_t slot = hash & (pool->capacity - 1);
     for (;;) {
-        PoolEntry *e = &pool->buckets[idx];
-        if (e->hash == 0) {
-            /* Empty slot — insert. */
-            char *dup = xr_arena_strndup(pool->arena, str, len);
-            e->hash = h;
-            e->str = dup;
-            e->len = len;
-            pool->count++;
-            return dup;
+        if (!pool_work(pool, 1)) return NULL;
+        PoolEntry *entry = &pool->buckets[slot];
+        if (!entry->hash) {
+            char *copy = xr_arena_strndup(pool->arena, str ? str : "", length);
+            if (xr_compiler_arena_capture_status(pool->arena, pool->state) != XR_COMPILE_RESOURCE_OK) return NULL;
+            if (!pool_work(pool, sizeof(*entry))) return NULL;
+            *entry = (PoolEntry) {hash, copy, length};
+            ++pool->count;
+            return copy;
         }
-        if (e->hash == h && e->len == len && memcmp(e->str, str, len) == 0) {
-            /* Hit — return existing. */
-            return e->str;
+        if (entry->hash == hash && entry->len == length) {
+            size_t i = 0;
+            for (; i < length; ++i) {
+                if (!pool_work(pool, 2)) return NULL;
+                if (entry->str[i] != str[i]) break;
+            }
+            if (i == length) return entry->str;
         }
-        idx = (idx + 1) & mask;
+        slot = (slot + 1) & (pool->capacity - 1);
     }
 }
 
 XR_FUNC const char *xr_string_pool_intern(XrCompileStringPool *pool, const char *str) {
-    if (!str)
-        return NULL;
-    return pool_intern(pool, str, strlen(str));
+    if (!pool) return NULL;
+    size_t length = 0;
+    if (xr_compile_state_string_length(pool->state, str, &length) != XR_COMPILE_RESOURCE_OK) return NULL;
+    return pool_intern(pool, str, length);
 }
 
-XR_FUNC const char *xr_string_pool_intern_len(XrCompileStringPool *pool, const char *str,
-                                              size_t len) {
-    if (!str)
-        return NULL;
-    return pool_intern(pool, str, len);
+XR_FUNC const char *xr_string_pool_intern_len(XrCompileStringPool *pool, const char *str, size_t length) {
+    return pool_intern(pool, str, length);
 }
 
 XR_FUNC size_t xr_string_pool_count(const XrCompileStringPool *pool) {
-    XR_DCHECK(pool != NULL, "xr_string_pool_count: NULL pool");
-    return pool->count;
+    return pool ? pool->count : 0;
 }

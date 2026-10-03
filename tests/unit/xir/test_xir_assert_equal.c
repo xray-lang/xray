@@ -186,7 +186,7 @@ static void equal_run(XrXirArtifact *lowered,const char *generated_path) {
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     for (uint32_t i=0;i<13;++i) {
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);
-        XrXirInstanceResult polled=xr_xir_instance_poll(instance);
+        XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         if (polled.outcome.status!=XR_XIR_CALL_RETURNED) fprintf(stderr,"equal %s status=%u\n",names[i],polled.outcome.status);
         CHECK(polled.outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
@@ -214,7 +214,7 @@ static void equal_existing_fixture(const char *directory,const char *path,const 
     XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(value.type==XR_XIR_I64 && !value.payload);xr_xir_value_drop(&value);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);

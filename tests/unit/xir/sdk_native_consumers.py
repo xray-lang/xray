@@ -9,7 +9,7 @@ def checked(command,**kwargs):
     return result.stdout
 
 
-def compile_source(args,sdk,source,object_file):
+def compile_source(args,sdk,source,object_file,program_symbol=None):
     if args.provider=='msvc':
         command=[args.compiler,'/nologo','/std:c11','/utf-8','/experimental:c11atomics',
                  '/MD','/O2','/W4','/WX','/DNDEBUG','/DNOMINMAX','/DWIN32_LEAN_AND_MEAN',
@@ -23,6 +23,8 @@ def compile_source(args,sdk,source,object_file):
         if args.provider=='clang':command.append('-fms-runtime-lib=dll')
         for directory in ('src','include','generated'):command+=['-isystem',str(sdk/directory)]
         command+=['-c',str(source),'-o',str(object_file)]
+    if program_symbol:
+        command.append(('/D' if args.provider=='msvc' else '-D')+'XIR_SDK_PROGRAM_SYMBOL='+program_symbol)
     checked(command)
 
 
@@ -35,12 +37,13 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('lease','generator','bundle','stdlib','compiler','linker'):parser.add_argument('--'+name,required=True)
     parser.add_argument('--provider',choices=('msvc','clang','zig'),required=True)
+    parser.add_argument('--original-generator')
     args=parser.parse_args();root=Path(__file__).resolve().parents[3];bundle=Path(args.bundle)
     lease=subprocess.Popen([args.lease,str(bundle),str(bundle/'sdk_manifest.json')],
                            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
     try:
-        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['17','2'],ready
-        sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(4)]
+        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['18','2'],ready
+        sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(5)]
         assert sdk.is_dir() and all(Path(name).is_file() for name in libraries)
         with tempfile.TemporaryDirectory(prefix='xir-sdk-native-') as temporary:
             work=Path(temporary);consumer=root/'tests/unit/xir/xir_sdk_consumer.c'
@@ -51,23 +54,27 @@ def main():
             link(args,probe_exe,[str(probe_object)],libraries)
             expected=json.loads((proof/'EXPECTED.json').read_text())['rows']
             actual=json.loads(checked([str(probe_exe)]))
-            assert actual==[dict(id=row['id'],value=row['value']) for row in expected] and len(actual)==197
-            print(args.provider+': fresh admitted-header 197-field independent ABI PASS',flush=True)
-            for name,path,expected in (
-                ('retired',root/'tests/unit/fixtures/assertion/retired_names_are_ordinary.xr',b''),
-                ('array',root/'tests/unit/fixtures/runtime/array_growth_accounting.xr',b'array-growth-accounting-ok\n')):
+            assert actual==[dict(id=row['id'],value=row['value']) for row in expected] and len(actual)==220
+            print(args.provider+': fresh admitted-header 220-field independent ABI PASS',flush=True)
+            cases=[('multi',root/'tests/fixtures/xir_compile_owner/root.xr',b'owner\xe4\xb8\xad-ok 42 true\n',
+                    args.generator,'multi','linked_source_program')]
+            if args.original_generator:
+                cases += [('retired',root/'tests/unit/fixtures/assertion/retired_names_are_ordinary.xr',b'',
+                           args.original_generator,'empty','original_source_program'),
+                          ('array',root/'tests/unit/fixtures/runtime/array_growth_accounting.xr',b'array-growth-accounting-ok\n',
+                           args.original_generator,'array','original_source_program')]
+            for name,path,expected,generator,mode,symbol in cases:
                 generated=work/(name+'.c')
-                checked([args.generator,str(path.parent),str(path),args.stdlib,'accept',str(generated),
-                         'array' if name=='array' else 'empty','normal'])
+                checked([generator,str(path.parent),str(path),args.stdlib,'accept',str(generated),mode,'normal'])
                 assert not re.search(r'\(\s*\{',generated.read_text(encoding='utf-8'))
                 objects=[]
                 for source in (generated,consumer):
                     object_file=work/(name+'-'+source.stem+'.obj');objects.append(str(object_file))
-                    compile_source(args,sdk,source,object_file)
+                    compile_source(args,sdk,source,object_file,symbol if source==consumer else None)
                 executable=work/(name+'.exe')
                 link(args,executable,objects,libraries)
                 output=checked([str(executable)]).replace(b'\r\n',b'\n');assert output==expected,(name,output,expected)
-                print(args.provider+' '+name+': actual C11 + admitted four archives + owned host result PASS',flush=True)
+                print(args.provider+' '+name+': actual C11 + admitted five archives + owned host result PASS',flush=True)
     finally:
         lease.stdin.write('q');lease.stdin.flush()
         _,error=lease.communicate(timeout=10);assert not lease.returncode,error

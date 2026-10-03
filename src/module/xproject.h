@@ -15,7 +15,6 @@
 #ifndef XPROJECT_H
 #define XPROJECT_H
 
-#include "../runtime/value/xvalue.h"
 #include "../base/xhashmap.h"
 #include <stdbool.h>
 
@@ -77,27 +76,24 @@ typedef struct XrProject {
 
 /* ========== Project API ========== */
 
-XR_FUNC XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root);
-XR_FUNC void xr_project_free(XrProject *project);
+/* All input paths are absolute. Resources and structural limits are explicit.
+ * Constructors require an initially NULL output. Failed operations preserve
+ * outputs; query misses publish NULL on OK. */
+XR_FUNC XrManifestStatus xr_project_load_owned(const XrOsIoPolicy *policy,
+    const char *absolute_root, const XrTomlParseLimits *limits, XrProject **output,
+    XrManifestDiagnostic *diagnostic);
+XR_FUNC void xr_project_free_owned(XrProject *project);
+XR_FUNC bool xr_project_uses_policy(const XrProject *, const XrOsIoPolicy *);
+typedef struct XrProjectAuthority XrProjectAuthority;
+XR_FUNC XrManifestStatus xr_project_authority_build_owned(const XrProject *,
+    XrProjectAuthority **output, XrManifestDiagnostic *diagnostic);
+XR_FUNC const XrModuleIdentityAuthority *xr_project_authority_view(const XrProjectAuthority *);
+XR_FUNC void xr_project_authority_free_owned(XrProjectAuthority *);
+XR_FUNC XrManifestStatus xr_resolve_local_dependency_owned(const XrProject *,
+    const char *package_name, char **output);
+/* Dependency paths use private policy ownership and this matching release. */
+XR_FUNC void xr_project_path_free_owned(char *path);
+XR_FUNC XrManifestStatus xr_project_find_target_config_owned(const XrProject *,
+    const char *target_name, const XrTargetConfig **output);
 
-/* Build the exact typed entry authority declared by the manifest. Both
- * returned strings are xr_malloc-owned and back the authority fields.
- * On failure `err` receives the manifest field that made the authority
- * inexact, so a caller can name the required spelling instead of reporting
- * that some authority could not be established. */
-XR_FUNC bool xr_project_module_identity_authority(const XrProject *project,
-                                                  XrModuleIdentityAuthority *authority,
-                                                  char **namespace_out, char **physical_root_out,
-                                                  char *err, size_t err_size);
-
-// Returns local path (caller frees), or NULL for non-local dependencies
-XR_FUNC char *xr_resolve_local_dependency(XrProject *project, const char *package_name);
-XR_FUNC const XrTargetConfig *xr_project_find_target_config(const XrProject *project,
-                                                            const char *target_name);
-
-/* ========== File Utilities ========== */
-
-XR_FUNC bool xr_project_collect_files(const char *dir_path, char ***files, int *count);
-XR_FUNC void xr_project_free_files(char **files, int count);
-
-#endif  // XPROJECT_H
+#endif /* XPROJECT_H */

@@ -27,22 +27,24 @@
 #include "xfmt_internal.h"
 
 static void xfmt_write_trivia_body(XrFmtContext *ctx, XrTrivia *trivia) {
+    if (!xfmt_step(ctx)) return;
     if (trivia->type == TRIVIA_LINE_COMMENT) {
         xfmt_write_str(ctx, "//");
-        for (int i = 0; i < trivia->length; i++) {
+        for (int i = 0; xfmt_step(ctx) && (i < trivia->length); i++) {
             xfmt_write_char(ctx, trivia->start[i]);
         }
     } else if (trivia->type == TRIVIA_BLOCK_COMMENT) {
         xfmt_write_str(ctx, "/*");
-        for (int i = 0; i < trivia->length; i++) {
+        for (int i = 0; xfmt_step(ctx) && (i < trivia->length); i++) {
             xfmt_write_char(ctx, trivia->start[i]);
         }
         xfmt_write_str(ctx, "*/");
     }
 }
 
-void xfmt_write_leading_comments(XrFmtContext *ctx, XrTrivia *trivia) {
-    while (trivia) {
+XR_FUNC void xfmt_write_leading_comments(XrFmtContext *ctx, XrTrivia *trivia) {
+    if (!xfmt_step(ctx)) return;
+    while ( xfmt_step(ctx) && (trivia)) {
         xfmt_write_indent(ctx);
         xfmt_write_trivia_body(ctx, trivia);
         xfmt_write_newline(ctx);
@@ -50,7 +52,8 @@ void xfmt_write_leading_comments(XrFmtContext *ctx, XrTrivia *trivia) {
     }
 }
 
-void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia) {
+XR_FUNC void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia) {
+    if (!xfmt_step(ctx)) return;
     XR_DCHECK(ctx != NULL, "xfmt_write_trailing_comment: NULL ctx");
     if (!trivia)
         return;
@@ -70,7 +73,7 @@ void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia) {
     bool had_newline = ctx->length > 0 && ctx->output[ctx->length - 1] == '\n';
     if (had_newline) {
         ctx->length--;
-        ctx->output[ctx->length] = '\0';
+        if (xfmt_healthy(ctx)) ctx->output[ctx->length] = '\0';
         ctx->line_start = 0;
     }
 

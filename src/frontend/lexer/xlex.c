@@ -8,7 +8,7 @@
  * xlex.c - Lexical analyzer implementation
  *
  * KEY CONCEPT:
- *   Tokenizes source code for the parser using SIMD optimization for whitespace.
+ *   Tokenizes source code with explicit arena lifetime and metered byte reads.
  */
 
 #include <assert.h>
@@ -17,6 +17,8 @@
 #include "../../base/xchecks.h"
 #include "../../base/xutf8.h"
 #include "../../base/xsimd.h"
+#include "../../toolchain/xcompiler_arena_backing.h"
+#include <limits.h>
 #include "../../base/xmalloc.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 
@@ -24,33 +26,28 @@
 // Trivia Functions
 // ============================================================================
 
-XrTrivia *xr_trivia_new(XrTriviaType type, const char *start, int length, int line) {
-    XrTrivia *trivia = (XrTrivia *) xr_malloc(sizeof(XrTrivia));
+static XrTrivia *trivia_new(Scanner *scanner, XrTriviaType type, const char *start, int length, int line) {
+    if (xr_compile_state_status(scanner->state) != XR_COMPILE_RESOURCE_OK) return NULL;
+    if (length < 0) {
+        xr_compile_state_fail(scanner->state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    XrTrivia *trivia = xr_arena_alloc(scanner->arena, sizeof(XrTrivia));
+    if (xr_compiler_arena_capture_status(scanner->arena, scanner->state) != XR_COMPILE_RESOURCE_OK) return NULL;
     if (!trivia)
         return NULL;
     trivia->type = type;
-    trivia->start = start;
+    trivia->start = xr_arena_strndup(scanner->arena, start, (size_t) length);
+    if (xr_compiler_arena_capture_status(scanner->arena, scanner->state) != XR_COMPILE_RESOURCE_OK) return NULL;
     trivia->length = length;
     trivia->line = line;
     trivia->next = NULL;
     return trivia;
 }
 
-void xr_trivia_free(XrTrivia *trivia) {
-    xr_free(trivia);
-}
-
-void xr_trivia_free_chain(XrTrivia *head) {
-    while (head) {
-        XrTrivia *next = head->next;
-        xr_free(head);
-        head = next;
-    }
-}
-
 // Append trivia using tail pointer for O(1)
 static void trivia_append(Scanner *scanner, XrTrivia *item) {
-    XR_DCHECK(item != NULL, "trivia_append: NULL item");
+    if (!item || xr_compile_state_status(scanner->state) != XR_COMPILE_RESOURCE_OK) return;
     if (!scanner->pending_trivia) {
         scanner->pending_trivia = item;
     } else {
@@ -63,52 +60,70 @@ static void trivia_append(Scanner *scanner, XrTrivia *item) {
 // Scanner Initialization
 // ============================================================================
 
-void xr_scanner_init(Scanner *scanner, const char *source) {
-    XR_DCHECK(scanner != NULL, "scanner_init: NULL scanner");
-    XR_DCHECK(source != NULL, "scanner_init: NULL source");
-    xr_scanner_init_with_trivia(scanner, source, false);
+static bool scanner_healthy(const Scanner *scanner) {
+    return scanner && xr_compile_state_status(scanner->state) == XR_COMPILE_RESOURCE_OK;
 }
 
-void xr_scanner_init_with_trivia(Scanner *scanner, const char *source, bool collect_trivia) {
-    XR_DCHECK(scanner != NULL, "scanner_init_with_trivia: NULL scanner");
-    XR_DCHECK(source != NULL, "scanner_init_with_trivia: NULL source");
-    scanner->source = source;
-    scanner->start = source;
-    scanner->current = source;
-    size_t source_len = strlen(source);
-    scanner->end = source + source_len;
-    scanner->line = 1;
-    scanner->line_start = source;
-    scanner->start_line = 1;
-    scanner->start_line_start = source;
-    scanner->had_leading_space = false;
-    scanner->collect_trivia = collect_trivia;
-    scanner->pending_trivia = NULL;
-    scanner->trivia_tail = NULL;
-    scanner->pending_error = NULL;
+static int scanner_read_utf8(void *context, const uint8_t *address, uint8_t *output) {
+    XrCompileState *state = context;
+    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return 0;
+    *output = *address;
+    return 1;
+}
 
-    XrUtf8ScanResult scan = xr_utf8_scan_strict((const uint8_t *) source, source_len);
+static char scanner_read(Scanner *scanner, const char *address) {
+    uint8_t value = 0;
+    (void) scanner_read_utf8(scanner->state, (const uint8_t *) address, &value);
+    return (char) value;
+}
+
+static int scanner_compare(Scanner *scanner, const char *left, const char *right, size_t length) {
+    for (size_t i = 0; i < length; ++i) {
+        if (xr_compile_state_work(scanner->state, 2) != XR_COMPILE_RESOURCE_OK) return 0;
+        unsigned char a = (unsigned char) left[i], b = (unsigned char) right[i];
+        if (a != b) return a < b ? -1 : 1;
+    }
+    return 0;
+}
+
+XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena,
+                                        const char *source) {
+    return xr_compile_scanner_open_with_trivia(scanner, state, arena, source, false);
+}
+
+XrCompileResourceStatus xr_compile_scanner_open_with_trivia(Scanner *scanner, XrCompileState *state,
+                                                    XrArena *arena, const char *source,
+                                                    bool collect_trivia) {
+    if (!scanner || !source || !xr_compiler_arena_matches_state(arena, state))
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    size_t length = 0;
+    XrCompileResourceStatus status = xr_compile_state_string_length(state, source, &length);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
+    if (length >= INT_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+    Scanner local = {0};
+    local.state = state;
+    local.arena = arena;
+    local.source = local.start = local.current = local.line_start = local.start_line_start = source;
+    local.end = source + length;
+    local.line = local.start_line = 1;
+    local.collect_trivia = collect_trivia;
+    XrUtf8ScanResult scan;
+    if (!xr_utf8_scan_strict_read((const uint8_t *) source, length, scanner_read_utf8, state, &scan))
+        return xr_compile_state_status(state);
     if (scan.error != XR_UTF8_OK) {
         const char *error_start = source + scan.byte_offset;
-        const char *line_start = source;
-        int line = 1;
-        for (const char *p = source; p < error_start; p++) {
-            if (*p == '\n') {
-                line++;
-                line_start = p + 1;
-            }
+        for (const char *p = source; p < error_start; ++p) {
+            char c = scanner_read(&local, p);
+            if (!scanner_healthy(&local)) return xr_compile_state_status(state);
+            if (c == '\n') { ++local.line; local.line_start = p + 1; }
         }
-        size_t invalid_length = scan.invalid_length ? scan.invalid_length : 1;
-        if (scan.byte_offset + invalid_length > source_len)
-            invalid_length = source_len - scan.byte_offset;
-        scanner->start = error_start;
-        scanner->current = error_start + invalid_length;
-        scanner->line = line;
-        scanner->line_start = line_start;
-        scanner->start_line = line;
-        scanner->start_line_start = line_start;
-        scanner->pending_error = "source must be valid UTF-8";
+        local.start = error_start;
+        local.current = error_start + scan.invalid_length;
+        local.start_line = local.line;
+        local.start_line_start = local.line_start;
+        local.pending_error = "source must be valid UTF-8";
     }
+    return xr_compile_state_copy(state, scanner, &local, sizeof(local));
 }
 
 // Capture the start position of a new token. Must be called once per token,
@@ -123,28 +138,33 @@ static inline void scanner_begin_token(Scanner *scanner) {
 }
 
 static int is_at_end(Scanner *scanner) {
-    return scanner->current >= scanner->end;
+    return !scanner_healthy(scanner) || scanner->current >= scanner->end;
 }
 
 static char advance(Scanner *scanner) {
-    scanner->current++;
-    return scanner->current[-1];
+    if (is_at_end(scanner)) return '\0';
+    char value = scanner_read(scanner, scanner->current);
+    if (scanner_healthy(scanner)) ++scanner->current;
+    return value;
 }
 
 static char peek(Scanner *scanner) {
-    return *scanner->current;
+    if (is_at_end(scanner)) return '\0';
+    return scanner_read(scanner, scanner->current);
 }
 
 static char peek_next(Scanner *scanner) {
+    if (!scanner_healthy(scanner)) return '\0';
     if (scanner->current + 1 >= scanner->end)
         return '\0';
-    return scanner->current[1];
+    return scanner_read(scanner, scanner->current + (1));
 }
 
 static int match(Scanner *scanner, char expected) {
     if (is_at_end(scanner))
         return 0;
-    if (*scanner->current != expected)
+    char actual = scanner_read(scanner, scanner->current);
+    if (!scanner_healthy(scanner) || actual != expected)
         return 0;
     scanner->current++;
     return 1;
@@ -153,8 +173,8 @@ static int match(Scanner *scanner, char expected) {
 static bool scan_nested_block_comment(Scanner *scanner, const char **content_start,
                                       const char **content_end, int *comment_line,
                                       bool *spans_newline) {
-    if (!scanner || scanner->current + 1 >= scanner->end || scanner->current[0] != '/' ||
-        scanner->current[1] != '*')
+    if (!scanner || scanner->current + 1 >= scanner->end || scanner_read(scanner, scanner->current + (0)) != '/' ||
+        scanner_read(scanner, scanner->current + (1)) != '*')
         return false;
 
     if (comment_line)
@@ -166,15 +186,15 @@ static bool scan_nested_block_comment(Scanner *scanner, const char **content_sta
     const char *body_start = scanner->current;
     int depth = 1;
 
-    while (scanner->current < scanner->end) {
-        if (scanner->current + 1 < scanner->end && scanner->current[0] == '/' &&
-            scanner->current[1] == '*') {
+    while (scanner_healthy(scanner) && scanner->current < scanner->end) {
+        if (scanner->current + 1 < scanner->end && scanner_read(scanner, scanner->current + (0)) == '/' &&
+            scanner_read(scanner, scanner->current + (1)) == '*') {
             depth++;
             scanner->current += 2;
             continue;
         }
-        if (scanner->current + 1 < scanner->end && scanner->current[0] == '*' &&
-            scanner->current[1] == '/') {
+        if (scanner->current + 1 < scanner->end && scanner_read(scanner, scanner->current + (0)) == '*' &&
+            scanner_read(scanner, scanner->current + (1)) == '/') {
             depth--;
             if (depth == 0) {
                 if (content_start)
@@ -187,7 +207,7 @@ static bool scan_nested_block_comment(Scanner *scanner, const char **content_sta
             scanner->current += 2;
             continue;
         }
-        if (*scanner->current == '\n') {
+        if (scanner_read(scanner, scanner->current) == '\n') {
             scanner->line++;
             scanner->line_start = scanner->current + 1;
             if (spans_newline)
@@ -222,8 +242,8 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
 
     const char *save_current = scanner->current;
 
-    while (scanner->current < scanner->end) {
-        char c = *scanner->current;
+    while (scanner_healthy(scanner) && scanner->current < scanner->end) {
+        char c = scanner_read(scanner, scanner->current);
         if (c == ' ' || c == '\t' || c == '\r') {
             scanner->current++;
         } else {
@@ -236,22 +256,23 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
         return NULL;
     }
 
-    char c = *scanner->current;
-    char n = (scanner->current + 1 < scanner->end) ? scanner->current[1] : '\0';
+    char c = scanner_read(scanner, scanner->current);
+    char n = (scanner->current + 1 < scanner->end) ? scanner_read(scanner, scanner->current + (1)) : '\0';
 
     if (c == '/' && n == '/') {
         int comment_line = scanner->line;
         scanner->current += 2;  // skip //
         const char *cs = scanner->current;
-        while (scanner->current < scanner->end && *scanner->current != '\n') {
+        while (scanner_healthy(scanner) && scanner->current < scanner->end && scanner_read(scanner, scanner->current) != '\n') {
             scanner->current++;
         }
         int len = (int) (scanner->current - cs);
-        return xr_trivia_new(TRIVIA_LINE_COMMENT, cs, len, comment_line);
+        return trivia_new(scanner, TRIVIA_LINE_COMMENT, cs, len, comment_line);
     }
 
     if (c == '/' && n == '*') {
-        Scanner probe = *scanner;
+        Scanner probe;
+        if (xr_compile_state_copy(scanner->state, &probe, scanner, sizeof(probe)) != XR_COMPILE_RESOURCE_OK) return NULL;
         const char *cs = NULL;
         const char *ce = NULL;
         int comment_line = probe.line;
@@ -265,7 +286,7 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
         scanner->line = probe.line;
         scanner->line_start = probe.line_start;
         int len = (int) (ce - cs);
-        return xr_trivia_new(TRIVIA_BLOCK_COMMENT, cs, len, comment_line);
+        return trivia_new(scanner, TRIVIA_BLOCK_COMMENT, cs, len, comment_line);
     }
 
     scanner->current = save_current;
@@ -273,6 +294,7 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
 }
 
 static Token make_token(Scanner *scanner, XrTokenType type) {
+    if (!scanner_healthy(scanner)) return (Token) {.type = TK_EOF};
     Token token = {0};
     token.type = type;
     token.start = scanner->start;
@@ -296,6 +318,7 @@ static Token make_token(Scanner *scanner, XrTokenType type) {
 }
 
 static Token error_token(Scanner *scanner, const char *message) {
+    if (!scanner_healthy(scanner)) return (Token) {.type = TK_EOF};
     Token token = {0};
     token.type = TK_ERROR;
     // L-03: error_message carries the diagnostic; start still points into the
@@ -319,22 +342,7 @@ static Token error_token(Scanner *scanner, const char *message) {
 static bool skip_whitespace(Scanner *scanner) {
     bool skipped = false;
     for (;;) {
-        // SIMD fast path: batch skip whitespace
-        size_t remaining = (size_t) (scanner->end - scanner->current);
-        if (remaining >= 16) {
-            const char *non_ws = xr_simd_skip_whitespace(scanner->current, remaining);
-            if (non_ws > scanner->current) {
-                skipped = true;
-            }
-            while (scanner->current < non_ws) {
-                if (*scanner->current == '\n') {
-                    scanner->line++;
-                    scanner->line_start = scanner->current + 1;
-                }
-                scanner->current++;
-            }
-        }
-
+        if (!scanner_healthy(scanner)) return skipped;
         char c = peek(scanner);
         switch (c) {
             case ' ':
@@ -351,24 +359,19 @@ static bool skip_whitespace(Scanner *scanner) {
                 break;
             case '/':
                 if (peek_next(scanner) == '/') {
-                    // Single-line comment - use SIMD to find line end
+                    // Single-line comment
                     skipped = true;
                     int comment_line = scanner->line;
                     advance(scanner);  // /
                     advance(scanner);  // /
                     const char *comment_start = scanner->current;
-                    remaining = (size_t) (scanner->end - scanner->current);
-                    if (remaining >= 16) {
-                        const char *eol = xr_simd_find_newline(scanner->current, remaining);
-                        scanner->current = eol;
-                    }
                     while (peek(scanner) != '\n' && !is_at_end(scanner)) {
                         advance(scanner);
                     }
                     // Collect trivia if enabled
                     if (scanner->collect_trivia) {
                         int comment_len = (int) (scanner->current - comment_start);
-                        XrTrivia *trivia = xr_trivia_new(TRIVIA_LINE_COMMENT, comment_start,
+                        XrTrivia *trivia = trivia_new(scanner, TRIVIA_LINE_COMMENT, comment_start,
                                                          comment_len, comment_line);
                         trivia_append(scanner, trivia);
                     }
@@ -384,7 +387,7 @@ static bool skip_whitespace(Scanner *scanner) {
                     }
                     if (scanner->collect_trivia) {
                         int comment_len = (int) (comment_end - comment_start);
-                        XrTrivia *trivia = xr_trivia_new(TRIVIA_BLOCK_COMMENT, comment_start,
+                        XrTrivia *trivia = trivia_new(scanner, TRIVIA_BLOCK_COMMENT, comment_start,
                                                          comment_len, comment_line);
                         trivia_append(scanner, trivia);
                     }
@@ -447,7 +450,7 @@ static XrTokenType identifier_type(Scanner *scanner) {
     int len = (int) (scanner->current - scanner->start);
 
     // Single underscore is the match wildcard pattern, not an identifier.
-    if (len == 1 && s[0] == '_') {
+    if (len == 1 && scanner_read(scanner, s + (0)) == '_') {
         return TK_UNDERSCORE;
     }
 
@@ -458,11 +461,11 @@ static XrTokenType identifier_type(Scanner *scanner) {
     // (e.g. "i64" / "interface"), and prefixes of keywords (e.g. user-named
     // `iffy`) cannot collide with the keyword (`if`) because length differs.
     int lo = 0, hi = (int) NUM_KEYWORDS - 1;
-    while (lo <= hi) {
+    while (scanner_healthy(scanner) && lo <= hi) {
         int mid = (lo + hi) >> 1;
         const XrKeyword *kw = &keywords[mid];
         int min_len = len < kw->length ? len : kw->length;
-        int cmp = memcmp(s, kw->name, (size_t) min_len);
+        int cmp = scanner_compare(scanner, s, kw->name, (size_t) min_len);
         if (cmp == 0)
             cmp = len - kw->length;
         if (cmp == 0)
@@ -472,9 +475,9 @@ static XrTokenType identifier_type(Scanner *scanner) {
         else
             lo = mid + 1;
     }
-    for (size_t i = 0; i < NUM_SCALAR_KEYWORDS; i++) {
+    for (size_t i = 0; scanner_healthy(scanner) && i < NUM_SCALAR_KEYWORDS; i++) {
         const XrKeyword *kw = &scalar_keywords[i];
-        if (kw->length == len && memcmp(s, kw->name, (size_t) len) == 0)
+        if (kw->length == len && scanner_compare(scanner, s, kw->name, (size_t) len) == 0)
             return kw->type;
     }
     return TK_NAME;
@@ -497,7 +500,7 @@ static int is_octal_digit(char c) {
 
 static Token number(Scanner *scanner) {
     XrTokenType type = TK_LITERAL_INT;
-    char first = scanner->start[0];
+    char first = scanner_read(scanner, scanner->start + (0));
 
     if (first == '0' && !is_at_end(scanner)) {
         char prefix = peek(scanner);
@@ -564,9 +567,9 @@ static Token number(Scanner *scanner) {
     // there, with another expression-terminating character before it,
     // means we are tokenising the index part of a member access.
     bool is_member_index = false;
-    if (scanner->start > scanner->source && scanner->start[-1] == '.' &&
+    if (scanner->start > scanner->source && scanner_read(scanner, scanner->start + (-1)) == '.' &&
         scanner->start - 1 > scanner->source) {
-        char before_dot = scanner->start[-2];
+        char before_dot = scanner_read(scanner, scanner->start + (-2));
         if (XR_IS_ALPHA(before_dot) || XR_IS_DIGIT(before_dot) || before_dot == '_' ||
             before_dot == ')' || before_dot == ']') {
             is_member_index = true;
@@ -684,17 +687,17 @@ static XrBlockCloseResult scan_block_closer(Scanner *scanner, int quote_count) {
     if (scanner->current != scanner->line_start)
         return XR_BLOCK_CLOSE_NONE;
     const char *probe = scanner->current;
-    while (probe < scanner->end && (*probe == ' ' || *probe == '\t'))
+    while (scanner_healthy(scanner) && probe < scanner->end && (scanner_read(scanner, probe) == ' ' || scanner_read(scanner, probe) == '\t'))
         probe++;
     int found = 0;
-    while (probe < scanner->end && *probe == '"') {
+    while (scanner_healthy(scanner) && probe < scanner->end && scanner_read(scanner, probe) == '"') {
         found++;
         probe++;
     }
     if (found != quote_count)
         return XR_BLOCK_CLOSE_NONE;
-    if (probe < scanner->end && *probe != '\n' &&
-        !(*probe == '\r' && probe + 1 < scanner->end && probe[1] == '\n')) {
+    if (probe < scanner->end && scanner_read(scanner, probe) != '\n' &&
+        !(scanner_read(scanner, probe) == '\r' && probe + 1 < scanner->end && scanner_read(scanner, probe + (1)) == '\n')) {
         return XR_BLOCK_CLOSE_TRAILING;
     }
     scanner->current = probe;
@@ -803,23 +806,23 @@ static bool scan_nested_quoted_literal(Scanner *scanner) {
     XrLiteralEscapeMode escape_mode = XR_LITERAL_ESCAPED;
     int prefix_length = 0;
     const char *p = scanner->current;
-    if (p < scanner->end && *p == '"') {
+    if (p < scanner->end && scanner_read(scanner, p) == '"') {
         kind = XR_QUOTED_STRING;
-    } else if (p + 1 < scanner->end && p[0] == 'r' && p[1] == '"') {
+    } else if (p + 1 < scanner->end && scanner_read(scanner, p + (0)) == 'r' && scanner_read(scanner, p + (1)) == '"') {
         kind = XR_QUOTED_STRING;
         escape_mode = XR_LITERAL_RAW;
         prefix_length = 1;
-    } else if (p + 1 < scanner->end && p[0] == 'b' && p[1] == '"') {
+    } else if (p + 1 < scanner->end && scanner_read(scanner, p + (0)) == 'b' && scanner_read(scanner, p + (1)) == '"') {
         kind = XR_QUOTED_BYTES;
         prefix_length = 1;
-    } else if (p + 2 < scanner->end && p[0] == 'b' && p[1] == 'r' && p[2] == '"') {
+    } else if (p + 2 < scanner->end && scanner_read(scanner, p + (0)) == 'b' && scanner_read(scanner, p + (1)) == 'r' && scanner_read(scanner, p + (2)) == '"') {
         kind = XR_QUOTED_BYTES;
         escape_mode = XR_LITERAL_RAW;
         prefix_length = 2;
-    } else if (p + 1 < scanner->end && p[0] == 'c' && p[1] == '"') {
+    } else if (p + 1 < scanner->end && scanner_read(scanner, p + (0)) == 'c' && scanner_read(scanner, p + (1)) == '"') {
         kind = XR_QUOTED_C_BYTES;
         prefix_length = 1;
-    } else if (p + 2 < scanner->end && p[0] == 'c' && p[1] == 'r' && p[2] == '"') {
+    } else if (p + 2 < scanner->end && scanner_read(scanner, p + (0)) == 'c' && scanner_read(scanner, p + (1)) == 'r' && scanner_read(scanner, p + (2)) == '"') {
         kind = XR_QUOTED_C_BYTES;
         escape_mode = XR_LITERAL_RAW;
         prefix_length = 2;
@@ -1029,6 +1032,7 @@ static Token regex_literal(Scanner *scanner) {
 
 // Try to scan regex literal (called when expecting expression)
 Token xr_scanner_try_regex(Scanner *scanner) {
+    if (!scanner_healthy(scanner)) return (Token) {.type = TK_EOF};
     scanner->had_leading_space = skip_whitespace(scanner);
     scanner_begin_token(scanner);
 
@@ -1055,6 +1059,7 @@ Token xr_scanner_try_regex(Scanner *scanner) {
 
 // Scan next token
 Token xr_scanner_scan(Scanner *scanner) {
+    if (!scanner_healthy(scanner)) return (Token) {.type = TK_EOF};
     if (scanner->pending_error) {
         const char *msg = scanner->pending_error;
         scanner->pending_error = NULL;
@@ -1078,12 +1083,12 @@ Token xr_scanner_scan(Scanner *scanner) {
     char c = advance(scanner);
 
     if (c == 'r' && scanner->current + 1 < scanner->end &&
-        (scanner->current[0] == 'b' || scanner->current[0] == 'c') && scanner->current[1] == '"') {
+        (scanner_read(scanner, scanner->current + (0)) == 'b' || scanner_read(scanner, scanner->current + (0)) == 'c') && scanner_read(scanner, scanner->current + (1)) == '"') {
         scanner->current += 2;
         return error_token(scanner, "raw fixed-byte prefixes are br/cr, not rb/rc");
     }
     if ((c == 'b' || c == 'c') && scanner->current + 1 < scanner->end &&
-        scanner->current[0] == 'r' && scanner->current[1] == '"') {
+        scanner_read(scanner, scanner->current + (0)) == 'r' && scanner_read(scanner, scanner->current + (1)) == '"') {
         advance(scanner);
         advance(scanner);
         return quoted_literal(scanner, c == 'b' ? XR_QUOTED_BYTES : XR_QUOTED_C_BYTES,

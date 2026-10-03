@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../../base/xdefs.h"
+#include "../../base/xcompile_state.h"
 #include "../../shared/xr_param_mode.h"
 #include "../../shared/xr_view_origin.h"
 #include "../../shared/xr_exact_scalar_registry.h"
@@ -184,14 +185,18 @@ static inline const char *xr_tref_head_name(const XrTypeRef *t) {
  * The string is arena-allocated and valid for the current parse. */
 XR_FUNC const char *xr_tref_to_string(struct XrCompilerSession *session, const XrTypeRef *t);
 
-/* Write type ref into caller-supplied buffer (no arena needed).
- * Returns number of characters written (excluding NUL). */
-XR_FUNC int xr_tref_to_string_buf(const XrTypeRef *t, char *buf, int cap);
+/* Write into a caller buffer using the mandatory shared compile state.
+ * Returns the byte count excluding NUL, or -1 with the sticky failure preserved.
+ * On failure the buffer may be partially written; only a nonnegative return
+ * publishes a complete terminated result. A full buffer truncates as before. */
+XR_FUNC int xr_compile_tref_to_string_buf(XrCompileState *state, const XrTypeRef *t,
+                                            char *buf, int cap);
 
-/* Like xr_tref_to_string_buf, but expands a named structural-object type into its field
+/* Like xr_compile_tref_to_string_buf, but expands a named structural-object type into its field
  * structure instead of printing its name. Only the outermost ref is expanded.
  * For the right-hand side of `type Name = { ... }`, where printing the name
  * would emit the self-referential `type Name = Name`. */
-XR_FUNC int xr_tref_to_string_buf_structural(const XrTypeRef *t, char *buf, int cap);
+XR_FUNC int xr_compile_tref_to_string_structural(XrCompileState *state, const XrTypeRef *t,
+                                                   char *buf, int cap);
 
 #endif  // XTYPE_REF_H

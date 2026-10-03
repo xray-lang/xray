@@ -194,7 +194,7 @@ static void array_instance_cases(void) {
         uint32_t dependency = 1;
         XrXirSourceModule modules[] = {{"array",5,mode ? NULL : &dependency,mode ? 0 : 1,0},
             {"library",7,NULL,0,2}};
-        XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER}};
+        XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
         XrXirSlot slots[] = {{0,(XrXirType)256,1},{0,(XrXirType)256,0},{1,(XrXirType)256,0}};
         XrXirDeclarations declarations = {modules,mode ? 1 : 2,identities,slots,mode ? 0 : 3,NULL,0,0,1, NULL};
         XrXirCallEntry entries[] = {
@@ -216,11 +216,11 @@ static void array_instance_cases(void) {
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
         xr_xir_program_drop(program);
         CHECK(xr_xir_instance_start(instance,1,NULL,0) == XR_XIR_CALL_READY);
-        XrXirInstanceResult result = xr_xir_instance_poll(instance);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         if (mode == 2 || mode == 4) {
             CHECK(result.outcome.status == XR_XIR_CALL_SUSPENDED && witness.reads == (mode == 4 ? 8u : 32u));
             CHECK(xr_xir_instance_resume(instance,result.epoch,result.outcome.wake) == XR_XIR_CALL_READY);
-            result = xr_xir_instance_poll(instance);
+            result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         }
         CHECK(result.outcome.status == (mode ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_RETURNED));
         CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY && witness.cleanups == (mode ? 2u : 4u));

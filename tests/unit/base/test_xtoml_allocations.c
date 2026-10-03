@@ -1,200 +1,231 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_xtoml_allocations.c - Exhaustive allocation rejection and release checks
+ * test_xtoml_allocations.c - Observe actual TOML policy allocations and work
  */
+#include "base/xtoml.h"
 #include "base/xmalloc.h"
+#include <stdio.h>
 #include <stdlib.h>
 
-#define REQUIRE(c) do { if (!(c)) { fprintf(stderr, "failed at %d: %s\n", __LINE__, #c); exit(1); } } while (0)
-static size_t attempts, fail_at, live_count, live_bytes;
-static struct { void *pointer; size_t size; } slots[1024];
-
-static void *track(void *pointer, size_t size) {
-    REQUIRE(pointer);
-    for (size_t i = 0; i < XR_COUNTOF(slots); ++i) {
-        if (slots[i].pointer) continue;
-        slots[i].pointer = pointer;
-        slots[i].size = size;
-        ++live_count;
-        live_bytes += size;
-        return pointer;
-    }
-    exit(1);
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+typedef struct Allocation { void *pointer; size_t bytes; } Allocation;
+static Allocation allocations[4096];
+static size_t attempts, fail_at = SIZE_MAX, live, allocated_total, peak, live_count;
+static void *observe_alloc(size_t bytes) {
+    if (attempts++ == fail_at) return NULL;
+    void *memory = xr_malloc(bytes);
+    CHECK(memory);
+    size_t i = 0;
+    while (i < 4096 && allocations[i].pointer) ++i;
+    CHECK(i < 4096);
+    allocations[i] = (Allocation){memory, bytes};
+    ++live_count; live += bytes; allocated_total += bytes;
+    if (live > peak) peak = live;
+    return memory;
 }
-static void *probe_malloc(size_t size) {
-    return ++attempts == fail_at ? NULL : track(xr_malloc(size), size);
-}
-static void *probe_calloc(size_t count, size_t size) {
-    return ++attempts == fail_at ? NULL : track(xr_calloc(count, size), count * size);
-}
-static void probe_free(void *pointer) {
-    if (!pointer) return;
-    for (size_t i = 0; i < XR_COUNTOF(slots); ++i) {
-        if (slots[i].pointer != pointer) continue;
-        slots[i].pointer = NULL;
-        --live_count;
-        live_bytes -= slots[i].size;
-        xr_free(pointer);
-        return;
-    }
-    exit(1);
-}
-static void *probe_realloc(void *pointer, size_t size) {
-    if (++attempts == fail_at) return NULL;
-    if (!pointer) return track(xr_realloc(NULL, size), size);
-    for (size_t i = 0; i < XR_COUNTOF(slots); ++i) {
-        if (slots[i].pointer != pointer) continue;
-        void *grown = xr_realloc(pointer, size);
-        REQUIRE(grown);
-        live_bytes = live_bytes - slots[i].size + size;
-        slots[i].pointer = grown;
-        slots[i].size = size;
-        return grown;
-    }
-    exit(1);
-}
-static char *probe_strdup(const char *source) {
-    size_t size = strlen(source) + 1;
-    char *copy = probe_malloc(size);
-    if (copy) memcpy(copy, source, size);
-    return copy;
+static void observe_free(void *memory) {
+    if (!memory) return;
+    size_t i = 0;
+    while (i < 4096 && allocations[i].pointer != memory) ++i;
+    CHECK(i < 4096);
+    live -= allocations[i].bytes; --live_count;
+    allocations[i] = (Allocation){0};
+    xr_free(memory);
 }
 #undef xr_malloc
-#undef xr_calloc
-#undef xr_realloc
 #undef xr_free
-#define xr_malloc probe_malloc
-#define xr_calloc probe_calloc
-#define xr_realloc probe_realloc
-#define xr_free probe_free
-#define xr_strdup probe_strdup
-#include "../../../src/base/xtoml.c"
+#define xr_malloc(bytes) observe_alloc(bytes)
+#define xr_free(memory) observe_free(memory)
+#include "base/xcompile_resources.c"
 
-static size_t run(const char *source, size_t failure, bool valid) {
-    attempts = 0;
-    fail_at = failure;
-    XrTomlParseStatus status = XR_TOML_PARSE_OK;
-    XrTomlValue *value = xtoml_parse_limited(source, strlen(source),
-        (XrTomlParseBudget){65536, 1024 * 1024, 1024 * 1024, 128}, &status, NULL);
-    size_t total = attempts;
-    if ((failure || !valid) && value) {
-        fprintf(stderr, "accepted document at allocation %zu of %zu\n", failure, total);
-        exit(1);
+static XrCompileResourceStats stats(XrCompileResources *owner) {
+    XrCompileResourceStats s;
+    CHECK(xr_compile_resources_stats(owner, &s) == XR_COMPILE_RESOURCE_OK);
+    CHECK(s.live_bytes == live && s.allocated_bytes == allocated_total && s.peak_bytes == peak);
+    return s;
+}
+static void reset(size_t failure) {
+    CHECK(!live && !live_count);
+    attempts = allocated_total = peak = 0; fail_at = failure;
+}
+static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+#include "../../../src/base/xtoml.c"
+#define REQUIRE CHECK
+static unsigned char canary;
+static XrCompileResourceStats measured;
+static size_t run_limits(const char *source, size_t failure, const XrCompileResourceLimits *limits,
+    XrTomlParseLimits shape, XrTomlParseStatus expected) {
+    reset(failure ? failure-1 : SIZE_MAX);
+    XrCompileResources *owner = NULL;
+    XrCompileResourceStatus created = xr_compile_resources_new(limits,&owner);
+    if (created != XR_COMPILE_RESOURCE_OK) {
+        CHECK(expected == (created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_TOML_PARSE_OUT_OF_MEMORY : XR_TOML_PARSE_BUDGET));
+        CHECK(!owner && !live); measured = (XrCompileResourceStats){0}; return attempts;
     }
-    if (!failure && valid) REQUIRE(value);
-    REQUIRE(status == (failure ? XR_TOML_PARSE_OUT_OF_MEMORY :
-        valid ? XR_TOML_PARSE_OK : XR_TOML_PARSE_INVALID));
-    xtoml_free(value);
-    REQUIRE(live_count == 0 && live_bytes == 0);
+    XrOsIoPolicy policy = xr_compile_io_policy(owner);
+    XrTomlValue *output = (void *)&canary;
+    XrTomlParseStatus status = xtoml_parse_owned(&policy,source,strlen(source),&shape,&output);
+    if (status != expected) fprintf(stderr,"failure=%zu work=%llu expected=%d got=%d source=%.80s\n",
+        failure,(unsigned long long)limits->work,expected,status,source);
+    CHECK(status == expected);
+    if (status != XR_TOML_PARSE_OK) CHECK(output == (void *)&canary);
+    else { CHECK(output != (void *)&canary); xtoml_owned_free(output); }
+    CHECK(live_count == 1);
+    measured = stats(owner);
+    xr_compile_resources_release(owner); CHECK(!live && !live_count);
+    return attempts;
+}
+static size_t run(const char *source, size_t failure, bool valid) {
+    size_t total = run_limits(source,failure,&unlimited,(XrTomlParseLimits){65536,128},
+        failure ? XR_TOML_PARSE_OUT_OF_MEMORY : valid ? XR_TOML_PARSE_OK : XR_TOML_PARSE_INVALID);
+    if (failure) CHECK(attempts == failure);
     return total;
 }
 static void budget_boundaries(void) {
     const char *source = "a.b=[1,2,3]\nx=\"owned\\u0000suffix\"\n";
-    size_t length = strlen(source);
-    XrTomlParseStatus status;
-    attempts = 0; fail_at = 0;
-    REQUIRE(!xtoml_parse_limited(source, length, (XrTomlParseBudget){length - 1, 65536, 65536, 128}, &status, NULL));
-    REQUIRE(status == XR_TOML_PARSE_LIMIT && !attempts && !live_count && !live_bytes);
-    REQUIRE(!xtoml_parse("", 16u * 1024u * 1024u + 1u));
-    REQUIRE(!attempts);
-    size_t first_success = 0;
-    for (size_t bytes = 0; bytes <= 8192; ++bytes) {
-        XrTomlValue *root = xtoml_parse_limited(source, length,
-            (XrTomlParseBudget){length, bytes, 65536, 128}, &status, NULL);
-        if (root) {
-            REQUIRE(status == XR_TOML_PARSE_OK);
-            XrTomlValue *items = xtoml_get_array(xtoml_get_table(root, "a"), "b");
-            REQUIRE(xtoml_array_len(items) == 3 && xtoml_array_get(items, 2)->as.integer == 3);
-            first_success = bytes;
-        } else REQUIRE(status == XR_TOML_PARSE_LIMIT);
-        xtoml_free(root);
-        REQUIRE(!live_count && !live_bytes);
-        if (first_success) break;
+    size_t sites = run(source,0,true); XrCompileResourceStats baseline = measured;
+    for (size_t failure = 1; failure <= sites; ++failure) run(source,failure,true);
+    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned below = 0; below < 2; ++below) {
+        XrCompileResourceLimits limits = unlimited;
+        if (!axis) limits.allocated_bytes = baseline.allocated_bytes-below;
+        else if (axis == 1) limits.live_bytes = baseline.peak_bytes-below;
+        else limits.work = baseline.work-below;
+        run_limits(source,0,&limits,(XrTomlParseLimits){65536,128},below ? XR_TOML_PARSE_BUDGET : XR_TOML_PARSE_OK);
     }
-    REQUIRE(first_success);
-    printf("TOML allocation budget: every limit through %zu bytes checked\n", first_success);
+    run_limits(source,0,&unlimited,(XrTomlParseLimits){strlen(source)-1,128},XR_TOML_PARSE_LIMIT);
+    CHECK(attempts == 1);
+    printf("TOML physical allocation sites=%zu allocated=%llu peak=%llu; all three exact/minus1 PASS\n",
+        sites,(unsigned long long)baseline.allocated_bytes,(unsigned long long)baseline.peak_bytes);
 }
-
 static void require_depth(const char *source, uint32_t depth, bool valid) {
-    fail_at = 0;
-    XrTomlParseStatus status;
-    XrTomlValue *root = xtoml_parse_limited(source, strlen(source),
-        (XrTomlParseBudget){65536, 1024 * 1024, 1024 * 1024, depth}, &status, NULL);
-    REQUIRE(status == (valid ? XR_TOML_PARSE_OK : XR_TOML_PARSE_LIMIT));
-    REQUIRE((root != NULL) == valid);
-    xtoml_free(root);
-    REQUIRE(!live_count && !live_bytes);
+    run_limits(source,0,&unlimited,(XrTomlParseLimits){65536,depth},valid ? XR_TOML_PARSE_OK : XR_TOML_PARSE_LIMIT);
 }
-
 static void depth_boundaries(void) {
-    require_depth("", 0, true);
-    require_depth("x=1\n", 0, false);
-    require_depth("x=1\n", 1, true);
-    const char *const sources[] = {
-        "a=[[[0]]]\n", "[a.b]\nc.d=1\n", "a.b={c=[{d=1}]}\n", "[[a.b]]\nc=[1]\n"
-    };
-    const uint32_t depths[] = {4, 4, 5, 5};
-    for (size_t i = 0; i < XR_COUNTOF(sources); ++i) {
-        require_depth(sources[i], depths[i] - 1, false);
-        require_depth(sources[i], depths[i], true);
-    }
+    require_depth("",0,true); require_depth("x=1\n",0,false); require_depth("x=1\n",1,true);
+    const char *sources[] = {"a=[[[0]]]\n","[a.b]\nc.d=1\n","a.b={c=[{d=1}]}\n","[[a.b]]\nc=[1]\n"};
+    const uint32_t depths[] = {4,4,5,5};
+    for (unsigned i = 0; i < 4; ++i) { require_depth(sources[i],depths[i]-1,false); require_depth(sources[i],depths[i],true); }
     char deep[20008];
     for (unsigned nesting = 127; nesting <= 128; ++nesting) {
-        size_t pos = 0;
-        deep[pos++] = 'a'; deep[pos++] = '=';
+        size_t pos = 0; deep[pos++] = 'a'; deep[pos++] = '=';
         for (unsigned i = 0; i < nesting; ++i) deep[pos++] = '[';
-        deep[pos++] = '0';
-        for (unsigned i = 0; i < nesting; ++i) deep[pos++] = ']';
-        deep[pos] = '\0';
-        require_depth(deep, UINT32_MAX, nesting == 127);
+        deep[pos++] = '0'; for (unsigned i = 0; i < nesting; ++i) deep[pos++] = ']'; deep[pos] = 0;
+        require_depth(deep,UINT32_MAX,nesting == 127);
     }
-    memcpy(deep, "a=", 2);
-    memset(deep + 2, '[', 5000); deep[5002] = '0';
-    memset(deep + 5003, ']', 5000); deep[10003] = '\0';
-    require_depth(deep, 128, false);
-    for (unsigned i = 0; i < 5000; ++i) { deep[i * 2] = 'a'; deep[i * 2 + 1] = '.'; }
-    memcpy(deep + 9999, "=1", 3);
-    require_depth(deep, 128, false);
-    memcpy(deep, "a=", 2);
-    for (unsigned i = 0; i < 5000; ++i) memcpy(deep + 2 + i * 3, "{a=", 3);
-    deep[15002] = '0'; memset(deep + 15003, '}', 5000); deep[20003] = '\0';
-    require_depth(deep, 128, false);
+    memcpy(deep,"a=",2); memset(deep+2,'[',5000); deep[5002] = '0';
+    memset(deep+5003,']',5000); deep[10003] = 0; require_depth(deep,128,false);
+    for (unsigned i = 0; i < 5000; ++i) { deep[i*2] = 'a'; deep[i*2+1] = '.'; }
+    memcpy(deep+9999,"=1",3); require_depth(deep,128,false);
+    memcpy(deep,"a=",2); for (unsigned i = 0; i < 5000; ++i) memcpy(deep+2+i*3,"{a=",3);
+    deep[15002] = '0'; memset(deep+15003,'}',5000); deep[20003] = 0; require_depth(deep,128,false);
 }
-
 static void work_boundaries(void) {
     const char *source = "same_prefix_aaaa=1\nsame_prefix_aaab=2\nsame_prefix_aaac=3\n";
-    size_t length = strlen(source), first_success = 0;
-    fail_at = 0;
-    for (size_t work_limit = 0; work_limit < 1024; ++work_limit) {
-        attempts = 0;
-        XrTomlParseStatus status;
-        XrTomlValue *root = xtoml_parse_limited(source, length,
-            (XrTomlParseBudget){length, 65536, work_limit, 128}, &status, NULL);
-        if (root) {
-            REQUIRE(status == XR_TOML_PARSE_OK && xtoml_get_int(root, "same_prefix_aaac") == 3);
-            first_success = work_limit;
-        } else REQUIRE(status == XR_TOML_PARSE_LIMIT);
-        if (work_limit < length) REQUIRE(!attempts);
-        xtoml_free(root);
-        REQUIRE(!live_count && !live_bytes);
-        if (first_success) break;
+    run(source,0,true); XrCompileResourceStats baseline = measured;
+    for (uint64_t work = 1; work < baseline.work; ++work) {
+        XrCompileResourceLimits limits = unlimited; limits.work = work;
+        run_limits(source,0,&limits,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_BUDGET);
     }
-    REQUIRE(first_success > length);
-    printf("TOML work budget: every limit through %zu units checked\n", first_success);
-    TomlCtx context = {0};
-    REQUIRE(!grown_capacity(&context, INT_MAX, sizeof(XrTomlMember)));
-    REQUIRE(context.error && context.status == XR_TOML_PARSE_LIMIT);
-    context.error = false;
-    REQUIRE(!grown_capacity(&context, 4, SIZE_MAX));
-    REQUIRE(context.error && context.status == XR_TOML_PARSE_LIMIT);
+    printf("TOML all work limits 1..%llu rejected with physical zero\n",(unsigned long long)baseline.work-1);
+    const char *numbers = "a=[0.1,1e-308,1e309,2.2250738585072014e-308,9007199254740993.0,0x7fff_ffff_ffff_ffff]\n";
+    run(numbers,0,true); baseline = measured;
+    for (unsigned i = 1; i <= 128; ++i) {
+        XrCompileResourceLimits limits = unlimited; limits.work = (baseline.work*i)/129;
+        run_limits(numbers,0,&limits,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_BUDGET);
+    }
+    XrCompileResourceLimits exact = unlimited; exact.work = baseline.work;
+    run_limits(numbers,0,&exact,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_OK);
+    --exact.work; run_limits(numbers,0,&exact,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_BUDGET);
 }
-
+static void ownership_and_query(void) {
+    reset(SIZE_MAX); XrCompileResources *owner = NULL;
+    CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
+    XrOsIoPolicy policy = xr_compile_io_policy(owner); const XrTomlParseLimits limits = {1024,128};
+    char source[] = "same_prefix_aaab=42\n";
+    XrTomlValue *root = NULL, *value = (void *)&canary;
+    CHECK(xtoml_parse_owned(&policy,source,strlen(source),&limits,&root) == XR_TOML_PARSE_OK);
+    XrCompileResourceStats before = stats(owner);
+    CHECK(xtoml_owned_get(root,"same_prefix_aaab",&value) == XR_TOML_PARSE_OK && value->as.integer == 42);
+    XrCompileResourceStats after = stats(owner);
+    CHECK(after.work-before.work == 17+1+16);
+    memset(source,0,sizeof(source)); xr_compile_resources_release(owner);
+    CHECK(xtoml_owned_get(root,"absent",&value) == XR_TOML_PARSE_OK && !value);
+    CHECK(xtoml_owned_get(root,"same_prefix_aaab",&value) == XR_TOML_PARSE_OK && value->as.integer == 42);
+    xtoml_owned_free(root); CHECK(!live && !live_count);
+    run("x=1\n",0,true); XrCompileResourceLimits capped = unlimited; capped.work = measured.work;
+    reset(SIZE_MAX); owner = NULL; root = NULL;
+    CHECK(xr_compile_resources_new(&capped,&owner) == XR_COMPILE_RESOURCE_OK); policy = xr_compile_io_policy(owner);
+    CHECK(xtoml_parse_owned(&policy,"x=1\n",4,&limits,&root) == XR_TOML_PARSE_OK);
+    value = (void *)&canary;
+    CHECK(xtoml_owned_get(root,"x",&value) == XR_TOML_PARSE_BUDGET && value == (void *)&canary);
+    XrTomlValue *other = (void *)&canary;
+    CHECK(xtoml_parse_owned(&policy,"x=1\n",4,&limits,&other) == XR_TOML_PARSE_BUDGET && other == (void *)&canary);
+    xr_compile_resources_release(owner); xtoml_owned_free(root); CHECK(!live && !live_count);
+}
+typedef struct RejectPolicy {
+    XrCompileResources *owner;
+    XrOsIoStatus failure;
+    size_t calls, fail_at;
+} RejectPolicy;
+static XrOsIoStatus reject_alloc(void *context, size_t bytes, void **output) {
+    RejectPolicy *state = context; XrOsIoPolicy policy = xr_compile_io_policy(state->owner);
+    return policy.alloc(policy.context,bytes,output);
+}
+static void reject_free(void *context, void *memory) { (void)context; xr_compile_resources_free(memory); }
+static XrOsIoStatus reject_work(void *context, uint64_t units) {
+    RejectPolicy *state = context;
+    if (++state->calls == state->fail_at) return state->failure;
+    XrOsIoPolicy policy = xr_compile_io_policy(state->owner); return policy.work(policy.context,units);
+}
+static void policy_failures(void) {
+    const char *source = "x={a=[1,2,3],b=\"long\\u0041 value\"}\n";
+    const XrOsIoStatus errors[] = {XR_OS_IO_BUDGET,XR_OS_IO_OUT_OF_MEMORY,XR_OS_IO_IO,XR_OS_IO_BAD_ARGUMENT};
+    const XrTomlParseStatus expected[] = {XR_TOML_PARSE_BUDGET,XR_TOML_PARSE_OUT_OF_MEMORY,XR_TOML_PARSE_IO,XR_TOML_PARSE_BAD_ARGUMENT};
+    for (unsigned kind = 0; kind < 4; ++kind) for (size_t point = 1; point < 256; ++point) {
+        reset(SIZE_MAX); XrCompileResources *owner = NULL;
+        CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
+        RejectPolicy state = {owner,errors[kind],0,point};
+        XrOsIoPolicy policy = {&state,reject_alloc,reject_free,reject_work};
+        const XrTomlParseLimits limits = {1024,128}; XrTomlValue *root = (void *)&canary;
+        XrTomlParseStatus status = xtoml_parse_owned(&policy,source,strlen(source),&limits,&root);
+        CHECK(status == expected[kind] && root == (void *)&canary && state.calls == point);
+        CHECK(live_count == 1); xr_compile_resources_release(owner); CHECK(!live && !live_count);
+    }
+    reset(SIZE_MAX); XrCompileResources *owner = NULL;
+    CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
+    XrOsIoPolicy policy = xr_compile_io_policy(owner);
+    const XrTomlParseLimits limits = {1024,128}; XrTomlValue *root = (void *)&canary;
+    CHECK(xtoml_parse_owned(NULL,"",0,&limits,&root) == XR_TOML_PARSE_BAD_ARGUMENT && root == (void *)&canary);
+    CHECK(xtoml_parse_owned(&policy,"",0,NULL,&root) == XR_TOML_PARSE_BAD_ARGUMENT && root == (void *)&canary);
+    TomlCtx context = {0}; context.policy = policy;
+    CHECK(!toml_allocate(&context,SIZE_MAX,false) && context.status == XR_TOML_PARSE_BUDGET && attempts == 1);
+    context = (TomlCtx){0}; context.policy = policy;
+    CHECK(!grown_capacity(&context,INT_MAX,sizeof(XrTomlMember)) && context.status == XR_TOML_PARSE_LIMIT);
+    context = (TomlCtx){0}; context.policy = policy;
+    char *memory = toml_allocate(&context,4,false); CHECK(memory); memcpy(memory,"abc",4);
+    size_t prior_live = live; fail_at = attempts;
+    CHECK(!toml_resize(&context,memory,8) && context.status == XR_TOML_PARSE_OUT_OF_MEMORY);
+    CHECK(live == prior_live && !memcmp(memory,"abc",4)); fail_at = SIZE_MAX;
+    toml_release(memory); xr_compile_resources_release(owner); CHECK(!live && !live_count);
+}
+static void utf8_read_work(void) {
+    /* The shared decoder reads E0/80, then diagnostics read E0/80/BF. */
+    const char invalid[] = "\xe0\x80\xbf";
+    run(invalid,0,false); CHECK(measured.work == 6 && attempts == 1);
+    for (uint64_t work = 1; work < 6; ++work) {
+        XrCompileResourceLimits limits = unlimited; limits.work = work;
+        run_limits(invalid,0,&limits,(XrTomlParseLimits){1024,128},XR_TOML_PARSE_BUDGET);
+        CHECK(attempts == 1);
+    }
+}
 int main(void) {
+    policy_failures(); utf8_read_work();
+    ownership_and_query();
     depth_boundaries();
     work_boundaries();
     budget_boundaries();

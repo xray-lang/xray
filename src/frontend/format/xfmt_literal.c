@@ -12,70 +12,28 @@
 
 #include "xfmt_literal.h"
 #include "xfmt_internal.h"
+#include <limits.h>
 #include "../../base/xmalloc.h"
 #include <stdio.h>
 #include <string.h>
 
-/* ========== Local buffer helpers ==========
- *
- * Mirror xfmt.c's static write_char/write_str behaviour so this file
- * stays self-contained; when xfmt.c is split, these helpers may move
- * into a shared xfmt_internal.h.
- */
-
-static void lit_ensure(XrFmtContext *ctx, size_t additional) {
-    if (ctx->length + additional >= ctx->capacity) {
-        ctx->capacity = (ctx->capacity + additional) * 2;
-        XR_REALLOC_OR_ABORT(ctx->output, ctx->capacity, "fmt_literal buffer grow");
-    }
-}
-
+/* Literals share the same allocation and raw-span writer as syntax. */
 static void lit_byte(XrFmtContext *ctx, char c) {
-    xfmt_write_char(ctx, c);
+    if (!xfmt_step(ctx)) return; xfmt_write_char(ctx, c); }
+static void lit_bytes(XrFmtContext *ctx, const char *bytes, size_t length) {
+    if (!xfmt_step(ctx)) return;
+    xfmt_write_bytes(ctx, bytes, length);
 }
-
-static void lit_bytes(XrFmtContext *ctx, const char *bytes, size_t n) {
-    if (n == 0)
-        return;
-    lit_ensure(ctx, n);
-    memcpy(ctx->output + ctx->length, bytes, n);
-    ctx->length += n;
-    ctx->output[ctx->length] = '\0';
-    const char *last_nl = NULL;
-    for (size_t i = 0; i < n; i++) {
-        if (bytes[i] == '\n')
-            last_nl = bytes + i;
-    }
-    if (last_nl) {
-        ctx->line_start = 1;
-        ctx->column = (int) (bytes + n - 1 - last_nl);
-    } else {
-        ctx->column += (int) n;
-    }
+static void lit_str(XrFmtContext *ctx, const char *text) {
+    if (!xfmt_step(ctx)) return;
+    if (text) xfmt_write_bytes(ctx, text, xfmt_length(ctx, text));
 }
-
-static void lit_str(XrFmtContext *ctx, const char *s) {
-    if (!s)
-        return;
-    lit_bytes(ctx, s, strlen(s));
-}
-
 static void lit_indent(XrFmtContext *ctx) {
-    if (!ctx->line_start)
-        return;
-    if (ctx->config->use_tabs) {
-        for (int i = 0; i < ctx->indent_level; i++)
-            lit_byte(ctx, '\t');
-    } else {
-        int spaces = ctx->indent_level * ctx->config->indent_size;
-        for (int i = 0; i < spaces; i++)
-            lit_byte(ctx, ' ');
-    }
-    ctx->line_start = 0;
-}
+    if (!xfmt_step(ctx)) return; xfmt_write_indent(ctx); }
 
 static void emit_escaped_byte(XrFmtContext *ctx, unsigned char c, bool escape_dollar, bool block,
                               bool binary) {
+    if (!xfmt_step(ctx)) return;
     switch (c) {
         case '"':
             if (block)
@@ -118,6 +76,7 @@ static void emit_escaped_byte(XrFmtContext *ctx, unsigned char c, bool escape_do
     }
     if (c < 0x20 || (binary && c >= 0x80)) {
         char buf[5];
+        if (!xfmt_work(ctx, sizeof(buf))) return;
         snprintf(buf, sizeof buf, "\\x%02X", c);
         lit_bytes(ctx, buf, 4);
         return;
@@ -128,9 +87,10 @@ static void emit_escaped_byte(XrFmtContext *ctx, unsigned char c, bool escape_do
 static void emit_payload(XrFmtContext *ctx, const uint8_t *value, size_t len,
                          XrLiteralEscapeMode escape_mode, bool block, bool binary,
                          bool escape_dollar) {
+    if (!xfmt_step(ctx)) return;
     if (!value || len <= 0)
         return;
-    for (size_t i = 0; i < len; i++) {
+    for (size_t i = 0; xfmt_step(ctx) && (i < len); i++) {
         unsigned char c = value[i];
         if (escape_mode == XR_LITERAL_RAW) {
             lit_byte(ctx, (char) c);
@@ -142,15 +102,16 @@ static void emit_payload(XrFmtContext *ctx, const uint8_t *value, size_t len,
     }
 }
 
-static bool quote_line_collision(const uint8_t *value, size_t length, int quote_count) {
+static bool quote_line_collision(XrFmtContext *ctx, const uint8_t *value, size_t length, int quote_count) {
+    if (!xfmt_step(ctx)) return false;
     size_t line_start = 0;
-    for (size_t i = 0; i <= length; i++) {
+    for (size_t i = 0; xfmt_step(ctx) && (i <= length); i++) {
         if (i < length && value[i] != '\n')
             continue;
         size_t line_length = i - line_start;
         if (line_length == (size_t) quote_count) {
             bool only_quotes = true;
-            for (size_t j = line_start; j < i; j++) {
+            for (size_t j = line_start; xfmt_step(ctx) && (j < i); j++) {
                 if (value[j] != '"') {
                     only_quotes = false;
                     break;
@@ -164,21 +125,26 @@ static bool quote_line_collision(const uint8_t *value, size_t length, int quote_
     return false;
 }
 
-static int safe_quote_count(const uint8_t *value, size_t length) {
+static int safe_quote_count(XrFmtContext *ctx, const uint8_t *value, size_t length) {
+    if (!xfmt_step(ctx)) return 0;
     int quote_count = 3;
-    while (quote_line_collision(value, length, quote_count))
+    while ( xfmt_step(ctx) && (quote_line_collision(ctx, value, length, quote_count))) {
+        if (quote_count == INT_MAX) { xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET); return 0; }
         quote_count++;
+    }
     return quote_count;
 }
 
 static void emit_quotes(XrFmtContext *ctx, int quote_count) {
-    for (int i = 0; i < quote_count; i++)
+    if (!xfmt_step(ctx)) return;
+    for (int i = 0; xfmt_step(ctx) && (i < quote_count); i++)
         lit_byte(ctx, '"');
 }
 
 static void emit_quoted_payload(XrFmtContext *ctx, const char *prefix, const uint8_t *value,
                                 size_t length, XrLiteralEscapeMode escape_mode,
                                 XrLiteralSourceForm source_form, bool binary, bool escape_dollar) {
+    if (!xfmt_step(ctx)) return;
     lit_str(ctx, prefix);
     if (source_form == XR_LITERAL_INLINE) {
         lit_byte(ctx, '"');
@@ -186,7 +152,7 @@ static void emit_quoted_payload(XrFmtContext *ctx, const char *prefix, const uin
         lit_byte(ctx, '"');
         return;
     }
-    int quote_count = safe_quote_count(value, length);
+    int quote_count = safe_quote_count(ctx, value, length);
     emit_quotes(ctx, quote_count);
     lit_byte(ctx, '\n');
     if (length > 0) {
@@ -199,18 +165,26 @@ static void emit_quoted_payload(XrFmtContext *ctx, const char *prefix, const uin
     ctx->block_literal_closed = true;
 }
 
-void xfmt_emit_float_literal(XrFmtContext *ctx, double value) {
+XR_FUNC void xfmt_emit_float_literal(XrFmtContext *ctx, double value) {
+    if (!xfmt_step(ctx)) return;
     // %.17g round-trips every finite double exactly; shorter forms can change
     // the value. Then guarantee the result still LOOKS like a float: without a
     // '.', 'e' or 'E' the lexer would take `0` back as an integer literal and
     // the expression would silently change type.
     char buf[64];
+    if (!xfmt_work(ctx, sizeof(buf))) return;
     int n = snprintf(buf, sizeof(buf), "%.17g", value);
     if (n <= 0 || (size_t) n >= sizeof(buf)) {
-        xfmt_write_str(ctx, "0.0");
+        xfmt_fail(ctx, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return;
     }
-    if (!strpbrk(buf, ".eEnN")) {  // n/N also catch inf/nan spellings
+    bool marker = false;
+    for (int i = 0; xfmt_step(ctx) && (i < n); ++i) {
+        if (!xfmt_step(ctx)) return;
+        char c = buf[i];
+        if (c == '.' || c == 'e' || c == 'E' || c == 'n' || c == 'N') marker = true;
+    }
+    if (!marker) {  // n/N also catch inf/nan spellings
         if ((size_t) n + 2 < sizeof(buf)) {
             buf[n] = '.';
             buf[n + 1] = '0';
@@ -220,12 +194,14 @@ void xfmt_emit_float_literal(XrFmtContext *ctx, double value) {
     xfmt_write_str(ctx, buf);
 }
 
-void xfmt_emit_escaped_inline_string(XrFmtContext *ctx, const char *value, int length) {
+XR_FUNC void xfmt_emit_escaped_inline_string(XrFmtContext *ctx, const char *value, int length) {
+    if (!xfmt_step(ctx)) return;
     emit_quoted_payload(ctx, "", (const uint8_t *) value, length > 0 ? (size_t) length : 0,
                         XR_LITERAL_ESCAPED, XR_LITERAL_INLINE, false, false);
 }
 
-void xfmt_emit_string_literal(XrFmtContext *ctx, AstNode *node) {
+XR_FUNC void xfmt_emit_string_literal(XrFmtContext *ctx, AstNode *node) {
+    if (!xfmt_step(ctx)) return;
     LiteralNode *literal = &node->as.literal;
     const char *value = literal->raw_value.string_val;
     const char *prefix = literal->escape_mode == XR_LITERAL_RAW ? "r" : "";
@@ -233,7 +209,8 @@ void xfmt_emit_string_literal(XrFmtContext *ctx, AstNode *node) {
                         literal->escape_mode, literal->source_form, false, false);
 }
 
-void xfmt_emit_fixed_bytes_literal(XrFmtContext *ctx, AstNode *node) {
+XR_FUNC void xfmt_emit_fixed_bytes_literal(XrFmtContext *ctx, AstNode *node) {
+    if (!xfmt_step(ctx)) return;
     FixedBytesLiteralNode *literal = &node->as.fixed_bytes_literal;
     const char *prefix = NULL;
     if (literal->append_nul)
@@ -244,18 +221,20 @@ void xfmt_emit_fixed_bytes_literal(XrFmtContext *ctx, AstNode *node) {
                         literal->escape_mode, literal->source_form, true, false);
 }
 
-static int template_quote_count(const TemplateStringNode *tmpl) {
+static int template_quote_count(XrFmtContext *ctx, const TemplateStringNode *tmpl) {
+    if (!xfmt_step(ctx)) return 0;
     int quote_count = 3;
     bool collision = true;
-    while (collision) {
+    while ( xfmt_step(ctx) && (collision)) {
         collision = false;
-        for (int i = 0; i < tmpl->part_count; i++) {
+        for (int i = 0; xfmt_step(ctx) && (i < tmpl->part_count); i++) {
             AstNode *part = tmpl->parts[i];
             if (part && part->type == AST_LITERAL_STRING) {
                 const char *value = part->as.literal.raw_value.string_val;
                 if (value &&
-                    quote_line_collision((const uint8_t *) value, part->as.literal.string_length, quote_count)) {
+                    quote_line_collision(ctx, (const uint8_t *) value, part->as.literal.string_length, quote_count)) {
                     collision = true;
+                    if (quote_count == INT_MAX) { xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET); return 0; }
                     quote_count++;
                     break;
                 }
@@ -267,7 +246,8 @@ static int template_quote_count(const TemplateStringNode *tmpl) {
 
 static void emit_template_parts(XrFmtContext *ctx, TemplateStringNode *tmpl, bool block,
                                 XrFmtExprEmitter emit_expr) {
-    for (int i = 0; i < tmpl->part_count; i++) {
+    if (!xfmt_step(ctx)) return;
+    for (int i = 0; xfmt_step(ctx) && (i < tmpl->part_count); i++) {
         AstNode *part = tmpl->parts[i];
         /* A literal part may end exactly at a block newline. In that case the
          * next part owns the first bytes on the new source line. Establish
@@ -289,7 +269,8 @@ static void emit_template_parts(XrFmtContext *ctx, TemplateStringNode *tmpl, boo
     }
 }
 
-void xfmt_emit_template_string(XrFmtContext *ctx, AstNode *node, XrFmtExprEmitter emit_expr) {
+XR_FUNC void xfmt_emit_template_string(XrFmtContext *ctx, AstNode *node, XrFmtExprEmitter emit_expr) {
+    if (!xfmt_step(ctx)) return;
     TemplateStringNode *tmpl = &node->as.template_str;
     if (tmpl->escape_mode == XR_LITERAL_RAW)
         lit_byte(ctx, 'r');
@@ -299,7 +280,7 @@ void xfmt_emit_template_string(XrFmtContext *ctx, AstNode *node, XrFmtExprEmitte
         lit_byte(ctx, '"');
         return;
     }
-    int quote_count = template_quote_count(tmpl);
+    int quote_count = template_quote_count(ctx, tmpl);
     emit_quotes(ctx, quote_count);
     lit_byte(ctx, '\n');
     if (tmpl->part_count > 0) {

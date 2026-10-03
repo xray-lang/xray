@@ -38,13 +38,13 @@ static bool source_nominal_declaration(SourceContext *ctx, AstNode *node, Source
 }
 static SourceName *source_nominal_name(SourceContext *ctx, const char *name) {
     if (!name) return NULL;
-    const char *dot = strchr(name, '.');
+    const char *dot = source_text_find(ctx, name, '.');
     SourceName *symbol;
     if (dot) {
         size_t length = (size_t) (dot - name);
         char *prefix = source_alloc(ctx, length + 1, 1);
         if (!prefix) return NULL;
-        memcpy(prefix, name, length);
+        if (!source_copy_bytes(ctx, NULL, prefix, name, length)) return NULL;
         symbol = visible_name(ctx, prefix);
         if (symbol && symbol->kind == SOURCE_MODULE) symbol = imported_declaration(ctx, symbol, dot + 1);
         else return NULL;
@@ -92,8 +92,8 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     symbol->module = ctx->module; ctx->nominal_sources[symbol->index] = symbol;
     XrXirNominalDeclaration *record = (XrXirNominalDeclaration *) &ctx->nominals.declarations[symbol->index];
     const char *module = ctx->graph->specs[ctx->module].canonical;
-    *record = (XrXirNominalDeclaration) {{module, (uint32_t) strlen(module)},
-        {name, (uint32_t) strlen(name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0};
+    *record = (XrXirNominalDeclaration) {{module, (uint32_t) source_text_size(ctx, module)},
+        {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0};
     XrXirTypeNode type = {0}; type.kind = XR_XIR_TYPE_NOMINAL; type.nominal.declaration = symbol->index;
     XrXirConstraint *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;
     XrXirType *arguments = count ? source_alloc(ctx, count, sizeof(*arguments)) : NULL;
@@ -105,7 +105,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"nominal type parameter is malformed");
         for (uint32_t j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
-            if (!strcmp(parameter->name, parameters[j]->name))
+            if (source_text_same(ctx, NULL, parameter->name, parameters[j]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate nominal type parameter");
         }
         arguments[i] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + i);
@@ -194,7 +194,7 @@ static bool source_struct_fields(SourceContext *ctx) {
                     if (field->initializer)
                         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit admitted constructor value");
                 }
-                fields[f] = (XrXirNominalField) {{field->name, (uint32_t) strlen(field->name)}, types[f],
+                fields[f] = (XrXirNominalField) {{field->name, (uint32_t) source_text_size(ctx, field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
                     (field->is_const ? 0 : XR_XIR_FIELD_MUTABLE)};
                 SourceName member = {0}; member.name = source_owned_text(ctx, field->name); member.node = node;
@@ -246,7 +246,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                 if (!source_nominal_function_scope(ctx,index,symbol)) return false;
                 ctx->bodies[index].declaration = ctx->nominal_members[symbol->index][f];
                 bool visible = nominal->exported && !(nominal->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED));
-                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER};
+                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER, 0, 0};
             }
         }
     }
@@ -261,7 +261,7 @@ static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType typ
     for (uint32_t f = 0; f < decl->field_count; ++f) {
         if (!source_work(ctx, node)) return false;
         const XrXirNominalField *field = &decl->fields[f];
-        if (strlen(name) != field->name.length || memcmp(name, field->name.bytes, field->name.length)) continue;
+        if (source_text_size(ctx, name) != field->name.length || !source_span_same(ctx, NULL, name, field->name.bytes, field->name.length)) continue;
         bool owner = ctx->identities[ctx->function].nominal_owner == found->nominal.declaration + 1;
         if ((!owner && (field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))) || ((write == 1 || write == 3) && !(field->flags & XR_XIR_FIELD_MUTABLE)) || (write == 2 && !owner))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field access is not permitted");
@@ -356,7 +356,7 @@ static bool source_class_carriers(SourceContext *ctx) {
             XrXirType field;
             if (!source_substitute(ctx,&substitution,decl->fields[f].type,0,&field)) return false;
             if (!xr_xir_type_span(&ctx->types,field)) {
-                XrXirStatus status=xr_xir_class_field_verify(&ctx->types,field,&ctx->budget);
+                XrXirStatus status=xr_xir_compile_class_field_verify(&ctx->compile, &ctx->types, field);
                 if (status!=XR_XIR_OK) {
                     ctx->module=symbol->module;
                     return source_fail(ctx,symbol->node,status,status==XR_XIR_BAD_TYPE ?
@@ -376,7 +376,7 @@ static bool source_class_field_capabilities(SourceContext *ctx) {
         SourceName *owner=ctx->nominal_sources[d];ctx->module=owner->module;
         for (uint32_t f=0;f<decl->field_count;++f) {
             if (xr_xir_type_span(&ctx->types,decl->fields[f].type)) continue;
-            XrXirStatus status=xr_xir_class_field_verify(&ctx->types,decl->fields[f].type,&ctx->budget);
+            XrXirStatus status=xr_xir_compile_class_field_verify(&ctx->compile, &ctx->types, decl->fields[f].type);
             if (status!=XR_XIR_OK) return source_fail(ctx,owner->node,status,
                 status==XR_XIR_BAD_TYPE ? "class field carrier is not implemented" : "class field capability budget or allocation failed");
         }

@@ -7,11 +7,13 @@ from pathlib import Path
 
 INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"\n]+)"', re.MULTILINE)
 OWNERS = {
+    'src/base/CMakeLists.txt': ['xray_compile_resources'],
     'src/xir/CMakeLists.txt': ['xray_xir_admission', 'xray_xir_declarations', 'xray_xir_scalar'],
     'src/execution/xir_runtime_host.cmake': ['xray_xir_runtime_host'],
 }
 GENERATED_RUNTIME_ROOTS = ['src/xir/xxir_equal.h', 'src/xir/xxir_panic.h',
-                           'src/xir/xxir_output.h', 'src/xir/xxir_nullable.h', 'src/shared/xr_error_core.h']
+                           'src/xir/xxir_output.h', 'src/xir/xxir_nullable.h', 'src/shared/xr_error_core.h',
+                           'src/execution/xr_xir_native_main.inc.c']
 
 def recipe(root: Path) -> dict:
     root = root.resolve()
@@ -62,6 +64,13 @@ def recipe(root: Path) -> dict:
     return {'archive_source_groups': groups,
             'files': [{'path': name, 'kind': entries[name]} for name in sorted(entries)]}
 
+def write_if_changed(path: Path, text: str) -> None:
+    content = text.encode('utf-8')
+    if path.is_file() and path.read_bytes() == content:
+        return
+    path.write_bytes(content)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True)
@@ -74,9 +83,9 @@ def main() -> None:
     lines.extend('    {' + json.dumps(entry['path']) + ', ' + str(entry['kind']) + 'u},'
                  for entry in result['files'])
     lines.append('};')
-    Path(args.output).write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
+    write_if_changed(Path(args.output), '\n'.join(lines) + '\n')
     if args.record:
-        Path(args.record).write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8', newline='\n')
+        write_if_changed(Path(args.record), json.dumps(result, indent=2) + '\n')
 
 if __name__ == '__main__':
     main()

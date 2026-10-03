@@ -20,12 +20,12 @@ static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrX
         for(uint32_t e=0;e<14 && status!=XR_XIR_CALL_OOM;++e){
             status=xr_xir_instance_start(instance,ids[e],NULL,0);
             if(status==XR_XIR_CALL_READY){
-                XrXirInstanceResult run=xr_xir_instance_poll(instance);uint32_t yields=0;
+                XrXirInstanceResult run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);uint32_t yields=0;
                 while(run.outcome.status==XR_XIR_CALL_SUSPENDED){
                     CHECK(e==13 && ++yields==1);
                     status=xr_xir_instance_resume(instance,run.epoch,run.outcome.wake);
                     if(status!=XR_XIR_CALL_READY)break;
-                    run=xr_xir_instance_poll(instance);
+                    run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 }
                 if(status==XR_XIR_CALL_READY)status=run.outcome.status;
                 if(status!=XR_XIR_CALL_OOM)CHECK(yields==(e==13 ? 1u : 0u));
@@ -73,9 +73,9 @@ static void default_invoke_cancel(XrXirProgram *program,uint32_t entry) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-    XrXirInstanceResult run=xr_xir_instance_poll(instance);CHECK(run.outcome.status==XR_XIR_CALL_SUSPENDED);
+    XrXirInstanceResult run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);CHECK(run.outcome.status==XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_CANCELLED);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_CANCELLED);
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_BAD_STATE && !result.type);
     CHECK(xr_xir_instance_resume(instance,run.epoch,run.outcome.wake)==XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);

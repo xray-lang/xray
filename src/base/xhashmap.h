@@ -37,6 +37,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "xdefs.h"
+#include "xio_policy.h"
 
 // Tombstone sentinel: key==NULL && value==XR_HASHMAP_TOMBSTONE
 #define XR_HASHMAP_TOMBSTONE ((void *) (uintptr_t) 1)
@@ -53,26 +54,26 @@ typedef struct XrHashMap {
     uint32_t count;
 } XrHashMap;
 
-XR_FUNC XrHashMap *xr_hashmap_new(void);
+/* The mandatory policy is copied into private aligned owner storage. Keys and
+ * values remain borrowed. Failed mutations preserve all prior entries; work
+ * and cumulative allocations stay consumed. Owned blocks keep a compile ledger
+ * alive, while other policy contexts must outlive this map. */
+XR_FUNC XrOsIoStatus xr_hashmap_owned_new(const XrOsIoPolicy *policy, XrHashMap **output);
+XR_FUNC void xr_hashmap_owned_free(XrHashMap *map);
+XR_FUNC XrOsIoStatus xr_hashmap_owned_set(XrHashMap *map, const char *key, void *value);
+/* Missing keys publish NULL on OK. Resource failures preserve output. */
+XR_FUNC XrOsIoStatus xr_hashmap_owned_get(const XrHashMap *map, const char *key, void **output);
+XR_FUNC XrOsIoStatus xr_hashmap_owned_has(const XrHashMap *map, const char *key, bool *output);
+XR_FUNC XrOsIoStatus xr_hashmap_owned_delete(XrHashMap *map, const char *key, bool *output);
+XR_FUNC XrOsIoStatus xr_hashmap_owned_clear(XrHashMap *map);
 
-XR_FUNC void xr_hashmap_free(XrHashMap *map);
-
-// Insert or update. Returns true on success; false only when the key is
-// absent and no slot is available (allocation failure on a full table).
-// The map never silently drops an insert — callers must handle false.
-XR_FUNC bool xr_hashmap_set(XrHashMap *map, const char *key, void *value);
-
-// Returns NULL if key not found
-XR_FUNC void *xr_hashmap_get(XrHashMap *map, const char *key);
-
-XR_FUNC bool xr_hashmap_has(XrHashMap *map, const char *key);
-XR_FUNC bool xr_hashmap_delete(XrHashMap *map, const char *key);
-XR_FUNC void xr_hashmap_clear(XrHashMap *map);
-
-// Iteration support (avoids exposing internal structure)
 typedef void (*XrHashMapIterFunc)(const char *key, void *value, void *userdata);
-XR_FUNC void xr_hashmap_foreach(XrHashMap *map, XrHashMapIterFunc func, void *userdata);
-
+/* Iteration callbacks cannot mutate the map. */
+XR_FUNC XrOsIoStatus xr_hashmap_owned_foreach(const XrHashMap *map, XrHashMapIterFunc func, void *userdata);
+/* Cleanup invokes each callback once without fresh work admission, then frees
+ * the map. Callbacks may release borrowed keys/values but cannot fail or mutate
+ * the map. A NULL callback is equivalent to owned_free. */
+XR_FUNC void xr_hashmap_owned_dispose(XrHashMap *map, XrHashMapIterFunc cleanup, void *userdata);
 // Get count of active entries
 static inline uint32_t xr_hashmap_count(XrHashMap *map) {
     return map ? map->count : 0;

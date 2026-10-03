@@ -73,14 +73,13 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     uint32_t parameters=ctx->functions[ctx->function].parameter_count;
     if (body->region_sealed || body->count>UINT32_MAX-parameters)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source region is not open");
-    if (body->expression_count>ctx->budget.work)
-        return source_fail(ctx,NULL,XR_XIR_BUDGET,"expression region validation exhausted");
-    ctx->budget.work-=body->expression_count;
     uint32_t expressions=0;
     for (SourceExpressionStorage *storage=body->expressions;storage;storage=storage->next) {
+        if (!source_work(ctx,NULL)) return false;
         if (!storage->count || storage->count>32 || storage->count>body->expression_count-expressions)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression region storage is invalid");
         for (uint32_t e=0;e<storage->count;++e) {
+            if (!source_work(ctx,NULL)) return false;
             SourceExpressionPlan *plan=&storage->expressions[e];
             if (plan->owner!=ctx->function || (seal && plan->state!=SOURCE_TERM_GROUND && plan->state!=SOURCE_TERM_DISCARDED) ||
                 plan->identity>=body->expression_count || plan->entry.owner!=ctx->function ||
@@ -95,19 +94,23 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression region count is invalid");
     uint32_t value_count=parameters+body->count;
     uint64_t cells=(uint64_t)value_count+(uint64_t)body->block_count*2;
-    uint64_t bytes=cells*sizeof(uint32_t);
-    uint64_t work=1+(uint64_t)value_count+3*(uint64_t)body->count+4*(uint64_t)body->block_count+body->operand_count;
-    if (bytes>SIZE_MAX || bytes>ctx->budget.scratch_bytes || work>ctx->budget.work)
+    if (cells>SIZE_MAX/sizeof(uint32_t))
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"source region identity map exhausted");
-    ctx->budget.work-=work;ctx->budget.scratch_bytes-=bytes;
-    uint32_t *map=cells ? xr_calloc((size_t)cells,sizeof(*map)) : NULL;
+    uint32_t *map=cells ? source_scratch(ctx,(size_t)cells,sizeof(*map),true) : NULL;
     bool ok=false;
-    if (cells && !map) {source_fail(ctx,NULL,XR_XIR_OUT_OF_MEMORY,"source region identity allocation failed");goto done;}
+    if (cells && !map) goto done;
     uint32_t *blocks=map ? map+value_count : NULL;
     uint32_t *layout=blocks ? blocks+body->block_count : NULL;
-    for (uint32_t i=0;i<value_count;++i) map[i]=i<parameters ? i : UINT32_MAX;
-    for (uint32_t b=0;b<body->block_count;++b) blocks[b]=layout[b]=UINT32_MAX;
+    for (uint32_t i=0;i<value_count;++i) {
+        if (!source_work(ctx,NULL)) goto done;
+        map[i]=i<parameters ? i : UINT32_MAX;
+    }
     for (uint32_t b=0;b<body->block_count;++b) {
+        if (!source_work(ctx,NULL)) goto done;
+        blocks[b]=layout[b]=UINT32_MAX;
+    }
+    for (uint32_t b=0;b<body->block_count;++b) {
+        if (!source_work(ctx,NULL)) goto done;
         SourceBlockRecipe *recipe=&body->blocks[b];
         if (recipe->owner!=ctx->function || recipe->identity>=body->block_count ||
             recipe->runtime>=body->block_count || blocks[recipe->identity]!=UINT32_MAX || layout[recipe->runtime]!=UINT32_MAX) goto invalid;
@@ -115,6 +118,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     }
     uint32_t original_end=0;
     for (uint32_t i=0;i<body->count;++i) {
+        if (!source_work(ctx,NULL)) goto done;
         const XrXirInstruction *op=&body->recipes[i].instruction;
         if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) goto invalid;
         if (xr_xir_op_uses_operand_table(op->op)) {
@@ -126,9 +130,11 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     if (original_end!=body->operand_count) goto invalid;
     uint32_t emitted=0;
     for (uint32_t b=0;b<body->block_count;++b) {
+        if (!source_work(ctx,NULL)) goto done;
         XrXirBlock block=body->blocks[layout[b]].block;
         if (block.first>body->count || block.count>body->count-block.first || block.count>body->count-emitted) goto invalid;
         for (uint32_t a=0;a<block.count;++a) {
+        if (!source_work(ctx,NULL)) goto done;
             SourceInstructionRecipe *recipe=&body->recipes[block.first+a];
             if (recipe->owner!=ctx->function || recipe->value<parameters || recipe->value>=value_count || map[recipe->value]!=UINT32_MAX) goto invalid;
             map[recipe->value]=parameters+emitted++;
@@ -140,9 +146,11 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     XrXirInstruction *instructions=views.instructions;
     XrXirBlock *emitted_blocks=views.blocks;
     uint32_t *operands=views.operands;
+    if (!source_work_units(ctx,NULL,(uint64_t)body->operand_count*sizeof(*operands))) goto done;
     if (body->operand_count) memcpy(operands,body->operands,body->operand_count*sizeof(*operands));
     emitted=0;
     for (uint32_t b=0;b<body->block_count;++b) {
+        if (!source_work(ctx,NULL)) goto done;
         XrXirBlock block=body->blocks[layout[b]].block;
         if (block.first>body->count || block.count>body->count-block.first) goto invalid;
         if (block.panic && !source_region_id(blocks,body->block_count,block.panic,&block.panic)) goto invalid;
@@ -155,8 +163,10 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     }
     uint32_t operand_end=0;emitted=0;
     for (uint32_t b=0;b<body->block_count;++b) {
+        if (!source_work(ctx,NULL)) goto done;
       XrXirBlock block=body->blocks[layout[b]].block;
       for (uint32_t i=block.first;i<block.first+block.count;++i) {
+        if (!source_work(ctx,NULL)) goto done;
         XrXirInstruction op=body->recipes[i].instruction;
         if (op.op<=XR_XIR_INVALID || op.op>=XR_XIR_OP_COUNT) goto invalid;
         SourceRecipeRole role=source_recipe_roles[op.op];
@@ -165,6 +175,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
                 op.args[1]>body->operand_count-operand_end) goto invalid;
             uint32_t original=op.args[0];op.args[0]=op.args[1] ? operand_end : 0;
             for (uint32_t a=0;a<op.args[1];++a) {
+        if (!source_work(ctx,NULL)) goto done;
                 uint32_t id=body->operands[original+a];
                 bool block_id=op.op==XR_XIR_PHI && !(a%2);
                 if (block_id ? !source_region_id(blocks,body->block_count,id,&operands[operand_end+a]) :
@@ -175,11 +186,15 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             uint32_t count=op.op==XR_XIR_RETURN ? output->result!=XR_XIR_UNIT : role.values;
             if (op.op==XR_XIR_SLOT_INIT || op.op==XR_XIR_SLOT_STORE)
                 count=xr_xir_slot_payload_operands(ctx->slots,ctx->slot_count,&op);
-            for (uint32_t a=0;a<count;++a)
+            for (uint32_t a=0;a<count;++a) {
+                if (!source_work(ctx,NULL)) goto done;
                 if (!source_region_value(map,value_count,op.args[a],&op.args[a],seal)) goto invalid;
+            }
         }
-        for (uint32_t e=0;e<role.edges;++e)
+        for (uint32_t e=0;e<role.edges;++e) {
+            if (!source_work(ctx,NULL)) goto done;
             if (!source_region_id(blocks,body->block_count,op.targets[e],&op.targets[e])) goto invalid;
+        }
         if (op.op==XR_XIR_INVOKE_RESULT || op.op==XR_XIR_INVOKE_ERROR || op.op==XR_XIR_INVOKE_DISCARD ||
             ((op.op==XR_XIR_CLEANUP_LEAVE || op.op==XR_XIR_CLEANUP_ERROR) && op.immediate)) {
             bool frontier=op.op==XR_XIR_CLEANUP_LEAVE || op.op==XR_XIR_CLEANUP_ERROR;
@@ -209,5 +224,5 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
 invalid:
     source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source region identity is invalid");
 done:
-    xr_free(map);ctx->budget.scratch_bytes+=bytes;return ok;
+    xr_compile_resources_free(map);return ok;
 }

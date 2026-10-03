@@ -14,15 +14,16 @@
 #define XDECLARATION_LOAD_H
 #include "xdeclaration_manifest.h"
 
-typedef struct XrDeclarationInputBudget {
-    XrTomlParseBudget parsing;
-    XrDeclarationBudget records;
-} XrDeclarationInputBudget;
+typedef struct XrDeclarationInputLimits {
+    XrTomlParseLimits parsing;
+    XrDeclarationLimits records;
+} XrDeclarationInputLimits;
 
 /* Establishes physical file containment, not semantic package identity. The
  * source owner must bind selectors to its explicit package authority and
- * prove every obligation before publication. parsing.work bounds the combined
- * parser and record work; work_used reports consumption even for ABSENT. No borrowed file/DOM data escapes. */
-XR_FUNC XrDeclarationStatus xr_declaration_manifest_load(const char *physical_root,
-    XrDeclarationInputBudget budget, XrDeclarationManifest **output, size_t *work_used);
+ * prove every obligation before publication. All temporary and published
+ * owners use one ledger. ABSENT and every other failure preserve output. */
+XR_FUNC XrDeclarationStatus xr_compile_declaration_manifest_load(
+    XrCompileResources *resources, const char *physical_root,
+    const XrDeclarationInputLimits *limits, XrDeclarationManifest **output);
 #endif // XDECLARATION_LOAD_H

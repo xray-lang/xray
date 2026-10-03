@@ -85,11 +85,9 @@ static bool source_implementation_bindings(SourceContext *ctx, XrXirImplementati
     XrXirTypes input = ctx->types;
     uint32_t nominal_count = ctx->nominals.declarations[owner->index].parameter_count;
     XrXirInterfaceClosure *closure = NULL;
-    uint64_t closure_scratch = ctx->budget.scratch_bytes;
     XrXirInterfaceClosureRoots roots = {&ctx->interfaces,&input,&implementation->interface,1,nominal_count};
-    XrXirStatus status = xr_xir_interface_closure_build(&roots,&ctx->budget,&closure);
+    XrXirStatus status = xr_xir_compile_interface_closure_build(&ctx->compile, &roots, &closure);
     if (status != XR_XIR_OK) return source_fail(ctx,owner->node,status,"implementation requirements are invalid");
-    closure_scratch -= ctx->budget.scratch_bytes;
     bool ok = false;
     uint32_t count = xr_xir_interface_closure_requirement_count(closure);
     XrXirImplementationBinding *bindings = count ? source_alloc(ctx,count,sizeof(*bindings)) : NULL;
@@ -99,7 +97,7 @@ static bool source_implementation_bindings(SourceContext *ctx, XrXirImplementati
         const XrXirInterfaceRequirement *requirement = xr_xir_interface_closure_requirement(closure,r);
         char *name = source_alloc(ctx,(uint64_t)requirement->name.length + 1,1);
         if (!name || !source_work(ctx,owner->node)) goto done;
-        memcpy(name,requirement->name.bytes,requirement->name.length);
+        if (!source_copy_bytes(ctx, owner->node, name, requirement->name.bytes, requirement->name.length)) goto done;
         SourceName *method = find_name(ctx,ctx->nominal_methods[owner->index],name);
         if (!method) { source_fail(ctx,owner->node,XR_XIR_BAD_TYPE,"explicit implementation is missing a method"); goto done; }
         if (ctx->identities[method->index].method_kind != XR_XIR_READ_METHOD ||
@@ -115,14 +113,14 @@ static bool source_implementation_bindings(SourceContext *ctx, XrXirImplementati
     }
     implementation->bindings = bindings; implementation->binding_count = count; ok = true;
 done:
-    xr_xir_interface_closure_free(closure);
-    ctx->budget.scratch_bytes += closure_scratch; return ok;
+    xr_xir_compile_interface_closure_free(closure);
+    return ok;
 }
 static bool source_implementations_bind(SourceContext *ctx) {
     XrXirDeclarations declarations;
     XrXirModule module = source_module_view(ctx,&declarations);
-    XrXirStatus status = xr_xir_types_structure_verify(module.types,&ctx->budget);
-    if (status == XR_XIR_OK) status = xr_xir_generics_structure_verify(&module,&ctx->budget);
+    XrXirStatus status = xr_xir_compile_types_structure_verify(&ctx->compile, module.types);
+    if (status == XR_XIR_OK) status = xr_xir_compile_generics_structure_verify(&ctx->compile, &module);
     if (status != XR_XIR_OK)
         return source_fail(ctx,NULL,status,"source declaration type structure is invalid");
     if (!source_implementation_applications(ctx)) return false;
@@ -130,12 +128,12 @@ static bool source_implementations_bind(SourceContext *ctx) {
     for (uint32_t i = 0; i < ctx->implementations.count; ++i)
         if (!source_implementation_bindings(ctx,&records[i])) return false;
     module = source_module_view(ctx,&declarations);
-    status = xr_xir_types_structure_verify(module.types,&ctx->budget);
-    if (status == XR_XIR_OK) status = xr_xir_generics_structure_verify(&module,&ctx->budget);
+    status = xr_xir_compile_types_structure_verify(&ctx->compile, module.types);
+    if (status == XR_XIR_OK) status = xr_xir_compile_generics_structure_verify(&ctx->compile, &module);
     if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"bound implementation type structure is invalid");
-    status = xr_xir_implementations_verify(&module,&ctx->budget);
+    status = xr_xir_compile_implementations_verify(&ctx->compile, &module);
     if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"implementation witness definition obligations failed");
-    status = xr_xir_declaration_constraints_verify(&module,&ctx->budget);
+    status = xr_xir_compile_declaration_constraints_verify(&ctx->compile, &module);
     if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"declaration type obligations failed");
     ctx->implementations_ready = true; return true;
 }

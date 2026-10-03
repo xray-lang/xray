@@ -18,14 +18,14 @@ static bool source_conversion_plan(SourceContext *ctx, AstNode *node, XrXirType 
     if (xr_xir_type_is_nullable(&ctx->types,target) && xr_xir_nullable_element(&ctx->types,target) == actual) {
         recipe.operation = XR_XIR_NULLABLE_SOME;
     } else if (xr_xir_type_is_callable(&ctx->types,target) && xr_xir_type_is_callable(&ctx->types,actual)) {
-        XrXirStatus status = xr_xir_callable_weakening(&ctx->types,actual,target,&ctx->budget.work);
+        XrXirStatus status = xr_xir_compile_callable_weakening(&ctx->compile, &ctx->types, actual, target);
         if (status != XR_XIR_OK) return source_fail(ctx,node,status,"callable conversion may only discard its top-level promise");
         recipe.operation = XR_XIR_FUNCTION_WEAKEN;
     } else if (target == XR_XIR_ERROR) {
         XrXirDeclarations declarations;
         XrXirModule module = source_module_view(ctx,&declarations);
         XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status = xr_xir_type_markers_prove(&context,actual,XR_XIR_CONSTRAINT_ERROR,&ctx->budget);
+        XrXirStatus status = xr_xir_compile_type_markers_prove(&ctx->compile, &context, actual, XR_XIR_CONSTRAINT_ERROR);
         if (status != XR_XIR_OK) return source_fail(ctx,node,status,"Error conversion requires an enum proof");
         recipe.operation = XR_XIR_ERROR_ERASE;
     } else {

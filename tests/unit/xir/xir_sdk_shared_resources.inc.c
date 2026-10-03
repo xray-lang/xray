@@ -9,10 +9,10 @@
 static XrXirTargetStatus sdk_target(const XrXirRuntimeSdkRequest *sdk,XrXirTargetSnapshot **output) {
     char path[32768];CHECK(snprintf(path,sizeof(path),"%s/src/base/xdefs.h",sdk->root)>0);
     const char *argv[]={"diagnostic-input-snapshot"};
-    XrXirTargetCommand command={sdk->root,argv,1,NULL,0};
+    XrXirTargetCommandFacts command={"C:/described-tool.exe",sdk->root,argv,1,NULL,0,3000,1048576,0};
     XrXirTargetDependency file={path,XR_XIR_TARGET_HEADER};
-    XrXirTargetRequest request={sdk->resources,"x86_64-windows-msvc",3,2,11,&file,1,&command,1};
-    return xtc_xir_target_capture(&request,output);
+    XrXirTargetSnapshotRequest request={sdk->resources,"x86_64-windows-msvc",3,2,11,&file,1,&command,1,NULL};
+    return xtc_xir_target_snapshot_capture(&request,output);
 }
 static void sdk_target_faults(const XrXirRuntimeSdkRequest *request) {
     XrXirRuntimeSdk *sdk=NULL;CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK);
@@ -31,11 +31,15 @@ static void sdk_target_faults(const XrXirRuntimeSdkRequest *request) {
         sdk_io_fail_at=SIZE_MAX;
         CHECK(sdk_stats(request->resources).live_bytes==baseline && runtime_bytes==physical && sdk_handles()==handles);
     }
-    sdk_io_error=ERROR_READ_FAULT;CHECK(xr_xir_runtime_sdk_facts(sdk)->value_abi==17);
+    sdk_io_error=ERROR_READ_FAULT;CHECK(xr_xir_runtime_sdk_facts(sdk)->value_abi==18);
     xr_xir_runtime_sdk_free(sdk);
     printf("Target with SDK alive: %zu allocator and %zu IO/OOM points PASS\n",allocations,ios);
 }
-static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original) {
+static void sdk_faults_with_target(const XrXirRuntimeSdkRequest *original) {
+    XrXirTargetSnapshot *target=NULL;CHECK(sdk_target(original,&target)==XR_XIR_TARGET_OK);
+    sdk_actual_faults(original);CHECK(xtc_xir_target_file(target,0)->length>0);xtc_xir_target_free(target);
+}
+static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original,bool run_sdk_faults) {
     size_t physical=runtime_bytes;DWORD handles=sdk_handles();
     XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_unlimited);
     XrXirRuntimeSdk *sdk=NULL;XrXirTargetSnapshot *target=NULL;
@@ -84,24 +88,24 @@ static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original) {
     CHECK(xr_xir_runtime_sdk_load(&request,&sdk)==XR_XIR_SDK_BUDGET && !sdk);
     CHECK(sdk_stats(request.resources).allocated_bytes==cumulative);
     xr_compile_resources_release(request.resources);
-    /* Exercise SDK failures while an independent input owner holds the same ledger. */
-    target=NULL;CHECK(sdk_target(original,&target)==XR_XIR_TARGET_OK);
-    sdk_actual_faults(original);CHECK(xtc_xir_target_file(target,0)->length>0);xtc_xir_target_free(target);
+    /* The full SDK matrix retains its original position between shared-budget
+     * checks and Target failures. The focused mode still loads the real SDK. */
+    if (run_sdk_faults) sdk_faults_with_target(original);
     sdk_target_faults(original);
     CHECK(runtime_bytes==physical && sdk_handles()==handles);
     puts("SDK + Target cumulative/peak/work exact-minus1, no refresh, producer release and both destruction orders PASS");
 }
 static void sdk_fixed_work(void) {
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
-    SdkJson json={NULL,NULL,NULL,resources,XR_XIR_SDK_OK};size_t length=0;
+    XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);size_t length=0;
     uint64_t before=sdk_stats(resources).work;
-    CHECK(sdk_json_length(&json,"abc",&length) && length==3);
+    CHECK(xr_json_cursor_length(&json,"abc",&length) && length==3);
     CHECK(sdk_stats(resources).work-before==4);
-    before=sdk_stats(resources).work;CHECK(sdk_json_equal(&json,"a","a"));
+    before=sdk_stats(resources).work;CHECK(xr_json_cursor_equal(&json,"a","a"));
     CHECK(sdk_stats(resources).work-before==4);
     char source[]="\"\\u0061\"";json.begin=json.cursor=source;json.end=source+8;
     const char *text=NULL;before=sdk_stats(resources).work;
-    CHECK(sdk_json_string(&json,1,&text) && !strcmp(text,"a"));
+    CHECK(xr_json_cursor_string(&json,1,&text) && !strcmp(text,"a"));
     CHECK(sdk_stats(resources).work-before==11); /* Eight reads, one peek, two writes. */
     XrXirRuntimeSdk sdk={0};sdk.resources=resources;
     before=sdk_stats(resources).work;CHECK(!strcmp(sdk_utf8(&sdk,L"C:\\a",4),"C:/a"));
@@ -132,11 +136,11 @@ static void sdk_bounded_scanning(void) {
     char *memory=VirtualAlloc(NULL,page*2,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);CHECK(memory);
     DWORD old;CHECK(VirtualProtect(memory+page,page,PAGE_NOACCESS,&old));memory[page-1]='x';
     XrCompileResourceLimits limit={UINT64_MAX,UINT64_MAX,2};
-    XrCompileResources *resources=sdk_ledger(&limit);SdkJson json={NULL,NULL,NULL,resources,XR_XIR_SDK_OK};
-    size_t length=99;CHECK(!sdk_json_length(&json,memory+page-1,&length) && length==99 && json.status==XR_XIR_SDK_BUDGET);
+    XrCompileResources *resources=sdk_ledger(&limit);XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
+    size_t length=99;CHECK(!xr_json_cursor_length(&json,memory+page-1,&length) && length==99 && json.status==XR_JSON_CURSOR_BUDGET);
     CHECK(sdk_stats(resources).work==2);
-    json.status=XR_XIR_SDK_OK;json.cursor=memory+page;json.end=memory+page+1;
-    CHECK(!sdk_json_space(&json) && json.status==XR_XIR_SDK_BUDGET);
+    json.status=XR_JSON_CURSOR_OK;json.cursor=memory+page;json.end=memory+page+1;
+    CHECK(!xr_json_cursor_space(&json) && json.status==XR_JSON_CURSOR_BUDGET);
     XrXirRuntimeSdk sdk={0};sdk.resources=resources;
     sdk.manifest.file_count=1;sdk.manifest.files[0].path=memory+page;
     const char *path=NULL;

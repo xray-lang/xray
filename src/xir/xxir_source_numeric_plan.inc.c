@@ -31,11 +31,11 @@ static bool source_numeric_plan(SourceContext *ctx, AstNode *site,
         recipe.operation = XR_XIR_CONST_FLOAT;
         recipe.type = request->expected.present && xr_xir_float_bits(expected) ? expected : XR_XIR_F64;
         if (!source_decimal_payload(ctx,request->decimal,recipe.type,&bits)) return false;
-        memcpy(&recipe.payload,&bits,sizeof(bits));
+        if (!source_copy_bytes(ctx, site, &recipe.payload, &bits, sizeof(bits))) return false;
     } else if (request->expected.present && xr_xir_float_bits(expected)) {
         recipe.operation = XR_XIR_CONST_FLOAT; recipe.type = expected;
         if (!source_integer_float_payload(ctx,site,request->integer,recipe.type,&bits)) return false;
-        memcpy(&recipe.payload,&bits,sizeof(bits));
+        if (!source_copy_bytes(ctx, site, &recipe.payload, &bits, sizeof(bits))) return false;
     } else {
         recipe.type = request->expected.present && xr_xir_type_is_integer(expected) ? expected : XR_XIR_I64;
         if (!source_integer_payload(ctx,site,request->integer,recipe.type,&bits)) return false;

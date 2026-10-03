@@ -1,180 +1,211 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_fmt.c - 'xray fmt' command for code formatting
- *
- * KEY CONCEPT:
- *   AST-based formatter for Xray source code.
- *   Parses code to AST and regenerates with consistent style.
- *   Handles space-sensitive generic syntax correctly.
+ * xcmd_fmt.c - Owned syntax formatting and atomic file publication
  */
-
 #include "xcli.h"
-#include "xcli_spec.h"
-#include "xcli_fs.h"
-#include "../../api/xisolate_profile.h"
-#include "xray.h"
-#include "xray_vm.h"
+#include "xcli_canonical_source.h"
+#include "../../base/xfileio.h"
+#include "../../base/xio_policy.inc.h"
 #include "../../frontend/format/xfmt.h"
 #include "../../frontend/parser/xparse.h"
-#include "../../frontend/parser/xast.h"
-#include "../../base/xmalloc.h"
-#include "../../base/xchecks.h"
-#include <stdio.h>
-#include <string.h>
 #include "../../os/os_fs.h"
 #include "../../os/os_dir.h"
+#include "../toolchain/xtc_xir_publication.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-// Format configuration
-typedef struct {
-    int indent_size;               // Indent spaces (default 4)
-    int use_tabs;                  // Use tabs instead of spaces
-    int max_line_length;           // Max line length hint (default 100)
-    int trailing_newline;          // Ensure trailing newline at EOF
-    int align_branch_arrows;       // Column-align `->` of match/select branch arms
-    int align_enum_values;         // Column-align `=` of enum members
-    int align_struct_fields;       // Column-align `:` of class/struct fields
-    int align_trailing_comments;   // Column-align `//` of trailing line comments
-    int wrap_long_lines;           // Break literals/calls exceeding max_line_length
-    int multiline_trailing_comma;  // Emit `,` after last element when wrapped
-} FmtConfig;
+typedef struct FmtWork {
+    XrCompileResources *resources;
+    XrCompileState *state;
+    XrOsIoPolicy policy;
+    XrFmtConfig config;
+    size_t total, changed, errors;
+    int result;
+    bool check_only, verbose, stopped, published;
+} FmtWork;
+typedef struct FmtDirectory {
+    struct FmtDirectory *parent;
+    XrDirIter *iterator;
+    char *path;
+} FmtDirectory;
 
-static FmtConfig default_config = {.indent_size = 4,
-                                   .use_tabs = 0,
-                                   .max_line_length = 100,
-                                   .trailing_newline = 1,
-                                   .align_branch_arrows = 1,
-                                   .align_enum_values = 0,
-                                   .align_struct_fields = 0,
-                                   .align_trailing_comments = 0,
-                                   .wrap_long_lines = 0,
-                                   .multiline_trailing_comma = 1};
-
-// Format source code using AST
-static char *format_source(XrVMRuntime *X, const char *source, const char *path,
-                           FmtConfig *config) {
-    // Parse source to AST with trivia collection (preserves comments)
-    AstNode *ast = xr_parse_with_trivia(xr_compiler_session_current_for_isolate(X), source, path);
-    if (!ast) {
-        // Parse failed - return NULL to indicate error
-        return NULL;
+static void fmt_failure(FmtWork *work, int result, bool stop) {
+    ++work->errors;
+    if (result > work->result) work->result = result;
+    work->stopped |= stop;
+}
+static void fmt_io_failure(FmtWork *work, const char *path, XrOsIoStatus status) {
+    fprintf(stderr,"xray fmt: %s: I/O status=%u\n",path,(unsigned)status);
+    bool internal = status == XR_OS_IO_OUT_OF_MEMORY || status == XR_OS_IO_BAD_ARGUMENT;
+    fmt_failure(work,internal ? XR_CLI_EXIT_INTERNAL :
+        status == XR_OS_IO_UNSUPPORTED ? XR_CLI_EXIT_UNAVAILABLE : XR_CLI_EXIT_FAIL,
+        internal || status == XR_OS_IO_BUDGET);
+}
+static bool fmt_resource(FmtWork *work, XrCompileResourceStatus status, const char *path) {
+    if (status == XR_COMPILE_RESOURCE_OK) return true;
+    fmt_io_failure(work,path,status == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET :
+        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_BAD_ARGUMENT);
+    return false;
+}
+static int fmt_publication_exit(XtcXirPublicationStatus status) {
+    if (status == XTC_XIR_PUBLICATION_OK) return XR_CLI_EXIT_OK;
+    if (status == XTC_XIR_PUBLICATION_OUT_OF_MEMORY || status == XTC_XIR_PUBLICATION_INVALID)
+        return XR_CLI_EXIT_INTERNAL;
+    return status == XTC_XIR_PUBLICATION_UNSUPPORTED ? XR_CLI_EXIT_UNAVAILABLE : XR_CLI_EXIT_FAIL;
+}
+static bool fmt_publish(FmtWork *work, const char *path, const XrFmtOutput *output) {
+    XtcXirPublication *owner = NULL;
+    XtcXirPublicationRequest request = {path,{XR_PATH_MAX,16,output->length ? output->length : 1}};
+    XtcXirPublicationStatus status = xtc_xir_publication_new(work->resources,&request,&owner);
+    if (status == XTC_XIR_PUBLICATION_OK) status = xtc_xir_publication_write(owner,output->text,output->length);
+    if (status == XTC_XIR_PUBLICATION_OK) status = xtc_xir_publication_commit(owner);
+    bool okay = status == XTC_XIR_PUBLICATION_OK;
+    if(okay)work->published=true;
+    if (!okay) {
+        const XtcXirPublicationDiagnostic *d = xtc_xir_publication_diagnostic(owner);
+        fprintf(stderr,"xray fmt: %s: publication status=%u stage=%u published=%u os=%u\n",
+            path,(unsigned)status,d?(unsigned)d->stage:0,d?(unsigned)d->published:0,d?d->os_error:0);
+        fmt_failure(work,fmt_publication_exit(status),status == XTC_XIR_PUBLICATION_BUDGET ||
+            status == XTC_XIR_PUBLICATION_OUT_OF_MEMORY || status == XTC_XIR_PUBLICATION_INVALID);
     }
-
-    // Convert to XrFmtConfig
-    XrFmtConfig xfmt_config = {.indent_size = config->indent_size,
-                               .use_tabs = config->use_tabs,
-                               .max_line_length = config->max_line_length,
-                               .trailing_newline = config->trailing_newline,
-                               .blank_lines_around_functions = 1,
-                               .blank_lines_around_classes = 1,
-                               .space_around_operators = 1,
-                               .space_after_comma = 1,
-                               .space_in_parentheses = 0,
-                               .brace_same_line = 1,
-                               .align_branch_arrows = config->align_branch_arrows,
-                               .align_enum_values = config->align_enum_values,
-                               .align_struct_fields = config->align_struct_fields,
-                               .align_trailing_comments = config->align_trailing_comments,
-                               .wrap_long_lines = config->wrap_long_lines,
-                               .multiline_trailing_comma = config->multiline_trailing_comma};
-
-    // Format AST to string
-    return xfmt_format_ast(ast, &xfmt_config, X);
+    for (unsigned attempt=0;attempt<8;++attempt) {
+        if (xtc_xir_publication_close(&owner)==XTC_XIR_PUBLICATION_OK) return okay;
+        XtcXirPublicationDiagnostic d=*xtc_xir_publication_diagnostic(owner);
+        fprintf(stderr,"xray fmt: %s: publication cleanup pending published=%u os=%u\n",
+            path,(unsigned)d.published,d.cleanup_os_error);
+        okay=false;
+        fmt_failure(work,fmt_publication_exit(d.status),false);
+    }
+    fprintf(stderr,"xray fmt: terminal publication cleanup failure\n");
+    fflush(stdout); fflush(stderr);
+    _Exit(XR_CLI_EXIT_INTERNAL);
 }
 
-// Format single file
-// Returns: 0 = no change, 1 = formatted, -1 = error
-static int format_file(XrVMRuntime *X, const char *path, FmtConfig *config, int check_only,
-                       int verbose) {
-    char *source = xr_cli_read_file(path);
-    if (!source) {
-        fprintf(stderr, "Error: cannot read file '%s'\n", path);
-        return -1;
-    }
-
-    char *formatted = format_source(X, source, path, config);
-    if (!formatted) {
-        xr_free(source);
-        fprintf(stderr, "Error: formatting failed '%s' (syntax error?)\n", path);
-        return -1;
-    }
-
-    int changed = strcmp(source, formatted) != 0;
-
-    if (changed) {
-        if (check_only) {
-            printf("Needs formatting: %s\n", path);
-        } else {
-            if (xr_cli_write_file(path, formatted) != 0) {
-                fprintf(stderr, "Error: cannot write file '%s'\n", path);
-                xr_free(source);
-                xr_free(formatted);
-                return -1;
-            }
-            if (verbose) {
-                printf("Formatted: %s\n", path);
-            }
-        }
-    } else {
-        if (verbose) {
-            printf("Unchanged: %s\n", path);
+static void fmt_file(FmtWork *work, const char *path) {
+    ++work->total;
+    uint8_t *source=NULL; size_t length=0;
+    XrCompilerSession *session=NULL; AstNode *ast=NULL; XrFmtOutput output={0};
+    XrOsIoStatus io=xr_os_io_read_regular_file(&work->policy,path,SIZE_MAX-1,&source,&length);
+    if(io!=XR_OS_IO_OK) { fmt_io_failure(work,path,io); goto cleanup; }
+    for(size_t i=0;i<length;++i) {
+        if(!fmt_resource(work,xr_compile_state_work(work->state,1),path)) goto cleanup;
+        if(!source[i]) {
+            fprintf(stderr,"xray fmt: %s: source contains a NUL byte\n",path);
+            fmt_failure(work,XR_CLI_EXIT_FAIL,false); goto cleanup;
         }
     }
-
-    xr_free(source);
-    xr_free(formatted);
-    return changed ? 1 : 0;
+    void *terminated=source;
+    XrCompileResourceStatus resized=xr_compile_resources_resize(work->resources,&terminated,length+1);
+    source=terminated;
+    if(!fmt_resource(work,resized,path) || !fmt_resource(work,xr_compile_state_work(work->state,1),path)) goto cleanup;
+    source[length]=0;
+    XrCompilerSessionStatus opened=xr_compile_session_new(work->resources,&session);
+    if(opened!=XR_COMPILER_SESSION_OK) {
+        fmt_resource(work,opened==XR_COMPILER_SESSION_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT,path);
+        goto cleanup;
+    }
+    XrParseStatus parsed=xr_compile_parse_with_trivia(session,(const char *)source,path,NULL,&ast);
+    if(parsed!=XR_PARSE_OK) {
+        fprintf(stderr,"xray fmt: %s: parser status=%u\n",path,(unsigned)parsed);
+        bool internal=parsed==XR_PARSE_BAD_ARGUMENT || parsed==XR_PARSE_OUT_OF_MEMORY;
+        fmt_failure(work,internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,internal || parsed==XR_PARSE_BUDGET);
+        goto cleanup;
+    }
+    XrFmtStatus formatted=xr_compile_format_ast(xr_compile_session_compile_state(session),ast,&work->config,&output);
+    if(formatted!=XR_FMT_OK) {
+        fprintf(stderr,"xray fmt: %s: formatter status=%u\n",path,(unsigned)formatted);
+        fmt_failure(work,formatted==XR_FMT_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL,true);
+        goto cleanup;
+    }
+    xr_program_destroy(ast); ast=NULL;
+    xr_compile_session_free(session); session=NULL;
+    bool changed=length!=output.length;
+    if(!changed) {
+        if(!fmt_resource(work,xr_compile_state_work(work->state,length),path)) goto cleanup;
+        changed=memcmp(source,output.text,length)!=0;
+    }
+    if(changed) {
+        if(work->check_only) { ++work->changed; printf("Needs formatting: %s\n",path); }
+        else if(fmt_publish(work,path,&output)) {
+            ++work->changed;
+            if(work->verbose) printf("Formatted: %s\n",path);
+        }
+    } else if(work->verbose) printf("Unchanged: %s\n",path);
+cleanup:
+    xr_program_destroy(ast); xr_compile_session_free(session);
+    xr_compile_format_output_free(&output); xr_compile_resources_free(source);
 }
-
-// Recursively format directory
-static int format_directory(XrVMRuntime *X, const char *path, FmtConfig *config, int check_only,
-                            int verbose, int *total, int *changed) {
-    XrDirIter *it = xr_dir_open(path);
-    if (!it) {
-        fprintf(stderr, "Error: cannot open directory '%s'\n", path);
-        return -1;
+static bool fmt_name_equal(FmtWork *work, const char *name, const char *word) {
+    for(;;) {
+        if(!fmt_resource(work,xr_compile_state_work(work->state,2),"directory entry")) return false;
+        unsigned char a=(unsigned char)*name++, b=(unsigned char)*word++;
+        if(a!=b) return false;
+        if(!a) return true;
     }
-
-    int errors = 0;
-    char filepath[1024];
-    XrDirEntry e;
-
-    while (xr_dir_next(it, &e)) {
-        snprintf(filepath, sizeof(filepath), "%s/%s", path, e.name);
-
-        if (e.is_dir) {
-            // Skip hidden directories and build directories
-            if (e.name[0] == '.' || strcmp(e.name, "node_modules") == 0 ||
-                strcmp(e.name, "build") == 0 || strcmp(e.name, "build-asan") == 0 ||
-                strcmp(e.name, "build-release") == 0) {
-                continue;
-            }
-            format_directory(X, filepath, config, check_only, verbose, total, changed);
-        } else if (xr_cli_is_xr_file(e.name)) {
-            (*total)++;
-            int result = format_file(X, filepath, config, check_only, verbose);
-            if (result > 0)
-                (*changed)++;
-            if (result < 0)
-                errors++;
+}
+static bool fmt_skip_directory(FmtWork *work,const char *name) {
+    if(!fmt_resource(work,xr_compile_state_work(work->state,1),"directory entry")) return true;
+    return name[0]=='.' || fmt_name_equal(work,name,"node_modules") || fmt_name_equal(work,name,"build") ||
+        fmt_name_equal(work,name,"build-asan") || fmt_name_equal(work,name,"build-release");
+}
+static bool fmt_source_name(FmtWork *work,const char *name) {
+    size_t length=0;
+    if(!fmt_resource(work,xr_compile_state_string_length(work->state,name,&length),"directory entry")) return false;
+    return length>=4 && fmt_name_equal(work,name+length-3,".xr");
+}
+static bool fmt_push_directory(FmtWork *work,FmtDirectory **top,char *path) {
+    FmtDirectory *frame=NULL;
+    XrCompileResourceStatus allocated=xr_compile_state_calloc(work->state,1,sizeof(*frame),(void **)&frame);
+    if(!fmt_resource(work,allocated,path)) { xr_compile_resources_free(path); return false; }
+    XrOsIoStatus status=xr_os_io_dir_open(&work->policy,path,&frame->iterator);
+    if(status!=XR_OS_IO_OK) {
+        fmt_io_failure(work,path,status); xr_compile_resources_free(frame); xr_compile_resources_free(path); return false;
+    }
+    frame->path=path; frame->parent=*top; *top=frame;
+    return true;
+}
+static void fmt_pop_directory(FmtDirectory **top) {
+    FmtDirectory *frame=*top; *top=frame->parent;
+    xr_os_io_dir_close(frame->iterator); xr_compile_resources_free(frame->path); xr_compile_resources_free(frame);
+}
+static void fmt_directory(FmtWork *work,const char *path) {
+    char *copy=NULL; FmtDirectory *top=NULL;
+    if(!fmt_resource(work,xr_compile_state_strdup(work->state,path,&copy),path)) return;
+    if(!fmt_push_directory(work,&top,copy)) return;
+    while(top && !work->stopped) {
+        XrDirEntry entry;
+        XrOsIoStatus status=xr_os_io_dir_next(top->iterator,&entry);
+        if(status!=XR_OS_IO_OK) {
+            if(status!=XR_OS_IO_END) fmt_io_failure(work,top->path,status);
+            fmt_pop_directory(&top); continue;
         }
+        if(entry.is_dir ? fmt_skip_directory(work,entry.name) : !fmt_source_name(work,entry.name)) continue;
+        if(work->stopped) break;
+        char *child=NULL;
+        status=xr_path_join_owned(&work->policy,top->path,entry.name,&child);
+        if(status!=XR_OS_IO_OK) { fmt_io_failure(work,top->path,status); continue; }
+        XrFsStat stat;
+        status=xr_os_io_stat(&work->policy,child,&stat);
+        if(status!=XR_OS_IO_OK) fmt_io_failure(work,child,status);
+        else if(stat.kind==XR_FS_DIR) { fmt_push_directory(work,&top,child); child=NULL; }
+        else if(stat.kind==XR_FS_FILE) fmt_file(work,child);
+        else fmt_io_failure(work,child,XR_OS_IO_BAD_ARGUMENT);
+        xr_compile_resources_free(child);
     }
-
-    xr_dir_close(it);
-    return errors;
+    while(top) fmt_pop_directory(&top);
 }
 
 XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
-    XR_DCHECK(inv != NULL, "inv is NULL");
-
-    FmtConfig config = default_config;
-    bool check_only = xr_cli_opt_bool(&inv->options, "check");
-    bool verbose = xr_cli_opt_bool(&inv->options, "verbose");
-
+    if(!inv || inv->positional_count<0 || (inv->positional_count && !inv->positionals) ||
+        (inv->options.count && (!inv->options.spec || !inv->options.present))) return XR_CLI_EXIT_INTERNAL;
+    XrFmtConfig config=xfmt_default_config;
+    bool check_only=xr_cli_opt_bool(&inv->options,"check"), verbose=xr_cli_opt_bool(&inv->options,"verbose");
     if (xr_cli_opt_bool(&inv->options, "tabs")) {
         config.use_tabs = 1;
     }
@@ -216,58 +247,36 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
         config.multiline_trailing_comma = 0;
     }
 
-    /* Create isolate for parsing */
-    XrVMRuntime *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
-    if (!X) {
-        xr_cli_error("fmt", "failed to create isolate");
-        return XR_CLI_EXIT_INTERNAL;
+
+    FmtWork work={0}; work.config=config; work.check_only=check_only; work.verbose=verbose;
+    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceStatus status=xr_compile_resources_new(&limits,&work.resources);
+    if(!fmt_resource(&work,status,"request")) return work.result;
+    work.policy=xr_compile_io_policy(work.resources);
+    status=xr_compile_state_new(work.resources,&work.state);
+    if(!fmt_resource(&work,status,"request")) goto cleanup;
+    if(!inv->positional_count) fmt_directory(&work,".");
+    for(int i=0;i<inv->positional_count && !work.stopped;++i) {
+        const char *path=inv->positionals[i];
+        XrFsStat stat;
+        XrOsIoStatus io=xr_os_io_stat(&work.policy,path,&stat);
+        if(io!=XR_OS_IO_OK) fmt_io_failure(&work,path ? path : "<null>",io);
+        else if(stat.kind==XR_FS_DIR) fmt_directory(&work,path);
+        else if(stat.kind==XR_FS_FILE) fmt_file(&work,path);
+        else fmt_io_failure(&work,path,XR_OS_IO_BAD_ARGUMENT);
     }
-
-    int total = 0, changed = 0;
-    int errors = 0;
-
-    /* No positionals -> format current directory */
-    if (inv->positional_count == 0) {
-        errors = format_directory(X, ".", &config, check_only, verbose, &total, &changed);
-    } else {
-        for (int i = 0; i < inv->positional_count; i++) {
-            const char *path = inv->positionals[i];
-            XrFsStat st;
-
-            if (xr_fs_stat(path, &st) != 0) {
-                xr_cli_error("fmt", "path does not exist '%s'", path);
-                errors++;
-                continue;
-            }
-
-            if (st.kind == XR_FS_DIR) {
-                errors += format_directory(X, path, &config, check_only, verbose, &total, &changed);
-            } else if (st.kind == XR_FS_FILE) {
-                total++;
-                int result = format_file(X, path, &config, check_only, verbose);
-                if (result > 0)
-                    changed++;
-                if (result < 0)
-                    errors++;
-            }
-        }
+    if(work.total) {
+        if(check_only && work.changed) printf("\n%zu files need formatting (of %zu)\n",work.changed,work.total);
+        else if(check_only && !work.errors) printf("\nOK: all %zu files properly formatted\n",work.total);
+        else if(!check_only) printf("\nFormatted %zu files (of %zu)\n",work.changed,work.total);
     }
-
-    xray_vm_delete(X);
-
-    /* Output statistics */
-    if (total > 0) {
-        printf("\n");
-        if (check_only) {
-            if (changed > 0) {
-                printf("%d files need formatting (of %d)\n", changed, total);
-            } else {
-                printf("OK: all %d files properly formatted\n", total);
-            }
-        } else {
-            printf("Formatted %d files (of %d)\n", changed, total);
-        }
+    if(check_only && work.changed && !work.result) work.result=XR_CLI_EXIT_FAIL;
+cleanup:
+    xr_compile_state_release(work.state); xr_compile_resources_release(work.resources);
+    int output_flush=fflush(stdout), error_flush=fflush(stderr);
+    if(output_flush || error_flush || ferror(stdout) || ferror(stderr)) {
+        fprintf(stderr,"xray fmt: output failure published=%u\n",(unsigned)work.published);
+        if(work.result<XR_CLI_EXIT_FAIL) work.result=XR_CLI_EXIT_FAIL;
     }
-
-    return (check_only && changed > 0) || errors > 0 ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+    return work.result;
 }

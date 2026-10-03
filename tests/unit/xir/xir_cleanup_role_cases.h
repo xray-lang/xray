@@ -67,8 +67,8 @@ static void cleanup_role_cases(void) {
     CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    uint8_t identities[140] = {0}; put32(identities + 3 * 28 + 16, 3); put32(identities + 4 * 28 + 16, 4);
-    put32(identities + 2 * 28 + 20, XR_XIR_FUNCTION_NO_SUSPEND);
+    uint8_t identities[180] = {0}; put32(identities + 3 * 36 + 16, 3); put32(identities + 4 * 36 + 16, 4);
+    put32(identities + 2 * 36 + 20, XR_XIR_FUNCTION_NO_SUSPEND);
     size_t at = 0; uint32_t matches = 0;
     for (size_t i = 64; i + sizeof(identities) <= packet.length; ++i)
         if (!memcmp(packet.bytes + i, identities, sizeof(identities))) { at = i; ++matches; }
@@ -87,10 +87,10 @@ static void cleanup_role_cases(void) {
     put32(packet.bytes + 12, 42); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 8, XR_XIR_CHECKED_SCHEMA);
     put32(packet.bytes + 12, XR_XIR_CHECKED_CONTRACT); digest_packet(&packet);
-    put32(packet.bytes + at + 3 * 28 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + at + 3 * 28 + 16, 3); digest_packet(&packet);
-    put32(packet.bytes + at + 2 * 28 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + at + 2 * 28 + 20, XR_XIR_FUNCTION_NO_SUSPEND); digest_packet(&packet);
+    put32(packet.bytes + at + 3 * 36 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + at + 3 * 36 + 16, 3); digest_packet(&packet);
+    put32(packet.bytes + at + 2 * 36 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + at + 2 * 36 + 20, XR_XIR_FUNCTION_NO_SUSPEND); digest_packet(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked); xr_xir_checked_packet_free(&packet);
     CHECK(decoded->module.declarations->functions[4].cleanup_owner == 4);

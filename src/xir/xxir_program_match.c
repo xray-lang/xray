@@ -12,26 +12,25 @@
 #include "xxir_program_internal.h"
 #include "xxir_checked.h"
 #include "xxir_internal.h"
+#include "xxir_compile_memory.h"
 #include "../base/xsha256.h"
 
 #define MATCH(a, b) do { \
-    if (!*work) return XR_XIR_BUDGET; \
-    --*work; if ((a) != (b)) return XR_XIR_BAD_STRUCTURE; \
+    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET; if ((a) != (b)) return XR_XIR_BAD_STRUCTURE; \
 } while (0)
 #define TRY(expression) do { \
     XrXirStatus status = (expression); \
     if (status != XR_XIR_OK) return status; \
 } while (0)
-static XrXirStatus match_bytes(const void *a, const void *b, size_t size, uint64_t *work) {
-    if (size > *work) return XR_XIR_BUDGET;
-    *work -= size;
+static XrXirStatus match_bytes(const void *a, const void *b, size_t size, const XrXirCompileContext *context) {
+    if (!xir_compile_work(context, size)) return XR_XIR_BUDGET;
     return size && (!a || !b || memcmp(a, b, size)) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
-static XrXirStatus match_literal(XrXirLiteral a, XrXirLiteral b, uint64_t *work) {
+static XrXirStatus match_literal(XrXirLiteral a, XrXirLiteral b, const XrXirCompileContext *context) {
     MATCH(a.length, b.length);
-    return match_bytes(a.bytes, b.bytes, a.length, work);
+    return match_bytes(a.bytes, b.bytes, a.length, context);
 }
-static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, uint64_t *work) {
+static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const XrXirCompileContext *context) {
     MATCH(!!a, !!b);
     if (!a) return XR_XIR_OK;
     MATCH(a->count, b->count);
@@ -60,25 +59,25 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, uint64_
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < x->count; ++i) {
         const XrXirNominalIdentity *u = &x->identities[i], *v = &y->identities[i];
-        TRY(match_literal(u->module, v->module, work));
-        TRY(match_literal(u->name, v->name, work));
+        TRY(match_literal(u->module, v->module, context));
+        TRY(match_literal(u->name, v->name, context));
         MATCH(u->exported, v->exported); MATCH(u->arity, v->arity);
         MATCH(u->kind, v->kind); MATCH(u->flags, v->flags); MATCH(u->variant_count, v->variant_count);
         for (uint32_t j = 0; j < u->variant_count; ++j) {
-            TRY(match_literal(u->variants[j].name, v->variants[j].name, work));
+            TRY(match_literal(u->variants[j].name, v->variants[j].name, context));
             MATCH(u->variants[j].field_begin, v->variants[j].field_begin);
             MATCH(u->variants[j].field_count, v->variants[j].field_count);
         }
         MATCH(u->field_count, v->field_count);
         for (uint32_t p = 0; p < u->field_count; ++p) {
-            TRY(match_literal(u->fields[p].name, v->fields[p].name, work));
+            TRY(match_literal(u->fields[p].name, v->fields[p].name, context));
             MATCH(u->fields[p].flags, v->fields[p].flags);
         }
     }
     return XR_XIR_OK;
 }
 static XrXirStatus match_declarations(const XrXirDeclarations *a,
-    const XrXirDeclarations *b, uint32_t functions, uint64_t *work) {
+    const XrXirDeclarations *b, uint32_t functions, const XrXirCompileContext *context) {
     if (!a || !b) return XR_XIR_BAD_STRUCTURE;
     MATCH(a->module_count, b->module_count); MATCH(a->slot_count, b->slot_count);
     MATCH(a->literal_count, b->literal_count); MATCH(a->root_module, b->root_module);
@@ -86,7 +85,7 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
     for (uint32_t i = 0; i < a->module_count; ++i) {
         const XrXirSourceModule *x = &a->modules[i], *y = &b->modules[i];
         MATCH(x->name_length, y->name_length);
-        TRY(match_bytes(x->name, y->name, x->name_length, work));
+        TRY(match_bytes(x->name, y->name, x->name_length, context));
         MATCH(x->initializer, y->initializer); MATCH(x->dependency_count, y->dependency_count);
         for (uint32_t p = 0; p < x->dependency_count; ++p)
             MATCH(x->dependencies[p], y->dependencies[p]);
@@ -98,6 +97,9 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
         MATCH(a->functions[i].member_access, b->functions[i].member_access);
         MATCH(a->functions[i].cleanup_owner, b->functions[i].cleanup_owner);
         MATCH(a->functions[i].promises, b->functions[i].promises);
+        MATCH(a->functions[i].method_kind, b->functions[i].method_kind);
+        MATCH(a->functions[i].test_role, b->functions[i].test_role);
+        MATCH(a->functions[i].test_timeout_seconds, b->functions[i].test_timeout_seconds);
     }
     for (uint32_t i = 0; i < a->slot_count; ++i) {
         MATCH(a->slots[i].module, b->slots[i].module);
@@ -105,11 +107,11 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
         MATCH(a->slots[i].mutable, b->slots[i].mutable);
     }
     for (uint32_t i = 0; i < a->literal_count; ++i)
-        TRY(match_literal(a->literals[i], b->literals[i], work));
+        TRY(match_literal(a->literals[i], b->literals[i], context));
     return XR_XIR_OK;
 }
 static XrXirStatus match_layout(const XrXirFunctionLayout *a,
-    const XrXirFunctionLayout *b, uint32_t parameters, uint64_t *work) {
+    const XrXirFunctionLayout *b, uint32_t parameters, const XrXirCompileContext *context) {
     MATCH(a->slot_count, b->slot_count); MATCH(a->frame_bytes, b->frame_bytes);
     MATCH(a->owned_count, b->owned_count); MATCH(a->outgoing_count, b->outgoing_count);
     MATCH(a->path_count, b->path_count);
@@ -127,11 +129,13 @@ static XrXirStatus match_layout(const XrXirFunctionLayout *a,
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_program_match(const XrXirProgramSpec *spec,
-    const XrXirFunctionLayout *layouts, const XrXirArtifact *lowered, uint64_t *work) {
-    if (!spec || !layouts || !lowered || !work) return XR_XIR_BAD_STRUCTURE;
-    const XrXirModule *module = xr_xir_artifact_module(lowered);
-    const XrXirTarget *target = xr_xir_artifact_target(lowered);
+XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, const XrXirFunctionLayout *layouts, const XrXirArtifact *lowered) {
+    if (!spec || !layouts || !lowered || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *owner_context = xr_xir_compile_artifact_context(lowered);
+    if (!owner_context || owner_context->resources != context->resources) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
+    const XrXirTarget *target = xr_xir_compile_artifact_target(lowered);
     if (!target) return XR_XIR_BAD_STAGE;
     MATCH(spec->target.architecture, target->architecture);
     MATCH(spec->target.abi_version, target->abi_version);
@@ -139,16 +143,14 @@ XrXirStatus xr_xir_program_match(const XrXirProgramSpec *spec,
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
     bool cleanup = false;
     for (uint32_t i = 0; i < module->function_count; ++i) {
-        if (!*work) return XR_XIR_BUDGET;
-        --*work;
+        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         if (module->declarations->functions[i].cleanup_owner) cleanup = true;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
         uint32_t flags = 0;
         if (cleanup) for (uint32_t child = 0; child < module->function_count; ++child) {
-            if (!*work) return XR_XIR_BUDGET;
-            --*work;
+            if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
             if (module->declarations->functions[child].cleanup_owner == i + 1) flags = XR_XIR_ENTRY_EXIT;
         }
         MATCH(entry->flags, flags);
@@ -156,62 +158,38 @@ XrXirStatus xr_xir_program_match(const XrXirProgramSpec *spec,
         const XrXirFunction *function = &module->functions[i];
         MATCH(entry->parameter_count, function->parameter_count);
         MATCH(entry->result, function->result);
-        TRY(match_layout(&layouts[i], xr_xir_artifact_layout(lowered, i),
-            function->parameter_count, work));
+        TRY(match_layout(&layouts[i], xr_xir_compile_artifact_layout(lowered, i),
+            function->parameter_count, context));
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
             MATCH(entry->parameters[p], function->parameters[p]);
     }
-    TRY(match_types(spec->types, module->types, work));
-    return match_declarations(spec->declarations, module->declarations, spec->entry_count, work);
+    TRY(match_types(spec->types, module->types, context));
+    return match_declarations(spec->declarations, module->declarations, spec->entry_count, context);
 }
 #undef MATCH
 #undef TRY
 
-static bool proof_reserve(const XrXirBudget *decode, const XrXirBudget *lower, uint64_t limit) {
-    /* Decode retains its artifact while semantic temporaries and graph scratch run. */
-    uint64_t available = limit;
-    for (unsigned i = 0; i < 2; ++i) {
-        if (decode->metadata_bytes > available) return false;
-        available -= decode->metadata_bytes;
-    }
-    if (decode->scratch_bytes > available) return false;
-    /* Lowering overlaps the decoded input with clone, packet, projection, layouts,
-     * and semantic temporaries. Each group is bounded by its own metadata quota. */
-    available = limit;
-    if (decode->metadata_bytes > available) return false;
-    available -= decode->metadata_bytes;
-    for (unsigned i = 0; i < 5; ++i) {
-        if (lower->metadata_bytes > available) return false;
-        available -= lower->metadata_bytes;
-    }
-    return lower->scratch_bytes <= available;
-}
-
-XrXirStatus xr_xir_program_proof_verify(const XrXirProgramSpec *spec,
-    const XrXirProgramProof *proof, const XrXirBudget *decode_budget,
-    const XrXirBudget *lower_budget, uint64_t byte_limit, uint64_t *work) {
-    if (!spec || !proof || !proof->bytes || proof->length < 64 ||
-        !proof->identity || !proof->layouts || !decode_budget || !lower_budget || !work)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!proof_reserve(decode_budget, lower_budget, byte_limit)) return XR_XIR_BUDGET;
-    if (proof->length > *work || proof->length > decode_budget->metadata_bytes)
-        return XR_XIR_BUDGET;
-    *work -= proof->length;
-    uint8_t digest[32]; xr_sha256(proof->bytes, proof->length, digest);
+XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, const XrXirProgramProof *proof) {
+    if (!xir_compile_context_valid(context) || !spec || !proof || !proof->bytes ||
+        proof->length < 64 || !proof->identity || !proof->layouts) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context, proof->length)) return XR_XIR_BUDGET;
+    uint8_t digest[32];
+    xr_sha256(proof->bytes, proof->length, digest);
+    if (!xir_compile_work(context, sizeof(digest))) return XR_XIR_BUDGET;
     if (memcmp(digest, proof->identity, sizeof(digest))) return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    XrXirStatus status = xr_xir_checked_read(proof->bytes, proof->length,
-        decode_budget, &checked, NULL);
+    XrXirStatus status = xr_xir_compile_checked_read(context, proof->bytes, proof->length, &checked, NULL);
     if (status == XR_XIR_OK)
-        status = xr_xir_lower(checked, &spec->target, lower_budget, &lowered, NULL);
-    xr_xir_artifact_free(checked);
+        status = xr_xir_compile_lower(checked, &spec->target, &lowered, NULL);
+    xr_xir_compile_artifact_free(checked);
     if (status == XR_XIR_OK)
-        status = xr_xir_program_match(spec, proof->layouts, lowered, work);
-    xr_xir_artifact_free(lowered);
+        status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered);
+    xr_xir_compile_artifact_free(lowered);
     return status;
 }
 
-XrXirProgramProof xr_xir_program_proof(const XrXirArtifact *artifact) {
+XR_FUNC XrXirProgramProof xr_xir_compile_program_proof(const XrXirArtifact *artifact) {
     if (!artifact || artifact->module.stage != XR_XIR_LOWERED)
         return (XrXirProgramProof) {0};
     return (XrXirProgramProof) {artifact->checked_packet.bytes, artifact->checked_packet.length,

@@ -1,0 +1,36 @@
+{
+  "msvc-fullpath.rsp": {
+    "source": "E:\\xxl\\xray-lang\\.worktrees\\314-compile-resources\\build-image-collector-owner\\invocation-diagnostic\\r4\\msvc\\actual.rsp",
+    "command": "E:\\xxl\\xray-lang\\.worktrees\\314-compile-resources\\build-image-collector-owner\\invocation-diagnostic\\r4\\msvc\\command.json",
+    "command_sha256": "6c6d77038c9bc9631ff3215a433c38e438d92fa66b3682a4c0205596faff1f1a",
+    "expected_from": "Twelve actual explicit argv inputs in their frozen order, independently UTF-16 framed."
+  },
+  "clang-fullpath.rsp": {
+    "source": "E:\\xxl\\xray-lang\\.worktrees\\314-compile-resources\\build-image-collector-owner\\invocation-diagnostic\\r4\\clang\\actual.rsp",
+    "command": "E:\\xxl\\xray-lang\\.worktrees\\314-compile-resources\\build-image-collector-owner\\invocation-diagnostic\\r4\\clang\\command.json",
+    "command_sha256": "29a36fd36971261070c4ba87344f70bb5973c15ba0ce84b3418d9b1b829bd9c7",
+    "expected_from": "Twelve actual explicit argv inputs in their frozen order, independently UTF-16 framed."
+  },
+  "zig-fullpath.rsp": {
+    "source": "E:\\xxl\\xray-lang\\.worktrees\\314-compile-resources\\build-image-collector-owner\\invocation-diagnostic\\r4\\zig\\actual.rsp",
+    "command": "E:\\xxl\\xray-lang\\.worktrees\\314-compile-resources\\build-image-collector-owner\\invocation-diagnostic\\r4\\zig\\command.json",
+    "command_sha256": "96054887b800b0a41a7af14a15ea0f183854e8f0d7d89ad8af433ef67f8970e9",
+    "expected_from": "Twelve actual explicit argv inputs in their frozen order, independently UTF-16 framed."
+  },
+  "msvc-defaultlib.rsp": {
+    "source": "E:\\xxl\\xray-lang\\.worktrees\\314-compile-resources\\build-image-collector-owner\\invocation-diagnostic\\r2\\msvc\\link\\actual.rsp",
+    "expected_status": "UNSUPPORTED",
+    "reason": "Real ten-token sample starts with /defaultlib: options."
+  },
+  "unicode-fullpath.rsp": {
+    "source": "Fixed independent Unicode/UNC/duplicate path oracle",
+    "paths": [
+      "C:\\空 格\\é中😀.obj",
+      "\\\\server\\share\\库.lib",
+      "//server/share/a.lib",
+      "C:\\literal\\backslash.lib",
+      "C:\\空 格\\é中😀.obj",
+      "C:/􏿿.lib"
+    ]
+  }
+}

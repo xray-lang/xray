@@ -14,14 +14,14 @@ static XrXirStatus panic_edges(const Graph *graph, const XrXirFunction *function
     VerifyContext *context) {
     for (uint32_t b = 0; b < function->block_count; ++b) {
         context->location.block = b;
-        if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
         bool handler = graph->fault_head[b] != UINT32_MAX;
         bool selector = function->instructions[function->blocks[b].first].op == XR_XIR_PANIC_CATCH;
         if (handler != selector || (handler && graph->head[b] != UINT32_MAX)) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         context->location.instruction = i;
-        if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
         if (function->instructions[i].op == XR_XIR_PANIC_CATCH &&
             function->blocks[graph->owner[i]].first != i) return XR_XIR_BAD_STRUCTURE;
     }

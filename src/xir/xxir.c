@@ -12,6 +12,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_compile_memory.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -28,132 +29,132 @@ const char *xr_xir_op_name(XrXirOp op) {
     }
 }
 
-const XrXirModule *xr_xir_artifact_module(const XrXirArtifact *artifact) {
+const XrXirCompileContext *xr_xir_compile_artifact_context(const XrXirArtifact *artifact) {
+    return artifact ? &artifact->context : NULL;
+}
+
+const XrXirModule *xr_xir_compile_artifact_module(const XrXirArtifact *artifact) {
     return artifact ? &artifact->module : NULL;
 }
 
-const XrXirTarget *xr_xir_artifact_target(const XrXirArtifact *artifact) {
+const XrXirTarget *xr_xir_compile_artifact_target(const XrXirArtifact *artifact) {
     return artifact && artifact->module.stage == XR_XIR_LOWERED ? &artifact->target : NULL;
 }
 
-const XrXirFunctionLayout *xr_xir_artifact_layout(const XrXirArtifact *artifact, uint32_t function) {
+const XrXirFunctionLayout *xr_xir_compile_artifact_layout(const XrXirArtifact *artifact, uint32_t function) {
     return artifact && artifact->layouts && function < artifact->module.function_count ?
         &artifact->layouts[function] : NULL;
 }
 
-void xr_xir_artifact_free(XrXirArtifact *artifact) {
+void xr_xir_compile_artifact_free(XrXirArtifact *artifact) {
     if (!artifact)
         return;
     XrXirFunction *functions = (XrXirFunction *) artifact->module.functions;
-    for (uint32_t i = 0; i < artifact->module.function_count; ++i) {
-        xr_free((void *) functions[i].name);
-        xr_free((void *) functions[i].parameters);
-        xr_free((void *) functions[i].blocks);
-        xr_free((void *) functions[i].instructions);
-        xr_free((void *) functions[i].operands);
+    for (uint32_t i = 0; functions && i < artifact->module.function_count; ++i) {
+        xr_compile_resources_free((void *) functions[i].name);
+        xr_compile_resources_free((void *) functions[i].parameters);
+        xr_compile_resources_free((void *) functions[i].blocks);
+        xr_compile_resources_free((void *) functions[i].instructions);
+        xr_compile_resources_free((void *) functions[i].operands);
         if (artifact->layouts) {
-            xr_free((void *) artifact->layouts[i].offsets);
-            xr_free((void *) artifact->layouts[i].parameters);
-            xr_free((void *) artifact->layouts[i].owned_offsets);
+            xr_compile_resources_free((void *) artifact->layouts[i].offsets);
+            xr_compile_resources_free((void *) artifact->layouts[i].parameters);
+            xr_compile_resources_free((void *) artifact->layouts[i].owned_offsets);
         }
     }
-    xr_free(artifact->layouts);
-    xr_xir_checked_packet_free(&artifact->checked_packet);
-    xr_xir_generics_free((XrXirGeneric *) artifact->module.generics, artifact->module.function_count);
-    xr_xir_declarations_free((XrXirDeclarations *) artifact->module.declarations);
-    xr_xir_types_free((XrXirTypes *) artifact->module.types);
-    xr_xir_provenance_free((XrXirProvenance *)artifact->module.provenance);
+    xr_compile_resources_free(artifact->layouts);
+    xr_xir_compile_checked_packet_free(&artifact->checked_packet);
+    xr_xir_compile_generics_free((XrXirGeneric *) artifact->module.generics, artifact->module.function_count);
+    xr_xir_compile_declarations_free((XrXirDeclarations *) artifact->module.declarations);
+    xr_xir_compile_types_free((XrXirTypes *) artifact->module.types);
+    xr_xir_compile_provenance_free((XrXirProvenance *)artifact->module.provenance);
     if (artifact->module.defaults) {
-        xr_free((void *)artifact->module.defaults->records);
-        xr_free((void *)artifact->module.defaults);
+        xr_compile_resources_free((void *)artifact->module.defaults->records);
+        xr_compile_resources_free((void *)artifact->module.defaults);
     }
-    xr_free(functions);
-    xr_free(artifact);
+    xr_compile_resources_free(functions);
+    xr_compile_resources_free(artifact);
 }
 
-static void *copy_bytes(const void *source, size_t size) {
-    if (!size)
-        return NULL;
-    void *copy = xr_malloc(size);
-    if (copy)
-        memcpy(copy, source, size);
-    return copy;
+static void *copy_bytes(const XrXirCompileContext *compile_context, const void *source, size_t size, XrXirStatus *allocation_status) {
+    return xir_compile_copy(compile_context, source, size, allocation_status);
 }
 
-static bool clone_defaults(const XrXirDefaultTable *source, XrXirModule *destination) {
+static bool clone_defaults(const XrXirCompileContext *compile_context, const XrXirDefaultTable *source, XrXirModule *destination, XrXirStatus *allocation_status) {
     if (!source) return true;
-    XrXirDefaultTable *table = xr_calloc(1, sizeof(*table));
+    XrXirDefaultTable *table = xir_compile_calloc(compile_context, 1, sizeof(*table), allocation_status);
     if (!table) return false;
     destination->defaults = table;
-    table->records = copy_bytes(source->records, (size_t)source->count * sizeof(*source->records));
+    table->records = copy_bytes(compile_context, source->records, (size_t)source->count * sizeof(*source->records), allocation_status);
     if (!table->records) return false;
     table->count = source->count;
     return true;
 }
 
-static XrXirArtifact *clone_module(const XrXirModule *source) {
-    XrXirArtifact *copy = xr_calloc(1, sizeof(*copy));
+static XrXirArtifact *clone_module(const XrXirCompileContext *compile_context, const XrXirModule *source, XrXirStatus *allocation_status) {
+    XrXirArtifact *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), allocation_status);
     if (!copy)
         return NULL;
-    XrXirFunction *functions = xr_calloc(source->function_count, sizeof(*functions));
+    XrXirFunction *functions = xir_compile_calloc(compile_context, source->function_count, sizeof(*functions), allocation_status);
     if (!functions) {
-        xr_free(copy);
+        xr_compile_resources_free(copy);
         return NULL;
     }
+    copy->context = *compile_context;
     copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL, NULL, source->linkage_kind, NULL};
     XrXirGeneric *generics = NULL;
-    if (xr_xir_generics_clone(source, &generics) != XR_XIR_OK) {
-        xr_xir_artifact_free(copy); return NULL;
+    if ((*allocation_status = xr_xir_compile_generics_clone(compile_context, source, &generics)) != XR_XIR_OK) {
+        xr_xir_compile_artifact_free(copy); return NULL;
     }
     copy->module.generics = generics;
     XrXirTypes *types = NULL;
-    if (xr_xir_types_clone(source->types, &types) != XR_XIR_OK) {
-        xr_xir_artifact_free(copy); return NULL;
+    if ((*allocation_status = xr_xir_compile_types_clone(compile_context, source->types, &types)) != XR_XIR_OK) {
+        xr_xir_compile_artifact_free(copy); return NULL;
     }
     copy->module.types = types;
     XrXirDeclarations *declarations = NULL;
-    if (xr_xir_declarations_clone(source->declarations, source->function_count, &declarations) != XR_XIR_OK) {
-        xr_xir_artifact_free(copy);
+    if ((*allocation_status = xr_xir_compile_declarations_clone(compile_context, source->declarations, source->function_count, &declarations)) != XR_XIR_OK) {
+        xr_xir_compile_artifact_free(copy);
         return NULL;
     }
     copy->module.declarations = declarations;
-    if (!clone_defaults(source->defaults, &copy->module)) {
-        xr_xir_artifact_free(copy); return NULL;
+    if (!clone_defaults(compile_context, source->defaults, &copy->module, allocation_status)) {
+        xr_xir_compile_artifact_free(copy); return NULL;
     }
     for (uint32_t i = 0; i < source->function_count; ++i) {
         const XrXirFunction *from = &source->functions[i];
         XrXirFunction *to = &functions[i];
         *to = *from;
-        to->name = copy_bytes(from->name, from->name_length);
-        to->parameters = copy_bytes(from->parameters,
-                                   (size_t) from->parameter_count * sizeof(*from->parameters));
-        to->blocks = copy_bytes(from->blocks, (size_t) from->block_count * sizeof(*from->blocks));
-        to->instructions = copy_bytes(from->instructions,
-                                     (size_t) from->instruction_count * sizeof(*from->instructions));
-        to->operands = copy_bytes(from->operands, (size_t) from->operand_count * sizeof(*from->operands));
+        to->name = copy_bytes(compile_context, from->name, from->name_length, allocation_status);
+        to->parameters = copy_bytes(compile_context, from->parameters,
+                                   (size_t) from->parameter_count * sizeof(*from->parameters), allocation_status);
+        to->blocks = copy_bytes(compile_context, from->blocks, (size_t) from->block_count * sizeof(*from->blocks), allocation_status);
+        to->instructions = copy_bytes(compile_context, from->instructions,
+                                     (size_t) from->instruction_count * sizeof(*from->instructions), allocation_status);
+        to->operands = copy_bytes(compile_context, from->operands, (size_t) from->operand_count * sizeof(*from->operands), allocation_status);
         if (!to->name || (to->parameter_count && !to->parameters) ||
             !to->blocks || !to->instructions || (to->operand_count && !to->operands)) {
-            xr_xir_artifact_free(copy);
+            xr_xir_compile_artifact_free(copy);
             return NULL;
         }
     }
     if (source->provenance) {
         const XrXirProvenance *from = source->provenance;
-        XrXirProvenance *to = xr_calloc(1, sizeof(*to));
-        if (!to) { xr_xir_artifact_free(copy); return NULL; }
+        XrXirProvenance *to = xir_compile_calloc(compile_context, 1, sizeof(*to), allocation_status);
+        if (!to) { xr_xir_compile_artifact_free(copy); return NULL; }
         copy->module.provenance = to;
-        to->origins = xr_calloc(from->count, sizeof(*to->origins));
-        if (!to->origins) { xr_xir_artifact_free(copy); return NULL; }
+        to->origins = xir_compile_calloc(compile_context, from->count, sizeof(*to->origins), allocation_status);
+        if (!to->origins) { xr_xir_compile_artifact_free(copy); return NULL; }
         to->count = from->count;
-        to->source = clone_module(&from->source->module);
-        if (!to->source) { xr_xir_artifact_free(copy); return NULL; }
-        to->source->budget = from->source->budget;
+        to->source = clone_module(compile_context, &from->source->module, allocation_status);
+        if (!to->source) { xr_xir_compile_artifact_free(copy); return NULL; }
+
         for (uint32_t i = 0; i < from->count; ++i) {
             to->origins[i] = from->origins[i];
-            to->origins[i].arguments = copy_bytes(from->origins[i].arguments,
-                (size_t)from->origins[i].argument_count * sizeof(XrXirType));
+            to->origins[i].arguments = copy_bytes(compile_context, from->origins[i].arguments,
+                (size_t)from->origins[i].argument_count * sizeof(XrXirType), allocation_status);
             if (from->origins[i].argument_count && !to->origins[i].arguments) {
-                xr_xir_artifact_free(copy); return NULL;
+                xr_xir_compile_artifact_free(copy); return NULL;
             }
         }
     }
@@ -170,61 +171,71 @@ static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnos
     return status;
 }
 
-XrXirStatus xr_xir_recheck(const XrXirModule *checked, const XrXirBudget *budget,
-    XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+XrXirStatus xr_xir_compile_recheck(const XrXirCompileContext *compile_context, const XrXirModule *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     if (!output) return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    *output = NULL;
+
     if (!checked || checked->stage != XR_XIR_CHECKED) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
-    XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
-    XrXirStatus status = xr_xir_verify(checked, &limits, diagnostic);
+    XrXirCompileContext limits = *budget;
+    XrXirStatus status = xr_xir_compile_verify(&limits, checked, diagnostic);
     if (status != XR_XIR_OK) return status;
-    XrXirArtifact *copy = clone_module(checked);
-    if (!copy) return transition_error(XR_XIR_OUT_OF_MEMORY, diagnostic);
-    copy->budget = limits;
-    status = xr_xir_artifact_verify(copy, &limits, diagnostic);
-    if (status != XR_XIR_OK) { xr_xir_artifact_free(copy); return status; }
+    XrXirArtifact *copy = clone_module(compile_context, checked, &allocation_status);
+    if (!copy) return transition_error(allocation_status, diagnostic);
+    copy->context = limits;
+    status = xr_xir_compile_artifact_verify(copy, diagnostic);
+    if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return status; }
     *output = copy; return XR_XIR_OK;
 }
 
 static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
-                             const XrXirBudget *budget, XrXirArtifact **output,
+                             const XrXirCompileContext *budget, XrXirArtifact **output,
                              XrXirDiagnostic *diagnostic, const XrXirTarget *target) {
-    if (!output)
+    XrXirStatus allocation_status = XR_XIR_OK;
+    if (!xir_compile_context_valid(budget) || !output)
         return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    *output = NULL;
+
     if (!input || input->stage != source)
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
-    XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
+    XrXirCompileContext limits = *budget;
     if (source == XR_XIR_CHECKED) {
         if (input->linkage_kind != XR_XIR_PROGRAM)
             return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         if (input->generics || (input->types && input->types->interfaces))
             return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         XrXirLayout layout;
-        if (xr_xir_layout(NULL, XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
-            return transition_error(XR_XIR_BAD_LAYOUT, diagnostic);
+        XrXirStatus layout_status = xr_xir_compile_layout(budget, NULL, XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout);
+        if (layout_status != XR_XIR_OK) return transition_error(layout_status, diagnostic);
     }
-    XrXirStatus status = xr_xir_verify(input, budget, diagnostic);
+    XrXirStatus status = xr_xir_compile_verify(budget, input, diagnostic);
     if (status != XR_XIR_OK)
         return status;
-    XrXirArtifact *copy = clone_module(input);
+    XrXirArtifact *copy = clone_module(budget, input, &allocation_status);
     if (!copy)
-        return transition_error(XR_XIR_OUT_OF_MEMORY, diagnostic);
-    copy->budget = limits;
+        return transition_error(allocation_status, diagnostic);
+    copy->context = limits;
     if (source == XR_XIR_CHECKED) {
-        status = xr_xir_checked_write(copy, &limits, &copy->checked_packet, diagnostic);
-        if (status != XR_XIR_OK) { xr_xir_artifact_free(copy); return status; }
+        status = xr_xir_compile_checked_write(copy, &copy->checked_packet, diagnostic);
+        if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return status; }
+        if (!xir_compile_work(budget, copy->checked_packet.length)) {
+            xr_xir_compile_artifact_free(copy); return transition_error(XR_XIR_BUDGET, diagnostic);
+        }
         xr_sha256(copy->checked_packet.bytes, copy->checked_packet.length, copy->checked_identity);
     }
     copy->module.stage = source == XR_XIR_BUILT ? XR_XIR_CHECKED : XR_XIR_LOWERED;
     if (copy->module.stage == XR_XIR_LOWERED) {
-        XrXirBudget projection_budget = limits;
+        XrXirCompileContext projection_budget = limits;
         status = lower_nominal_types(&copy->module, &projection_budget);
-        if (status != XR_XIR_OK) { xr_xir_artifact_free(copy); return transition_error(status, diagnostic); }
+        if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return transition_error(status, diagnostic); }
         copy->target = *target;
         for (uint32_t f = 0; f < copy->module.function_count; ++f) {
             const XrXirFunction *function = &copy->module.functions[f];
             XrXirInstruction *instructions = (XrXirInstruction *) function->instructions;
+            if (!xir_compile_work(budget, function->instruction_count)) {
+                xr_xir_compile_artifact_free(copy); return transition_error(XR_XIR_BUDGET, diagnostic);
+            }
             for (uint32_t i = 0; i < function->instruction_count; ++i) {
                 if (instructions[i].op == XR_XIR_COPY)
                     instructions[i].op = xr_xir_type_is_owned(copy->module.types, instructions[i].type) ?
@@ -237,51 +248,56 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
                 }
             }
         }
-        status = xr_xir_layout_build(copy, &limits);
+        status = xr_xir_compile_layout_build(copy);
         if (status != XR_XIR_OK) {
-            xr_xir_artifact_free(copy);
+            xr_xir_compile_artifact_free(copy);
             return transition_error(status, diagnostic);
         }
     }
-    status = xr_xir_artifact_verify(copy, budget, diagnostic);
+    status = xr_xir_compile_artifact_verify(copy, diagnostic);
     if (status != XR_XIR_OK) {
-        xr_xir_artifact_free(copy);
+        xr_xir_compile_artifact_free(copy);
         return status;
     }
     *output = copy;
     return XR_XIR_OK;
 }
 
-XrXirStatus xr_xir_check(const XrXirModule *built, const XrXirBudget *budget,
-                       XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+XrXirStatus xr_xir_compile_check(const XrXirCompileContext *compile_context, const XrXirModule *built, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *budget = &compile_state;
     return transition(built, XR_XIR_BUILT, budget, output, diagnostic, NULL);
 }
 
-XrXirStatus xr_xir_lower(const XrXirArtifact *checked, const XrXirTarget *target,
-                       const XrXirBudget *budget,
-                       XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
-    return transition(xr_xir_artifact_module(checked), XR_XIR_CHECKED, budget, output, diagnostic, target);
+XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget *target, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    if (!checked) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = checked->context;
+    XrXirCompileContext *budget = &compile_state;
+    return transition(xr_xir_compile_artifact_module(checked), XR_XIR_CHECKED, budget, output, diagnostic, target);
 }
 
-XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact, const XrXirBudget *budget,
-                                 XrXirDiagnostic *diagnostic) {
-    XrXirBudget limits = budget ? *budget : (artifact ? artifact->budget : xr_xir_default_budget());
+XrXirStatus xr_xir_compile_artifact_verify(const XrXirArtifact *artifact, XrXirDiagnostic *diagnostic) {
+    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = artifact->context;
+    XrXirCompileContext *budget = &compile_state;
+    XrXirCompileContext limits = *budget;
     if (artifact && artifact->module.stage == XR_XIR_LOWERED) {
         const XrXirCheckedPacket *packet = &artifact->checked_packet;
         if (!packet->bytes || packet->length < 64)
             return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-        if (packet->length > limits.metadata_bytes || packet->length > limits.work)
+        if ((packet->length > SIZE_MAX) ||!xir_compile_work(&limits, packet->length))
             return transition_error(XR_XIR_BUDGET, diagnostic);
-        limits.metadata_bytes -= packet->length;
-        limits.work -= packet->length;
+
+
         uint8_t digest[32];
         xr_sha256(packet->bytes, packet->length, digest);
         if (memcmp(digest, artifact->checked_identity, sizeof(digest)))
             return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     }
-    XrXirStatus status = xr_xir_verify(xr_xir_artifact_module(artifact), &limits, diagnostic);
+    XrXirStatus status = xr_xir_compile_verify(&limits, xr_xir_compile_artifact_module(artifact), diagnostic);
     if (status != XR_XIR_OK)
         return status;
-    status = xr_xir_layout_verify(artifact, &limits);
+    status = xr_xir_compile_layout_verify(artifact);
     return status == XR_XIR_OK ? status : transition_error(status, diagnostic);
 }

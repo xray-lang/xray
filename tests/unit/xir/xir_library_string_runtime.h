@@ -54,7 +54,7 @@ static bool library_string_pair(XrXirProgram *program,const uint32_t ids[LIBRARY
         for(uint32_t e=0;e<LIBRARY_STRING_EXPORTS&&status!=XR_XIR_CALL_OOM;++e){
             CHECK(status==XR_XIR_CALL_READY||status==XR_XIR_CALL_RETURNED);
             status=xr_xir_instance_start(instance,ids[e],NULL,0);
-            if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll(instance).outcome.status;
+            if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
             if(status==XR_XIR_CALL_RETURNED){status=xr_xir_instance_take_result(instance,&held[i][e]);
                 if(status==XR_XIR_CALL_RETURNED)library_string_expect(&held[i][e],e);}
             CHECK(status==XR_XIR_CALL_RETURNED||status==XR_XIR_CALL_OOM);

@@ -30,19 +30,19 @@ static XrXirValueStatus storage_cursor_init(const XrXirTypeArena *arena, Storage
     if (!cursor) return XR_XIR_VALUE_BAD_ARGUMENT;
     *cursor = (StorageCursor) {0};
     XrXirLayout physical = {0};
-    if ((capacity && !frames) || !xr_xir_type_arena_layout(arena, span.type, &physical) ||
+    if ((capacity && !frames) || !xr_xir_compile_type_arena_layout(arena, span.type, &physical) ||
         (physical.size && !span.bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, span.type);
-    uint32_t required = layout && inline_nominal_type(xr_xir_type_arena_types(arena), span.type)
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(arena, span.type);
+    uint32_t required = layout && inline_nominal_type(xr_xir_compile_type_arena_types(arena), span.type)
         ? (owned_only ? layout->owned_depth : layout->depth) : 0;
     if (capacity < required) return XR_XIR_VALUE_LIMIT;
     *cursor = (StorageCursor) {arena, frames, span, 0, capacity, true, owned_only};
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus storage_cursor_enter(StorageCursor *cursor, StorageSpan span) {
-    const XrXirTypes *types = xr_xir_type_arena_types(cursor->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(cursor->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
-    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(cursor->arena, span.type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(cursor->arena, span.type);
     XR_CHECK(node && inline_nominal_type(types, span.type) && layout, "inline cursor requires sealed value metadata");
     if (cursor->owned_only && !layout->owned_depth) return XR_XIR_VALUE_OK;
     uint32_t begin = 0, count = node->nominal.field_count;
@@ -66,7 +66,7 @@ static XrXirValueStatus storage_cursor_next(StorageCursor *cursor, uint64_t *wor
     StorageSpan *leaf, bool *found) {
     if (!cursor || !leaf || !found) return XR_XIR_VALUE_BAD_ARGUMENT;
     *found = false; *leaf = (StorageSpan) {0};
-    const XrXirTypes *types = xr_xir_type_arena_types(cursor->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(cursor->arena);
     while (cursor->has_pending || cursor->depth) {
         if (work) {
             if (!*work) return XR_XIR_VALUE_LIMIT;
@@ -78,7 +78,7 @@ static XrXirValueStatus storage_cursor_next(StorageCursor *cursor, uint64_t *wor
             StorageFrame *frame = &cursor->frames[cursor->depth - 1];
             if (frame->next == frame->end) { --cursor->depth; continue; }
             const XrXirTypeNode *node = xr_xir_type_node(types, frame->span.type);
-            const XrXirStorageLayout *layout = xr_xir_type_arena_storage(cursor->arena, frame->span.type);
+            const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(cursor->arena, frame->span.type);
             uint32_t field = frame->next++;
             span.type = node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field];
             span.bytes = frame->span.bytes ? frame->span.bytes +

@@ -15,13 +15,28 @@
 
 #include "../os_proc.h"
 #include "../../base/xmalloc.h"
-#include "../../shared/xr_win_utf.h"
+#include <windows.h>
 #include <string.h>
 #include <limits.h>
 
 #define XR_PROC_MAX_LIVE 64
 #define XR_PROC_KILLED_EXIT_CODE ((DWORD) 0xE0000001u)
-typedef struct ProcLive { DWORD pid; HANDLE process, job; bool waited; } ProcLive;
+typedef struct ProcDebug {
+    XrProcMemory memory;
+    XrProcImageObserver observer;
+    DWORD thread, root, pids[XR_PROC_MAX_LIVE];
+    bool initial[XR_PROC_MAX_LIVE];
+    uint32_t live, created;
+    bool root_exited, pending, dispatched, pumping;
+    DEBUG_EVENT event;
+    DWORD disposition;
+    XrOsProcStatus status;
+} ProcDebug;
+typedef struct ProcLive {
+    DWORD pid; HANDLE process, job; bool waited;
+    DWORD debug_thread;
+    ProcDebug *debug;
+} ProcLive;
 static ProcLive g_live[XR_PROC_MAX_LIVE];
 static SRWLOCK g_live_lock = SRWLOCK_INIT;
 
@@ -178,10 +193,12 @@ static wchar_t *proc_environment(ProcBuild *b, const XrProcSpawnOptions *o) {
         if (!value) { proc_free(b, key); goto done; }
         size_t k = 0, v = 0;
         if (!proc_wlength(b, key, &k) || !proc_wlength(b, value, &v)) goto pair_done;
-        if (!proc_work(b, k * sizeof(wchar_t))) goto pair_done;
-        bool drive_key = k == 3 && key[0] == L'=' && ((key[1] >= L'A' && key[1] <= L'Z') || (key[1] >= L'a' && key[1] <= L'z')) && key[2] == L':';
         if (k >= INT_MAX) { b->status = XR_PROC_BUDGET; goto pair_done; }
-        if (!k || (!drive_key && wcschr(key, L'='))) { b->status = XR_PROC_INVALID_ARGUMENT; goto pair_done; }
+        if (!k) { b->status = XR_PROC_INVALID_ARGUMENT; goto pair_done; }
+        for (size_t at = 0; at < k; ++at) {
+            if (!proc_work(b, sizeof(wchar_t))) goto pair_done;
+            if (key[at] == L'=' && (at || k == 1)) { b->status = XR_PROC_INVALID_ARGUMENT; goto pair_done; }
+        }
         if (k > SIZE_MAX / sizeof(wchar_t) - v - 2) { b->status = XR_PROC_BUDGET; goto pair_done; }
         pair = proc_alloc(b, (k + v + 2) * sizeof(wchar_t)); if (!pair) goto pair_done;
         if (!proc_work(b, (k + v + 2) * sizeof(wchar_t))) goto pair_done;
@@ -236,17 +253,153 @@ static wchar_t *proc_environment(ProcBuild *b, const XrProcSpawnOptions *o) {
     return block;
 }
 
+
+/* Debug callbacks and their borrowed handles are confined to the spawning
+ * thread. Cleanup uses the same event dispatcher without invoking callbacks
+ * or acquiring further resource permission. */
+static XrOsProcStatus proc_debug_charge(ProcDebug *d, uint64_t work) {
+    if (d->status == XR_PROC_OK) d->status = d->memory.work(d->memory.context, work);
+    return d->status;
+}
+static XrOsProcStatus proc_debug_dispatch(ProcDebug *d, bool cleanup) {
+    if (d->dispatched) return XR_PROC_OK;
+    if (!cleanup && proc_debug_charge(d, XR_PROC_MAX_LIVE + 1) != XR_PROC_OK) return d->status;
+    DWORD pid = d->event.dwProcessId;
+    int slot = -1, empty = -1;
+    for (int i = 0; i < XR_PROC_MAX_LIVE; ++i) {
+        if (d->pids[i] == pid) slot = i;
+        if (!d->pids[i] && empty < 0) empty = i;
+    }
+    d->dispatched = true;
+    d->disposition = DBG_CONTINUE;
+    HANDLE image = NULL;
+    XrProcImageKind kind = XR_PROC_IMAGE_DLL;
+    switch (d->event.dwDebugEventCode) {
+    case CREATE_PROCESS_DEBUG_EVENT:
+        if (slot >= 0 && !cleanup) return XR_PROC_IO;
+        if (!cleanup && d->created == UINT32_MAX) return XR_PROC_BUDGET;
+        if (d->created != UINT32_MAX) ++d->created;
+        ++d->live;
+        if (empty >= 0) { d->pids[empty] = pid; d->initial[empty] = true; }
+        else if (!cleanup) return XR_PROC_BUDGET;
+        image = d->event.u.CreateProcessInfo.hFile; kind = XR_PROC_IMAGE_EXECUTABLE;
+        break;
+    case EXIT_PROCESS_DEBUG_EVENT:
+        if (pid == d->root) d->root_exited = true;
+        if (slot >= 0) { d->pids[slot] = 0; d->initial[slot] = false; }
+        else if (!cleanup) return XR_PROC_IO;
+        if (d->live) --d->live;
+        break;
+    case LOAD_DLL_DEBUG_EVENT:
+        if (slot < 0 && !cleanup) return XR_PROC_IO;
+        image = d->event.u.LoadDll.hFile;
+        break;
+    case EXCEPTION_DEBUG_EVENT:
+        d->disposition = DBG_EXCEPTION_NOT_HANDLED;
+        if (slot >= 0 && d->initial[slot] && d->event.u.Exception.dwFirstChance &&
+            d->event.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT) {
+            d->initial[slot] = false; d->disposition = DBG_CONTINUE;
+        }
+        break;
+    default: break;
+    }
+    if (!cleanup && (d->event.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT ||
+        d->event.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT)) {
+        if (!image || image == INVALID_HANDLE_VALUE) return XR_PROC_UNSUPPORTED;
+        XrProcImageEvent event = {(XrProcId)pid, kind, (intptr_t)image};
+        return d->observer.observe(d->observer.context, &event);
+    }
+    return XR_PROC_OK;
+}
+static XrOsProcStatus proc_debug_continue(ProcDebug *d, bool cleanup) {
+    HANDLE *file = d->event.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT ? &d->event.u.CreateProcessInfo.hFile :
+        d->event.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT ? &d->event.u.LoadDll.hFile : NULL;
+    if (file && *file && *file != INVALID_HANDLE_VALUE) {
+        if (!cleanup && proc_debug_charge(d, 1) != XR_PROC_OK) return d->status;
+        if (!CloseHandle(*file)) return xr_proc_last_error();
+        *file = NULL;
+    }
+    if (!cleanup && proc_debug_charge(d, 1) != XR_PROC_OK) return d->status;
+    if (!ContinueDebugEvent(d->event.dwProcessId, d->event.dwThreadId, d->disposition)) return xr_proc_last_error();
+    d->pending = d->dispatched = false;
+    return XR_PROC_OK;
+}
+static XrOsProcStatus proc_debug_step(ProcDebug *d, bool cleanup, DWORD timeout, bool *progressed) {
+    if (!d->pending) {
+        if (!cleanup && proc_debug_charge(d, 1) != XR_PROC_OK) return d->status;
+        if (!WaitForDebugEvent(&d->event, timeout)) {
+            DWORD error = GetLastError();
+            if (error == ERROR_SEM_TIMEOUT) return XR_PROC_OK;
+            SetLastError(error); return xr_proc_last_error();
+        }
+        d->pending = true;
+    }
+    XrOsProcStatus status = proc_debug_dispatch(d, cleanup);
+    if (status == XR_PROC_OK) status = proc_debug_continue(d, cleanup);
+    if (status == XR_PROC_OK && progressed) *progressed = true;
+    return status;
+}
+static bool proc_debug_cleanup(ProcDebug *d, HANDLE process) {
+    bool ok = true;
+    /* Termination still requires acknowledging outstanding debug exit events.
+     * A persistent OS failure must not turn cleanup into an infinite wait. */
+    ULONGLONG deadline = GetTickCount64() + 5000;
+    while (d->pending || !d->root_exited || d->live) {
+        if (proc_debug_step(d, true, 10, NULL) != XR_PROC_OK) { ok = false; Sleep(1); }
+        if (GetTickCount64() >= deadline) {
+            ok = false;
+            if (d->pending) {
+                DWORD pending_pid = d->event.dwProcessId;
+                (void)proc_debug_continue(d, true);
+                /* EXIT dispatch already removed this PID from the live set.
+                 * A failed Continue must still detach that pending process. */
+                if (d->pending) (void)DebugActiveProcessStop(pending_pid);
+            }
+            for (unsigned i = 0; i < XR_PROC_MAX_LIVE; ++i)
+                if (d->pids[i]) (void)DebugActiveProcessStop(d->pids[i]);
+            (void)DebugActiveProcessStop(d->root);
+            break;
+        }
+    }
+    if (WaitForSingleObject(process, 5000) != WAIT_OBJECT_0) ok = false;
+    return ok;
+}
+
 XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free || !o->memory.work ||
-        (o->env_count && (!o->env_keys || !o->env_values)) || (o->detached && o->new_process_group)) return XR_PROC_INVALID_ARGUMENT;
+        (o->env_count && (!o->env_keys || !o->env_values)) || (o->detached && o->new_process_group) ||
+        (o->image_mode != XR_PROC_IMAGES_NONE && o->image_mode != XR_PROC_IMAGES_WINDOWS_TREE) ||
+        ((o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE) != (o->image_observer.observe != NULL)) ||
+        (o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE && (!o->new_process_group || o->detached))) return XR_PROC_INVALID_ARGUMENT;
     ProcBuild b = {o->memory, XR_PROC_OK};
-    wchar_t *command = proc_command(&b, argv), *program = NULL, *cwd = NULL, *environment = NULL;
+    wchar_t *command = NULL, *program = NULL, *cwd = NULL, *environment = NULL;
     HANDLE job = NULL, redirected[3] = {NULL, NULL, NULL};
     STARTUPINFOEXW si = {0}; PROCESS_INFORMATION pi = {0}; bool attributes_ready = false, started = false;
     si.StartupInfo.cb = sizeof(si); int slot = -1;
-    if (!command) goto done;
+    ProcDebug *debug = NULL;
+    DWORD debug_thread = o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE ? GetCurrentThreadId() : 0;
+    if (debug_thread) {
+        AcquireSRWLockExclusive(&g_live_lock);
+        for (int i = 0; i < XR_PROC_MAX_LIVE; ++i)
+            if (g_live[i].debug_thread == debug_thread) b.status = XR_PROC_INVALID_ARGUMENT;
+        /* Reserve before calling any allocation/work policy: those callbacks
+         * may reenter spawn on this thread before a process exists. */
+        if (b.status == XR_PROC_OK) {
+            for (int i = 0; i < XR_PROC_MAX_LIVE; ++i) if (!g_live[i].pid) {
+                slot = i; g_live[i].pid = UINT32_MAX; g_live[i].debug_thread = debug_thread; break;
+            }
+            if (slot < 0) b.status = XR_PROC_BUDGET;
+        }
+        ReleaseSRWLockExclusive(&g_live_lock);
+        if (b.status != XR_PROC_OK) goto done;
+        debug = proc_alloc(&b, sizeof(*debug)); if (!debug) goto done;
+        if (!proc_work(&b, sizeof(*debug) + sizeof(o->memory) + sizeof(o->image_observer))) goto done;
+        memset(debug, 0, sizeof(*debug)); debug->memory = o->memory;
+        debug->observer = o->image_observer; debug->thread = debug_thread;
+    }
+    command = proc_command(&b, argv); if (!command) goto done;
     program = proc_wide(&b, prog); if (!program) goto done;
     bool exact_program = false;
     if (!o->complete_environment && !proc_exact_program(&b, program, &exact_program)) goto done;
@@ -265,9 +418,9 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     }
     if (o->cwd && *o->cwd) { cwd = proc_wide(&b, o->cwd); if (!cwd) goto done; }
     environment = proc_environment(&b, o); if (!environment) goto done;
-    if (!o->detached) {
+    if (!o->detached && slot < 0) {
         AcquireSRWLockExclusive(&g_live_lock);
-        for (int i = 0; i < XR_PROC_MAX_LIVE; ++i) if (!g_live[i].pid) { slot = i; g_live[i].pid = UINT32_MAX; break; }
+        for (int i = 0; i < XR_PROC_MAX_LIVE; ++i) if (!g_live[i].pid) { slot = i; g_live[i].pid = UINT32_MAX; g_live[i].debug_thread = debug_thread; break; }
         ReleaseSRWLockExclusive(&g_live_lock);
         if (slot < 0) { b.status = XR_PROC_BUDGET; goto done; }
     }
@@ -306,9 +459,9 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     }
     if (!proc_work(&b, 1)) goto done;
     if (!CreateProcessW(program, command, NULL, NULL, attributes_ready, CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED |
-        (o->new_process_group ? CREATE_NO_WINDOW : 0) |
+        (o->new_process_group ? CREATE_NO_WINDOW : 0) | (debug ? DEBUG_PROCESS : 0) |
         (attributes_ready ? EXTENDED_STARTUPINFO_PRESENT : 0) | ((o->detached || o->new_process_group) ? CREATE_NEW_PROCESS_GROUP : 0), environment, cwd, &si.StartupInfo, &pi)) { b.status = xr_proc_last_error(); goto done; }
-    started = true;
+    started = true; if (debug) debug->root = pi.dwProcessId;
     if (job) {
         if (!proc_work(&b, 1)) goto done;
         if (!AssignProcessToJobObject(job, pi.hProcess)) { b.status = xr_proc_last_error(); goto done; }
@@ -317,7 +470,8 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     if (ResumeThread(pi.hThread) == (DWORD)-1) { b.status = xr_proc_last_error(); goto done; }
     if (slot >= 0) {
         AcquireSRWLockExclusive(&g_live_lock);
-        g_live[slot] = (ProcLive){pi.dwProcessId, pi.hProcess, job, false};
+        g_live[slot] = (ProcLive){pi.dwProcessId, pi.hProcess, job, false, debug_thread, debug};
+        debug = NULL;
         ReleaseSRWLockExclusive(&g_live_lock); pi.hProcess = NULL; job = NULL;
     }
     *output = (XrProcId)pi.dwProcessId;
@@ -325,8 +479,10 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     if (b.status != XR_PROC_OK && started) {
         if (job) (void)TerminateJobObject(job, XR_PROC_KILLED_EXIT_CODE);
         (void)TerminateProcess(pi.hProcess, XR_PROC_KILLED_EXIT_CODE);
-        (void)WaitForSingleObject(pi.hProcess, INFINITE);
+        if (debug) (void)proc_debug_cleanup(debug, pi.hProcess);
+        else (void)WaitForSingleObject(pi.hProcess, INFINITE);
     }
+    proc_free(&b, debug);
     if (pi.hThread) CloseHandle(pi.hThread);
     if (pi.hProcess) CloseHandle(pi.hProcess);
     if (job) CloseHandle(job);
@@ -344,9 +500,42 @@ static ProcLive *proc_find(XrProcId pid) {
     for (int i = 0; i < XR_PROC_MAX_LIVE; ++i) if (g_live[i].pid == (DWORD)pid && g_live[i].process) return &g_live[i];
     SetLastError(ERROR_INVALID_HANDLE); return NULL;
 }
+
+XR_FUNC XrOsProcStatus xr_proc_pump_images(XrProcId pid, XrProcImagePumpResult *output) {
+    if (!output) return XR_PROC_INVALID_ARGUMENT;
+    AcquireSRWLockExclusive(&g_live_lock);
+    ProcLive *p = proc_find(pid);
+    ProcDebug *d = p ? p->debug : NULL;
+    HANDLE job = p ? p->job : NULL;
+    if (!d || d->thread != GetCurrentThreadId() || d->pumping) {
+        ReleaseSRWLockExclusive(&g_live_lock); return XR_PROC_INVALID_ARGUMENT;
+    }
+    d->pumping = true;
+    ReleaseSRWLockExclusive(&g_live_lock);
+    XrOsProcStatus status = d->status;
+    bool progressed = false;
+    if (status == XR_PROC_OK && (!d->root_exited || d->live || d->pending))
+        status = proc_debug_step(d, false, 1, &progressed);
+    bool complete = d->root_exited && !d->live && !d->pending;
+    if (status == XR_PROC_OK && complete) {
+        status = proc_debug_charge(d, 1);
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting;
+        if (status == XR_PROC_OK) {
+            if (!QueryInformationJobObject(job, JobObjectBasicAccountingInformation, &accounting, sizeof(accounting), NULL)) status = xr_proc_last_error();
+            else if (accounting.TotalProcesses != d->created) status = XR_PROC_UNSUPPORTED;
+            else complete = !accounting.ActiveProcesses;
+        }
+    }
+    d->status = status; d->pumping = false;
+    if (status == XR_PROC_OK) *output = (XrProcImagePumpResult){complete, progressed};
+    return status;
+}
 static XrProcWaitResult proc_wait(XrProcId pid, DWORD timeout, int *exit_code) {
     HANDLE lease = NULL, original = NULL;
     AcquireSRWLockExclusive(&g_live_lock); ProcLive *p = proc_find(pid);
+    if (p && p->debug && (p->debug->thread != GetCurrentThreadId() || p->debug->pumping || timeout == INFINITE)) {
+        ReleaseSRWLockExclusive(&g_live_lock); SetLastError(ERROR_INVALID_PARAMETER); return XR_PROC_WAIT_ERROR;
+    }
     if (p && !p->waited) {
         original = p->process;
         if (!DuplicateHandle(GetCurrentProcess(), original, GetCurrentProcess(), &lease,
@@ -391,40 +580,29 @@ XR_FUNC int xr_proc_kill_tree(XrProcId pid, int signal) {
 }
 XR_FUNC int xr_proc_close(XrProcId pid) {
     AcquireSRWLockExclusive(&g_live_lock); ProcLive *p = proc_find(pid); ProcLive owner = {0};
+    if (p && p->debug && (p->debug->thread != GetCurrentThreadId() || p->debug->pumping)) {
+        ReleaseSRWLockExclusive(&g_live_lock); SetLastError(ERROR_INVALID_PARAMETER); return -1;
+    }
     if (p && p->job) { owner = *p; memset(p, 0, sizeof(*p)); }
     ReleaseSRWLockExclusive(&g_live_lock); if (!owner.process) return -1;
-    bool ok = true;
+    bool ok = true, job_stopped = false;
     if (owner.job) {
         if (!TerminateJobObject(owner.job, XR_PROC_KILLED_EXIT_CODE)) ok = false;
+        else job_stopped = true;
         /* Closing the kill-on-close job still stops descendants after a failed explicit termination. */
         if (!CloseHandle(owner.job)) ok = false;
+        else job_stopped = true;
     }
-    if (!owner.waited) {
+    if (owner.debug) {
+        /* A killed debuggee cannot signal until its EXIT event is continued.
+         * Re-terminating it now may report ACCESS_DENIED despite successful job termination. */
+        if (!job_stopped && !TerminateProcess(owner.process, XR_PROC_KILLED_EXIT_CODE) && WaitForSingleObject(owner.process, 0) != WAIT_OBJECT_0) ok = false;
+        if (!proc_debug_cleanup(owner.debug, owner.process)) ok = false;
+        owner.debug->memory.free(owner.debug->memory.context, owner.debug);
+    } else if (!owner.waited) {
         if (!TerminateProcess(owner.process, XR_PROC_KILLED_EXIT_CODE) && WaitForSingleObject(owner.process, 0) != WAIT_OBJECT_0) ok = false;
         if (WaitForSingleObject(owner.process, INFINITE) != WAIT_OBJECT_0) ok = false;
     }
     if (!CloseHandle(owner.process)) ok = false;
     return ok ? 0 : -1;
-}
-
-int64_t xr_proc_self_pid(void) {
-    return (int64_t) GetCurrentProcessId();
-}
-
-int xr_proc_self_exe_path(char *buf, size_t size) {
-    if (buf == NULL || size == 0) {
-        return -1;
-    }
-    wchar_t wide[32768];
-    DWORD n = GetModuleFileNameW(NULL, wide, (DWORD) (sizeof(wide) / sizeof(wide[0])));
-    /* n == 0 means failure; n == capacity means truncation. */
-    if (n == 0 || (size_t) n >= sizeof(wide) / sizeof(wide[0]) ||
-        !xr_win_utf16_to_utf8(wide, (size_t) n, buf, size)) {
-        return -1;
-    }
-    return 0;
-}
-
-bool xr_proc_debugger_attached(void) {
-    return IsDebuggerPresent() ? true : false;
 }

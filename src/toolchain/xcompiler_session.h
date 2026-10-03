@@ -1,336 +1,53 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcompiler_session.h - Toolchain-owned compiler session state
+ * xcompiler_session.h - One target-neutral parser resource owner
  */
-
 #ifndef XCOMPILER_SESSION_H
 #define XCOMPILER_SESSION_H
-
 #include "../base/xdefs.h"
-#include "../base/xforward_decl.h"
-#include "../base/xtarget_data_layout.h"
-#include "../incremental/xr_module_task_graph.h"
+#include "../base/xcompile_state.h"
 
 struct XrArena;
 struct XrCompileStringPool;
-struct XrCacheStore;
-struct XrCacheStoreConfig;
-struct XrDependencyGraph;
-struct XrInvalidationEvent;
-struct XrInvalidationResult;
-struct XrReplSymbolTable;
-struct XrSourceCache;
-struct XrTypePool;
-struct XaAnalyzer;
-struct XrModuleGraph;
-struct XrNativePackagePlan;
-struct XrTargetProfile;
-
 typedef struct XrCompilerSession XrCompilerSession;
+typedef enum XrCompilerSessionStatus {
+    XR_COMPILER_SESSION_OK,
+    XR_COMPILER_SESSION_BAD_ARGUMENT,
+    XR_COMPILER_SESSION_BUDGET,
+    XR_COMPILER_SESSION_OUT_OF_MEMORY
+} XrCompilerSessionStatus;
 
-#define XR_COMPILER_SESSION_INITIAL_GENERATION UINT64_C(1)
-#define XR_COMPILER_SESSION_INITIAL_REPL_DECLARATION_GENERATION UINT64_C(1)
-#define XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT 16u
-
-typedef enum XrCompilerSessionGenerationChange {
-    XR_COMPILER_SESSION_CHANGE_NONE = 0,
-    XR_COMPILER_SESSION_CHANGE_SESSION = 1u << 0,
-    XR_COMPILER_SESSION_CHANGE_WORKSPACE = 1u << 1,
-    XR_COMPILER_SESSION_CHANGE_CONFIGURATION = 1u << 2,
-    XR_COMPILER_SESSION_CHANGE_TARGET = 1u << 3,
-    XR_COMPILER_SESSION_CHANGE_PROVIDER = 1u << 4,
-    XR_COMPILER_SESSION_CHANGE_ALL = (1u << 5) - 1u,
-} XrCompilerSessionGenerationChange;
-
-/* A snapshot is detached from the mutable session and remains stable after
- * later change notifications or resets. */
-typedef struct XrCompilerSessionGenerationSnapshot {
-    uint64_t session_generation;
-    uint64_t workspace_generation;
-    uint64_t configuration_generation;
-    uint64_t target_generation;
-    uint64_t provider_generation;
-} XrCompilerSessionGenerationSnapshot;
-
-typedef enum XrCompilerSessionOperationOutcome {
-    XR_COMPILER_SESSION_OPERATION_NONE = 0,
-    XR_COMPILER_SESSION_OPERATION_SUCCEEDED,
-    XR_COMPILER_SESSION_OPERATION_CANCELLED,
-    XR_COMPILER_SESSION_OPERATION_FATAL,
-} XrCompilerSessionOperationOutcome;
-
-typedef struct XrCompilerSessionOperationScope {
-    XrCompilerSession *session;
-    uint64_t session_generation;
-    bool owns_operation;
-    bool active;
-} XrCompilerSessionOperationScope;
-
-typedef enum XrCompilerSessionReplDeclarationState {
-    XR_COMPILER_SESSION_REPL_DECLARATION_RESERVED = 0,
-    XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED,
-    XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE,
-    XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME,
-} XrCompilerSessionReplDeclarationState;
-
-/* Each submitted REPL unit owns a fresh identity. A failed unit remains in
- * the ledger as abandoned, so later declarations can never reuse its
- * identity or impersonate the last published generation. */
-typedef struct XrCompilerSessionReplDeclarationRecord {
-    uint64_t generation;
-    uint64_t parent_generation;
-    uint64_t session_generation;
-    uint32_t statement_count;
-    XrCompilerSessionReplDeclarationState state;
-} XrCompilerSessionReplDeclarationRecord;
-
-typedef struct XrCompilerSessionReplGenerationSnapshot {
-    uint64_t next_generation;
-    uint64_t published_generation;
-    uint64_t attempted_count;
-    uint64_t published_count;
-    uint64_t abandoned_count;
-    bool active;
-} XrCompilerSessionReplGenerationSnapshot;
-
-typedef struct XrCompilerSessionReplDeclarationScope {
-    XrCompilerSession *session;
-    uint64_t generation;
-    uint64_t session_generation;
-    size_t record_index;
-    bool active;
-} XrCompilerSessionReplDeclarationScope;
-
-typedef struct XrCompilerSessionIncrementalStats {
-    size_t module_count;
-    size_t dependency_count;
-    size_t invalidation_history_count;
-    size_t invalidation_history_limit;
-    size_t logical_bytes;
-    size_t peak_logical_bytes;
-    uint64_t completed_operations;
-    uint64_t cancelled_operations;
-    uint64_t fatal_operations;
-    XrCompilerSessionOperationOutcome last_outcome;
-    bool operation_active;
-    bool cache_store_open;
-} XrCompilerSessionIncrementalStats;
-
-typedef bool (*XrCompilerSessionModuleTaskPublishFn)(
-    const XrModuleTaskGraph *graph, uint32_t task_index,
-    const XrModuleTaskOutput *output, void *task_state, void *context,
-    char *error, size_t error_size);
-
-typedef bool (*XrCompilerSessionModuleTaskPreflightFn)(
-    const XrModuleTaskGraph *graph, uint32_t task_index,
-    const XrModuleTaskOutput *output, const void *task_state, void *context,
-    char *error, size_t error_size);
-
-typedef void (*XrCompilerSessionModuleTaskFinalizeFn)(void *task_state,
-                                                       void *context);
-
-/* One exact candidate graph is prepared in dependency levels. Every task is
- * preflighted before canonical immutable publication begins, and the graph is
- * installed only after every callback succeeds. */
-typedef struct XrCompilerSessionModuleTaskBatch {
-    const struct XrDependencyGraph *dependency_graph;
-    uint32_t worker_limit;
-    size_t task_state_size;
-    XrModuleTaskExecuteFn prepare;
-    XrCompilerSessionModuleTaskPreflightFn preflight;
-    XrCompilerSessionModuleTaskPublishFn publish;
-    XrCompilerSessionModuleTaskFinalizeFn finalize;
-    void *context;
-} XrCompilerSessionModuleTaskBatch;
-
-typedef struct XrCompilerSessionModuleTaskStats {
-    XrModuleTaskStats execution;
-    uint32_t task_count;
-    uint32_t preflighted_task_count;
-    uint32_t published_task_count;
-} XrCompilerSessionModuleTaskStats;
-
-typedef enum XrCompileUnitKind {
-    XR_COMPILE_UNIT_USER = 0,
-    XR_COMPILE_UNIT_STDLIB,
-    XR_COMPILE_UNIT_MEMORY,
-} XrCompileUnitKind;
-
-/* Import positions belong to an installed program table. Reusable module
- * code keeps an exact resolved locator and reads its isolate-owned cache. */
-typedef enum XrVmImportBinding {
-    XR_VM_IMPORT_PROGRAM_TABLE = 0,
-    XR_VM_IMPORT_RUNTIME_MODULE,
-} XrVmImportBinding;
-
-typedef struct XrCompileUnitIdentity {
-    XrCompileUnitKind kind;
-    const char *module_identity;
-    const char *stdlib_module_name; /* Native/registry coordinate, not a durable identity. */
-} XrCompileUnitIdentity;
-
+/* Zero-initialize before push. A live scope cannot move or be copied; only the
+ * exact top scope may pop. The borrowed scope storage must stay alive until
+ * pop or session destruction. Closing with open scopes invalidates them and
+ * sets BAD_ARGUMENT on the shared state before releasing the session. */
 typedef struct XrCompilerSessionScope {
     XrCompilerSession *session;
     struct XrArena *saved_arena;
     struct XrCompileStringPool *saved_pool;
-    uint64_t session_generation;
+    struct XrCompilerSessionScope *parent;
+    uint64_t token;
     bool active;
 } XrCompilerSessionScope;
 
-typedef struct XrCompilerSessionConfig {
-    XrVMRuntime *vm_host;
-    const char *project_root;
-    const char *source_file;
-    bool repl_mode;
-    bool emit_aot;
-    const XrTargetDataLayout *target_data_layout;
-    struct XrTargetProfile *target_profile;
-    const struct XrNativePackagePlan *native_package_plan; /* borrowed */
-    /* The session opens and owns the configured store. The store copies all
-     * scalar and path configuration. Artifact authority is supplied per
-     * operation and is never retained by the session or store. */
-    const struct XrCacheStoreConfig *incremental_cache;
-} XrCompilerSessionConfig;
-
-XR_FUNC XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg);
-XR_FUNC void xr_compiler_session_delete(XrCompilerSession *session);
-
-XR_FUNC const char *xr_compiler_session_project_root(const XrCompilerSession *session);
-XR_FUNC const char *xr_compiler_session_source_file(const XrCompilerSession *session);
-XR_FUNC XrCompilerSessionGenerationSnapshot
-xr_compiler_session_generation_snapshot(const XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
-                                                         uint32_t change_mask);
-XR_FUNC bool xr_compiler_session_reset_incremental(XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_repl_declaration_begin(
-    XrCompilerSession *session, XrCompilerSessionReplDeclarationScope *scope);
-XR_FUNC bool xr_compiler_session_repl_declaration_publish(
-    XrCompilerSessionReplDeclarationScope *scope, uint32_t statement_count);
-XR_FUNC bool xr_compiler_session_repl_declaration_abandon(
-    XrCompilerSessionReplDeclarationScope *scope,
-    XrCompilerSessionReplDeclarationState state);
-XR_FUNC XrCompilerSessionReplGenerationSnapshot
-xr_compiler_session_repl_generation_snapshot(const XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_repl_declaration_at(
-    const XrCompilerSession *session, size_t index,
-    XrCompilerSessionReplDeclarationRecord *out_record);
-/* The outermost scope owns the transaction. Nested compiler entry points
- * borrow it, so a module bundle is one operation rather than one operation per
- * dependency. Any nested failure aborts the owner and invalidates every scope
- * from the abandoned generation. */
-XR_FUNC bool xr_compiler_session_operation_begin(
-    XrCompilerSession *session, XrCompilerSessionOperationScope *scope);
-XR_FUNC bool xr_compiler_session_operation_succeed(
-    XrCompilerSessionOperationScope *scope);
-XR_FUNC bool xr_compiler_session_operation_fail(
-    XrCompilerSessionOperationScope *scope, XrCompilerSessionOperationOutcome outcome);
-XR_FUNC bool xr_compiler_session_publish_dependency_graph(
-    XrCompilerSession *session, const struct XrDependencyGraph *graph);
-XR_FUNC bool xr_compiler_session_publish_module_tasks(
-    XrCompilerSession *session,
-    const XrCompilerSessionModuleTaskBatch *batch,
-    XrCompilerSessionModuleTaskStats *stats, char *error,
-    size_t error_size);
-XR_FUNC bool xr_compiler_session_apply_invalidation(
-    XrCompilerSession *session, const struct XrInvalidationEvent *event);
-XR_FUNC const struct XrDependencyGraph *xr_compiler_session_dependency_graph(
-    const XrCompilerSession *session);
-XR_FUNC const struct XrInvalidationResult *xr_compiler_session_invalidation_at(
-    const XrCompilerSession *session, size_t index);
-XR_FUNC struct XrCacheStore *xr_compiler_session_cache_store(
-    const XrCompilerSession *session);
-/* Installs the session-owned cache before an operation starts. Replacement is
- * forbidden because it would make one session generation observe two stores. */
-XR_FUNC bool xr_compiler_session_open_incremental_cache(
-    XrCompilerSession *session, const struct XrCacheStoreConfig *config);
-XR_FUNC XrCompilerSessionIncrementalStats xr_compiler_session_incremental_stats(
-    const XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_incremental_idle_cleanup(
-    XrCompilerSession *session, size_t retained_history);
-
-XR_FUNC XrVMRuntime *xr_compiler_session_vm_host(const XrCompilerSession *session);
-XR_FUNC const XrTargetDataLayout *
-xr_compiler_session_target_data_layout(const XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_set_target_data_layout(XrCompilerSession *session,
-                                                        const XrTargetDataLayout *layout);
-XR_FUNC bool xr_compiler_session_set_target_profile(
-    XrCompilerSession *session, struct XrTargetProfile *profile);
-XR_FUNC const struct XrTargetProfile *xr_compiler_session_target_profile(
-    const XrCompilerSession *session);
-XR_FUNC void xr_compiler_session_set_native_package_plan(XrCompilerSession *session,
-                                                         const struct XrNativePackagePlan *plan);
-XR_FUNC const struct XrNativePackagePlan *
-xr_compiler_session_native_package_plan(const XrCompilerSession *session);
-XR_FUNC XrCompilerSession *xr_compiler_session_current_for_isolate(XrVMRuntime *isolate);
-XR_FUNC XrCompilerSession *xr_compiler_session_attach_isolate(XrVMRuntime *isolate,
-                                                              XrCompilerSession *session);
-
-XR_FUNC struct XrArena *xr_compiler_session_current_arena(const XrCompilerSession *session);
-XR_FUNC void xr_compiler_session_set_current_arena(XrCompilerSession *session,
-                                                   struct XrArena *arena);
-
-XR_FUNC uint32_t xr_compiler_session_next_ast_node_id(XrCompilerSession *session);
-XR_FUNC uint32_t xr_compiler_session_ast_node_id(const XrCompilerSession *session);
-XR_FUNC uint64_t xr_compiler_session_ast_identity_epoch(const XrCompilerSession *session);
-XR_FUNC void xr_compiler_session_set_ast_node_id(XrCompilerSession *session, uint32_t next_id);
-
-XR_FUNC struct XrCompileStringPool *
-xr_compiler_session_string_pool(const XrCompilerSession *session);
-XR_FUNC void xr_compiler_session_set_string_pool(XrCompilerSession *session,
-                                                 struct XrCompileStringPool *pool);
-
-XR_FUNC struct XrTypePool *xr_compiler_session_ensure_analyzer_pool(XrCompilerSession *session);
-XR_FUNC struct XrTypePool *xr_compiler_session_analyzer_pool(const XrCompilerSession *session);
-XR_FUNC void xr_compiler_session_install_analyzer_pool(XrCompilerSession *session);
-
-XR_FUNC struct XrSourceCache *xr_compiler_session_ensure_source_cache(XrCompilerSession *session);
-XR_FUNC struct XrSourceCache *xr_compiler_session_source_cache(const XrCompilerSession *session);
-
-XR_FUNC struct XrReplSymbolTable *
-xr_compiler_session_ensure_repl_symbols(XrCompilerSession *session);
-XR_FUNC struct XrReplSymbolTable *
-xr_compiler_session_repl_symbols(const XrCompilerSession *session);
-XR_FUNC struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *session);
-XR_FUNC struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session);
-/* Each submission transfers its arena and copied source identity to the
- * session. Published generations seed later evidence; abandoned generations
- * remain owned only because analyzer references can still point into them. */
-struct XrModuleIdentityAuthority;
-XR_FUNC bool
-xr_compiler_session_retain_repl_source(XrCompilerSession *session, AstNode *program,
-                                       const char *source,
-                                       const struct XrModuleIdentityAuthority *authority);
-/* Retained input arenas and the persistent analyzer share a session lifetime;
- * their declaration and specialization facts remain valid across prompts. */
-XR_FUNC bool xr_compiler_session_repl_retains_program(const XrCompilerSession *session,
-                                                      const AstNode *program);
-XR_FUNC const char *xr_compiler_session_repl_source_file(const XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_repl_graph_view(XrCompilerSession *session,
-                                                 struct XrModuleGraph *view);
-XR_FUNC void xr_compiler_session_repl_graph_view_dispose(struct XrModuleGraph *view);
-
-XR_FUNC void xr_compiler_session_set_module_graph(XrCompilerSession *session,
-                                                  struct XrModuleGraph *graph);
-XR_FUNC struct XrModuleGraph *xr_compiler_session_module_graph(const XrCompilerSession *session);
-
-/* Explicit trust identity for graph-less compilation units such as the
- * build-time stdlib bytecode bootstrap.  Callers must clear it after the
- * compilation operation; strings are borrowed for the scoped operation. */
-XR_FUNC bool xr_compiler_session_set_compile_unit_identity(XrCompilerSession *session,
-                                                           const XrCompileUnitIdentity *identity);
-XR_FUNC XrCompileUnitIdentity
-xr_compiler_session_compile_unit_identity(const XrCompilerSession *session);
-XR_FUNC XrVmImportBinding xr_compiler_session_vm_import_binding(const XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_set_vm_import_binding(XrCompilerSession *session,
-                                                       XrVmImportBinding binding);
-
-XR_FUNC bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *arena,
-                                            const char *source_file, XrCompilerSessionScope *scope);
-XR_FUNC void xr_compiler_session_pop_arena(XrCompilerSessionScope *scope);
-
-#endif  // XCOMPILER_SESSION_H
+/* The caller supplies the sole ledger; output must be empty. No VM, target,
+ * analyzer, REPL, cache or dependency-graph ownership belongs to this session.
+ * Completed AST arenas retain their own state and may outlive the session. */
+XR_FUNC XrCompilerSessionStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output);
+XR_FUNC void xr_compile_session_free(XrCompilerSession *session);
+XR_FUNC XrCompileResources *xr_compile_session_resources(const XrCompilerSession *session);
+XR_FUNC XrCompileState *xr_compile_session_compile_state(const XrCompilerSession *session);
+XR_FUNC XrCompileResourceStatus xr_compile_session_resource_status(const XrCompilerSession *session);
+XR_FUNC struct XrArena *xr_compile_session_current_arena(const XrCompilerSession *session);
+XR_FUNC struct XrCompileStringPool *xr_compile_session_string_pool(const XrCompilerSession *session);
+XR_FUNC uint32_t xr_compile_session_next_ast_node_id(XrCompilerSession *session);
+XR_FUNC XrCompileResourceStatus xr_compile_session_push_arena(XrCompilerSession *session,
+    struct XrArena *arena, XrCompilerSessionScope *scope);
+/* Valid LIFO cleanup restores bindings even after resource failure; the return
+ * still preserves that first failure. Mismatched pop leaves every binding live. */
+XR_FUNC XrCompileResourceStatus xr_compile_session_pop_arena(XrCompilerSessionScope *scope);
+#endif // XCOMPILER_SESSION_H

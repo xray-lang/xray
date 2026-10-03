@@ -24,12 +24,12 @@ static XrXirOutputStatus runtime_sink(void *context, const XrXirOutputGroup *gro
     CHECK(group && group->count <= 18); return XR_XIR_OUTPUT_OK;
 }
 static XrXirCallStatus runtime_drive(XrXirInstance *instance) {
-    XrXirInstanceResult result = xr_xir_instance_poll(instance);
+    XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     unsigned wakes = 0;
     while (result.outcome.status == XR_XIR_CALL_SUSPENDED) {
         CHECK(++wakes <= 13);
         CHECK(xr_xir_instance_resume(instance, result.epoch, result.outcome.wake) == XR_XIR_CALL_READY);
-        result = xr_xir_instance_poll(instance);
+        result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     }
     return result.outcome.status;
 }

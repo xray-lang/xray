@@ -30,6 +30,7 @@
 /* Consume one type-closing '>' while preserving an adjacent closer or assignment.
  * Expression parsing retains the lexer's ordinary comparison and shift tokens. */
 static bool consume_gt_in_generic(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return false;
     XR_DCHECK(parser != NULL, "consume_gt_in_generic: NULL parser");
     if (xr_parser_match(parser, TK_GT))
         return true;
@@ -51,16 +52,19 @@ static bool consume_gt_in_generic(Parser *parser) {
         return true;
     }
 
-    xr_parser_error(parser, "expected '>' to close generic type");
+    do {
+        xr_parser_error(parser, "expected '>' to close generic type");
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     return false;
 }
 
-static int alias_param_index(const XrTypeAlias *alias, const char *name) {
+static int alias_param_index(Parser *parser, const XrTypeAlias *alias, const char *name) {
     if (!alias || !name)
         return -1;
-    for (int i = 0; i < alias->type_param_count; i++) {
+    for (int i = 0; xr_parser_step(parser) && (xr_parser_healthy(parser) && i < alias->type_param_count); i++) {
         if (alias->type_param_names && alias->type_param_names[i] &&
-            strcmp(alias->type_param_names[i], name) == 0)
+            xr_parser_compare_string(parser, alias->type_param_names[i], name) == 0)
             return i;
     }
     return -1;
@@ -70,6 +74,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                                        const XrTypeAlias *subst_alias, XrTypeRef **type_args);
 
 static void report_removed_source_type_name(Parser *parser, const char *message) {
+    if (!xr_parser_healthy(parser)) return;
     if (!parser || !message)
         return;
     if (parser->panic_mode && parser->had_error)
@@ -77,40 +82,44 @@ static void report_removed_source_type_name(Parser *parser, const char *message)
 
     int saved_panic_mode = parser->panic_mode;
     parser->panic_mode = 0;
-    xr_parser_error(parser, message);
+    do {
+        xr_parser_error(parser, message);
+        if (!xr_parser_healthy(parser)) return;
+    } while (0);
     if (saved_panic_mode)
         parser->panic_mode = 1;
 }
 
 static bool reject_removed_source_type_name(Parser *parser, const char *name) {
+    if (!xr_parser_healthy(parser)) return false;
     if (!name)
         return false;
-    if (strcmp(name, "JsonValue") == 0) {
+    if (xr_parser_compare_string(parser, name, "JsonValue") == 0) {
         report_removed_source_type_name(
             parser, "Type 'JsonValue' has been removed. Use 'JSON.Value' instead.");
         return true;
     }
-    if (strcmp(name, "Json") == 0) {
+    if (xr_parser_compare_string(parser, name, "Json") == 0) {
         report_removed_source_type_name(
             parser, "Type 'Json' has been removed. Use 'JSON.Value' or 'JSON.Object'.");
         return true;
     }
-    if (strcmp(name, "any") == 0) {
+    if (xr_parser_compare_string(parser, name, "any") == 0) {
         report_removed_source_type_name(
             parser,
             "'any' type is not supported. Use a concrete type or 'JSON.Value' for dynamic JSON.");
         return true;
     }
-    if (strcmp(name, "unknown") == 0) {
+    if (xr_parser_compare_string(parser, name, "unknown") == 0) {
         report_removed_source_type_name(
             parser,
             "'unknown' type has been removed. Use a concrete type, a generic type parameter, or "
             "'JSON.Value' for schema-less JSON values.");
         return true;
     }
-    if (strcmp(name, "owned") == 0 || strcmp(name, "shared") == 0) {
+    if (xr_parser_compare_string(parser, name, "owned") == 0 || xr_parser_compare_string(parser, name, "shared") == 0) {
         char message[160];
-        snprintf(message, sizeof(message),
+        xr_parser_format(parser, message, sizeof(message),
                  "'%s' type capability syntax was removed; use T or const T", name);
         report_removed_source_type_name(parser, message);
         return true;
@@ -120,45 +129,58 @@ static bool reject_removed_source_type_name(Parser *parser, const char *name) {
 
 static XrTypeRef *expand_type_alias(Parser *parser, XrTypeAlias *alias, XrTypeRef **type_args,
                                     int type_arg_count) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (!alias)
         return xr_tref_error(parser->compiler_session);
 
     if (!alias->type_ref) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
-        xr_parser_error(parser, msg);
+        xr_parser_format(parser, msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
+        do {
+            xr_parser_error(parser, msg);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_tref_error(parser->compiler_session);
     }
 
     if (alias->type_param_count != type_arg_count) {
         char msg[256];
         if (alias->type_param_count == 0) {
-            snprintf(msg, sizeof(msg), "type alias '%s' does not take type arguments",
+            xr_parser_format(parser, msg, sizeof(msg), "type alias '%s' does not take type arguments",
                      alias->name ? alias->name : "?");
         } else {
-            snprintf(msg, sizeof(msg), "generic type alias '%s' expects %d type arguments, got %d",
+            xr_parser_format(parser, msg, sizeof(msg), "generic type alias '%s' expects %d type arguments, got %d",
                      alias->name ? alias->name : "?", alias->type_param_count, type_arg_count);
         }
-        xr_parser_error(parser, msg);
+        do {
+            xr_parser_error(parser, msg);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_tref_error(parser->compiler_session);
     }
 
     if (alias->is_expanding) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
-        xr_parser_error(parser, msg);
+        xr_parser_format(parser, msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
+        do {
+            xr_parser_error(parser, msg);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_tref_error(parser->compiler_session);
     }
 
     alias->is_expanding = true;
     XrTypeRef *result = clone_subst_type_ref(parser, alias->type_ref, alias, type_args);
+    if (!xr_parser_healthy(parser)) return NULL;
     alias->is_expanding = false;
     return result;
 }
 
 static XrTypeRef *expand_named_or_clone(Parser *parser, const char *name) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (parser->type_scope) {
         XrTypeAlias *alias = xr_type_scope_lookup(parser->type_scope, name);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (alias)
             return expand_type_alias(parser, alias, NULL, 0);
     }
@@ -167,8 +189,10 @@ static XrTypeRef *expand_named_or_clone(Parser *parser, const char *name) {
 
 static XrTypeRef *expand_generic_or_clone(Parser *parser, const char *name, XrTypeRef **args,
                                           int arg_count) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (parser->type_scope) {
         XrTypeAlias *alias = xr_type_scope_lookup(parser->type_scope, name);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (alias)
             return expand_type_alias(parser, alias, args, arg_count);
     }
@@ -176,6 +200,7 @@ static XrTypeRef *expand_generic_or_clone(Parser *parser, const char *name, XrTy
 }
 
 XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "xr_parse_type_name_ref: NULL parser");
     if (reject_removed_source_type_name(parser, name))
         return xr_tref_error(parser->compiler_session);
@@ -184,6 +209,7 @@ XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name) {
 
 XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *name,
                                                   XrTypeRef **args, int arg_count) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "xr_parse_generic_type_name_ref: NULL parser");
     if (reject_removed_source_type_name(parser, name))
         return xr_tref_error(parser->compiler_session);
@@ -192,6 +218,7 @@ XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *na
 
 static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                                        const XrTypeAlias *subst_alias, XrTypeRef **type_args) {
+    if (!xr_parser_healthy(parser)) return NULL;
     if (!src)
         return xr_tref_error(parser->compiler_session);
 
@@ -211,7 +238,8 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_ERROR:
             return xr_tref_error(parser->compiler_session);
         case XR_TREF_TYPE_PARAM: {
-            int idx = alias_param_index(subst_alias, src->name);
+            int idx = alias_param_index(parser, subst_alias, src->name);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (idx >= 0 && type_args)
                 return clone_subst_type_ref(parser, type_args[idx], NULL, NULL);
             return xr_tref_type_param(parser->compiler_session, src->name ? src->name : "?");
@@ -221,27 +249,35 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_GENERIC: {
             XrTypeRef *args[256];
             int count = src->nchildren;
-            for (int i = 0; i < count; i++)
-                args[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+                do {
+                    args[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             return expand_generic_or_clone(parser, src->name ? src->name : "?", args, count);
         }
         case XR_TREF_CONST: {
             XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                          subst_alias, type_args)
                                                   : xr_tref_error(parser->compiler_session);
+            if (!xr_parser_healthy(parser)) return NULL;
             return xr_tref_const(parser->compiler_session, inner);
         }
         case XR_TREF_OPTIONAL: {
             XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                          subst_alias, type_args)
                                                   : xr_tref_error(parser->compiler_session);
+            if (!xr_parser_healthy(parser)) return NULL;
             return xr_tref_optional(parser->compiler_session, inner);
         }
         case XR_TREF_UNION: {
             XrTypeRef *members[256];
             int count = src->nchildren;
-            for (int i = 0; i < count; i++)
-                members[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+                do {
+                    members[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             return xr_tref_union(parser->compiler_session, members, count);
         }
         case XR_TREF_FUNCTION: {
@@ -252,12 +288,16 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             XrTypeRef *params[256];
             XrParamMode modes[256];
             int nparam = total - 1;
-            for (int i = 0; i < nparam; i++) {
-                params[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            for (int i = 0; xr_parser_step(parser) && (i < nparam); i++) {
+                do {
+                    params[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 modes[i] = src->function_param_modes ? src->function_param_modes[i] : XR_PARAM_READ;
             }
             XrTypeRef *ret =
                 clone_subst_type_ref(parser, src->children[total - 1], subst_alias, type_args);
+            if (!xr_parser_healthy(parser)) return NULL;
             return xr_tref_function_signature(
                 parser->compiler_session, params, modes, src->function_param_names, nparam, ret,
                 src->borrow_origin_syntax, src->borrow_origins, src->borrow_origin_count);
@@ -265,25 +305,36 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_TUPLE: {
             XrTypeRef *elems[256];
             int count = src->nchildren;
-            for (int i = 0; i < count; i++)
-                elems[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+                do {
+                    elems[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             return xr_tref_tuple(parser->compiler_session, elems, count);
         }
         case XR_TREF_OBJECT: {
             XrTypeRef *fields[256];
             int count = src->nchildren;
-            for (int i = 0; i < count; i++)
-                fields[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+                do {
+                    fields[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             XrTypeRef *obj = xr_tref_object(parser->compiler_session, src->field_names, fields,
                                             src->field_readonly, count);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (src->name)
-                obj->name = ast_strdup(parser->compiler_session, src->name);
+                do {
+                    obj->name = ast_strdup(parser->compiler_session, src->name);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             return obj;
         }
         case XR_TREF_FIXED_ARRAY: {
             XrTypeRef *elem = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                         subst_alias, type_args)
                                                  : xr_tref_error(parser->compiler_session);
+            if (!xr_parser_healthy(parser)) return NULL;
             return xr_tref_fixed_array_expr(parser->compiler_session, elem, src->fixed_length_expr,
                                             src->fixed_length);
         }
@@ -295,39 +346,47 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
 
 static XrTypeRef *parse_type_annotation_base(Parser *parser);
 
-static bool tref_is_json(const XrTypeRef *t) {
-    return t && t->kind == XR_TREF_NAMED && t->name && strcmp(t->name, "JSON.Value") == 0;
+static bool tref_is_json(Parser *parser, const XrTypeRef *t) {
+    return t && t->kind == XR_TREF_NAMED && t->name && xr_parser_compare_string(parser, t->name, "JSON.Value") == 0;
 }
 
 static bool tref_is_null(const XrTypeRef *t) {
     return t && t->kind == XR_TREF_NULL;
 }
 
-static bool tref_intrinsically_includes_null(const XrTypeRef *t) {
-    return tref_is_json(t);
+static bool tref_intrinsically_includes_null(Parser *parser, const XrTypeRef *t) {
+    return tref_is_json(parser, t);
 }
 
 static XrTypeRef *parse_nullable_suffix(Parser *parser, XrTypeRef *base) {
-    if (tref_intrinsically_includes_null(base)) {
-        xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
+    if (!xr_parser_healthy(parser)) return NULL;
+    if (tref_intrinsically_includes_null(parser, base)) {
+        do {
+            xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
                                 "'JSON.Value?'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return base;
     }
     return xr_tref_optional(parser->compiler_session, base);
 }
 
 static void reject_redundant_null_union(Parser *parser, XrTypeRef **members, int count) {
+    if (!xr_parser_healthy(parser)) return;
     bool has_null = false;
     bool has_intrinsic_null = false;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
         if (tref_is_null(members[i]))
             has_null = true;
-        if (tref_intrinsically_includes_null(members[i]))
+        if (tref_intrinsically_includes_null(parser, members[i]))
             has_intrinsic_null = true;
     }
     if (has_null && has_intrinsic_null) {
-        xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
+        do {
+            xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
                                 "'JSON.Value | null'");
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
     }
 }
 
@@ -337,13 +396,18 @@ static void reject_redundant_null_union(Parser *parser, XrTypeRef **members, int
 // recursion-depth guard. All nested type arguments recurse through the
 // public entry, so the guard bounds type nesting depth.
 static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_type_annotation: NULL parser");
     Token annotation_start = parser->current;
     XrTypeRef *base = parse_type_annotation_base(parser);
+    if (!xr_parser_healthy(parser)) return NULL;
 
     /* Optional type suffix: T? */
     if (xr_parser_match(parser, TK_QUESTION))
-        base = parse_nullable_suffix(parser, base);
+        do {
+            base = parse_nullable_suffix(parser, base);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
     /* Union type: T | U | ... */
     if (xr_parser_check(parser, TK_PIPE)) {
@@ -351,21 +415,29 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
         int count = 0;
         members[count++] = base;
 
-        while (xr_parser_match(parser, TK_PIPE) && count < XR_TREF_UNION_MAX + 1) {
+        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_PIPE) && count < XR_TREF_UNION_MAX + 1) {
             XrTypeRef *next = parse_type_annotation_base(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (xr_parser_match(parser, TK_QUESTION))
-                next = parse_nullable_suffix(parser, next);
+                do {
+                    next = parse_nullable_suffix(parser, next);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             if (count < XR_TREF_UNION_MAX + 1)
                 members[count++] = next;
         }
 
         if (count > XR_TREF_UNION_MAX) {
-            xr_parser_error(parser, "union type exceeds maximum of 6 members");
+            do {
+                xr_parser_error(parser, "union type exceeds maximum of 6 members");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_error(parser->compiler_session);
         }
 
         reject_redundant_null_union(parser, members, count);
         XrTypeRef *union_ref = xr_tref_union(parser->compiler_session, members, count);
+        if (!xr_parser_healthy(parser)) return NULL;
         xr_tref_set_source_position(union_ref, annotation_start.line, annotation_start.column);
         return union_ref;
     }
@@ -374,25 +446,32 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
 }
 
 XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_type_annotation: NULL parser");
     if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
         parser->recursion_depth--;
-        xr_parser_error(parser, "type nesting too deep (max 1000 levels)");
+        do {
+            xr_parser_error(parser, "type nesting too deep (max 1000 levels)");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_tref_error(parser->compiler_session);
     }
     /* `const` is a contextual qualifier in every type position. */
     if (xr_parser_match(parser, TK_CONST)) {
         XrTypeRef *inner = xr_parse_type_annotation(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         parser->recursion_depth--;
         return xr_tref_const(parser->compiler_session, inner);
     }
 
     XrTypeRef *result = parse_type_annotation_inner(parser);
+    if (!xr_parser_healthy(parser)) return NULL;
     parser->recursion_depth--;
     return result;
 }
 
 static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrParamMode *out_mode) {
+    if (!xr_parser_healthy(parser)) return false;
     if (out_mode)
         *out_mode = XR_PARAM_READ;
     if (!allow_mode)
@@ -401,13 +480,19 @@ static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrPara
     if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
         if (out_mode)
             *out_mode = XR_PARAM_REF;
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return true;
     }
     if (xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
         if (out_mode)
             *out_mode = XR_PARAM_MOVE;
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
         return true;
     }
     return false;
@@ -415,24 +500,36 @@ static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrPara
 
 static void xr_parse_reject_move_const_parameter(Parser *parser, XrParamMode mode,
                                                  const XrTypeRef *type) {
+    if (!xr_parser_healthy(parser)) return;
     if (mode != XR_PARAM_MOVE || !type || type->kind != XR_TREF_CONST)
         return;
-    xr_parser_error(parser,
+    do {
+        xr_parser_error(parser,
                     "MOVE parameter mode is not allowed with const capability; use READ const T");
+        if (!xr_parser_healthy(parser)) return;
+    } while (0);
 }
 
 static void xr_parse_reject_postfix_param_mode(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return;
     if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref") ||
         xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
         Token mode_token = parser->current;
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         (void) mode_token;
-        xr_parser_error_at_previous(parser, "parameter mode must appear immediately after ':'");
+        do {
+            xr_parser_error_at_previous(parser, "parameter mode must appear immediately after ':'");
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
     }
 }
 
 XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_mode,
                                                      XrParamMode *out_mode, XrTypeRef **out_type) {
+    if (!xr_parser_healthy(parser)) return false;
     XR_DCHECK(parser != NULL, "xr_parse_optional_param_type_annotation: NULL parser");
     if (out_mode)
         *out_mode = XR_PARAM_READ;
@@ -443,22 +540,35 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
 
     XrParamMode mode = XR_PARAM_READ;
     if (allow_mode) {
-        xr_parse_optional_param_mode(parser, true, &mode);
+        do {
+            xr_parse_optional_param_mode(parser, true, &mode);
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
     } else {
         XrParamMode rejected_mode = XR_PARAM_READ;
         if (xr_parse_optional_param_mode(parser, true, &rejected_mode) &&
             rejected_mode != XR_PARAM_READ) {
             char message[128];
-            snprintf(message, sizeof(message),
+            xr_parser_format(parser, message, sizeof(message),
                      "parameter mode '%s' is not allowed in this parameter position",
                      xr_param_mode_label(rejected_mode));
-            xr_parser_error_at_previous(parser, message);
+            do {
+                xr_parser_error_at_previous(parser, message);
+                if (!xr_parser_healthy(parser)) return false;
+            } while (0);
         }
     }
 
     XrTypeRef *type = xr_parse_type_annotation(parser);
-    xr_parse_reject_move_const_parameter(parser, mode, type);
-    xr_parse_reject_postfix_param_mode(parser);
+    if (!xr_parser_healthy(parser)) return false;
+    do {
+        xr_parse_reject_move_const_parameter(parser, mode, type);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
+    do {
+        xr_parse_reject_postfix_param_mode(parser);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     if (out_mode)
         *out_mode = mode;
     if (out_type)
@@ -467,6 +577,7 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
 }
 
 static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **out_mode) {
+    if (!xr_parser_healthy(parser)) return false;
     const char *mode = NULL;
     if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
         mode = "ref";
@@ -477,9 +588,17 @@ static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **o
     }
 
     XrParserStreamState saved = xr_parser_stream_save(parser);
-    xr_parser_advance(parser);
+    if (!xr_parser_healthy(parser)) return false;
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     bool is_prefix = xr_parser_check(parser, TK_NAME);
-    xr_parser_stream_restore(parser, &saved);
+    if (!xr_parser_healthy(parser)) return false;
+    do {
+        xr_parser_stream_restore(parser, &saved);
+        if (!xr_parser_healthy(parser)) return false;
+    } while (0);
     if (!is_prefix)
         return false;
     if (out_mode)
@@ -488,38 +607,53 @@ static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **o
 }
 
 XR_FUNC void xr_parse_reject_ref_out_default_param(Parser *parser, const XrParamNode *param) {
+    if (!xr_parser_healthy(parser)) return;
     if (!param || (param->passing_mode != XR_PARAM_REF && param->passing_mode != XR_PARAM_MOVE))
         return;
 
     const char *mode = param->passing_mode == XR_PARAM_REF ? "ref" : "move";
     const char *name = param->name ? param->name : "<anonymous>";
     char message[192];
-    snprintf(message, sizeof(message),
+    xr_parser_format(parser, message, sizeof(message),
              "%s parameter '%s' cannot have a default value; callers must pass %s place "
              "explicitly",
              mode, name, mode);
-    xr_parser_error_at_previous(parser, message);
+    do {
+        xr_parser_error_at_previous(parser, message);
+        if (!xr_parser_healthy(parser)) return;
+    } while (0);
 }
 
 static bool xr_parse_parameter_starts_destructure(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return false;
     return xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
            xr_parser_check(parser, TK_LPAREN);
 }
 
 XR_FUNC XrParamNode *xr_parse_parameter_at(Parser *parser, uint32_t flags, int param_index) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "xr_parse_parameter_at: NULL parser");
     bool is_rest = false;
     if (flags & XR_PARSE_PARAMETER_ALLOW_REST)
-        is_rest = xr_parser_match(parser, TK_DOT_DOT_DOT);
+        do {
+            is_rest = xr_parser_match(parser, TK_DOT_DOT_DOT);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
     const char *prefix_mode = NULL;
     if (!is_rest && xr_parse_current_is_param_mode_prefix(parser, &prefix_mode)) {
         Token mode_token = parser->current;
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         (void) prefix_mode;
         (void) mode_token;
-        xr_parser_error_at_previous(parser,
+        do {
+            xr_parser_error_at_previous(parser,
                                     "parameter mode must appear after the parameter name and ':'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     if (!is_rest && (flags & XR_PARSE_PARAMETER_ALLOW_DESTRUCTURE) &&
@@ -527,62 +661,94 @@ XR_FUNC XrParamNode *xr_parse_parameter_at(Parser *parser, uint32_t flags, int p
         int pattern_line = parser->current.line;
         int pattern_column = parser->current.column;
         XrDestructurePattern *pattern = xr_parse_destructure_pattern(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!pattern) {
-            xr_parser_error(parser, "failed to parse destructure parameter");
+            do {
+                xr_parser_error(parser, "failed to parse destructure parameter");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
 
         char temp_name[32];
-        snprintf(temp_name, sizeof(temp_name), "__param%d", param_index >= 0 ? param_index : 0);
+        xr_parser_format(parser, temp_name, sizeof(temp_name), "__param%d", param_index >= 0 ? param_index : 0);
 
         XrParamNode *param =
             xr_param_node_new(parser->compiler_session, temp_name, pattern_line, pattern_column);
+        if (!xr_parser_healthy(parser)) return NULL;
         param->pattern = pattern;
 
-        xr_parse_optional_param_type_annotation(parser, false, &param->passing_mode, &param->type);
+        do {
+            xr_parse_optional_param_type_annotation(parser, false, &param->passing_mode, &param->type);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return param;
     }
 
-    xr_parser_consume(parser, TK_NAME,
+    do {
+        xr_parser_consume(parser, TK_NAME,
                       is_rest ? "expected parameter name after ..." : "expected parameter name");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     Token name_token = parser->previous;
 
     char param_name[256];
-    snprintf(param_name, sizeof(param_name), "%.*s", name_token.length, name_token.start);
+    xr_parser_format(parser, param_name, sizeof(param_name), "%.*s", name_token.length, name_token.start);
 
     XrParamNode *param =
         xr_param_node_new(parser->compiler_session, param_name, name_token.line, name_token.column);
+    if (!xr_parser_healthy(parser)) return NULL;
     param->is_rest = is_rest;
 
     bool allow_mode = (flags & XR_PARSE_PARAMETER_ALLOW_MODE) && !is_rest;
     bool has_type = xr_parse_optional_param_type_annotation(parser, allow_mode,
                                                             &param->passing_mode, &param->type);
+    if (!xr_parser_healthy(parser)) return NULL;
     if ((flags & XR_PARSE_PARAMETER_REQUIRE_TYPE) && !has_type)
-        xr_parser_error(parser, "expected ':' and type annotation after parameter name");
+        do {
+            xr_parser_error(parser, "expected ':' and type annotation after parameter name");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     return param;
 }
 
 XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
+    if (!xr_parser_healthy(parser)) return NULL;
     return xr_parse_parameter_at(parser, flags, -1);
 }
 
 /* ---- Base type (no trailing ? or |) ---- */
 
 static XrTypeRef *parse_type_annotation_base(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_type_annotation_base: NULL parser");
 
     /* Fixed-length array type: [T; N] */
     if (xr_parser_check(parser, TK_LBRACKET)) {
-        xr_parser_advance(parser);
+        do {
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         if (parser->current.type == TK_LITERAL_INT) {
-            xr_parser_error(parser, "fixed array type uses [T; N], e.g. [u8; 64]");
+            do {
+                xr_parser_error(parser, "fixed array type uses [T; N], e.g. [u8; 64]");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_error(parser->compiler_session);
         }
         XrTypeRef *elem = xr_parse_type_annotation(parser);
-        xr_parser_consume(parser, TK_SEMICOLON, "expected ';' before fixed array length in [T; N]");
+        if (!xr_parser_healthy(parser)) return NULL;
+        do {
+            xr_parser_consume(parser, TK_SEMICOLON, "expected ';' before fixed array length in [T; N]");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         AstNode *length_expr = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!length_expr) {
-            xr_parser_error(parser, "fixed array length must be a compile-time integer expression");
+            do {
+                xr_parser_error(parser, "fixed array length must be a compile-time integer expression");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_error(parser->compiler_session);
         }
         int literal_length = 0;
@@ -591,7 +757,10 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             if (raw > 0 && raw <= INT_MAX)
                 literal_length = (int) raw;
         }
-        xr_parser_consume(parser, TK_RBRACKET, "expected ']' after fixed array length");
+        do {
+            xr_parser_consume(parser, TK_RBRACKET, "expected ']' after fixed array length");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         return xr_tref_fixed_array_expr(parser->compiler_session, elem, length_expr,
                                         literal_length);
     }
@@ -617,66 +786,110 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_LBRACE)) {
         int capacity = 16;
         int field_count = 0;
-        const char **fnames = xr_malloc((size_t) capacity * sizeof(const char *));
-        XrTypeRef **ftypes = xr_malloc((size_t) capacity * sizeof(XrTypeRef *));
-        bool *freadonly = xr_malloc((size_t) capacity * sizeof(bool));
+        const char **fnames = ast_alloc(parser->compiler_session, (size_t) capacity * sizeof(const char *));
+        if (!xr_parser_healthy(parser)) return NULL;
+        XrTypeRef **ftypes = ast_alloc(parser->compiler_session, (size_t) capacity * sizeof(XrTypeRef *));
+        if (!xr_parser_healthy(parser)) return NULL;
+        bool *freadonly = ast_alloc(parser->compiler_session, (size_t) capacity * sizeof(bool));
+        if (!xr_parser_healthy(parser)) return NULL;
 
-        XR_CHECK(fnames != NULL && ftypes != NULL && freadonly != NULL,
-                 "parse_type: alloc failed for struct literal fields");
+        if (!fnames || !ftypes || !freadonly) return NULL;
 
-        while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
             if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
-                xr_parser_error(parser,
+                do {
+                    xr_parser_error(parser,
                                 "structural object types are exact; express width with a generic "
                                 "constraint such as `<T: { name: string }>`");
-                xr_parser_match(parser, TK_COMMA);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                do {
+                    xr_parser_match(parser, TK_COMMA);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 continue;
             }
             if (field_count >= capacity) {
-                int new_cap = capacity * 2;
-                XR_REALLOC_OR_ABORT(fnames, (size_t) new_cap * sizeof(const char *),
-                                    "parse_type field_names grow");
-                XR_REALLOC_OR_ABORT(ftypes, (size_t) new_cap * sizeof(XrTypeRef *),
-                                    "parse_type field_types grow");
-                XR_REALLOC_OR_ABORT(freadonly, (size_t) new_cap * sizeof(bool),
-                                    "parse_type field_readonly grow");
+                int new_cap = xr_parser_grow_capacity(parser, capacity);
+                if (!xr_parser_healthy(parser)) return NULL;
+                do {
+                    fnames = ast_array_grow(parser->compiler_session, fnames, sizeof(const char *), (size_t) capacity, (size_t) new_cap);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                if (!fnames) return NULL;
+                do {
+                    ftypes = ast_array_grow(parser->compiler_session, ftypes, sizeof(XrTypeRef *), (size_t) capacity, (size_t) new_cap);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                if (!ftypes) return NULL;
+                do {
+                    freadonly = ast_array_grow(parser->compiler_session, freadonly, sizeof(bool), (size_t) capacity, (size_t) new_cap);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                if (!freadonly) return NULL;
                 capacity = new_cap;
             }
             bool is_const = xr_parser_match(parser, TK_CONST);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (!xr_parser_check(parser, TK_NAME)) {
-                xr_parser_error(parser, "expected field name");
+                do {
+                    xr_parser_error(parser, "expected field name");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 break;
             }
-            xr_parser_advance(parser);
-            fnames[field_count] = xr_strndup(parser->previous.start, parser->previous.length);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            do {
+                fnames[field_count] = ast_strndup(parser->compiler_session, parser->previous.start, parser->previous.length);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
 
             bool is_optional = xr_parser_match(parser, TK_QUESTION);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (is_optional)
-                xr_parser_error(parser,
+                do {
+                    xr_parser_error(parser,
                                 "object field `?` suffix was removed; write the nullable type "
                                 "after `:`, for example `age: i64?`");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             if (!xr_parser_match(parser, TK_COLON)) {
-                xr_parser_error(parser, "expected ':'");
-                xr_free((void *) fnames[field_count]);
+                do {
+                    xr_parser_error(parser, "expected ':'");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+
                 break;
             }
             XrTypeRef *ftype = xr_parse_type_annotation(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (is_optional)
-                ftype = xr_tref_optional(parser->compiler_session, ftype);
+                do {
+                    ftype = xr_tref_optional(parser->compiler_session, ftype);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
             ftypes[field_count] = ftype;
             freadonly[field_count] = is_const;
             field_count++;
-            xr_parser_match(parser, TK_COMMA);
+            do {
+                xr_parser_match(parser, TK_COMMA);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
-        xr_parser_consume(parser, TK_RBRACE, "expected '}'");
+        do {
+            xr_parser_consume(parser, TK_RBRACE, "expected '}'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         XrTypeRef *result =
             xr_tref_object(parser->compiler_session, fnames, ftypes, freadonly, field_count);
-        for (int i = 0; i < field_count; i++)
-            xr_free((void *) fnames[i]);
-        xr_free(fnames);
-        xr_free(ftypes);
-        xr_free(freadonly);
+        if (!xr_parser_healthy(parser)) return NULL;
+
+
+
         return result;
     }
 
@@ -690,110 +903,168 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         if (xr_parser_check(parser, TK_LT)) {
             /* fn<T>(...) is a diagnostics-only rendering: a generic function is
              * not a first-class value, so it cannot be written in source. */
-            xr_parser_error(parser, "a generic function type cannot be written in source");
+            do {
+                xr_parser_error(parser, "a generic function type cannot be written in source");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
-        xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'fn' in a function type");
+        do {
+            xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'fn' in a function type");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         int cap = 8;
-        XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
-        XrParamMode *param_modes = (XrParamMode *) xr_malloc((size_t) cap * sizeof(XrParamMode));
-        const char **param_names = (const char **) xr_malloc((size_t) cap * sizeof(const char *));
+        XrTypeRef **elems = (XrTypeRef **) ast_alloc(parser->compiler_session, (size_t) cap * sizeof(XrTypeRef *));
+        if (!xr_parser_healthy(parser)) return NULL;
+        XrParamMode *param_modes = (XrParamMode *) ast_alloc(parser->compiler_session, (size_t) cap * sizeof(XrParamMode));
+        if (!xr_parser_healthy(parser)) return NULL;
+        const char **param_names = (const char **) ast_alloc(parser->compiler_session, (size_t) cap * sizeof(const char *));
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!elems || !param_modes || !param_names) {
-            if (elems)
-                xr_free(elems);
-            if (param_modes)
-                xr_free(param_modes);
-            if (param_names)
-                xr_free(param_names);
-            xr_parser_error(parser, "out of memory while parsing function type");
+
+
+
+            do {
+                xr_parser_error(parser, "out of memory while parsing function type");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_error(parser->compiler_session);
         }
         int count = 0;
-        while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
+        while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
             if (count > 0) {
                 if (!xr_parser_match(parser, TK_COMMA)) {
-                    xr_parser_error(parser, "expected ',' between function parameter types");
+                    do {
+                        xr_parser_error(parser, "expected ',' between function parameter types");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     break;
                 }
                 if (xr_parser_check(parser, TK_RPAREN))
                     break;
             }
             if (count == cap) {
-                int new_cap = cap * 2;
+                int new_cap = xr_parser_grow_capacity(parser, cap);
+                if (!xr_parser_healthy(parser)) return NULL;
                 XrTypeRef **resized =
-                    (XrTypeRef **) xr_realloc(elems, (size_t) new_cap * sizeof(XrTypeRef *));
+                    (XrTypeRef **) ast_array_grow(parser->compiler_session, elems, sizeof(XrTypeRef *), (size_t) cap, (size_t) new_cap);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (!resized) {
-                    xr_free(elems);
-                    xr_free(param_modes);
-                    xr_free(param_names);
-                    xr_parser_error(parser, "out of memory while growing function type");
+
+
+
+                    do {
+                        xr_parser_error(parser, "out of memory while growing function type");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     return xr_tref_error(parser->compiler_session);
                 }
                 elems = resized;
                 XrParamMode *resized_modes =
-                    (XrParamMode *) xr_realloc(param_modes, (size_t) new_cap * sizeof(XrParamMode));
+                    (XrParamMode *) ast_array_grow(parser->compiler_session, param_modes, sizeof(XrParamMode), (size_t) cap, (size_t) new_cap);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (!resized_modes) {
-                    xr_free(elems);
-                    xr_free(param_modes);
-                    xr_free(param_names);
-                    xr_parser_error(parser, "out of memory while growing function type");
+
+
+
+                    do {
+                        xr_parser_error(parser, "out of memory while growing function type");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     return xr_tref_error(parser->compiler_session);
                 }
                 param_modes = resized_modes;
-                const char **resized_names = (const char **) xr_realloc(
-                    param_names, (size_t) new_cap * sizeof(const char *));
+                const char **resized_names = (const char **) ast_array_grow(parser->compiler_session, param_names, sizeof(const char *), (size_t) cap, (size_t) new_cap);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (!resized_names) {
-                    xr_free(elems);
-                    xr_free(param_modes);
-                    xr_free(param_names);
-                    xr_parser_error(parser, "out of memory while growing function type");
+
+
+
+                    do {
+                        xr_parser_error(parser, "out of memory while growing function type");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     return xr_tref_error(parser->compiler_session);
                 }
                 param_names = resized_names;
                 cap = new_cap;
             }
             param_modes[count] = XR_PARAM_READ;
-            xr_parse_optional_param_mode(parser, true, &param_modes[count]);
+            do {
+                xr_parse_optional_param_mode(parser, true, &param_modes[count]);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             param_names[count] = NULL;
             if (xr_parser_check(parser, TK_NAME)) {
-                Scanner lookahead = parser->scanner;
+                Scanner lookahead;
+                if (xr_compile_state_copy(parser->state, &lookahead, &parser->scanner, sizeof(lookahead)) != XR_COMPILE_RESOURCE_OK) return NULL;
                 Token next = xr_scanner_scan(&lookahead);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (next.type == TK_COLON) {
                     Token name = parser->current;
                     char *copy =
                         (char *) ast_alloc(parser->compiler_session, (size_t) name.length + 1);
-                    memcpy(copy, name.start, (size_t) name.length);
-                    copy[name.length] = '\0';
+                    if (!xr_parser_healthy(parser)) return NULL;
+                    do { if (!ast_copy(parser->compiler_session, copy, name.start, (size_t) name.length)) return NULL; } while (0);
+                    do { if (!ast_work(parser->compiler_session, 1)) return NULL; copy[name.length] = '\0'; } while (0);
                     param_names[count] = copy;
-                    xr_parser_advance(parser);
-                    xr_parser_consume(parser, TK_COLON,
+                    do {
+                        xr_parser_advance(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
+                    do {
+                        xr_parser_consume(parser, TK_COLON,
                                       "expected ':' after function type parameter name");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                 }
             }
-            elems[count] = xr_parse_type_annotation(parser);
-            xr_parse_reject_move_const_parameter(parser, param_modes[count], elems[count]);
+            do {
+                elems[count] = xr_parse_type_annotation(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            do {
+                xr_parse_reject_move_const_parameter(parser, param_modes[count], elems[count]);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             count++;
         }
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close the function parameter list");
+        do {
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close the function parameter list");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         XrTypeRef *ret;
         XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
         AstBorrowOriginRef *borrow_origins = NULL;
         int borrow_origin_count = 0;
         if (xr_parser_match(parser, TK_ARROW)) {
-            ret = xr_parse_type_annotation(parser);
-            xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+            do {
+                ret = xr_parse_type_annotation(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            do {
+                xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
                                        &borrow_origin_count);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             if (ret && ret->kind == XR_TREF_UNIT)
-                xr_parser_error(parser, "a unit return is written by omitting `->`, not `-> ()`");
+                do {
+                    xr_parser_error(parser, "a unit return is written by omitting `->`, not `-> ()`");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
         } else {
-            ret = xr_tref_unit(parser->compiler_session);
+            do {
+                ret = xr_tref_unit(parser->compiler_session);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
         XrTypeRef *result = xr_tref_function_signature(
             parser->compiler_session, elems, param_modes, param_names, count, ret,
             borrow_origin_syntax, borrow_origins, borrow_origin_count);
+        if (!xr_parser_healthy(parser)) return NULL;
         xr_tref_set_source_position(result, function_token.line, function_token.column);
-        xr_free(elems);
-        xr_free(param_modes);
-        xr_free(param_names);
+
+
+
         return result;
     }
 
@@ -805,26 +1076,40 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_LPAREN)) {
         if (xr_parser_match(parser, TK_RPAREN)) {
             if (xr_parser_check(parser, TK_ARROW)) {
-                xr_parser_error(parser,
+                do {
+                    xr_parser_error(parser,
                                 "function types are written `fn(...) -> R` (add the `fn` prefix)");
-                xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+                do {
+                    xr_parser_advance(parser);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 XrTypeRef *ret = xr_parse_type_annotation(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
                 return xr_tref_function(parser->compiler_session, NULL, 0, ret);
             }
             return xr_tref_unit(parser->compiler_session);
         }
         int cap = 8;
-        XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
+        XrTypeRef **elems = (XrTypeRef **) ast_alloc(parser->compiler_session, (size_t) cap * sizeof(XrTypeRef *));
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!elems) {
-            xr_parser_error(parser, "out of memory while parsing type list");
+            do {
+                xr_parser_error(parser, "out of memory while parsing type list");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_error(parser->compiler_session);
         }
         int count = 0;
         bool saw_comma = false;
-        while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
+        while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
             if (count > 0) {
                 if (!xr_parser_match(parser, TK_COMMA)) {
-                    xr_parser_error(parser, "expected ',' between tuple element types");
+                    do {
+                        xr_parser_error(parser, "expected ',' between tuple element types");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     break;
                 }
                 saw_comma = true;
@@ -832,28 +1117,47 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                     break;
             }
             if (count == cap) {
-                int new_cap = cap * 2;
+                int new_cap = xr_parser_grow_capacity(parser, cap);
+                if (!xr_parser_healthy(parser)) return NULL;
                 XrTypeRef **resized =
-                    (XrTypeRef **) xr_realloc(elems, (size_t) new_cap * sizeof(XrTypeRef *));
+                    (XrTypeRef **) ast_array_grow(parser->compiler_session, elems, sizeof(XrTypeRef *), (size_t) cap, (size_t) new_cap);
+                if (!xr_parser_healthy(parser)) return NULL;
                 if (!resized) {
-                    xr_free(elems);
-                    xr_parser_error(parser, "out of memory while growing type list");
+
+                    do {
+                        xr_parser_error(parser, "out of memory while growing type list");
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
                     return xr_tref_error(parser->compiler_session);
                 }
                 elems = resized;
                 cap = new_cap;
             }
-            elems[count] = xr_parse_type_annotation(parser);
+            do {
+                elems[count] = xr_parse_type_annotation(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             count++;
         }
-        xr_parser_consume(parser, TK_RPAREN, "expected ')'");
+        do {
+            xr_parser_consume(parser, TK_RPAREN, "expected ')'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         if (xr_parser_check(parser, TK_ARROW)) {
-            xr_parser_error(parser,
+            do {
+                xr_parser_error(parser,
                             "function types are written `fn(...) -> R` (add the `fn` prefix)");
-            xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             XrTypeRef *ret = xr_parse_type_annotation(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
             XrTypeRef *result = xr_tref_function(parser->compiler_session, elems, count, ret);
-            xr_free(elems);
+            if (!xr_parser_healthy(parser)) return NULL;
+
             return result;
         }
         /* A single element with no comma is a grouping, not a 1-tuple; `(T,)`
@@ -861,15 +1165,16 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
          * and spec 2.7. */
         if (count == 1 && !saw_comma) {
             XrTypeRef *grouped = elems[0];
-            xr_free(elems);
+
             return grouped;
         }
         if (count == 0) {
-            xr_free(elems);
+
             return xr_tref_unit(parser->compiler_session);
         }
         XrTypeRef *result = xr_tref_tuple(parser->compiler_session, elems, count);
-        xr_free(elems);
+        if (!xr_parser_healthy(parser)) return NULL;
+
         return result;
     }
 
@@ -878,54 +1183,78 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         Token name_token = parser->previous;
         char temp_name[256];
         int name_len = name_token.length < 255 ? name_token.length : 255;
-        strncpy(temp_name, name_token.start, (size_t) name_len);
-        temp_name[name_len] = '\0';
+        do {
+            xr_parser_copy_string_n(parser, temp_name, name_token.start, (size_t) name_len);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do { if (!ast_work(parser->compiler_session, 1)) return NULL; temp_name[name_len] = '\0'; } while (0);
 
         /* Module-qualified type names share one type-ref identity. JSON uses
          * this path for Value/Object/Path rather than introducing a source
          * type named `JSON`. */
         if (xr_parser_match(parser, TK_DOT)) {
             if (!xr_parser_check(parser, TK_NAME)) {
-                xr_parser_error(parser, "expected type name after '.'");
+                do {
+                    xr_parser_error(parser, "expected type name after '.'");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return xr_tref_error(parser->compiler_session);
             }
-            xr_parser_advance(parser);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             Token member_token = parser->previous;
             int member_len = member_token.length;
             if (name_len + 1 + member_len >= (int) sizeof(temp_name)) {
-                xr_parser_error(parser, "qualified type name is too long");
+                do {
+                    xr_parser_error(parser, "qualified type name is too long");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 return xr_tref_error(parser->compiler_session);
             }
-            temp_name[name_len] = '.';
-            memcpy(temp_name + name_len + 1, member_token.start, (size_t) member_len);
-            temp_name[name_len + 1 + member_len] = '\0';
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; temp_name[name_len] = '.'; } while (0);
+            do { if (!ast_copy(parser->compiler_session, temp_name + name_len + 1, member_token.start, (size_t) member_len)) return NULL; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; temp_name[name_len + 1 + member_len] = '\0'; } while (0);
             name_len += 1 + member_len;
         }
 
         /* Misspelling detection (purely syntactic, kept in parser) */
-        if (strcmp(temp_name, "JsonValue") == 0) {
+        if (xr_parser_compare_string(parser, temp_name, "JsonValue") == 0) {
             reject_removed_source_type_name(parser, temp_name);
             return xr_tref_error(parser->compiler_session);
         }
         if (reject_removed_source_type_name(parser, temp_name))
             return xr_tref_error(parser->compiler_session);
-        if (strcmp(temp_name, "String") == 0 || strcmp(temp_name, "str") == 0) {
-            xr_parser_error(parser, "type 'string' must be lowercase in Xray");
+        if (xr_parser_compare_string(parser, temp_name, "String") == 0 || xr_parser_compare_string(parser, temp_name, "str") == 0) {
+            do {
+                xr_parser_error(parser, "type 'string' must be lowercase in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_string(parser->compiler_session);
         }
-        if (strcmp(temp_name, "Bool") == 0 || strcmp(temp_name, "Boolean") == 0 ||
-            strcmp(temp_name, "boolean") == 0) {
-            xr_parser_error(parser, "use 'bool' (lowercase) for boolean type in Xray");
+        if (xr_parser_compare_string(parser, temp_name, "Bool") == 0 || xr_parser_compare_string(parser, temp_name, "Boolean") == 0 ||
+            xr_parser_compare_string(parser, temp_name, "boolean") == 0) {
+            do {
+                xr_parser_error(parser, "use 'bool' (lowercase) for boolean type in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_bool(parser->compiler_session);
         }
-        if (strcmp(temp_name, "Char") == 0) {
-            xr_parser_error(parser, "use 'char' (lowercase) for character type in Xray");
+        if (xr_parser_compare_string(parser, temp_name, "Char") == 0) {
+            do {
+                xr_parser_error(parser, "use 'char' (lowercase) for character type in Xray");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_char(parser->compiler_session);
         }
-        if (strcmp(temp_name, "void") == 0) {
-            xr_parser_error_coded_note(
+        if (xr_parser_compare_string(parser, temp_name, "void") == 0) {
+            do {
+                xr_parser_error_coded_note(
                 parser, &name_token, XR_ERR_SYN_VOID_REMOVED, "`void` keyword was removed",
                 "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return xr_tref_unit(parser->compiler_session);
         }
 
@@ -935,8 +1264,11 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             int type_arg_count = 0;
             do {
                 if (type_arg_count < 16)
-                    type_args[type_arg_count++] = xr_parse_type_annotation(parser);
-            } while (xr_parser_match(parser, TK_COMMA));
+                    do {
+                        type_args[type_arg_count++] = xr_parse_type_annotation(parser);
+                        if (!xr_parser_healthy(parser)) return NULL;
+                    } while (0);
+            } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA));
             consume_gt_in_generic(parser);
             return expand_generic_or_clone(parser, temp_name, type_args, type_arg_count);
         }
@@ -944,6 +1276,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         /* Check parser's type scope for aliases and generic params */
         if (parser->type_scope) {
             XrTypeAlias *alias = xr_type_scope_lookup(parser->type_scope, temp_name);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (alias)
                 return expand_type_alias(parser, alias, NULL, 0);
         }
@@ -953,7 +1286,10 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     }
 
     /* Error recovery */
-    xr_parser_error_expected_name(parser, "expected type name");
+    do {
+        xr_parser_error_expected_name(parser, "expected type name");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
     return xr_tref_error(parser->compiler_session);
 }
 
@@ -967,6 +1303,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
  * constraints are intersected: a type satisfies the parameter only when it
  * satisfies every listed constraint. */
 XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "xr_parse_constraint_list: NULL parser");
     XR_DCHECK(out_count != NULL, "xr_parse_constraint_list: NULL out_count");
 
@@ -976,16 +1313,21 @@ XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count) {
 
     do {
         XrTypeRef *constraint = xr_parse_type_annotation(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (constraint == NULL)
             break;
-        XR_PARSE_PUSH(parser, list, count, capacity, constraint);
-    } while (xr_parser_match(parser, TK_AMP));
+        do {
+            XR_PARSE_PUSH(parser, list, count, capacity, constraint);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_AMP));
 
     *out_count = count;
     return list;
 }
 
 XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count) {
+    if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "xr_parse_generic_params: NULL parser");
     XR_DCHECK(out_count != NULL, "xr_parse_generic_params: NULL out_count");
 
@@ -1000,113 +1342,158 @@ XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count) {
     /* Installed before the first parameter so a constraint can name an earlier
      * one. The caller restores its own scope; leaving this one installed is
      * what lets the signature and body see the parameters. */
-    XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+    XrTypeScope *generic_scope = xr_parser_type_scope_new(parser, parser->type_scope);
+    if (!xr_parser_healthy(parser)) return NULL;
     parser->type_scope = generic_scope;
 
     do {
-        xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         Token param_token = parser->previous;
 
         char *param_name =
             (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
-        memcpy(param_name, param_token.start, param_token.length);
-        param_name[param_token.length] = '\0';
+        if (!xr_parser_healthy(parser)) return NULL;
+        do { if (!ast_copy(parser->compiler_session, param_name, param_token.start, param_token.length)) return NULL; } while (0);
+        do { if (!ast_work(parser->compiler_session, 1)) return NULL; param_name[param_token.length] = '\0'; } while (0);
 
         /* `<T, T>` would make every mention of T ambiguous and silently bind to
          * whichever the scope kept. */
-        for (int i = 0; i < count; i++) {
-            if (params[i] && params[i]->name && strcmp(params[i]->name, param_name) == 0) {
+        for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+            if (params[i] && params[i]->name && xr_parser_compare_string(parser, params[i]->name, param_name) == 0) {
                 char msg[160];
-                snprintf(msg, sizeof(msg), "duplicate type parameter name '%s'", param_name);
-                xr_parser_error(parser, msg);
+                xr_parser_format(parser, msg, sizeof(msg), "duplicate type parameter name '%s'", param_name);
+                do {
+                    xr_parser_error(parser, msg);
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
                 break;
             }
         }
 
         /* Visible to every later parameter's default, and to the signature. */
-        xr_type_scope_define(generic_scope, param_name,
+        do {
+            xr_parser_type_scope_define(parser, generic_scope, param_name,
                              xr_tref_type_param(parser->compiler_session, param_name));
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
         /* Higher-kinded type parameters are a permanent non-feature
          * (LANGUAGE_SPEC 9.6.1). Name the decision instead of letting the
          * list parser report a missing '>' at the inner '<'. */
         if (xr_parser_check(parser, TK_LT)) {
             char msg[192];
-            snprintf(msg, sizeof(msg),
+            xr_parser_format(parser, msg, sizeof(msg),
                      "type parameter '%s' cannot take its own type parameters: Xray does not "
                      "provide higher-kinded types; take a concrete instantiation instead",
                      param_name);
-            xr_parser_error_at_current(parser, msg);
+            do {
+                xr_parser_error_at_current(parser, msg);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
         }
 
         XrTypeRef **constraints = NULL;
         int constraint_count = 0;
         if (xr_parser_match(parser, TK_COLON))
-            constraints = xr_parse_constraint_list(parser, &constraint_count);
+            do {
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
 
         /* Default type arguments are not implemented (LANGUAGE_SPEC 9.2). Name
          * the feature rather than letting the list parser report a missing '>',
          * which points at the '=' and reads like a syntax slip. */
         if (xr_parser_check(parser, TK_ASSIGN)) {
             char msg[192];
-            snprintf(msg, sizeof(msg),
+            xr_parser_format(parser, msg, sizeof(msg),
                      "default type parameters are not supported; '%s' must be given explicitly "
                      "at each use site",
                      param_name);
-            xr_parser_error_at_current(parser, msg);
-            xr_parser_advance(parser); /* consume '=' */
+            do {
+                xr_parser_error_at_current(parser, msg);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+            do {
+                xr_parser_advance(parser);
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0); /* consume '=' */
             (void) xr_parse_type_annotation(parser);
         }
 
         XrGenericParam *gp =
             (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
+        if (!xr_parser_healthy(parser)) return NULL;
         gp->name = param_name;
         gp->constraints = constraints;
         gp->constraint_count = constraint_count;
-        XR_PARSE_PUSH(parser, params, count, capacity, gp);
+        do {
+            XR_PARSE_PUSH(parser, params, count, capacity, gp);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
 
-    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
-    xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
+    do {
+        xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
 
     *out_count = count;
     return params;
 }
 
 void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_count) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "xr_parse_where_clause: NULL parser");
 
     if (!xr_parser_match(parser, TK_WHERE))
         return;
 
     if (param_count <= 0) {
-        xr_parser_error(parser, "'where' requires type parameters to constrain");
+        do {
+            xr_parser_error(parser, "'where' requires type parameters to constrain");
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         /* Still parse the clause so the rest of the declaration stays in sync. */
     }
 
     do {
-        xr_parser_consume(parser, TK_NAME, "expected type parameter name after 'where'");
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name after 'where'");
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         Token subject = parser->previous;
 
         XrGenericParam *target = NULL;
-        for (int i = 0; i < param_count; i++) {
+        for (int i = 0; xr_parser_step(parser) && (i < param_count); i++) {
             if (params[i] && params[i]->name &&
-                strncmp(params[i]->name, subject.start, (size_t) subject.length) == 0 &&
-                params[i]->name[subject.length] == '\0') {
+                xr_parser_compare_string_n(parser, params[i]->name, subject.start, (size_t) subject.length) == 0 &&
+                xr_parser_read_byte(parser, params[i]->name + subject.length) == '\0') {
+                if (!xr_parser_healthy(parser)) return;
                 target = params[i];
                 break;
             }
         }
         if (!target && param_count > 0) {
             char msg[192];
-            snprintf(msg, sizeof(msg), "'where' names '%.*s', which is not a type parameter here",
+            xr_parser_format(parser, msg, sizeof(msg), "'where' names '%.*s', which is not a type parameter here",
                      subject.length, subject.start);
-            xr_parser_error(parser, msg);
+            do {
+                xr_parser_error(parser, msg);
+                if (!xr_parser_healthy(parser)) return;
+            } while (0);
         }
 
-        xr_parser_consume(parser, TK_COLON, "expected ':' after type parameter in 'where'");
+        do {
+            xr_parser_consume(parser, TK_COLON, "expected ':' after type parameter in 'where'");
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
         int added_count = 0;
         XrTypeRef **added = xr_parse_constraint_list(parser, &added_count);
+        if (!xr_parser_healthy(parser)) return;
         if (!target || added_count <= 0)
             continue;
 
@@ -1114,54 +1501,85 @@ void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_co
          * same constraint list `<T: A>` fills, so one enforcement path (E0358)
          * covers both and they compose on the same parameter. */
         if (target->constraint_count < 0 || added_count > INT_MAX - target->constraint_count) {
-            xr_parser_error(parser, "where constraint count exceeds parser limits");
+            do {
+                xr_parser_error(parser, "where constraint count exceeds parser limits");
+                if (!xr_parser_healthy(parser)) return;
+            } while (0);
             return;
         }
         int merged_count = target->constraint_count + added_count;
         if ((size_t)merged_count > SIZE_MAX / sizeof(XrTypeRef *)) {
-            xr_parser_error(parser, "where constraint storage exceeds parser limits");
+            do {
+                xr_parser_error(parser, "where constraint storage exceeds parser limits");
+                if (!xr_parser_healthy(parser)) return;
+            } while (0);
             return;
         }
         XrTypeRef **merged = (XrTypeRef **) ast_alloc_array(
             parser->compiler_session, sizeof(XrTypeRef *), (size_t) merged_count);
+        if (!xr_parser_healthy(parser)) return;
         if (!merged) {
-            xr_parser_error(parser, "where constraint allocation failed");
+            do {
+                xr_parser_error(parser, "where constraint allocation failed");
+                if (!xr_parser_healthy(parser)) return;
+            } while (0);
             return;
         }
-        for (int i = 0; i < target->constraint_count; i++)
+        for (int i = 0; xr_parser_step(parser) && (i < target->constraint_count); i++)
             merged[i] = target->constraints[i];
-        for (int i = 0; i < added_count; i++)
+        for (int i = 0; xr_parser_step(parser) && (i < added_count); i++)
             merged[target->constraint_count + i] = added[i];
         target->constraints = merged;
         target->constraint_count = merged_count;
 
-    } while (xr_parser_match(parser, TK_COMMA));
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA));
 }
 XrGenericParam **xr_parse_method_conditions(Parser *parser, int *out_count) {
+    if (!xr_parser_healthy(parser)) return NULL;
     *out_count = 0;
     if (!xr_parser_match(parser, TK_WHERE)) return NULL;
     XrGenericParam **conditions = NULL;
     int count = 0, capacity = 0;
     do {
-        xr_parser_consume(parser, TK_NAME, "expected type parameter name after 'where'");
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name after 'where'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
         Token subject = parser->previous;
         XrGenericParam *condition = ast_alloc(parser->compiler_session, sizeof(*condition));
+        if (!xr_parser_healthy(parser)) return NULL;
         char *name = ast_alloc(parser->compiler_session, (size_t)subject.length + 1);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (!condition || !name) {
-            xr_parser_error(parser, "method condition allocation failed");
+            do {
+                xr_parser_error(parser, "method condition allocation failed");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
             return NULL;
         }
-        memcpy(name, subject.start, (size_t)subject.length); name[subject.length] = '\0';
+        do { if (!ast_copy(parser->compiler_session, name, subject.start, (size_t)subject.length)) return NULL; } while (0);
+        if (!ast_work(parser->compiler_session, 1)) return NULL;
+        name[subject.length] = '\0';
         condition->name = name;
-        xr_parser_consume(parser, TK_COLON, "expected ':' after method condition subject");
-        condition->constraints = xr_parse_constraint_list(parser, &condition->constraint_count);
-        XR_PARSE_PUSH(parser, conditions, count, capacity, condition);
-    } while (xr_parser_match(parser, TK_COMMA));
+        do {
+            xr_parser_consume(parser, TK_COLON, "expected ':' after method condition subject");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            condition->constraints = xr_parse_constraint_list(parser, &condition->constraint_count);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do {
+            XR_PARSE_PUSH(parser, conditions, count, capacity, condition);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA));
     *out_count = count;
     return conditions;
 }
 void xr_parse_borrow_origin_set(Parser *parser, XrBorrowOriginSyntaxState *out_syntax,
                                 AstBorrowOriginRef **out_origins, int *out_count) {
+    if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parse_borrow_origin_set: NULL parser");
     XR_DCHECK(out_syntax != NULL && out_origins != NULL && out_count != NULL,
               "parse_borrow_origin_set: NULL output");
@@ -1185,14 +1603,21 @@ void xr_parse_borrow_origin_set(Parser *parser, XrBorrowOriginSyntaxState *out_s
         } else if (xr_parser_match(parser, TK_NAME)) {
             origin.kind = AST_BORROW_ORIGIN_PARAM_NAME;
             char *name = (char *) ast_alloc(parser->compiler_session, (size_t) token.length + 1);
-            memcpy(name, token.start, (size_t) token.length);
-            name[token.length] = '\0';
+            if (!xr_parser_healthy(parser)) return;
+            do { if (!ast_copy(parser->compiler_session, name, token.start, (size_t) token.length)) return; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return; name[token.length] = '\0'; } while (0);
             origin.name = name;
         } else {
-            xr_parser_error_at_current(
+            do {
+                xr_parser_error_at_current(
                 parser, "expected a parameter name, 'this', or 'static' after 'from'");
+                if (!xr_parser_healthy(parser)) return;
+            } while (0);
             return;
         }
-        XR_PARSE_PUSH(parser, *out_origins, *out_count, capacity, origin);
-    } while (xr_parser_match(parser, TK_PIPE));
+        do {
+            XR_PARSE_PUSH(parser, *out_origins, *out_count, capacity, origin);
+            if (!xr_parser_healthy(parser)) return;
+        } while (0);
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_PIPE));
 }

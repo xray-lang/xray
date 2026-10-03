@@ -1,6 +1,9 @@
 # Unit tests for xray
 # All unit tests are managed here (no glob in root CMakeLists.txt)
 
+# Child and standalone gates share one interpreter discovery in this build.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 # Literal semantic vectors are derived independently of compiler libraries.
 add_test(NAME test_program_identity_vectors
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/program/derive_identity_vectors.py
@@ -31,7 +34,51 @@ if(ENABLE_ASAN AND (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC"))
 endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compile_resources.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_arena.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_producer.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_parser.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/incremental/cache_compile_resources.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/module/package_compile_resources.cmake)
+add_subdirectory(base/hashmap_owner)
+add_subdirectory(xir/compile_owner)
+add_subdirectory(xir/bounded_call)
+add_subdirectory(shared/native_admission)
+add_subdirectory(shared/core_intrinsic_owner)
+add_subdirectory(module/declaration_owner)
+add_subdirectory(module/stdlib_source_owner)
+if(WIN32)
+    add_subdirectory(os/thread_join_owner)
+    add_subdirectory(module/module_owner)
+    add_subdirectory(module/project_owner)
+    add_executable(test_cli_source_owner cli/source_owner/test_cli_source_owner.c)
+    target_link_libraries(test_cli_source_owner PRIVATE xray_cli_source bcrypt)
+    target_compile_options(test_cli_source_owner PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_cli_source_owner COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/cli/source_owner/test_cli_source_owner.py
+        $<TARGET_FILE:test_cli_source_owner> ${PROJECT_SOURCE_DIR}/stdlib)
+    set_tests_properties(test_cli_source_owner PROPERTIES TIMEOUT 300 COST 40
+        RUN_SERIAL TRUE LABELS "unit;cli;xir;ownership;budget")
+endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_projection_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_invocation_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_operation_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/local_toolchain_owner.cmake)
+add_subdirectory(cli/pe_version_owner)
+if(WIN32)
+    set(ADMISSION_SDK "${CMAKE_BINARY_DIR}/xir-runtime-sdk")
+    set(ADMISSION_MSVC "${XIR_INVOCATION_MSVC}")
+    set(ADMISSION_LINKER "${XIR_INVOCATION_LINKER}")
+    add_subdirectory(cli/native_admission_owner)
+endif()
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/workspace_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/source_paths_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/run_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/check_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/build_source_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/base/windows_path_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/cgen_bytes_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/test_declarations_owner/gates.cmake)
 
 macro(add_xray_unit_test name source)
     add_executable(${name} ${source} ${ARGN})
@@ -46,6 +93,7 @@ endmacro()
 
 if(WIN32)
     add_executable(test_windows_utf8 base/test_windows_utf8.c)
+    target_link_libraries(test_windows_utf8 PRIVATE xray_compile_resources)
     target_include_directories(test_windows_utf8 PRIVATE ${CMAKE_SOURCE_DIR}/src)
     if(MSVC)
         target_compile_options(test_windows_utf8 PRIVATE /W4 /WX /utf-8)
@@ -58,6 +106,8 @@ if(WIN32)
         ${CMAKE_SOURCE_DIR}/src/base/xfileio.c
         ${CMAKE_SOURCE_DIR}/src/os/win/fs_win.c
         ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c)
+    target_link_libraries(test_windows_paths PRIVATE xray_compile_resources)
+    target_sources(test_windows_paths PRIVATE ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c)
     target_include_directories(test_windows_paths PRIVATE ${CMAKE_SOURCE_DIR}/src)
     if(MSVC)
         target_compile_options(test_windows_paths PRIVATE /W4 /WX /utf-8)
@@ -73,9 +123,22 @@ if(WIN32)
             --xray $<TARGET_FILE:xray>)
     set_tests_properties(test_windows_unicode_paths PROPERTIES
         LABELS "integration;cli;windows;vm;aot" TIMEOUT 600 COST 180)
-    add_executable(test_file_read_windows base/test_file_read_windows.c)
+    add_executable(test_file_read_windows base/test_file_read_windows.c
+        ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c)
+    if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_file_read_windows PRIVATE /experimental:c11atomics)
+    endif()
     target_include_directories(test_file_read_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    add_executable(test_declaration_file_windows base/test_declaration_file_windows.c)
+    add_executable(test_declaration_file_windows base/test_declaration_file_windows.c
+        ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c
+        ${CMAKE_SOURCE_DIR}/src/base/xtoml.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c
+        ${CMAKE_SOURCE_DIR}/src/module/xdeclaration_manifest.c
+        ${CMAKE_SOURCE_DIR}/src/module/xdeclaration_load.c)
+    if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_declaration_file_windows PRIVATE /experimental:c11atomics)
+    endif()
     target_include_directories(test_declaration_file_windows PRIVATE ${CMAKE_SOURCE_DIR}/src)
     foreach(file_test test_file_read_windows test_declaration_file_windows)
         if(MSVC)
@@ -146,14 +209,19 @@ add_xray_python_unit_test(test_canonical_program_test_profile
 add_xray_python_unit_test(xr_program_h2_backend_differential_self_test
     test_h2_backend_differential.py)
 
-add_executable(test_xtoml base/test_xtoml.c ${CMAKE_SOURCE_DIR}/src/base/xtoml.c)
+add_executable(test_xtoml base/test_xtoml.c ${CMAKE_SOURCE_DIR}/src/base/xtoml.c
+    ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c ${CMAKE_SOURCE_DIR}/src/base/xcompile_resources.c)
 target_include_directories(test_xtoml PRIVATE ${CMAKE_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(test_xtoml PRIVATE /W4 /WX)
 else()
     target_compile_options(test_xtoml PRIVATE -Wall -Wextra -Werror)
 endif()
-add_executable(test_xtoml_allocations base/test_xtoml_allocations.c)
+add_executable(test_xtoml_allocations base/test_xtoml_allocations.c ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c)
+if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_xtoml PRIVATE /experimental:c11atomics)
+    target_compile_options(test_xtoml_allocations PRIVATE /experimental:c11atomics)
+endif()
 target_include_directories(test_xtoml_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(test_xtoml_allocations PRIVATE /W4 /WX)
@@ -165,7 +233,13 @@ set_tests_properties(test_xtoml_allocations PROPERTIES LABELS "unit;metadata;own
 add_test(NAME test_xtoml COMMAND test_xtoml)
 set_tests_properties(test_xtoml PROPERTIES LABELS "unit;metadata;ownership")
 
-add_executable(test_declaration_manifest module/test_declaration_manifest.c)
+add_executable(test_declaration_manifest module/test_declaration_manifest.c
+    ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c
+    ${CMAKE_SOURCE_DIR}/src/base/xtoml.c
+    ${CMAKE_SOURCE_DIR}/src/module/xdeclaration_manifest.c)
+if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_declaration_manifest PRIVATE /experimental:c11atomics)
+endif()
 target_include_directories(test_declaration_manifest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(test_declaration_manifest PRIVATE /W4 /WX)
@@ -364,8 +438,11 @@ set_tests_properties(test_xir_output_status PROPERTIES LABELS "unit;xir;ownershi
 
 add_xray_bootstrap_executable(test_xir_source xir/test_xir_source.c)
 target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
-add_xray_bootstrap_executable(test_xir_source_product xir/test_xir_source_product.c)
-target_link_libraries(test_xir_source_product PRIVATE xray_xir_source_product)
+add_executable(test_xir_source_product xir/test_xir_source_product.c)
+add_test(NAME test_xir_native_projection_policy COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_native_projection_vectors.py)
+set_tests_properties(test_xir_native_projection_policy PROPERTIES LABELS "unit;xir;abi;generated-c" TIMEOUT 30)
+target_link_libraries(test_xir_source_product PRIVATE xray_xir_native_projection)
 if(MSVC)
     target_compile_options(test_xir_source_product PRIVATE /W4 /WX /utf-8)
 else()
@@ -387,9 +464,9 @@ add_test(NAME test_xir_source_product_allocations COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
     $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib --scan)
 set_tests_properties(test_xir_source_product_allocations PROPERTIES
-    LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 420)
-add_xray_bootstrap_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
-target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_source_product)
+    LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 80)
+add_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
+target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_native_projection)
 if(MSVC)
     target_compile_options(test_xir_source_product_linked PRIVATE /W4 /WX /utf-8)
 else()
@@ -398,7 +475,30 @@ endif()
 add_test(NAME test_xir_source_product_linked COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
     $<TARGET_FILE:test_xir_source_product_linked> ${CMAKE_SOURCE_DIR}/stdlib)
-set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution")
+set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
+set(XIR_SOURCE_OWNER_FIXTURE "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_compile_owner")
+set(XIR_SOURCE_OWNER_NATIVE "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-native.c")
+add_custom_command(OUTPUT "${XIR_SOURCE_OWNER_NATIVE}"
+    COMMAND $<TARGET_FILE:test_xir_source_product_linked> "${XIR_SOURCE_OWNER_FIXTURE}"
+        "${XIR_SOURCE_OWNER_FIXTURE}/root.xr" "${CMAKE_SOURCE_DIR}/stdlib"
+        accept "${XIR_SOURCE_OWNER_NATIVE}" multi normal
+    DEPENDS test_xir_source_product_linked "${XIR_SOURCE_OWNER_FIXTURE}/root.xr"
+        "${XIR_SOURCE_OWNER_FIXTURE}/counter.xr" "${XIR_SOURCE_OWNER_FIXTURE}/label.xr"
+    VERBATIM)
+add_executable(test_xir_source_product_native xir/test_xir_source_product_native.c "${XIR_SOURCE_OWNER_NATIVE}")
+target_link_libraries(test_xir_source_product_native PRIVATE xray_xir_scalar xray_compile_resources)
+if(MSVC)
+    target_compile_options(test_xir_source_product_native PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_product_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_source_product_vm_modules
+    COMMAND test_xir_source_product_linked "${XIR_SOURCE_OWNER_FIXTURE}"
+        "${XIR_SOURCE_OWNER_FIXTURE}/root.xr" "${CMAKE_SOURCE_DIR}/stdlib"
+        accept "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-vm.c" multi normal)
+add_test(NAME test_xir_source_product_native COMMAND test_xir_source_product_native)
+set_tests_properties(test_xir_source_product_vm_modules test_xir_source_product_native
+    PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
 target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 add_xray_bootstrap_executable(test_xir_source_admission xir/test_xir_source_admission.c)
 add_xray_bootstrap_executable(test_xir_source_generics xir/test_xir_source_generics.c)
@@ -1093,10 +1193,8 @@ if(TARGET xray_core_objs AND TARGET xray_stdlib_bootstrap_core)
 endif()
 add_xray_bootstrap_unit_test(test_parser_asi frontend/test_parser_asi.c)
 add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
-add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)
-add_xray_bootstrap_unit_test(test_formatter_comments frontend/test_formatter_comments.c)
-add_xray_bootstrap_unit_test(test_formatter_strings frontend/test_formatter_strings.c)
-add_xray_bootstrap_unit_test(test_fmt_roundtrip frontend/test_fmt_roundtrip.c)
+include(frontend/format_owner.cmake)
+include(cli/fmt_owner/CMakeLists.txt)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
 add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 add_xray_unit_test(test_xa_typed_program frontend/test_xa_typed_program.c)
@@ -3873,7 +3971,6 @@ add_executable(test_cli_spec
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_parser.c
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_help.c
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_diag.c
-    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c
 )
 target_include_directories(test_cli_spec PRIVATE
@@ -3881,7 +3978,21 @@ target_include_directories(test_cli_spec PRIVATE
     ${CMAKE_BINARY_DIR}/generated
     ${CMAKE_SOURCE_DIR}/src/app/cli
 )
-target_link_libraries(test_cli_spec PRIVATE xray_core)
+if(WIN32)
+    target_sources(test_cli_spec PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/os/win/fd_win.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/time_win.c)
+else()
+    target_sources(test_cli_spec PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/os/unix/fd_unix.c
+        ${CMAKE_SOURCE_DIR}/src/os/unix/time_unix.c)
+endif()
+set_target_properties(test_cli_spec PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_cli_spec PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_cli_spec PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
 add_test(NAME test_cli_spec COMMAND test_cli_spec)
 
 add_executable(test_cli_toolchain
@@ -3902,6 +4013,13 @@ target_include_directories(test_cli_toolchain PRIVATE
 target_link_libraries(test_cli_toolchain PRIVATE xray_core)
 add_test(NAME test_cli_toolchain COMMAND test_cli_toolchain)
 include(cli/toolchain_process_owned.cmake)
+if(WIN32)
+    add_subdirectory(cli/dependency_facts)
+    add_subdirectory(cli/process_image_observer)
+    add_subdirectory(cli/image_collector_owner)
+    add_subdirectory(cli/process_clone_observed)
+    add_subdirectory(cli/file_lease_owner)
+endif()
 
 add_xray_unit_test(test_target_profile_authority
     cli/test_target_profile_authority.c

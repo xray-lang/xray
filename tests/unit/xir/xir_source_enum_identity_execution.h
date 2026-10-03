@@ -30,7 +30,7 @@ static void source_enum_identity_value_check(const XrXirValue *value, uint32_t i
 }
 static XrXirCallStatus source_enum_identity_count(XrXirInstance *instance, uint32_t entry, int64_t expected) {
     XrXirCallStatus status = xr_xir_instance_start(instance,entry,NULL,0);
-    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
     if (status == XR_XIR_CALL_RETURNED) {
         XrXirValue value = {0};
         CHECK(xr_xir_instance_take_result(instance,&value) == XR_XIR_CALL_RETURNED);
@@ -45,7 +45,7 @@ static void source_enum_identity_attempt(XrXirProgram *program, SourceEnumIdenti
     if (status == XR_XIR_CALL_READY) status = source_enum_identity_count(instance,entries.count,0);
     for (uint32_t e = 0; e < 4 && status == XR_XIR_CALL_RETURNED; ++e) {
         status = xr_xir_instance_start(instance,entries.values[e],NULL,0);
-        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
         if (status == XR_XIR_CALL_RETURNED) {
             CHECK(xr_xir_instance_take_result(instance,&results[e]) == XR_XIR_CALL_RETURNED);
             source_enum_identity_value_check(&results[e],e);

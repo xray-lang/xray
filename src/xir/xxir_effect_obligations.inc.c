@@ -11,11 +11,11 @@
  */
 #include "xxir_constraints.h"
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
-    XrXirBudget *remaining, XrXirDiagnostic *diagnostic) {
+    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic) {
     if (!module->declarations) return XR_XIR_OK;
     bool present = false;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        if (!spend(&remaining->work, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
         uint32_t owner = module->declarations->functions[f].cleanup_owner;
         if (module->declarations->functions[f].promises) present = true;
         if (!owner) continue;
@@ -26,18 +26,17 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             const XrXirGeneric *body = &module->generics[f], *parent = &module->generics[owner - 1];
             if (body->parameter_count != parent->parameter_count) return XR_XIR_BAD_TYPE;
             for (uint32_t p = 0; p < body->parameter_count; ++p) {
-                if (!spend(&remaining->work, 1)) return XR_XIR_BUDGET;
-                XrXirStatus status = xr_xir_constraint_records_match(module->types,body->constraints[p],
-                    module->types,parent->constraints[p],body->parameter_count,remaining);
+                if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+                XrXirStatus status = xr_xir_compile_constraint_records_match(remaining, module->types, body->constraints[p], module->types, parent->constraints[p], body->parameter_count);
                 if (status != XR_XIR_OK) return status;
             }
         }
     }
     if (!present) return XR_XIR_OK;
     XrXirEffects *effects = NULL;
-    XrXirStatus status = xr_xir_effects_infer_verified(module, remaining, &effects);
+    XrXirStatus status = xr_xir_compile_effects_infer_verified(remaining, module, &effects);
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
-        if (!spend(&remaining->work, 1)) { status = XR_XIR_BUDGET; break; }
+        if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
         bool cleanup = module->declarations->functions[f].cleanup_owner != 0;
         if (!cleanup && !module->declarations->functions[f].promises) continue;
         const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
@@ -52,7 +51,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
                 diagnostic->instruction = witness->instruction;
                 const XrXirFunction *function = &module->functions[f];
                 for (uint32_t b = 0; b < function->block_count; ++b) {
-                    if (!spend(&remaining->work, 1)) { status = XR_XIR_BUDGET; break; }
+                    if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
                     XrXirBlock block = function->blocks[b];
                     if (witness->instruction >= block.first && witness->instruction - block.first < block.count) {
                         diagnostic->block = b; break;
@@ -61,6 +60,6 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             }
         }
     }
-    xr_xir_effects_free(effects);
+    xr_xir_compile_effects_free(effects);
     return status;
 }

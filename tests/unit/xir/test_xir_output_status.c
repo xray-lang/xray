@@ -31,7 +31,7 @@ static XrXirOutputStatus group_status(void *context,const XrXirOutputGroup *grou
     CHECK(group && group->count==1 && group->stream==XR_XIR_STDOUT && !group->line);
     CHECK(group->values[0].type==XR_XIR_STRING);
     ++state->callbacks;
-    if (state->cancel) CHECK(xr_xir_call_cancel(state->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+    if (state->cancel) CHECK(xr_xir_call_request_cancel(state->call)==XR_XIR_CALL_CANCEL_REQUESTED);
     return state->status;
 }
 static XrXirAction output_action(XrXirCallView *view) {
@@ -111,7 +111,7 @@ static void call_channels(void) {
         config.entries=&entry;config.entry_count=1;config.accounting=&accounting;
         config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,group_status,&state};
         CHECK(xr_xir_call_new(&config,0,NULL,0,&state.call)==XR_XIR_CALL_READY);
-        XrXirCallResult result=xr_xir_call_poll(state.call);
+        XrXirCallResult result=xr_xir_call_poll_bounded(state.call, UINT64_MAX);
         XrXirCallStatus wanted=cancel ? XR_XIR_CALL_CANCELLED : writing && mode==3 ? XR_XIR_CALL_RETURNED : expected[mode];
         CHECK(result.status==wanted && state.callbacks==1 && state.releases==1);
         CHECK(!xr_xir_call_panic_status(result.status) && xr_xir_call_result_valid(&result));

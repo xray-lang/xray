@@ -65,7 +65,7 @@ static bool publication_run(XrXirProgram *program, const uint32_t ids[2]) {
                 }
                 if (!oom) {
                     status = xr_xir_instance_start(instance,ids[vector == 1],&argument,1);
-                    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+                    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
                     oom = status == XR_XIR_CALL_OOM && (mode != 2 || !probe.calls);
                     if (!oom) {
                         CHECK(probe.calls == 1);

@@ -11,6 +11,8 @@
 #include "xfileio.h"
 #include "xmalloc.h"
 #include "xchecks.h"
+#include "xio_policy.inc.h"
+#include "../shared/xr_path_limit.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,46 +23,26 @@
 #include <sys/stat.h>
 #endif
 
+XR_FUNC XrOsIoStatus xr_file_probe_owned(const XrOsIoPolicy *policy, const char *path, bool allow_links) {
+    if (!io_policy_valid(policy) || !path || !path[0]) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK};
 #ifdef XR_OS_WINDOWS
-static XrPathStatus fileio_windows_status(DWORD error) {
-    switch (error) {
-    case ERROR_FILE_NOT_FOUND: case ERROR_PATH_NOT_FOUND: return XR_PATH_NOT_FOUND;
-    case ERROR_NOT_ENOUGH_MEMORY: case ERROR_OUTOFMEMORY: return XR_PATH_OUT_OF_MEMORY;
-    case ERROR_FILENAME_EXCED_RANGE: case ERROR_BUFFER_OVERFLOW: return XR_PATH_BUDGET;
-    case ERROR_INVALID_NAME: case ERROR_BAD_PATHNAME: case ERROR_INVALID_PARAMETER:
-    case ERROR_NO_UNICODE_TRANSLATION: return XR_PATH_INVALID;
-    default: return XR_PATH_IO;
-    }
-}
-static XrPathStatus fileio_conversion_status(XrWinPathStatus status) {
-    return status == XR_WIN_PATH_OOM ? XR_PATH_OUT_OF_MEMORY :
-        status == XR_WIN_PATH_LIMIT ? XR_PATH_BUDGET : XR_PATH_INVALID;
-}
-#else
-static XrPathStatus fileio_errno_status(int error) {
-    return error == ENOMEM ? XR_PATH_OUT_OF_MEMORY : error == ENAMETOOLONG ? XR_PATH_BUDGET :
-        error == ENOENT || error == ENOTDIR ? XR_PATH_NOT_FOUND :
-        error == EINVAL ? XR_PATH_INVALID : XR_PATH_IO;
-}
-#endif
-
-XR_FUNC XrPathStatus xr_file_probe(const char *path, bool allow_links) {
-    if (!path || !path[0]) return XR_PATH_INVALID;
-#ifdef XR_OS_WINDOWS
-    XrWinPathStatus converted;
-    wchar_t *wide = xr_win_utf8_path(path, &converted);
-    if (!wide) return fileio_conversion_status(converted);
-    WIN32_FILE_ATTRIBUTE_DATA attributes = {0};
+    wchar_t *wide = NULL;
+    io_status(&io, xr_win_utf8_path_owned(policy, path, &wide));
+    WIN32_FILE_ATTRIBUTE_DATA attributes;
+    if (!io_work(&io, 1)) { io_free(&io, wide); return io.status; }
     BOOL found = GetFileAttributesExW(wide, GetFileExInfoStandard, &attributes);
     DWORD error = found ? ERROR_SUCCESS : GetLastError();
-    xr_free(wide);
-    if (!found) return fileio_windows_status(error);
-    if (attributes.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_DEVICE)) return XR_PATH_INVALID;
-    return !allow_links && (attributes.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ? XR_PATH_INVALID : XR_PATH_OK;
+    io_free(&io, wide);
+    if (!found) return io_windows_status(error);
+    if (attributes.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_DEVICE)) return XR_OS_IO_BAD_ARGUMENT;
+    return !allow_links && (attributes.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ? XR_OS_IO_BAD_ARGUMENT : XR_OS_IO_OK;
 #else
+    size_t length = 0;
+    if (!io_length(&io, path, &length) || !io_work(&io, 1)) return io.status;
     struct stat attributes;
-    if (lstat(path, &attributes)) return fileio_errno_status(errno);
-    return S_ISREG(attributes.st_mode) || (allow_links && S_ISLNK(attributes.st_mode)) ? XR_PATH_OK : XR_PATH_INVALID;
+    if (lstat(path, &attributes)) return io_errno_status(errno);
+    return S_ISREG(attributes.st_mode) || (allow_links && S_ISLNK(attributes.st_mode)) ? XR_OS_IO_OK : XR_OS_IO_BAD_ARGUMENT;
 #endif
 }
 
@@ -69,9 +51,10 @@ char *xr_file_read_all(const char *path, const char *mode, size_t *out_size) {
         return NULL;
 
 #ifdef XR_OS_WINDOWS
-    XrWinPathStatus converted;
-    wchar_t *wide_path = xr_win_utf8_path(path, &converted);
-    wchar_t *wide_mode = wide_path ? xr_win_utf8_path(mode, &converted) : NULL;
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    wchar_t *wide_path = NULL, *wide_mode = NULL;
+    (void)xr_win_utf8_path_owned(&policy, path, &wide_path);
+    if (wide_path) (void)xr_win_utf8_text_owned(&policy, mode, &wide_mode);
     FILE *f = wide_path && wide_mode ? _wfopen(wide_path, wide_mode) : NULL;
     xr_free(wide_mode); xr_free(wide_path);
 #else
@@ -105,61 +88,75 @@ char *xr_file_read_all(const char *path, const char *mode, size_t *out_size) {
     return buf;
 }
 
-char *xr_path_dirname(const char *path) {
-    if (!path)
-        return xr_strdup(".");
-
-    const char *last_fwd = strrchr(path, '/');
-#ifdef _WIN32
-    const char *last_bwd = strrchr(path, '\\');
-    const char *last_slash = last_fwd;
-    if (!last_slash || (last_bwd && last_bwd > last_slash))
-        last_slash = last_bwd;
-#else
-    const char *last_slash = last_fwd;
+static bool path_separator(char c) {
+    return c == '/'
+#ifdef XR_OS_WINDOWS
+        || c == '\\'
 #endif
-    if (!last_slash)
-        return xr_strdup(".");
-
-    /* Handle root "/" or "X:\" */
-    if (last_slash == path)
-        return xr_strdup("/");
-
-    size_t len = (size_t) (last_slash - path);
-    char *dir = (char *) xr_malloc(len + 1);
-    if (!dir)
-        return NULL;
-
-    memcpy(dir, path, len);
-    dir[len] = '\0';
-    return dir;
+        ;
+}
+/* Root recognition is lexical. It grants no filesystem authority. */
+static size_t path_root_length(XrIoContext *io, const char *path, size_t length) {
+    if (!length || !io_work(io, 1)) return 0;
+    bool rooted = path_separator(path[0]);
+#ifdef XR_OS_WINDOWS
+    if (length >= 2 && io_work(io, 1)) {
+        char second = path[1];
+        if (!rooted && second == ':' && length >= 3 && io_work(io, 1))
+            return path_separator(path[2]) ? 3 : 0;
+        if (rooted && path_separator(second)) {
+            size_t offset = 2;
+            for (unsigned component = 0; component < 2; ++component) {
+                size_t begin = offset;
+                while (offset < length && io_work(io, 1) && !path_separator(path[offset])) ++offset;
+                if (offset == begin) return 1;
+                if (component == 0 && offset < length) ++offset;
+            }
+            return offset;
+        }
+    }
+#endif
+    return rooted ? 1 : 0;
+}
+XR_FUNC XrOsIoStatus xr_path_dirname_owned(const XrOsIoPolicy *policy, const char *path, char **output) {
+    if (!io_policy_valid(policy) || !path || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK};
+    size_t length = 0;
+    if (!io_length(&io, path, &length)) return io.status;
+    size_t root = path_root_length(&io, path, length);
+    while (length > root && io_work(&io, 1) && path_separator(path[length - 1])) --length;
+    while (length > root && io_work(&io, 1) && !path_separator(path[length - 1])) --length;
+    while (length > root && io_work(&io, 1) && path_separator(path[length - 1])) --length;
+    const char *source = path;
+    if (!length) { source = "."; length = 1; }
+    char *result = io_alloc(&io, length + 1);
+    if (result && io_copy(&io, result, source, length) && io_work(&io, 1)) result[length] = 0;
+    if (io.status == XR_OS_IO_OK) *output = result;
+    else io_free(&io, result);
+    return io.status;
 }
 
-char *xr_path_join(const char *dir, const char *name) {
-    if (!dir || !name)
-        return NULL;
-
-    size_t dir_len = strlen(dir);
-    size_t name_len = strlen(name);
-
-    /* Strip trailing slashes from dir */
-    while (dir_len > 0 && dir[dir_len - 1] == '/') {
-        dir_len--;
+XR_FUNC XrOsIoStatus xr_path_join_owned(const XrOsIoPolicy *policy, const char *dir,
+    const char *name, char **output) {
+    if (!io_policy_valid(policy) || !dir || !name || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; size_t dl = 0, nl = 0;
+    if (!io_length(&io, dir, &dl) || !io_length(&io, name, &nl)) return io.status;
+    if (dl > 1 && io_work(&io, 1) && path_separator(dir[dl - 1])) {
+        size_t root = path_root_length(&io, dir, dl);
+        while (dl > root && io_work(&io, 1) && path_separator(dir[dl - 1])) --dl;
     }
-
-    /* Handle empty dir after stripping */
-    if (dir_len == 0)
-        return xr_strdup(name);
-
-    char *result = (char *) xr_malloc(dir_len + 1 + name_len + 1);
-    if (!result)
-        return NULL;
-
-    memcpy(result, dir, dir_len);
-    result[dir_len] = '/';
-    memcpy(result + dir_len + 1, name, name_len);
-    result[dir_len + 1 + name_len] = '\0';
-    return result;
+    bool separator = dl != 0;
+    if (separator && io_work(&io, 1) && path_separator(dir[dl - 1])) separator = false;
+    if (nl > SIZE_MAX - 2 || dl > SIZE_MAX - nl - 2) return XR_OS_IO_BUDGET;
+    size_t size = dl + (separator ? 1u : 0u) + nl + 1;
+    char *result = io_alloc(&io, size);
+    if (result && io_copy(&io, result, dir, dl)) {
+        size_t offset = dl;
+        if (separator && io_work(&io, 1)) result[offset++] = '/';
+        if (io_copy(&io, result + offset, name, nl + 1)) *output = result;
+    }
+    if (io.status != XR_OS_IO_OK) io_free(&io, result);
+    return io.status;
 }
 
 char *xr_path_basename(const char *path) {
@@ -193,49 +190,35 @@ char *xr_path_basename(const char *path) {
     return result;
 }
 
-char *xr_realpath(const char *path, XrPathStatus *status) {
-    XrPathStatus ignored;
-    if (!status) status = &ignored;
-    *status = XR_PATH_INVALID;
-    if (!path)
-        return NULL;
-
+XR_FUNC XrOsIoStatus xr_realpath_owned(const XrOsIoPolicy *policy, const char *path, char **output) {
+    if (!io_policy_valid(policy) || !path || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK};
 #ifdef XR_OS_WINDOWS
-    XrWinPathStatus converted;
-    wchar_t *wide = xr_win_utf8_path(path, &converted);
-    if (!wide) {
-        *status = fileio_conversion_status(converted);
-        return NULL;
+    wchar_t *wide = NULL, *resolved = NULL;
+    io_status(&io, xr_win_utf8_text_owned(policy, path, &wide));
+    DWORD units = 0;
+    if (io_work(&io, 1)) {
+        units = GetFullPathNameW(wide, 0, NULL, NULL);
+        if (!units || units > 32768) io_status(&io, units ? XR_OS_IO_BUDGET : io_windows_status(GetLastError()));
     }
-    DWORD units = GetFullPathNameW(wide, 0, NULL, NULL);
-    if (!units || units > 32768) {
-        *status = units ? XR_PATH_BUDGET : fileio_windows_status(GetLastError());
-        xr_free(wide); return NULL;
+    if (io.status == XR_OS_IO_OK) resolved = io_alloc(&io, (size_t)units * sizeof(wchar_t));
+    if (resolved && io_work(&io, 1 + (size_t)units * sizeof(wchar_t))) {
+        DWORD length = GetFullPathNameW(wide, units, resolved, NULL);
+        if (!length || length >= units) io_status(&io, length ? XR_OS_IO_BUDGET : io_windows_status(GetLastError()));
     }
-    wchar_t *resolved = xr_malloc((size_t)units * sizeof(wchar_t));
-    if (!resolved) { *status = XR_PATH_OUT_OF_MEMORY; xr_free(wide); return NULL; }
-    DWORD length = GetFullPathNameW(wide, units, resolved, NULL);
-    DWORD error = length ? ERROR_SUCCESS : GetLastError();
-    xr_free(wide);
     char *result = NULL;
-    if (length && length < units) {
-        result = xr_win_utf16_text(resolved, &converted);
-        *status = result ? XR_PATH_OK : fileio_conversion_status(converted);
-    } else {
-        *status = length ? XR_PATH_BUDGET : fileio_windows_status(error);
-    }
-    xr_free(resolved);
-    return result;
+    if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf16_text_owned(policy, resolved, &result));
+    io_free(&io, resolved); io_free(&io, wide);
 #else
-    char *rp = realpath(path, NULL);
-    if (!rp) {
-        *status = fileio_errno_status(errno);
-        return NULL;
-    }
-
-    char *dup = xr_strdup(rp);
-    *status = dup ? XR_PATH_OK : XR_PATH_OUT_OF_MEMORY;
-    free(rp); /* xr:allow-raw-alloc realpath uses system malloc */
-    return dup;
+    size_t length = 0;
+    if (!io_length(&io, path, &length)) return io.status;
+    /* Supplying the output storage avoids realpath(NULL)'s hidden allocation.
+     * POSIX realpath requires room for PATH_MAX, including its terminator. */
+    char *result = io_alloc(&io, XR_PATH_LIMIT_MAX_PATH);
+    if (result && io_work(&io, 1 + length + XR_PATH_LIMIT_MAX_PATH) && !realpath(path, result))
+        io_status(&io, io_errno_status(errno));
+    if (io.status != XR_OS_IO_OK) { io_free(&io, result); result = NULL; }
 #endif
+    if (io.status == XR_OS_IO_OK) *output = result;
+    return io.status;
 }

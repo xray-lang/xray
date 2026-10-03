@@ -1,56 +1,72 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcli_canonical_source.h - Shared CLI source-to-program request adapter
+ * xcli_canonical_source.h - Shared CLI admission to an owned Source product
  *
  * KEY CONCEPT:
- *   Every source product command derives the same exact module identity and
- *   source snapshot before delegating to the app-neutral program owner.
+ *   Every projection receives the same source owner and caller ledger.
  */
-
 #ifndef XCLI_CANONICAL_SOURCE_H
 #define XCLI_CANONICAL_SOURCE_H
+#include "../../program/xr_xir_source_product.h"
+#include "../../module/xnative_package.h"
+#include "../../toolchain/xcompiler_session.h"
 
-#include "../../program/xr_program_source_build.h"
+typedef struct XrCliCompileSourceRequest {
+    const XrXirCompileContext *context;
+    const char *absolute_entry_path;
+    const char *absolute_stdlib_path;
+    const struct XrXirLibraryCatalog *libraries;
+    XrTomlParseLimits manifest_limits;
+    XrXirTarget target;
+} XrCliCompileSourceRequest;
 
-struct XrVMRuntime;
+typedef enum XrCliCompileSourceStatus {
+    XR_CLI_COMPILE_SOURCE_OK,
+    XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT,
+    XR_CLI_COMPILE_SOURCE_NOT_FOUND,
+    XR_CLI_COMPILE_SOURCE_INVALID,
+    XR_CLI_COMPILE_SOURCE_LIMIT,
+    XR_CLI_COMPILE_SOURCE_BUDGET,
+    XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY,
+    XR_CLI_COMPILE_SOURCE_IO,
+    XR_CLI_COMPILE_SOURCE_UNSUPPORTED,
+    XR_CLI_COMPILE_SOURCE_REJECTED
+} XrCliCompileSourceStatus;
 
-#define XR_CLI_CANONICAL_SOURCE_SCHEMA_VERSION UINT32_C(4)
-#define XR_CLI_CANONICAL_SOURCE_DIAGNOSTIC_SIZE 512u
+typedef enum XrCliCompileSourceStage {
+    XR_CLI_COMPILE_SOURCE_INPUT,
+    XR_CLI_COMPILE_SOURCE_PATH,
+    XR_CLI_COMPILE_SOURCE_AUTHORITY,
+    XR_CLI_COMPILE_SOURCE_SESSION,
+    XR_CLI_COMPILE_SOURCE_PRODUCT
+} XrCliCompileSourceStage;
 
-typedef struct XrCliCanonicalSourceRequest {
-    uint32_t schema_version;
-    struct XrVMRuntime *compiler_host;
-    const char *entry_source_path;
-    const char *entry_function;
-    uint8_t entry_kind;
-    uint8_t source_profile;
-    uint8_t discover_tests;
-    uint8_t reserved8[5];
-    XrFingerprint semantic_profile_fingerprint;
-} XrCliCanonicalSourceRequest;
+typedef struct XrCliCompileSourceDiagnostic {
+    XrCliCompileSourceStatus status;
+    XrCliCompileSourceStage stage;
+    XrManifestStatus authority_status;
+    XrManifestDiagnostic authority;
+    XrCompilerSessionStatus session_status;
+    XrXirSourceProductDiagnostic source;
+} XrCliCompileSourceDiagnostic;
 
-typedef enum XrCliCanonicalSourceStatus {
-    XR_CLI_CANONICAL_SOURCE_OK = 0,
-    XR_CLI_CANONICAL_SOURCE_INVALID_INPUT,
-    XR_CLI_CANONICAL_SOURCE_AUTHORITY_REJECTED,
-    XR_CLI_CANONICAL_SOURCE_SOURCE_REJECTED,
-    XR_CLI_CANONICAL_SOURCE_BUILD_REJECTED,
-} XrCliCanonicalSourceStatus;
+/* One outer operation creates a ledger from these defaults. Stage adapters
+ * keep that ledger; they do not create a new allowance for each stage. */
+XR_FUNC XrCompileResourceLimits xr_cli_compile_default_resource_limits(void);
+XR_FUNC XrTomlParseLimits xr_cli_compile_default_manifest_limits(void);
 
-typedef struct XrCliCanonicalSourceDiagnostic {
-    XrCliCanonicalSourceStatus status;
-    XrProgramSourceDiagnostic build;
-    char message[XR_CLI_CANONICAL_SOURCE_DIAGNOSTIC_SIZE];
-} XrCliCanonicalSourceDiagnostic;
-
-XR_FUNC XrCliCanonicalSourceStatus xr_cli_canonical_source_build(
-    const XrCliCanonicalSourceRequest *request, XrProgramSourceProduct *product_out,
-    XrCliCanonicalSourceDiagnostic *diagnostic_out);
-XR_FUNC const char *xr_cli_canonical_source_status_name(XrCliCanonicalSourceStatus status);
-
-#endif  // XCLI_CANONICAL_SOURCE_H
+/* Inputs are borrowed synchronously. NULL libraries means no published input.
+ * Output must be empty and is preserved on failure. Initialize diagnostics to
+ * zero; free their owned partial snapshot before reusing them. Neither products
+ * nor diagnostics borrow this request, its Catalog, or the temporary Session.
+ * The target selects the existing Lowered representation, not host capability. */
+XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
+    const XrCliCompileSourceRequest *request, XrXirSourceProduct **output,
+    XrCliCompileSourceDiagnostic *diagnostic);
+XR_FUNC void xr_cli_compile_source_diagnostic_free(XrCliCompileSourceDiagnostic *diagnostic);
+XR_FUNC const char *xr_cli_compile_source_status_name(XrCliCompileSourceStatus status);
+#endif // XCLI_CANONICAL_SOURCE_H

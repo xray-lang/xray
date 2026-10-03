@@ -53,7 +53,7 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         if (!source_work(ctx,node)) return false;
         const XrXirNominalField *field=&declaration->fields[f];
         const char *name=member->as.member_access.name;
-        if (strlen(name)!=field->name.length || memcmp(name,field->name.bytes,field->name.length)) continue;
+        if (source_text_size(ctx, name)!=field->name.length || !source_span_same(ctx, NULL, name, field->name.bytes, field->name.length)) continue;
         if (!source_substitute(ctx,&substitution,field->type,0,&output->type)) return false;
         output->present=true;break;
     }

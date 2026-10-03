@@ -10,9 +10,11 @@ if(NOT DEFINED XIR_SDK_BUNDLE_DIR)
 endif()
 add_library(xir_sdk_resources_production STATIC
     "${XIR_TARGET_SOURCE_ROOT}/src/toolchain/xr_xir_runtime_sdk.c"
+    "${XIR_TARGET_SOURCE_ROOT}/src/base/xjson_cursor.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xcompile_resources.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xsha256.c")
 add_executable(test_xir_sdk_resources "${CMAKE_CURRENT_LIST_DIR}/test_xir_runtime_sdk.c"
+    "${XIR_TARGET_SOURCE_ROOT}/src/base/xjson_cursor.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xsha256.c" "${XIR_TARGET_SOURCE_ROOT}/src/base/xutf8.c")
 add_executable(test_xir_sdk_resources_lease "${CMAKE_CURRENT_LIST_DIR}/test_xir_sdk_lease.c")
 target_link_libraries(test_xir_sdk_resources_lease PRIVATE xir_sdk_resources_production)
@@ -28,9 +30,19 @@ foreach(target xir_sdk_resources_production test_xir_sdk_resources test_xir_sdk_
 endforeach()
 add_test(NAME test_xir_sdk_resources COMMAND test_xir_sdk_resources
     "${XIR_SDK_BUNDLE_DIR}" "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json")
+# Target-only impact gate; the default executable invocation remains exhaustive.
+add_test(NAME test_xir_sdk_shared_resources COMMAND test_xir_sdk_resources
+    "${XIR_SDK_BUNDLE_DIR}" "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json" --shared-resources)
+set_tests_properties(test_xir_sdk_shared_resources PROPERTIES
+    LABELS "unit;xir;ownership;sdk;resources;target-impact" RUN_SERIAL TRUE TIMEOUT 300 COST 1)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME test_xir_sdk_resources_manifest COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_LIST_DIR}/sdk_manifest_vectors.py" --executable $<TARGET_FILE:test_xir_sdk_resources>
     --bundle "${XIR_SDK_BUNDLE_DIR}")
 set_tests_properties(test_xir_sdk_resources test_xir_sdk_resources_manifest PROPERTIES
     LABELS "unit;xir;ownership;sdk;resources" RUN_SERIAL TRUE TIMEOUT 300)
+if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+    set_tests_properties(test_xir_sdk_resources PROPERTIES COST 210)
+else()
+    set_tests_properties(test_xir_sdk_resources PROPERTIES COST 30)
+endif()

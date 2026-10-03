@@ -5,6 +5,7 @@ import json
 import struct
 import re
 from pathlib import Path
+from derive_test_roles_vectors import historical_vector
 
 
 def packet(contract, schema=21):
@@ -47,6 +48,8 @@ def main():
         text = (directory / record['path']).read_text(encoding='utf-8')
         match = re.search(r'static const uint8_t ' + record['name'] + r'\[\] = \{(.*?)\};', text, re.S)
         literal = bytes(int(value,16) for value in re.findall(r'0x[0-9a-fA-F]{2}', match[1]))
+        if 'sha256' not in record:
+            literal = historical_vector(record['path'], record['name'])
         assert literal[:8] == b'XRCHK\0\0\0' and struct.unpack_from('<Q',literal,24)[0] == len(literal)-64
         assert hashlib.sha256(literal[:32]+literal[64:]).digest() == literal[32:64]
         if 'sha256' in record:

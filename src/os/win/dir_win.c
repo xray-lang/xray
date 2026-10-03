@@ -1,95 +1,89 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xdir_win.c - Windows implementation of xdir.h.
- *
- * FindFirstFileA / FindNextFileA wrap-and-skip-dot-entries
- * iterator. The first FindFirstFile call already returns the
- * first entry, so we need a "primed" flag to defer that hand-off
- * to the first xr_dir_next.
- *
- * UTF-8 note: callers pass UTF-8 paths. The narrow FindFirstFileA
- * uses the ANSI code page, which is not UTF-8 on most Windows
- * deployments, so non-ASCII paths are not round-trip-safe in this
- * implementation. A wide-char (-W) variant with MultiByteToWideChar
- * conversion is the right long-term fix; tracked separately.
+ * dir_win.c - One UTF-8 directory iterator with explicit allocation/work policy
  */
-
 #include "../os_dir.h"
-
-#include "xmalloc.h"
-#include <string.h>
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
+#include "../../base/xwindows_utf8.h"
 
 struct XrDirIter {
-    HANDLE h;
-    WIN32_FIND_DATAA data;
-    bool primed;  // true if `data` already holds the next entry
+    XrOsIoPolicy policy;
+    HANDLE handle;
+    WIN32_FIND_DATAW data;
+    XrDirEntry pending;
+    XrOsIoStatus status;
+    bool primed, ended;
 };
 
-XrDirIter *xr_dir_open(const char *path) {
-    if (!path || !*path)
-        return NULL;
-
-    // FindFirstFile expects a glob pattern; append "\\*".
-    char pattern[XR_DIR_ENTRY_NAME_MAX * 4];
-    size_t plen = strlen(path);
-    if (plen + 3 >= sizeof(pattern))
-        return NULL;
-    memcpy(pattern, path, plen);
-    if (plen > 0 && pattern[plen - 1] != '\\' && pattern[plen - 1] != '/')
-        pattern[plen++] = '\\';
-    pattern[plen++] = '*';
-    pattern[plen] = '\0';
-
-    XrDirIter *it = (XrDirIter *) xr_malloc(sizeof(*it));
-    if (!it)
-        return NULL;
-
-    it->h = FindFirstFileA(pattern, &it->data);
-    if (it->h == INVALID_HANDLE_VALUE) {
-        xr_free(it);
-        return NULL;
+XR_FUNC XrOsIoStatus xr_os_io_dir_open(const XrOsIoPolicy *policy, const char *path, XrDirIter **output) {
+    if (!io_policy_valid(policy) || !path || !output) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; size_t length = 0;
+    if (!io_length(&io, path, &length)) return io.status;
+    if (!length) return XR_OS_IO_BAD_ARGUMENT;
+    if (length > SIZE_MAX - 3) return XR_OS_IO_BUDGET;
+    XrDirIter *iterator = io_alloc(&io, sizeof(*iterator));
+    if (!iterator) return io.status;
+    if (!io_clear(&io, iterator, sizeof(*iterator))) { io_free(&io, iterator); return io.status; }
+    iterator->policy = *policy; iterator->handle = INVALID_HANDLE_VALUE;
+    char *pattern = io_alloc(&io, length + 3); wchar_t *wide = NULL;
+    if (pattern && io_copy(&io, pattern, path, length) && io_work(&io, 1)) {
+        bool separator = path[length - 1] != '/' && path[length - 1] != 92;
+        if (separator && io_work(&io, 1)) pattern[length++] = 92;
+        if (io_work(&io, 2)) { pattern[length++] = '*'; pattern[length] = 0; }
     }
-    it->primed = true;
-    return it;
+    if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf8_path_owned(policy, pattern, &wide));
+    if (io_work(&io, 1)) {
+        iterator->handle = FindFirstFileW(wide, &iterator->data);
+        if (iterator->handle == INVALID_HANDLE_VALUE) io_status(&io, io_windows_status(GetLastError()));
+        else iterator->primed = true;
+    }
+    io_free(&io, wide); io_free(&io, pattern);
+    if (io.status != XR_OS_IO_OK) xr_os_io_dir_close(iterator);
+    else *output = iterator;
+    return io.status;
 }
 
-bool xr_dir_next(XrDirIter *it, XrDirEntry *out) {
-    if (!it || !out)
-        return false;
-
-    for (;;) {
-        if (!it->primed) {
-            if (!FindNextFileA(it->h, &it->data))
-                return false;
+XR_FUNC XrOsIoStatus xr_os_io_dir_next(XrDirIter *iterator, XrDirEntry *output) {
+    if (!iterator || !output) return XR_OS_IO_BAD_ARGUMENT;
+    if (iterator->status != XR_OS_IO_OK) return iterator->status;
+    if (iterator->ended) return XR_OS_IO_END;
+    XrIoContext io = {&iterator->policy, XR_OS_IO_OK};
+    while (io.status == XR_OS_IO_OK) {
+        if (!iterator->primed && io_work(&io, 1) && !FindNextFileW(iterator->handle, &iterator->data)) {
+            DWORD error = GetLastError();
+            if (error == ERROR_NO_MORE_FILES) { iterator->ended = true; return XR_OS_IO_END; }
+            io_status(&io, io_windows_status(error));
         }
-        it->primed = false;
-
-        const char *n = it->data.cFileName;
-        if (n[0] == '.' && (n[1] == '\0' || (n[1] == '.' && n[2] == '\0')))
-            continue;
-
-        size_t nlen = strlen(n);
-        if (nlen >= XR_DIR_ENTRY_NAME_MAX)
-            continue;
-        memcpy(out->name, n, nlen + 1);
-        out->is_dir = (it->data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        return true;
+        iterator->primed = false;
+        if (io.status != XR_OS_IO_OK) break;
+        const wchar_t *name = iterator->data.cFileName;
+        bool dot = false;
+        if (io_work(&io, sizeof(wchar_t)) && name[0] == '.' && io_work(&io, sizeof(wchar_t))) {
+            if (!name[1]) dot = true;
+            else if (name[1] == '.' && io_work(&io, sizeof(wchar_t)) && !name[2]) dot = true;
+        }
+        if (dot) continue;
+        char *text = NULL; size_t length = 0;
+        if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf16_text_owned(io.policy, name, &text));
+        if (io.status == XR_OS_IO_OK && io_length(&io, text, &length)) {
+            if (length >= XR_DIR_ENTRY_NAME_MAX) io_status(&io, XR_OS_IO_BUDGET);
+            else if (io_clear(&io, &iterator->pending, sizeof(iterator->pending)) &&
+                io_copy(&io, iterator->pending.name, text, length + 1)) {
+                iterator->pending.is_dir = (iterator->data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                io_copy(&io, output, &iterator->pending, sizeof(*output));
+            }
+        }
+        io_free(&io, text); break;
     }
+    iterator->status = io.status;
+    return io.status;
 }
-
-void xr_dir_close(XrDirIter *it) {
-    if (!it)
-        return;
-    if (it->h != INVALID_HANDLE_VALUE)
-        FindClose(it->h);
-    xr_free(it);
+XR_FUNC void xr_os_io_dir_close(XrDirIter *iterator) {
+    if (!iterator) return;
+    if (iterator->handle != INVALID_HANDLE_VALUE) FindClose(iterator->handle);
+    XrOsIoPolicy policy = iterator->policy;
+    policy.free(policy.context, iterator);
 }

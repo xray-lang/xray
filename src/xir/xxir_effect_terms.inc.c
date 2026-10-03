@@ -12,12 +12,11 @@
  */
 typedef struct EffectTermMemory {
     struct EffectTermMemory *next;
-    uint64_t bytes;
 } EffectTermMemory;
 typedef struct EffectTerms {
     XrXirTypes types;
     EffectTermMemory *memory;
-    XrXirBudget *remaining;
+    XrXirCompileContext *remaining;
     XrXirStatus status;
     uint32_t capacity;
 } EffectTerms;
@@ -25,31 +24,31 @@ typedef struct EffectTermFrame {
     XrXirTypeNode node;
     uint32_t index, next;
     void *children;
-    uint64_t bytes;
 } EffectTermFrame;
 static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     if (!count || pool->status != XR_XIR_OK) return NULL;
     if (count > (SIZE_MAX - sizeof(EffectTermMemory)) / size ||
-        count * size + sizeof(EffectTermMemory) > pool->remaining->scratch_bytes ||
-        !effect_spend(&pool->remaining->work, count + 1)) {
+(count * size + sizeof(EffectTermMemory) > SIZE_MAX) ||
+        !xir_compile_work(pool->remaining, count + 1)) {
         pool->status = XR_XIR_BUDGET; return NULL;
     }
     uint64_t bytes = count * size + sizeof(EffectTermMemory);
-    EffectTermMemory *memory = xr_calloc(1, (size_t)bytes);
-    if (!memory) { pool->status = XR_XIR_OUT_OF_MEMORY; return NULL; }
-    pool->remaining->scratch_bytes -= bytes;
-    memory->bytes = bytes; memory->next = pool->memory; pool->memory = memory;
+    EffectTermMemory *memory = xir_compile_calloc(pool->remaining, 1, (size_t)bytes, &allocation_status);
+    if (!memory) { pool->status = allocation_status; return NULL; }
+
+    memory->next = pool->memory; pool->memory = memory;
     return memory + 1;
 }
 static void effect_terms_free(EffectTerms *pool) {
     while (pool->memory) {
         EffectTermMemory *memory = pool->memory; pool->memory = memory->next;
-        pool->remaining->scratch_bytes += memory->bytes; xr_free(memory);
+         xr_compile_resources_free(memory);
     }
 }
 /* Shape equality intentionally excludes executable field/layout projections. */
 static bool effect_term_same(EffectTerms *pool, const XrXirTypeNode *a, const XrXirTypeNode *b) {
-    if (!effect_spend(&pool->remaining->work, (uint64_t)a->parameter_count + a->nominal.argument_count + 1)) {
+    if (!xir_compile_work(pool->remaining, (uint64_t)a->parameter_count + a->nominal.argument_count + 1)) {
         pool->status = XR_XIR_BUDGET; return false;
     }
     if (a->kind != b->kind || a->flags != b->flags || a->element != b->element ||
@@ -75,19 +74,19 @@ static XrXirType effect_term_intern(EffectTerms *pool, XrXirTypeNode node) {
         if (capacity > maximum) capacity = maximum;
         XrXirTypeNode *nodes = effect_terms_alloc(pool, capacity, sizeof(*nodes));
         if (!nodes) return XR_XIR_UNIT;
-        if (pool->types.count) memcpy(nodes, pool->types.nodes, (size_t)pool->types.count * sizeof(*nodes));
+        if (pool->types.count) { if (!xir_compile_work(pool->remaining, (size_t)pool->types.count * sizeof(*nodes))) { pool->status = XR_XIR_BUDGET; return XR_XIR_UNIT; } memcpy(nodes, pool->types.nodes, (size_t)pool->types.count * sizeof(*nodes)); }
         pool->types.nodes = nodes; pool->capacity = capacity;
     }
     if (node.nominal.argument_count) {
         XrXirType *arguments = effect_terms_alloc(pool, node.nominal.argument_count, sizeof(*arguments));
         if (!arguments) return XR_XIR_UNIT;
-        memcpy(arguments, node.nominal.arguments, (size_t)node.nominal.argument_count * sizeof(*arguments));
+        { if (!xir_compile_work(pool->remaining, (size_t)node.nominal.argument_count * sizeof(*arguments))) { pool->status = XR_XIR_BUDGET; return XR_XIR_UNIT; } memcpy(arguments, node.nominal.arguments, (size_t)node.nominal.argument_count * sizeof(*arguments)); }
         node.nominal.arguments = arguments;
     }
     if (node.parameter_count) {
         XrXirCallableParameter *parameters = effect_terms_alloc(pool, node.parameter_count, sizeof(*parameters));
         if (!parameters) return XR_XIR_UNIT;
-        memcpy(parameters, node.parameters, (size_t)node.parameter_count * sizeof(*parameters));
+        { if (!xir_compile_work(pool->remaining, (size_t)node.parameter_count * sizeof(*parameters))) { pool->status = XR_XIR_BUDGET; return XR_XIR_UNIT; } memcpy(parameters, node.parameters, (size_t)node.parameter_count * sizeof(*parameters)); }
         node.parameters = parameters;
     }
     node.nominal.fields = NULL; node.nominal.field_count = 0;
@@ -96,7 +95,7 @@ static XrXirType effect_term_intern(EffectTerms *pool, XrXirTypeNode node) {
 }
 static bool effect_term_ready(EffectTerms *pool, XrXirType type, const XrXirGeneric *arguments,
     const XrXirType *cache, XrXirType *result) {
-    if (!effect_spend(&pool->remaining->work, 1)) { pool->status = XR_XIR_BUDGET; return false; }
+    if (!xir_compile_work(pool->remaining, 1)) { pool->status = XR_XIR_BUDGET; return false; }
     if ((uint32_t)type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t)type < XR_XIR_TYPE_PARAMETER_LIMIT) {
         uint32_t p = (uint32_t)type - XR_XIR_TYPE_PARAMETER_BASE;
         if (p >= arguments->argument_count) { pool->status = XR_XIR_BAD_TYPE; return false; }
@@ -108,37 +107,38 @@ static bool effect_term_ready(EffectTerms *pool, XrXirType type, const XrXirGene
     return *result != XR_XIR_UNIT;
 }
 static bool effect_term_push(EffectTerms *pool, EffectTermFrame *frame, uint32_t index) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     *frame = (EffectTermFrame){0}; frame->index = index; frame->node = pool->types.nodes[index];
     frame->node.parameter_span = 0;
     uint64_t bytes = (uint64_t)frame->node.nominal.argument_count * sizeof(XrXirType) +
         (uint64_t)frame->node.parameter_count * sizeof(XrXirCallableParameter);
-    if (bytes > SIZE_MAX || bytes > pool->remaining->scratch_bytes ||
-        !effect_spend(&pool->remaining->work, bytes + 1)) { pool->status = XR_XIR_BUDGET; return false; }
+    if (bytes > SIZE_MAX ||
+        !xir_compile_work(pool->remaining, 1)) { pool->status = XR_XIR_BUDGET; return false; }
     if (bytes) {
-        frame->children = xr_calloc(1, (size_t)bytes);
-        if (!frame->children) { pool->status = XR_XIR_OUT_OF_MEMORY; return false; }
-        frame->bytes = bytes; pool->remaining->scratch_bytes -= bytes;
+        frame->children = xir_compile_calloc(pool->remaining, 1, (size_t)bytes, &allocation_status);
+        if (!frame->children) { pool->status = allocation_status; return false; }
         if (frame->node.kind == XR_XIR_TYPE_NOMINAL) frame->node.nominal.arguments = frame->children;
         else frame->node.parameters = frame->children;
     }
     return true;
 }
-static void effect_term_pop(EffectTerms *pool, EffectTermFrame *frame) {
-    xr_free(frame->children); pool->remaining->scratch_bytes += frame->bytes;
+static void effect_term_pop(EffectTermFrame *frame) {
+    xr_compile_resources_free(frame->children);
 }
 static XrXirStatus effect_terms_substitute(EffectTerms *pool, XrXirType type,
     const XrXirGeneric *arguments, XrXirType *output) {
+    XrXirStatus allocation_status = XR_XIR_OK;
     *output = XR_XIR_UNIT;
     if (!xr_xir_type_span(&pool->types, type)) { *output = type; return XR_XIR_OK; }
     uint32_t size = pool->types.count;
     uint64_t bytes = (uint64_t)size * (sizeof(EffectTermFrame) + sizeof(XrXirType));
-    if (bytes > SIZE_MAX || bytes > pool->remaining->scratch_bytes ||
-        !effect_spend(&pool->remaining->work, (uint64_t)size * 2 + 1)) return XR_XIR_BUDGET;
-    pool->remaining->scratch_bytes -= bytes;
-    EffectTermFrame *stack = size ? xr_calloc(size, sizeof(*stack)) : NULL;
-    XrXirType *cache = size ? xr_calloc(size, sizeof(*cache)) : NULL;
+    if (bytes > SIZE_MAX ||
+        !xir_compile_work(pool->remaining, (uint64_t)size * 2 + 1)) return XR_XIR_BUDGET;
+
+    EffectTermFrame *stack = size ? xir_compile_calloc(pool->remaining, size, sizeof(*stack), &allocation_status) : NULL;
+    XrXirType *cache = size ? xir_compile_calloc(pool->remaining, size, sizeof(*cache), &allocation_status) : NULL;
     uint32_t depth = 0;
-    if (size && (!stack || !cache)) pool->status = XR_XIR_OUT_OF_MEMORY;
+    if (size && (!stack || !cache)) pool->status = allocation_status;
     XrXirType result = XR_XIR_UNIT;
     if (pool->status == XR_XIR_OK && !effect_term_ready(pool, type, arguments, cache, &result) &&
         pool->status == XR_XIR_OK) {
@@ -146,14 +146,14 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool, XrXirType type,
         else if (effect_term_push(pool, &stack[depth], (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE)) ++depth;
     }
     while (depth && pool->status == XR_XIR_OK) {
-        if (!effect_spend(&pool->remaining->work, 1)) { pool->status = XR_XIR_BUDGET; break; }
+        if (!xir_compile_work(pool->remaining, 1)) { pool->status = XR_XIR_BUDGET; break; }
         EffectTermFrame *frame = &stack[depth - 1];
         XrXirTypeNode source = pool->types.nodes[frame->index];
         uint32_t components = source.kind == XR_XIR_TYPE_NOMINAL ? source.nominal.argument_count :
             source.kind == XR_XIR_TYPE_CALLABLE ? source.parameter_count + 1 : 1;
         if (frame->next == components) {
             cache[frame->index] = effect_term_intern(pool, frame->node);
-            effect_term_pop(pool, frame); --depth; continue;
+            effect_term_pop( frame); --depth; continue;
         }
         XrXirType child = source.element;
         if (source.kind == XR_XIR_TYPE_NOMINAL) child = source.nominal.arguments[frame->next];
@@ -176,9 +176,10 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool, XrXirType type,
         ++frame->next;
     }
     if (pool->status == XR_XIR_OK) {
-        if (!effect_term_ready(pool, type, arguments, cache, output)) pool->status = XR_XIR_BAD_TYPE;
+        if (!effect_term_ready(pool, type, arguments, cache, output) && pool->status == XR_XIR_OK)
+            pool->status = XR_XIR_BAD_TYPE;
     }
-    while (depth) effect_term_pop(pool, &stack[--depth]);
-    xr_free(cache); xr_free(stack); pool->remaining->scratch_bytes += bytes;
+    while (depth) effect_term_pop( &stack[--depth]);
+    xr_compile_resources_free(cache); xr_compile_resources_free(stack);
     return pool->status;
 }

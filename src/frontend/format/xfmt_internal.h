@@ -33,14 +33,36 @@
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
 
+typedef struct XrFmtContext {
+    char *output;
+    size_t capacity, length;
+    int indent_level, line_start, column;
+    bool block_literal_closed, force_fn_expr;
+    XrFmtConfig configuration;
+    const XrFmtConfig *config;
+    XrCompileState *state;
+} XrFmtContext;
+
+XR_FUNC bool xfmt_work(XrFmtContext *ctx, uint64_t units);
+XR_FUNC bool xfmt_step(XrFmtContext *ctx);
+XR_FUNC bool xfmt_healthy(const XrFmtContext *ctx);
+XR_FUNC void xfmt_fail(XrFmtContext *ctx, XrCompileResourceStatus status);
+XR_FUNC void *xfmt_alloc_array(XrFmtContext *ctx, size_t count, size_t size);
+XR_FUNC size_t xfmt_length(XrFmtContext *ctx, const char *text);
+XR_FUNC int xfmt_compare(XrFmtContext *ctx, const char *left, const char *right);
+XR_FUNC void xfmt_write_bytes(XrFmtContext *ctx, const char *bytes, size_t length);
+XR_FUNC void xfmt_node(XrFmtContext *ctx, AstNode *node);
+XR_FUNC void xfmt_type(XrFmtContext *ctx, XrTypeRef *type);
+
 // ---------------------------------------------------------------------------
 // Buffer helpers (defined in xfmt.c)
 // ---------------------------------------------------------------------------
 
-XR_FUNC void xfmt_ensure_capacity(XrFmtContext *ctx, size_t additional);
+XR_FUNC bool xfmt_ensure_capacity(XrFmtContext *ctx, size_t additional);
 XR_FUNC void xfmt_write_char(XrFmtContext *ctx, char c);
 XR_FUNC void xfmt_write_str(XrFmtContext *ctx, const char *str);
 XR_FUNC void xfmt_write_fmt(XrFmtContext *ctx, const char *fmt, ...) XR_PRINTF_FMT(2, 3);
+XR_FUNC int xfmt_indent_width(XrFmtContext *ctx);
 XR_FUNC void xfmt_write_indent(XrFmtContext *ctx);
 XR_FUNC void xfmt_write_newline(XrFmtContext *ctx);
 XR_FUNC void xfmt_write_space(XrFmtContext *ctx);
