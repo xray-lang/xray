@@ -66,13 +66,15 @@ bool xr_thread_create_ex(xr_thread_t *t, xr_thread_fn fn, void *arg, size_t stac
     return create_with_stack(t, fn, arg, stack_size);
 }
 
-int xr_thread_join(xr_thread_t t, void **retval) {
+XR_FUNC int xr_thread_join(xr_thread_t t, void **retval) {
     if (!t.handle)
         return -1;
-    WaitForSingleObject(t.handle, INFINITE);
+    if (WaitForSingleObject(t.handle, INFINITE) != WAIT_OBJECT_0)
+        return -1;
+    if (!CloseHandle(t.handle))
+        return -1;
     if (retval && t.ctx)
         *retval = t.ctx->retval;
-    CloseHandle(t.handle);
     if (t.ctx)
         xr_free(t.ctx);
     return 0;

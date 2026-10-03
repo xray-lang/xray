@@ -127,7 +127,10 @@ XR_FUNC bool xr_thread_create(xr_thread_t *t, xr_thread_fn fn, void *arg);
 XR_FUNC bool xr_thread_create_ex(xr_thread_t *t, xr_thread_fn fn, void *arg, size_t stack_size);
 
 // Block until `t` exits and reap its resources. If `retval` is
-// non-NULL, the thread's return pointer is written there.
+// non-NULL, the thread's return pointer is written there on success.
+// Returns zero on success. On Windows, a failed wait or close leaves
+// retval unchanged and preserves the thread handle/context for retry.
+// The caller must retain that owner after failure, never detach it as cleanup.
 XR_FUNC int xr_thread_join(xr_thread_t t, void **retval);
 
 // Mark `t` so its resources are released automatically when it
