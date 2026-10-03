@@ -21,7 +21,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 #include "xir_scalar_compile_owner.h"
 
-static XrXirArtifact *uninitialized_leaf_fixture(void) {
+static XrXirArtifact *uninitialized_leaf_fixture(const XrXirCompileContext *context) {
     const XrXirType parameter = XR_XIR_I64;
     const XrXirInstruction ops[] = {
         {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0, {0}},
@@ -34,7 +34,7 @@ static XrXirArtifact *uninitialized_leaf_fixture(void) {
     const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_check(&scalar_owner.context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     return lowered;
@@ -61,7 +61,7 @@ static XrXirFunction phi_leaf_fixture(void) {
     return (XrXirFunction) {"phi", 3, parameters, 3, XR_XIR_I64, blocks, 3, ops, 12, inputs, 12};
 }
 
-static XrXirArtifact *fixture_checked(void) {
+static XrXirArtifact *fixture_checked(const XrXirCompileContext *context) {
     const XrXirType add_parameters[] = {XR_XIR_BOOL, XR_XIR_I64, XR_XIR_I64};
     const XrXirType eq_parameters[] = {XR_XIR_I64, XR_XIR_I64};
     const XrXirType bool_parameters[] = {XR_XIR_BOOL};
@@ -208,16 +208,16 @@ static XrXirArtifact *fixture_checked(void) {
     };
     const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_compile_check(&scalar_owner.context, &module, &artifact, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &module, &artifact, NULL) == XR_XIR_OK);
     return artifact;
 }
 
-static XrXirArtifact *fixture_lowered(void) {
-    XrXirArtifact *checked = fixture_checked(), *lowered = NULL;
+static XrXirArtifact *fixture_lowered(const XrXirCompileContext *context) {
+    XrXirArtifact *checked = fixture_checked(context), *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL;
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_checked_read(&scalar_owner.context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(decoded, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_artifact_free(checked);

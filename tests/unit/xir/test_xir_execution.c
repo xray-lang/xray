@@ -36,7 +36,7 @@ static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *conte
 
 int main(void) {
     scalar_compile_begin();
-    { XrXirArtifact *uninitialized = uninitialized_leaf_fixture();
+    { XrXirArtifact *uninitialized = uninitialized_leaf_fixture(&scalar_owner.context);
     XrXirRunContext context = {4, 65536, 0, 0, 0, 0};
     XrXirValue argument = {XR_XIR_I64, 0, -1}, result = {0};
     CHECK(xr_xir_compile_vm_run(uninitialized, 0, &context, &argument, 1, &result) == XR_XIR_RUN_OK);
@@ -48,7 +48,7 @@ int main(void) {
     float_runtime_cases();
     floating_value_admission();
     integer_ir_rejections();
-    XrXirArtifact *artifact = fixture_lowered();
+    XrXirArtifact *artifact = fixture_lowered(&scalar_owner.context);
     execution_cases(run, artifact);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirLayout layout;
@@ -86,7 +86,7 @@ int main(void) {
     artifact = NULL;
     CHECK(result.type == XR_XIR_I64 && result.payload == INT64_MIN);
 
-    XrXirArtifact *checked = fixture_checked();
+    XrXirArtifact *checked = fixture_checked(&scalar_owner.context);
     CHECK(xr_xir_compile_vm_run(checked, 0, &context, NULL, 0, &result) == XR_XIR_RUN_BAD_ARTIFACT);
     XrXirTarget invalid = {0, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked, &invalid, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
@@ -98,7 +98,7 @@ int main(void) {
     /* Lowering inherits the checked artifact limits, not the caller context. */
     uint64_t frame_limit = scalar_owner.context.limits.frame_bytes;
     scalar_owner.context.limits.frame_bytes = 47;
-    checked = fixture_checked();
+    checked = fixture_checked(&scalar_owner.context);
     scalar_owner.context.limits.frame_bytes = frame_limit;
     CHECK(xr_xir_compile_lower(checked, &target, &artifact, NULL) == XR_XIR_BUDGET);
     CHECK(!artifact);

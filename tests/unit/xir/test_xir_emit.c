@@ -17,12 +17,12 @@
 
 int main(int argc, char **argv) {
     scalar_compile_begin();
-    XrXirArtifact *checked = fixture_checked();
+    XrXirArtifact *checked = fixture_checked(&scalar_owner.context);
     XrXirCSource source = {0};
     CHECK(xr_xir_compile_emit_leaf_c(checked, "fixture", 1048576, &source) == XR_XIR_BAD_STAGE);
     CHECK(!source.text && !source.length);
     xr_xir_compile_artifact_free(checked);
-    XrXirArtifact *artifact = fixture_lowered();
+    XrXirArtifact *artifact = fixture_lowered(&scalar_owner.context);
     CHECK(xr_xir_compile_emit_leaf_c(artifact, "invalid;", 1048576, &source) == XR_XIR_BAD_STRUCTURE);
     CHECK(xr_xir_compile_emit_leaf_c(artifact, "fixture", 1, &source) == XR_XIR_BUDGET);
     CHECK(!source.text && !source.length);
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     xr_xir_compile_artifact_free(artifact);
     CHECK(source.length == strlen(source.text));
     CHECK(!strstr(source.text, "({"));
-    XrXirArtifact *uninitialized = uninitialized_leaf_fixture();
+    XrXirArtifact *uninitialized = uninitialized_leaf_fixture(&scalar_owner.context);
     XrXirCSource extra = {0};
     CHECK(xr_xir_compile_emit_leaf_c(uninitialized, "uninitialized", 65536, &extra) == XR_XIR_OK);
     xr_xir_compile_artifact_free(uninitialized);
