@@ -10,8 +10,8 @@ static XrXirStatus path_field_type(const XrXirInstruction *op,
     XrXirType parent, VerifyContext *context) {
     const XrXirTypes *types = context->module->types;
     const XrXirTypeNode *node = xr_xir_type_node(types, parent);
-    if (!node || !xr_xir_type_is_struct(types, parent) || op->immediate < 0 ||
-        (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
+    if (!node || (!xr_xir_type_is_struct(types, parent) && !xr_xir_type_is_class(types, parent)) ||
+        op->immediate < 0 || (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
     uint32_t field = (uint32_t)op->immediate;
     XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, node->nominal.declaration, field, XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;

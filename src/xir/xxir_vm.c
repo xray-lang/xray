@@ -168,6 +168,9 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
         if (kind == XR_XIR_PLACE_CELL) {
             receiver.kind = XR_XIR_ROOT_CELL;
             receiver.value = vm_value_operand(run, place->args[0]);
+        } else if (kind == XR_XIR_PLACE_OBJECT) {
+            receiver.kind = XR_XIR_ROOT_OBJECT;
+            receiver.value = vm_value_operand(run, place->args[0]);
         } else {
             receiver.kind = XR_XIR_ROOT_SLOT;
             receiver.slot = (uint32_t) place->immediate;
@@ -496,7 +499,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         op->op == XR_XIR_CONVERT_NUMBER) return vm_integer_step(run, state);
     if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR)
         return vm_cleanup_step(run, state, op, action);
-    if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE ||
+    if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE || op->op == XR_XIR_OBJECT_PLACE ||
         op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_INDEX_PLACE) {
         state->instruction = next;
         return XR_XIR_RUN_OK;

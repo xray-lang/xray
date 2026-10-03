@@ -95,7 +95,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
         XrXirPlaceKind place = xr_xir_place_kind(function, slot);
         if (place == XR_XIR_PLACE_CELL || place == XR_XIR_PLACE_SLOT ||
-            place == XR_XIR_PLACE_FIELD || place == XR_XIR_PLACE_INDEX) {
+            place == XR_XIR_PLACE_FIELD || place == XR_XIR_PLACE_INDEX || place == XR_XIR_PLACE_OBJECT) {
             if (create) ((uint32_t *) layout->offsets)[slot] = UINT32_MAX;
             else if (layout->offsets[slot] != UINT32_MAX) return XR_XIR_BAD_LAYOUT;
             continue;

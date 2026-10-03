@@ -2233,8 +2233,8 @@ static bool collect_declarations(SourceContext *ctx) {
                     return source_fail(ctx,node,XR_XIR_BUDGET,"method function budget exhausted");
                 functions += (uint32_t)declaration.method_count;
             }
-            if (node->type == AST_STRUCT_DECL) {
-                ClassDeclNode *decl = &node->as.struct_decl;
+            if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL) {
+                ClassDeclNode *decl = node->type == AST_CLASS_DECL ? &node->as.class_decl : &node->as.struct_decl;
                 for (int f = 0; f < decl->field_count; ++f) {
                     if (!source_work(ctx, decl->fields[f])) return false;
                     if (decl->fields[f]->type == AST_FIELD_DECL && decl->fields[f]->as.field_decl.initializer) {
@@ -2779,7 +2779,7 @@ static bool build_bodies(SourceContext *ctx) {
         if(ctx->bodies[f].checked_library)continue;
         ctx->function = f; ctx->module = ctx->bodies[f].module; ctx->returned = false;
         ctx->locals = ctx->scope = NULL;
-        if (ctx->bodies[f].node->type == AST_STRUCT_DECL) {
+        if (ctx->bodies[f].node->type == AST_STRUCT_DECL || ctx->bodies[f].node->type == AST_CLASS_DECL) {
             if (!source_struct_constructor_body(ctx) || !finish_body(ctx)) return false;
             continue;
         }

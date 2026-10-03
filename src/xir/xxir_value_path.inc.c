@@ -77,6 +77,22 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,
     if (slot->type != step->container) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, slot->type);
+    if (step->kind == XR_XIR_PATH_FIELD && node && xr_xir_type_is_class(types, slot->type)) {
+        /* A class is an identity, not a copyable value: its fields change in place, so no
+         * ancestor is made unique and no candidate is published for this step. */
+        if (step->selector < 0 || (uint64_t)step->selector >= node->nominal.field_count)
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+        uint32_t field = (uint32_t)step->selector;
+        if (write && !(types->nominals->identities[node->nominal.declaration].fields[field].flags &
+            XR_XIR_FIELD_MUTABLE)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        XrXirValue handle = path_handle(*slot);
+        XirObject *object = object_pointer(&handle);
+        const XrXirStorageLayout *layout = class_body_layout(object);
+        if (!layout || field >= layout->field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        *slot = (ValuePathSlot){node->nominal.fields[field],
+            (unsigned char *)((XirClassObject *)object + 1) + layout->field_offsets[field], true};
+        return XR_XIR_VALUE_OK;
+    }
     if (step->kind == XR_XIR_PATH_FIELD) {
         if (!node || !xr_xir_type_is_struct(types, slot->type) || step->selector < 0 ||
             (uint64_t)step->selector >= node->nominal.field_count) return XR_XIR_VALUE_BAD_ARGUMENT;

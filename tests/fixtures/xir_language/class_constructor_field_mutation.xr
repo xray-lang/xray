@@ -1,0 +1,11 @@
+class Bag {
+    items: Array<i64>
+    constructor() {
+        this.items = []
+        this.items.push(1)
+    }
+}
+fn main() {
+    var b = Bag()
+}
+main()

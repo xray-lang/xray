@@ -417,6 +417,13 @@ static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
         if (status != XR_XIR_VALUE_OK) return value_call_status(status);
         return place->type == receiver->type ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
     }
+    if (receiver->kind == XR_XIR_ROOT_OBJECT) {
+        /* The object handle is only navigated: class steps never publish through this temporary. */
+        if (receiver->local_payload || receiver->slot || receiver->value.type != (uint32_t) receiver->type)
+            return XR_XIR_CALL_BAD_STATE;
+        place->payload = (void *) &receiver->value.payload;
+        return XR_XIR_CALL_READY;
+    }
     if (!value_unit(receiver->value)) return XR_XIR_CALL_BAD_STATE;
     if (receiver->kind == XR_XIR_ROOT_LOCAL) {
         uint32_t entry = xr_xir_call_current_entry(view->activation);

@@ -1,0 +1,7 @@
+class Named {
+    name: string
+}
+fn main() {
+    var n = Named()
+}
+main()

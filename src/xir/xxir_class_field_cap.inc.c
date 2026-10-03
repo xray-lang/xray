@@ -16,13 +16,21 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
     if (node->kind==XR_XIR_TYPE_NULLABLE) { *leaf=false; return XR_XIR_OK; }
-    if (node->kind==XR_XIR_TYPE_ARRAY)
-        return node->element==XR_XIR_I64 || node->element==XR_XIR_STRING ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    /* An Array field is a handle whose backing store is its own admitted array; any element the
+     * array family admits (scalars, strings, nominal values, nullable values, arrays) is stored there. */
+    if (node->kind==XR_XIR_TYPE_ARRAY) {
+        if (node->element==XR_XIR_BOOL || xr_xir_type_is_number(node->element) || node->element==XR_XIR_STRING) return XR_XIR_OK;
+        const XrXirTypeNode *element=xr_xir_type_node(types,node->element);
+        return element && !element->parameter_span && (element->kind==XR_XIR_TYPE_NOMINAL ||
+            element->kind==XR_XIR_TYPE_NULLABLE || element->kind==XR_XIR_TYPE_ARRAY) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    }
     if (node->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals ||
         (types->nominals->declarations!=NULL)==(types->nominals->identities!=NULL) ||
         node->nominal.declaration>=types->nominals->count) return XR_XIR_BAD_TYPE;
     uint32_t kind=types->nominals->declarations ? types->nominals->declarations[node->nominal.declaration].kind :
         types->nominals->identities[node->nominal.declaration].kind;
+    /* A class field is an identity handle, never an inline body, so it ends the traversal. */
+    if (kind==XR_XIR_NOMINAL_CLASS) return XR_XIR_OK;
     if (kind!=XR_XIR_NOMINAL_STRUCT && kind!=XR_XIR_NOMINAL_ENUM) return XR_XIR_BAD_TYPE;
     *leaf=false;return XR_XIR_OK;
 }

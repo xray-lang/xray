@@ -504,8 +504,9 @@ static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
             layout->offsets[id]);
     } else {
         const XrXirInstruction *place = &function->instructions[id - function->parameter_count];
-        if (kind == XR_XIR_PLACE_CELL) {
-            append(buffer, "        receiver.kind = XR_XIR_ROOT_CELL; receiver.value = ");
+        if (kind == XR_XIR_PLACE_CELL || kind == XR_XIR_PLACE_OBJECT) {
+            append(buffer, kind == XR_XIR_PLACE_CELL ? "        receiver.kind = XR_XIR_ROOT_CELL; receiver.value = " :
+                "        receiver.kind = XR_XIR_ROOT_OBJECT; receiver.value = ");
             emit_value(buffer, function, layout, place->args[0]);
             append(buffer, ";\n");
         } else append(buffer, "        receiver.kind = XR_XIR_ROOT_SLOT; receiver.slot = %uu;\n",
@@ -756,7 +757,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     }
     switch (op->op) {
-    case XR_XIR_PHI: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE:
+    case XR_XIR_PHI: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE: case XR_XIR_OBJECT_PLACE:
     case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: break;
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_FLOAT:

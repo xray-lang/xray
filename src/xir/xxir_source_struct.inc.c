@@ -160,7 +160,7 @@ static bool source_class_declare(SourceContext *ctx, AstNode *node) {
         if (!source_work(ctx,decl->methods[i])) return false;
         if (decl->methods[i]->type == AST_METHOD_DECL && decl->methods[i]->as.method_decl.is_constructor) ++constructors;
     }
-    if (constructors!=1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires one explicit complete constructor");
+    if (constructors>1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"a class has at most one constructor");
     if (!source_nominal_declare(ctx,node,decl->name,decl->type_params,
         (uint32_t)decl->type_param_count,XR_XIR_NOMINAL_CLASS)) return false;
     ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=
@@ -193,10 +193,6 @@ static bool source_struct_fields(SourceContext *ctx) {
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "stored field contract is not admitted");
                 if (!source_type(ctx, field->field_type, &types[f]) || types[f] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
-                if (symbol->node->type == AST_CLASS_DECL) {
-                    if (field->initializer)
-                        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class field requires an explicit admitted constructor value");
-                }
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) source_text_size(ctx, field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
                     (field->is_const ? 0 : XR_XIR_FIELD_MUTABLE)};
@@ -232,8 +228,8 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
     for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
             if (!source_work(ctx, symbol->node)) return false;
-            if (symbol->kind != SOURCE_NOMINAL || symbol->node->type != AST_STRUCT_DECL) continue;
-            ClassDeclNode *decl = &symbol->node->as.struct_decl;
+            if (symbol->kind != SOURCE_NOMINAL || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
+            ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
             for (uint32_t f = 0; f < nominal->field_count; ++f) {
                 AstNode *node = decl->fields[f];

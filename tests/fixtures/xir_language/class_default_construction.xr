@@ -1,0 +1,19 @@
+class MathUtil {
+    static twice(n: i64) -> i64 { return n * 2 }
+}
+class Counter {
+    total: i64 = 5
+    label: string = "c"
+    bump(k: i64) { this.total = this.total + k }
+    show() -> string { return "${this.label}:${this.total}" }
+}
+fn main() {
+    print(MathUtil.twice(21))
+    var c = Counter()
+    c.bump(3)
+    print(c.show())
+    const alias = c
+    alias.bump(1)
+    print(c.total)
+}
+main()

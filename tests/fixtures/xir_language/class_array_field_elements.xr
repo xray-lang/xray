@@ -1,0 +1,25 @@
+class Buf {
+    bytes: Array<u8> = []
+    scores: Array<f64> = []
+    flags: Array<bool> = []
+    names: Array<string> = []
+    push(b: u8, s: f64) {
+        this.bytes.push(b)
+        this.scores.push(s)
+        this.flags.push(b > 3)
+        this.names.push("n${b}")
+    }
+}
+fn main() {
+    var b = Buf()
+    b.push(2, 0.5)
+    b.push(9, 1.5)
+    print(len(b.bytes))
+    print(b.scores[1])
+    print(b.flags[1])
+    print(b.names[0])
+    const view = b
+    view.push(7, 2.5)
+    print(len(b.bytes))
+}
+main()

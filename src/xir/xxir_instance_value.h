@@ -17,7 +17,8 @@
 #include "xxir_array.h"
 
 typedef enum XrXirValueRootKind {
-    XR_XIR_ROOT_VALUE, XR_XIR_ROOT_LOCAL, XR_XIR_ROOT_CELL, XR_XIR_ROOT_SLOT
+    XR_XIR_ROOT_VALUE, XR_XIR_ROOT_LOCAL, XR_XIR_ROOT_CELL, XR_XIR_ROOT_SLOT,
+    XR_XIR_ROOT_OBJECT /* a class identity whose fields start the path */
 } XrXirValueRootKind;
 typedef struct XrXirValueReceiver {
     XrXirValueRootKind kind;

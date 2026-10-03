@@ -1,0 +1,7 @@
+class Cell {
+    n: i64 = 1
+}
+fn main() {
+    var c: Cell
+}
+main()

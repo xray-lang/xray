@@ -573,8 +573,8 @@ static XrXirStatus place_write_authority(const XrXirFunction *function,
         if (place == XR_XIR_PLACE_FIELD) {
             XrXirType type = xr_xir_operand_type(function, op->args[0]);
             const XrXirTypeNode *node = xr_xir_type_node(context->module->types, type);
-            if (!node || !xr_xir_type_is_struct(context->module->types, type) || op->immediate < 0 ||
-                (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
+            if (!node || (!xr_xir_type_is_struct(context->module->types, type) && !xr_xir_type_is_class(context->module->types, type)) ||
+                op->immediate < 0 || (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, node->nominal.declaration, (uint32_t)op->immediate, XR_XIR_NOMINAL_WRITE);
             if (status != XR_XIR_OK) return status;
         } else if (place == XR_XIR_PLACE_SLOT) {
@@ -594,8 +594,9 @@ static XrXirStatus role_operand(const XrXirFunction *function, const Graph *grap
         function->operands[op->args[0] + ordinal] : op->args[ordinal];
     XrXirPlaceKind place = xr_xir_place_kind(function, id);
     XrXirOperandRole role = xr_xir_operand_role(op->op, ordinal);
+    /* An object place only starts a path; the identity itself cannot be assigned. */
     if ((role == XR_XIR_OPERAND_VALUE && place != XR_XIR_PLACE_NONE) ||
-        (role == XR_XIR_OPERAND_WRITE && place == XR_XIR_PLACE_NONE)) return XR_XIR_BAD_VALUE;
+        (role == XR_XIR_OPERAND_WRITE && (place == XR_XIR_PLACE_NONE || place == XR_XIR_PLACE_OBJECT))) return XR_XIR_BAD_VALUE;
     if (role == XR_XIR_OPERAND_WRITE) {
         XrXirStatus status = place_write_authority(function, context, id);
         if (status != XR_XIR_OK) return status;
@@ -733,6 +734,13 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         const XrXirInstruction *op = &function->instructions[i];
         if (op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) {
             XrXirStatus status = path_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
+        if (op->op == XR_XIR_OBJECT_PLACE) {
+            XrXirType object = xr_xir_operand_type(function, op->args[0]);
+            if (!xr_xir_type_is_class(context->module->types, object) || op->type != object) return XR_XIR_BAD_TYPE;
+            XrXirStatus status = role_operand(function, graph, context, i, 0, object);
             if (status != XR_XIR_OK) return status;
             continue;
         }

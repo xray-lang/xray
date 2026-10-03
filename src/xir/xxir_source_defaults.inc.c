@@ -9,10 +9,13 @@
  * KEY CONCEPT:
  *   Type-graph availability is finite work; execution uses owned checked functions.
  */
+/* A class instance has identity and must be built explicitly, so a class is never a defaultable
+ * field or binding even when its own default constructor exists. */
 static bool source_type_defaultable(SourceContext *ctx, XrXirType type) {
     if (type == XR_XIR_BOOL || xr_xir_type_is_number(type)) return true;
     const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
     return node && node->kind == XR_XIR_TYPE_NOMINAL && node->nominal.declaration < ctx->nominals.count &&
+        ctx->nominals.declarations[node->nominal.declaration].kind != XR_XIR_NOMINAL_CLASS &&
         ctx->nominal_defaultable[node->nominal.declaration];
 }
 static bool source_struct_defaultability(SourceContext *ctx) {
@@ -22,9 +25,10 @@ static bool source_struct_defaultability(SourceContext *ctx) {
         for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
             SourceName *symbol = ctx->nominal_sources[d];
             if (!source_work(ctx, symbol->node)) return false;
-            if (ctx->nominals.declarations[d].kind != XR_XIR_NOMINAL_STRUCT || ctx->nominal_defaultable[d]) continue;
+            XrXirNominalKind kind = (XrXirNominalKind) ctx->nominals.declarations[d].kind;
+            if ((kind != XR_XIR_NOMINAL_STRUCT && kind != XR_XIR_NOMINAL_CLASS) || ctx->nominal_defaultable[d]) continue;
             bool explicit_constructor = false;
-            ClassDeclNode *source = &symbol->node->as.struct_decl;
+            ClassDeclNode *source = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             for (int m = 0; m < source->method_count; ++m) {
                 if (!source_work(ctx, source->methods[m])) return false;
                 if (source->methods[m]->type == AST_METHOD_DECL && source->methods[m]->as.method_decl.is_constructor) explicit_constructor = true;
@@ -33,7 +37,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
             const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[d];
             bool available = true;
             for (uint32_t f = 0; f < decl->field_count; ++f) {
-                AstNode *field = symbol->node->as.struct_decl.fields[f];
+                AstNode *field = source->fields[f];
                 if (!source_work(ctx, field)) return false;
                 if (!field->as.field_decl.initializer && !source_type_defaultable(ctx, decl->fields[f].type)) {
                     available = false; break;
@@ -61,7 +65,8 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
         ctx->bodies[index].node = symbol->node; ctx->bodies[index].module = symbol->module;
         ctx->bodies[index].declaration = symbol->declaration;
         if (!source_nominal_function_scope(ctx,index,symbol)) return false;
-        ctx->identities[index] = (XrXirFunctionIdentity) {symbol->module, ctx->nominals.declarations[d].exported, d + 1, 0, 0, 0, XR_XIR_CONSTRUCTOR, 0, 0};
+        ctx->identities[index] = (XrXirFunctionIdentity) {symbol->module, ctx->nominals.declarations[d].exported, d + 1, 0, 0,
+            ctx->nominals.declarations[d].kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0};
     }
     return true;
 }
@@ -79,7 +84,8 @@ static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType ty
         return source_recipe_record(ctx, (XrXirInstruction) {op, type, {0}, {0}, 0, {0}}, value);
     }
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
-    if (!found || found->kind != XR_XIR_TYPE_NOMINAL || !ctx->nominal_constructors[found->nominal.declaration])
+    if (!found || found->kind != XR_XIR_TYPE_NOMINAL || !ctx->nominal_constructors[found->nominal.declaration] ||
+        !source_type_defaultable(ctx, type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type has no admitted default initializer");
     XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, ctx->nominal_constructors[found->nominal.declaration], {0}};
     return source_type_arguments(ctx, node, found->nominal.arguments, found->nominal.argument_count, &op) &&
@@ -89,10 +95,11 @@ static bool source_struct_constructor_body(SourceContext *ctx) {
     uint32_t d = ctx->identities[ctx->function].nominal_owner - 1;
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[d];
     SourceName *symbol = ctx->nominal_sources[d];
+    ClassDeclNode *source = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
     SourceValue *fields = decl->field_count ? source_alloc(ctx, decl->field_count, sizeof(*fields)) : NULL;
     if (decl->field_count && !fields) return false;
     for (uint32_t f = 0; f < decl->field_count; ++f) {
-        AstNode *field = symbol->node->as.struct_decl.fields[f];
+        AstNode *field = source->fields[f];
         if (!source_work(ctx, field)) return false;
         uint32_t function = ctx->nominal_defaults[d][f];
         if (function) {
@@ -103,7 +110,8 @@ static bool source_struct_constructor_body(SourceContext *ctx) {
         } else if (!source_default_value(ctx, field, decl->fields[f].type, &fields[f])) return false;
     }
     SourceValue value;
-    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, symbol->type, {0}, {0}, 0, {0}}, fields, decl->field_count, &value) ||
+    if (!source_recipe_group(ctx, (XrXirInstruction) {decl->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_CLASS_NEW : XR_XIR_STRUCT_NEW,
+            symbol->type, {0}, {0}, 0, {0}}, fields, decl->field_count, &value) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0, {0}}, NULL)) return false;
     ctx->returned = true; return true;
 }

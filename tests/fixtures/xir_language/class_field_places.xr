@@ -1,0 +1,58 @@
+struct Point {
+    x: i64
+    y: i64
+}
+struct Track {
+    points: Array<Point>
+    name: string
+}
+class Leaf {
+    items: Array<i64> = []
+    total: i64 = 0
+    add(v: i64) {
+        this.items.push(v)
+        this.total = this.total + v
+    }
+    set(i: i64, v: i64) { this.items[i] = v }
+}
+class Branch {
+    leaf: Leaf
+    track: Track
+    constructor(leaf: Leaf, track: Track) {
+        this.leaf = leaf
+        this.track = track
+    }
+    grow(v: i64) {
+        this.leaf.items.push(v)
+        this.track.points.push(Point{x: v, y: v * 2})
+    }
+    bump(i: i64) {
+        this.track.points[i].x = this.track.points[i].x + 100
+    }
+}
+fn feed(leaf: Leaf) {
+    leaf.add(5)
+    leaf.items.push(6)
+}
+fn main() {
+    var leaf = Leaf()
+    leaf.add(1)
+    leaf.add(2)
+    const snapshot = leaf.items
+    leaf.add(3)
+    leaf.set(0, 10)
+    print(len(snapshot))
+    print(len(leaf.items))
+    print(leaf.items[0])
+    print(leaf.total)
+    feed(leaf)
+    print(len(leaf.items))
+    var branch = Branch(leaf, Track{points: [], name: "t"})
+    branch.grow(7)
+    branch.grow(8)
+    branch.bump(1)
+    print(branch.track.points[1].x)
+    print(len(leaf.items))
+    print(branch.track.points[0].y)
+}
+main()

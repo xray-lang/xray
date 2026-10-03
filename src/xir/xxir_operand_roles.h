@@ -27,7 +27,7 @@ static inline uint32_t xr_xir_slot_payload_operands(const XrXirSlot *slots, uint
 
 typedef enum XrXirPlaceKind {
     XR_XIR_PLACE_NONE, XR_XIR_PLACE_LOCAL, XR_XIR_PLACE_CELL, XR_XIR_PLACE_SLOT,
-    XR_XIR_PLACE_FIELD, XR_XIR_PLACE_INDEX
+    XR_XIR_PLACE_FIELD, XR_XIR_PLACE_INDEX, XR_XIR_PLACE_OBJECT
 } XrXirPlaceKind;
 
 typedef enum XrXirOperandRole {
@@ -45,6 +45,7 @@ static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, ui
     if (op == XR_XIR_SLOT_PLACE) return XR_XIR_PLACE_SLOT;
     if (op == XR_XIR_FIELD_PLACE) return XR_XIR_PLACE_FIELD;
     if (op == XR_XIR_INDEX_PLACE) return XR_XIR_PLACE_INDEX;
+    if (op == XR_XIR_OBJECT_PLACE) return XR_XIR_PLACE_OBJECT;
     return XR_XIR_PLACE_NONE;
 }
 
