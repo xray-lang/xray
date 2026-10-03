@@ -33,11 +33,73 @@ static bool source_for_in_body(SourceContext *ctx, AstNode *node,
     ctx->locals = saved; ctx->scope = scope;
     return ok;
 }
+/* A counting loop over [first, bound) or [first, bound] on an i64 cursor cell. The emitter is left in the
+ * body block with the loop registered for break and continue; the body reads `index` once per iteration. */
+typedef struct SourceCounter {
+    SourceValue cursor, index, bound;
+    uint32_t head, branch, last_branch;
+    bool inclusive;
+    SourceLoop loop;
+} SourceCounter;
+static bool source_counter_open(SourceContext *ctx, SourceValue first, SourceValue bound, bool inclusive,
+    SourceCounter *counter) {
+    XrXirType cursor_type;
+    SourceValue condition;
+    if (!source_cell_type(ctx,XR_XIR_I64,&cursor_type) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cursor_type,{first.id},{0},0,{0}},&counter->cursor)) return false;
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    counter->head = body->block_count; counter->bound = bound; counter->inclusive = inclusive; counter->last_branch = 0;
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{counter->head},0,{0}},NULL) || !begin_block(ctx)) return false;
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,XR_XIR_I64,{counter->cursor.id},{0},0,{0}},&counter->index) ||
+        !source_recipe_record(ctx,(XrXirInstruction){inclusive ? XR_XIR_LE_INT : XR_XIR_LT_INT,XR_XIR_BOOL,{counter->index.id,bound.id},{0},0,{0}},&condition))
+        return false;
+    uint32_t entry = body->block_count;
+    counter->branch = body->count;
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{condition.id},{entry,0},0,{0}},NULL) || !begin_block(ctx)) return false;
+    counter->loop = (SourceLoop){ctx->loop,NULL,NULL,body->frontier}; ctx->loop = &counter->loop;
+    return true;
+}
+/* Leaves the loop through the exit block that continue-free paths, breaks and the bound test all reach. */
+static bool source_counter_close(SourceContext *ctx, SourceCounter *counter) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    ctx->loop = counter->loop.parent;
+    if (!ctx->returned || counter->loop.continues) {
+        uint32_t step = body->block_count;
+        if ((!ctx->returned && !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{step},0,{0}},NULL)) ||
+            !patch_exits(ctx,counter->loop.continues,step) || !begin_block(ctx)) return false;
+        if (counter->inclusive) {
+            /* The end bound itself may be the largest i64, so stop before stepping past it. */
+            SourceValue more;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{counter->index.id,counter->bound.id},{0},0,{0}},&more)) return false;
+            counter->last_branch = body->count;
+            uint32_t next_block = body->block_count;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{more.id},{next_block,0},0,{0}},NULL) || !begin_block(ctx)) return false;
+        }
+        SourceValue one, next;
+        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},1,{0}},&one) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ADD_INT,XR_XIR_I64,{counter->index.id,one.id},{0},0,{0}},&next) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_WRITE,XR_XIR_UNIT,{counter->cursor.id,next.id},{0},0,{0}},NULL) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{counter->head},0,{0}},NULL)) return false;
+    }
+    uint32_t exit = body->block_count;
+    if (!begin_block(ctx)) return false;
+    body->recipes[counter->branch].instruction.targets[1] = exit;
+    if (counter->last_branch) body->recipes[counter->last_branch].instruction.targets[1] = exit;
+    return patch_exits(ctx,counter->loop.breaks,exit);
+}
+/* A break out of the innermost counter loop; the emitter must start a new block afterwards. */
+static bool source_counter_break(SourceContext *ctx) {
+    SourcePatch *patch = source_alloc(ctx, 1, sizeof(*patch));
+    if (!patch) return false;
+    *patch = (SourcePatch) {ctx->loop->breaks, ctx->bodies[ctx->function].count}; ctx->loop->breaks = patch;
+    ctx->returned = true;
+    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0, {0}}, NULL);
+}
 /* `a..b` and `a..=b` count an i64 cursor; both endpoints are evaluated once, start first. */
 static bool source_range_bounds(SourceContext *ctx, AstNode *node, SourceValue *start, SourceValue *end) {
     RangeNode *range = &node->as.for_in_stmt.collection->as.range;
     if (!range->start || !range->end) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"range requires both endpoints");
-    SourceExpectedType expected = {true,XR_XIR_I64};
+    SourceExpectedType expected = {true,XR_XIR_I64, false};
     if (!source_plan_expression(ctx,range->start,expected,start) || !source_plan_expression(ctx,range->end,expected,end)) return false;
     if (start->type != XR_XIR_I64 || end->type != XR_XIR_I64)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoints must be i64");
@@ -56,8 +118,8 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
     bool inclusive = counting && syntax->collection->as.range.inclusive_end;
     if (counting && syntax->is_keyvalue)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"a range for-in binds one name");
-    SourceValue array = {0}, bound, first, cursor;
-    XrXirType element_type = XR_XIR_I64, cursor_type;
+    SourceValue array = {0}, bound, first;
+    XrXirType element_type = XR_XIR_I64;
     if (counting) {
         if (!source_range_bounds(ctx,node,&first,&bound)) return false;
     } else {
@@ -69,42 +131,11 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,{array.id},{0},0,{0}},&bound) ||
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&first)) return false;
     }
-    if (!source_cell_type(ctx,XR_XIR_I64,&cursor_type) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cursor_type,{first.id},{0},0,{0}},&cursor)) return false;
-    SourceFunction *body = &ctx->bodies[ctx->function];
-    uint32_t head = body->block_count;
-    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{head},0,{0}},NULL) || !begin_block(ctx)) return false;
-    SourceValue index, condition;
-    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,XR_XIR_I64,{cursor.id},{0},0,{0}},&index) ||
-        !source_recipe_record(ctx,(XrXirInstruction){inclusive ? XR_XIR_LE_INT : XR_XIR_LT_INT,XR_XIR_BOOL,{index.id,bound.id},{0},0,{0}},&condition)) return false;
-    uint32_t branch = body->count, entry = body->block_count;
-    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{condition.id},{entry,0},0,{0}},NULL) || !begin_block(ctx)) return false;
-    SourceValue element = index;
-    if (!counting && !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element_type,{array.id,index.id},{0},0,{0}},&element)) return false;
-    SourceLoop loop = {ctx->loop,NULL,NULL,body->frontier}; ctx->loop = &loop;
-    bool ok = source_for_in_body(ctx,node,index,element); ctx->loop = loop.parent;
-    if (!ok) return false;
-    uint32_t last_branch = 0;
-    if (!ctx->returned || loop.continues) {
-        uint32_t step = body->block_count;
-        if ((!ctx->returned && !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{step},0,{0}},NULL)) ||
-            !patch_exits(ctx,loop.continues,step) || !begin_block(ctx)) return false;
-        if (inclusive) {
-            /* The end bound itself may be the largest i64, so stop before stepping past it. */
-            SourceValue more; uint32_t next_block;
-            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{index.id,bound.id},{0},0,{0}},&more)) return false;
-            last_branch = body->count; next_block = body->block_count;
-            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{more.id},{next_block,0},0,{0}},NULL) || !begin_block(ctx)) return false;
-        }
-        SourceValue one, next;
-        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},1,{0}},&one) ||
-            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ADD_INT,XR_XIR_I64,{index.id,one.id},{0},0,{0}},&next) ||
-            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_WRITE,XR_XIR_UNIT,{cursor.id,next.id},{0},0,{0}},NULL) ||
-            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{head},0,{0}},NULL)) return false;
-    }
-    uint32_t exit = body->block_count;
-    if (!begin_block(ctx)) return false;
-    body->recipes[branch].instruction.targets[1] = exit;
-    if (last_branch) body->recipes[last_branch].instruction.targets[1] = exit;
-    return patch_exits(ctx,loop.breaks,exit);
+    SourceCounter counter;
+    if (!source_counter_open(ctx,first,bound,inclusive,&counter)) return false;
+    SourceValue element = counter.index;
+    if (!counting && !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element_type,{array.id,counter.index.id},{0},0,{0}},&element)) return false;
+    bool ok = source_for_in_body(ctx,node,counter.index,element);
+    ctx->loop = counter.loop.parent;
+    return ok && source_counter_close(ctx,&counter);
 }

@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
+#include "xir_scalar_compile_owner.h"
 
 static XrXirArtifact *uninitialized_leaf_fixture(void) {
     const XrXirType parameter = XR_XIR_I64;
@@ -33,9 +34,9 @@ static XrXirArtifact *uninitialized_leaf_fixture(void) {
     const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_check(&scalar_owner.context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     return lowered;
 }
 
@@ -207,7 +208,7 @@ static XrXirArtifact *fixture_checked(void) {
     };
     const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(&scalar_owner.context, &module, &artifact, NULL) == XR_XIR_OK);
     return artifact;
 }
 
@@ -215,11 +216,11 @@ static XrXirArtifact *fixture_lowered(void) {
     XrXirArtifact *checked = fixture_checked(), *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL;
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_lower(decoded, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet); xr_xir_artifact_free(decoded);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&scalar_owner.context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(decoded, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(decoded);
+    xr_xir_compile_artifact_free(checked);
     return lowered;
 }
 #endif

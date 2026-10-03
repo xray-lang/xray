@@ -130,7 +130,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         references[a]=!requirement && xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
         arguments[a]=NULL;
         if (references[a]) continue;
-        arguments[a]=source_plan_collect(ctx,call->arguments[a],(SourceExpectedType){false,XR_XIR_UNIT});
+        arguments[a]=source_plan_collect(ctx,call->arguments[a],(SourceExpectedType){false,XR_XIR_UNIT, false});
         if (!arguments[a]) goto done;
     }
     if (inferred) {
@@ -156,7 +156,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
             XrXirInferenceKnown known={0};
             XrXirStatus status=xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
             if (status!=XR_XIR_OK) {source_fail(ctx,node,status,"ready argument context is invalid");goto done;}
-            SourceExpectedType expected={false,XR_XIR_UNIT};
+            SourceExpectedType expected={false,XR_XIR_UNIT, false};
             if (known.known) {
                 SourceSubstitution partial={known.arguments,known.argument_count};expected.present=true;
                 if (!source_substitute(ctx,&partial,formal,0,&expected.type)) goto done;
@@ -164,7 +164,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
             if (!known.known) {
                 XrXirType evidence;
                 if (!source_call_evidence_view(ctx,formal,argument->ground_type,&evidence)) goto done;
-                if (evidence!=argument->ground_type) expected=(SourceExpectedType){true,evidence};
+                if (evidence!=argument->ground_type) expected=(SourceExpectedType){true,evidence, false};
             }
             if (!source_conversion_plan(ctx,argument->syntax,argument->ground_type,expected,&argument->conversion)) goto done;
             argument->conversion_ready=true;
@@ -182,7 +182,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
             XrXirInferenceKnown known={0};
             XrXirStatus status=xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
             if (status!=XR_XIR_OK) {source_fail(ctx,node,status,"literal argument context is invalid");goto done;}
-            SourceExpectedType expected={false,XR_XIR_UNIT};
+            SourceExpectedType expected={false,XR_XIR_UNIT, false};
             if (known.known) {
                 SourceSubstitution partial={known.arguments,known.argument_count};expected.present=true;
                 if (!source_substitute(ctx,&partial,formal,0,&expected.type)) goto done;
@@ -208,7 +208,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
             if (inferred && !source_call_observe(ctx,node,state,formal,reference->type,requirement)) goto done;
             continue;
         }
-        SourceExpectedType expected={false,XR_XIR_UNIT};
+        SourceExpectedType expected={false,XR_XIR_UNIT, false};
         if (inferred) {
             XrXirInferenceKnown known={0};
             XrXirStatus status=xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
@@ -265,7 +265,7 @@ static bool source_call_conversions(SourceContext *ctx, AstNode *node, const Sou
         } else expected=request->concrete[p].type;
         SourceConversionRecipe recipe;
         if (!source_conversion_plan(ctx,node,request->values[p+request->value_offset].type,
-            (SourceExpectedType){true,expected},&recipe)) goto done;
+            (SourceExpectedType){true,expected, false},&recipe)) goto done;
         if (!recipes && recipe.needed) {
             recipes=source_scratch(ctx,request->count-p,sizeof(*recipes),true);
             if (!recipes) goto done;

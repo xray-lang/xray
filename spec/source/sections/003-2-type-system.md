@@ -813,6 +813,7 @@ Xray 默认只保留最小类型身份层：
 
 - `typeOf(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
 - `typeName(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
+- 当前 XIR 已闭合值的有限准入、Unit/null 区别及泛型/Error/静态查询的未实现边界见 §13.3；调试名字不授予额外类型能力。
 - 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
@@ -1891,6 +1892,7 @@ Xray keeps only the minimal type identity layer by default:
 
 - `typeOf(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
 - `typeName(x)` returns a debug/logging type-name string and is a cold-path capability.
+- See §13.3 for the current XIR closed-value subset, the Unit/null distinction and unimplemented generic/Error/static-query forms; debug names grant no additional type capability.
 - Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 

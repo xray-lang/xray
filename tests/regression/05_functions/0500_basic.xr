@@ -184,12 +184,12 @@ fn test_function_as_condition() {
 fn test_empty_function() {
     fn empty() { }
     var result = empty()
-    assert(typeName(result) == "null")
+    assert(typeName(result) == "()")
 }
 
 @test
 fn test_return_only() {
     fn returnOnly() { return }
     var result = returnOnly()
-    assert(typeName(result) == "null")
+    assert(typeName(result) == "()")
 }

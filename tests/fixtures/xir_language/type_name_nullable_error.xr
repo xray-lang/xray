@@ -1,0 +1,2 @@
+fn name(value: Error?) -> string { return typeName(value) }
+print(name(null))

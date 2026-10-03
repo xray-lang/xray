@@ -7,21 +7,21 @@
  * xxir_source_ground_type.inc.c - Declaration type facts without evaluating values
  */
 static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,SourceExpectedType *output) {
-    *output=(SourceExpectedType){false,XR_XIR_UNIT};
+    *output=(SourceExpectedType){false,XR_XIR_UNIT, false};
     if (!node || !source_work(ctx,node)) return node==NULL;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
     if (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR) {
         SourceName *binding=visible_name(ctx,node->type==AST_VARIABLE ? node->as.variable.name : "this");
         if (binding && (binding->kind==SOURCE_LOCAL || binding->kind==SOURCE_SLOT))
-            *output=(SourceExpectedType){true,source_symbol_type(ctx,binding)};
+            *output=(SourceExpectedType){true,source_symbol_type(ctx,binding), false};
         return true;
     }
     if (node->type==AST_INDEX_GET) {
         SourceExpectedType receiver;
         if (!source_ground_type(ctx,node->as.index_get.array,depth+1,&receiver)) return false;
         if (receiver.present && xr_xir_type_is_array(&ctx->types,receiver.type))
-            *output=(SourceExpectedType){true,xr_xir_array_element(&ctx->types,receiver.type)};
+            *output=(SourceExpectedType){true,xr_xir_array_element(&ctx->types,receiver.type), false};
         return true;
     }
     AstNode *member=node;
@@ -31,7 +31,7 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         SourceName *binding=visible_name(ctx,member->as.variable.name);
         if (binding && (binding->kind==SOURCE_LOCAL || binding->kind==SOURCE_SLOT)) {
             const XrXirTypeNode *signature=xr_xir_callable_signature(&ctx->types,binding->type);
-            if (signature) *output=(SourceExpectedType){true,signature->result};
+            if (signature) *output=(SourceExpectedType){true,signature->result, false};
         }
         return true;
     }

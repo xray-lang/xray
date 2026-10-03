@@ -1424,6 +1424,7 @@ Xray keeps only the minimal type identity layer by default:
 
 - `typeOf(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
 - `typeName(x)` returns a debug/logging type-name string and is a cold-path capability.
+- See §13.3 for the current XIR closed-value subset, the Unit/null distinction and unimplemented generic/Error/static-query forms; debug names grant no additional type capability.
 - Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
@@ -6146,6 +6147,10 @@ These global functions and built-in constructor/static functions are usable with
 | `typeName<T>()` | `() -> string` | returns the name of static type `T` |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
+The current XIR value-query subset admits `typeName(value)` only when no lexical or module binding shadows the builtin. One ordinary READ argument is evaluated once under normal semantics. Admitted scalars and Atomic/PanicInfo use shared type names; Unit is `()`, while bare or grouped null is `null`. Top-level Array/callable values report `Array`/`function`; concrete nominal values report their declaration name and closed type arguments, with Array arguments showing their element type. A present Nullable reports the element's family or nominal name; none reports `null`. Name bytes belong to the receiving owner. The 256-byte name and 32-level recursion limits report budget failure without truncation.
+
+Generic Array<T>/callable<T> family names are available at the definition. Queries of T itself, nominal types with open arguments and T?, concrete dynamic enum names through Error existentials, `typeName<T>()` and full reflection remain unimplemented. This admission boundary preserves those legal language forms. Their later implementation must retain the query in Checked, specialize and recheck it without revisiting AST to invent capabilities. The query grants no visibility, construction or constraint authority.
+
 The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 
 ```xray
@@ -6351,7 +6356,9 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-The table retains the complete method denominator; the first XIR subset does not automatically admit its remaining methods. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+The table retains the complete method denominator. The current frozen XIR boundary comprises the three get/set/push primitives and twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. These are 15 operations; the other 17 of the 32 members remain unadmitted. Execution identities come from the same structured declarations in `stdlib/types/array.xr`; names serve member lookup only. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+
+These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
 
 | Member | Type / Description |
 |--|--|
@@ -6363,8 +6370,8 @@ The table retains the complete method denominator; the first XIR subset does not
 | `indexOf(x)` / `contains(x)` | read-only query |
 | `join(sep?)` | read-only receiver; concatenates into a string |
 | `ref reverse()` / `ref sort(cmp?)` | changes the receiver's ordering |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read-only receiver; callback contracts must be frozen before admission |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read-only receiver; callback contracts must be frozen before admission |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read snapshot; map/filter callbacks may take an index; reduce uses `fn(U,T)->U` |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read snapshot; forEach may take an index; the others short-circuit with `fn(T)->bool` |
 | `ref fill(v, start?, end?)` / `ref clear()` | fill or clear |
 | `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
 | `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |
@@ -7430,7 +7437,7 @@ Without a unique floating context the default is f64. Annotations, assignments, 
 
 ### 17.26 XIR Array values and source boundary
 
-The `struct Array<T>` declaration in `stdlib/types/array.xr` is this family's sole source authority. The compiler, member adapters and API inventory consume the same structured declaration. Of its current 32 members, only READ `get(index: i64) -> T`, REF `set(index: i64, value: T) -> ()` and REF `push(value: T) -> ()` admit new-XIR execution. The other 29 retain inventory identities without execution authority. Index reads/writes use the same operations. Global `len` resolves separately by its core intrinsic identity; this subset accepts only Array and returns i64. Lexical, module and import resolution precede the prelude, so a user function named `len` remains an ordinary function.
+The `struct Array<T>` declaration in `stdlib/types/array.xr` is this family's sole source authority. The compiler, member adapters and API inventory consume the same structured declaration. Of its current 32 members, the frozen boundary contains the three READ `get(index: i64) -> T`, REF `set(index: i64, value: T) -> ()` and REF `push(value: T) -> ()` primitives plus twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. These are 15 operations; the other 17 retain inventory identities without execution authority. Source finds the exact public member declaration before selecting implementation by its admitted native operation/recipe identity; queries record the declaration identity and CALL reference without a separate name-based execution table. See §14.7 for callback/query/clear typing, evaluation, effects and ownership. Index reads/writes use the same operations. Global `len` resolves separately by its core intrinsic identity; this subset accepts only Array and returns i64. Lexical, module and import resolution precede the prelude, so a user function named `len` remains an ordinary function.
 
 Source admits explicit `Array<T>`, homogeneous literals, empty literals with an Array context, ordinary assignment copies, parameters, returns, locals and entry-module state. An empty literal without an element context rejects. Elements evaluate left to right under ordinary contextual typing. Nested arrays and function elements use the unified constructed pool's copyable/storable admission; unit, internal CELL, views and unadmitted noncopyable resources are not ordinary elements. Generic bodies using `Array<T>` are checked against their declared constraints, specialized on Checked, then reverified. Ordinary instances finish before Program sealing; concrete arguments cannot invent capabilities missing at definition checking. Other container and user struct/class families require separate admission.
 
@@ -7444,7 +7451,7 @@ Source query snapshots independently own Array type nodes, member signatures, ge
 
 The Windows source VM, native, mixed-entry and Checked-reload paths verify the two-module string program against independent expectations: `red\nblue\n2\ngreen\nblue\ngreen\n3\n`. Separate assertions cover instance isolation, result lifetime, sticky initialization bounds and physical release after allocation failure. The output golden does not replace OOM, retain, work-budget or full sanitizer gates. Complete batch qualification still requires fresh affected targets, regression, contract and sanitizer gates; this section does not claim those complete gates or macOS have passed.
 
-Array constructor calls, withCapacity/capacity, slices, ptr/mutPtr, map/filter, iteration and other unadmitted members explicitly reject. Source ref parameters, move, complete user structs, cross-Program structural import, stdlib Checked/native package publication, default CLI migration and final old-chain deletion are outside this subset. The sole current protocols remain defined by the implementation constants in §17.6, without old readers or compatibility interfaces.
+The other 17 Array members, and unfinished capacity, slice, ptr/mutPtr and iterator method families, still require individual admission; freezing twelve recipes does not complete them automatically. Full move, user-struct families, cross-Program structural import, stdlib Checked/native package publication and final old-chain deletion are outside this subset. Source Array for-in follows its existing owned-snapshot contract and does not qualify iterator APIs. The sole current protocols remain defined by the implementation constants in §17.6, without old readers or compatibility interfaces. This contract update claims neither full safety nor full regression success.
 
 ### 17.27 Floating arithmetic and typed output
 

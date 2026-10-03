@@ -1,0 +1,21 @@
+fn main() {
+    const values = [1, 2, 3, 4]
+    var visits = 0
+    print(values.every(x -> { visits = visits + 1; return x < 2 }))
+    print(visits)
+    visits = 0
+    print(values.some(x -> { visits = visits + 1; return x == 2 }))
+    print(visits)
+    visits = 0
+    print(values.find(x -> { visits = visits + 1; return x == 3 }) ?? -1)
+    print(visits)
+    visits = 0
+    print(values.findIndex(x -> { visits = visits + 1; return x == 2 }))
+    print(visits)
+    visits = 0
+    const empty: Array<i64> = []
+    print(empty.every(x -> { visits = visits + 1; return false }))
+    print(empty.some(x -> { visits = visits + 1; return true }))
+    print(visits)
+}
+main()

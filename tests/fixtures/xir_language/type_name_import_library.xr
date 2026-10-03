@@ -1,0 +1,1 @@
+export fn typeName(value: i64, suffix: string) -> string { return "import:" + string(value) + suffix }

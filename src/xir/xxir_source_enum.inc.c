@@ -156,7 +156,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
         if (at == variant.field_count || seen[at]) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown or duplicate enum payload field");
         seen[at] = true; XrXirType type;
         if (!source_substitute(ctx,&substitution,d->fields[variant.field_begin+at].type,0,&type) ||
-            !source_plan_expression(ctx, provided->values[i], (SourceExpectedType){type != XR_XIR_UNIT,type}, &fields[at])) return false;
+            !source_plan_expression(ctx, provided->values[i], (SourceExpectedType){type != XR_XIR_UNIT,type, false}, &fields[at])) return false;
         if (fields[at].type != type) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum payload type mismatch");
         XrXirSourceRange range = source_query_range(ctx,node,NULL);
         if (provided->spans) {

@@ -52,7 +52,7 @@ static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *va
     if (source_constructor_receiver(ctx, set->object)) return source_constructor_field(ctx, node, set->member, value, set->value);
     SourceMemberPlace member = {0};
     if (!source_member_place(ctx, node, set->object, set->member, 1, &member) ||
-        !source_plan_expression(ctx, set->value, (SourceExpectedType){member.type != XR_XIR_UNIT,member.type}, value)) return false;
+        !source_plan_expression(ctx, set->value, (SourceExpectedType){member.type != XR_XIR_UNIT,member.type, false}, value)) return false;
     if (value->type != member.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field assignment type mismatch");
     return source_member_store(ctx, node, &member, *value);
 }
@@ -62,7 +62,7 @@ static bool source_member_compound(SourceContext *ctx, AstNode *node, AstNodeTyp
     bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
     if (!source_member_place(ctx, node, assignment->object, assignment->name, 3, &member) ||
         !source_member_read(ctx, node, &member, &left) ||
-        !source_plan_expression(ctx, assignment->value, (SourceExpectedType){shift ? XR_XIR_UNIT : member.type != XR_XIR_UNIT,shift ? XR_XIR_UNIT : member.type}, &right) ||
+        !source_plan_expression(ctx, assignment->value, (SourceExpectedType){shift ? XR_XIR_UNIT : member.type != XR_XIR_UNIT,shift ? XR_XIR_UNIT : member.type, false}, &right) ||
         !source_binary_apply(ctx, node, operation, left, right, value)) return false;
     if (value->type != member.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment cannot narrow its result");
     return source_member_store(ctx, node, &member, *value);
@@ -94,7 +94,7 @@ static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *valu
         (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type, {symbol->index, 0}, {0}, 0, {0}} :
         (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0}, {0}, symbol->index, {0}};
     bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
-    if (!source_recipe_record(ctx, read, &left) || !source_plan_expression(ctx, assignment->value, (SourceExpectedType){shift ? XR_XIR_UNIT : symbol->type != XR_XIR_UNIT,shift ? XR_XIR_UNIT : symbol->type}, &right) ||
+    if (!source_recipe_record(ctx, read, &left) || !source_plan_expression(ctx, assignment->value, (SourceExpectedType){shift ? XR_XIR_UNIT : symbol->type != XR_XIR_UNIT,shift ? XR_XIR_UNIT : symbol->type, false}, &right) ||
         !source_binary_apply(ctx, node, operation, left, right, value)) return false;
     if (value->type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment cannot narrow its result");
     XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?

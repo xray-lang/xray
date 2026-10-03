@@ -27,9 +27,92 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(header[:3], (1, 'Array', 'T'))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
-                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'})
-        self.assertEqual(next(m for m in members if m.name == 'map').operation, 'NONE')
+                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(schema.array_recipe_contracts('T')))
+        self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
+
+    def test_array_recipes_have_exact_symbolic_shapes(self):
+        _, members = schema.parse_source(self.source, self.prelude)
+        expected = {
+            'map': ('CALLBACK_MAP', 'ARRAY_RESULT'),
+            'filter': ('CALLBACK_PREDICATE_INDEXED', 'ARRAY_ELEMENT'),
+            'reduce': ('CALLBACK_REDUCE', 'RESULT_VARIABLE'),
+            'forEach': ('CALLBACK_VISIT', 'UNIT'),
+            'find': ('CALLBACK_PREDICATE', 'NULLABLE_ELEMENT'),
+            'findIndex': ('CALLBACK_PREDICATE', 'I64'),
+            'every': ('CALLBACK_PREDICATE', 'BOOL'),
+            'some': ('CALLBACK_PREDICATE', 'BOOL'),
+        }
+        for member in members:
+            if member.name in expected:
+                self.assertEqual((schema.simple_term(member.parameters[0][1], 'T'),
+                                  schema.simple_term(member.result, 'T')), expected[member.name])
+                self.assertEqual(member.receiver, 'READ')
+            if member.operation != 'NONE':
+                self.assertNotEqual(schema.simple_term(member.result, 'T'), 'UNADMITTED')
+                for parameter in member.parameters:
+                    self.assertNotEqual(schema.simple_term(parameter[1], 'T'), 'UNADMITTED')
+        reduce = next(member for member in members if member.name == 'reduce')
+        self.assertEqual(schema.simple_term(reduce.parameters[1][1], 'T'), 'RESULT_VARIABLE')
+        clear = next(member for member in members if member.name == 'clear')
+        self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
+        self.assertEqual({m.name for m in members if m.operation == 'NONE'},
+                         {'withCapacity', 'capacity', 'ptr', 'mutPtr', 'pop', 'shift', 'unshift',
+                          'reserve', 'resize', 'concat', 'reverse', 'sort', 'fill', 'toString',
+                          'iterator', 'entriesIterator', 'entries'})
+
+    def test_array_recipe_shape_permission_and_result_rejections(self):
+        with self.assertRaises(ValueError):
+            schema.array_recipe_contracts('U')
+        cases = [
+            ('map(fn: fn(item: T, index: i64) -> U) -> Array<U>',
+             'map(fn: fn(item: T, index: i64) -> Unknown) -> Array<Unknown>'),
+            ('map(fn: fn(item: T, index: i64) -> U) -> Array<U>',
+             'map(fn: fn(item: T, index: i64) -> T) -> Array<T>'),
+            ('map(fn: fn(item: T, index: i64) -> U) -> Array<U>',
+             'map(fn: fn(item: T, index: i64) -> U) -> Array<T>'),
+            ('filter(fn: fn(item: T, index: i64) -> bool)', 'filter(fn: fn(item: T, index: i64) -> i64)'),
+            ('reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U',
+             'reduce(fn: fn(acc: T, item: T) -> T, initial: T) -> T'),
+            ('reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U',
+             'reduce(fn: fn(acc: U, item: T) -> U, initial: T) -> U'),
+            ('reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U',
+             'reduce(initial: U, fn: fn(acc: U, item: T) -> U) -> U'),
+            ('forEach(fn: fn(item: T, index: i64))', 'forEach(fn: fn(item: T, index: i64) -> T)'),
+            ('find(fn: fn(item: T) -> bool) -> T?', 'find(fn: fn(item: T) -> bool) -> T'),
+            ('findIndex(fn: fn(item: T) -> bool) -> i64', 'findIndex(fn: fn(item: T) -> bool) -> bool'),
+            ('every(fn: fn(item: T) -> bool)', 'every(fn: fn(item: T, index: i64) -> bool)'),
+            ('some(fn: fn(item: T) -> bool)', 'some(fn: fn(item: T) -> U)'),
+            ('contains(value: T)', 'contains(value?: T)'),
+            ('indexOf(value: T)', 'indexOf(...value: T)'),
+            ('join(separator?: string)', 'join(separator: string)'),
+            ('join(separator?: string)', 'join(separator?: T)'),
+            ('ref clear()', 'clear()'),
+            ('ref clear()', 'ref clear(value: T)'),
+            ('struct Array<T>', 'struct Array<U>'),
+        ]
+        for before, after in cases:
+            with self.subTest(before=before, after=after), self.assertRaises(ValueError):
+                schema.parse_source(self.source.replace(before, after), self.prelude)
+        _, members = schema.parse_source(self.source, self.prelude)
+        for member in members:
+            if member.operation not in schema.array_recipe_contracts('T'):
+                continue
+            declaration = ('ref ' if member.receiver == 'REF' else '') + member.name + member.signature
+            marker = (f'// @native-operation {member.operation} allocation={member.allocation} '
+                      f'failures={member.failures} ownership={member.ownership}')
+            mutations = [
+                (declaration, ('move ' if member.receiver == 'REF' else 'ref ') + member.name + member.signature),
+                (declaration, 'static ' + member.name + member.signature),
+                (marker, marker.replace('allocation=may_heap', 'allocation=no_heap')),
+                (marker, marker.replace(f'failures={member.failures}', 'failures=none')),
+                (marker, marker.replace(f'ownership={member.ownership}',
+                                        'ownership=owned' if member.ownership == 'unit' else 'ownership=unit')),
+                (marker, ''),
+            ]
+            for before, after in mutations:
+                with self.subTest(operation=member.operation, mutation=after), self.assertRaises(ValueError):
+                    schema.parse_source(self.source.replace(before, after), self.prelude)
 
     def test_string_value_identity_and_full_member_spans(self):
         source = (ROOT / 'stdlib/types/string.xr').read_text(encoding='utf-8')

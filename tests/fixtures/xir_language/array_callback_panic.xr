@@ -1,0 +1,14 @@
+fn main() {
+    const values = [1, 2, 3]
+    var visits = 0
+    try {
+        const mapped = values.map(x -> { visits = visits + 1; return 10 / (x - 2) })
+        print(len(mapped))
+    } catch panic(p) {
+        print(visits)
+        print(typeName(p))
+    }
+    print(len(values))
+    print(values[2])
+}
+main()

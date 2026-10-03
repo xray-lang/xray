@@ -44,7 +44,7 @@ static void floating_ir_rejections(void) {
         }
         function.result = ops[0].type;
         XrXirArtifact *artifact = NULL;
-        CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_BAD_TYPE && !artifact);
+        CHECK(xr_xir_compile_check(&scalar_owner.context, &module, &artifact, NULL) == XR_XIR_BAD_TYPE && !artifact);
     }
 }
 static void floating_value_admission(void) {
@@ -63,9 +63,13 @@ static void floating_value_admission(void) {
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrXirTypeNode node = {XR_XIR_TYPE_CELL,cases[i].type,NULL,0,XR_XIR_UNIT,0,0, {0}};
         XrXirTypes types = {&node,1, NULL, NULL};
-        XrXirBudget budget = {.parameters = 16, .metadata_bytes = 4096, .work = 64};
+        ScalarCompileOwner owner = {0};
+        XrXirCompileLimits structural = xr_xir_compile_default_limits();
+        structural.parameters = 16;
+        /* Type copying charges actual byte work independently of metadata bytes. */
+        scalar_compile_owner_new(&owner, (XrCompileResourceLimits) {4096, 4096, 16384}, structural);
         XrXirTypeArena *arena = NULL;
-        CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena) == XR_XIR_VALUE_OK);
         XrXirValueAdmission admission = {arena,domain,NULL,NULL,16,0};
         XrXirValue value = floating_argument(cases[i].type, cases[i].bits), copy = {0}, cell = {0}, read = {0};
         CHECK(xr_xir_value_argument(&value, NULL, cases[i].type) == cases[i].valid);
@@ -78,7 +82,8 @@ static void floating_value_admission(void) {
             CHECK(xr_xir_cell_read(&cell, &read) == XR_XIR_VALUE_OK && read.type == value.type && read.payload == value.payload);
         } else CHECK(!copy.type && !copy.payload && !cell.type && !cell.payload);
         xr_xir_value_drop(&copy); xr_xir_value_drop(&cell); xr_xir_value_drop(&read);
-        xr_xir_type_arena_drop(arena);
+        xr_xir_compile_type_arena_drop(arena);
+        scalar_compile_owner_free(&owner);
         CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
     }
     xr_xir_domain_drop(domain);
@@ -88,10 +93,10 @@ static void floating_value_admission(void) {
         uint32_t size = context == XR_XIR_LAYOUT_STORAGE ? (width ? 8 : 4) :
             context == XR_XIR_LAYOUT_FRAME || context == XR_XIR_LAYOUT_SSA ? 8 : 16;
         XrXirLayout layout;
-        CHECK(xr_xir_layout(NULL, type, &target, (XrXirLayoutContext) context, &layout) == XR_XIR_OK);
+        CHECK(xr_xir_builtin_layout(type, &target, (XrXirLayoutContext) context, &layout) == XR_XIR_OK);
         CHECK(layout.size == size && layout.alignment == (size > 8 ? 8 : size));
     }
     floating_ir_rejections();
-    puts("Floating admission: 13 forged IR cases, 15 canonical value/cell cases and both layouts passed");
+    puts("Floating admission: 17 forged IR cases, 15 canonical value/cell cases and both layouts passed");
 }
 #endif // XIR_FLOAT_ADMISSION_CASES_H

@@ -9,8 +9,8 @@ therefore records what passes and may only grow:
 
   - a recorded test that no longer passes fails the run;
   - a test that starts passing and is not recorded also fails, so the change
-    that fixed it records it in the same commit (`--update` rewrites the
-    baseline from this run and never removes a line without printing it).
+    that fixed it records it in the same commit (`--update` adds newly passing
+    tests and refuses to write when any recorded test no longer passes).
 
 Failing files stay in the denominator: they appear as failures in the report and
 are never filtered out. A file that fails as a whole is identified by
@@ -94,7 +94,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--baseline", type=Path, default=BASELINE)
     parser.add_argument("--json", type=Path, default=None, help="retain the full report at this path")
-    parser.add_argument("--update", action="store_true", help="rewrite the baseline from this run")
+    parser.add_argument("--update", action="store_true", help="add passing tests only when all recorded tests still pass")
     args = parser.parse_args(argv[1:])
 
     with tempfile.TemporaryDirectory(prefix="xray_regression_gate_") as temporary:
@@ -122,15 +122,6 @@ def main(argv: list[str]) -> int:
     regressions = sorted(recorded_set - passing)
     fixed = sorted(passing - recorded_set)
 
-    if args.update:
-        removed = regressions
-        for name in removed:
-            print(f"removing from baseline (no longer passes): {name}")
-        args.baseline.write_text(HEADER + "".join(f"{name}\n" for name in sorted(passing)),
-                                 encoding="utf-8", newline="\n")
-        print(f"baseline rewritten: {len(passing)} entries ({len(fixed)} added, {len(removed)} removed)")
-        return 0
-
     if regressions:
         print(f"FAIL: {len(regressions)} recorded test(s) no longer pass:")
         for name in regressions[:60]:
@@ -138,6 +129,16 @@ def main(argv: list[str]) -> int:
             print(f"  {name}: {reason}")
         if len(regressions) > 60:
             print(f"  ... {len(regressions) - 60} more")
+        if args.update:
+            print("FAIL: refusing --update because recorded tests no longer pass; baseline unchanged")
+            return 1
+
+    if args.update:
+        args.baseline.write_text(HEADER + "".join(f"{name}\n" for name in sorted(passing)),
+                                 encoding="utf-8", newline="\n")
+        print(f"baseline updated: {len(passing)} entries ({len(fixed)} added, none removed)")
+        return 0
+
     if fixed:
         print(f"FAIL: {len(fixed)} test(s) pass but are not recorded; rerun with --update in the fixing change:")
         for name in fixed[:60]:

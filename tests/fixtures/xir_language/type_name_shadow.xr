@@ -1,0 +1,7 @@
+fn typeName(value: i64, suffix: string) -> string { return "shadow:" + string(value) + suffix }
+print(typeName(7, "!"))
+fn local() {
+    const typeName = fn(value: bool) -> string { return value ? "local:true" : "local:false" }
+    print(typeName(true))
+}
+local()

@@ -1,0 +1,3 @@
+struct Wrap<T> { value: T }
+fn name<T>(value: Wrap<T>) -> string { return typeName(value) }
+print(name<i64>(Wrap<i64>{value: 1}))

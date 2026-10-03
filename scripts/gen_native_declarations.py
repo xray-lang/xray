@@ -145,7 +145,62 @@ def simple_term(term, binder):
         return 'BOOL'
     if binder and term == ('name', binder, ()):
         return 'ELEMENT'
+    if binder:
+        if term == ('name', 'U', ()):
+            return 'RESULT_VARIABLE'
+        if term == ('name', 'Array', (('name', binder, ()),)):
+            return 'ARRAY_ELEMENT'
+        if term == ('name', 'Array', (('name', 'U', ()),)):
+            return 'ARRAY_RESULT'
+        if term == ('nullable', ('name', binder, ())):
+            return 'NULLABLE_ELEMENT'
+        callback_terms = {
+            f'fn(item: {binder}, index: i64) -> U': 'CALLBACK_MAP',
+            f'fn(item: {binder}, index: i64) -> bool': 'CALLBACK_PREDICATE_INDEXED',
+            f'fn(acc: U, item: {binder}) -> U': 'CALLBACK_REDUCE',
+            f'fn(item: {binder}, index: i64)': 'CALLBACK_VISIT',
+            f'fn(item: {binder}) -> bool': 'CALLBACK_PREDICATE',
+        }
+        for spelling, identity in callback_terms.items():
+            if term == TypeParser(spelling).type():
+                return identity
     return 'UNADMITTED'
+
+
+def array_recipe_contracts(binder):
+    """Exact declaration shapes; U denotes the checked callback result variable."""
+    if binder == 'U':
+        raise ValueError('Array element binder cannot shadow its callback result variable')
+    callbacks = 'allocation,retain,limit,callback'
+    ordinary = 'allocation,retain,limit'
+    return {
+        'ARRAY_MAP': ('map', 'READ', f'(fn: fn(item: {binder}, index: i64) -> U) -> Array<U>', callbacks, 'owned'),
+        'ARRAY_FILTER': ('filter', 'READ', f'(fn: fn(item: {binder}, index: i64) -> bool) -> Array<{binder}>', callbacks, 'owned'),
+        'ARRAY_REDUCE': ('reduce', 'READ', f'(fn: fn(acc: U, item: {binder}) -> U, initial: U) -> U', callbacks, 'owned'),
+        'ARRAY_FOR_EACH': ('forEach', 'READ', f'(fn: fn(item: {binder}, index: i64)) -> ()', callbacks, 'unit'),
+        'ARRAY_FIND': ('find', 'READ', f'(fn: fn(item: {binder}) -> bool) -> {binder}?', callbacks, 'owned'),
+        'ARRAY_FIND_INDEX': ('findIndex', 'READ', f'(fn: fn(item: {binder}) -> bool) -> i64', callbacks, 'owned'),
+        'ARRAY_EVERY': ('every', 'READ', f'(fn: fn(item: {binder}) -> bool) -> bool', callbacks, 'owned'),
+        'ARRAY_SOME': ('some', 'READ', f'(fn: fn(item: {binder}) -> bool) -> bool', callbacks, 'owned'),
+        'ARRAY_CONTAINS': ('contains', 'READ', f'(value: {binder}) -> bool', ordinary, 'owned'),
+        'ARRAY_INDEX_OF': ('indexOf', 'READ', f'(value: {binder}) -> i64', ordinary, 'owned'),
+        'ARRAY_JOIN': ('join', 'READ', '(separator?: string) -> string', ordinary, 'owned'),
+        'ARRAY_CLEAR': ('clear', 'REF', '()', ordinary, 'unit'),
+    }
+
+
+def validate_array_recipe(member, contract):
+    name, receiver, signature, failures, ownership = contract
+    parser = TypeParser(signature)
+    parameters = parser.parameters()
+    result = ('tuple', ())
+    if parser.peek() == '->':
+        parser.take('->')
+        result = parser.type()
+    if (parser.peek() is not None or member.name != name or member.receiver != receiver or
+            member.parameters != parameters or member.result != result or member.static or not member.method or
+            member.lowered or member.allocation != 'may_heap' or member.failures != failures or member.ownership != ownership):
+        raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
 
 
 def parse_source(source, prelude):
@@ -248,6 +303,7 @@ def parse_source(source, prelude):
         pending, lowered = None, False
     if header is None or not closed or pending:
         raise ValueError('incomplete native declaration')
+    recipes = array_recipe_contracts(header[2]) if header[0] == 1 else {}
     used = set()
     for member in members:
         if member.operation == 'NONE':
@@ -255,6 +311,9 @@ def parse_source(source, prelude):
         if member.operation in used:
             raise ValueError('duplicate operation identity')
         used.add(member.operation)
+        if member.operation in recipes:
+            validate_array_recipe(member, recipes[member.operation])
+            continue
         shape = (member.name, member.receiver,
                  tuple(simple_term(p[1], header[2]) for p in member.parameters),
                  simple_term(member.result, header[2]), member.allocation, member.failures, member.ownership)
@@ -272,7 +331,7 @@ def parse_source(source, prelude):
         expected_optional = (False, True) if member.operation == 'STRING_INDEX_OF' else (False,) * len(member.parameters)
         if shape != expected or member.static or not member.method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
-    required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} if header[0] == 1 else {
+    required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')

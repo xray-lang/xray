@@ -1,0 +1,88 @@
+struct Point {
+    x: i64
+    y: i64
+}
+class Box<T> {
+    v: T? = null
+}
+enum Color { Red }
+struct Wrap<T> { value: T }
+struct Pair<A, B> {
+    first: A
+    second: B
+}
+var evaluations = 0
+fn id(x: i64) -> i64 { return x }
+fn counted() -> i64 {
+    evaluations += 1
+    return 9
+}
+fn counted_nullable() -> Array<i64>? {
+    evaluations += 1
+    return [3]
+}
+fn unit() { evaluations += 1 }
+fn main() {
+    var a = 1
+    var s = "x"
+    var f = 1.5
+    var arr = [1, 2]
+    var p = Point{x: 1, y: 2}
+    var n: i64? = null
+    var m: i64? = 5
+    print(typeName(a))
+    print(typeName(s))
+    print(typeName(f))
+    print(typeName(arr))
+    print(typeName(p))
+    print(typeName(Color.Red))
+    print(typeName(true))
+    print(typeName(id))
+    print(typeName(n))
+    print(typeName(m))
+    print(typeName(1 < 2))
+    var u: u8 = 3
+    print(typeName(u))
+    var b = Box<i64>()
+    print(typeName(b))
+    var i8v: i8 = -3
+    var i16v: i16 = -3
+    var i32v: i32 = -3
+    var i64v: i64 = -3
+    var u16v: u16 = 3
+    var u32v: u32 = 3
+    var u64v: u64 = 3
+    var f32v: f32 = 1.5
+    print(typeName(i8v))
+    print(typeName(i16v))
+    print(typeName(i32v))
+    print(typeName(i64v))
+    print(typeName(u16v))
+    print(typeName(u32v))
+    print(typeName(u64v))
+    print(typeName(f32v))
+    print(typeName(Atomic(1)))
+    var nullable_array: Array<i64>? = [4, 5]
+    var no_array: Array<i64>? = null
+    print(typeName(nullable_array))
+    print(typeName(no_array))
+    var nested = Wrap<Pair<i64, Array<u8>>>{value: Pair<i64, Array<u8>>{first: 1, second: [2]}}
+    print(typeName(nested))
+    print(typeName(counted()))
+    print(evaluations)
+    print(typeName(counted_nullable()))
+    print(evaluations)
+    print(typeName(unit()))
+    print(evaluations)
+    const unit_value: () = unit()
+    print(typeName(unit_value))
+    print(evaluations)
+    print(typeName(null))
+    print(typeName(((null))))
+    try {
+        const invalid = 1 / 0
+    } catch panic(p) {
+        print(typeName(p))
+    }
+}
+main()

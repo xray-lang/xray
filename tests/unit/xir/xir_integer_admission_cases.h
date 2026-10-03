@@ -38,7 +38,7 @@ static void integer_ir_rejections(void) {
         }
         function.result = ops[0].type;
         XrXirArtifact *checked = NULL;
-        CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_BAD_TYPE);
+        CHECK(xr_xir_compile_check(&scalar_owner.context, &module, &checked, NULL) == XR_XIR_BAD_TYPE);
         CHECK(!checked);
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
@@ -46,7 +46,7 @@ static void integer_ir_rejections(void) {
     for (unsigned i = 0; i < 8; ++i) {
         for (unsigned context = XR_XIR_LAYOUT_STORAGE; context <= XR_XIR_LAYOUT_FRAME; ++context) {
             XrXirLayout layout;
-            CHECK(xr_xir_layout(NULL, types[i], &target, (XrXirLayoutContext) context, &layout) == XR_XIR_OK);
+            CHECK(xr_xir_builtin_layout(types[i], &target, (XrXirLayoutContext) context, &layout) == XR_XIR_OK);
             uint32_t size = context == XR_XIR_LAYOUT_STORAGE ? xr_xir_integer_bits(types[i]) / 8 :
                 context == XR_XIR_LAYOUT_FRAME || context == XR_XIR_LAYOUT_SSA ? 8 : 16;
             CHECK(layout.size == size && layout.alignment == (size > 8 ? 8 : size));

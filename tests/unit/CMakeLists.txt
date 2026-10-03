@@ -3545,6 +3545,9 @@ set_tests_properties(test_native_type_surface PROPERTIES LABELS "stdlib;metadata
 add_test(NAME test_native_declaration_schema
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/unit/frontend/test_native_declaration_schema.py)
 set_tests_properties(test_native_declaration_schema PROPERTIES LABELS "stdlib;metadata;native-types")
+add_test(NAME test_regression_corpus_ratchet
+    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/unit/frontend/test_regression_corpus_ratchet.py)
+set_tests_properties(test_regression_corpus_ratchet PROPERTIES LABELS "unit;frontend;regression" TIMEOUT 30)
 if(XRAY_STDLIB_VM_FASTPATHS)
     add_xray_unit_test(test_stdlib_vm_fastpath_abi stdlib/test_stdlib_vm_fastpath_abi.c)
     set_tests_properties(test_stdlib_vm_fastpath_abi PROPERTIES

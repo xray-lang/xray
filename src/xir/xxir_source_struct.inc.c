@@ -301,7 +301,7 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         if (!source_struct_field(ctx, node, instance_type, names[f], false, &index, &type)) return false;
         if (seen[index]) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate struct literal field");
         seen[index] = true;
-        if (!source_plan_expression(ctx, values[f], (SourceExpectedType){type != XR_XIR_UNIT,type}, &fields[index])) return false;
+        if (!source_plan_expression(ctx, values[f], (SourceExpectedType){type != XR_XIR_UNIT,type, false}, &fields[index])) return false;
         if (fields[index].type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct field type mismatch");
     }
     for (uint32_t f = 0; f < count; ++f) {

@@ -1,0 +1,2 @@
+fn name<T>(value: T) -> string { return typeName(value) }
+print(name<i64>(1))

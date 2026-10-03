@@ -1,0 +1,2 @@
+fn clear_read(items: Array<i64>) { items.clear() }
+clear_read([1])

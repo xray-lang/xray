@@ -100,7 +100,7 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
     unsigned access = incoming ? (source_constructor_active(ctx) ? 2u : 1u) : 0u;
     if (!source_struct_field(ctx, node, visible_name(ctx, "this")->type, name, access, &field, &type)) return false;
     if (!incoming) return source_constructor_read(ctx, node, field, value);
-    if (!source_plan_expression(ctx, incoming, (SourceExpectedType){type != XR_XIR_UNIT,type}, value)) return false;
+    if (!source_plan_expression(ctx, incoming, (SourceExpectedType){type != XR_XIR_UNIT,type, false}, value)) return false;
     if (value->type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor field type mismatch");
     return source_constructor_store(ctx, node, field, *value);
 }
@@ -168,7 +168,7 @@ static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType
         if (call->arg_accesses && call->arg_accesses[p] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument requires a value");
         if (!source_substitute(ctx, &substitution, function->parameters[p], 0, &expected) ||
-            !source_plan_expression(ctx, call->arguments[p], (SourceExpectedType){expected != XR_XIR_UNIT,expected}, &arguments[p])) return false;
+            !source_plan_expression(ctx, call->arguments[p], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false}, &arguments[p])) return false;
         if (arguments[p].type != expected) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument type mismatch");
     }
     for (uint32_t p = (uint32_t)call->arg_count; p < function->parameter_count; ++p)

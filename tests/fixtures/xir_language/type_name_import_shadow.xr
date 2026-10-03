@@ -1,0 +1,2 @@
+import { typeName } from "./type_name_import_library"
+print(typeName(8, "?"))

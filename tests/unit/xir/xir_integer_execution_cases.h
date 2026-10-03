@@ -14,6 +14,7 @@
 #include "xir/xxir.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_output.h"
+#include "xir_scalar_compile_owner.h"
 
 typedef struct IntegerExecutionCase {
     uint32_t function;
@@ -56,9 +57,13 @@ static void integer_value_boundaries(void) {
         XrXirType type = (XrXirType) values[i].type;
         XrXirTypeNode node = {XR_XIR_TYPE_CELL,type,NULL,0,XR_XIR_UNIT,0,0, {0}};
         XrXirTypes types = {&node,1, NULL, NULL};
-        XrXirBudget budget = {.parameters = 16, .metadata_bytes = 4096, .work = 64};
+        ScalarCompileOwner owner = {0};
+        XrXirCompileLimits structural = xr_xir_compile_default_limits();
+        structural.parameters = 16;
+        /* Copy work counts real bytes independently of the metadata limit. */
+        scalar_compile_owner_new(&owner, (XrCompileResourceLimits) {4096, 4096, 16384}, structural);
         XrXirTypeArena *arena = NULL;
-        CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena) == XR_XIR_VALUE_OK);
         XrXirValueAdmission admission = {arena,domain,NULL,NULL,16,0};
         XrXirValue copy = {0}, cell = {0}, read = {0};
         CHECK(xr_xir_value_copy(&values[i], &copy) == XR_XIR_VALUE_OK);
@@ -74,7 +79,8 @@ static void integer_value_boundaries(void) {
         CHECK(read.payload == values[i].payload);
         xr_xir_value_drop(&copy); xr_xir_value_drop(&read); xr_xir_value_drop(&cell);
         CHECK(!copy.type && !read.type && !cell.type);
-        xr_xir_type_arena_drop(arena);
+        xr_xir_compile_type_arena_drop(arena);
+        scalar_compile_owner_free(&owner);
         CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
     }
     xr_xir_domain_drop(domain);

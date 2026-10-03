@@ -1,0 +1,6 @@
+fn identity(value: i64) -> i64 { return value }
+fn families<T>(items: Array<T>, action: fn(T) -> T) {
+    print(typeName(items))
+    print(typeName(action))
+}
+families<i64>([1, 2], identity)

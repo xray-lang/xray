@@ -1,0 +1,13 @@
+import time
+var calls = 0
+fn main() {
+    var result = [1, 2].map(fn(x: i64) -> i64 {
+        time.sleep(1)
+        calls += 1
+        return x * 3
+    })
+    print(result[0])
+    print(result[1])
+    print(calls)
+}
+main()

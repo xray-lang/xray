@@ -1,0 +1,3 @@
+enum Failure { Stop }
+fn name(value: Error) -> string { return typeName(value) }
+print(name(Failure.Stop))

@@ -943,6 +943,53 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
 }
 
+/* Keep host optimization bounded per generated function without changing the
+ * one-instruction action boundary or the shared activation state. */
+#define EMIT_RESUME_CHUNK_INSTRUCTIONS 32u
+/* Scan offsets only: subsequent appends may relocate the emission buffer. */
+static bool emit_resume_label_used(CBuffer *buffer, size_t first, size_t end,
+    const char *reference, size_t length) {
+    if (end < first || end > buffer->length) {
+        emit_reject(buffer, XR_XIR_BAD_STRUCTURE);
+        return false;
+    }
+    for (size_t at = first; length <= end - at && emit_work(buffer, 1); ++at) {
+        bool equal = true;
+        for (size_t byte = 0; byte < length; ++byte) {
+            if (!emit_work(buffer, 2)) return false;
+            if (buffer->text[at + byte] != reference[byte]) { equal = false; break; }
+        }
+        if (equal) return true;
+    }
+    return false;
+}
+static void emit_resume_chunks(CBuffer *buffer, const XrXirArtifact *artifact,
+    const char *prefix, uint32_t index) {
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    const XrXirFunction *function = &module->functions[index];
+    const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
+    for (uint32_t first = 0; first < function->instruction_count && emit_work(buffer, 1);) {
+        uint32_t count = function->instruction_count - first;
+        if (count > EMIT_RESUME_CHUNK_INSTRUCTIONS) count = EMIT_RESUME_CHUNK_INSTRUCTIONS;
+        uint32_t end = first + count;
+        append(buffer, "static XR_NOINLINE XrXirAction %s_step_%u_%u(XrXirCallView *view, %s_state_%u *state) {\n"
+            "    (void) view;\n    switch (state->pc) {\n", prefix, index, first / EMIT_RESUME_CHUNK_INSTRUCTIONS, prefix, index);
+        size_t body_begin = buffer->length;
+        for (uint32_t i = first; i < end && emit_work(buffer, 1); ++i)
+            emit_resume_step(buffer, module, function, layout, i);
+        size_t body_end = buffer->length;
+        bool invalid = emit_resume_label_used(buffer, body_begin, body_end, "goto invalid;", sizeof("goto invalid;") - 1);
+        bool limit = emit_resume_label_used(buffer, body_begin, body_end, "goto limit;", sizeof("goto limit;") - 1);
+        if (invalid) append(buffer, "    default: goto invalid;\n    }\ninvalid:\n");
+        else append(buffer, "    default: break;\n    }\n");
+        append(buffer, "    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
+        if (limit) append(buffer,
+            "limit:\n    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};\n");
+        append(buffer, "}\n");
+        first = end;
+    }
+}
+
 static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
                                   const char *prefix, uint32_t index) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
@@ -963,6 +1010,8 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     if (layout->path_count) append(buffer, "    XrXirValuePathStep path_steps[%u];\n", layout->path_count);
     append(buffer, "    unsigned char frame[%u];\n} %s_state_%u;\n",
            layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
+    bool chunked = function->instruction_count > EMIT_RESUME_CHUNK_INSTRUCTIONS;
+    if (chunked) emit_resume_chunks(buffer, artifact, prefix, index);
     append(buffer, "XR_FUNC XrXirAction %s_f%u(XrXirCallView *view) {\n"
            "    %s_state_%u *state = view->state;\n", prefix, index, prefix, index);
     emit_cleanup_entry(buffer, function, layout);
@@ -1015,9 +1064,17 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "!= XR_XIR_VALUE_OK) goto limit;\n"
            "        } else if (state->destination != UINT32_MAX)\n"
            "            xr_xir_scalar_store(state->frame, state->destination, inbox.payload);\n"
-           "        }\n    }\n    switch (state->pc) {\n");
-    for (uint32_t i = 0; i < function->instruction_count && emit_work(buffer, 1); ++i)
-        emit_resume_step(buffer, module, function, layout, i);
+           "        }\n    }\n");
+    if (chunked) {
+        append(buffer, "    switch (state->pc / %uu) {\n", EMIT_RESUME_CHUNK_INSTRUCTIONS);
+        uint32_t chunks = (function->instruction_count - 1) / EMIT_RESUME_CHUNK_INSTRUCTIONS + 1;
+        for (uint32_t chunk = 0; chunk < chunks && emit_work(buffer, 1); ++chunk)
+            append(buffer, "    case %uu: return %s_step_%u_%u(view, state);\n", chunk, prefix, index, chunk);
+    } else {
+        append(buffer, "    switch (state->pc) {\n");
+        for (uint32_t i = 0; i < function->instruction_count && emit_work(buffer, 1); ++i)
+            emit_resume_step(buffer, module, function, layout, i);
+    }
     append(buffer, "    default: break;\n    }\ninvalid:\n"
            "    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n"
            "limit:\n    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};\n}\n");

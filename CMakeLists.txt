@@ -4641,6 +4641,18 @@ if(BUILD_TESTS)
         TIMEOUT 600
     )
 
+    add_test(
+        NAME resume_chunk_shape_cli
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_resume_chunk_shape.py
+                --xray $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(resume_chunk_shape_cli PROPERTIES
+        LABELS "cli;aot;canonical-program;regression"
+        TIMEOUT 300
+    )
+
     # Spec 8.1.1 uncaught value-return error diagnostic. A content gate: the
     # dropped-`go` shape exits 0 on both backends, so the VM/AOT differential
     # agrees even when one of them prints nothing.

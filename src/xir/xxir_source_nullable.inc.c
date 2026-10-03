@@ -70,7 +70,7 @@ static bool source_coalesce(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     if (right->type == AST_LITERAL_NULL) {
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_NULLABLE_NONE, result, {0}, {0}, 0, {0}}, &no)) return false;
     } else {
-        if (!source_plan_expression(ctx, right, (SourceExpectedType) {true, result}, &no)) return false;
+        if (!source_plan_expression(ctx, right, (SourceExpectedType) {true, result, false}, &no)) return false;
         if (no.type == element && result != element &&
             !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_NULLABLE_SOME, result, {no.id, 0}, {0}, 0, {0}}, &no)) return false;
         if (no.type != result)

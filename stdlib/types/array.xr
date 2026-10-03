@@ -18,22 +18,35 @@ struct Array<T> {
     ref pop() -> T?
     ref shift() -> T?
     ref unshift(value: T)
+    // @native-operation ARRAY_CLEAR allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref clear()
     ref reserve(capacity: i64) -> Array<T>
     ref resize(length: i64, fill: T) -> Array<T>
     concat(...arrays: Array<T>) -> Array<T>
+    // @native-operation ARRAY_INDEX_OF allocation=may_heap failures=allocation,retain,limit ownership=owned
     indexOf(value: T) -> i64
+    // @native-operation ARRAY_CONTAINS allocation=may_heap failures=allocation,retain,limit ownership=owned
     contains(value: T) -> bool
+    // @native-operation ARRAY_JOIN allocation=may_heap failures=allocation,retain,limit ownership=owned
     join(separator?: string) -> string
     ref reverse() -> Array<T>
     ref sort(compareFn?: fn(a: T, b: T) -> i64) -> Array<T>
+    // U is inferred only from the checked callback signature, not a receiver type parameter.
+    // @native-operation ARRAY_MAP allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     map(fn: fn(item: T, index: i64) -> U) -> Array<U>
+    // @native-operation ARRAY_FILTER allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     filter(fn: fn(item: T, index: i64) -> bool) -> Array<T>
+    // @native-operation ARRAY_REDUCE allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U
+    // @native-operation ARRAY_FOR_EACH allocation=may_heap failures=allocation,retain,limit,callback ownership=unit
     forEach(fn: fn(item: T, index: i64)) -> ()
+    // @native-operation ARRAY_FIND allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     find(fn: fn(item: T) -> bool) -> T?
+    // @native-operation ARRAY_FIND_INDEX allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     findIndex(fn: fn(item: T) -> bool) -> i64
+    // @native-operation ARRAY_EVERY allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     every(fn: fn(item: T) -> bool) -> bool
+    // @native-operation ARRAY_SOME allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     some(fn: fn(item: T) -> bool) -> bool
     ref fill(value: T, start?: i64, end?: i64) -> Array<T>
     // All arrays, including Array<byte>, render the "[a, b]" container form.

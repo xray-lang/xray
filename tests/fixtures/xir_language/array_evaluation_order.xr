@@ -1,0 +1,25 @@
+var values = [1, 2, 3]
+fn callback() -> fn(i64, i64) -> i64 {
+    print("callback")
+    values = [8]
+    return fn(acc: i64, x: i64) -> i64 { return acc + x }
+}
+fn initial() -> i64 {
+    print("initial")
+    values.push(9)
+    return 10
+}
+fn main() {
+    print(values.reduce(callback(), initial()))
+    print(values[0])
+    print(len(values))
+    var snapshot = [1, 2, 3]
+    var mapped = snapshot.map(fn(x: i64) -> i64 {
+        snapshot.push(9)
+        return x * 10
+    })
+    print(len(mapped))
+    print(mapped[2])
+    print(len(snapshot))
+}
+main()

@@ -41,15 +41,31 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual("Array<T>", declaration["signature"])
         self.assertEqual("struct", declaration["declaration_kind"])
 
-    def test_only_three_operations_are_admitted(self) -> None:
+    def test_fifteen_operations_have_exact_admission_contracts(self) -> None:
         members = [entry for entry in self.items if entry["kind"] != "type"]
         admitted = {entry["name"]: entry for entry in members if entry["xir_admitted"]}
-        self.assertEqual({"get", "set", "push"}, set(admitted))
-        for name, operation, receiver, ownership, failures in (
+        ordinary = ["allocation", "retain", "limit"]
+        callback = ordinary + ["callback"]
+        expected = (
             ("get", "ARRAY_GET", "read", "owned", ["bounds", "allocation", "retain", "limit"]),
             ("set", "ARRAY_SET", "ref", "unit", ["bounds", "allocation", "retain", "limit"]),
-            ("push", "ARRAY_PUSH", "ref", "unit", ["allocation", "retain", "limit"]),
-        ):
+            ("push", "ARRAY_PUSH", "ref", "unit", ordinary),
+            ("clear", "ARRAY_CLEAR", "ref", "unit", ordinary),
+            ("contains", "ARRAY_CONTAINS", "read", "owned", ordinary),
+            ("indexOf", "ARRAY_INDEX_OF", "read", "owned", ordinary),
+            ("join", "ARRAY_JOIN", "read", "owned", ordinary),
+            ("map", "ARRAY_MAP", "read", "owned", callback),
+            ("filter", "ARRAY_FILTER", "read", "owned", callback),
+            ("reduce", "ARRAY_REDUCE", "read", "owned", callback),
+            ("forEach", "ARRAY_FOR_EACH", "read", "unit", callback),
+            ("find", "ARRAY_FIND", "read", "owned", callback),
+            ("findIndex", "ARRAY_FIND_INDEX", "read", "owned", callback),
+            ("every", "ARRAY_EVERY", "read", "owned", callback),
+            ("some", "ARRAY_SOME", "read", "owned", callback),
+        )
+        self.assertEqual(15, len(admitted))
+        self.assertEqual({row[0] for row in expected}, set(admitted))
+        for name, operation, receiver, ownership, failures in expected:
             with self.subTest(name=name):
                 entry = admitted[name]
                 self.assertEqual(operation, entry["operation"])
@@ -58,7 +74,10 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                 self.assertEqual(ownership, entry["ownership"])
                 self.assertEqual(failures, entry["failures"])
         unadmitted = [entry for entry in members if not entry["xir_admitted"]]
-        self.assertEqual(29, len(unadmitted))
+        self.assertEqual(17, len(unadmitted))
+        self.assertEqual({"withCapacity", "capacity", "ptr", "mutPtr", "pop", "shift", "unshift",
+                          "reserve", "resize", "concat", "reverse", "sort", "fill", "toString",
+                          "iterator", "entriesIterator", "entries"}, {entry["name"] for entry in unadmitted})
         self.assertTrue(all(entry["operation"] == "NONE" for entry in unadmitted))
         self.assertTrue(all(entry["allocation"] == "unknown" for entry in unadmitted))
         self.assertTrue(all(entry["ownership"] == "unknown" for entry in unadmitted))

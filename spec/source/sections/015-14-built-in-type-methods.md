@@ -139,7 +139,9 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-下表保留完整方法分母；首个 XIR 子集并不自动准入其余方法。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe，共 15 个 operation；32 个成员中其余 17 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+
+这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
 | 成员 | 类型/说明 |
 |--|--|
@@ -151,8 +153,8 @@ print(a[0], a[1])           // head head
 | `indexOf(x)` / `contains(x)` | 只读查询 |
 | `join(sep?)` | 只读 receiver，拼接为字符串 |
 | `ref reverse()` / `ref sort(cmp?)` | 修改 receiver 的排列 |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读 receiver；回调合同须在准入前另冻 |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读 receiver；回调合同须在准入前另冻 |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读快照；map/filter 的元素回调可带 index，reduce 为 `fn(U,T)->U` |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读快照；forEach 可带 index，其余为 `fn(T)->bool` 的短路查询 |
 | `ref fill(v, start?, end?)` / `ref clear()` | 填充或清空 |
 | `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
 | `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
@@ -474,7 +476,9 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-The table retains the complete method denominator; the first XIR subset does not automatically admit its remaining methods. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+The table retains the complete method denominator. The current frozen XIR boundary comprises the three get/set/push primitives and twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. These are 15 operations; the other 17 of the 32 members remain unadmitted. Execution identities come from the same structured declarations in `stdlib/types/array.xr`; names serve member lookup only. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+
+These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
 
 | Member | Type / Description |
 |--|--|
@@ -486,8 +490,8 @@ The table retains the complete method denominator; the first XIR subset does not
 | `indexOf(x)` / `contains(x)` | read-only query |
 | `join(sep?)` | read-only receiver; concatenates into a string |
 | `ref reverse()` / `ref sort(cmp?)` | changes the receiver's ordering |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read-only receiver; callback contracts must be frozen before admission |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read-only receiver; callback contracts must be frozen before admission |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read snapshot; map/filter callbacks may take an index; reduce uses `fn(U,T)->U` |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read snapshot; forEach may take an index; the others short-circuit with `fn(T)->bool` |
 | `ref fill(v, start?, end?)` / `ref clear()` | fill or clear |
 | `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
 | `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |

@@ -1,0 +1,1 @@
+var result = [1].map(fn(x: string) -> string { return x })

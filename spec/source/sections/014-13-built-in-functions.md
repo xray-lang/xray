@@ -46,6 +46,10 @@ order: 014
 | `typeName<T>()` | `() -> string` | 返回静态类型 `T` 的名称 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
+当前 XIR 值查询子集只准入未被词法或模块绑定遮蔽的 `typeName(value)`，实参是一个普通 READ 值并按普通语义求值一次。已准入标量、Atomic/PanicInfo 使用共享类型名；Unit 为 `()`，裸 null 与括号 null 为 `null`。Array/callable 顶层返回 `Array`/`function`，具体名义类型显示声明名与闭合类型参数，参数中的 Array 显示元素类型。Nullable present 返回 element 的家族或名义名，none 返回 `null`。结果字符串进入接收 owner；名称上限 256 字节、递归上限 32 层，超限报告预算失败，不截断。
+
+普通泛型 Array<T>/callable<T> 的家族名在定义处可得；T 自身、含开放参数的名义类型及 T? 的完整查询、Error existential 的具体动态 enum 名、`typeName<T>()` 与完整反射仍未接通。这是当前实现准入边界，保留上述合法语言形式；后续须在 Checked 上保留查询、特化并复验，不回到 AST 补造能力。查询不授予可见性、构造或约束权限。
+
 全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
 ```xray @id=builtin-typeOf-is
@@ -149,6 +153,10 @@ These global functions and built-in constructor/static functions are usable with
 | `typeName(x)` | `(value) -> string` | returns the debug/logging type-name string |
 | `typeName<T>()` | `() -> string` | returns the name of static type `T` |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
+
+The current XIR value-query subset admits `typeName(value)` only when no lexical or module binding shadows the builtin. One ordinary READ argument is evaluated once under normal semantics. Admitted scalars and Atomic/PanicInfo use shared type names; Unit is `()`, while bare or grouped null is `null`. Top-level Array/callable values report `Array`/`function`; concrete nominal values report their declaration name and closed type arguments, with Array arguments showing their element type. A present Nullable reports the element's family or nominal name; none reports `null`. Name bytes belong to the receiving owner. The 256-byte name and 32-level recursion limits report budget failure without truncation.
+
+Generic Array<T>/callable<T> family names are available at the definition. Queries of T itself, nominal types with open arguments and T?, concrete dynamic enum names through Error existentials, `typeName<T>()` and full reflection remain unimplemented. This admission boundary preserves those legal language forms. Their later implementation must retain the query in Checked, specialize and recheck it without revisiting AST to invent capabilities. The query grants no visibility, construction or constraint authority.
 
 The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 

@@ -92,7 +92,7 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
             if (!xr_xir_type_is_array(&ctx->types,place->type))
                 return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed place is not an Array");
             XrXirType element = xr_xir_array_element(&ctx->types,place->type); SourceValue index;
-            if (!source_plan_expression(ctx, step->as.index_get.index, (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64}, &index) ||
+            if (!source_plan_expression(ctx, step->as.index_get.index, (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64, false}, &index) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_INDEX_PLACE,element,{place->id,index.id},{0},0,{0}},place)) return false;
         }
         if (!source_query_expression(ctx,step,place->type)) return false;

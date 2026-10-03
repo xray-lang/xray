@@ -26,6 +26,7 @@
 #include "../shared/xr_decimal_float.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
+#include "../shared/xr_type_names_core.h"
 #include "../module/xmodule_graph.h"
 #include "../module/xlockfile.h"
 #include "../toolchain/xcompiler_session.h"
@@ -69,7 +70,8 @@ static bool source_name_ready(const SourceName *name) {
         ((name->kind == SOURCE_LOCAL || name->kind == SOURCE_SLOT) && name->type != XR_XIR_UNIT));
 }
 typedef struct SourceErrorContext SourceErrorContext;
-typedef struct SourceExpectedType { bool present; XrXirType type; } SourceExpectedType;
+/* `infer_result` leaves a callable context's result open so a closure's own body decides it. */
+typedef struct SourceExpectedType { bool present; XrXirType type; bool infer_result; } SourceExpectedType;
 typedef struct SourceConversionRecipe {
     bool needed;
     XrXirOp operation;
@@ -203,7 +205,7 @@ typedef struct SourceContext {
     bool returned, has_generics, query_ready;
     XrXirSourceView query;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
-    uint32_t query_module_capacity, array_module, array_declaration, array_members[4], length_declaration;
+    uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
 
@@ -972,6 +974,14 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 #include "xxir_source_call_plan.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
+typedef enum SourceArrayRecipe {
+    SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,
+    SOURCE_ARRAY_FIND, SOURCE_ARRAY_FIND_INDEX, SOURCE_ARRAY_EVERY, SOURCE_ARRAY_SOME,
+    SOURCE_ARRAY_CONTAINS, SOURCE_ARRAY_INDEX_OF, SOURCE_ARRAY_JOIN, SOURCE_ARRAY_CLEAR
+} SourceArrayRecipe;
+static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
+static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
+    const SourceValue *evaluated, SourceValue *value);
 #include "xxir_source_array.inc.c"
 #include "xxir_source_string.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
@@ -1014,6 +1024,7 @@ static bool source_string_literal(SourceContext *ctx, AstNode *node, const char 
 }
 #include "xxir_source_enum.inc.c"
 #include "xxir_source_enum_text.inc.c"
+#include "xxir_source_type_name.inc.c"
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_panic.inc.c"
@@ -1062,8 +1073,20 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 if (call->arg_count != 1 || call->type_arg_count || !call->arguments ||
                     (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string conversion takes one value");
-                return source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){false, XR_XIR_UNIT}, &input) &&
+                return source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){false, XR_XIR_UNIT, false}, &input) &&
                     source_text_conversion(ctx, node, input, value);
+            }
+            if (source_text_same(ctx, NULL, name, "typeName")) {
+                SourceValue input;
+                if (call->arg_count != 1 || call->type_arg_count || !call->arguments ||
+                    (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
+                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "typeName takes one value");
+                AstNode *argument = call->arguments[0];
+                while (argument && argument->type == AST_GROUPING) argument = argument->as.grouping;
+                if (argument && argument->type == AST_LITERAL_NULL)
+                    return source_string_literal(ctx, node, TYPE_NAME_NULL, strlen(TYPE_NAME_NULL), value);
+                return source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){false, XR_XIR_UNIT, false}, &input) &&
+                    source_type_name(ctx, node, input, value);
             }
             print = source_text_same(ctx, NULL, name, "print"); atomic = source_text_same(ctx, NULL, name, "Atomic"); stream = stream_primitive(ctx, name);
             host_time = host_time_primitive(ctx, name);
@@ -1093,7 +1116,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             XrXirType path_type;
             if (!source_path_type(ctx,member->object,&path_type)) return false;
             if (xr_xir_type_is_array(&ctx->types,path_type) &&
-                (source_text_same(ctx, NULL, member->name, "set") || source_text_same(ctx, NULL, member->name, "push")))
+                (source_text_same(ctx, NULL, member->name, "set") || source_text_same(ctx, NULL, member->name, "push") ||
+                 source_text_same(ctx, NULL, member->name, "clear")))
                 return source_array_call(ctx,node,NULL,value);
             if (xr_xir_type_is_nominal(&ctx->types, path_type)) {
                 SourceName *ref_method = source_method_find(ctx, path_type, member->name);
@@ -1174,7 +1198,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (atomic || method == XR_XIR_ATOMIC_I64_FETCH_ADD) expected = XR_XIR_I64;
         if (stream) expected = XR_XIR_STRING;
         if (host_time > (uint32_t) XR_XIR_CLOCK_MONOTONIC) expected = XR_XIR_I64;
-        if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){expected != XR_XIR_UNIT,expected}, &args[i])) return false;
+        if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false}, &args[i])) return false;
         if (args[i].type == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unit argument is not admitted");
     }
     if (indirect.type) {
@@ -1293,7 +1317,7 @@ static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *v
     AsExprNode *cast = &node->as.as_expr;
     XrXirType target; SourceValue input;
     if (!cast->is_safe && source_type(ctx, cast->type, &target) && target == XR_XIR_STRING) {
-        return source_plan_expression(ctx, cast->expr, (SourceExpectedType){false, XR_XIR_UNIT}, &input) &&
+        return source_plan_expression(ctx, cast->expr, (SourceExpectedType){false, XR_XIR_UNIT, false}, &input) &&
             source_text_conversion(ctx, node, input, value);
     }
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
@@ -1301,7 +1325,7 @@ static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *v
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete nonnullable numeric target");
     SourceInteger literal;
     if (!source_direct_integer(ctx, cast->expr, &literal)) return false;
-    SourceExpectedType context = {literal.present && !literal.negative && literal.magnitude > INT64_MAX,XR_XIR_U64};
+    SourceExpectedType context = {literal.present && !literal.negative && literal.magnitude > INT64_MAX,XR_XIR_U64, false};
     if (!source_plan_expression(ctx, cast->expr, context, &input)) return false;
     if (!xr_xir_type_is_number(input.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete numeric operand");
@@ -1316,7 +1340,7 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedT
         SourceInteger literal;
         if (!source_direct_integer(ctx, node->as.unary.operand, &literal) ||
             !source_plan_expression(ctx, node->as.unary.operand, (SourceExpectedType){literal.present && expected.present && xr_xir_type_is_integer(expected.type),
-                expected.present ? expected.type : XR_XIR_UNIT}, &right)) return false;
+                expected.present ? expected.type : XR_XIR_UNIT, false}, &right)) return false;
         if (node->type == AST_UNARY_NEG && xr_xir_float_bits(right.type))
             return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_NEG_FLOAT, right.type, {right.id, 0}, {0}, 0, {0}}, value);
         if (!xr_xir_type_is_integer(right.type)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unary arithmetic requires an integer");
@@ -1335,12 +1359,12 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedT
         bool second_literal=second->integer.present || second->decimal.node || second->syntax->type==AST_LITERAL_NULL;
         if (!shift && first_literal && !second_literal && !first->numeric.ready) {
             if (!source_plan_complete(ctx,second,&right)) return false;
-            first->expected=(SourceExpectedType){true,right.type};
+            first->expected=(SourceExpectedType){true,right.type, false};
             if (!source_plan_complete(ctx,first,&left)) return false;
         } else {
             if (!source_plan_complete(ctx,first,&left)) return false;
             if (!second->numeric.ready && second_literal && !shift)
-                second->expected=(SourceExpectedType){true,left.type};
+                second->expected=(SourceExpectedType){true,left.type, false};
             if (!source_plan_complete(ctx,second,&right)) return false;
         }
         return plan->binary ? source_binary_emit(ctx,plan->binary,left,right,value) :
@@ -1364,8 +1388,8 @@ static bool source_conditional_plan(SourceContext *ctx,AstNode *node,XrXirType y
         if (xr_xir_integer_bits(no)>xr_xir_integer_bits(common)) common=no;
     }
     SourceConditionalRecipe recipe={0};recipe.result=common;
-    if (!source_conversion_plan(ctx,node,yes,(SourceExpectedType){true,common},&recipe.yes) ||
-        !source_conversion_plan(ctx,node,no,(SourceExpectedType){true,common},&recipe.no)) return false;
+    if (!source_conversion_plan(ctx,node,yes,(SourceExpectedType){true,common, false},&recipe.yes) ||
+        !source_conversion_plan(ctx,node,no,(SourceExpectedType){true,common, false},&recipe.no)) return false;
     *output=recipe;return true;
 }
 static bool source_conditional(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
@@ -1567,7 +1591,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         if (!symbol || !symbol->mutable || (!source_local_name(symbol) && symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_UNIT_SLOT))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "assignment requires a mutable binding");
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_WRITE)) return false;
-        if (!source_plan_expression(ctx, node->as.assignment.value, (SourceExpectedType){true,symbol->type}, &assigned)) return false;
+        if (!source_plan_expression(ctx, node->as.assignment.value, (SourceExpectedType){true,symbol->type, false}, &assigned)) return false;
         if (assigned.type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "assignment type mismatch");
         if (symbol->kind == SOURCE_LOCAL && !source_facts_assign(ctx, symbol, source_value_is_some(ctx, assigned))) return false;
         if (symbol->kind == SOURCE_UNIT_LOCAL) {
@@ -1584,7 +1608,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     }
 }
 static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    return source_plan_expression(ctx, node, (SourceExpectedType){false,XR_XIR_UNIT}, value);
+    return source_plan_expression(ctx, node, (SourceExpectedType){false,XR_XIR_UNIT, false}, value);
 }
 static bool source_plan_soft_numeric(SourceContext *ctx,SourceExpressionPlan *plan,bool *soft) {
     if (!source_work(ctx,plan->syntax)) return false;
@@ -1637,13 +1661,13 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
         return true;
     bool shift=plan->syntax->type==AST_BINARY_LSHIFT || plan->syntax->type==AST_BINARY_RSHIFT;
     SourceExpectedType left_hint=hint,right_hint=hint;
-    if (left->type_ready) right_hint=(SourceExpectedType){!shift,left->ground_type};
-    if (right->type_ready && !shift) left_hint=(SourceExpectedType){true,right->ground_type};
+    if (left->type_ready) right_hint=(SourceExpectedType){!shift,left->ground_type, false};
+    if (right->type_ready && !shift) left_hint=(SourceExpectedType){true,right->ground_type, false};
     if (!hint.present && !left->type_ready && !right->type_ready && (left->decimal.node || right->decimal.node))
-        left_hint=right_hint=(SourceExpectedType){defaults,XR_XIR_F64};
+        left_hint=right_hint=(SourceExpectedType){defaults,XR_XIR_F64, false};
     if (!source_plan_binary_prepare(ctx,left,left_hint,defaults) ||
         !source_plan_numeric_prepare(ctx,left,left_hint,defaults)) return false;
-    if (left->type_ready && !shift) right_hint=(SourceExpectedType){true,left->ground_type};
+    if (left->type_ready && !shift) right_hint=(SourceExpectedType){true,left->ground_type, false};
     if (!source_plan_binary_prepare(ctx,right,right_hint,defaults) ||
         !source_plan_numeric_prepare(ctx,right,right_hint,defaults)) return false;
     if (!left->type_ready || !right->type_ready) return true;
@@ -1698,7 +1722,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     case AST_MATCH_EXPR:
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
-        plan->left=source_plan_collect(ctx,node->as.match_expr.expr,(SourceExpectedType){false,XR_XIR_UNIT});
+        plan->left=source_plan_collect(ctx,node->as.match_expr.expr,(SourceExpectedType){false,XR_XIR_UNIT, false});
         bool match_ok=plan->left && source_match_prepare(ctx,plan);
         --ctx->depth;ctx->active_expression=parent;
         if (!match_ok) return NULL;
@@ -1706,21 +1730,21 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     case AST_TERNARY:
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
-        plan->condition=source_plan_collect(ctx,node->as.ternary.condition,(SourceExpectedType){false,XR_XIR_UNIT});
+        plan->condition=source_plan_collect(ctx,node->as.ternary.condition,(SourceExpectedType){false,XR_XIR_UNIT, false});
         {
             /* Each arm is typed under the facts of its own direction (N-7). */
             SourceFact *entry_facts=ctx->facts; SourceFactSet arm_facts={0};
             if (plan->condition && source_condition_facts(ctx,node->as.ternary.condition,true,&arm_facts,0) &&
                 source_facts_apply(ctx,&arm_facts))
-                plan->left=source_plan_collect(ctx,node->as.ternary.true_expr,(SourceExpectedType){false,XR_XIR_UNIT});
+                plan->left=source_plan_collect(ctx,node->as.ternary.true_expr,(SourceExpectedType){false,XR_XIR_UNIT, false});
             ctx->facts=entry_facts; arm_facts=(SourceFactSet){0};
             if (plan->left && source_condition_facts(ctx,node->as.ternary.condition,false,&arm_facts,0) &&
                 source_facts_apply(ctx,&arm_facts))
-                plan->right=source_plan_collect(ctx,node->as.ternary.false_expr,(SourceExpectedType){false,XR_XIR_UNIT});
+                plan->right=source_plan_collect(ctx,node->as.ternary.false_expr,(SourceExpectedType){false,XR_XIR_UNIT, false});
             ctx->facts=entry_facts;
         }
         --ctx->depth;ctx->active_expression=parent;
-        if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT},false)) return NULL;
+        if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false},false)) return NULL;
         break;
     case AST_GROUPING:
         if (plan->integer.present || plan->decimal.node) break;
@@ -1731,10 +1755,10 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     case AST_BINARY_EQ:case AST_BINARY_NE:case AST_BINARY_LT:case AST_BINARY_LE:case AST_BINARY_GT:case AST_BINARY_GE:
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
-        plan->left=source_plan_collect(ctx,node->type==AST_GROUPING ? node->as.grouping : node->as.binary.left,(SourceExpectedType){false,XR_XIR_UNIT});
-        if (plan->left && node->type!=AST_GROUPING) plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){false,XR_XIR_UNIT});
+        plan->left=source_plan_collect(ctx,node->type==AST_GROUPING ? node->as.grouping : node->as.binary.left,(SourceExpectedType){false,XR_XIR_UNIT, false});
+        if (plan->left && node->type!=AST_GROUPING) plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){false,XR_XIR_UNIT, false});
         --ctx->depth;ctx->active_expression=parent;
-        if (!plan->left || (node->type!=AST_GROUPING && !plan->right) || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT},false)) return NULL;
+        if (!plan->left || (node->type!=AST_GROUPING && !plan->right) || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false},false)) return NULL;
         if (node->type>=AST_BINARY_EQ && node->type<=AST_BINARY_GE) {plan->type_ready=true;plan->ground_type=XR_XIR_BOOL;}
         break;
     default:break;
@@ -1800,7 +1824,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     XrXirType annotation = XR_XIR_UNIT;
     if (decl->type_annotation && !source_type(ctx, decl->type_annotation, &annotation)) return false;
     if (decl->initializer) {
-        if (!source_plan_expression(ctx, decl->initializer, (SourceExpectedType){decl->type_annotation != NULL,annotation}, &initial)) return false;
+        if (!source_plan_expression(ctx, decl->initializer, (SourceExpectedType){decl->type_annotation != NULL,annotation, false}, &initial)) return false;
     } else if (!source_default_value(ctx, node, annotation, &initial)) return false;
     if (decl->type_annotation && annotation != initial.type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "binding annotation mismatch");
@@ -1847,7 +1871,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate local name");
     }
     SourceValue value;
-    if (!source_closure(ctx, node, (SourceExpectedType){false, XR_XIR_UNIT}, &value)) return false;
+    if (!source_closure(ctx, node, (SourceExpectedType){false, XR_XIR_UNIT, false}, &value)) return false;
     if (!symbol) {
         symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
@@ -2075,7 +2099,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_EXPR_STMT: {
         SourceValue value; AstNode *expr=node->as.expr_stmt;
         if (expr->type!=AST_MATCH_EXPR) return expression(ctx,expr,&value);
-        SourceExpressionPlan *plan=source_plan_collect(ctx,expr,(SourceExpectedType){false,XR_XIR_UNIT});
+        SourceExpressionPlan *plan=source_plan_collect(ctx,expr,(SourceExpectedType){false,XR_XIR_UNIT, false});
         if (!plan) return false;
         plan->statement_match=true;
         return source_plan_complete(ctx,plan,&value);
@@ -2090,7 +2114,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         if (status != XR_XIR_OK)
             return source_fail(ctx, node, status, "throw requires a proved enum error value");
         if (ctx->bodies[ctx->function].error_context) {
-            if (!(source_conversion_plan(ctx,node,(&value)->type,(SourceExpectedType){XR_XIR_ERROR != XR_XIR_UNIT,XR_XIR_ERROR},&checked_conversion) && source_conversion_emit(ctx,&checked_conversion,&value)) || !source_error_edge(ctx,value)) return false;
+            if (!(source_conversion_plan(ctx,node,(&value)->type,(SourceExpectedType){XR_XIR_ERROR != XR_XIR_UNIT,XR_XIR_ERROR, false},&checked_conversion) && source_conversion_emit(ctx,&checked_conversion,&value)) || !source_error_edge(ctx,value)) return false;
             ctx->returned = true; return true;
         }
         ctx->returned = true;
@@ -2105,7 +2129,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         SourceValue value = {0};
         SourceFunction *body = &ctx->bodies[ctx->function];
         XrXirType expected = body->infer_result ? XR_XIR_UNIT : ctx->functions[ctx->function].result;
-        if (node->as.return_stmt.value_count && !source_plan_expression(ctx, node->as.return_stmt.values[0], (SourceExpectedType){!body->infer_result,expected}, &value)) return false;
+        if (node->as.return_stmt.value_count && !source_plan_expression(ctx, node->as.return_stmt.values[0], (SourceExpectedType){!body->infer_result,expected, false}, &value)) return false;
         if (body->infer_result && !body->saw_return) ctx->functions[ctx->function].result = value.type;
         body->saw_return = true;
         if (value.type != ctx->functions[ctx->function].result)
@@ -2802,7 +2826,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     body->generic_owner = ctx->bodies[outer].generic_owner;
     body->type_parameters = ctx->bodies[outer].type_parameters;
     body->type_parameter_count = ctx->bodies[outer].type_parameter_count;
-    body->infer_result = node->type == AST_FUNCTION_EXPR && !decl->return_type && !context;
+    body->infer_result = node->type == AST_FUNCTION_EXPR && !decl->return_type && (!context || expected.infer_result);
     ctx->generics[index].parameter_count = ctx->generics[outer].parameter_count;
     ctx->generics[index].constraints = ctx->generics[outer].constraints;
     ctx->generics[index].parameter_kinds = ctx->generics[outer].parameter_kinds;
@@ -2833,7 +2857,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     bool ok = closure_parameters(ctx, node, &scan, parameters, context);
     if (ok) {
         if (decl->return_type) ok = source_type(ctx, decl->return_type, &ctx->functions[index].result);
-        else if (context) ctx->functions[index].result = context->result;
+        else if (context && !expected.infer_result) ctx->functions[index].result = context->result;
     }
     /* A declaration states its result, so its signature is known before the body
      * and the body can name the function it belongs to. */
@@ -2885,6 +2909,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     for (uint32_t i = 0; i < count; ++i) types[i] = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + i);
     return source_type_arguments(ctx, node, types, count, &op) && source_recipe_group(ctx, op, captures, scan.count, value);
 }
+#include "xxir_source_array_recipes.inc.c"
 #include "xxir_source_core_panics.inc.c"
 static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
@@ -2907,7 +2932,7 @@ static bool build_bodies(SourceContext *ctx) {
         if (ctx->bodies[f].default_expression || ctx->bodies[f].node->type == AST_FIELD_DECL) {
             SourceValue value;
             if (!source_plan_expression(ctx, ctx->bodies[f].default_expression ? ctx->bodies[f].default_expression :
-                ctx->bodies[f].node->as.field_decl.initializer, (SourceExpectedType){ctx->functions[f].result != XR_XIR_UNIT,ctx->functions[f].result}, &value) ||
+                ctx->bodies[f].node->as.field_decl.initializer, (SourceExpectedType){ctx->functions[f].result != XR_XIR_UNIT,ctx->functions[f].result, false}, &value) ||
                 !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0, {0}}, NULL)) return false;
             ctx->returned = true;
             if (!finish_body(ctx)) return false;

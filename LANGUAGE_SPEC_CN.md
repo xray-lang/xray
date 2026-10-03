@@ -1400,6 +1400,7 @@ Xray 默认只保留最小类型身份层：
 
 - `typeOf(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
 - `typeName(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
+- 当前 XIR 已闭合值的有限准入、Unit/null 区别及泛型/Error/静态查询的未实现边界见 §13.3；调试名字不授予额外类型能力。
 - 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
@@ -6102,6 +6103,10 @@ fn measuredKernel(value: u64) -> u64 {
 | `typeName<T>()` | `() -> string` | 返回静态类型 `T` 的名称 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
+当前 XIR 值查询子集只准入未被词法或模块绑定遮蔽的 `typeName(value)`，实参是一个普通 READ 值并按普通语义求值一次。已准入标量、Atomic/PanicInfo 使用共享类型名；Unit 为 `()`，裸 null 与括号 null 为 `null`。Array/callable 顶层返回 `Array`/`function`，具体名义类型显示声明名与闭合类型参数，参数中的 Array 显示元素类型。Nullable present 返回 element 的家族或名义名，none 返回 `null`。结果字符串进入接收 owner；名称上限 256 字节、递归上限 32 层，超限报告预算失败，不截断。
+
+普通泛型 Array<T>/callable<T> 的家族名在定义处可得；T 自身、含开放参数的名义类型及 T? 的完整查询、Error existential 的具体动态 enum 名、`typeName<T>()` 与完整反射仍未接通。这是当前实现准入边界，保留上述合法语言形式；后续须在 Checked 上保留查询、特化并复验，不回到 AST 补造能力。查询不授予可见性、构造或约束权限。
+
 全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
 ```xray
@@ -6297,7 +6302,9 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-下表保留完整方法分母；首个 XIR 子集并不自动准入其余方法。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe，共 15 个 operation；32 个成员中其余 17 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+
+这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
 | 成员 | 类型/说明 |
 |--|--|
@@ -6309,8 +6316,8 @@ print(a[0], a[1])           // head head
 | `indexOf(x)` / `contains(x)` | 只读查询 |
 | `join(sep?)` | 只读 receiver，拼接为字符串 |
 | `ref reverse()` / `ref sort(cmp?)` | 修改 receiver 的排列 |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读 receiver；回调合同须在准入前另冻 |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读 receiver；回调合同须在准入前另冻 |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读快照；map/filter 的元素回调可带 index，reduce 为 `fn(U,T)->U` |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读快照；forEach 可带 index，其余为 `fn(T)->bool` 的短路查询 |
 | `ref fill(v, start?, end?)` / `ref clear()` | 填充或清空 |
 | `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
 | `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
@@ -7267,7 +7274,7 @@ NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等�
 
 ### 17.26 XIR Array值与源码边界
 
-`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，仅READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`准入新XIR执行。其余29个成员保留清单身份，不因此获得执行资格。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
+`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，冻结READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`三原语，以及map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear十二个声明recipe，共15个operation。其余17个成员保留清单身份，不因此获得执行资格。Source先查找准确public成员声明，再按已准入native operation/recipe identity选择实现，query记录原声明身份与CALL引用；不按名字另立执行表。回调、查询、清空的类型、求值、效应与所有权合同见§14.7。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
 
 源码准入显式`Array<T>`、同类型元素字面量、有Array上下文的空字面量、普通赋值复制、参数、返回、局部及入口模块状态。空字面量没有元素上下文时拒绝。元素从左到右求值，使用既有上下文类型规则；嵌套Array与函数元素遵循统一构造类型池的可复制、可存储准入，unit、内部CELL、视图和未准入的不可复制资源不能成为普通元素。`Array<T>`泛型体在定义处按约束检查，在Checked上特化后复验；普通实例在Program封存前完成，不能按具体实参补造定义处未证明的能力。其他容器与用户struct/class声明族仍须分别准入。
 
@@ -7283,7 +7290,7 @@ GET及索引读返回独立拥有的元素，并保留索引求值前选定的�
 
 此子集的Windows源码VM、native、混合条目及Checked重载按独立预期验证两模块字符串程序，输出为`red\nblue\n2\ngreen\nblue\ngreen\n3\n`；实例隔离、结果寿命、初始化越界粘滞与分配失败物理释放另有断言。输出golden不替代OOM、retain、工作预算或全量sanitizer门。完整批次资格仍要求受影响目标重建、回归、合同和sanitizer门；本节不声明这些完整门或macOS已通过。
 
-Array构造器调用、withCapacity/capacity、切片、ptr/mutPtr、map/filter、迭代及其余未准入成员仍明确拒绝。源码ref参数、move、完整用户结构体、跨Program结构导入、stdlib Checked/native包发布、默认CLI迁移和旧链最终删除不由本节完成。唯一现行协议仍由§17.6的实现常量定义，无旧reader或兼容接口。
+其余17个Array成员以及尚未接通的capacity、切片、ptr/mutPtr和iterator方法族仍须分别准入；不因十二个recipe的冻结而自动完成。完整move、用户结构体族、跨Program结构导入、stdlib Checked/native包发布及旧链最终删除不由本节完成。源码Array for-in沿既有拥有式快照合同，不能视为iterator API资格。唯一现行协议仍由§17.6的实现常量定义，无旧reader或兼容接口；本节合同同步不宣称完整安全或全回归通过。
 
 ### 17.27 浮点四则与 typed 输出
 
