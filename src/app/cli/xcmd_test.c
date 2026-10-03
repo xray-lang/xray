@@ -67,6 +67,13 @@ typedef struct XrTestFailureRecord {
     XrTestStatus status;
 } XrTestFailureRecord;
 
+/* One executed or skipped test, kept for the machine-readable report. */
+typedef struct XrTestCaseRecord {
+    char *name;
+    char *message;
+    XrTestStatus status;
+} XrTestCaseRecord;
+
 /* ========== Per-File Result (thread-safe, no shared state) ========== */
 
 typedef struct {
@@ -81,6 +88,11 @@ typedef struct {
     XrTestFailureRecord *failures;
     int failure_count;
     int failure_cap;
+
+    // Every test outcome in declaration order (owned copies)
+    XrTestCaseRecord *cases;
+    int case_count;
+    int case_cap;
 
     // Compilation/execution error
     bool has_error;
@@ -101,6 +113,19 @@ static void file_result_add_failure(XrTestFileResult *r, const char *test_name, 
     rec->status = status;
 }
 
+static void file_result_add_case(XrTestFileResult *r, const char *name, XrTestStatus status,
+                                 const char *message) {
+    if (r->case_count >= r->case_cap) {
+        r->case_cap = r->case_cap == 0 ? 8 : r->case_cap * 2;
+        XR_REALLOC_OR_ABORT(r->cases, r->case_cap * sizeof(XrTestCaseRecord),
+                            "xcmd_test cases grow");
+    }
+    XrTestCaseRecord *record = &r->cases[r->case_count++];
+    record->name = xr_strdup(name ? name : "<anonymous>");
+    record->message = xr_strdup(message ? message : "");
+    record->status = status;
+}
+
 static void file_result_free(XrTestFileResult *r) {
     for (int i = 0; i < r->failure_count; i++) {
         xr_free(r->failures[i].file);
@@ -108,6 +133,11 @@ static void file_result_free(XrTestFileResult *r) {
         xr_free(r->failures[i].message);
     }
     xr_free(r->failures);
+    for (int i = 0; i < r->case_count; i++) {
+        xr_free(r->cases[i].name);
+        xr_free(r->cases[i].message);
+    }
+    xr_free(r->cases);
 }
 
 /* ========== Display Helpers ========== */
@@ -331,6 +361,7 @@ static void run_selected(XrXirInstance *instance, const XrXirSourceTests *tests,
             if (test_entry_selected(entry, config)) {
                 ++result->errors;
                 file_result_add_failure(result, entry->name, error, TEST_ERROR);
+                file_result_add_case(result, entry->name, TEST_ERROR, error);
             }
         }
     }
@@ -360,6 +391,7 @@ static void run_selected(XrXirInstance *instance, const XrXirSourceTests *tests,
                 file_result_add_failure(result, entry->name, hook_error, TEST_ERROR);
             }
         }
+        file_result_add_case(result, entry->name, status, status == TEST_PASSED ? "" : error);
         if (status == TEST_PASSED)
             ++result->passed;
         else {
@@ -439,8 +471,10 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
             ++result->test_count;
             if (test_entry_selected(entry, config))
                 ++selected;
-            else
+            else {
                 ++result->skipped;
+                file_result_add_case(result, entry->name, TEST_SKIPPED, "");
+            }
         }
     }
     if (!selected)
@@ -795,6 +829,88 @@ static void print_summary(int file_count, int total_passed, int total_failed, in
                total_problems, total_problems == 1 ? "" : "s");
 }
 
+/* ========== Machine-Readable Report ========== */
+
+static const char *status_name(XrTestStatus status) {
+    switch (status) {
+        case TEST_PASSED: return "passed";
+        case TEST_FAILED: return "failed";
+        case TEST_ERROR: return "error";
+        case TEST_SKIPPED: return "skipped";
+        case TEST_TIMEOUT: return "timeout";
+    }
+    return "error";
+}
+
+/* Writes TEXT as a JSON string. Bytes that are not well-formed UTF-8 become U+FFFD so the
+ * report stays valid whatever a test printed. */
+static void json_string(FILE *out, const char *text) {
+    const unsigned char *p = (const unsigned char *) text;
+    fputc('"', out);
+    while (*p) {
+        unsigned char c = *p;
+        if (c == '"' || c == '\\') {
+            fputc('\\', out);
+            fputc((int) c, out);
+            ++p;
+        } else if (c < 0x20) {
+            fprintf(out, "\\u%04x", c);
+            ++p;
+        } else if (c < 0x80) {
+            fputc((int) c, out);
+            ++p;
+        } else {
+            size_t length = c >= 0xf0 && c < 0xf5 ? 4u : c >= 0xe0 ? 3u : c >= 0xc2 && c < 0xe0 ? 2u : 0u;
+            bool valid = length != 0u && c < 0xf5;
+            for (size_t i = 1u; valid && i < length; ++i)
+                valid = (p[i] & 0xc0u) == 0x80u;
+            if (valid) {
+                fwrite(p, 1, length, out);
+                p += length;
+            } else {
+                fputs("\\ufffd", out);
+                ++p;
+            }
+        }
+    }
+    fputc('"', out);
+}
+
+static bool write_report(const char *path, XrTestFileResult *results, int count, double total_ms) {
+    FILE *out = fopen(path, "wb");
+    if (!out)
+        return false;
+    fputs("{\"schema\":1,\"files\":[", out);
+    for (int i = 0; i < count; i++) {
+        const XrTestFileResult *r = &results[i];
+        fputs(i ? ",\n" : "\n", out);
+        fputs("{\"path\":", out);
+        json_string(out, r->filepath);
+        fprintf(out, ",\"tests\":%d,\"passed\":%d,\"failed\":%d,\"errors\":%d,\"timeouts\":%d,"
+                     "\"skipped\":%d",
+                r->test_count, r->passed, r->failed, r->errors, r->timeout, r->skipped);
+        if (r->has_error) {
+            fputs(",\"error\":", out);
+            json_string(out, r->error_msg);
+        }
+        fputs(",\"cases\":[", out);
+        for (int j = 0; j < r->case_count; j++) {
+            fputs(j ? "," : "", out);
+            fputs("{\"name\":", out);
+            json_string(out, r->cases[j].name);
+            fprintf(out, ",\"status\":\"%s\"", status_name(r->cases[j].status));
+            if (r->cases[j].message[0]) {
+                fputs(",\"message\":", out);
+                json_string(out, r->cases[j].message);
+            }
+            fputc('}', out);
+        }
+        fputs("]}", out);
+    }
+    fprintf(out, "\n],\"duration_ms\":%.0f}\n", total_ms);
+    return fclose(out) == 0;
+}
+
 /* ========== CLI Entry Point ========== */
 
 /* Joins every worker. A failed join keeps the live thread's owner; its shared
@@ -820,6 +936,7 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     bool quiet = xr_cli_opt_bool(&inv->options, "quiet");
     bool fail_fast = xr_cli_opt_bool(&inv->options, "fail-fast");
     const char *filter = xr_cli_opt_string(&inv->options, "filter", NULL);
+    const char *report_path = xr_cli_opt_string(&inv->options, "report", NULL);
     int num_threads = xr_cli_opt_int(&inv->options, "jobs", 1);
     if (num_threads < 1)
         num_threads = 1;
@@ -939,6 +1056,10 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     }
 
     double total_time = get_time_ms() - total_start;
+    if (report_path && !write_report(report_path, results, fl.count, total_time)) {
+        xr_cli_error("test", "cannot write report '%s'", report_path);
+        return XR_CLI_EXIT_FAIL;
+    }
 
     /* Aggregate stats */
     int file_count = 0, total_passed = 0, total_failed = 0;

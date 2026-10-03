@@ -45,7 +45,7 @@ TEST(spec_retired_eval_command_removed) {
 TEST(spec_find_command_test_options) {
     const XrCliCommandSpec *spec = xr_cli_find_command("test");
     ASSERT_NOT_NULL(spec);
-    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 5);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 6);
     ASSERT_EQ_INT(spec->positional_min, 0);
     ASSERT_EQ_INT(spec->positional_max, -1);
 }

@@ -245,6 +245,14 @@ static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, c
     }
     return false;
 }
+/* Names the syntax family and the parser node kind so an unadmitted construct is traceable. */
+static bool source_fail_syntax(SourceContext *ctx, AstNode *node, const char *family) {
+    char message[128];
+    if (source_format(ctx, message, sizeof(message), "%s syntax is not implemented in XIR (node %d)",
+            family, node ? (int) node->type : -1) != XR_DIAG_OK)
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "syntax is not implemented in XIR");
+    return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, message);
+}
 static bool source_module_fail(SourceContext *ctx, AstNode *node, XrModuleStatus status, const char *message) {
     XrXirStatus mapped = status == XR_MODULE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
         status == XR_MODULE_BUDGET ? XR_XIR_BUDGET :
@@ -630,7 +638,18 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     if (!source_type(ctx, ref->children[count], &result)) return false;
     --ctx->depth; return source_signature(ctx, parameters, count, result, type);
 }
+static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
+/* A type failure raised without an owning AST node reports the annotation that caused it. */
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
+    bool valid = source_type_ref(ctx, ref, type);
+    if (!valid && ref && ref->line && ctx->diagnostic.status != XR_XIR_OK && !ctx->diagnostic.line) {
+        ctx->diagnostic.module = ctx->module;
+        ctx->diagnostic.line = ref->line;
+        ctx->diagnostic.column = ref->column;
+    }
+    return valid;
+}
+static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     if (!ref) { *type = XR_XIR_UNIT; return true; }
     switch (ref->kind) {
     case XR_TREF_OPTIONAL: {
@@ -1444,7 +1463,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {assigned.type == XR_XIR_UNIT ? 0 : assigned.id, 0}, {0, 0}, symbol->index, {0}}, NULL)) return false;
         *value = assigned; return true;
     }
-    default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "expression syntax is not implemented in XIR");
+    default: return source_fail_syntax(ctx, node, "expression");
     }
 }
 static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value) {
@@ -1898,7 +1917,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         } else body->frontier = entry;
         return ok;
     }
-    default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "statement syntax is not implemented in XIR");
+    default: return source_fail_syntax(ctx, node, "statement");
     }
 }
 static bool source_core_result_scope(SourceContext *ctx, AstNode *node, uint32_t index) {

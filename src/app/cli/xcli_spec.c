@@ -28,6 +28,8 @@ static const XrCliOptionSpec test_options[] = {
     {"filter", 'f', XR_CLI_VALUE_STRING, false, false, "PATTERN", "Only run matching tests"},
     {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Quiet mode (exit code only)"},
     {"jobs", 'j', XR_CLI_VALUE_INT, false, false, "N", "Parallel threads (default 1)"},
+    {"report", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
+     "Write every test outcome as JSON to FILE"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec check_options[] = {
