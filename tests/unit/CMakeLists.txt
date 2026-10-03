@@ -1,6 +1,9 @@
 # Unit tests for xray
 # All unit tests are managed here (no glob in root CMakeLists.txt)
 
+# Child and standalone gates share one interpreter discovery in this build.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 # Literal semantic vectors are derived independently of compiler libraries.
 add_test(NAME test_program_identity_vectors
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/program/derive_identity_vectors.py

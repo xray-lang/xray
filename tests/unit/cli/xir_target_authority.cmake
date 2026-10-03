@@ -50,7 +50,9 @@ set_tests_properties(test_xir_target_authority PROPERTIES LABELS "unit;xir;toolc
 add_test(NAME test_xir_target_environment_production COMMAND test_xir_target_environment_production)
 set_tests_properties(test_xir_target_environment_production PROPERTIES LABELS "unit;xir;toolchain;ownership" TIMEOUT 120)
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
+if(NOT TARGET Python3::Interpreter)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+endif()
 foreach(target test_xir_target_authority test_xir_target_environment_production)
     add_test(NAME ${target}_identity COMMAND "${Python3_EXECUTABLE}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/target_environment_owner/identity_oracle.py" $<TARGET_FILE:${target}>)
