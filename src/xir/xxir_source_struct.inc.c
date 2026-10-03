@@ -149,10 +149,10 @@ static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
 }
 static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.class_decl;
-    if (!decl->explicit_final || decl->super_name || decl->super_module || decl->is_packed ||
+    if (decl->super_name || decl->super_module || decl->is_packed ||
         decl->explicit_align || decl->attr_count || decl->type_param_count < 0 ||
         decl->type_param_count > 65536 || decl->field_count < 0)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires an explicit final root declaration");
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance");
     uint32_t constructors=0;
     for (int i=0;i<decl->method_count;++i) {
         if (!source_work(ctx,decl->methods[i])) return false;
@@ -161,7 +161,8 @@ static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     if (constructors!=1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires one explicit complete constructor");
     if (!source_nominal_declare(ctx,node,decl->name,decl->type_params,
         (uint32_t)decl->type_param_count,XR_XIR_NOMINAL_CLASS)) return false;
-    ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=XR_XIR_NOMINAL_FINAL;
+    ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=
+        decl->explicit_final ? XR_XIR_NOMINAL_FINAL : 0;
     return true;
 }
 static bool source_struct_fields(SourceContext *ctx) {

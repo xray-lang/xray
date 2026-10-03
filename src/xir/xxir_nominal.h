@@ -20,7 +20,9 @@ typedef struct XrXirNominalField {
     XrXirType type;
     uint32_t flags;
 } XrXirNominalField;
-/* CLASS FINAL is a declaration fact, not inferred from carrier kind. */
+/* CLASS FINAL is a declaration fact, not inferred from carrier kind. A class
+ * without it is an open root: no declaration may name it as a parent yet, so it
+ * executes exactly like a final one and carries no dispatch state. */
 #define XR_XIR_NOMINAL_FINAL 1u
 
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;

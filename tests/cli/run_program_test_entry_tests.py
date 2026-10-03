@@ -37,8 +37,8 @@ class ProgramTestCommand(unittest.TestCase):
     def test_module_state_hooks_skip_and_import_discovery(self):
         self.invoke({
             "library.xr": '''
-var counter: i64 = 40
-export fn bump() -> i64 { counter = counter + 1; return counter }
+const counter = Atomic(40)
+export fn bump() -> i64 { return counter.fetchAdd(1) + 1 }
 @test
 fn importedTestMustNotRun() { assert(false) }
 ''',

@@ -354,7 +354,7 @@ static void native_array_type_rejections(XrXirSourceRequest *request) {
             const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
             const XrXirSourceDeclaration *bad = declaration(view, "bad", 0);
             CHECK(!bad);
-            CHECK(!strcmp(diagnostic.message,"class execution currently requires an explicit final root declaration"));
+            CHECK(!strcmp(diagnostic.message,"class execution currently requires one explicit complete constructor"));
             for (uint32_t d = 0; d < view->declaration_count; ++d)
                 CHECK(view->declarations[d].kind != XR_XIR_SOURCE_TYPE || !view->declarations[d].native_identity);
             for (uint32_t r = 0; r < view->reference_count; ++r)

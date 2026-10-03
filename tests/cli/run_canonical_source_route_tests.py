@@ -336,8 +336,8 @@ def check_string_lengths(binary: Path) -> None:
             'export class Label {\n  text:string\n'
             '  constructor(s:string) {this.text=s}\n'
             '  length()->i64 {return len(this.text)}\n}\n'
-            'var saved=Label("世😀")\n'
-            'export fn storedLength()->i64 {return saved.length()}\n', encoding="utf-8")
+            'const saved:string="世😀"\n'
+            'export fn storedLength()->i64 {return Label(saved).length()}\n', encoding="utf-8")
         source = directory / "main.xr"
         source.write_text(
             'import time\nimport {text, Label, storedLength} from "./helper"\n'
