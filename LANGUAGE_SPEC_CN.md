@@ -7129,7 +7129,7 @@ Built/Checked保留LOCAL_NEW/READ/WRITE，Lowered唯一选择标量或托管存�
 托管写入先retain后drop，帧所有退出路径负责清理；精确最后使用释放和不可复制资源析构尚未据此验收。
 
 if/else与while条件必须bool；只执行选中分支，循环每次重新求条件。局部更新跨分支与回边保存，
-块内名字不外泄；无标签break/continue指向最内层while。值函数每条存活路径必须返回，拒绝不可达语句。
+块内名字不外泄；无标签break/continue指向最内层while。值函数每条存活路径必须返回；return、throw、break、continue 之后的语句不可达，不被降级，其中的闭包被拒绝。
 本族接通具体i64加法/相等/小于与既有string加法；不授予无约束T任何运算见证。
 块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema与语义合同遵循§17.6，
 旧语义版本拒绝；没有第二条兼容检查路径。精确接口由 `test_xir_locals` 与 `test_xir_local_native` 验证。

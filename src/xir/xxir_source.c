@@ -2040,10 +2040,11 @@ static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
 }
 #include "xxir_source_iteration.inc.c"
 #include "xxir_source_catch.inc.c"
+static bool source_unreachable_statement(SourceContext *ctx, AstNode *node);
 static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     SourceConversionRecipe checked_conversion;
     if (!node || !source_work(ctx, node)) return false;
-    if (ctx->returned) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unreachable statements are not admitted");
+    if (ctx->returned) return source_unreachable_statement(ctx, node);
     switch (node->type) {
     case AST_DEFER_STMT: return source_defer(ctx, node);
     case AST_TRY_CATCH: {
@@ -2309,6 +2310,14 @@ static bool count_closures(AstNode *node, void *pointer) {
     bool ok = xr_ast_for_each_child(node,count_closures,scan);
     --scan->depth;
     return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source declaration shape");
+}
+/* Code after return, throw, break or continue never runs and has no control-flow edge, so it is dropped.
+ * Closures in it are rejected because their declarations are counted ahead of lowering and must each be lowered. */
+static bool source_unreachable_statement(SourceContext *ctx, AstNode *node) {
+    SourceClosureCount scan = {ctx, 0, 2, 0, 0};
+    if (!count_closures(node, &scan)) return false;
+    if (scan.count) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closures in unreachable statements are not admitted");
+    return true;
 }
 #include "xxir_source_library.inc.c"
 

@@ -7255,7 +7255,7 @@ scope destructors are not qualified by this family.
 If/else and while require bool conditions. Only the selected branch executes and
 loop conditions are reevaluated. Local updates survive joins and backedges while
 block names stay scoped. Unlabelled break/continue target the innermost while.
-Every live path in a value function must return; unreachable statements reject.
+Every live path in a value function must return; statements after a return, throw, break or continue are unreachable and are not lowered, and closures in them reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire

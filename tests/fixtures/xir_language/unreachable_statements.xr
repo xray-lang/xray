@@ -1,0 +1,37 @@
+enum Failure { Stop }
+fn early(flag: bool) -> i64 {
+    if (flag) {
+        return 1
+        print("never")
+    }
+    return 2
+    print("never")
+}
+fn thrower() -> i64 {
+    throw Failure.Stop
+    var unused = 5
+    return unused
+}
+fn main() {
+    print(early(true))
+    print(early(false))
+    var ran = false
+    for (i in 0..3) {
+        break
+        ran = true
+    }
+    print(ran)
+    var count = 0
+    for (i in 0..4) {
+        count = count + 1
+        continue
+        count = count + 100
+    }
+    print(count)
+    try {
+        thrower()
+    } catch (e) {
+        print("caught")
+    }
+}
+main()

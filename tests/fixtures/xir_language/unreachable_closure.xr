@@ -1,0 +1,6 @@
+fn f() -> i64 {
+    return 1
+    const g = fn() -> i64 { return 2 }
+    return g()
+}
+print(f())
