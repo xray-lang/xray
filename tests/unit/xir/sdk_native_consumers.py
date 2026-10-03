@@ -54,8 +54,8 @@ def main():
             link(args,probe_exe,[str(probe_object)],libraries)
             expected=json.loads((proof/'EXPECTED.json').read_text())['rows']
             actual=json.loads(checked([str(probe_exe)]))
-            assert actual==[dict(id=row['id'],value=row['value']) for row in expected] and len(actual)==220
-            print(args.provider+': fresh admitted-header 220-field independent ABI PASS',flush=True)
+            assert actual==[dict(id=row['id'],value=row['value']) for row in expected] and len(actual)==233
+            print(args.provider+': fresh admitted-header 233-field independent ABI PASS',flush=True)
             cases=[('multi',root/'tests/fixtures/xir_compile_owner/root.xr',b'owner\xe4\xb8\xad-ok 42 true\n',
                     args.generator,'multi','linked_source_program')]
             if args.original_generator:

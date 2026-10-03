@@ -858,6 +858,21 @@ static uint32_t stream_primitive(SourceContext *ctx, const char *name) {
     if (source_text_same(ctx, NULL, name, "__writeStderr")) return 2;
     return 0;
 }
+/* The five host time leaves are private to the standard time module, selected by
+ * its exact stdlib authority and logical path, never by a user spelling. Codes 1-3
+ * are the clock kinds; 4 is the UTC offset query; 5 is the suspending timer. */
+static uint32_t host_time_primitive(SourceContext *ctx, const char *name) {
+    const XrModuleSpec *spec = &ctx->graph->specs[ctx->module];
+    if (spec->authority.kind != XR_MODULE_IDENTITY_STDLIB || !spec->authority.namespace_id ||
+        !source_text_same(ctx, NULL, spec->authority.namespace_id, "time") || !spec->logical_path ||
+        !source_text_same(ctx, NULL, spec->logical_path, "time/time.xr")) return 0;
+    if (source_text_same(ctx, NULL, name, "__realtimeNanos")) return XR_XIR_CLOCK_REALTIME;
+    if (source_text_same(ctx, NULL, name, "__cpuNanos")) return XR_XIR_CLOCK_CPU;
+    if (source_text_same(ctx, NULL, name, "__monotonicNanos")) return XR_XIR_CLOCK_MONOTONIC;
+    if (source_text_same(ctx, NULL, name, "__utcOffsetAt")) return 4;
+    if (source_text_same(ctx, NULL, name, "__sleep")) return 5;
+    return 0;
+}
 typedef struct SourceTypeArguments {
     XrTypeRef **refs;
     uint32_t count;
@@ -977,7 +992,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "call arity or type arguments are not admitted");
     SourceName *target = NULL, *binding = NULL;
     bool print = false, atomic = false;
-    uint32_t stream = 0;
+    uint32_t stream = 0, host_time = 0;
     AstNode *callee = call->callee;
     SourceValue receiver = {0}, indirect = {0};
     bool indirect_ready = false;
@@ -1005,6 +1020,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (source_text_same(ctx, NULL, name, "PanicInfo"))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo construction requires class support");
             print = source_text_same(ctx, NULL, name, "print"); atomic = source_text_same(ctx, NULL, name, "Atomic"); stream = stream_primitive(ctx, name);
+            host_time = host_time_primitive(ctx, name);
         }
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
@@ -1078,7 +1094,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
     }
     XrXirTypeNode signature = {0};
-    if (!print && !atomic && !stream && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION)) {
+    if (!print && !atomic && !stream && !host_time && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION)) {
         if (call->type_arg_count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call has no generic declaration parameters");
         if (!indirect_ready && !expression(ctx, callee, &indirect)) return false;
         const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types, indirect.type);
@@ -1086,7 +1102,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call requires its declared signature");
         signature = *found;
     }
-    if ((print || atomic || stream || method != XR_XIR_INVALID) && call->type_arg_count)
+    if ((print || atomic || stream || host_time || method != XR_XIR_INVALID) && call->type_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "primitive does not admit explicit type arguments");
     XrXirInstruction op = {0};
     uint32_t argument_count = (uint32_t)call->arg_count;
@@ -1099,6 +1115,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (indirect.type) expected = signature.parameters[i].type;
         if (atomic || method == XR_XIR_ATOMIC_I64_FETCH_ADD) expected = XR_XIR_I64;
         if (stream) expected = XR_XIR_STRING;
+        if (host_time > (uint32_t) XR_XIR_CLOCK_MONOTONIC) expected = XR_XIR_I64;
         if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){expected != XR_XIR_UNIT,expected}, &args[i])) return false;
         if (args[i].type == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unit argument is not admitted");
     }
@@ -1113,6 +1130,13 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (call->arg_count != 1 || args[0].type != XR_XIR_STRING)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "stream write requires one string");
         op = (XrXirInstruction) {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {args[0].id, 0}, {0, 0}, stream, {0}};
+    } else if (host_time) {
+        bool clock = host_time <= (uint32_t) XR_XIR_CLOCK_MONOTONIC;
+        if (call->arg_count != (clock ? 0 : 1) || (!clock && args[0].type != XR_XIR_I64))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "host time primitive argument mismatch");
+        op = clock ? (XrXirInstruction) {XR_XIR_CLOCK_NANOS, XR_XIR_I64, {0, 0}, {0, 0}, host_time, {0}} :
+            host_time == 4 ? (XrXirInstruction) {XR_XIR_UTC_OFFSET_AT, XR_XIR_I64, {args[0].id, 0}, {0, 0}, 0, {0}} :
+            (XrXirInstruction) {XR_XIR_TIMER_AFTER_MS, XR_XIR_UNIT, {args[0].id, 0}, {0, 0}, 0, {0}};
     } else if (print) {
         for (int i = 0; i < call->arg_count; ++i)
             if (args[i].type != XR_XIR_BOOL && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)

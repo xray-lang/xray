@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 22u
+#define XR_XIR_CALL_ABI_VERSION 23u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -26,7 +26,9 @@ typedef enum XrXirCallStatus {
     XR_XIR_CALL_BAD_STATE, XR_XIR_CALL_BUSY, XR_XIR_CALL_DIVIDE_BY_ZERO,
     XR_XIR_CALL_CONSUMED, XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_NUMERIC_RANGE,
     XR_XIR_CALL_BOUNDS, XR_XIR_CALL_MATCH_FAILURE, XR_XIR_CALL_DEFER_ASYNC,
-    XR_XIR_CALL_CANCEL_REQUESTED, XR_XIR_CALL_ASSERTION = 19
+    XR_XIR_CALL_CANCEL_REQUESTED, XR_XIR_CALL_ASSERTION = 19,
+    /* A host service failed. It is never a language panic and no handler observes it. */
+    XR_XIR_CALL_HOST_ERROR
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
@@ -38,7 +40,9 @@ typedef enum XrXirActionKind {
     XR_XIR_ACTION_CALL = 1, XR_XIR_ACTION_RETURN, XR_XIR_ACTION_THROW,
     XR_XIR_ACTION_SUSPEND, XR_XIR_ACTION_CONTINUE, XR_XIR_ACTION_FAULT,
     XR_XIR_ACTION_OUTPUT, XR_XIR_ACTION_WRITE_STREAM, XR_XIR_ACTION_LEAVE,
-    XR_XIR_ACTION_EXIT_DONE
+    XR_XIR_ACTION_EXIT_DONE,
+    /* value is the nonzero I64 millisecond duration the activation waits for. */
+    XR_XIR_ACTION_TIMER
 } XrXirActionKind;
 /* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
 #define XR_XIR_ACTION_PROTECTED 1u
@@ -129,6 +133,36 @@ typedef struct XrXirOutputProvider {
     XrXirOutputEntry write;
     void *context;
 } XrXirOutputProvider;
+/* Clock reads and UTC offsets are synchronous services of the instance; they
+ * never suspend. An absent provider is all zero and every service then fails
+ * as a host error. The provider context stays host-owned. */
+typedef enum XrXirTimeStatus {
+    XR_XIR_TIME_OK, XR_XIR_TIME_RANGE, XR_XIR_TIME_FAILED
+} XrXirTimeStatus;
+typedef XrXirTimeStatus (*XrXirClockEntry)(void *context, XrXirClockKind clock, int64_t *nanoseconds);
+typedef XrXirTimeStatus (*XrXirUtcOffsetEntry)(void *context, int64_t seconds, int64_t *minutes);
+typedef struct XrXirTimeProvider {
+    uint32_t abi_version, reserved;
+    XrXirClockEntry clock;
+    XrXirUtcOffsetEntry utc_offset;
+    void *context;
+} XrXirTimeProvider;
+static inline bool xr_xir_time_provider_valid(const XrXirTimeProvider *provider) {
+    if (!provider) return false;
+    if (!provider->abi_version)
+        return !provider->reserved && !provider->clock && !provider->utc_offset && !provider->context;
+    return provider->abi_version == XR_XIR_CALL_ABI_VERSION && !provider->reserved &&
+        provider->clock && provider->utc_offset;
+}
+/* A suspension asks its host for nothing (YIELD) or for a duration (TIMER). The
+ * request is published only for the exact pending wake token. */
+typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS } XrXirWaitKind;
+#define XR_XIR_TIMER_MAX_MS UINT64_C(86400000)
+typedef struct XrXirWaitRequest {
+    uint32_t kind, reserved;
+    uint64_t after_ms;
+} XrXirWaitRequest;
+
 typedef struct XrXirCallConfig {
     uint32_t abi_version, struct_size;
     const XrXirCallEntry *entries;
@@ -157,6 +191,11 @@ XR_FUNC XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t 
 XR_FUNC XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *activation, uint64_t quantum);
 XR_FUNC XrXirCallStatus xr_xir_call_take_result(XrXirCall *activation, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_call_resume(XrXirCall *activation, uint64_t wake);
+/* Fills the request of the pending suspension. Failure leaves output unchanged;
+ * no clock is read and nothing is resumed. Resuming a timer is the host's decision
+ * that the duration has elapsed; the driver never interprets wall time. */
+XR_FUNC XrXirCallStatus xr_xir_call_wait_request(const XrXirCall *activation, uint64_t wake,
+    XrXirWaitRequest *output);
 /* Queues cancellation without callbacks or reclamation; poll drains cleanup. */
 XR_FUNC XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *activation);
 /* Consumes the activation except on BUSY; reports a failed language cleanup. */

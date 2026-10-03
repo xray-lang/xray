@@ -84,7 +84,7 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [23, 59, 18, 22, 28]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [23, 59, 18, 23, 28]
     assert len(manifest['abi_measurements']) == 220
     assert [row['path'] for row in manifest['files'] if row['kind'] == 5] == sorted('lib/' + name + '.lib' for name in ARCHIVES)
     def status(name, document, expected, sdk_root=bundle):

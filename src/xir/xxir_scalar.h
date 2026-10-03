@@ -27,8 +27,14 @@ typedef enum XrXirRunStatus {
     XR_XIR_RUN_DIVIDE_BY_ZERO,
     XR_XIR_RUN_STEP_LIMIT,
     XR_XIR_RUN_FRAME_LIMIT,
-    XR_XIR_RUN_OUT_OF_MEMORY, XR_XIR_RUN_NUMERIC_RANGE
+    XR_XIR_RUN_OUT_OF_MEMORY, XR_XIR_RUN_NUMERIC_RANGE,
+    XR_XIR_RUN_HOST_ERROR
 } XrXirRunStatus;
+
+/* Host clocks readable by the time primitives; the values are fixed operand encodings. */
+typedef enum XrXirClockKind {
+    XR_XIR_CLOCK_REALTIME = 1, XR_XIR_CLOCK_CPU, XR_XIR_CLOCK_MONOTONIC
+} XrXirClockKind;
 
 typedef struct XrXirRunContext {
     uint64_t steps;

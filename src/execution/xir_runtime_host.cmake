@@ -1,4 +1,4 @@
-add_library(xray_xir_runtime_host STATIC xr_xir_host_execution.c xr_xir_host_cli.c)
+add_library(xray_xir_runtime_host STATIC xr_xir_host_execution.c xr_xir_host_cli.c xr_xir_host_time.c)
 if(WIN32)
     target_sources(xray_xir_runtime_host PRIVATE ../os/win/time_win.c)
 else()

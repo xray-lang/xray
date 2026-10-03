@@ -55,6 +55,7 @@ struct XrXirCall {
     const XrXirCallView *active_view;
     XrXirCallResult result;
     uint64_t allocation_bytes, polls_left, next_wake;
+    XrXirWaitRequest wait;
     bool driving, cleaning, admitting, cancel_requested;
     bool aborting;
     XrXirCallStatus abort_reason;
@@ -66,6 +67,7 @@ XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
         case XR_XIR_RUN_DIVIDE_BY_ZERO: reason = XR_XIR_CALL_DIVIDE_BY_ZERO; break;
         case XR_XIR_RUN_NUMERIC_RANGE: reason = XR_XIR_CALL_NUMERIC_RANGE; break;
         case XR_XIR_RUN_OUT_OF_MEMORY: reason = XR_XIR_CALL_OOM; break;
+        case XR_XIR_RUN_HOST_ERROR: reason = XR_XIR_CALL_HOST_ERROR; break;
         case XR_XIR_RUN_STEP_LIMIT:
         case XR_XIR_RUN_FRAME_LIMIT: reason = XR_XIR_CALL_LIMIT; break;
         default: reason = XR_XIR_CALL_BAD_STATE; break;
@@ -558,23 +560,29 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         }
         XrXirCallStatus reason = XR_XIR_CALL_BAD_STATE;
         if (boundary_value(action.value, XR_XIR_I64) &&
-            (action.value.payload == XR_XIR_CALL_OOM || action.value.payload == XR_XIR_CALL_LIMIT))
+            (action.value.payload == XR_XIR_CALL_OOM || action.value.payload == XR_XIR_CALL_LIMIT ||
+             action.value.payload == XR_XIR_CALL_HOST_ERROR))
             reason = (XrXirCallStatus) action.value.payload;
         abort_frames(call, reason);
         return;
     }
-    if (action.kind == XR_XIR_ACTION_SUSPEND) {
-        if (cleanup_active(call) && boundary_value(action.value, XR_XIR_UNIT)) {
+    if (action.kind == XR_XIR_ACTION_SUSPEND || action.kind == XR_XIR_ACTION_TIMER) {
+        bool timer = action.kind == XR_XIR_ACTION_TIMER;
+        bool shaped = timer ? boundary_value(action.value, XR_XIR_I64) && action.value.payload >= 1 &&
+            (uint64_t) action.value.payload <= XR_XIR_TIMER_MAX_MS : boundary_value(action.value, XR_XIR_UNIT);
+        if (cleanup_active(call) && shaped) {
             XrXirCallResult result = call_result(XR_XIR_CALL_DEFER_ASYNC);
             result.panic.detail.code = XR_XIR_PANIC_DEFER_ASYNC;
             request_exit(call, &result, false); return;
         }
-        if (!boundary_value(action.value, XR_XIR_UNIT) || call->next_wake == UINT64_MAX) {
+        if (!shaped || call->next_wake == UINT64_MAX) {
             abort_frames(call, XR_XIR_CALL_BAD_STATE);
             return;
         }
         call->result = call_result(XR_XIR_CALL_SUSPENDED);
         call->result.wake = ++call->next_wake;
+        call->wait = (XrXirWaitRequest) {timer ? XR_XIR_WAIT_TIMER_MS : XR_XIR_WAIT_YIELD, 0,
+            timer ? (uint64_t) action.value.payload : 0};
         return;
     }
     bool returning = action.kind == XR_XIR_ACTION_RETURN;
@@ -655,6 +663,16 @@ XrXirCallStatus xr_xir_call_resume(XrXirCall *call, uint64_t wake) {
     if (call->result.status != XR_XIR_CALL_SUSPENDED || !wake || wake != call->result.wake)
         return XR_XIR_CALL_BAD_STATE;
     call->result = call_result(XR_XIR_CALL_READY);
+    call->wait = (XrXirWaitRequest) {0};
+    return XR_XIR_CALL_READY;
+}
+
+XrXirCallStatus xr_xir_call_wait_request(const XrXirCall *call, uint64_t wake, XrXirWaitRequest *output) {
+    if (!call || !output) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (call->driving) return XR_XIR_CALL_BUSY;
+    if (call->result.status != XR_XIR_CALL_SUSPENDED || !wake || wake != call->result.wake ||
+        call->wait.kind == XR_XIR_WAIT_NONE) return XR_XIR_CALL_BAD_STATE;
+    *output = call->wait;
     return XR_XIR_CALL_READY;
 }
 
@@ -676,8 +694,10 @@ XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
     if (call->aborting || (call->result.status != XR_XIR_CALL_READY && call->result.status != XR_XIR_CALL_SUSPENDED))
         return XR_XIR_CALL_BAD_STATE;
     call->cancel_requested = true;
-    if (call->result.status == XR_XIR_CALL_SUSPENDED)
+    if (call->result.status == XR_XIR_CALL_SUSPENDED) {
         call->result = call_result(XR_XIR_CALL_READY);
+        call->wait = (XrXirWaitRequest) {0};
+    }
     return XR_XIR_CALL_CANCEL_REQUESTED;
 }
 

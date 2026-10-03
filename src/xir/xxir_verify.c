@@ -250,6 +250,9 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (!xr_xir_float_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM) {
         if (op->immediate != 1 && op->immediate != 2) return XR_XIR_BAD_STRUCTURE;
+    } else if (op->op == XR_XIR_CLOCK_NANOS) {
+        if (op->immediate < XR_XIR_CLOCK_REALTIME || op->immediate > XR_XIR_CLOCK_MONOTONIC)
+            return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL &&
@@ -796,7 +799,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         }
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
-        if (op->op == XR_XIR_ATOMIC_I64_NEW) expected = XR_XIR_I64;
+        if (op->op == XR_XIR_ATOMIC_I64_NEW || op->op == XR_XIR_TIMER_AFTER_MS) expected = XR_XIR_I64;
         if (op->op == XR_XIR_CELL_NEW) expected = xr_xir_cell_element(context->module->types, op->type);
         if (op->op == XR_XIR_CELL_READ) {
             expected = xr_xir_operand_type(function, op->args[0]);

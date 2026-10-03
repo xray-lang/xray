@@ -697,6 +697,23 @@ static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
     }
     append(buffer, "        return (XrXirAction){XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
 }
+/* Clock reads and UTC offsets are synchronous instance services. A range
+ * rejection is a language fault; a provider failure aborts the activation. */
+static void emit_time_step(CBuffer *buffer, const XrXirFunction *function,
+    const XrXirFunctionLayout *layout, uint32_t index) {
+    const XrXirInstruction *op = &function->instructions[index];
+    uint32_t destination = layout->offsets[function->parameter_count + index];
+    append(buffer, "        { int64_t reading = 0;\n        XrXirCallStatus time_status = ");
+    if (op->op == XR_XIR_CLOCK_NANOS)
+        append(buffer, "xr_xir_instance_clock_ns(view, (XrXirClockKind) %uu, &reading);\n", (uint32_t) op->immediate);
+    else append(buffer, "xr_xir_instance_utc_offset(view, xr_xir_scalar_load(state->frame, %uu), &reading);\n",
+        layout->offsets[op->args[0]]);
+    append(buffer, "        if (time_status == XR_XIR_CALL_NUMERIC_RANGE) ");
+    emit_fault_return(buffer, function, layout, index, "xr_xir_call_fault(XR_XIR_RUN_NUMERIC_RANGE)");
+    append(buffer, "\n        if (time_status == XR_XIR_CALL_HOST_ERROR) return xr_xir_call_fault(XR_XIR_RUN_HOST_ERROR);\n"
+        "        if (time_status != XR_XIR_CALL_READY) goto invalid;\n"
+        "        xr_xir_scalar_store(state->frame, %uu, reading); }\n", destination);
+}
 static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                             const XrXirFunction *function, const XrXirFunctionLayout *layout,
                             uint32_t index) {
@@ -816,6 +833,13 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_SUSPEND:
         append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
         return;
+    case XR_XIR_TIMER_AFTER_MS:
+        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, "
+            "{XR_XIR_I64, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, 0};\n", layout->offsets[op->args[0]]);
+        return;
+    case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
+        emit_time_step(buffer, function, layout, index);
+        break;
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
         append(buffer,"        { XrXirValue output = {0};\n");
         if (op->op == XR_XIR_NULLABLE_SOME) {

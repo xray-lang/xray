@@ -170,7 +170,7 @@ XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t 
     if (size != sizeof(*config)) return XR_XIR_CALL_BAD_ABI;
     *config = (XrXirInstanceConfig) {XR_XIR_CALL_ABI_VERSION, sizeof(*config),
         UINT64_C(16) << 20, UINT64_C(16) << 20, UINT64_C(16) << 20,
-        UINT64_C(1000000), 4096, {0}, NULL, NULL};
+        UINT64_C(1000000), 4096, {0}, NULL, NULL, {0}};
     return XR_XIR_CALL_READY;
 }
 static void instance_dispose(XrXirInstance *instance) {
@@ -192,7 +192,8 @@ XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceCo
     if (!program || !config) return XR_XIR_CALL_BAD_ARGUMENT;
     if (config->abi_version != XR_XIR_CALL_ABI_VERSION || config->struct_size != sizeof(*config))
         return XR_XIR_CALL_BAD_ABI;
-    if (!xr_xir_output_provider_valid(&config->output)) return XR_XIR_CALL_BAD_ABI;
+    if (!xr_xir_output_provider_valid(&config->output) || !xr_xir_time_provider_valid(&config->time))
+        return XR_XIR_CALL_BAD_ABI;
     const XrXirDeclarations *d = program->declarations;
     uint64_t bytes = sizeof(XrXirInstance) + (uint64_t) d->slot_count * (sizeof(XrXirValue) + 5) +
         (uint64_t) d->module_count * 5 + ((uint64_t) program->entry_count + 1) * sizeof(XrXirCallEntry);
@@ -330,6 +331,13 @@ XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, 
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->stopping || !instance->call || epoch != instance->epoch) return XR_XIR_CALL_BAD_STATE;
     return xr_xir_call_resume(instance->call, wake);
+}
+XrXirCallStatus xr_xir_instance_wait_request(const XrXirInstance *instance, uint64_t epoch,
+    uint64_t wake, XrXirWaitRequest *output) {
+    if (!instance || !output) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
+    if (instance->stopping || !instance->call || epoch != instance->epoch) return XR_XIR_CALL_BAD_STATE;
+    return xr_xir_call_wait_request(instance->call, wake, output);
 }
 XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output) {
     if (!instance || !output) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -503,6 +511,34 @@ XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, X
     if (!instance || literal >= instance->program->declarations->literal_count) return XR_XIR_CALL_BAD_STATE;
     const XrXirLiteral *bytes = &instance->program->declarations->literals[literal];
     return value_call_status(xr_xir_string_new(instance->domain, bytes->bytes, bytes->length, output));
+}
+static XrXirCallStatus time_call_status(XrXirTimeStatus status) {
+    return status == XR_XIR_TIME_OK ? XR_XIR_CALL_READY :
+        status == XR_XIR_TIME_RANGE ? XR_XIR_CALL_NUMERIC_RANGE : XR_XIR_CALL_HOST_ERROR;
+}
+XrXirCallStatus xr_xir_instance_clock_ns(XrXirCallView *view, XrXirClockKind clock, int64_t *nanoseconds) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !nanoseconds || clock < XR_XIR_CLOCK_REALTIME || clock > XR_XIR_CLOCK_MONOTONIC)
+        return XR_XIR_CALL_BAD_STATE;
+    const XrXirTimeProvider *provider = &instance->config.time;
+    if (!provider->abi_version) return XR_XIR_CALL_HOST_ERROR;
+    int64_t reading = 0;
+    XrXirTimeStatus status = provider->clock(provider->context, clock, &reading);
+    /* Clock readings are nonnegative nanosecond counts; a rejection is not a range fault. */
+    if (status == XR_XIR_TIME_OK && reading < 0) status = XR_XIR_TIME_FAILED;
+    if (status == XR_XIR_TIME_RANGE) status = XR_XIR_TIME_FAILED;
+    if (status == XR_XIR_TIME_OK) *nanoseconds = reading;
+    return time_call_status(status);
+}
+XrXirCallStatus xr_xir_instance_utc_offset(XrXirCallView *view, int64_t seconds, int64_t *minutes) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !minutes) return XR_XIR_CALL_BAD_STATE;
+    const XrXirTimeProvider *provider = &instance->config.time;
+    if (!provider->abi_version) return XR_XIR_CALL_HOST_ERROR;
+    int64_t offset = 0;
+    XrXirTimeStatus status = provider->utc_offset(provider->context, seconds, &offset);
+    if (status == XR_XIR_TIME_OK) *minutes = offset;
+    return time_call_status(status);
 }
 XrXirCallStatus xr_xir_instance_atomic(XrXirCallView *view, int64_t initial, XrXirValue *output) {
     XrXirInstance *instance = view_instance(view);

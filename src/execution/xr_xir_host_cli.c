@@ -12,6 +12,7 @@
  *   and use the same formatter as other execution consumers.
  */
 #include "xr_xir_host_cli.h"
+#include "xr_xir_host_time.h"
 #include "../xir/xxir_error.h"
 #include "../xir/xxir_format.h"
 #include "../xir/xxir_output.h"
@@ -115,6 +116,8 @@ static int host_terminal(XrXirCallStatus status, const XrXirCallResult *result) 
         return host_failure("XR_RUN_6003: canonical execution exceeded its resource budget\n", 1);
     if (status == XR_XIR_CALL_OUTPUT_ERROR)
         return host_failure("XR_RUN_6002: canonical output failed\n", 1);
+    if (status == XR_XIR_CALL_HOST_ERROR)
+        return host_failure("XR_RUN_6007: a host clock or timer service failed\n", 1);
     if (status == XR_XIR_CALL_CANCELLED)
         return host_failure("XR_RUN_6002: canonical execution was cancelled\n", 1);
     return host_failure("XR_RUN_6002: canonical execution returned an invalid or unavailable outcome\n", 4);
@@ -134,6 +137,7 @@ XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry
     /* An ordinary process runs until it finishes or the user stops it; the embedding
      * default poll cap protects hosts that schedule many programs and does not apply. */
     config.poll_limit = UINT64_MAX;
+    xr_xir_host_time_provider(&config.time);
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, host_output_bytes, NULL, config.value_limit};
     config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
     XrXirCallResult result = {0};

@@ -55,6 +55,7 @@ typedef struct XrXirInstanceConfig {
     XrXirOutputProvider output;
     XrXirLifecycleEntry trace;
     void *trace_context;
+    XrXirTimeProvider time;
 } XrXirInstanceConfig;
 typedef struct XrXirInstanceResult {
     XrXirCallResult outcome;
@@ -81,6 +82,10 @@ XR_FUNC XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance
 /* Cancels only the current activation; initialized module state remains usable. */
 XR_FUNC XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, uint64_t wake);
+/* Publishes the host request of the current suspension for its exact epoch and
+ * wake token. Failure leaves output unchanged; nothing is read or resumed. */
+XR_FUNC XrXirCallStatus xr_xir_instance_wait_request(const XrXirInstance *instance, uint64_t epoch,
+    uint64_t wake, XrXirWaitRequest *output);
 /* Transfers ordinary entry outcomes. Initialization failure stays instance-owned:
  * take_result returns BAD_STATE without changing output; use copy_failure. */
 XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);
@@ -93,7 +98,14 @@ XR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, 
 XR_FUNC XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry,
     const XrXirValue *captures, uint32_t count, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXirValue *function, uint32_t *entry);
-/* Execution helpers require a view from the instance's active callback. */
+/* Execution helpers require a view from the instance's active callback. Clock
+ * reads and UTC offsets are synchronous provider calls: they never suspend, a
+ * provider range rejection is the numeric-range status and every other provider
+ * failure, or an absent provider, is a host error. Failure leaves output unchanged. */
+XR_FUNC XrXirCallStatus xr_xir_instance_clock_ns(XrXirCallView *view, XrXirClockKind clock,
+    int64_t *nanoseconds);
+XR_FUNC XrXirCallStatus xr_xir_instance_utc_offset(XrXirCallView *view, int64_t seconds,
+    int64_t *minutes);
 XR_FUNC XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_atomic(XrXirCallView *view, int64_t initial, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell(XrXirCallView *view, XrXirType type,

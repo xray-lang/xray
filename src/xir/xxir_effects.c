@@ -55,7 +55,7 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
     const XrXirInstruction *instruction, XrXirFunctionEffects *effect) {
     XrXirOp op = instruction->op;
     switch (op) {
-    case XR_XIR_SUSPEND: effect->suspend = XR_XIR_EFFECT_MAY; return true;
+    case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: effect->suspend = XR_XIR_EFFECT_MAY; return true;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return true;
     case XR_XIR_CALL_REQUIREMENT: {
@@ -115,6 +115,7 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
     case XR_XIR_EQUAL: case XR_XIR_ASSERT_CONDITION: case XR_XIR_MATCH_FAIL: case XR_XIR_ERROR_ERASE: case XR_XIR_INVOKE_RESULT:
     case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
     case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
+    case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         return true;
     default: return false;
     }
@@ -210,7 +211,7 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
             XrXirFunctionEffects local = {0};
             if (!effect_seed(module, function, &function->instructions[i], &local)) return XR_XIR_BAD_STRUCTURE;
             XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
-            if (fact == XR_XIR_EFFECT_MAY && op == XR_XIR_SUSPEND) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
+            if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS)) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
             else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)
                 cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             if (!cause) continue;

@@ -1,0 +1,8 @@
+import time
+
+print(time.nanos())
+print(time.micros())
+print(time.monotonic())
+print(time.now())
+print(time.clock())
+print(time.localOffsetAt(0))

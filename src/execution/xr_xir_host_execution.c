@@ -12,7 +12,7 @@
  *   Suspension tokens are resumed exactly and are never interpreted as clocks.
  */
 #include "xr_xir_host_execution.h"
-#include "../os/os_time.h"
+#include "xr_xir_host_time.h"
 #include "../base/xmalloc.h"
 
 struct XrXirHostCall {
@@ -80,6 +80,14 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_resume(XrXirHostCall *call, uint64_t ep
     if (status == XR_XIR_CALL_READY) call->observed = host_status(status);
     return status;
 }
+XR_FUNC XrXirCallStatus xr_xir_host_call_wait_request(const XrXirHostCall *call, uint64_t epoch,
+    uint64_t wake, XrXirWaitRequest *output) {
+    if (!call || !output) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (call->busy) return XR_XIR_CALL_BUSY;
+    if (call->consumed || call->observed.outcome.status != XR_XIR_CALL_SUSPENDED ||
+        call->observed.epoch != epoch || call->observed.outcome.wake != wake) return XR_XIR_CALL_BAD_STATE;
+    return xr_xir_instance_wait_request(call->instance, epoch, wake, output);
+}
 XR_FUNC XrXirCallStatus xr_xir_host_call_request_cancel(XrXirHostCall *call) {
     if (!call) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->busy) return XR_XIR_CALL_BUSY;
@@ -120,11 +128,30 @@ XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *req
     while (observed.outcome.status == XR_XIR_CALL_READY ||
         observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
         if (observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
-            xr_time_sleep_ns(0);
+            XrXirWaitRequest wait_request = {0};
+            XrXirHostWait wait = {0};
+            status = xr_xir_host_call_wait_request(call, observed.epoch, observed.outcome.wake, &wait_request);
+            XrXirHostWaitStatus waiting = status == XR_XIR_CALL_READY ?
+                xr_xir_host_wait_begin(&wait, &wait_request) : XR_XIR_HOST_WAIT_BAD_ARGUMENT;
+            while (waiting == XR_XIR_HOST_WAIT_PENDING)
+                waiting = xr_xir_host_wait_poll(&wait, UINT64_MAX);
+            if (waiting != XR_XIR_HOST_WAIT_DUE) {
+                /* The host cannot honor the wait: drain the activation and report the host failure. */
+                if (xr_xir_host_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED) {
+                    do observed = xr_xir_host_call_step_bounded(call, 256);
+                    while (observed.outcome.status == XR_XIR_CALL_READY);
+                }
+                status = XR_XIR_CALL_HOST_ERROR;
+                break;
+            }
             status = xr_xir_host_call_resume(call, observed.epoch, observed.outcome.wake);
             if (status != XR_XIR_CALL_READY) break;
         }
         observed = xr_xir_host_call_step_bounded(call, 256);
+    }
+    if (status == XR_XIR_CALL_HOST_ERROR) {
+        XrXirCallStatus cleanup_failed = xr_xir_host_call_drop(call);
+        return cleanup_failed != XR_XIR_CALL_READY ? cleanup_failed : status;
     }
     XrXirCallResult owned = {0};
     if (status == XR_XIR_CALL_READY) status = xr_xir_host_call_take(call, &owned);

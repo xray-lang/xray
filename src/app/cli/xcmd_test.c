@@ -23,6 +23,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../execution/xr_xir_host_cli.h"
+#include "../../execution/xr_xir_host_time.h"
 #include "../../os/os_dir.h"
 #include "../../os/os_fs.h"
 #include "../../os/os_thread.h"
@@ -39,6 +40,8 @@
 #define TEST_WORKER_STACK_SIZE (8u * 1024u * 1024u)
 /* Interpreter actions between two deadline checks. */
 #define TEST_SLICE_QUANTUM 4096u
+/* Longest single sleep while a timer is pending; bounds deadline latency. */
+#define TEST_WAIT_SLICE_NS UINT64_C(10000000)
 #define TEST_PATH_MAX 1024
 #define TEST_MESSAGE_MAX 512
 
@@ -204,6 +207,9 @@ static XrTestStatus classify_terminal(const XrXirCallResult *outcome, bool cance
         case XR_XIR_CALL_OUTPUT_ERROR:
             snprintf(message, size, "test output failed");
             return TEST_ERROR;
+        case XR_XIR_CALL_HOST_ERROR:
+            snprintf(message, size, "a host clock or timer service failed");
+            return TEST_ERROR;
         default:
             break;
     }
@@ -241,20 +247,37 @@ static XrTestStatus invoke_entry(XrXirInstance *instance, uint32_t function, dou
     XrXirCallStatus started = xr_xir_instance_start_test(instance, function);
     if (started != XR_XIR_CALL_READY)
         return classify_start_failure(instance, started, message, size);
-    bool cancelling = false;
+    bool cancelling = false, waiting = false, host_failed = false;
+    XrXirHostWait wait = {0};
+    uint64_t epoch = 0, wake = 0;
     for (;;) {
-        XrXirInstanceResult slice = xr_xir_instance_poll_bounded(instance, TEST_SLICE_QUANTUM);
-        XrXirCallStatus status = slice.outcome.status;
-        if (status == XR_XIR_CALL_SUSPENDED) {
-            XrXirCallStatus resumed = xr_xir_instance_resume(instance, slice.epoch, slice.outcome.wake);
-            if (resumed != XR_XIR_CALL_READY) {
-                snprintf(message, size, "cannot resume suspension (status=%u)", (unsigned) resumed);
-                return TEST_ERROR;
+        if (waiting) {
+            /* A suspended activation is resumed only once the host has seen its full duration. */
+            XrXirHostWaitStatus due = xr_xir_host_wait_poll(&wait, TEST_WAIT_SLICE_NS);
+            if (due == XR_XIR_HOST_WAIT_DUE) {
+                XrXirCallStatus resumed = xr_xir_instance_resume(instance, epoch, wake);
+                if (resumed != XR_XIR_CALL_READY) {
+                    snprintf(message, size, "cannot resume suspension (status=%u)", (unsigned) resumed);
+                    return TEST_ERROR;
+                }
+                waiting = false;
+            } else if (due != XR_XIR_HOST_WAIT_PENDING) host_failed = true;
+        } else {
+            XrXirInstanceResult slice = xr_xir_instance_poll_bounded(instance, TEST_SLICE_QUANTUM);
+            XrXirCallStatus status = slice.outcome.status;
+            if (status == XR_XIR_CALL_SUSPENDED) {
+                XrXirWaitRequest request = {0};
+                epoch = slice.epoch;
+                wake = slice.outcome.wake;
+                if (xr_xir_instance_wait_request(instance, epoch, wake, &request) != XR_XIR_CALL_READY ||
+                    xr_xir_host_wait_begin(&wait, &request) != XR_XIR_HOST_WAIT_PENDING) host_failed = true;
+                else waiting = true;
+            } else if (status != XR_XIR_CALL_READY) {
+                return classify_terminal(&slice.outcome, cancelling, message, size);
             }
-        } else if (status != XR_XIR_CALL_READY) {
-            return classify_terminal(&slice.outcome, cancelling, message, size);
         }
-        if (!cancelling && get_time_ms() >= deadline) {
+        if (!cancelling && (host_failed || get_time_ms() >= deadline)) {
+            waiting = false;
             XrXirCallStatus requested = xr_xir_instance_cancel_current(instance);
             if (requested != XR_XIR_CALL_CANCEL_REQUESTED) {
                 snprintf(message, size, "cannot cancel timed-out test (status=%u)",
@@ -262,6 +285,14 @@ static XrTestStatus invoke_entry(XrXirInstance *instance, uint32_t function, dou
                 return TEST_ERROR;
             }
             cancelling = true;
+        }
+        if (host_failed && cancelling) {
+            /* Drain the cancelled activation, then report the host failure as its own error. */
+            XrXirInstanceResult drained;
+            do drained = xr_xir_instance_poll_bounded(instance, TEST_SLICE_QUANTUM);
+            while (drained.outcome.status == XR_XIR_CALL_READY);
+            snprintf(message, size, "a host clock or timer service failed");
+            return TEST_ERROR;
         }
     }
 }
@@ -428,6 +459,7 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
     }
     /* The wall-clock deadline bounds a test; the embedding poll cap does not apply. */
     instance_config.poll_limit = UINT64_MAX;
+    xr_xir_host_time_provider(&instance_config.time);
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, test_output_bytes, NULL,
                             instance_config.value_limit};
     instance_config.output =

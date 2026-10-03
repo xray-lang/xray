@@ -30,6 +30,10 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_begin(const XrXirHostExecutionRequest *
  * the next state-changing operation or drop; only take publishes an owned result. */
 XR_FUNC XrXirInstanceResult xr_xir_host_call_step_bounded(XrXirHostCall *call, uint64_t quantum);
 XR_FUNC XrXirCallStatus xr_xir_host_call_resume(XrXirHostCall *call, uint64_t epoch, uint64_t wake);
+/* Publishes the request of the observed suspension for its exact epoch and wake. Failure leaves
+ * output unchanged. Resuming a timer is the host's claim that its duration has elapsed. */
+XR_FUNC XrXirCallStatus xr_xir_host_call_wait_request(const XrXirHostCall *call, uint64_t epoch,
+    uint64_t wake, XrXirWaitRequest *output);
 /* Queues cancellation without callbacks or reclamation. Subsequent bounded steps
  * finish the existing cleanup protocol and expose its terminal outcome. */
 XR_FUNC XrXirCallStatus xr_xir_host_call_request_cancel(XrXirHostCall *call);
@@ -37,7 +41,9 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_request_cancel(XrXirHostCall *call);
 XR_FUNC XrXirCallStatus xr_xir_host_call_take(XrXirHostCall *call, XrXirCallResult *output);
 /* Consumes the owner except on BUSY, reporting cleanup failure. NULL is a no-op. */
 XR_FUNC XrXirCallStatus xr_xir_host_call_drop(XrXirHostCall *call);
-/* Admission or cleanup failure preserves output. A published result owns values. */
+/* Admission or cleanup failure preserves output. A published result owns values. A timer
+ * suspension waits on the monotonic clock until its full duration has elapsed; a failed
+ * host clock cancels and drains the call and reports a host error without a result. */
 XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *request,
     XrXirCallResult *output);
 #endif // XR_XIR_HOST_EXECUTION_H

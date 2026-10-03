@@ -71,7 +71,7 @@ def main():
     else:
         identity=(directory/'xir_source_product_identity.h').read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',identity,re.S)
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(18,22,28)
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(18,23,28)
     print(json.dumps({'ordinary_vectors_reframed_with_role_zero':len(records),
         'nullable_none_sha256':hashlib.sha256(sum_vector(False)).hexdigest(),
         'nullable_some_sha256':hashlib.sha256(sum_vector(True)).hexdigest()}))

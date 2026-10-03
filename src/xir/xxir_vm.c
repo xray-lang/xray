@@ -592,6 +592,22 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_SUSPEND:
         action->kind = XR_XIR_ACTION_SUSPEND;
         break;
+    case XR_XIR_TIMER_AFTER_MS:
+        *action = (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, {XR_XIR_I64, 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}, 0};
+        break;
+    case XR_XIR_CLOCK_NANOS:
+    case XR_XIR_UTC_OFFSET_AT: {
+        if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+        XrXirCallStatus status = op->op == XR_XIR_CLOCK_NANOS ?
+            xr_xir_instance_clock_ns(run->view, (XrXirClockKind) op->immediate, &value) :
+            xr_xir_instance_utc_offset(run->view,
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &value);
+        if (status == XR_XIR_CALL_NUMERIC_RANGE) return XR_XIR_RUN_NUMERIC_RANGE;
+        if (status == XR_XIR_CALL_HOST_ERROR) return XR_XIR_RUN_HOST_ERROR;
+        if (status != XR_XIR_CALL_READY) return XR_XIR_RUN_BAD_ARTIFACT;
+        break;
+    }
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
         state->instruction = next;
@@ -833,6 +849,8 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_INVOKE ||
             body->instructions[i].op == XR_XIR_INVOKE_INDIRECT || body->instructions[i].op == XR_XIR_SUSPEND ||
+            body->instructions[i].op == XR_XIR_TIMER_AFTER_MS || body->instructions[i].op == XR_XIR_CLOCK_NANOS ||
+            body->instructions[i].op == XR_XIR_UTC_OFFSET_AT ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
             body->instructions[i].op == XR_XIR_ASSERT_CONDITION || body->instructions[i].op == XR_XIR_EQUAL ||
             body->instructions[i].op == XR_XIR_PANIC_CATCH ||
