@@ -45,7 +45,7 @@ typedef struct SourceManifest {
     XrModuleIdentityAuthority authority;
     XrDeclarationManifest *declarations;
 } SourceManifest;
-typedef enum SourceKind { SOURCE_SLOT, SOURCE_UNIT_SLOT, SOURCE_FUNCTION, SOURCE_MODULE, SOURCE_IMPORT, SOURCE_LOCAL, SOURCE_UNIT_LOCAL, SOURCE_NOMINAL, SOURCE_INTERFACE } SourceKind;
+typedef enum SourceKind { SOURCE_SLOT, SOURCE_UNIT_SLOT, SOURCE_FUNCTION, SOURCE_MODULE, SOURCE_IMPORT, SOURCE_LOCAL, SOURCE_UNIT_LOCAL, SOURCE_NOMINAL, SOURCE_INTERFACE, SOURCE_PENDING } SourceKind;
 typedef struct SourceName {
     struct SourceName *next;
     const char *name, *imported;
@@ -57,7 +57,9 @@ typedef struct SourceName {
     uint32_t declaration;
 } SourceName;
 /* SOURCE_UNIT_LOCAL is an initialized logical declaration with no runtime
- * payload. Its index is never an executable value or a capture ordinal. */
+ * payload. Its index is never an executable value or a capture ordinal.
+ * SOURCE_PENDING reserves a nested function name for its whole block before the
+ * declaration runs, so an earlier use fails instead of resolving to an outer name. */
 static bool source_local_name(const SourceName *name) {
     return name && (name->kind == SOURCE_LOCAL || name->kind == SOURCE_UNIT_LOCAL);
 }
@@ -1708,6 +1710,50 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     source_query_binding_type(ctx, symbol);
     return true;
 }
+/* A nested function is a closure value bound immutably from its declaration on. */
+static bool source_nested_function(SourceContext *ctx, AstNode *node) {
+    FunctionDeclNode *decl = &node->as.function_decl;
+    SourceName *symbol = NULL;
+    for (SourceName *p = ctx->locals; p != ctx->scope; p = p->next) {
+        if (!source_work(ctx, node)) return false;
+        if (p->kind == SOURCE_PENDING && p->node == node) symbol = p;
+        else if (source_text_same(ctx, NULL, p->name, decl->name))
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate local name");
+    }
+    SourceValue value;
+    if (!source_closure(ctx, node, (SourceExpectedType){false, XR_XIR_UNIT}, &value)) return false;
+    if (!symbol) {
+        symbol = source_alloc(ctx, 1, sizeof(*symbol));
+        if (!symbol) return false;
+        *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_PENDING, UINT32_MAX, ctx->module, XR_XIR_UNIT, false, false, 0};
+        ctx->locals = symbol;
+    }
+    symbol->kind = SOURCE_LOCAL; symbol->index = value.id; symbol->type = value.type;
+    symbol->module = ctx->module; symbol->mutable = false; symbol->construction = false;
+    if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
+        source_query_range(ctx, node, symbol->name))) return false;
+    source_query_binding_type(ctx, symbol);
+    return true;
+}
+/* Reserve every nested function name of a block before its first statement runs. */
+static bool source_block_functions(SourceContext *ctx, AstNode *block) {
+    for (int i = 0; i < block->as.block.count; ++i) {
+        AstNode *node = block->as.block.statements[i];
+        if (!source_work(ctx, block)) return false;
+        if (!node || node->type != AST_FUNCTION_DECL) continue;
+        for (SourceName *p = ctx->locals; p != ctx->scope; p = p->next) {
+            if (!source_work(ctx, node)) return false;
+            if (source_text_same(ctx, NULL, p->name, node->as.function_decl.name))
+                return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate local name");
+        }
+        SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
+        if (!symbol) return false;
+        *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_PENDING, UINT32_MAX,
+            ctx->module, XR_XIR_UNIT, false, false, 0};
+        ctx->locals = symbol;
+    }
+    return true;
+}
 static bool scoped_statement(SourceContext *ctx, AstNode *node) {
     if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source control depth exhausted");
     SourceName *saved = ctx->locals, *scope = ctx->scope;
@@ -1857,7 +1903,9 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_FOR_IN_STMT: return source_for_in(ctx, node);
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_IMPORT_STMT: case AST_FUNCTION_DECL: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
+    case AST_FUNCTION_DECL: return top || source_nested_function(ctx, node);
+    case AST_TYPE_ALIAS: return true;
+    case AST_IMPORT_STMT: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_EXPR_STMT: {
@@ -1906,7 +1954,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         SourceName *saved = ctx->locals, *scope = ctx->scope;
         SourceFunction *body = &ctx->bodies[ctx->function]; uint32_t entry = body->frontier;
         ctx->scope = saved; ++ctx->depth; ++body->lexical_depth;
-        bool ok = true;
+        bool ok = source_block_functions(ctx, node);
         for (int i = 0; ok && i < node->as.block.count; ++i)
             ok = statement(ctx, node->as.block.statements[i], false);
         --ctx->depth; --body->lexical_depth; ctx->locals = saved; ctx->scope = scope;
@@ -2066,9 +2114,12 @@ static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
     if (!source_work(scan->ctx,node)) return false;
-    if (scan->depth == 128 || ((node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT) && scan->count == scan->ctx->compile.limits.functions))
+    /* A module-level declaration is a direct child of the program node, at depth one. */
+    bool closure = node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT ||
+        (node->type == AST_FUNCTION_DECL && scan->depth > 1);
+    if (scan->depth == 128 || (closure && scan->count == scan->ctx->compile.limits.functions))
         return source_fail(scan->ctx,node,XR_XIR_BUDGET,"closure declaration budget exhausted");
-    if (node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT) ++scan->count;
+    if (closure) ++scan->count;
     if (node->type == AST_MEMBER_ACCESS) {
         if (scan->members == UINT32_MAX)
             return source_fail(scan->ctx,node,XR_XIR_BUDGET,"member helper capacity exhausted");
@@ -2317,6 +2368,11 @@ typedef struct SourceCaptureScan {
     SourceName *bound;
     SourceCapture *captures;
     uint32_t count, depth;
+    /* A nested function declaration is its own root: its name is bound inside the
+     * body, and `self_used` records whether the body refers to it. */
+    AstNode *root;
+    SourceName *self;
+    bool self_used;
 } SourceCaptureScan;
 static bool capture_bind(SourceCaptureScan *scan, const char *name, AstNode *node) {
     SourceName *binding = source_alloc(scan->ctx, 1, sizeof(*binding));
@@ -2326,8 +2382,14 @@ static bool capture_bind(SourceCaptureScan *scan, const char *name, AstNode *nod
 }
 static bool capture_name(SourceCaptureScan *scan, const char *name, AstNode *node) {
     SourceContext *ctx = scan->ctx;
-    if (find_name(ctx, scan->bound, name)) return true;
+    SourceName *bound = find_name(ctx, scan->bound, name);
+    if (bound) {
+        if (bound == scan->self) scan->self_used = true;
+        return true;
+    }
     SourceName *source = visible_name(ctx, name);
+    if (source && source->kind == SOURCE_PENDING)
+        return source_fail(ctx, node, XR_XIR_BAD_VALUE, "nested function is used before its declaration completes");
     if (!source_local_name(source)) return ctx->diagnostic.status == XR_XIR_OK;
     for (SourceCapture *p = scan->captures; p; p = p->next) {
         if (!source_work(ctx, node)) return false;
@@ -2400,11 +2462,19 @@ static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
             if (!capture_scan(node->as.block.statements[i], scan)) return false;
         scan->bound = saved; return true;
     }
-    case AST_FUNCTION_EXPR: {
+    case AST_FUNCTION_EXPR: case AST_FUNCTION_DECL: {
         SourceName *saved = scan->bound;
+        bool declaration = node->type == AST_FUNCTION_DECL;
+        if (declaration) {
+            if (!capture_bind(scan, node->as.function_decl.name, node)) return false;
+            if (node == scan->root) scan->self = scan->bound;
+        }
         for (int i = 0; i < node->as.function_expr.param_count; ++i)
             if (!capture_bind(scan, node->as.function_expr.params[i]->name, node)) return false;
-        bool ok = capture_scan(node->as.function_expr.body, scan); scan->bound = saved; return ok;
+        bool ok = capture_scan(node->as.function_expr.body, scan); scan->bound = saved;
+        /* A nested declaration stays visible to the rest of its enclosing block. */
+        if (ok && declaration && node != scan->root) ok = capture_bind(scan, node->as.function_decl.name, node);
+        return ok;
     }
     case AST_IF_STMT:
         return capture_scan(node->as.if_stmt.condition, scan) && capture_scope(scan, node->as.if_stmt.then_branch) &&
@@ -2497,6 +2567,32 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
     return true;
 }
 #include "xxir_source_cleanup.inc.c"
+/* Inside its own body a nested declaration is the closure value rebuilt from the
+ * body's captures, so recursion needs no extra capture and no cell. */
+static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
+    uint32_t index, XrXirType type) {
+    SourceFunction *body = &ctx->bodies[index];
+    for (const SourceCapture *p = scan->captures; p; p = p->next) {
+        if (!source_work(ctx, node)) return false;
+        if (p->source->construction)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "recursive nested function cannot capture a constructor value");
+    }
+    SourceValue *captures = scan->count ? source_alloc(ctx, scan->count, sizeof(*captures)) : NULL;
+    uint32_t count = ctx->generics[index].parameter_count;
+    XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
+    SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
+    if ((scan->count && !captures) || (count && !types) || !symbol) return false;
+    for (uint32_t i = 0; i < scan->count; ++i) captures[i] = (SourceValue) {i, body->parameters[i]};
+    for (uint32_t i = 0; i < count; ++i) types[i] = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + i);
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, index, {0}};
+    SourceValue self;
+    if (!source_type_arguments(ctx, node, types, count, &op) || !source_recipe_group(ctx, op, captures, scan->count, &self))
+        return false;
+    *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_LOCAL, self.id,
+        ctx->module, type, false, false, body->declaration};
+    ctx->locals = symbol;
+    return true;
+}
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     const XrXirTypeNode *context = expected.present ? xr_xir_callable_signature(&ctx->types, expected.type) : NULL;
     if (expected.present && !context)
@@ -2519,7 +2615,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure context requires an unsupported parameter mode");
         }
     }
-    SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0};
+    SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0, node, NULL, false};
     if (!capture_scan(node, &scan)) return false;
     if (scan.count > 65536 - (uint32_t) decl->param_count || ctx->next_closure >= ctx->closure_limit)
         return source_fail(ctx, node, XR_XIR_BUDGET, "closure parameter or declaration budget exhausted");
@@ -2529,7 +2625,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     body->generic_owner = ctx->bodies[outer].generic_owner;
     body->type_parameters = ctx->bodies[outer].type_parameters;
     body->type_parameter_count = ctx->bodies[outer].type_parameter_count;
-    body->infer_result = !decl->return_type && !context;
+    body->infer_result = node->type == AST_FUNCTION_EXPR && !decl->return_type && !context;
     ctx->generics[index].parameter_count = ctx->generics[outer].parameter_count;
     ctx->generics[index].constraints = ctx->generics[outer].constraints;
     ctx->generics[index].parameter_kinds = ctx->generics[outer].parameter_kinds;
@@ -2560,9 +2656,16 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         if (decl->return_type) ok = source_type(ctx, decl->return_type, &ctx->functions[index].result);
         else if (context) ctx->functions[index].result = context->result;
     }
+    /* A declaration states its result, so its signature is known before the body
+     * and the body can name the function it belongs to. */
+    bool nested_function = node->type == AST_FUNCTION_DECL;
+    if (ok && nested_function) {
+        ok = source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type);
+        if (ok && scan.self_used) ok = source_closure_self(ctx, node, &scan, index, type);
+    }
     ok = ok &&
         statement(ctx, decl->body, false) && finish_body(ctx) &&
-        source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type);
+        (nested_function || source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type));
     if (ok && no_suspend) {
         XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, type);
         signature.flags = XR_XIR_CALLABLE_NO_SUSPEND;

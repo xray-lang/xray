@@ -401,6 +401,10 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
     Token annotation_start = parser->current;
     XrTypeRef *base = parse_type_annotation_base(parser);
     if (!xr_parser_healthy(parser)) return NULL;
+    /* Named and generic references are fresh allocations, unlike the shared
+     * primitive singletons, so they can carry the position of their spelling. */
+    if (base && !base->line && (base->kind == XR_TREF_NAMED || base->kind == XR_TREF_GENERIC))
+        xr_tref_set_source_position(base, annotation_start.line, annotation_start.column);
 
     /* Optional type suffix: T? */
     if (xr_parser_match(parser, TK_QUESTION))

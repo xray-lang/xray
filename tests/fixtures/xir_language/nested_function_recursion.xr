@@ -1,0 +1,40 @@
+// A nested function is a closure value bound from its declaration on.
+// Self recursion, shared mutable capture and a captured parameter.
+fn outer(n: i64) -> i64 {
+    var calls = 0
+    fn fact(k: i64) -> i64 {
+        calls += 1
+        if (k <= 1) { return 1 }
+        return k * fact(k - 1)
+    }
+    const r = fact(n)
+    return r * 1000 + calls
+}
+
+fn adder(base: i64) -> fn(i64) -> i64 {
+    fn add(x: i64) -> i64 { return x + base }
+    return add
+}
+
+fn fib(n: i64) -> i64 {
+    fn walk(a: i64, b: i64, k: i64) -> i64 {
+        if (k == 0) { return a }
+        return walk(b, a + b, k - 1)
+    }
+    return walk(0, 1, n)
+}
+
+print(outer(5))
+print(adder(10)(32))
+print(fib(20))
+fn level() -> i64 {
+    var total = 0
+    {
+        fn inner(x: i64) -> i64 { return x * 2 }
+        total += inner(4)
+    }
+    fn inner2(x: i64) -> i64 { return x + 1 }
+    total += inner2(total)
+    return total
+}
+print(level())

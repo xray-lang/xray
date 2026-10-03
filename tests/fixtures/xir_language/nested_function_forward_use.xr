@@ -1,0 +1,13 @@
+fn caller() -> i64 {
+    fn isEven(n: i64) -> bool {
+        if (n == 0) { return true }
+        return isOdd(n - 1)
+    }
+    fn isOdd(n: i64) -> bool {
+        if (n == 0) { return false }
+        return isEven(n - 1)
+    }
+    if (isEven(4)) { return 1 }
+    return 0
+}
+print(caller())

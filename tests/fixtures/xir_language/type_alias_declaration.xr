@@ -1,0 +1,4 @@
+type Count = i64
+type Step = fn(i64) -> i64
+fn apply(f: Step, v: Count) -> Count { return f(v) }
+print(apply((x: i64) -> x * 3, 14))

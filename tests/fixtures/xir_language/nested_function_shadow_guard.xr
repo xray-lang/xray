@@ -1,0 +1,7 @@
+fn helper() -> i64 { return 1 }
+fn pick() -> i64 {
+    const early = helper()
+    fn helper() -> i64 { return 2 }
+    return early + helper()
+}
+print(pick())

@@ -63,7 +63,9 @@ static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType 
 }
 static bool source_nominal_apply(SourceContext *ctx, SourceName *symbol, XrTypeRef **arguments,
     uint32_t count, XrXirType *type) {
-    if (!symbol || symbol->kind != SOURCE_NOMINAL || count != ctx->nominals.declarations[symbol->index].parameter_count)
+    if (!symbol || symbol->kind != SOURCE_NOMINAL)
+        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "name does not resolve to an admitted nominal type");
+    if (count != ctx->nominals.declarations[symbol->index].parameter_count)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "nominal type requires its exact explicit arguments");
     if (!count) { *type = symbol->type; return true; }
     if (!arguments || ctx->depth >= 128)
