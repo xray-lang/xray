@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_compile_c_source_free(&source);
     }
-    for (uint32_t mode=0;mode<5;++mode) {
+    for (uint32_t mode=0;mode<6;++mode) {
         XrXirArtifact *artifact=native_inbox_fixture(&compiler.context,mode);
         XrXirCSource source={0}; char prefix[32];
         CHECK(snprintf(prefix,sizeof(prefix),"fixture_inbox%u",mode)>0);

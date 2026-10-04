@@ -1029,8 +1029,33 @@ static void emit_resume_inbox_helper(CBuffer *buffer, const char *prefix) {
         , prefix);
 }
 
+static void emit_resume_waiting_helper(CBuffer *buffer, const char *prefix) {
+    append(buffer,
+        "static XR_NOINLINE bool %s_accept_waiting(XrXirCallView *view, unsigned char *frame,\n"
+        "    bool *waiting, uint32_t *pc, uint32_t *panic_pc, uint32_t panic_destination,\n"
+        "    uint32_t *destination, uint32_t *expected, uint32_t normal_pc, uint32_t error_pc,\n"
+        "    uint32_t error_destination, bool *invoking, bool discard, XrXirAction *terminal) {\n"
+        "    *waiting = false;\n"
+        "    uint32_t handler_pc = *panic_pc; *panic_pc = 0;\n"
+        "    if (xr_xir_call_panic_status(view->inbox.status)) {\n"
+        "        if (!handler_pc) {\n"
+        "            *terminal = (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n"
+        "            return true;\n"
+        "        }\n"
+        "        *invoking = false;\n"
+        "        *terminal = xr_xir_instance_panic_land(view, frame,\n"
+        "            (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,\n"
+        "                {XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0},\n"
+        "            panic_destination, handler_pc, pc);\n"
+        "        return true;\n"
+        "    }\n"
+        "    return %s_accept_inbox(view, frame, pc, destination, expected, normal_pc,\n"
+        "        error_pc, error_destination, invoking, discard, terminal);\n"
+        "}\n", prefix, prefix);
+}
+
 static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
-                                  const char *prefix, uint32_t index) {
+                                  const char *prefix, uint32_t index, bool *waiting_helper_emitted) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirFunction *function = &module->functions[index];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
@@ -1042,13 +1067,25 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "typedef struct %s_state_%u {\n"
            "    uint32_t pc, destination, expected, normal_pc, error_pc, error_destination, panic_pc, panic_destination;\n"
            "    bool initialized, waiting, invoking, discard;\n", prefix, index);
-    if (emit_has_cleanup(buffer, function)) append(buffer,
+    if (!emit_work(buffer, 1)) return;
+    bool has_cleanup = emit_has_cleanup(buffer, function);
+    if (!emit_work(buffer, 1)) return;
+    if (has_cleanup) append(buffer,
         "    uint32_t frontier, cleanup_parent, exit_target, exit_pc, exit_destination, leave_instruction, panic_frontier;\n"
         "    bool cleanup_waiting, leaving;\n");
     if (layout->outgoing_count) append(buffer, "    XrXirValue arguments[%u];\n", layout->outgoing_count);
     if (layout->path_count) append(buffer, "    XrXirValuePathStep path_steps[%u];\n", layout->path_count);
     append(buffer, "    unsigned char frame[%u];\n} %s_state_%u;\n",
            layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
+    if (!emit_work(buffer, 1)) return;
+    if (!has_cleanup) {
+        if (!emit_work(buffer, 1)) return;
+        if (!*waiting_helper_emitted) {
+            emit_resume_waiting_helper(buffer, prefix);
+            if (!emit_work(buffer, 1)) return;
+            *waiting_helper_emitted = true;
+        }
+    }
     bool chunked = function->instruction_count > EMIT_RESUME_CHUNK_INSTRUCTIONS;
     if (chunked) emit_resume_chunks(buffer, artifact, prefix, index);
     if (!emit_work(buffer, 5)) return;
@@ -1070,26 +1107,38 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
             append(buffer, "        xr_xir_scalar_store(state->frame, %uu, view->arguments[%u].payload);\n",
                    layout->offsets[p], p);
     }
-    append(buffer, "        state->initialized = true;\n    }\n"
-           "    if (state->waiting) {\n        state->waiting = false;\n"
-           "        uint32_t panic_pc = state->panic_pc; state->panic_pc = 0;\n"
-           "        if (xr_xir_call_panic_status(view->inbox.status)) {\n"
-           "            if (!panic_pc) goto invalid;\n"
-           "            state->invoking = false;\n");
-    if (emit_has_cleanup(buffer, function)) append(buffer,
-           "            if (state->frontier != state->panic_frontier) {\n"
-           "                state->exit_target = state->panic_frontier; state->exit_pc = panic_pc;\n"
-           "                state->exit_destination = state->panic_destination; state->leaving = true;\n"
-           "                return (XrXirAction){XR_XIR_ACTION_LEAVE, 0, NULL, 0, {XR_XIR_I64, 0, view->inbox.status},\n"
-           "                    view->inbox.panic, XR_XIR_ACTION_LEAVE_PANIC};\n            }\n");
-    append(buffer, "            return xr_xir_instance_panic_land(view, state->frame, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
-           "{XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0}, state->panic_destination, panic_pc, &state->pc);\n"
-           "        }\n"
-           "        XrXirAction inbox_action = {0};\n"
-           "        if (%s_accept_inbox(view, state->frame, &state->pc, &state->destination,\n"
-           "                &state->expected, state->normal_pc, state->error_pc, state->error_destination,\n"
-           "                &state->invoking, state->discard, &inbox_action)) return inbox_action;\n"
-           "    }\n", prefix);
+    append(buffer, "        state->initialized = true;\n    }\n");
+    if (!emit_work(buffer, 1)) return;
+    if (!has_cleanup) {
+        append(buffer,
+            "    if (state->waiting) {\n"
+            "        XrXirAction waiting_action = {0};\n"
+            "        if (%s_accept_waiting(view, state->frame, &state->waiting,\n"
+            "                &state->pc, &state->panic_pc, state->panic_destination, &state->destination,\n"
+            "                &state->expected, state->normal_pc, state->error_pc, state->error_destination,\n"
+            "                &state->invoking, state->discard, &waiting_action)) return waiting_action;\n"
+            "    }\n", prefix);
+    } else {
+        append(buffer, "    if (state->waiting) {\n        state->waiting = false;\n"
+               "        uint32_t panic_pc = state->panic_pc; state->panic_pc = 0;\n"
+               "        if (xr_xir_call_panic_status(view->inbox.status)) {\n"
+               "            if (!panic_pc) goto invalid;\n"
+               "            state->invoking = false;\n");
+        if (emit_has_cleanup(buffer, function)) append(buffer,
+               "            if (state->frontier != state->panic_frontier) {\n"
+               "                state->exit_target = state->panic_frontier; state->exit_pc = panic_pc;\n"
+               "                state->exit_destination = state->panic_destination; state->leaving = true;\n"
+               "                return (XrXirAction){XR_XIR_ACTION_LEAVE, 0, NULL, 0, {XR_XIR_I64, 0, view->inbox.status},\n"
+               "                    view->inbox.panic, XR_XIR_ACTION_LEAVE_PANIC};\n            }\n");
+        append(buffer, "            return xr_xir_instance_panic_land(view, state->frame, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
+               "{XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0}, state->panic_destination, panic_pc, &state->pc);\n"
+               "        }\n"
+               "        XrXirAction inbox_action = {0};\n"
+               "        if (%s_accept_inbox(view, state->frame, &state->pc, &state->destination,\n"
+               "                &state->expected, state->normal_pc, state->error_pc, state->error_destination,\n"
+               "                &state->invoking, state->discard, &inbox_action)) return inbox_action;\n"
+               "    }\n", prefix);
+    }
     if (chunked) {
         append(buffer, "    switch (state->pc / %uu) {\n", EMIT_RESUME_CHUNK_INSTRUCTIONS);
         uint32_t chunks = (function->instruction_count - 1) / EMIT_RESUME_CHUNK_INSTRUCTIONS + 1;
@@ -1344,8 +1393,10 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(offsetof(XrXirCallResult, value) == 8 && offsetof(XrXirCallResult, wake) == 24 && "
            "offsetof(XrXirCallResult, panic) == 32, \"XIR result offsets\");\n");
     if (module->function_count) emit_resume_inbox_helper(buffer, symbol_prefix);
+    if (!emit_work(buffer, 1)) return;
+    bool waiting_helper_emitted = false;
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)
-        emit_resume_function(buffer, artifact, symbol_prefix, f);
+        emit_resume_function(buffer, artifact, symbol_prefix, f, &waiting_helper_emitted);
     append(buffer, "XR_DATADEF const XrXirCallEntry %s_entries[] = {\n", symbol_prefix);
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f) {
         const XrXirFunction *function = &module->functions[f];

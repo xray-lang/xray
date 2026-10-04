@@ -10,7 +10,7 @@
 #define XIR_NATIVE_INBOX_FIXTURE_H
 #include "xir_call_fixture.h"
 static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, uint32_t mode) {
-    CHECK(mode < 5);
+    CHECK(mode < 6);
     const XrXirType string_parameter = XR_XIR_STRING;
     const uint32_t operands[] = {0};
     XrXirInstruction root[] = {
@@ -83,6 +83,20 @@ static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, u
         functions[0].blocks=protected_blocks; functions[0].block_count=4;
         functions[0].operands=protected_operands; functions[0].operand_count=2;
         identities[2].cleanup_owner=1;
+    }
+    /* No cleanup: both the protected CALL and handler have frontier zero. */
+    const XrXirInstruction same_frontier_root[]={
+        {XR_XIR_JUMP,XR_XIR_UNIT,{0},{1},0,{0}},
+        {XR_XIR_CALL,XR_XIR_UNIT,{0,1},{0},1,{0}},
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{3},{0},0,{0}},
+        {XR_XIR_PANIC_CATCH,XR_XIR_UNIT,{0},{0},0,{0}},
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},91,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{6},{0},0,{0}}};
+    const XrXirBlock same_frontier_blocks[]={{0,1,0,0},{1,3,2,0},{4,3,0,0}};
+    if (mode==5) {
+        functions[0].instructions=same_frontier_root; functions[0].instruction_count=7;
+        functions[0].blocks=same_frontier_blocks; functions[0].block_count=3;
     }
     const XrXirSourceModule source={"alpha",5,NULL,0,3};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,4,NULL};

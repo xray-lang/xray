@@ -7,13 +7,13 @@
  * xir_native_inbox_boundaries.inc.c - Actual generated entry ownership gates
  */
 XR_DATA const XrXirCallEntry fixture_inbox0_entries[5],fixture_inbox1_entries[5],
-    fixture_inbox2_entries[5],fixture_inbox3_entries[5],fixture_inbox4_entries[5];
+    fixture_inbox2_entries[5],fixture_inbox3_entries[5],fixture_inbox4_entries[5],fixture_inbox5_entries[5];
 typedef struct NativeInboxWitness {
     XrXirResumeEntry resume;
     XrXirDomain *domain;
     XrXirValue child_value,foreign;
     XrXirDomainStats input_baseline;
-    uint32_t mode,attack,child_steps,child_releases,inboxes,outputs,panic_leaves;
+    uint32_t mode,attack,child_steps,child_releases,inboxes,outputs,panic_leaves,panic_landings;
 } NativeInboxWitness;
 static const unsigned char native_inbox_input[]={ 'a',0,0xC2,0xA2 };
 static const char native_inbox_result[]={ 'r',0,'z' };
@@ -37,6 +37,8 @@ static XrXirAction native_inbox_observe(XrXirCallView *view) {
     NativeInboxWitness *w=view->instance;
     bool incoming=view->phase==XR_XIR_CALL_NORMAL && view->inbox.status==XR_XIR_CALL_RETURNED &&
         !w->inboxes && w->mode<3;
+    bool same_frontier_panic=view->phase==XR_XIR_CALL_NORMAL && w->mode==5 && !w->panic_landings &&
+        view->inbox.status==XR_XIR_CALL_DIVIDE_BY_ZERO;
     XrXirCallResult original=view->inbox;
     XrXirDomainStats before={0}; XirObject *carrier=NULL; uint32_t references=0;
     size_t attempts=runtime_attempts;
@@ -64,9 +66,22 @@ static XrXirAction native_inbox_observe(XrXirCallView *view) {
             if (w->attack==6) view->inbox.value=(XrXirValue){XR_XIR_UNIT,0,w->foreign.payload};
             if (w->attack==7) view->inbox.value=view->arguments[0];
             if (w->attack==8) view->inbox.value=w->foreign;
+            if (w->attack==9) {
+                view->inbox.status=XR_XIR_CALL_DIVIDE_BY_ZERO;
+                view->inbox.panic.detail.code=XR_XIR_PANIC_DIVIDE;
+                CHECK(xr_xir_call_result_valid(&view->inbox));
+            }
+            if (w->attack==10) view->inbox.status=XR_XIR_CALL_CANCELLED;
         }
     }
     XrXirAction action=w->resume(view);
+    if (same_frontier_panic) {
+        CHECK(!w->panic_landings++ && !w->panic_leaves && !w->outputs);
+        CHECK(action.kind==XR_XIR_ACTION_CONTINUE && !action.callee && !action.arguments &&
+            !action.argument_count && !action.flags && !action.value.type &&
+            !action.value.reserved && !action.value.payload && xr_xir_panic_empty(&action.panic));
+        CHECK(runtime_attempts==attempts);
+    }
     if (incoming) {
         CHECK(runtime_attempts==attempts);
         if (w->mode==1 && w->attack==1) {
@@ -130,7 +145,7 @@ static bool native_inbox_run(const XrXirCompileContext *context,
     vs=xr_xir_string_new(domain,(const char *)native_inbox_input,sizeof(native_inbox_input),&input);
     if (vs!=XR_XIR_VALUE_OK) {CHECK(vs==XR_XIR_VALUE_OOM);goto done;}
     witness.input_baseline=xr_xir_domain_stats(domain);
-    if (mode==2 && attack>=6) {
+    if (mode==2 && attack>=6 && attack<=8) {
         CHECK(xr_xir_domain_new(65536,&foreign_domain)==XR_XIR_VALUE_OK);
         foreign_baseline=xr_xir_domain_stats(foreign_domain);
         CHECK(xr_xir_string_new(foreign_domain,"foreign",7,&witness.foreign)==XR_XIR_VALUE_OK);
@@ -152,16 +167,17 @@ static bool native_inbox_run(const XrXirCompileContext *context,
     status=result.status;
     if (status==XR_XIR_CALL_OOM) goto done;
     if (cancel) {
-        CHECK(status==XR_XIR_CALL_CANCELLED && !witness.inboxes && !witness.panic_leaves);
+        CHECK(status==XR_XIR_CALL_CANCELLED && !witness.inboxes && !witness.panic_leaves && !witness.panic_landings);
         CHECK(witness.outputs==(uint32_t)(mode==4));
     } else if (mode==1 && attack) CHECK(status==XR_XIR_CALL_LIMIT && witness.inboxes==1);
     else if (mode==2 && attack) CHECK(status==XR_XIR_CALL_BAD_STATE && witness.inboxes==1);
     else if (mode==3) CHECK(status==XR_XIR_CALL_DIVIDE_BY_ZERO && !witness.outputs);
     else {
         CHECK(status==XR_XIR_CALL_RETURNED && result.value.type==XR_XIR_I64 &&
-            result.value.payload==(mode==4 ? 91 : 41));
+            result.value.payload==(mode>=4 ? 91 : 41));
         CHECK(witness.inboxes==(uint32_t)(mode<3));
         CHECK(witness.outputs==(uint32_t)(mode==4) && witness.panic_leaves==(uint32_t)(mode==4));
+        CHECK(witness.panic_landings==(uint32_t)(mode==5));
     }
     completed=true;
  done:
@@ -196,8 +212,8 @@ static void native_inbox_boundaries(const XrXirCompileContext *context) {
     XrCompileResourceStats compiler_baseline={0};
     CHECK(xr_compile_resources_stats(context->resources,&compiler_baseline)==XR_COMPILE_RESOURCE_OK);
     const XrXirCallEntry *tables[]={fixture_inbox0_entries,fixture_inbox1_entries,
-        fixture_inbox2_entries,fixture_inbox3_entries,fixture_inbox4_entries};
-    for (uint32_t mode=0;mode<5;++mode) for (uint32_t cancel=0;cancel<2;++cancel) {
+        fixture_inbox2_entries,fixture_inbox3_entries,fixture_inbox4_entries,fixture_inbox5_entries};
+    for (uint32_t mode=0;mode<6;++mode) for (uint32_t cancel=0;cancel<2;++cancel) {
         runtime_fail_at=SIZE_MAX;runtime_attempts=0;
         CHECK(native_inbox_run(context,tables[mode],mode,0,cancel!=0));
         size_t sites=runtime_attempts;CHECK(sites);
@@ -212,8 +228,11 @@ static void native_inbox_boundaries(const XrXirCompileContext *context) {
     runtime_fail_at=SIZE_MAX;runtime_attempts=0;
     CHECK(native_inbox_run(context,tables[1],1,1,false));
     for (uint32_t attack=1;attack<=8;++attack) CHECK(native_inbox_run(context,tables[2],2,attack,false));
+    /* Borrowed-view faults: no handler for a valid panic, then invalid status. */
+    CHECK(native_inbox_run(context,tables[2],2,9,false));
+    CHECK(native_inbox_run(context,tables[2],2,10,false));
     XrCompileResourceStats stats={0};
     CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK &&
         stats.live_bytes==compiler_baseline.live_bytes);
-    puts("Generated native Inbox: discard refund, Unit admission, retain limit, panic cleanup and actual OOM");
+    puts("Generated native Inbox: discard refund, Unit admission, retain limit, panic cleanup, same-frontier landing, missing handler and actual OOM");
 }
