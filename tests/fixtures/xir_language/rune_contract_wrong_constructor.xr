@@ -1,0 +1,1 @@
+fn main() { print(rune(65 as u32)) }

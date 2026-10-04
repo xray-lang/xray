@@ -15,7 +15,7 @@ def main():
     word=lambda value:struct.pack('<I',value)
     def text(value):
         value=value.encode();return word(len(value))+value
-    prefix=[2,23,60,18,24,28,1,1,1,11,2,0,1,0,3,1,1]
+    prefix=[2,23,61,19,25,28,1,1,1,11,2,0,1,0,3,1,1]
     image=b'xray:xir-runtime-sdk:v1'+struct.pack('<17I',*prefix)
     image+=text('x86_64-windows-msvc')+text('xray:xir-runtime-abi-measurements:v1')
     image+=text('xray:xir-runtime-recipe:windows-x86_64-hosted:v1')+word(233)

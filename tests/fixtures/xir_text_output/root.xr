@@ -1,0 +1,54 @@
+export fn text()->i64 {
+    const ab="ab"
+    const cd="cd"
+    const expected="abcd"
+    const joined=ab+cd
+    const rendered=string(-5)
+    const equal=joined==expected
+    const less=rendered<expected
+    assert(less)
+    const a='A'
+    const smile='😀'
+    const runeLess=i64(a)<i64(smile)
+    print(rendered,equal,joined,smile,runeLess,expected)
+    const copied=joined
+    print(copied)
+    print("")
+    return 0
+}
+fn identity<T>(value:T)->T { return value }
+struct RuneBox { value:rune }
+enum Fault { Bad }
+export fn scalar(n:i64)->rune { return rune(n) }
+export fn point(c:rune)->i64 { return i64(c) }
+export fn nul()->string { return string(rune(0)) }
+export fn operations()->i64 {
+    var zero:rune
+    assert(i64(zero)==0)
+    const values:Array<rune>=['A','😀']
+    const copied=values
+    assert(i64(identity<rune>(copied[1]))==128512)
+    const box=RuneBox{value:'😀'}
+    assert(box.value.toUInt32()==128512 as u32)
+    const maybe:rune?='A'
+    assert(i64(maybe!)==65)
+    assert("a\0a"<"a\0z")
+    assert("ab"<="abc" && "abc">="ab" && "z">"a")
+    assert("é">"é")
+    return 9
+}
+export fn caught()->i64 {
+    var count=0
+    var destination:rune='A'
+    const code=fn()->i64 { count=count+1; return 55296 }
+    try {
+        defer { count=count+10 }
+        destination=rune(code())
+    } catch panic(p) {
+        assert(p.code==422)
+    }
+    return i64(destination)+count
+}
+export fn ordinary()->i64 {
+    try { return i64(rune(-1)) } catch(e:Fault) { return 0 }
+}

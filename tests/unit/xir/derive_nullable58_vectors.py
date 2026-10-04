@@ -5,7 +5,7 @@ from derive_assert_panics_vector import words, op, function, packet
 from derive_panic_carrier_vector import packet as scalar_packet
 from derive_equal57_migration import migrate, nullable_frame
 from derive_test_roles_vectors import upgrade
-from derive_semantic60_migration import semantic60_packet
+from derive_semantic61_migration import semantic61_packet
 
 
 def sum_vector(some):
@@ -43,7 +43,7 @@ def main():
     for record in records:
         previous=migrate(bytes.fromhex(record['old56_hex']))
         assert previous.hex()==record['current57_hex']
-        expected=semantic60_packet(upgrade(nullable_frame(previous)))
+        expected=semantic61_packet(upgrade(nullable_frame(previous)))
         path=directory/record['path'];text=path.read_text(encoding='utf-8')
         match=re.search(r'\b'+record['name']+r'\s*\[[^\]]*\]\s*=\s*\{(.*?)\};',text,re.S)
         actual=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))
@@ -55,15 +55,15 @@ def main():
     scalar=scalar_packet(59,23)
     assert product_layout(16).hex()=='a4f36107af3fd82c6fe19e1b99ba2ca1f7f7dd818c75f04e931e26f470abc953'
     outputs={'xir_checked_scalar59_golden.h':header('checked_scalar59_golden',scalar),
-             'xir_nullable_golden.h':header('nullable_none_golden',semantic60_packet(sum_vector(False)))+
-                                      header('nullable_some_golden',semantic60_packet(sum_vector(True)))}
+             'xir_nullable_golden.h':header('nullable_none_golden',semantic61_packet(sum_vector(False)))+
+                                      header('nullable_some_golden',semantic61_packet(sum_vector(True)))}
     for name,content in outputs.items():
         if args.write:(directory/name).write_text(content,encoding='utf-8')
         else:assert (directory/name).read_text(encoding='utf-8')==content
     if args.write:
         checked=directory/'test_xir_checked.c';text=checked.read_text(encoding='utf-8')
         digest=re.search(r'const uint8_t expected_digest\[32\] = \{(.*?)\};',text,re.S)
-        content='\n        '+', '.join(f'0x{v:02x}' for v in semantic60_packet(scalar)[32:64])+'\n    '
+        content='\n        '+', '.join(f'0x{v:02x}' for v in semantic61_packet(scalar)[32:64])+'\n    '
         checked.write_text(text[:digest.start(1)]+content+text[digest.end(1):],encoding='utf-8')
         identity=directory/'xir_source_product_identity.h';text=identity.read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',text,re.S)
@@ -75,9 +75,9 @@ def main():
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(18,24,28)
     print(json.dumps({'ordinary_vectors_reframed_with_role_zero':len(records),
         'historical59_nullable_none_sha256':hashlib.sha256(sum_vector(False)).hexdigest(),
-        'current60_nullable_none_sha256':hashlib.sha256(semantic60_packet(sum_vector(False))).hexdigest(),
+        'current61_nullable_none_sha256':hashlib.sha256(semantic61_packet(sum_vector(False))).hexdigest(),
         'historical59_nullable_some_sha256':hashlib.sha256(sum_vector(True)).hexdigest(),
-        'current60_nullable_some_sha256':hashlib.sha256(semantic60_packet(sum_vector(True))).hexdigest()}))
+        'current61_nullable_some_sha256':hashlib.sha256(semantic61_packet(sum_vector(True))).hexdigest()}))
 
 
 if __name__=='__main__':main()

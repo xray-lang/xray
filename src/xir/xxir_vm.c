@@ -396,6 +396,16 @@ static XrXirRunStatus vm_io_step(ScalarRun *run, VmState *state, XrXirAction *ac
         state->instruction = next;
         return value_run_status(valid ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT);
     }
+    case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING: {
+        XrXirValue left={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])};
+        XrXirValue right={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[1]])};
+        int order=0;
+        if (!xr_xir_string_compare(&left,&right,&order)) return XR_XIR_RUN_BAD_ARTIFACT;
+        bool result=op->op==XR_XIR_LT_STRING?order<0:op->op==XR_XIR_LE_STRING?order<=0:
+            op->op==XR_XIR_GT_STRING?order>0:order>=0;
+        xr_xir_scalar_store(run->frame,run->layout->offsets[result_id],result);
+        state->instruction=next;return XR_XIR_RUN_OK;
+    }
     case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: {
         XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         int64_t result = 0;
@@ -469,6 +479,13 @@ static XrXirRunStatus vm_integer_step(ScalarRun *run, VmState *state) {
         }
         break;
     }
+    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE: {
+        XrXirType from=xr_xir_operand_type(run->function,op->args[0]);
+        XrXirRunStatus status=xr_xir_rune_convert(from,op->type,
+            xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]),&value);
+        if (status!=XR_XIR_RUN_OK) return status;
+        break;
+    }
     case XR_XIR_CONVERT_NUMBER: {
         XrXirType from = xr_xir_operand_type(run->function, op->args[0]);
         XrXirRunStatus status = xr_xir_number_convert(from, op->type,
@@ -492,11 +509,13 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
+        (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT)
         return vm_io_step(run, state, action);
     if (arithmetic_operation(op->op) >= 0 || (op->op == XR_XIR_EQ_INT || op->op == XR_XIR_NE_INT || op->op == XR_XIR_LT_INT ||
         op->op == XR_XIR_LE_INT || op->op == XR_XIR_GT_INT || op->op == XR_XIR_GE_INT) ||
-        op->op == XR_XIR_CONVERT_NUMBER) return vm_integer_step(run, state);
+        op->op == XR_XIR_CONVERT_NUMBER || op->op == XR_XIR_RUNE_TO_INTEGER ||
+        op->op == XR_XIR_INTEGER_TO_RUNE) return vm_integer_step(run, state);
     if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR)
         return vm_cleanup_step(run, state, op, action);
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE || op->op == XR_XIR_OBJECT_PLACE ||
@@ -543,6 +562,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next; return XR_XIR_RUN_OK;
     }
     switch (op->op) {
+    case XR_XIR_CONST_RUNE:
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_INT:

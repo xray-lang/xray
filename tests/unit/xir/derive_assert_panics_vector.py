@@ -66,10 +66,10 @@ def main():
             'core_body_sha256': hashlib.sha256(current[64:]).hexdigest(),
             'core_packet_sha256': hashlib.sha256(current).hexdigest(), 'offsets': offsets}
     from derive_assert_equal_vector import vector as current_vector
-    from derive_semantic60_migration import semantic60_packet
+    from derive_semantic61_migration import semantic61_packet
     historical59, current_offsets = current_vector()
-    executable = semantic60_packet(historical59)
-    header = ('/* Complete independently framed wire23 semantic60 core declaration. */\n'
+    executable = semantic61_packet(historical59)
+    header = ('/* Complete independently framed wire23 semantic61 core declaration. */\n'
               'static const uint8_t assert_panics_golden[] = {\n' +
               '\n'.join('    ' + ','.join(f'0x{byte:02x}' for byte in executable[at:at+12]) + ','
                         for at in range(0, len(executable), 12)) + '\n};\n')
@@ -84,8 +84,8 @@ def main():
         assert literal == executable
         assert json.loads((directory / 'assert_panics_packet_vectors.json').read_text(encoding='utf-8')) == data
     print(json.dumps({'historical56_bytes': len(current), 'historical56_sha256': data['core_packet_sha256'],
-                     'current60_bytes':len(executable), 'current60_sha256':hashlib.sha256(executable).hexdigest(),
-                     'historical56_offsets': offsets, 'current60_offsets':current_offsets}, indent=2))
+                     'current61_bytes':len(executable), 'current61_sha256':hashlib.sha256(executable).hexdigest(),
+                     'historical56_offsets': offsets, 'current61_offsets':current_offsets}, indent=2))
 
 
 if __name__ == '__main__':

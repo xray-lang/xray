@@ -12,14 +12,14 @@
 typedef struct ClassFieldFrame { uint32_t index, next, count; bool declaration; } ClassFieldFrame;
 static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, bool *leaf) {
     *leaf=true;
-    if (type==XR_XIR_BOOL || xr_xir_type_is_number(type) || type==XR_XIR_STRING) return XR_XIR_OK;
+    if (type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type) || type==XR_XIR_STRING) return XR_XIR_OK;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
     if (node->kind==XR_XIR_TYPE_NULLABLE) { *leaf=false; return XR_XIR_OK; }
     /* An Array field is a handle whose backing store is its own admitted array; any element the
      * array family admits (scalars, strings, nominal values, nullable values, arrays) is stored there. */
     if (node->kind==XR_XIR_TYPE_ARRAY) {
-        if (node->element==XR_XIR_BOOL || xr_xir_type_is_number(node->element) || node->element==XR_XIR_STRING) return XR_XIR_OK;
+        if (node->element==XR_XIR_BOOL || node->element==XR_XIR_RUNE || xr_xir_type_is_number(node->element) || node->element==XR_XIR_STRING) return XR_XIR_OK;
         const XrXirTypeNode *element=xr_xir_type_node(types,node->element);
         return element && !element->parameter_span && (element->kind==XR_XIR_TYPE_NOMINAL ||
             element->kind==XR_XIR_TYPE_NULLABLE || element->kind==XR_XIR_TYPE_ARRAY) ? XR_XIR_OK : XR_XIR_BAD_TYPE;

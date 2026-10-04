@@ -38,7 +38,7 @@ static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environmen
         if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
 
         uint32_t id = (uint32_t)type;
-        if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
+        if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
         if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
             const XrXirConstraint *fact = constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
             return fact && (fact->markers & XR_XIR_CONSTRAINT_EQUAL) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
@@ -73,7 +73,7 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
 
         uint32_t id = (uint32_t) type;
-        if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
+        if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
             type == XR_XIR_ATOMIC_I64) return XR_XIR_OK;
         if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
             const XrXirConstraint *fact = constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
@@ -97,7 +97,7 @@ static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, u
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
         return id - XR_XIR_TYPE_PARAMETER_BASE < count;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return node ? node->parameter_span <= count : type == XR_XIR_BOOL || xr_xir_type_is_number(type) ||
+    return node ? node->parameter_span <= count : type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) ||
         type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
 }
 XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirConstraint constraint, uint32_t count) {

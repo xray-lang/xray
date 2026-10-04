@@ -1,0 +1,1 @@
+fn main() { const x:i64='A'; print(x) }

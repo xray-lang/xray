@@ -813,7 +813,9 @@ print(smile.toUInt32())   // 128512
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
 - `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
-- 显式转换：`i64(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- 显式转换：`i64(c)` 得到 scalar code point；`rune(n)` 接受一个 i64 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到拥有式单 scalar 字符串，U+0000 保留为一个 NUL 字节。
+- `rune(n)` 的实参只求值一次；负数、超过 0x10FFFF 或 surrogate 触发范围 panic E0422，可由 `catch panic` 接收，普通 Error catch 不截获。转换不引入普通 Error 效果或挂起；失败不发布结果、不改变目标 place，已完成的实参副作用不回滚。非法字面量在编译期拒绝。
+- rune 默认值为 U+0000。码点排序使用显式 `i64(c)` 或 `c.toUInt32()` 后的数值比较；不定义 rune 直接关系运算。
 - 常用方法见 §14.4.1。
 
 #### 2.3.6 Unit `()`（无返回值）
@@ -6117,7 +6119,7 @@ fn measuredKernel(value: u64) -> u64 {
 | `f64.tryParse(s)` | `(string) -> f64?` | 严格解析十进制浮点数；失败返回 `null` |
 | `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
-| `rune(n)` | `(i64) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
+| `rune(n)` | `(i64) -> rune` | 从 i64 构造 Unicode scalar；负数、surrogate 或越界值触发范围 panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
@@ -6269,7 +6271,7 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 | `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
 | `isWhitespace()` | `() -> bool` | 是否为空白字符 |
 
-`rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `toUInt32()`。
+`rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `toUInt32()`。 `toUInt32()`／`i64(c)` 返回完整码点，不失败、不分配、不挂起；`toString()`／`string(c)` 产生拥有式 UTF-8，U+0000 保留长度为 1 的 NUL 字节。
 
 ### 14.5 `string` 方法
 
@@ -6297,6 +6299,8 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 `contains`、`startsWith`、`endsWith` 接受一个 string 并返回 bool，按完整 UTF-8 字节查询，不做大小写折叠或 Unicode 归一化，NUL 不终止匹配。空模式对任意字符串返回 true，非空模式对空字符串返回 false。接收者先求值并取得值快照，再求值模式，各一次；实参求值期间修改原变量不改变快照。查询本身不分配、不修改或转移输入，不引入挂起或语言异常；操作数求值及持有仍可失败。普通泛型必须在定义处具备相应能力。
 
 `indexOf(search, start?)` 的 start 是 rune 序号，省略为 0，合法范围为 `0..len(receiver)`（含两端）；负数或超界触发 bounds panic，不截断。查询返回从 start 开始的首个匹配的 rune 序号，未命中为 -1，空模式返回 start。`lastIndexOf(search)` 返回最后匹配的 rune 序号，未命中为 -1，空模式返回 `len(receiver)`。匹配按完整 UTF-8 字节，不归一化；rune 是 Unicode scalar，不是 grapheme。接收者、模式、start 按该顺序各求值一次并保留值快照。查询自身无分配、不挂起、不改变所有权；实参求值/持有失败照常传播。Unicode 坐标转换可能扫描前缀；连续查询不承诺恒定时间。
+
+string 的 `<`、`<=`、`>`、`>=` 比较完整显式长度的 UTF-8 无符号字节字典序；嵌入 NUL 参与比较，相同前缀后较短字符串较小。不使用 locale、归一化或 grapheme 排序。
 
 string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
@@ -6333,7 +6337,7 @@ print(a[0], a[1])           // head head
 
 下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe，共 15 个 operation；32 个成员中其余 17 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
 
-这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
+这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
 下一声明片冻结 `ref unshift(value: T)`（普通 READ 的精确 T，返回 unit）和 `ref reverse() -> Array<T>`（零参数，拥有式结果）；冻结不表示已准入或验证。两者只要求 Array 原有的可复制、可保存能力，不额外要求 Equal、Compare 或 ToString；普通泛型在定义处检查，不从未来实例补权限。receiver 必须是可写逻辑 place，root/path 的选择器只求一次；unshift 实参成功后读取 binding 的当前 Array，实参的已完成副作用不回滚。负整数 T 是普通元素，不是长度参数。
 

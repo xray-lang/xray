@@ -2,7 +2,7 @@
 from pathlib import Path
 import argparse,hashlib,json,re
 from derive_assert_panics_vector import words,op,function,packet,vector as old_vector
-from derive_semantic60_migration import semantic60_packet
+from derive_semantic61_migration import semantic61_packet
 
 def vector(semantic=59):
     # Fixed intrinsic inventory: init, condition, panic action, ordinary Equal.
@@ -54,8 +54,8 @@ def main():
         'old56_sha256':hashlib.sha256(old).hexdigest(),'core_packet_hex':current.hex(),
         'core_body_sha256':hashlib.sha256(current[64:]).hexdigest(),
         'core_packet_sha256':hashlib.sha256(current).hexdigest(),'offsets':offsets}
-    executable=semantic60_packet(current)
-    header='/* Complete independently framed wire23 semantic60 Core declaration. */\nstatic const uint8_t assert_equal_golden[]={\n'
+    executable=semantic61_packet(current)
+    header='/* Complete independently framed wire23 semantic61 Core declaration. */\nstatic const uint8_t assert_equal_golden[]={\n'
     header+='\n'.join('    '+','.join(f'0x{byte:02x}' for byte in executable[at:at+12])+',' for at in range(0,len(executable),12))+'\n};\n'
     header+='\n'.join(f'#define XR_EQUAL_VECTOR_{name.upper()} {value}u' for name,value in offsets.items())+'\n'
     if args.write:
@@ -65,6 +65,6 @@ def main():
         assert json.loads((directory/'assert_equal_packet_vectors.json').read_text(encoding='utf-8'))==data
         text=(directory/'xir_assert_equal_golden.h').read_text(encoding='utf-8')
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',text))==executable
-    print(json.dumps({'bytes':len(current),'historical59_sha256':data['core_packet_sha256'],'current60_sha256':hashlib.sha256(executable).hexdigest(),'old56_reproduced':True,'offsets':offsets},indent=2))
+    print(json.dumps({'bytes':len(current),'historical59_sha256':data['core_packet_sha256'],'current61_sha256':hashlib.sha256(executable).hexdigest(),'old56_reproduced':True,'offsets':offsets},indent=2))
 
 if __name__=='__main__':main()

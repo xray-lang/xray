@@ -17,7 +17,7 @@
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
     if (xr_xir_type_is_cell(spec->types, type)) type = xr_xir_cell_element(spec->types, type);
-    return type == XR_XIR_BOOL || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
+    return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
 }
 static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXirProgramSpec *spec) {
     if (!spec || !spec->entries || !spec->entry_count || !spec->declarations ||

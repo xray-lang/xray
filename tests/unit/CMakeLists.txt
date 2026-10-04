@@ -2474,35 +2474,7 @@ add_test(NAME test_xr_program_aot_provider_output
 set_tests_properties(test_xr_program_aot_provider_output PROPERTIES
     LABELS "unit;aot;canonical-program;generated-c;native;provider;pure-aot;task-300")
 
-set(XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE
-    ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_text_output.c)
-add_custom_command(
-    OUTPUT ${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE}
-    COMMAND $<TARGET_FILE:test_xr_program_aot>
-        ${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE} text-output
-    DEPENDS test_xr_program_aot
-    COMMENT "Generating typed text output canonical XrProgram C fixture"
-    VERBATIM)
-set_source_files_properties(${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE} PROPERTIES GENERATED TRUE)
-add_executable(test_xr_program_aot_text_output ${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE})
-xr_enable_pure_aot_symbol_map(test_xr_program_aot_text_output)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_aot_text_output PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_aot_text_output PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-# Expected bytes: "-5 true abcd <U+1F600> true abcd\nabcd\n\n"
-add_test(NAME test_xr_program_aot_text_output
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_aot_text_output>
-        --expected-exit 0
-        --expected-stdout-hex 2d352074727565206162636420f09f9880207472756520616263640a616263640a0a)
-set_tests_properties(test_xr_program_aot_text_output PROPERTIES
-    LABELS "unit;aot;canonical-program;generated-c;native;provider;string;pure-aot;task-309")
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/rune_text_output.cmake)
 
 add_executable(xr_typed_provider_native_writer aot/xr_typed_provider_native_writer.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})

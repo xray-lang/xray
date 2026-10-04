@@ -33,6 +33,15 @@ static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType oper
         recipe.operation=XR_XIR_EQUAL; recipe.result=XR_XIR_BOOL; recipe.immediate=operation==AST_BINARY_NE;
     } else if (left==XR_XIR_STRING && right==XR_XIR_STRING && operation==AST_BINARY_ADD) {
         recipe.operation=XR_XIR_CONCAT_STRING;recipe.result=XR_XIR_STRING;
+    } else if (left==XR_XIR_STRING && right==XR_XIR_STRING) {
+        switch(operation) {
+        case AST_BINARY_LT:recipe.operation=XR_XIR_LT_STRING;break;
+        case AST_BINARY_LE:recipe.operation=XR_XIR_LE_STRING;break;
+        case AST_BINARY_GT:recipe.operation=XR_XIR_GT_STRING;break;
+        case AST_BINARY_GE:recipe.operation=XR_XIR_GE_STRING;break;
+        default:return source_fail(ctx,node,XR_XIR_BAD_TYPE,"operator is not defined for string operands");
+        }
+        recipe.result=XR_XIR_BOOL;
     } else if (xr_xir_float_bits(left) && xr_xir_float_bits(right)) {
         target=left==XR_XIR_F64 || right==XR_XIR_F64 ? XR_XIR_F64 : XR_XIR_F32;
         switch(operation) {

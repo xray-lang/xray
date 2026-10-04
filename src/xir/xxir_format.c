@@ -14,6 +14,7 @@
 #include "xxir_format.h"
 #include "xxir_enum.h"
 #include "xxir_float.h"
+#include "xxir_rune.h"
 
 static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
     (void)context;
@@ -29,6 +30,11 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
     if (type == XR_XIR_BOOL) {
         view->kind = XR_VALUE_FORMAT_BOOL; view->unsigned_value = (uint64_t)value->payload;
         return 1;
+    }
+    if (type == XR_XIR_RUNE) {
+        view->size=xr_xir_rune_utf8(value->payload,(char *)view->scalar_bytes);
+        if (!view->size) return 0;
+        view->kind=XR_VALUE_FORMAT_BYTES;view->bytes=view->scalar_bytes;view->quote=39; return 1;
     }
     if (type == XR_XIR_STRING) {
         const char *bytes = NULL;

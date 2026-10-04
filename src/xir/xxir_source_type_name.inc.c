@@ -21,6 +21,7 @@ static const char *source_scalar_type_name(XrXirType type) {
     switch (type) {
     case XR_XIR_UNIT: return TYPE_NAME_UNIT;
     case XR_XIR_BOOL: return TYPE_NAME_BOOL;
+    case XR_XIR_RUNE: return TYPE_NAME_RUNE;
     case XR_XIR_I8: return TYPE_NAME_I8;
     case XR_XIR_I16: return TYPE_NAME_I16;
     case XR_XIR_I32: return TYPE_NAME_I32;

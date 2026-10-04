@@ -31,7 +31,7 @@ order: 014
 | `f64.tryParse(s)` | `(string) -> f64?` | 严格解析十进制浮点数；失败返回 `null` |
 | `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
-| `rune(n)` | `(i64) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
+| `rune(n)` | `(i64) -> rune` | 从 i64 构造 Unicode scalar；负数、surrogate 或越界值触发范围 panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
@@ -139,7 +139,7 @@ These global functions and built-in constructor/static functions are usable with
 | `f64.tryParse(s)` | `(string) -> f64?` | strict decimal floating-point parse; returns `null` on failure |
 | `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
-| `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from i64; negative, surrogate and out-of-range values trigger range panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 

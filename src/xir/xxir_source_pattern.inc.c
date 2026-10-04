@@ -86,9 +86,10 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
     AstNode *atom=path;
     if (atom && atom->type==AST_UNARY_NEG) atom=atom->as.unary.operand;
     if (atom && (atom->type==AST_LITERAL_INT || atom->type==AST_LITERAL_FLOAT ||
-        (atom==path && atom->type==AST_LITERAL_STRING))) {
+        (atom==path && (atom->type==AST_LITERAL_STRING || atom->type==AST_LITERAL_RUNE)))) {
         bool admitted=atom->type==AST_LITERAL_INT?(xr_xir_type_is_integer(type) || xr_xir_float_bits(type)):
-            atom->type==AST_LITERAL_FLOAT?xr_xir_float_bits(type)!=0:type==XR_XIR_STRING;
+            atom->type==AST_LITERAL_FLOAT?xr_xir_float_bits(type)!=0:
+            atom->type==AST_LITERAL_RUNE?type==XR_XIR_RUNE:type==XR_XIR_STRING;
         if (!admitted) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"literal pattern type differs from its field");
         out->literal=path;
         uint64_t bits=0;

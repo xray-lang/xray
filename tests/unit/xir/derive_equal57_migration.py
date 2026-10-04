@@ -2,7 +2,7 @@
 from pathlib import Path
 import argparse,hashlib,json,re,struct
 from derive_test_roles_vectors import upgrade
-from derive_semantic60_migration import semantic60_packet
+from derive_semantic61_migration import semantic61_packet
 
 def migrate(old):
     assert old[:8]==b'XRCHK\0\0\0' and len(old)>=64
@@ -27,7 +27,7 @@ def main():
             new=migrate(bytes.fromhex(record['old56_hex']));assert new.hex()==record['current57_hex']
             text=(directory/record['path']).read_text(encoding='utf-8')
             match=re.search(r'\b'+record['name']+r'\s*\[[^\]]*\]\s*=\s*\{(.*?)\};',text,re.S)
-            assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))==semantic60_packet(upgrade(nullable_frame(new)))
+            assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))==semantic61_packet(upgrade(nullable_frame(new)))
         from derive_panic_carrier_vector import packet
         old_scalar=packet(56,22);previous_scalar=packet(57,22);current_scalar=packet(58,22)
         assert old_scalar[32:64].hex()=='ad6f38d1cd3ce90b74cac518abc41bd987cb6809ab4d86f4049260a790101c34'
@@ -37,10 +37,10 @@ def main():
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==current_scalar
         checked=(directory/'test_xir_checked.c').read_text(encoding='utf-8')
         digest=re.search(r'const uint8_t expected_digest\[32\] = \{(.*?)\};',checked,re.S)
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',digest[1]))==semantic60_packet(upgrade(current_scalar))[32:64]
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',digest[1]))==semantic61_packet(upgrade(current_scalar))[32:64]
         print(json.dumps({'old56_whole_packets_reproduced':len(records)+1,
                           'historical57_whole_packets_reproduced':len(records)+1,
-                          'current60_whole_packets_verified':len(records)+1}));return
+                          'current61_whole_packets_verified':len(records)+1}));return
     assert not manifest.exists();records=[]
     for path in sorted(directory.iterdir()):
         if path.suffix not in ('.c','.h') or path.name=='xir_assert_panics_golden.h':continue

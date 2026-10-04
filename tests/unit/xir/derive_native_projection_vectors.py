@@ -7,7 +7,7 @@ import struct
 source = Path(__file__).with_name('xir_native_projection_expectations.h').read_text(encoding='utf-8')
 for name in ('linked', 'original'):
     prefix = (name + '_source').encode('ascii')
-    framing = b'xray:xir-c11-codegen-policy:v1' + struct.pack('<7I', 1, 23, 60, 18, 24, 28, len(prefix)) + prefix
+    framing = b'xray:xir-c11-codegen-policy:v1' + struct.pack('<7I', 1, 23, 61, 19, 25, 28, len(prefix)) + prefix
     expected = hashlib.sha256(framing).digest()
     match = re.search(name + r'_policy\[32\]=\{([^}]+)\}', source)
     actual = bytes(int(byte, 16) for byte in match[1].split(','))

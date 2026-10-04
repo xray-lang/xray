@@ -31,7 +31,7 @@ static XrXirValueStatus equal_closed_type(XrXirType type, XrXirValueAdmission *a
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     for (;;) {
         if (!equal_work(admission, 1)) return XR_XIR_VALUE_LIMIT;
-        if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING)
+        if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING)
             return XR_XIR_VALUE_OK;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) || node->parameter_span)
@@ -79,7 +79,7 @@ static XrXirValueStatus equal_leaf(const XrXirValue *left, const XrXirValue *rig
         if (xr_xir_integer_compare(xr_xir_integer_format(type), left->payload, right->payload, &ordering) != XR_XIR_RUN_OK)
             return XR_XIR_VALUE_BAD_ARGUMENT;
         *equal = ordering == 0;
-    } else if (type == XR_XIR_BOOL) *equal = left->payload == right->payload;
+    } else if ((type == XR_XIR_BOOL || type == XR_XIR_RUNE)) *equal = left->payload == right->payload;
     else return XR_XIR_VALUE_BAD_ARGUMENT;
     return XR_XIR_VALUE_OK;
 }

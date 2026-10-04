@@ -1,0 +1,6 @@
+fn main() {
+    print(""<"a","ab"<="abc","abc">="ab","a\0a"<"a\0z","é">"é")
+    print("\u{7f}"<"\u{80}","a"<"aa","a">="a","a"<="a")
+}
+
+main()

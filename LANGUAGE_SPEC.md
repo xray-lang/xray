@@ -821,7 +821,9 @@ print(smile.toUInt32())   // 128512
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
 - `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
-- Explicit conversions: `i64(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- Explicit conversions: `i64(c)` returns the scalar code point; `rune(n)` accepts one i64 and validates scalar legality; `string(c)` / `c.toString()` returns an owned one-scalar string, preserving U+0000 as one NUL byte.
+- `rune(n)` evaluates its argument once. Negative, above-0x10FFFF or surrogate values trigger range panic E0422, handled by `catch panic` and not by an ordinary Error catch. The conversion adds no ordinary Error effect or suspension. Failure publishes no result and leaves the destination place unchanged; completed argument effects are not rolled back. Invalid literals reject at compilation.
+- The rune default is U+0000. Compare code points numerically after explicit `i64(c)` or `c.toUInt32()` conversion; direct rune relational operators are not defined.
 - Common methods are listed in §14.4.1.
 
 #### 2.3.6 Unit `()` (no return value)
@@ -6161,7 +6163,7 @@ These global functions and built-in constructor/static functions are usable with
 | `f64.tryParse(s)` | `(string) -> f64?` | strict decimal floating-point parse; returns `null` on failure |
 | `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
-| `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from i64; negative, surrogate and out-of-range values trigger range panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
@@ -6323,7 +6325,7 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
 | `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
 
-`rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed.
+`rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed. `toUInt32()` / `i64(c)` return the complete code point without failure, allocation or suspension. `toString()` / `string(c)` produce owned UTF-8; U+0000 preserves one NUL byte with length one.
 
 ### 14.5 `string` Methods
 
@@ -6355,6 +6357,8 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 `contains`, `startsWith`, and `endsWith` accept one string and return bool over complete UTF-8 bytes, without case folding or normalization; NUL does not end matching. Empty patterns match every string; nonempty patterns do not match empty strings. The receiver evaluates once into a value snapshot before the pattern evaluates once; changing the original variable during argument evaluation cannot change the snapshot. Queries allocate nothing, do not mutate or transfer inputs, and introduce no suspension or language exception; operand evaluation and retention can still fail. Generic definitions must have the required capability when checked.
 
 `indexOf(search, start?)` takes a rune ordinal start, defaulting to 0, in the inclusive range `0..len(receiver)`; negative or excessive starts cause a bounds panic without clamping. It returns the first matching rune ordinal at or after start, -1 for no match, and start for an empty pattern. `lastIndexOf(search)` returns the last matching rune ordinal, -1 for no match, and `len(receiver)` for an empty pattern. Matching uses complete UTF-8 bytes without normalization; runes are Unicode scalars, not graphemes. Receiver, pattern and start are evaluated once in that order with value snapshots. The query allocates nothing, does not suspend or change ownership; argument evaluation and retention failures still propagate. Unicode coordinate conversion may scan a prefix; repeated queries have no constant-time guarantee.
+
+String `<`, `<=`, `>` and `>=` compare the complete explicitly sized UTF-8 values in unsigned byte lexicographic order. Embedded NUL participates; after an equal prefix the shorter string is smaller. No locale, normalization or grapheme ordering applies.
 
 Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
 
@@ -6391,7 +6395,7 @@ print(a[0], a[1])           // head head
 
 The table retains the complete method denominator. The current frozen XIR boundary comprises the three get/set/push primitives and twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. These are 15 operations; the other 17 of the 32 members remain unadmitted. Execution identities come from the same structured declarations in `stdlib/types/array.xr`; names serve member lookup only. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
 
-These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
+These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/rune/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
 
 | Member | Type / Description |
 |--|--|

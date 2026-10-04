@@ -1,0 +1,12 @@
+fn main() {
+    var count=0
+    var destination:rune='A'
+    const code=fn()->i64 { count=count+1; return 55296 }
+    try {
+        defer { count=count+10 }
+        destination=rune(code())
+    } catch panic(p) { print(p.code) }
+    print(i64(destination),count)
+}
+
+main()

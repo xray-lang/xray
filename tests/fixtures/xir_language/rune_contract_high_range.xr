@@ -1,0 +1,3 @@
+fn main() { print(rune(1114112)) }
+
+main()

@@ -138,6 +138,7 @@ static bool value_header_valid(const XrXirValue *value) {
     if (unit_value(value)) return true;
     if (xr_xir_integer_payload_valid(type, value->payload) ||
         xr_xir_float_payload_valid(type, value->payload) ||
+        (type == XR_XIR_RUNE && xr_xir_rune_payload_valid(value->payload)) ||
         (type == XR_XIR_BOOL && (value->payload == 0 || value->payload == 1))) return true;
     if (!owned_carrier_type(type)) return false;
     XirObject *object = object_pointer(value);
@@ -554,6 +555,12 @@ XR_FUNC bool xr_xir_string_equal(const XrXirValue *left, const XrXirValue *right
     const XirString *a = string_pointer(left), *b = string_pointer(right);
     *equal = a == b || (a->length == b->length && (!a->length || !memcmp(a->bytes, b->bytes, a->length)));
     return true;
+}
+XR_FUNC bool xr_xir_string_compare(const XrXirValue *left, const XrXirValue *right, int *output) {
+    const char *a=NULL, *b=NULL; size_t ac=0,bc=0;
+    if (!output || !xr_xir_string_view(left,&a,&ac) || !xr_xir_string_view(right,&b,&bc)) return false;
+    size_t common=ac<bc?ac:bc; int order=common?memcmp(a,b,common):0;
+    *output=order<0?-1:order>0?1:ac<bc?-1:ac>bc?1:0; return true;
 }
 XR_FUNC bool xr_xir_string_contains(const XrXirValue *value, const XrXirValue *pattern, bool *result) {
     if (!result || !xr_xir_value_argument(value, NULL, XR_XIR_STRING) ||

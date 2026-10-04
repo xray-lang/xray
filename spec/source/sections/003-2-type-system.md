@@ -226,7 +226,9 @@ print(smile.toUInt32())   // 128512
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
 - `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
-- 显式转换：`i64(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- 显式转换：`i64(c)` 得到 scalar code point；`rune(n)` 接受一个 i64 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到拥有式单 scalar 字符串，U+0000 保留为一个 NUL 字节。
+- `rune(n)` 的实参只求值一次；负数、超过 0x10FFFF 或 surrogate 触发范围 panic E0422，可由 `catch panic` 接收，普通 Error catch 不截获。转换不引入普通 Error 效果或挂起；失败不发布结果、不改变目标 place，已完成的实参副作用不回滚。非法字面量在编译期拒绝。
+- rune 默认值为 U+0000。码点排序使用显式 `i64(c)` 或 `c.toUInt32()` 后的数值比较；不定义 rune 直接关系运算。
 - 常用方法见 §14.4.1。
 
 #### 2.3.6 Unit `()`（无返回值）
@@ -1318,7 +1320,9 @@ print(smile.toUInt32())   // 128512
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
 - `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
-- Explicit conversions: `i64(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- Explicit conversions: `i64(c)` returns the scalar code point; `rune(n)` accepts one i64 and validates scalar legality; `string(c)` / `c.toString()` returns an owned one-scalar string, preserving U+0000 as one NUL byte.
+- `rune(n)` evaluates its argument once. Negative, above-0x10FFFF or surrogate values trigger range panic E0422, handled by `catch panic` and not by an ordinary Error catch. The conversion adds no ordinary Error effect or suspension. Failure publishes no result and leaves the destination place unchanged; completed argument effects are not rolled back. Invalid literals reject at compilation.
+- The rune default is U+0000. Compare code points numerically after explicit `i64(c)` or `c.toUInt32()` conversion; direct rune relational operators are not defined.
 - Common methods are listed in §14.4.1.
 
 #### 2.3.6 Unit `()` (no return value)

@@ -12,7 +12,7 @@
 /* A class instance has identity and must be built explicitly, so a class is never a defaultable
  * field or binding even when its own default constructor exists. */
 static bool source_type_defaultable(SourceContext *ctx, XrXirType type) {
-    if (type == XR_XIR_BOOL || xr_xir_type_is_number(type)) return true;
+    if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type)) return true;
     const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
     return node && node->kind == XR_XIR_TYPE_NOMINAL && node->nominal.declaration < ctx->nominals.count &&
         ctx->nominals.declarations[node->nominal.declaration].kind != XR_XIR_NOMINAL_CLASS &&
@@ -75,6 +75,8 @@ static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType ty
     if (type == XR_XIR_UNIT) {
         *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true;
     }
+    if (type == XR_XIR_RUNE)
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_RUNE,type,{0},{0},0,{0}},value);
     if (type == XR_XIR_BOOL)
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, type, {0}, {0}, 0, {0}}, value);
     if (xr_xir_type_is_nullable(&ctx->types,type))

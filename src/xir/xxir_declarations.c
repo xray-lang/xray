@@ -213,7 +213,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         const XrXirSlot *slot = &d->slots[i];
         if (slot->module >= d->module_count || slot->mutable > 1 ||
             (slot->mutable && slot->module != d->root_module)) return XR_XIR_BAD_STRUCTURE;
-        if (xr_xir_type_is_cell(types, slot->type) || (slot->type != XR_XIR_UNIT && slot->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(types, slot->type)))
+        if (xr_xir_type_is_cell(types, slot->type) || (slot->type != XR_XIR_UNIT && slot->type != XR_XIR_BOOL && slot->type != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(types, slot->type)))
             return XR_XIR_BAD_TYPE;
         if (xr_xir_type_span(types, slot->type)) return XR_XIR_BAD_TYPE;
         XrXirModule scope = {XR_XIR_BUILT, NULL, functions, d, NULL, types, NULL, kind, NULL};

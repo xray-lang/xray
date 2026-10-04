@@ -1,0 +1,7 @@
+fn main() {
+    var zero:rune
+    print(i64(zero),'A','😀',i64('\u{d7ff}'),i64('\u{e000}'),i64('\u{10ffff}'))
+    print(i64(rune(0)),rune(65).toUInt32(),rune(128512).toString())
+}
+
+main()

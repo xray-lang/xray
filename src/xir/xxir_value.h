@@ -14,7 +14,7 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 18u
+#define XR_XIR_VALUE_ABI_VERSION 19u
 #define XR_XIR_CONSTRUCTED_TYPE_BASE 256u
 #define XR_XIR_CONSTRUCTED_TYPE_LIMIT 65536u
 #define XR_XIR_TYPE_PARAMETER_BASE 65536u
@@ -22,7 +22,12 @@
 #define XR_XIR_ARCH_X86_64 1u
 typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64,
     XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
-    XR_XIR_ERROR, XR_XIR_PANIC_INFO } XrXirType;
+    XR_XIR_ERROR, XR_XIR_PANIC_INFO, XR_XIR_RUNE } XrXirType;
+/* A Rune is one Unicode scalar, independently of every integer type. */
+static inline bool xr_xir_rune_payload_valid(int64_t payload) {
+    return payload >= 0 && payload <= INT64_C(0x10ffff) &&
+        !(payload >= INT64_C(0xd800) && payload <= INT64_C(0xdfff));
+}
 static inline uint32_t xr_xir_integer_bits(XrXirType type) {
     switch (type) {
     case XR_XIR_I8: case XR_XIR_U8: return 8;
@@ -94,6 +99,8 @@ XR_FUNC bool xr_xir_string_view(const XrXirValue *value, const char **bytes, siz
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count);
 XR_FUNC XrXirValueStatus xr_xir_string_length(const XrXirValue *value, int64_t *length);
 XR_FUNC bool xr_xir_string_equal(const XrXirValue *left, const XrXirValue *right, bool *equal);
+/* Complete UTF-8 byte order; failure preserves output and owns no storage. */
+XR_FUNC bool xr_xir_string_compare(const XrXirValue *left, const XrXirValue *right, int *output);
 XR_FUNC bool xr_xir_string_contains(const XrXirValue *value, const XrXirValue *pattern, bool *result);
 XR_FUNC bool xr_xir_string_starts_with(const XrXirValue *value, const XrXirValue *pattern, bool *result);
 XR_FUNC bool xr_xir_string_ends_with(const XrXirValue *value, const XrXirValue *pattern, bool *result);

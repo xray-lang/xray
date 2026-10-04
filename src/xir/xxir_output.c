@@ -11,11 +11,17 @@
  */
 #include "xxir_output.h"
 #include "xxir_float.h"
+#include "xxir_rune.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
 
 bool xr_xir_scalar_text(const XrXirValue *value, char *scalar, const char **bytes, size_t *length) {
     if (!value || !scalar || !bytes || !length || !xr_xir_value_argument(value, NULL, (XrXirType) value->type)) return false;
+    if (value->type == XR_XIR_RUNE) {
+        size_t count=xr_xir_rune_utf8(value->payload,scalar);
+        if (!count) return false;
+        *bytes=scalar; *length=count; return true;
+    }
     if (value->type == XR_XIR_BOOL) {
         *bytes = value->payload ? "true" : "false"; *length = value->payload ? 4 : 5; return true;
     }

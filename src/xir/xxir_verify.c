@@ -30,7 +30,7 @@
 #include <limits.h>
 
 typedef enum ResultRule {
-    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_NUMBER, RULE_FLOAT, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_CALL, RULE_ATOMIC, RULE_ARRAY, RULE_NOMINAL, RULE_ROOT, RULE_PANIC
+    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_NUMBER, RULE_FLOAT, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_RUNE, RULE_CALL, RULE_ATOMIC, RULE_ARRAY, RULE_NOMINAL, RULE_ROOT, RULE_PANIC
 } ResultRule;
 typedef struct OpRule {
     uint8_t stages;
@@ -80,7 +80,7 @@ static bool spend_count(uint32_t *remaining, uint32_t amount) {
 }
 
 static bool scalar(XrXirType type) {
-    return type == XR_XIR_BOOL || xr_xir_type_is_number(type);
+    return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
 
 static uint32_t operand_count(const XrXirFunction *function, const XrXirInstruction *op,
@@ -222,6 +222,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_INTEGER && !xr_xir_type_is_integer(op->type)) ||
         (rule->result == RULE_OWNED && (!xr_xir_type_is_owned(module->types, op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
+        (rule->result == RULE_RUNE && op->type != XR_XIR_RUNE) ||
         (rule->result == RULE_PANIC && op->type != XR_XIR_UNIT && op->type != XR_XIR_PANIC_INFO) ||
         (rule->result == RULE_ATOMIC && op->type != XR_XIR_ATOMIC_I64) ||
         (rule->result == RULE_ARRAY && (!xr_xir_type_is_array(module->types, op->type) ||
@@ -248,6 +249,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_CONST_BOOL || op->op == XR_XIR_LOCAL_UNINIT || op->op == XR_XIR_EQUAL || op->op == XR_XIR_NULLABLE_IS_SOME) {
         if (op->immediate != 0 && op->immediate != 1)
             return XR_XIR_BAD_TYPE;
+    } else if (op->op == XR_XIR_CONST_RUNE) {
+        if (!xr_xir_rune_payload_valid(op->immediate)) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_CONST_INT) {
         if (!xr_xir_integer_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_CONST_FLOAT) {
@@ -831,9 +834,14 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 (op->op == XR_XIR_NULLABLE_UNWRAP && xr_xir_nullable_element(context->module->types, expected) != op->type))
                 return XR_XIR_BAD_TYPE;
         }
+        if (op->op == XR_XIR_RUNE_TO_INTEGER) {
+            if (op->type != XR_XIR_I64 && op->type != XR_XIR_U32) return XR_XIR_BAD_TYPE;
+            expected = XR_XIR_RUNE;
+        }
+        if (op->op == XR_XIR_INTEGER_TO_RUNE) expected = XR_XIR_I64;
         if (op->op == XR_XIR_TO_STRING) {
             expected = xr_xir_operand_type(function, op->args[0]);
-            if (expected != XR_XIR_BOOL && !xr_xir_type_is_number(expected)) return XR_XIR_BAD_TYPE;
+            if (expected != XR_XIR_BOOL && expected != XR_XIR_RUNE && !xr_xir_type_is_number(expected)) return XR_XIR_BAD_TYPE;
         }
         if (op->op == XR_XIR_CELL_NEW) expected = xr_xir_cell_element(context->module->types, op->type);
         if (op->op == XR_XIR_CELL_READ) {
@@ -847,6 +855,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         }
         if (op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_STRING_LEN ||
             op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
+            (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
             op->op == XR_XIR_STRING_CONTAINS || op->op == XR_XIR_STRING_STARTS_WITH ||
             op->op == XR_XIR_STRING_ENDS_WITH || op->op == XR_XIR_STRING_INDEX_OF ||
             op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
@@ -894,7 +903,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 operand_type = id < function->parameter_count ? function->parameters[id] :
                     function->instructions[id - function->parameter_count].type;
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
-                if (operand_type != XR_XIR_BOOL && !xr_xir_type_is_number(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
+                if (operand_type != XR_XIR_BOOL && operand_type != XR_XIR_RUNE && !xr_xir_type_is_number(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
             uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF ?
                 function->operands[op->args[0] + a] : op->args[a];

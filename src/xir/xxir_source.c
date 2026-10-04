@@ -586,6 +586,7 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     case XR_TREF_UNIT: *type = XR_XIR_UNIT; return true;
     case XR_TREF_BOOL: *type = XR_XIR_BOOL; return true;
     case XR_TREF_STRING: *type = XR_XIR_STRING; return true;
+    case XR_TREF_RUNE: *type = XR_XIR_RUNE; return true;
     case XR_TREF_NAMED: case XR_TREF_TYPE_PARAM: {
         AstNode *node = ctx->type_scope.active ? ctx->type_scope.node : ctx->bodies[ctx->function].type_owner;
         if (!ref->name) break;
@@ -943,6 +944,7 @@ static bool finish_body(SourceContext *ctx);
 #include "xxir_source_methods.inc.c"
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic);
 static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value);
+#include "xxir_source_rune.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -977,6 +979,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_length(ctx, node, intrinsic, value);
             if (source_text_same(ctx, NULL, name, "PanicInfo"))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo construction requires class support");
+            if (source_text_same(ctx, NULL, name, "rune") || source_text_same(ctx, NULL, name, "i64"))
+                return source_rune_call(ctx,node,source_text_same(ctx,NULL,name,"rune"),value);
             if (source_text_same(ctx, NULL, name, "string")) {
                 SourceValue input;
                 if (call->arg_count != 1 || call->type_arg_count || !call->arguments ||
@@ -1040,12 +1044,14 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (!expression(ctx, member->object, &receiver)) return false;
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
-            if ((receiver.type == XR_XIR_BOOL || xr_xir_type_is_number(receiver.type)) &&
+            if ((receiver.type == XR_XIR_BOOL || receiver.type == XR_XIR_RUNE || xr_xir_type_is_number(receiver.type)) &&
                 source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "toString accepts no value or type arguments");
                 return source_text_conversion(ctx, node, receiver, value);
             }
+            if (receiver.type == XR_XIR_RUNE && source_text_same(ctx,NULL,member->name,"toUInt32"))
+                return source_rune_codepoint(ctx,node,receiver,value);
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
             if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
@@ -1133,7 +1139,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             (XrXirInstruction) {XR_XIR_TIMER_AFTER_MS, XR_XIR_UNIT, {args[0].id, 0}, {0, 0}, 0, {0}};
     } else if (print) {
         for (int i = 0; i < call->arg_count; ++i)
-            if (args[i].type != XR_XIR_BOOL && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)
+            if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_RUNE && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
         op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}};
     } else if (atomic) {
@@ -1150,6 +1156,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
     return source_recipe_record(ctx, op, value);
 }
 static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    if (node->type == AST_LITERAL_RUNE)
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_RUNE,XR_XIR_RUNE,{0},{0},
+            node->as.literal.raw_value.rune_val,{0}},value);
     if (node->type == AST_LITERAL_STRING)
         return source_string_literal(ctx, node, node->as.literal.raw_value.string_val,
             node->as.literal.string_length, value);
@@ -1172,7 +1181,7 @@ static bool source_template(SourceContext *ctx, AstNode *node, SourceValue *valu
             if (!source_literal(ctx, part, &piece)) return false;
         } else {
             if (!expression(ctx, part, &piece)) return false;
-            if (piece.type == XR_XIR_BOOL || xr_xir_type_is_number(piece.type)) {
+            if (piece.type == XR_XIR_BOOL || piece.type == XR_XIR_RUNE || xr_xir_type_is_number(piece.type)) {
                 if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {piece.id, 0}, {0}, 0, {0}}, &piece))
                     return false;
             } else if (piece.type != XR_XIR_STRING)
@@ -1222,7 +1231,7 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
 /* The text of a bool or number, as `print` writes it; a string converts to itself. */
 static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value) {
     if (input.type == XR_XIR_STRING) { *value = input; return true; }
-    if (input.type != XR_XIR_BOOL && !xr_xir_type_is_number(input.type))
+    if (input.type != XR_XIR_BOOL && input.type != XR_XIR_RUNE && !xr_xir_type_is_number(input.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "value has no admitted string conversion");
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {input.id, 0}, {0}, 0, {0}}, value);
 }
@@ -1420,7 +1429,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         node->as.index_get.index, NULL, NULL, value);
     case AST_INDEX_SET: return source_array_set(ctx, node, node->as.index_set.array,
         node->as.index_set.index, node->as.index_set.value, NULL, true, value);
-    case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
+    case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING: case AST_LITERAL_RUNE:
         return source_literal(ctx, node, value);
     case AST_TEMPLATE_STRING: return source_template(ctx, node, value);
     case AST_NEW_EXPR: return source_array_construct(ctx, node, value);

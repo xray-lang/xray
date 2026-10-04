@@ -100,9 +100,9 @@ static bool source_equal_admitted(SourceContext *ctx, AstNode *node, XrXirType t
 /* The element text of join: strings as they are, numbers and bools as print spells them. */
 static bool source_array_join_piece(SourceContext *ctx, AstNode *node, SourceValue element, SourceValue *piece) {
     if (element.type == XR_XIR_STRING) { *piece = element; return true; }
-    if (element.type == XR_XIR_BOOL || xr_xir_type_is_number(element.type))
+    if (element.type == XR_XIR_BOOL || element.type == XR_XIR_RUNE || xr_xir_type_is_number(element.type))
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {element.id, 0}, {0}, 0, {0}}, piece);
-    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join requires string, number or bool elements");
+    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join requires string, number, bool or rune elements");
 }
 /* contains, indexOf and join walk the snapshot; clear rebinds the named root to an empty Array. */
 static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
@@ -139,8 +139,8 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
             if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_STRING, false}, &separator)) return false;
             if (separator.type != XR_XIR_STRING) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join separator must be a string");
         } else if (!source_string_literal(ctx, node, "", 0, &separator)) return false;
-        if (element_type != XR_XIR_STRING && element_type != XR_XIR_BOOL && !xr_xir_type_is_number(element_type))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join requires string, number or bool elements");
+        if (element_type != XR_XIR_STRING && element_type != XR_XIR_BOOL && element_type != XR_XIR_RUNE && !xr_xir_type_is_number(element_type))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join requires string, number, bool or rune elements");
     } else {
         if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false}, &argument)) return false;
         if (argument.type != element_type)

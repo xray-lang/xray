@@ -115,6 +115,10 @@ static void emit_numeric_step(CBuffer *buffer, const XrXirFunction *function,
             "xr_xir_integer_compare(xr_xir_integer_format((XrXirType) %uu), "
             "xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &ordering);\n",
             (uint32_t) input, frame, left, frame, layout->offsets[op->args[1]]);
+    } else if (op->op == XR_XIR_RUNE_TO_INTEGER || op->op == XR_XIR_INTEGER_TO_RUNE) {
+        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_rune_convert("
+            "(XrXirType) %uu, (XrXirType) %uu, "
+            "xr_xir_scalar_load(%s, %uu), &temporary);\n", (uint32_t) input, (uint32_t) op->type, frame, left);
     } else if (op->op == XR_XIR_CONVERT_NUMBER) {
         append(buffer, "    XrXirRunStatus numeric_status = xr_xir_number_convert("
             "(XrXirType) %uu, (XrXirType) %uu, "
@@ -235,6 +239,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     append(buffer, "    if (!xr_xir_scalar_step(context)) { status = XR_XIR_RUN_STEP_LIMIT; goto xr_done; }\n");
     switch (op->op) {
     case XR_XIR_PHI: break;
+    case XR_XIR_CONST_RUNE:
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_INT:
@@ -262,6 +267,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
+    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_CONVERT_NUMBER:
         emit_numeric_step(buffer, function, layout, index, false);
         break;
@@ -669,6 +675,14 @@ static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
             op->op == XR_XIR_STRING_CONTAINS ? "xr_xir_string_contains" :
             op->op == XR_XIR_STRING_STARTS_WITH ? "xr_xir_string_starts_with" : "xr_xir_string_ends_with", destination);
         break;
+    case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
+        append(buffer, "        { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        int order = 0; if (!xr_xir_string_compare(&left, &right, &order)) goto limit;\n"
+            "        xr_xir_scalar_store(state->frame, %uu, order %s 0); }\n",
+            layout->offsets[op->args[0]],layout->offsets[op->args[1]],destination,
+            op->op==XR_XIR_LT_STRING?"<":op->op==XR_XIR_LE_STRING?"<=":op->op==XR_XIR_GT_STRING?">":">=");
+        break;
     case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING:
         append(buffer, "        { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             "        int64_t result = 0; XrXirValueStatus status;\n", layout->offsets[op->args[0]]);
@@ -730,6 +744,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
+        (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT) {
         emit_io_step(buffer, function, layout, index); return;
     }
@@ -760,6 +775,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     switch (op->op) {
     case XR_XIR_PHI: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE: case XR_XIR_OBJECT_PLACE:
     case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: break;
+    case XR_XIR_CONST_RUNE:
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_INT:
@@ -810,6 +826,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
+    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_CONVERT_NUMBER:
         emit_numeric_step(buffer, function, layout, index, true);
         break;

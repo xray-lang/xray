@@ -370,14 +370,14 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
              !(config->entries[entry->cleanup_owner - 1].flags & XR_XIR_ENTRY_EXIT)))) return XR_XIR_CALL_BAD_ARGUMENT;
         if (!entry->resume || entry->parameter_count > 65536 ||
             (entry->parameter_count && !entry->parameters) ||
-            (entry->result != XR_XIR_UNIT && entry->result != XR_XIR_BOOL &&
+            (entry->result != XR_XIR_UNIT && entry->result != XR_XIR_BOOL && entry->result != XR_XIR_RUNE &&
              !xr_xir_type_is_number((XrXirType) entry->result) && !xr_xir_type_is_owned(types, entry->result)))
             return XR_XIR_CALL_BAD_ARGUMENT;
         *bytes += (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
             return XR_XIR_CALL_LIMIT;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
-            if (entry->parameters[p] != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
+            if (entry->parameters[p] != XR_XIR_BOOL && entry->parameters[p] != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
                 !xr_xir_type_is_owned(types, entry->parameters[p]))
                 return XR_XIR_CALL_BAD_ARGUMENT;
     }
@@ -484,7 +484,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         for (uint32_t i = 0; i < action.argument_count; ++i) {
             const XrXirValue *value = &action.arguments[i];
             if ((writing && value->type != XR_XIR_STRING) ||
-                (value->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
+                (value->type != XR_XIR_BOOL && value->type != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
                 !xr_xir_value_argument(value, NULL, (XrXirType) value->type)) {
                 abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
             }

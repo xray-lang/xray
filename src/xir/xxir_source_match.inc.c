@@ -22,7 +22,7 @@ static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan)
     if (match->arm_count<=0 || (uint32_t)match->arm_count>UINT32_MAX/2)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"match requires arms and a scrutinee");
     XrXirType type=plan->left->ground_type;
-    if (!xr_xir_type_is_enum(&ctx->types,type) && type!=XR_XIR_BOOL && type!=XR_XIR_STRING && !xr_xir_type_is_number(type))
+    if (!xr_xir_type_is_enum(&ctx->types,type) && type!=XR_XIR_BOOL && type!=XR_XIR_RUNE && type!=XR_XIR_STRING && !xr_xir_type_is_number(type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"match scrutinee family is not admitted");
     SourceMatchPlan *prepared=source_recipe_storage(ctx,1,sizeof(*prepared));
     if (!prepared) return false;
@@ -105,7 +105,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
     }
     if (pattern->literal) {
         SourceValue literal,condition;
-        if (pattern->type==XR_XIR_STRING) {
+        if (pattern->type==XR_XIR_STRING || pattern->type==XR_XIR_RUNE) {
             if (!source_literal(ctx,pattern->literal,&literal)) return false;
         } else if (!source_recipe_record(ctx,(XrXirInstruction){xr_xir_float_bits(pattern->type)?XR_XIR_CONST_FLOAT:XR_XIR_CONST_INT,
             pattern->type,{0},{0},pattern->literal_payload, {0}},&literal)) return false;

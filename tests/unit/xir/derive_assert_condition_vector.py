@@ -1,7 +1,7 @@
 from pathlib import Path
 import hashlib,json,struct,re
 from derive_test_roles_vectors import upgrade, historical_vector
-from derive_semantic60_migration import semantic60_packet
+from derive_semantic61_migration import semantic61_packet
 
 def words(*values): return struct.pack('<'+'I'*len(values),*values)
 def op(code,result=0,left=0,right=0,immediate=0):
@@ -26,7 +26,7 @@ body+=words(0,0) # Empty literal0, implementation count0.
 body+=words(0,0,0,0) # No generics or type/nominal/interface pools.
 body+=words(1,0,1,1,2) # One default: parameter owner1 ordinal1 helper2.
 body+=words(0) # No provenance on this unspecialized library.
-current=semantic60_packet(upgrade(packet(body,58)))
+current=semantic61_packet(upgrade(packet(body,58)))
 directory=Path(__file__).parent
 manifest=json.loads((directory/'assert_condition_packet_vectors.json').read_text(encoding='utf-8'))
 header=(directory/'xir_assert_condition_golden.h').read_text(encoding='utf-8')

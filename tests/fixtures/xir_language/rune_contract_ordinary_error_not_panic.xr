@@ -1,0 +1,6 @@
+enum Fault { Bad }
+fn main() {
+    try { print(rune(-1)) } catch(e:Fault) { print("wrong") }
+}
+
+main()

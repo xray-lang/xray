@@ -1,4 +1,4 @@
-"""Independent current60 projection; historical packet bytes are immutable facts.
+"""Independent historical60 projection; historical packet bytes are immutable facts.
 
 This module never imports an Xray producer, writer, ABI macro, or build artifact.
 It is a test oracle, not a production reader or compatibility path.
@@ -30,11 +30,9 @@ def main():
         assert hashlib.sha256(old[64:]).hexdigest()==row['body_sha256']
         assert current[64:]==old[64:] and current[:12]==old[:12] and current[16:32]==old[16:32]
         assert hashlib.sha256(current).hexdigest()==row['current60_sha256']
-        path=directory.parents[2]/row['current_path']
-        text=path.read_text(encoding='utf-8')
-        match=next(m for m in expression.finditer(text) if m[1]==row['current_name'])
-        actual=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}\b',match[2]))
-        assert actual==current,(row['path'],row['name'])
+        complete=json.loads((directory/'semantic60_packet_history.json').read_text(encoding='utf-8'))['packets']
+        preserved=next(p for p in complete if p['path']==row['current_path'] and p['name']==row['current_name'])
+        assert bytes.fromhex(preserved['old60_hex'])==current,(row['path'],row['name'])
         if row['name']=='checked_scalar59_golden':
             historical=(directory/'xir_checked_scalar59_golden.h').read_text(encoding='utf-8')
             old_match=next(m for m in expression.finditer(historical) if m[1]==row['name'])

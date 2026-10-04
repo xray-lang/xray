@@ -87,10 +87,10 @@ def main():
             literal=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))
             from derive_equal57_migration import migrate as equal_frame, nullable_frame
             from derive_test_roles_vectors import upgrade
-            from derive_semantic60_migration import semantic60_packet
-            assert literal==semantic60_packet(upgrade(nullable_frame(equal_frame(new))))
+            from derive_semantic61_migration import semantic61_packet
+            assert literal==semantic61_packet(upgrade(nullable_frame(equal_frame(new))))
         print(json.dumps({'old55_digest_reproductions':len(records),'old56_independent_framing':len(records),
-                          'historical58_independent_framing':len(records),'current60_independent_literals':len(records)}));return
+                          'historical58_independent_framing':len(records),'current61_independent_literals':len(records)}));return
     assert not manifest_path.exists();records=[]
     for path in sorted(directory.glob('*')):
         if path.suffix not in ('.c','.h'):continue

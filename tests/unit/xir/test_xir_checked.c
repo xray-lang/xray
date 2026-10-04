@@ -136,7 +136,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 23 && XR_XIR_CHECKED_CONTRACT == 60 && XR_XIR_OP_COUNT == 128, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 23 && XR_XIR_CHECKED_CONTRACT == 61 && XR_XIR_OP_COUNT == 135, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 118 && XR_XIR_NULLABLE_SOME == 119, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 117, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 116, "typed normal result discard operation");
@@ -176,7 +176,7 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0x84, 0x0e, 0xf7, 0x8a, 0x38, 0x61, 0xbc, 0x17, 0x2f, 0x5e, 0xfc, 0xc1, 0xc7, 0x54, 0x7e, 0xfd, 0x6e, 0x05, 0xb9, 0x9c, 0x7e, 0x93, 0x54, 0x6a, 0x69, 0x62, 0x90, 0x71, 0xb3, 0xf5, 0x9d, 0xa2
+        0x82, 0x0d, 0x2f, 0xfb, 0x14, 0xd4, 0x42, 0x5c, 0x69, 0x68, 0x47, 0xf3, 0x14, 0x86, 0x2b, 0x0a, 0x05, 0x98, 0x4b, 0xb2, 0xac, 0xd5, 0x20, 0x2b, 0xa2, 0xd6, 0x29, 0x1f, 0xbe, 0xcd, 0xb2, 0x8e
     };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     CHECK(packet.length==sizeof(checked_scalar60_golden) && !memcmp(packet.bytes,checked_scalar60_golden,packet.length));

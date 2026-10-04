@@ -66,7 +66,7 @@ static void nominal_variants_free(const XrXirNominalVariant *variants, uint32_t 
     xr_compile_resources_free((void *) variants);
 }
 static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t parameters) {
-    if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
+    if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
         type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
     uint32_t id = (uint32_t) type;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)

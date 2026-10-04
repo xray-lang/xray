@@ -1,0 +1,12 @@
+fn same<T:Equal>(a:T,b:T)->bool { return a==b }
+struct RuneBox { value:rune }
+fn main() {
+    const runes:Array<rune>=['A','😀']
+    var copy=runes
+    copy[0]='B'
+    const box=RuneBox{value:runes[1]}
+    const maybe:rune?=box.value
+    print(same<rune>(runes[0],'A'),i64(copy[0]),i64(maybe!),runes.join("|"))
+}
+
+main()

@@ -121,3 +121,14 @@ XrXirRunStatus xr_xir_integer_arithmetic(XrXirIntegerFormat format,
     *result = integer_payload(format, bits);
     return XR_XIR_RUN_OK;
 }
+
+XR_FUNC XrXirRunStatus xr_xir_rune_convert(XrXirType source, XrXirType target,
+    int64_t payload, int64_t *output) {
+    if (!output) return XR_XIR_RUN_BAD_ARGUMENT;
+    if (source==XR_XIR_I64 && target==XR_XIR_RUNE) {
+        if (!xr_xir_rune_payload_valid(payload)) return XR_XIR_RUN_NUMERIC_RANGE;
+    } else if (source==XR_XIR_RUNE && (target==XR_XIR_I64 || target==XR_XIR_U32)) {
+        if (!xr_xir_rune_payload_valid(payload)) return XR_XIR_RUN_BAD_ARGUMENT;
+    } else return XR_XIR_RUN_BAD_ARGUMENT;
+    *output=payload; return XR_XIR_RUN_OK;
+}

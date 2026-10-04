@@ -80,6 +80,8 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
         return true;
     }
     case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL: case XR_XIR_INVOKE:
+    case XR_XIR_CONST_RUNE: case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
+    case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE:
     case XR_XIR_ATOMIC_I64_NEW: case XR_XIR_ATOMIC_I64_LOAD: case XR_XIR_ATOMIC_I64_FETCH_ADD:

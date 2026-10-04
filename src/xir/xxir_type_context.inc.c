@@ -24,7 +24,7 @@ static XrXirStatus type_context_edge(TypeContextProof *c, XrXirType type, uint32
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
         return id - XR_XIR_TYPE_PARAMETER_BASE < c->parameter_count ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     const XrXirTypeNode *node = xr_xir_type_node(c->types, type);
-    if (!node) return type == XR_XIR_UNIT || type == XR_XIR_BOOL || xr_xir_type_is_number(type) ||
+    if (!node) return type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) ||
         type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
         type == XR_XIR_PANIC_INFO ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     uint32_t index = id - XR_XIR_CONSTRUCTED_TYPE_BASE;
