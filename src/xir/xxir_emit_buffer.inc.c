@@ -119,6 +119,26 @@ static void emit_text(CBuffer *buffer, const char *text) {
     }
 }
 static void emit_unsigned(CBuffer *buffer, uint64_t value, unsigned base, unsigned width) {
+    /* Without label tracking, sizing needs the digit count, not its spelling.
+     * Charge the actual divisions and one length update; writing still encodes
+     * and copies every output byte through the ordinary path below. */
+    if (buffer->measuring && !buffer->tracking) {
+        if (buffer->status != XR_XIR_OK) return;
+        unsigned count = 0;
+        do {
+            if (!emit_work(buffer, 1)) return;
+            ++count;
+            value /= base;
+        } while (value);
+        size_t emitted = width > count ? width : count;
+        if (buffer->length >= buffer->limit || emitted >= buffer->limit - buffer->length) {
+            buffer->status = XR_XIR_BUDGET;
+            return;
+        }
+        if (!emit_work(buffer, 1)) return;
+        buffer->length += emitted;
+        return;
+    }
     char digits[20];
     unsigned count = 0;
     do {
