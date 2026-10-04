@@ -15,6 +15,7 @@
 #include <string.h>
 #include "xir/xxir_error.h"
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
+#include "xir_instance_compile_observer.h"
 #include "xir_runtime_allocations.h"
 #undef CHECK
 #define main original_instance_regressions
@@ -27,14 +28,14 @@ static XrXirAction ordinary_throw(XrXirCallView *view) {
 static void ordinary_throw_take(void) {
     Fixture data;fixture(&data,2);data.witness.mode=0;data.entries[3].resume=ordinary_throw;
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_program_seal(&data.spec,(XrXirProgramBudget){2097152,16000000},&program)==XR_XIR_OK);
-    xr_xir_artifact_free(data.proof);Trace log={0};XrXirInstance *instance=new_instance(program,&log);
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(data.proof),&data.spec,&program)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(data.proof);data.proof=NULL;native_fixture_owner_free(&data.compiler);Trace log={0};XrXirInstance *instance=new_instance(program,&log);
     CHECK(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_THROWN);
     CHECK(xr_xir_instance_state(instance)==XR_XIR_INSTANCE_READY);
     XrXirValue error={0};CHECK(xr_xir_instance_take_result(instance,&error)==XR_XIR_CALL_THROWN);
     XrXirValue number=run(instance,4);CHECK(number.type==XR_XIR_I64&&number.payload==10);xr_xir_value_drop(&number);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
     CHECK(error_fixture_is_code(&error,reader,91));xr_xir_value_drop(&error);xr_xir_domain_drop(reader);
     CHECK(!runtime_live&&!runtime_bytes);
@@ -42,8 +43,8 @@ static void ordinary_throw_take(void) {
 int main(void) {
     CHECK(original_instance_regressions()==0);CHECK(!runtime_live&&!runtime_bytes);
     Fixture fixture_data;fixture(&fixture_data,2);XrXirProgram *program=NULL;
-    CHECK(xr_xir_program_seal(&fixture_data.spec,(XrXirProgramBudget){2097152,16000000},&program)==XR_XIR_OK);
-    xr_xir_artifact_free(fixture_data.proof);fixture_data.proof=NULL;
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(fixture_data.proof),&fixture_data.spec,&program)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(fixture_data.proof);fixture_data.proof=NULL;native_fixture_owner_free(&fixture_data.compiler);
     Trace trace_data={0};XrXirInstance *instance=new_instance(program,&trace_data);
     CHECK(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);
     XrXirInstanceResult paused=xr_xir_instance_poll_bounded(instance, UINT64_MAX);CHECK(paused.outcome.status==XR_XIR_CALL_SUSPENDED);
@@ -81,12 +82,13 @@ int main(void) {
     CHECK(!memcmp(&copy,&unchanged,sizeof(copy))&&instance->failure.status==XR_XIR_CALL_THROWN);
     atomic_store(&object->references,references);
     CHECK(xr_xir_instance_copy_failure(instance,&copy)==XR_XIR_CALL_THROWN);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
     CHECK(error_fixture_is_code(&copy.value,reader,91));xr_xir_domain_drop(reader);
     size_t attempts=runtime_attempts;runtime_fail_at=attempts;xr_xir_value_drop(&copy.value);
     CHECK(runtime_attempts==attempts&&!runtime_live&&!runtime_bytes);
     runtime_fail_at=SIZE_MAX;ordinary_throw_take();
+    instance_compile_report();native_fixture_owner_report();
     puts("fixed canonical failure, READY ordinary throw take and owned-copy physical release PASS");
     return 0;
 }

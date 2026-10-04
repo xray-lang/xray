@@ -65,11 +65,12 @@ static void weaken_authority_cases(void) {
             sizeof(FunctionCaseFrame), weaken_authority_resume, function_case_cleanup, &witness, 0, 0};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         entries, 7, &declarations, {&witness.releases, function_case_release}, &types, {0}};
-    XrXirArtifact *proof = NULL; CHECK(native_metadata_fixture(&spec, &proof) == XR_XIR_OK);
-    spec.proof = xr_xir_program_proof(proof);
+    NativeFixtureOwner compiler = {0}; CHECK(native_fixture_owner_new(&compiler) == XR_XIR_OK);
+    XrXirArtifact *proof = NULL; CHECK(native_metadata_fixture(&compiler.context, &spec, &proof) == XR_XIR_OK);
+    spec.proof = xr_xir_compile_program_proof(proof);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget){2097152, 16000000}, &program) == XR_XIR_OK);
-    xr_xir_artifact_free(proof);
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, &program) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(proof); proof = NULL; native_fixture_owner_free(&compiler);
     XrXirInstance *instance = NULL, *other = NULL; XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program, &config, &other) == XR_XIR_CALL_READY);
@@ -97,7 +98,7 @@ static void weaken_authority_cases(void) {
     CHECK(xr_xir_instance_poll_bounded(other, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     CHECK(witness.status == XR_XIR_CALL_BAD_ARGUMENT && witness.calls == 1 && witness.conversions == 1);
     CHECK(xr_xir_instance_free(other) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program); CHECK(!witness.releases);
+    xr_xir_compile_program_drop(program); CHECK(!witness.releases);
     xr_xir_value_drop(&strong); CHECK(!witness.releases);
     xr_xir_value_drop(&weak); CHECK(witness.releases == 1);
     const char *bytes = NULL; size_t length = 0;

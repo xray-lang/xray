@@ -67,17 +67,20 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
         sizeof(FunctionCaseFrame), function_case_resume, function_case_cleanup, NULL, 0, 0};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         entries, 5, &declarations, {releases, function_case_release}, &types, {0}};
+    NativeFixtureOwner compiler = {0};
+    XrXirStatus status = native_fixture_owner_new(&compiler);
+    if (status != XR_XIR_OK) return status;
     XrXirArtifact *proof = NULL;
-    XrXirStatus prepared = native_metadata_fixture(&spec, &proof);
-    if (prepared != XR_XIR_OK) return prepared;
-    spec.proof = xr_xir_program_proof(proof);
+    XrXirStatus prepared = native_metadata_fixture(&compiler.context, &spec, &proof);
+    if (prepared != XR_XIR_OK) { native_fixture_owner_free(&compiler); return prepared; }
+    spec.proof = xr_xir_compile_program_proof(proof);
     signature.result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; signature.parameter_span = 1;
-    XrXirStatus rejected = xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, program);
-    if (rejected == XR_XIR_OUT_OF_MEMORY) { xr_xir_artifact_free(proof); return rejected; }
+    XrXirStatus rejected = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, program);
+    if (rejected == XR_XIR_OUT_OF_MEMORY) { xr_xir_compile_artifact_free(proof); native_fixture_owner_free(&compiler); return rejected; }
     CHECK(rejected == XR_XIR_BAD_TYPE && !*program);
     signature.result = XR_XIR_STRING; signature.parameter_span = 0;
-    XrXirStatus status = xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, program);
-    xr_xir_artifact_free(proof); return status;
+    status = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, program);
+    xr_xir_compile_artifact_free(proof); native_fixture_owner_free(&compiler); return status;
 }
 static bool function_case_run(bool cancel) {
     unsigned releases = 0;
@@ -128,7 +131,7 @@ static bool function_case_run(bool cancel) {
     CHECK(status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
  finish:
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     if (function.type) {
         CHECK(!releases && xr_xir_value_copy(&function, &copy) == XR_XIR_VALUE_OK);
         CHECK(xr_xir_instance_start_function(other, &function, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);

@@ -205,16 +205,17 @@ static void array_instance_cases(void) {
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_library,array_access_cleanup,&witness, 0, 0}};
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
             entries,mode ? 2 : 4,&declarations,{0},&types,{0}};
+        NativeFixtureOwner compiler = {0}; CHECK(native_fixture_owner_new(&compiler) == XR_XIR_OK);
         XrXirArtifact *proof = NULL;
-        CHECK(native_metadata_fixture(&spec, &proof) == XR_XIR_OK);
-        spec.proof = xr_xir_program_proof(proof);
+        CHECK(native_metadata_fixture(&compiler.context, &spec, &proof) == XR_XIR_OK);
+        spec.proof = xr_xir_compile_program_proof(proof);
         XrXirProgram *program = NULL; XrXirInstance *instance = NULL;
-        CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
-        xr_xir_artifact_free(proof);
+        CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, &program) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(proof); proof = NULL; native_fixture_owner_free(&compiler);
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         if (mode) config.poll_limit = 64;
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
-        xr_xir_program_drop(program);
+        xr_xir_compile_program_drop(program);
         CHECK(xr_xir_instance_start(instance,1,NULL,0) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         if (mode == 2 || mode == 4) {

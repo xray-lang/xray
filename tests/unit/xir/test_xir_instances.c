@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 
+#include "xir_instance_compile_observer.h"
 #include "xir_native_metadata_fixture.h"
 #include "xir_error_fixture.h"
 
@@ -129,9 +130,10 @@ typedef struct Fixture {
     XrXirProgramSpec spec;
     XrXirArtifact *proof;
     ErrorFixture error;
+    NativeFixtureOwner compiler;
 } Fixture;
 static const XrXirType string_parameter = XR_XIR_STRING;
-static void fixture(Fixture *f, uint32_t mode) {
+static void fixture_spec(Fixture *f, uint32_t mode) {
     memset(f, 0, sizeof(*f));
     f->witness.mode = mode;
     for (uint32_t i = 0; i < 3; ++i) f->env[i] = (Environment) {&f->witness, i};
@@ -163,9 +165,13 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL, {0}};
     if (mode==2) { error_fixture_init(&f->error,false); f->spec.types=&f->error.types; }
-    CHECK(native_metadata_fixture(&f->spec, &f->proof) == XR_XIR_OK);
-    f->spec.types=xr_xir_artifact_module(f->proof)->types;
-    f->spec.proof = xr_xir_program_proof(f->proof);
+}
+static void fixture(Fixture *f, uint32_t mode) {
+    fixture_spec(f, mode);
+    CHECK(native_fixture_owner_new(&f->compiler) == XR_XIR_OK);
+    CHECK(native_metadata_fixture(&f->compiler.context, &f->spec, &f->proof) == XR_XIR_OK);
+    f->spec.types=xr_xir_compile_artifact_module(f->proof)->types;
+    f->spec.proof = xr_xir_compile_program_proof(f->proof);
 }
 static XrXirInstance *new_instance(XrXirProgram *program, Trace *log) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -190,14 +196,15 @@ static void strings_equal(const XrXirValue *value, const char *expected, size_t 
 static void isolation(void) {
     Fixture f; fixture(&f, 1);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
-    xr_xir_artifact_free(f.proof); f.proof = NULL;
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f.proof), &f.spec, &program) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+    native_fixture_owner_free(&f.compiler);
     /* Metadata inputs may die or change after sealing; code environments stay leased. */
     f.modules[2].name = "other"; f.dependencies[0] = 99; f.literals[0].bytes = "wrong";
     f.slots[0].module = 0; f.identities[9].module = 0; f.entries[3].resume = NULL;
     Trace a = {0}, b = {0};
     XrXirInstance *first = new_instance(program, &a), *second = new_instance(program, &b);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(!f.witness.releases);
     CHECK(xr_xir_instance_start(first, 3, NULL, 0) == XR_XIR_CALL_READY);
     XrXirInstanceResult suspended = xr_xir_instance_poll_bounded(first, UINT64_MAX);
@@ -235,8 +242,9 @@ static void isolation(void) {
 static void borrowed_restart(void) {
     Fixture f; fixture(&f, 0);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
-    xr_xir_artifact_free(f.proof); f.proof = NULL;
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f.proof), &f.spec, &program) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+    native_fixture_owner_free(&f.compiler);
     Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
     CHECK(xr_xir_instance_start(instance, 8, NULL, 0) == XR_XIR_CALL_READY);
     XrXirInstanceResult old = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
@@ -259,15 +267,16 @@ static void borrowed_restart(void) {
     CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
     CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     strings_equal(&result, "independent", 11); xr_xir_value_drop(&result);
 }
 static void failed_initialization(void) {
     for (uint32_t mode = 1; mode <= 4; ++mode) {
         Fixture f; fixture(&f, mode);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
-    xr_xir_artifact_free(f.proof); f.proof = NULL;
+        CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f.proof), &f.spec, &program) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+        native_fixture_owner_free(&f.compiler);
         Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
         CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
@@ -297,7 +306,7 @@ static void failed_initialization(void) {
         }
         CHECK(f.witness.begins[2] == 1 && !f.witness.begins[0] && !f.witness.begins[1]);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-        xr_xir_program_drop(program); CHECK(f.witness.releases == 1);
+        xr_xir_compile_program_drop(program); CHECK(f.witness.releases == 1);
         if (mode == 4) CHECK(escaped.panic.detail.code == 430 && escaped.panic.detail.index == INT64_MIN && escaped.panic.detail.length == 3);
         xr_xir_domain_drop(reader);
     }
@@ -364,8 +373,13 @@ static void seal_rejection(void) {
             break;
         }
         XrXirProgram *program = NULL;
-        XrXirStatus status = xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {invalid == 9 ? 1 : 2097152, 16000000}, &program);
-        xr_xir_artifact_free(f.proof); f.proof = NULL;
+        const XrXirCompileContext *context = xr_xir_compile_artifact_context(f.proof);
+        void *reservation = invalid == 9 ? native_fixture_one_byte_remaining(context) : NULL;
+        XrXirStatus status = xr_xir_compile_program_seal(context, &f.spec, &program);
+        xr_compile_resources_free(reservation);
+        if (invalid == 9) CHECK(status == XR_XIR_BUDGET);
+        xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+        native_fixture_owner_free(&f.compiler);
         CHECK(status != XR_XIR_OK);
         if (invalid >= 15 && invalid <= 18) CHECK(status == XR_XIR_BAD_LAYOUT);
         if (invalid >= 19 && invalid < 25) CHECK(status == XR_XIR_BAD_STRUCTURE);
@@ -373,16 +387,119 @@ static void seal_rejection(void) {
         CHECK(!program && !f.witness.releases);
     }
 }
+static void compiler_pipeline_faults(void) {
+    const uint32_t modes[] = {0, 2};
+    for (unsigned kind = 0; kind < 2; ++kind) {
+        size_t sites = 0;
+        for (size_t pass = 0; pass <= sites; ++pass) {
+            instance_compile_zero();
+            Fixture f; fixture_spec(&f, modes[kind]);
+            instance_compile_attempts = 0; instance_compile_injected = false;
+            instance_compile_fail_at = pass ? pass - 1 : SIZE_MAX;
+            XrXirStatus status = native_fixture_owner_new(&f.compiler);
+            if (status == XR_XIR_OK) status = native_metadata_fixture(&f.compiler.context, &f.spec, &f.proof);
+            XrXirProgram *program = NULL;
+            if (status == XR_XIR_OK) {
+                f.spec.types = xr_xir_compile_artifact_module(f.proof)->types;
+                f.spec.proof = xr_xir_compile_program_proof(f.proof);
+                status = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f.proof), &f.spec, &program);
+            }
+            const size_t attempts = instance_compile_attempts;
+            instance_compile_fail_at = SIZE_MAX;
+            if (!pass) {
+                CHECK(status == XR_XIR_OK && program); sites = attempts;
+                CHECK(sites && sites < 10000);
+            } else CHECK(instance_compile_injected && attempts >= pass && status == XR_XIR_OUT_OF_MEMORY && !program);
+            CHECK(!f.witness.releases);
+            xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+            xr_xir_compile_program_drop(program);
+            CHECK(f.witness.releases == (pass ? 0u : 1u));
+            native_fixture_owner_free(&f.compiler);
+            instance_compile_zero();
+        }
+        printf("native metadata/check/specialize/reverify/lower/seal compiler OOM sites=%zu mode=%u; no partial publication\n",
+            sites, modes[kind]);
+    }
+}
+static void seal_work_boundaries(void) {
+    uint64_t cost = 0, prefix = 0;
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        Fixture f; fixture(&f, 0);
+        const XrXirCompileContext *context = xr_xir_compile_artifact_context(f.proof);
+        const XrXirCompileLimits frozen = context->limits;
+        XrCompileResourceStats before = native_fixture_stats(context);
+        if (mode) {
+            CHECK(before.work == prefix && cost && cost < NATIVE_FIXTURE_WORK - before.work);
+            const uint64_t allowance = cost - (mode == 2 ? 1u : 0u);
+            CHECK(xr_compile_resources_work(context->resources, NATIVE_FIXTURE_WORK - before.work - allowance) == XR_COMPILE_RESOURCE_OK);
+            before = native_fixture_stats(context);
+            CHECK(NATIVE_FIXTURE_WORK - before.work == allowance);
+        }
+        XrXirProgram *program = NULL;
+        XrXirStatus status = xr_xir_compile_program_seal(context, &f.spec, &program);
+        const XrCompileResourceStats after = native_fixture_stats(context);
+        CHECK(!memcmp(&frozen, &context->limits, sizeof(frozen)));
+        if (!mode) {
+            CHECK(status == XR_XIR_OK && program);
+            prefix = before.work; cost = after.work - before.work; CHECK(cost);
+        } else if (mode == 1) CHECK(status == XR_XIR_OK && program && after.work == NATIVE_FIXTURE_WORK);
+        else CHECK(status == XR_XIR_BUDGET && !program && !f.witness.releases);
+        xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+        xr_xir_compile_program_drop(program);
+        CHECK(f.witness.releases == (mode == 2 ? 0u : 1u));
+        native_fixture_owner_free(&f.compiler); instance_compile_zero();
+    }
+    printf("Program seal same-ledger work exact/minus1=%llu; prefix=%llu\n",
+        (unsigned long long)cost, (unsigned long long)prefix);
+}
+static void occupied_outputs(void) {
+    Fixture f; fixture(&f, 0);
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(f.proof);
+    XrCompileResourceStats before = native_fixture_stats(context);
+    XrXirProgram *program = (XrXirProgram *)(uintptr_t)1;
+    CHECK(xr_xir_compile_program_seal(context, (const XrXirProgramSpec *)(uintptr_t)1, &program) == XR_XIR_BAD_STRUCTURE);
+    CHECK(program == (XrXirProgram *)(uintptr_t)1 && !f.witness.releases);
+    XrXirArtifact *artifact = (XrXirArtifact *)(uintptr_t)1;
+    CHECK(native_metadata_fixture(context, (const XrXirProgramSpec *)(uintptr_t)1, &artifact) == XR_XIR_BAD_STRUCTURE);
+    CHECK(artifact == (XrXirArtifact *)(uintptr_t)1);
+    XrCompileResourceStats after = native_fixture_stats(context);
+    CHECK(!memcmp(&before, &after, sizeof(before)));
+    xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+    native_fixture_owner_free(&f.compiler); instance_compile_zero();
+}
 #include "xir_function_cases.h"
 #include "xir_effect_binding_cases.h"
 #include "xir_weaken_authority_cases.h"
 #include "xir_array_instance_cases.h"
+static void function_compiler_faults(void) {
+    size_t sites = 0;
+    for (size_t pass = 0; pass <= sites; ++pass) {
+        instance_compile_zero();
+        instance_compile_attempts = 0; instance_compile_injected = false;
+        instance_compile_fail_at = pass ? pass - 1 : SIZE_MAX;
+        unsigned releases = 0; XrXirProgram *program = NULL;
+        XrXirStatus status = function_case_seal(&releases, &program);
+        const size_t attempts = instance_compile_attempts;
+        instance_compile_fail_at = SIZE_MAX;
+        if (!pass) {
+            CHECK(status == XR_XIR_OK && program); sites = attempts;
+            CHECK(sites && sites < 10000);
+        } else CHECK(instance_compile_injected && attempts >= pass && status == XR_XIR_OUT_OF_MEMORY && !program);
+        CHECK(!releases);
+        xr_xir_compile_program_drop(program);
+        CHECK(releases == (pass ? 0u : 1u));
+        instance_compile_zero();
+    }
+    printf("callable metadata compiler OOM sites=%zu; no lease publication\n", sites);
+}
 int main(void) {
+    compiler_pipeline_faults(); function_compiler_faults(); seal_work_boundaries(); occupied_outputs();
     effect_binding_cases();
     weaken_authority_cases();
     array_instance_cases();
     CHECK(function_case_run(false) && function_case_run(true));
     isolation(); borrowed_restart(); failed_initialization(); seal_rejection();
+    instance_compile_report(); native_fixture_owner_report();
     puts("Program leases, deterministic initialization, isolated cells, sticky failure and result lifetime passed");
     return 0;
 }
