@@ -20,6 +20,7 @@
 #include "xir_checked_scalar57_golden.h"
 #include "xir_checked_scalar58_golden.h"
 #include "xir_checked_scalar59_golden.h"
+#include "xir_checked_scalar60_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -135,7 +136,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 23 && XR_XIR_CHECKED_CONTRACT == 59 && XR_XIR_OP_COUNT == 120, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 23 && XR_XIR_CHECKED_CONTRACT == 60 && XR_XIR_OP_COUNT == 128, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 118 && XR_XIR_NULLABLE_SOME == 119, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 117, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 116, "typed normal result discard operation");
@@ -175,12 +176,13 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0x7f, 0xd1, 0x06, 0xbf, 0xb9, 0x45, 0x7d, 0xd0, 0xd9, 0x30, 0xbc, 0x9b, 0xef, 0xf4, 0x86, 0x76, 0x0b, 0xa6, 0x48, 0x1f, 0x66, 0x6e, 0x48, 0x3b, 0x2b, 0xaa, 0xc4, 0x56, 0x4b, 0xcf, 0x5c, 0x3a
+        0x84, 0x0e, 0xf7, 0x8a, 0x38, 0x61, 0xbc, 0x17, 0x2f, 0x5e, 0xfc, 0xc1, 0xc7, 0x54, 0x7e, 0xfd, 0x6e, 0x05, 0xb9, 0x9c, 0x7e, 0x93, 0x54, 0x6a, 0x69, 0x62, 0x90, 0x71, 0xb3, 0xf5, 0x9d, 0xa2
     };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar59_golden) && !memcmp(packet.bytes,checked_scalar59_golden,packet.length));
+    CHECK(packet.length==sizeof(checked_scalar60_golden) && !memcmp(packet.bytes,checked_scalar60_golden,packet.length));
     rejected(checked_scalar57_golden,sizeof(checked_scalar57_golden));
     rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
+    rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));
     uint8_t original[221]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 145; offset <= 149; offset += 4) {
         put32(packet.bytes + offset, 1); digest_packet(&packet);

@@ -1,0 +1,2 @@
+fn hidden<T>(v:T)->i64{const local:T?=v;return 41}
+export fn main()->i64{const v:i64?=null;return hidden<i64?>(v)}

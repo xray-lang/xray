@@ -1,0 +1,3 @@
+fn layer<T>(v:T)->T?{return v}
+fn none<T>()->T?{return null}
+export fn main()->i64{const a=layer<i64>(41);const b=none<i64>();return a!}

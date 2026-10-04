@@ -602,7 +602,7 @@ var primes = #[2, 3, 5, 7]
 Xray 是静态类型语言；每个表达式在编译期有确定类型。类型系统的核心特性：
 
 1. **类型推断**：变量声明几乎不用写类型；分析器从初始值/上下文推导。
-2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
+2. **Optional 层独立**：`T?` 是语言项 `Optional<T>` 的写法；每层保留独立的存在标签，不拆成含 null 的 union。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
 5. **三个职责清晰的类型域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且普通类型位置字段集精确，泛型约束位置可表达最小字段集；`JSON.Value` 是 schema-less 递归数据交换值域。JSON 标量可零物化 widening，复合 typed value 必须经 `JSON.value` 显式编码。
@@ -1154,7 +1154,15 @@ for (i in 3..=5) {
 
 ### 2.5 可空类型
 
-`T?` 是 `T | null` 的语法糖。
+`T?` 是语言项 `Optional<T>` 的写法，具有“缺席”和“有值且载荷为准确 T”两个状态。这里的 None / Some(T) 是语义状态名称；显式构造和匹配这些状态的具体源码拼写尚未冻结，本节不新增 `Some(...)` / `None` 内建名字或调用语法。
+
+`T??` 保留两层 `Optional<Optional<T>>`，不规范化为 `T?`。外层 None、外层 Some(inner None) 和外层 Some(inner Some(value)) 是三个不同状态；泛型代换必须保留每一层。`T | null` 只在语法层改写为 `T?`，`A | B | null` 改写为 `(A | B)?`；`null` 不进入 union 成员集合。已有 Optional 成员不被拆开或展平。
+
+赋值和普通调用先尝试准确类型匹配；准确匹配不增加包装层。只有源类型准确为目标 `T?` 的元素类型 T 时，才允许一次 T→T? widening。即使 T 本身是 Optional，该转换也只增加外层一层并保留内层状态。裸 `null` 在准确的 Optional 期望类型下构造最外层 None，不从嵌套层数猜测内层状态；无期望类型的 `null` 不自动发明一个 Optional 类型。
+
+`x == null` / `x != null` 只检查本次 Optional 操作数的最外层存在标签，元素不需要 Equal；`x!` 只解包一层，外层 None 产生 null-unwrap panic；`x ?? d` 只处理外层，只有该层缺席才求值 d。可选访问为本次结果增加一层 Optional，不隐式展平结果已有的 Optional。流敏感收窄的主体与传播仍由 §2.13 负责，本节不选择重复测试或解包时的收窄 provenance。
+
+这是语言合同，不等于当前 Source 的执行资格；新 XIR 的分族准入与未完成表面见 §17。
 
 ```xray
 var x: i64? = null      // OK
@@ -1162,7 +1170,7 @@ var y: i64? = 42        // OK
 var z: i64 = null       // 编译错误：null 不是 i64
 ```
 
-`JSON.Value` 本身包含 `null`，因此 `JSON.Value?` 与 `JSON.Value | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
+`JSON.Value` 的值域本身包含 JSON null，但 `JSON.Value?` 是另一个独立的外层 Optional，因此是合法类型。它区分外层缺席和有值且载荷为 JSON null；`JSON.Value | null` 只在语法层改写为同一个外层 Optional，不因 JSON 值域已有 null 而拒绝。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
 
 **可空原始类型一等公民**：`i64?` / `f64?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
@@ -1227,7 +1235,7 @@ var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 
 **特殊化**：
 - `i64 | null` 规范化为 `i64?`。
-- `T?` 出现在 union 时：`i64? | string` 实际等价 `i64 | string | null`，规范化为 `(i64 | string)?`。
+- `T?` 出现在 union 时保留独立 Optional 成员：`i64? | string` 保留 `Optional<i64>` 与 `string`，不拆成 `i64 | string | null`，也不规范化为 `(i64 | string)?`。
 
 ### 2.7 元组类型
 
@@ -1522,9 +1530,9 @@ fn f(a: string?) {
 
 **N-13** 解包途径共三条，均在 N-4 之外独立生效：
 
-- `x!`：静态去掉 `null`；运行期若为 `null` 则 panic（`NullError`），**不是未定义行为**；
-- `x ?? d`：结果类型为 `x` 去 `null` 后与 `d` 的并集；
-- `x?.f`：可选链，**整链短路**——链上任意一段为 `null` 时整个后缀链求值为 `null`，结果类型为可空（见 §3.6）。
+- `x!`：对 Optional 操作数只取最外层的准确元素类型和值；外层缺席时产生 null-unwrap panic，**不是未定义行为**，不递归解包元素的 Optional；
+- `x ?? d`：只检查最外层；有值时取该层载荷，缺席时才求值 d，结果按期望上下文与普通类型规则合流，不展平载荷中的 Optional；
+- `x?.f`：可选链，**整链短路**；本次可选访问为结果包装一层 Optional，结果原有 Optional 层仍保留（见 §3.6）。
 ### 2.14 值、身份与借用
 
 本节定义声明类型、参数模式及函数内数据流共同决定的语言合同。存储布局、引用计数和 COW 是实现机制，不能反向改变源程序合法性。Built→Checked 检查这些规则；特化在 Checked 上完成并复验，Lowered 才选择具体复制、分离和释放操作。完整声明族的实现资格见 §17，规格冻结不等于实现完成。

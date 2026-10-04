@@ -601,7 +601,7 @@ The full precedence table is in [§3.1](#31-precedence-and-associativity).
 Xray is statically typed; every expression has a determined type at compile time. Core features of the type system:
 
 1. **Type inference**: variable declarations rarely require type annotations; the analyzer infers from the initializer / context.
-2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
+2. **Distinct Optional layers**: `T?` denotes the language item `Optional<T>`; every layer keeps its own presence tag without decomposing into a union with null.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
 5. **Three type domains with distinct responsibilities**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `structural object` is structural and exact in ordinary type positions, while generic constraint positions may require a minimum field set; `JSON.Value` is the schema-less recursive data-exchange domain. JSON scalars widen without materialization, while typed composites require explicit `JSON.value` encoding.
@@ -1162,7 +1162,15 @@ Ranges work with `for-in`, range patterns in `match`, and collection queries. Se
 
 ### 2.5 Nullable Types
 
-`T?` is sugar for `T | null`.
+`T?` denotes the language item `Optional<T>`, with an absent state and a present state carrying an exact T. None / Some(T) name these semantic states; the concrete source spelling for explicit construction and matching remains undecided. This section introduces no `Some(...)` / `None` builtin name or call syntax.
+
+`T??` keeps two layers, `Optional<Optional<T>>`, and does not normalize to `T?`. Outer None, outer Some(inner None), and outer Some(inner Some(value)) are distinct states; generic substitution preserves every layer. `T | null` rewrites to `T?` only at the syntax boundary, and `A | B | null` rewrites to `(A | B)?`; null is not a union member. An existing Optional member is neither decomposed nor flattened.
+
+Assignments and ordinary calls try exact type matching first; an exact match adds no wrapper. A single T→T? widening is permitted only when the source type is exactly the target Optional's element type T. When T is itself Optional, this adds only one outer layer and preserves its inner state. A bare `null` constructs the outermost None under an exact Optional expected type; the nesting depth does not select an inner state. A context-free `null` does not invent an Optional type.
+
+`x == null` / `x != null` inspect only the outer presence tag of the Optional operand in that operation, without requiring Equal for its element. `x!` unwraps one layer and produces a null-unwrap panic for outer None; `x ?? d` handles only the outer layer and evaluates d only when that layer is absent. Optional access adds one Optional layer around its result without flattening an already Optional result. Narrowing subjects and propagation remain governed by §2.13; this section does not choose narrowing provenance for repeated tests or unwrapping.
+
+This is the language contract, not a claim of current Source execution qualification; see §17 for declaration-family admission and unfinished surfaces.
 
 ```xray
 var x: i64? = null      // OK
@@ -1170,7 +1178,7 @@ var y: i64? = 42        // OK
 var z: i64 = null       // compile error: null is not i64
 ```
 
-`JSON.Value` intrinsically includes `null`, so `JSON.Value?` and `JSON.Value | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
+`JSON.Value` includes JSON null in its own domain, but `JSON.Value?` is a distinct outer Optional and is legal. It distinguishes outer absence from a present JSON-null payload. `JSON.Value | null` rewrites to that outer Optional at the syntax boundary and is not rejected because the JSON domain already contains null. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
 
 **Nullable primitives are first-class**: `i64?` / `f64?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
@@ -1235,7 +1243,7 @@ var d: f32 | string = 1.5     // sole f64-family member: f32
 
 **Special cases**:
 - `i64 | null` normalizes to `i64?`.
-- When `T?` appears in a union: `i64? | string` is effectively `i64 | string | null`, normalized to `(i64 | string)?`.
+- An Optional inside a union remains one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
 
 ### 2.7 Tuple Types
 
@@ -1546,9 +1554,9 @@ fn f(a: string?) {
 
 **N-13** There are exactly three unwrapping forms, each independent of N-4:
 
-- `x!`: statically removes `null`; panics (`NullError`) at run time when the value is `null` — this is **not** undefined behavior;
-- `x ?? d`: the result type is the union of `x` without `null` and `d`;
-- `x?.f`: optional chaining, **whole-chain short-circuit** — when any link is `null` the entire postfix chain evaluates to `null`, and the result type is nullable (§3.6).
+- `x!`: takes the exact element type and value from one outer Optional layer; outer absence produces a null-unwrap panic, which is **not** undefined behavior. It does not recursively unwrap an Optional element;
+- `x ?? d`: inspects only the outer layer, taking its payload when present and evaluating d only when absent. Its result is checked under the expected context and ordinary type rules without flattening an Optional payload;
+- `x?.f`: optional chaining with **whole-chain short-circuit**; the optional access adds one Optional layer around its result and preserves any Optional already in that result (§3.6).
 ### 2.14 Values, Identity, and Borrows
 
 This section defines language contracts determined by declared types, parameter modes, and intraprocedural dataflow. Layout, reference counting, and COW are implementation mechanisms and must not change source legality. Built→Checked checks these rules; specialization operates on Checked and is rechecked before Lowered selects concrete copy, detachment, and release operations. See §17 for implementation qualification of complete declaration families. Freezing a specification is not completion of its implementation.

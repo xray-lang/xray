@@ -172,8 +172,6 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         if (node->parameters || node->parameter_count || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *element = xr_xir_type_node(types, node->element);
-        if (node->kind == XR_XIR_TYPE_NULLABLE && element && element->kind == XR_XIR_TYPE_NULLABLE)
-            return XR_XIR_BAD_TYPE;
         bool nominal_element = element &&
             element->kind == XR_XIR_TYPE_NOMINAL &&
             (uint32_t) node->element - XR_XIR_CONSTRUCTED_TYPE_BASE < index;

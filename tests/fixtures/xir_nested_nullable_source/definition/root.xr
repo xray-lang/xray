@@ -1,0 +1,3 @@
+fn layer<T>(v:T)->T?{return v}
+fn none<T>()->T?{return null}
+export fn main()->i64{return 41}
