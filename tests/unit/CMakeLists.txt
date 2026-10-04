@@ -2694,8 +2694,9 @@ endforeach()
 
 include("xir/module_state_zero.cmake")
 include("xir/module_state_one.cmake")
+include("xir/module_state_failures.cmake")
 foreach(module_scenario RANGE 0 13)
-    if(module_scenario LESS 2)
+    if(module_scenario LESS 5)
         continue() # The identical target name is defined by the source-owned consumer.
     endif()
     set(module_target test_xr_program_aot_module_state_${module_scenario})
