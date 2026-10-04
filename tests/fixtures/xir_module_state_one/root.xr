@@ -1,0 +1,13 @@
+import { left } from "./left"
+import { right } from "./right"
+var state:string=left()
+export fn advance() {
+    const library_left=left()
+    const library_right=right()
+    const old=state
+    state="changed"
+    print(old)
+}
+export fn snapshot()->string { return state }
+export fn libraryLeft()->string { return left() }
+export fn libraryRight()->string { return right() }

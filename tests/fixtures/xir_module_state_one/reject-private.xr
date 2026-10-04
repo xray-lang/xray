@@ -1,0 +1,2 @@
+import { original } from "./base"
+export fn bad()->string { return original }

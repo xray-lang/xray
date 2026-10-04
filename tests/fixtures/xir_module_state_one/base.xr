@@ -1,0 +1,2 @@
+const original:string="module-owned-text"
+export fn value()->string { return original }

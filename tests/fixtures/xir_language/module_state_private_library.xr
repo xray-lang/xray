@@ -1,0 +1,2 @@
+import { original } from "./module_state_private_library_base"
+export fn bad()->string { return original }
