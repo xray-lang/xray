@@ -107,14 +107,23 @@ static void reader_lower_canonical(void) {
         XrXirOp saved = instruction->op; instruction->op = XR_XIR_INVALID;
         XrXirArtifact *out = decoded; uint64_t before = stats(owner).live_bytes;
         CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && out == decoded);
+        XrXirCheckedPacket refused = {packet.bytes,packet.length};
+        CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(refused.bytes == packet.bytes && refused.length == packet.length);
         CHECK(stats(owner).live_bytes == before); instruction->op = saved;
         if (kind) {
             XrXirArtifact *source = decoded->module.provenance->source;
             instruction = (XrXirInstruction *)source->module.functions[0].instructions;
             saved = instruction->op; instruction->op = XR_XIR_INVALID;
             CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && out == decoded);
+            CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_STRUCTURE);
+            CHECK(refused.bytes == packet.bytes && refused.length == packet.length);
             CHECK(stats(owner).live_bytes == before); instruction->op = saved;
         }
+        decoded->target.architecture = target.architecture;
+        CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_LAYOUT);
+        CHECK(refused.bytes == packet.bytes && refused.length == packet.length);
+        CHECK(stats(owner).live_bytes == before); decoded->target.architecture = 0;
         out = NULL; CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_OK);
         reader_lower_equal(a,out); xr_xir_compile_artifact_free(out);
         xr_xir_compile_artifact_free(a); xr_xir_compile_artifact_free(b); xr_xir_compile_artifact_free(decoded);

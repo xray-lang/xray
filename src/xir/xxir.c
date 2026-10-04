@@ -164,6 +164,7 @@ static XrXirArtifact *clone_module(const XrXirCompileContext *compile_context, c
 #include "xxir_provenance.inc.c"
 #include "xxir_provenance_match.inc.c"
 #include "xxir_types_lower.inc.c"
+#include "xxir_checked_codec.inc.c"
 
 static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnostic) {
     if (diagnostic)
@@ -206,10 +207,14 @@ static XrXirStatus transition_shape(const XrXirModule *input, XrXirStage source,
     return XR_XIR_OK;
 }
 
-/* Only the caller's completed verification admits this unchanged input. */
-static XrXirStatus transition_owned(const XrXirModule *input, XrXirStage source,
+typedef XrXirStatus (*TransitionPacketWriter)(const XrXirArtifact *,
+    XrXirCheckedPacket *, XrXirDiagnostic *);
+
+/* The selected private writer never outlives the caller's owned input proof. */
+static XrXirStatus transition_owned(const XrXirModule *input,
     const XrXirCompileContext *budget, XrXirArtifact **output,
-    XrXirDiagnostic *diagnostic, const XrXirTarget *target) {
+    XrXirDiagnostic *diagnostic, const XrXirTarget *target, TransitionPacketWriter writer) {
+    XrXirStage source = input->stage;
     XrXirStatus allocation_status = XR_XIR_OK, status = XR_XIR_OK;
     XrXirCompileContext limits = *budget;
     XrXirArtifact *copy = clone_module(budget, input, &allocation_status);
@@ -217,7 +222,7 @@ static XrXirStatus transition_owned(const XrXirModule *input, XrXirStage source,
         return transition_error(allocation_status, diagnostic);
     copy->context = limits;
     if (source == XR_XIR_CHECKED) {
-        status = xr_xir_compile_checked_write(copy, &copy->checked_packet, diagnostic);
+        status = writer(copy, &copy->checked_packet, diagnostic);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return status; }
         if (!xir_compile_work(budget, copy->checked_packet.length)) {
             xr_xir_compile_artifact_free(copy); return transition_error(XR_XIR_BUDGET, diagnostic);
@@ -271,7 +276,7 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
     XrXirStatus status = transition_shape(input, source, budget, target, diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_verify(budget, input, diagnostic);
     if (status != XR_XIR_OK) return status;
-    return transition_owned(input, source, budget, output, diagnostic, target);
+    return transition_owned(input, budget, output, diagnostic, target, xr_xir_compile_checked_write);
 }
 
 /* The reader owns and verifies the only input; no decoded view escapes. */
@@ -285,7 +290,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
     if (status == XR_XIR_OK)
         status = transition_shape(&checked->module, XR_XIR_CHECKED, &checked->context, target, diagnostic);
     if (status == XR_XIR_OK)
-        status = transition_owned(&checked->module, XR_XIR_CHECKED, &checked->context, output, diagnostic, target);
+        status = transition_owned(&checked->module, &checked->context, output, diagnostic, target, checked_encode);
     xr_xir_compile_artifact_free(checked);
     return status;
 }
