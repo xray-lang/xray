@@ -15,21 +15,70 @@
 #include "aot/xi_cgen_verify_output.h"
 #include <string.h>
 
-static XiCgenVerifyResult verify(const char *src) {
-    XiCgenVerifyResult r;
-    memset(&r, 0, sizeof(r));
-    XiCgenVerifyStatus status = xi_cgen_verify_output(src, strlen(src), &r);
-    if (status != (r.category == XI_CGEN_VERIFY_OK ? XI_CGEN_VERIFY_PASSED : XI_CGEN_VERIFY_MALFORMED)) {
-        fprintf(stderr, "unexpected structural verification status %u\n", status);
-        exit(1);
+#include "base/xmalloc.h"
+#define VERIFY_CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
+/* Observe the actual resource allocator; the verifier remains the linked
+ * production implementation. The fixed observer itself never allocates. */
+typedef struct VerifyAllocation { void *pointer; size_t bytes; } VerifyAllocation;
+static VerifyAllocation verify_allocations[32];
+static size_t verify_live,verify_physical;
+static XrCompileResources *verify_resources;
+static XrCompileResourceStats verify_baseline;
+static void *verify_counted_malloc(size_t bytes) {
+    void *memory=xr_malloc(bytes);if (!memory) return NULL;
+    for (size_t i=0;i<32;++i) if (!verify_allocations[i].pointer) {
+        VERIFY_CHECK(bytes<=SIZE_MAX-verify_physical);
+        verify_allocations[i]=(VerifyAllocation){memory,bytes};++verify_live;verify_physical+=bytes;return memory;
     }
+    VERIFY_CHECK(false);return NULL;
+}
+static void verify_counted_free(void *memory) {
+    if (!memory) return;
+    for (size_t i=0;i<32;++i) if (verify_allocations[i].pointer==memory) {
+        VERIFY_CHECK(verify_live && verify_physical>=verify_allocations[i].bytes);
+        verify_physical-=verify_allocations[i].bytes;--verify_live;verify_allocations[i]=(VerifyAllocation){0};xr_free(memory);return;
+    }
+    VERIFY_CHECK(false);
+}
+#pragma push_macro("xr_malloc")
+#pragma push_macro("xr_free")
+#undef xr_malloc
+#undef xr_free
+#define xr_malloc(bytes) verify_counted_malloc(bytes)
+#define xr_free(pointer) verify_counted_free(pointer)
+#include "base/xcompile_resources.c"
+#pragma pop_macro("xr_free")
+#pragma pop_macro("xr_malloc")
+static void verifier_owner_new(void) {
+    VERIFY_CHECK(!verify_resources && !verify_live && !verify_physical);
+    const XrCompileResourceLimits limits={UINT64_C(2)*1024*1024,UINT64_C(1)*1024*1024,UINT64_C(2000000)};
+    VERIFY_CHECK(xr_compile_resources_new(&limits,&verify_resources)==XR_COMPILE_RESOURCE_OK);
+    VERIFY_CHECK(xr_compile_resources_stats(verify_resources,&verify_baseline)==XR_COMPILE_RESOURCE_OK);
+    VERIFY_CHECK(verify_live==1 && verify_physical==verify_baseline.live_bytes);
+}
+static void verifier_owner_baseline(void) {
+    XrCompileResourceStats current={0};
+    VERIFY_CHECK(xr_compile_resources_stats(verify_resources,&current)==XR_COMPILE_RESOURCE_OK);
+    VERIFY_CHECK(current.live_bytes==verify_baseline.live_bytes && verify_live==1 && verify_physical==verify_baseline.live_bytes);
+    VERIFY_CHECK(current.allocated_bytes<=UINT64_C(2)*1024*1024 && current.peak_bytes<=UINT64_C(1)*1024*1024 && current.work<=UINT64_C(2000000));
+}
+static void verifier_owner_free(void) {
+    verifier_owner_baseline();xr_compile_resources_release(verify_resources);verify_resources=NULL;
+    VERIFY_CHECK(!verify_live && !verify_physical);
+    puts("CGen original output goldens: finite cumulative owner, actual physical blocks/bytes=0/0");
+}
+static XiCgenVerifyResult verify(const char *src) {
+    XiCgenVerifyResult r;memset(&r,0,sizeof(r));
+    XiCgenVerifyStatus status=xr_compile_cgen_verify_output(verify_resources,src,strlen(src),&r);
+    verifier_owner_baseline();
+    VERIFY_CHECK(status==(r.category==XI_CGEN_VERIFY_OK?XI_CGEN_VERIFY_PASSED:XI_CGEN_VERIFY_MALFORMED));
     return r;
 }
-
 static XiCgenVerifyResult verify_c90(const char *src) {
-    XiCgenVerifyResult r;
-    memset(&r, 0, sizeof(r));
-    xi_cgen_verify_c90_output(src, strlen(src), &r);
+    XiCgenVerifyResult r;memset(&r,0,sizeof(r));
+    XiCgenVerifyStatus status=xr_compile_cgen_verify_c90_output(verify_resources,src,strlen(src),&r);
+    verifier_owner_baseline();
+    VERIFY_CHECK(status==(r.category==XI_CGEN_VERIFY_OK?XI_CGEN_VERIFY_PASSED:XI_CGEN_VERIFY_MALFORMED));
     return r;
 }
 
@@ -200,6 +249,7 @@ TEST(category_names_are_stable) {
 }
 
 TEST_MAIN_BEGIN()
+verifier_owner_new();
 RUN_TEST_SUITE("CGen output verifier — W1 balance");
 RUN_TEST(w1_unbalanced_braces);
 RUN_TEST(w1_stray_close_brace);
@@ -221,4 +271,5 @@ RUN_TEST(c90_accepts_governed_kernel_shape);
 RUN_TEST(c90_rejects_compound_literal_and_runtime_residue);
 RUN_TEST(c90_rejects_line_comments_but_ignores_literal_text);
 RUN_TEST(category_names_are_stable);
+verifier_owner_free();
 TEST_MAIN_END()

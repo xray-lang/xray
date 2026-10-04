@@ -49,6 +49,17 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
 /* Charge actual operations before starting them. Failed stages never refund work. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources, uint64_t units);
 
+/* Scan at most 64 readable source bytes while holding the ledger lock. Each
+ * byte read consumes one work unit before access. Each non-delimiter byte
+ * additionally consumes one unit before advancing. A found delimiter is not
+ * advanced over; absent delimiters advance length bytes. Empty input needs no
+ * work and permits NULL source. No trailing NUL is required. Failure preserves
+ * both outputs, while any work for completed reads/advances remains consumed.
+ * Source, outputs and their lifetime require caller exclusion; the call retains
+ * no source pointer. The caller must hold a live ledger reference throughout. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,
+    const char *source, size_t length, unsigned char delimiter, size_t *advanced, bool *found);
+
 /* Outputs must be empty and payload sizes nonzero. Failure preserves output.
  * Actual allocator calls consume one work unit, including failed calls.
  * Zeroing additionally consumes payload bytes. Headers and alignment padding

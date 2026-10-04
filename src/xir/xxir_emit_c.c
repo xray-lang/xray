@@ -322,7 +322,8 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     if (!module || module->stage != XR_XIR_LOWERED)
         return XR_XIR_BAD_STAGE;
-    CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types, xr_xir_compile_artifact_context(artifact)};
+    CBuffer buffer = {.limit = byte_limit, .status = XR_XIR_OK,
+        .types = module->types, .context = xr_xir_compile_artifact_context(artifact)};
     if (!symbol_prefix_valid(&buffer, symbol_prefix))
         return buffer.status == XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : buffer.status;
     XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
@@ -345,7 +346,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
            XR_XIR_VALUE_ABI_VERSION);
     for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f)
         emit_function(&buffer, artifact, symbol_prefix, f);
-    if (buffer.status != XR_XIR_OK) {
+    if (!emit_finalize(&buffer)) {
         xr_compile_resources_free(buffer.text);
         return buffer.status;
     }
@@ -946,23 +947,6 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
 /* Keep host optimization bounded per generated function without changing the
  * one-instruction action boundary or the shared activation state. */
 #define EMIT_RESUME_CHUNK_INSTRUCTIONS 32u
-/* Scan offsets only: subsequent appends may relocate the emission buffer. */
-static bool emit_resume_label_used(CBuffer *buffer, size_t first, size_t end,
-    const char *reference, size_t length) {
-    if (end < first || end > buffer->length) {
-        emit_reject(buffer, XR_XIR_BAD_STRUCTURE);
-        return false;
-    }
-    for (size_t at = first; length <= end - at && emit_work(buffer, 1); ++at) {
-        bool equal = true;
-        for (size_t byte = 0; byte < length; ++byte) {
-            if (!emit_work(buffer, 2)) return false;
-            if (buffer->text[at + byte] != reference[byte]) { equal = false; break; }
-        }
-        if (equal) return true;
-    }
-    return false;
-}
 static void emit_resume_chunks(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *prefix, uint32_t index) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
@@ -974,12 +958,15 @@ static void emit_resume_chunks(CBuffer *buffer, const XrXirArtifact *artifact,
         uint32_t end = first + count;
         append(buffer, "static XR_NOINLINE XrXirAction %s_step_%u_%u(XrXirCallView *view, %s_state_%u *state) {\n"
             "    (void) view;\n    switch (state->pc) {\n", prefix, index, first / EMIT_RESUME_CHUNK_INSTRUCTIONS, prefix, index);
-        size_t body_begin = buffer->length;
+        if (!emit_work(buffer, 5)) return;
+        buffer->tracking = true;
+        buffer->label_match[0] = buffer->label_match[1] = 0;
+        buffer->label_used[0] = buffer->label_used[1] = false;
         for (uint32_t i = first; i < end && emit_work(buffer, 1); ++i)
             emit_resume_step(buffer, module, function, layout, i);
-        size_t body_end = buffer->length;
-        bool invalid = emit_resume_label_used(buffer, body_begin, body_end, "goto invalid;", sizeof("goto invalid;") - 1);
-        bool limit = emit_resume_label_used(buffer, body_begin, body_end, "goto limit;", sizeof("goto limit;") - 1);
+        if (!emit_work(buffer, 3)) return;
+        bool invalid = buffer->label_used[0], limit = buffer->label_used[1];
+        buffer->tracking = false;
         if (invalid) append(buffer, "    default: goto invalid;\n    }\ninvalid:\n");
         else append(buffer, "    default: break;\n    }\n");
         append(buffer, "    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
@@ -988,6 +975,58 @@ static void emit_resume_chunks(CBuffer *buffer, const XrXirArtifact *artifact,
         append(buffer, "}\n");
         first = end;
     }
+}
+
+static void emit_resume_inbox_helper(CBuffer *buffer, const char *prefix) {
+    append(buffer,
+        "static XR_NOINLINE bool %s_accept_inbox(XrXirCallView *view, unsigned char *frame,\n"
+        "    uint32_t *pc, uint32_t *destination, uint32_t *expected, uint32_t normal_pc,\n"
+        "    uint32_t error_pc, uint32_t error_destination, bool *invoking, bool discard,\n"
+        "    XrXirAction *terminal) {\n"
+        "    XrXirValue inbox = view->inbox.value;\n"
+        "    bool discarded = false;\n"
+        "    if (*invoking) {\n"
+        "        bool error = view->inbox.status == XR_XIR_CALL_THROWN;\n"
+        "        if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
+        "        *pc = error ? error_pc : normal_pc;\n"
+        "        *invoking = false;\n"
+        "        if (error) {\n"
+        "            *expected = XR_XIR_ERROR;\n"
+        "            *destination = error_destination;\n"
+        "            inbox.type = XR_XIR_ERROR;\n"
+        "        } else if (discard) {\n"
+        "            if (xr_xir_call_discard_inbox(view, (XrXirType)*expected) != XR_XIR_CALL_READY)\n"
+        "                goto invalid;\n"
+        "            discarded = true;\n"
+        "        }\n"
+        "    } else if (view->inbox.status == XR_XIR_CALL_THROWN) {\n"
+        "        *terminal = (XrXirAction){XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}, 0};\n"
+        "        return true;\n"
+        "    }\n"
+        "    if (!discarded) {\n"
+        "        if (view->inbox.status != XR_XIR_CALL_RETURNED && view->inbox.status != XR_XIR_CALL_THROWN)\n"
+        "            goto invalid;\n"
+        "        if (*expected == XR_XIR_UNIT) {\n"
+        "            if (inbox.type || inbox.reserved || inbox.payload) goto invalid;\n"
+        "        } else if (!xr_xir_value_argument(&inbox, view->arena, (XrXirType)*expected))\n"
+        "            goto invalid;\n"
+        "        if (xr_xir_type_is_owned(xr_xir_compile_type_arena_types(view->arena), (XrXirType)*expected)) {\n"
+        "            if (xr_xir_owned_slot_copy(frame, *destination, view->arena,\n"
+        "                    (XrXirType)*expected, inbox.payload) != XR_XIR_VALUE_OK) goto limit;\n"
+        "        } else if (*destination != UINT32_MAX) {\n"
+        "            xr_xir_scalar_store(frame, *destination, inbox.payload);\n"
+        "        }\n"
+        "    }\n"
+        "    return false;\n"
+        "invalid:\n"
+        "    *terminal = (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n"
+        "    return true;\n"
+        "limit:\n"
+        "    *terminal = (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,\n"
+        "        {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};\n"
+        "    return true;\n"
+        "}\n"
+        , prefix);
 }
 
 static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
@@ -1012,6 +1051,10 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
     bool chunked = function->instruction_count > EMIT_RESUME_CHUNK_INSTRUCTIONS;
     if (chunked) emit_resume_chunks(buffer, artifact, prefix, index);
+    if (!emit_work(buffer, 5)) return;
+    buffer->tracking = true;
+    buffer->label_match[0] = buffer->label_match[1] = 0;
+    buffer->label_used[0] = buffer->label_used[1] = false;
     append(buffer, "XR_FUNC XrXirAction %s_f%u(XrXirCallView *view) {\n"
            "    %s_state_%u *state = view->state;\n", prefix, index, prefix, index);
     emit_cleanup_entry(buffer, function, layout);
@@ -1042,29 +1085,11 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "            return xr_xir_instance_panic_land(view, state->frame, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
            "{XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0}, state->panic_destination, panic_pc, &state->pc);\n"
            "        }\n"
-           "        XrXirValue inbox = view->inbox.value;\n"
-           "        bool discarded = false;\n"
-           "        if (state->invoking) {\n"
-           "            bool error = view->inbox.status == XR_XIR_CALL_THROWN;\n"
-           "            if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
-           "            state->pc = error ? state->error_pc : state->normal_pc; state->invoking = false;\n"
-           "            if (error) { state->expected = XR_XIR_ERROR; state->destination = state->error_destination; inbox.type = XR_XIR_ERROR; }\n"
-           "            else if (state->discard) {\n"
-           "                if (xr_xir_call_discard_inbox(view, (XrXirType)state->expected) != XR_XIR_CALL_READY) goto invalid;\n"
-           "                discarded = true;\n            }\n"
-           "        } else if (view->inbox.status == XR_XIR_CALL_THROWN)\n"
-           "            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}, 0};\n"
-           "        if (!discarded) {\n"
-           "        if (view->inbox.status != XR_XIR_CALL_RETURNED && view->inbox.status != XR_XIR_CALL_THROWN) goto invalid;\n"
-           "        if (state->expected == XR_XIR_UNIT) {\n"
-           "            if (inbox.type || inbox.reserved || inbox.payload) goto invalid;\n"
-           "        } else if (!xr_xir_value_argument(&inbox, view->arena, (XrXirType) state->expected)) goto invalid;\n"
-           "        if (xr_xir_type_is_owned(xr_xir_compile_type_arena_types(view->arena), (XrXirType) state->expected)) {\n"
-           "            if (xr_xir_owned_slot_copy(state->frame, state->destination, view->arena, (XrXirType) state->expected, inbox.payload) "
-           "!= XR_XIR_VALUE_OK) goto limit;\n"
-           "        } else if (state->destination != UINT32_MAX)\n"
-           "            xr_xir_scalar_store(state->frame, state->destination, inbox.payload);\n"
-           "        }\n    }\n");
+           "        XrXirAction inbox_action = {0};\n"
+           "        if (%s_accept_inbox(view, state->frame, &state->pc, &state->destination,\n"
+           "                &state->expected, state->normal_pc, state->error_pc, state->error_destination,\n"
+           "                &state->invoking, state->discard, &inbox_action)) return inbox_action;\n"
+           "    }\n", prefix);
     if (chunked) {
         append(buffer, "    switch (state->pc / %uu) {\n", EMIT_RESUME_CHUNK_INSTRUCTIONS);
         uint32_t chunks = (function->instruction_count - 1) / EMIT_RESUME_CHUNK_INSTRUCTIONS + 1;
@@ -1075,9 +1100,14 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
         for (uint32_t i = 0; i < function->instruction_count && emit_work(buffer, 1); ++i)
             emit_resume_step(buffer, module, function, layout, i);
     }
+    if (!emit_work(buffer, 2)) return;
+    bool limit = buffer->label_used[1];
+    buffer->tracking = false;
     append(buffer, "    default: break;\n    }\ninvalid:\n"
-           "    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n"
-           "limit:\n    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};\n}\n");
+           "    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
+    if (limit) append(buffer,
+           "limit:\n    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};\n");
+    append(buffer, "}\n");
     append(buffer, "static void %s_release_%u(XrXirCallView *view, XrXirCallStatus reason) {\n"
            "    (void) reason; (void) view;\n", prefix, index);
     if (layout->owned_count) {
@@ -1287,17 +1317,11 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
         prefix, prefix, prefix, prefix);
 }
 
-XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const char *symbol_prefix,
-                        size_t byte_limit, XrXirCSource *output) {
-    if (!output || output->text || output->length) return XR_XIR_BAD_STRUCTURE;
+/* Sizing and writing traverse the same immutable Lowered artifact. */
+static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
+    const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
-    CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types, xr_xir_compile_artifact_context(artifact)};
-    if (!symbol_prefix_valid(&buffer, symbol_prefix))
-        return buffer.status == XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : buffer.status;
-    XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
-    if (status != XR_XIR_OK) return status;
-    append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+    append(buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
@@ -1308,7 +1332,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const c
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
-    append(&buffer,
+    append(buffer,
            "_Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8, \"XIR fault layout\");\n"
            "_Static_assert(offsetof(XrXirFaultDetail, index) == 8 && offsetof(XrXirFaultDetail, length) == 16, \"XIR fault offsets\");\n"
            "_Static_assert(sizeof(XrXirPanicPayload) == 40 && _Alignof(XrXirPanicPayload) == 8, \"XIR panic layout\");\n"
@@ -1319,27 +1343,56 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const c
            "_Static_assert(sizeof(XrXirCallResult) == 72 && _Alignof(XrXirCallResult) == 8, \"XIR result layout\");\n"
            "_Static_assert(offsetof(XrXirCallResult, value) == 8 && offsetof(XrXirCallResult, wake) == 24 && "
            "offsetof(XrXirCallResult, panic) == 32, \"XIR result offsets\");\n");
-    for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f)
-        emit_resume_function(&buffer, artifact, symbol_prefix, f);
-    append(&buffer, "XR_DATADEF const XrXirCallEntry %s_entries[] = {\n", symbol_prefix);
-    for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f) {
+    if (module->function_count) emit_resume_inbox_helper(buffer, symbol_prefix);
+    for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)
+        emit_resume_function(buffer, artifact, symbol_prefix, f);
+    append(buffer, "XR_DATADEF const XrXirCallEntry %s_entries[] = {\n", symbol_prefix);
+    for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f) {
         const XrXirFunction *function = &module->functions[f];
-        append(&buffer, "    {XR_XIR_CALL_ABI_VERSION, ");
-        if (function->parameter_count) append(&buffer, "%s_parameters_%u", symbol_prefix, f);
-        else append(&buffer, "NULL");
+        append(buffer, "    {XR_XIR_CALL_ABI_VERSION, ");
+        if (function->parameter_count) append(buffer, "%s_parameters_%u", symbol_prefix, f);
+        else append(buffer, "NULL");
         uint32_t owner = 0, flags = 0;
         if (module->declarations) {
             owner = module->declarations->functions[f].cleanup_owner;
-            for (uint32_t child = f + 1; child < module->function_count && emit_work(&buffer, 1); ++child)
+            for (uint32_t child = f + 1; child < module->function_count && emit_work(buffer, 1); ++child)
                 if (module->declarations->functions[child].cleanup_owner == f + 1) flags = XR_XIR_ENTRY_EXIT;
         }
-        append(&buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_release_%u, NULL, %uu, %uu},\n",
+        append(buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_release_%u, NULL, %uu, %uu},\n",
                function->parameter_count, (uint32_t) function->result, symbol_prefix, f, symbol_prefix, f,
                symbol_prefix, f, flags, owner);
     }
-    append(&buffer, "};\n");
-    emit_program(&buffer, artifact, symbol_prefix);
-    if (buffer.status != XR_XIR_OK) {
+    append(buffer, "};\n");
+    emit_program(buffer, artifact, symbol_prefix);
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const char *symbol_prefix,
+                        size_t byte_limit, XrXirCSource *output) {
+    if (!output || output->text || output->length) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    CBuffer buffer = {.limit = byte_limit, .status = XR_XIR_OK,
+        .types = module->types, .context = xr_xir_compile_artifact_context(artifact)};
+    if (!symbol_prefix_valid(&buffer, symbol_prefix))
+        return buffer.status == XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : buffer.status;
+    XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
+    if (status != XR_XIR_OK) return status;
+    CBuffer measured = buffer;
+    measured.measuring = true;
+    emit_native_unit(&measured, artifact, symbol_prefix);
+    if (measured.status != XR_XIR_OK) return measured.status;
+    size_t planned = measured.length;
+    void *memory = NULL;
+    buffer.status = xir_compile_resource_status(
+        xr_compile_resources_alloc(buffer.context->resources, planned + 1, &memory));
+    if (buffer.status != XR_XIR_OK) return buffer.status;
+    buffer.text = memory;
+    buffer.capacity = planned + 1;
+    emit_native_unit(&buffer, artifact, symbol_prefix);
+    if (!emit_work(&buffer, 1) || buffer.length != planned) {
+        if (buffer.status == XR_XIR_OK) buffer.status = XR_XIR_BAD_STRUCTURE;
+    }
+    if (!emit_finalize(&buffer)) {
         xr_compile_resources_free(buffer.text);
         return buffer.status;
     }

@@ -114,13 +114,40 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
     return XR_COMPILE_RESOURCE_OK;
 }
 
+static XrCompileResourceStatus compile_work_locked(XrCompileResources *resources, uint64_t units) {
+    if (units > resources->limits.work - resources->stats.work) return XR_COMPILE_RESOURCE_BUDGET;
+    resources->stats.work += units;
+    return XR_COMPILE_RESOURCE_OK;
+}
+
 XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources, uint64_t units) {
     if (!resources) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     compile_lock(resources);
-    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BUDGET;
-    if (units <= resources->limits.work - resources->stats.work) {
-        resources->stats.work += units;
-        status = XR_COMPILE_RESOURCE_OK;
+    XrCompileResourceStatus status = compile_work_locked(resources, units);
+    compile_unlock(resources);
+    return status;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,
+    const char *source, size_t length, unsigned char delimiter, size_t *advanced, bool *found) {
+    if (!resources || (!source && length) || length > 64 || !advanced || !found)
+        return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    size_t position = 0;
+    bool matched = false;
+    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_OK;
+    compile_lock(resources);
+    while (position < length) {
+        status = compile_work_locked(resources, 1);
+        if (status != XR_COMPILE_RESOURCE_OK) break;
+        unsigned char value = (unsigned char) source[position];
+        if (value == delimiter) { matched = true; break; }
+        status = compile_work_locked(resources, 1);
+        if (status != XR_COMPILE_RESOURCE_OK) break;
+        ++position;
+    }
+    if (status == XR_COMPILE_RESOURCE_OK) {
+        *advanced = position;
+        *found = matched;
     }
     compile_unlock(resources);
     return status;

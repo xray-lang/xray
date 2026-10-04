@@ -7,7 +7,7 @@
  * xxir_emit_buffer.inc.c - C emission with charged byte reads and writes
  *
  * KEY CONCEPT:
- *   The small format vocabulary has no unbounded measuring pass or allocator.
+ *   Both sizing and writing consume the same finite ledger and byte bound.
  */
 typedef struct CBuffer {
     char *text;
@@ -15,6 +15,9 @@ typedef struct CBuffer {
     XrXirStatus status;
     const XrXirTypes *types;
     const XrXirCompileContext *context;
+    bool measuring, tracking;
+    unsigned label_match[2];
+    bool label_used[2];
 } CBuffer;
 
 static bool emit_work(CBuffer *buffer, uint64_t units) {
@@ -23,10 +26,51 @@ static bool emit_work(CBuffer *buffer, uint64_t units) {
     buffer->status = XR_XIR_BUDGET;
     return false;
 }
+/* The tracked patterns have no overlapping prefix other than their first
+ * byte. Match the emitted chunk itself, without storing a second byte stream. */
+static bool emit_label_byte(CBuffer *buffer, char byte) {
+    static const char *const references[2] = { /* owned: static string literals */
+        "goto invalid;", "goto limit;"
+    };
+    static const unsigned lengths[2] = {sizeof("goto invalid;") - 1, sizeof("goto limit;") - 1};
+    if (!buffer->tracking) return true;
+    if (!emit_work(buffer, 2)) return false;
+    if (!buffer->label_match[0] && !buffer->label_match[1] && byte != 'g') return true;
+    for (unsigned i = 0; i < 2; ++i) {
+        if (!emit_work(buffer, 1)) return false;
+        if (buffer->label_used[i]) continue;
+        if (!emit_work(buffer, 2)) return false;
+        unsigned match = buffer->label_match[i];
+        if (byte == references[i][match]) ++match;
+        else {
+            if (!emit_work(buffer, 1)) return false;
+            match = byte == references[i][0] ? 1u : 0u;
+        }
+        if (!emit_work(buffer, 2)) return false;
+        bool used = match == lengths[i];
+        buffer->label_match[i] = used ? 0 : match;
+        buffer->label_used[i] = used;
+        if (used) {
+            if (!emit_work(buffer, 2)) return false;
+            if (buffer->label_used[0] && buffer->label_used[1]) {
+                if (!emit_work(buffer, 1)) return false;
+                buffer->tracking = false;
+                return true;
+            }
+        }
+    }
+    return true;
+}
 static void emit_byte(CBuffer *buffer, char byte) {
     if (buffer->status != XR_XIR_OK) return;
     if (buffer->length > buffer->limit || buffer->limit - buffer->length < 2) {
         buffer->status = XR_XIR_BUDGET;
+        return;
+    }
+    if (buffer->measuring) {
+        if (!emit_work(buffer, 1)) return;
+        ++buffer->length;
+        (void) emit_label_byte(buffer, byte);
         return;
     }
     size_t required = buffer->length + 2;
@@ -45,9 +89,21 @@ static void emit_byte(CBuffer *buffer, char byte) {
         buffer->text = memory;
         buffer->capacity = capacity;
     }
-    if (!emit_work(buffer, 2)) return;
+    if (!emit_work(buffer, 1)) return;
     buffer->text[buffer->length++] = byte;
+    (void) emit_label_byte(buffer, byte);
+}
+/* Until this single final write, callers borrow only the initialized length.
+ * Measuring emits no storage and never pays for a fictitious terminator. */
+static bool emit_finalize(CBuffer *buffer) {
+    if (buffer->status != XR_XIR_OK) return false;
+    if (buffer->measuring || !buffer->text || buffer->length >= buffer->capacity || buffer->length >= buffer->limit) {
+        buffer->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    if (!emit_work(buffer, 1)) return false;
     buffer->text[buffer->length] = 0;
+    return true;
 }
 static bool emit_format_read(CBuffer *buffer, const char **cursor, char *byte) {
     if (!emit_work(buffer, 1)) return false;

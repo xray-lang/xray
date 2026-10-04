@@ -28,11 +28,12 @@ int main(int argc, char **argv) {
     CHECK(!source.text && !source.length);
     CHECK(xr_xir_compile_emit_leaf_c(artifact, "fixture", 1048576, &source) == XR_XIR_OK);
     xr_xir_compile_artifact_free(artifact);
-    CHECK(source.length == strlen(source.text));
+    CHECK(source.text[source.length] == '\0' && source.length == strlen(source.text));
     CHECK(!strstr(source.text, "({"));
     XrXirArtifact *uninitialized = uninitialized_leaf_fixture(&scalar_owner.context);
     XrXirCSource extra = {0};
     CHECK(xr_xir_compile_emit_leaf_c(uninitialized, "uninitialized", 65536, &extra) == XR_XIR_OK);
+    CHECK(extra.text[extra.length] == '\0' && extra.length == strlen(extra.text));
     xr_xir_compile_artifact_free(uninitialized);
     if (argc == 2) {
         FILE *file = fopen(argv[1], "wb");

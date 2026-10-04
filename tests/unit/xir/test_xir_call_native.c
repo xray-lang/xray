@@ -86,6 +86,8 @@ static void native_invoke_allocation_failures(const XrXirCompileContext *context
     }
 }
 
+#include "xir_native_inbox_boundaries.inc.c"
+
 int main(void) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries, fixture_calls3_entries, fixture_calls4_entries, fixture_calls5_entries, fixture_calls6_entries, fixture_calls7_entries, fixture_calls8_entries, fixture_calls9_entries, fixture_calls10_entries, fixture_calls11_entries, fixture_calls12_entries, fixture_calls13_entries};
@@ -139,6 +141,7 @@ int main(void) {
     }
     CHECK(!runtime_live && !runtime_bytes);
     native_invoke_allocation_failures(&compiler.context, tables);
+    native_inbox_boundaries(&compiler.context);
     source_fixture_owner_free(&compiler);
     puts("Native resumable calls, error propagation, cancellation and physical release passed");
     return 0;

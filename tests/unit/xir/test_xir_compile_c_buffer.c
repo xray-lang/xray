@@ -63,13 +63,15 @@ static XrCompileResourceStats stats(const XrXirCompileContext *context) {
 static void formatting(void) {
     reset_observer();
     XrXirCompileContext context = context_new(UINT64_MAX);
-    CBuffer first = {NULL, 0, 0, 512, XR_XIR_OK, NULL, &context};
+    CBuffer first = {.limit = 512, .status = XR_XIR_OK, .context = &context};
     append(&first, "[%s] %d %u %llu %02x %%", "hello", INT_MIN, UINT_MAX, ULLONG_MAX, 9u);
+    CHECK(emit_finalize(&first));
     CHECK(first.status == XR_XIR_OK);
     const char expected[] = "[hello] -2147483648 4294967295 18446744073709551615 09 %";
     CHECK(first.length == sizeof(expected)-1 && !memcmp(first.text, expected, sizeof(expected)));
-    CBuffer second = {NULL, 0, 0, 32, XR_XIR_OK, NULL, &context};
+    CBuffer second = {.limit = 32, .status = XR_XIR_OK, .context = &context};
     append(&second, "%d|%02x|%u|%s", 0, 255u, 0u, "");
+    CHECK(emit_finalize(&second));
     CHECK(second.status == XR_XIR_OK && !strcmp(second.text, "0|ff|0|"));
     XrCompileResourceStats before = stats(&context);
     CHECK(before.allocation_count == 3 && live == 3);
@@ -82,18 +84,46 @@ static void formatting(void) {
 }
 static void exact_work(void) {
     /* Ledger creation 1, format bytes including NUL 5, one allocation 1,
-     * four output bytes plus NUL writes 8, two digit conversions 2 and
-     * two reverse-buffer reads 2: total 19, independent of C struct sizes. */
-    for (uint64_t limit = 18; limit <= 19; ++limit) {
+     * four real output writes 4, two digit conversions 2, two stack reads 2
+     * and the one final NUL write 1: total 16, independent of struct sizes. */
+    for (uint64_t limit = 15; limit <= 16; ++limit) {
         reset_observer();
         XrXirCompileContext context = context_new(limit);
-        CBuffer buffer = {NULL, 0, 0, 5, XR_XIR_OK, NULL, &context};
+        CBuffer buffer = {.limit = 5, .status = XR_XIR_OK, .context = &context};
         append(&buffer, "ab%u", 12u);
-        CHECK(buffer.status == (limit == 19 ? XR_XIR_OK : XR_XIR_BUDGET));
+        CHECK(buffer.status == XR_XIR_OK && buffer.length == 4 && !memcmp(buffer.text, "ab12", 4));
+        CHECK(stats(&context).work == 15);
+        buffer.text[buffer.length] = 'q';
+        CHECK(emit_finalize(&buffer) == (limit == 16));
+        CHECK(buffer.status == (limit == 16 ? XR_XIR_OK : XR_XIR_BUDGET));
         CHECK(stats(&context).work == limit);
-        if (limit == 19) CHECK(buffer.length == 4 && !memcmp(buffer.text, "ab12", 5));
+        if (limit == 16) CHECK(!memcmp(buffer.text, "ab12", 5));
+        else CHECK(buffer.text[buffer.length] == 'q' && !memcmp(buffer.text, "ab12", 4));
         xr_compile_resources_free(buffer.text);
         xr_compile_resources_release(context.resources);
+        CHECK(!live && !physical);
+    }
+}
+static void measured_work(void) {
+    /* Sizing emits four counted bytes but no allocation or NUL: creation1
+     * plus format5, four length advances, conversion2 and stack reads2=14.
+     * Real formatting adds14; the only actual final NUL makes total29. */
+    for (uint64_t limit = 28; limit <= 29; ++limit) {
+        reset_observer();
+        XrXirCompileContext context = context_new(limit);
+        CBuffer measured = {.limit = 5, .status = XR_XIR_OK, .context = &context, .measuring = true};
+        append(&measured, "ab%u", 12u);
+        CHECK(measured.status == XR_XIR_OK && !measured.text && measured.length == 4 && !measured.capacity);
+        CHECK(stats(&context).work == 14 && stats(&context).allocation_count == 1);
+        CBuffer buffer = {.limit = 5, .status = XR_XIR_OK, .context = &context};
+        append(&buffer, "ab%u", 12u);
+        CHECK(buffer.status == XR_XIR_OK && buffer.length == measured.length && !memcmp(buffer.text, "ab12", 4));
+        CHECK(stats(&context).work == 28);
+        buffer.text[buffer.length] = 'q';
+        CHECK(emit_finalize(&buffer) == (limit == 29));
+        CHECK(stats(&context).work == limit);
+        CHECK(buffer.text[buffer.length] == (limit == 29 ? '\0' : 'q'));
+        xr_compile_resources_free(buffer.text); xr_compile_resources_release(context.resources);
         CHECK(!live && !physical);
     }
 }
@@ -101,7 +131,7 @@ static void charged_before_reads(void) {
     for (unsigned i = 0; i < 2; ++i) {
         reset_observer();
         XrXirCompileContext context = context_new(i ? 3 : 1);
-        CBuffer buffer = {NULL, 0, 0, 128, XR_XIR_OK, NULL, &context};
+        CBuffer buffer = {.limit = 128, .status = XR_XIR_OK, .context = &context};
         const char *unreadable = (const char *)(uintptr_t)1;
         if (i) append(&buffer, "%s", unreadable); else append(&buffer, unreadable);
         CHECK(buffer.status == XR_XIR_BUDGET && !buffer.text && !buffer.length);
@@ -119,8 +149,9 @@ static void growth_failures(void) {
         reset_observer();
         XrXirCompileContext context = context_new(UINT64_MAX);
         fail_at = failure;
-        CBuffer buffer = {NULL, 0, 0, 1024, XR_XIR_OK, NULL, &context};
+        CBuffer buffer = {.limit = 1024, .status = XR_XIR_OK, .context = &context};
         append(&buffer, "%s", input);
+        (void) emit_finalize(&buffer);
         if (failure == SIZE_MAX) {
             CHECK(buffer.status == XR_XIR_OK && buffer.length == 349 && !strcmp(buffer.text, input));
             allocation_count = attempts;
@@ -140,7 +171,7 @@ static void growth_failures(void) {
     }
 }
 int main(void) {
-    formatting(); exact_work(); charged_before_reads(); growth_failures();
-    puts("C formatting: fixed outputs, exact work 19/18, pre-read limits, three allocation OOMs, physical zero");
+    formatting(); exact_work(); measured_work(); charged_before_reads(); growth_failures();
+    puts("C formatting: fixed outputs, exact final-write work 16/15 and sizing+write 29/28, pre-read limits, three allocation OOMs, physical zero");
     return 0;
 }

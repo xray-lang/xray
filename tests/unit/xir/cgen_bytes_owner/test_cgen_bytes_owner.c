@@ -23,17 +23,19 @@ static void bytes_case(uint32_t count) {
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     size_t capacity=128+(size_t)count*7;
     char *storage=NULL;CHECK(xr_compile_resources_alloc(resources,capacity,(void **)&storage)==XR_COMPILE_RESOURCE_OK);
-    CBuffer buffer={storage,0,capacity,capacity,XR_XIR_OK,NULL,&context};
+    CBuffer buffer={.text=storage,.capacity=capacity,.limit=capacity,.status=XR_XIR_OK,.context=&context};
     XrCompileResourceStats before,after;
     xr_compile_resources_stats(resources,&before);
     emit_bytes(&buffer,input,count);
+    CHECK(emit_finalize(&buffer));
     xr_compile_resources_stats(resources,&after);
-    /* Plain append bytes cost one format read and two writes, plus the final
-     * format NUL. Hex consumes four format bytes; each numeric digit has one
-     * write and one read of its stack slot, then two output writes. */
-    uint64_t expected=3*38+1+3*7+1+16*((count+15)/16);
-    for(uint32_t i=0;i<count;++i)expected+=((unsigned char)input[i]<16 ? 21 : 23);
+    /* Each plain byte has one format read and one output write. Format NUL
+     * reads remain; each hex digit keeps its conversion and stack read. The
+     * complete byte expression receives one actual final NUL write. */
+    uint64_t expected=2*38+1+2*7+1+11*((count+15)/16)+1;
+    for(uint32_t i=0;i<count;++i)expected+=((unsigned char)input[i]<16 ? 16 : 18);
     CHECK(buffer.status==XR_XIR_OK && after.work-before.work==expected);
+    CHECK(buffer.length==45+5*(size_t)count+5*((count+15)/16) && buffer.text[buffer.length]=='\0');
     CHECK(strncmp(buffer.text,"(const char *)(const unsigned char[]){",38)==0);
     const char *cursor=buffer.text+38;
     for(uint32_t i=0;i<count;++i) {
@@ -49,9 +51,13 @@ static void bytes_case(uint32_t count) {
         CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
         context.resources=resources;storage=NULL;
         CHECK(xr_compile_resources_alloc(resources,capacity,(void **)&storage)==XR_COMPILE_RESOURCE_OK);
-        buffer=(CBuffer){storage,0,capacity,capacity,XR_XIR_OK,NULL,&context};
+        buffer=(CBuffer){.text=storage,.capacity=capacity,.limit=capacity,.status=XR_XIR_OK,.context=&context};
         emit_bytes(&buffer,input,count);
+        CHECK(buffer.status==XR_XIR_OK);
+        buffer.text[buffer.length]='q';
+        CHECK(emit_finalize(&buffer)==!minus);
         CHECK(buffer.status==(minus ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(buffer.text[buffer.length]==(minus ? 'q' : '\0'));
         xr_compile_resources_free(buffer.text);xr_compile_resources_release(resources);
         CHECK(!runtime_live && !runtime_bytes);
     }
@@ -86,10 +92,11 @@ static void public_output(void) {
     XrXirCSource output={0};runtime_attempts=0;
     CHECK(xr_xir_compile_emit_c(lowered,"bytes",1<<20,&output)==XR_XIR_OK);
     size_t required=output.length+1,sites=runtime_attempts;
+    CHECK(output.text[output.length]=='\0');
     CHECK(strstr(output.text,"0x78,0x00,0x78,") && strstr(output.text,"(const char *)(const unsigned char[]){"));
     xr_xir_compile_c_source_free(&output);CHECK(runtime_bytes==baseline);
     CHECK(xr_xir_compile_emit_c(lowered,"bytes",required,&output)==XR_XIR_OK);
-    CHECK(output.length+1==required);xr_xir_compile_c_source_free(&output);
+    CHECK(output.length+1==required && output.text[output.length]=='\0');xr_xir_compile_c_source_free(&output);
     CHECK(xr_xir_compile_emit_c(lowered,"bytes",required-1,&output)==XR_XIR_BUDGET);
     CHECK(!output.text && !output.length && runtime_bytes==baseline);
     char sentinel='q';output=(XrXirCSource){&sentinel,1};
@@ -114,7 +121,7 @@ static void allocation_failures(void) {
         XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
         CBuffer buffer={0};buffer.context=&context;buffer.limit=1<<20;
         runtime_attempts=0;runtime_fail_at=fault;
-        emit_bytes(&buffer,bytes,sizeof(bytes));runtime_fail_at=SIZE_MAX;
+        emit_bytes(&buffer,bytes,sizeof(bytes));(void)emit_finalize(&buffer);runtime_fail_at=SIZE_MAX;
         if(fault==SIZE_MAX) {CHECK(buffer.status==XR_XIR_OK);sites=runtime_attempts;}
         else CHECK(buffer.status==XR_XIR_OUT_OF_MEMORY);
         xr_compile_resources_free(buffer.text);xr_compile_resources_release(resources);

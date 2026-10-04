@@ -24,12 +24,14 @@ _Static_assert(_Generic(&xr_compile_cgen_verify_output_or_ice, IcePrototype: 1, 
 
 typedef struct Allocation { void *pointer; size_t bytes; } Allocation;
 static Allocation allocations[32];
-static size_t calls, live, physical, fail_at = SIZE_MAX;
+static size_t calls, live, physical, physical_peak, fail_at = SIZE_MAX;
 static void *counted_malloc(size_t bytes) {
     if (calls++ == fail_at) return NULL;
     void *memory = xr_malloc(bytes); if (!memory) return NULL;
     for (size_t i = 0; i < 32; ++i) if (!allocations[i].pointer) {
-        allocations[i] = (Allocation){memory, bytes}; ++live; physical += bytes; return memory;
+        allocations[i] = (Allocation){memory, bytes}; ++live; physical += bytes;
+        if (physical > physical_peak) physical_peak = physical;
+        return memory;
     }
     CHECK(false); return NULL;
 }
@@ -80,14 +82,16 @@ static XiCgenVerifyResult poisoned(void) {
 
 static void formula(bool c90, const char *source, size_t length) {
     const uint64_t diagnostic = sizeof(XiCgenVerifyCategory) + sizeof(int) + 256;
-    const uint64_t scratch = sizeof(void *) + sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
+    const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
     CHECK(diagnostic == sizeof(XiCgenVerifyResult));
     uint64_t allocated = sizeof(OracleLedger) + sizeof(OracleHeader) + (c90 ? diagnostic : scratch);
-    if (!c90) allocated += sizeof(OracleHeader) + length;
+    const uint64_t mask_bytes = (length + 7) / 8;
+    if (!c90) allocated += 2 * sizeof(OracleHeader) + mask_bytes + 1;
     /* Quoted C90: one allocation, n loop steps, 2n-1 byte reads, publication.
-     * Newline-only W1-W4: scratch zero, two allocations, n copy bytes,
-     * 3n-1 lexical operations, n line steps and n delimiter reads. */
-    uint64_t work = 1 + (c90 ? 3 * length + diagnostic : scratch + diagnostic + 6 * length + 1);
+     * Newline-only W1-W4: scratch and mask zero, three allocations,
+     * 2n lexical operations, n line steps, n copies and n delimiter reads.
+     * Empty physical lines need no mask reads and one scratch byte. */
+    uint64_t work = 1 + (c90 ? 3 * length + diagnostic : scratch + diagnostic + mask_bytes + 5 * length + 3);
     VerifyPrototype verify = c90 ? xr_compile_cgen_verify_c90_output : xr_compile_cgen_verify_output;
     for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
         XrCompileResourceLimits limits = unlimited;
@@ -95,6 +99,7 @@ static void formula(bool c90, const char *source, size_t length) {
         if (dimension == 1) limits.live_bytes = allocated - minus;
         if (dimension == 2) limits.work = work - minus;
         XrCompileResources *resources = ledger(limits);
+        physical_peak = physical;
         XiCgenVerifyResult result = poisoned(), saved = result;
         CHECK(verify(resources, source, length, &result) == (minus ? XI_CGEN_VERIFY_BUDGET : XI_CGEN_VERIFY_PASSED));
         XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
@@ -102,7 +107,8 @@ static void formula(bool c90, const char *source, size_t length) {
         else {
             CHECK(result.category == XI_CGEN_VERIFY_OK);
             CHECK(stats.allocated_bytes == allocated && stats.peak_bytes == allocated);
-            CHECK(stats.work == work && stats.allocation_count == (c90 ? 2u : 3u));
+            CHECK(physical_peak == allocated);
+            CHECK(stats.work == work && stats.allocation_count == (c90 ? 2u : 4u));
         }
         CHECK(stats.live_bytes == sizeof(OracleLedger)); release(resources);
     }
@@ -137,11 +143,12 @@ static void comparison_formula(void) {
     const uint64_t detail_length = sizeof("C11 _Atomic residue") - 1;
     const uint64_t bytes = sizeof(OracleLedger) + sizeof(OracleHeader) + diagnostic;
     /* Ledger, allocation, scan step, two lookahead bytes, first mismatching
-     * inline byte, table step, keyword including NUL, seven equal bytes.
+     * inline byte, table step, seven equal bytes; static keyword lengths
+     * require no runtime character scan.
      * The local diagnostic clears D bytes and stores its two scalar fields;
      * %s scans three format bytes and L+1 text bytes, writes L+1 bytes, then
      * publishes the complete D-byte result. */
-    const uint64_t work = 1 + 1 + 1 + 2 + 1 + 1 + 8 + 7 + diagnostic +
+    const uint64_t work = 1 + 1 + 1 + 2 + 1 + 1 + 7 + diagnostic +
         sizeof(XiCgenVerifyCategory) + sizeof(int) + 2 * detail_length + 5 + diagnostic;
     for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
         XrCompileResourceLimits limits = unlimited;
@@ -204,7 +211,7 @@ static void allocation_failures(void) {
     const char source[] = "void f(void) {\n int v0=1;\n int v2048=2;\n int v4096=3;\n return;\n}\n";
     XrCompileResources *resources = ledger(unlimited); size_t before = calls; XiCgenVerifyResult result;
     CHECK(xr_compile_cgen_verify_output(resources, source, sizeof(source) - 1, &result) == XI_CGEN_VERIFY_PASSED);
-    size_t points = calls - before; CHECK(points == 5); release(resources);
+    size_t points = calls - before; CHECK(points == 6); release(resources);
     for (size_t point = 0; point < points; ++point) for (unsigned wrapper = 0; wrapper < 2; ++wrapper) {
         resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
         fail_at = calls + point;
@@ -216,14 +223,16 @@ static void allocation_failures(void) {
     resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
     fail_at = calls; CHECK(xr_compile_cgen_verify_c90_output(resources, "\"x\"", 3, &result) == XI_CGEN_VERIFY_OUT_OF_MEMORY);
     CHECK(!memcmp(&result, &saved, sizeof(result))); fail_at = SIZE_MAX; release(resources);
-    puts("verifier allocator failures: five real W1-W4 points and one C90 point, physical zero");
+    puts("verifier allocator failures: six real W1-W4 points and one C90 point, physical zero");
 }
 
 static void growth_formula(void) {
     const char source[] = "void f(void) {\n int v0=1;\n int v2048=2;\n int v4096=3;\n return;\n}\n";
     const uint64_t diagnostic = sizeof(XiCgenVerifyCategory) + sizeof(int) + 256;
-    const uint64_t scratch = sizeof(void *) + sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
-    const uint64_t fixed = sizeof(OracleLedger) + 2 * sizeof(OracleHeader) + scratch + sizeof(source) - 1;
+    const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
+    const uint64_t longest_line = sizeof("void f(void) {\n") - 1; CHECK(longest_line == 15);
+    const uint64_t mask_bytes = (sizeof(source) - 1 + 7) / 8;
+    const uint64_t fixed = sizeof(OracleLedger) + 3 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line;
     /* Definitions grow the seen bytes from 1024 to 4096 to 8192. All three
      * allocations are cumulative; the two largest coexist during resize. */
     const uint64_t cumulative = fixed + 3 * sizeof(OracleHeader) + 1024 + 4096 + 8192;
@@ -238,7 +247,7 @@ static void growth_formula(void) {
         if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
         else {
             XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 6);
+            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 7);
             CHECK(stats.live_bytes == sizeof(OracleLedger));
         }
         release(resources);
@@ -258,6 +267,161 @@ static void failed_work_preserves_diagnostic(VerifyPrototype verify, const char 
         CHECK(!memcmp(&result, &saved, sizeof(result))); release(resources);
     }
     printf("all %llu incomplete work limits preserve diagnostic bytes\n", (unsigned long long)(stats.work - 1));
+}
+
+static void line_scratch_boundaries(void) {
+    static const struct {
+        const char *source, *message;
+        XiCgenVerifyCategory category;
+        int line;
+    } cases[] = {
+        {"/* first\n } ) ../\n */\nvoid f(void) {\n return;\n}\n", "", XI_CGEN_VERIFY_OK, 0},
+        {"static const char *s = \"{\n../ ) }\";\n", "", XI_CGEN_VERIFY_OK, 0},
+        {"static const char *s = \"{\\\n../ ) }\";\n", "", XI_CGEN_VERIFY_OK, 0},
+        {"static int c = '\\\n(';\n", "", XI_CGEN_VERIFY_OK, 0},
+        {"/*\r\n } ) ../\r\n */\r\nstatic int x;", "", XI_CGEN_VERIFY_OK, 0},
+        {"return pkg/../x;\n}\n/* unfinished", "unterminated block comment", XI_CGEN_VERIFY_W1_BALANCE, 3},
+        {"return pkg/../x;\n}\n\"unfinished", "unterminated string literal", XI_CGEN_VERIFY_W1_BALANCE, 3},
+        {"static const char *s = \"ok\"; // tail", "", XI_CGEN_VERIFY_OK, 0},
+    };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        size_t length = strlen(cases[i].source), before = calls;
+        XrCompileResources *resources = ledger(unlimited);
+        XiCgenVerifyResult result = poisoned();
+        CHECK(xr_compile_cgen_verify_output(resources, cases[i].source, length, &result) ==
+            (cases[i].category == XI_CGEN_VERIFY_OK ? XI_CGEN_VERIFY_PASSED : XI_CGEN_VERIFY_MALFORMED));
+        CHECK(result.category == cases[i].category && result.line == cases[i].line);
+        CHECK(!strcmp(result.message, cases[i].message));
+        XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        CHECK(stats.live_bytes == sizeof(OracleLedger));
+        size_t points = calls - before - 1; CHECK(points); release(resources);
+        for (size_t point = 0; point < points; ++point) {
+            resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
+            fail_at = calls + point;
+            CHECK(xr_compile_cgen_verify_output(resources, cases[i].source, length, &result) == XI_CGEN_VERIFY_OUT_OF_MEMORY);
+            CHECK(!memcmp(&result, &saved, sizeof(result)));
+            fail_at = SIZE_MAX; release(resources);
+        }
+        for (uint64_t work = 1; work < stats.work; ++work) {
+            XrCompileResourceLimits limits = unlimited; limits.work = work;
+            resources = ledger(limits); result = poisoned(); XiCgenVerifyResult saved = result;
+            CHECK(xr_compile_cgen_verify_output(resources, cases[i].source, length, &result) == XI_CGEN_VERIFY_BUDGET);
+            CHECK(!memcmp(&result, &saved, sizeof(result))); release(resources);
+        }
+    }
+    static char many_lines[4096]; memset(many_lines, '\n', sizeof(many_lines));
+    formula(false, many_lines, sizeof(many_lines));
+    puts("cross-line lexical priority, every work cut, OOM and small physical scratch passed");
+}
+
+static void w4_token_boundaries(void) {
+    static const struct {
+        const char *source;
+        XiCgenVerifyCategory category;
+        int line;
+        const char *message;
+    } cases[] = {
+        {"void f(void) {\n return foo_v3 + av3 + v3abc + v3_ + v3v4 + 1v3;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n return state->v3 + object.v4;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n int v0=1;\n int v1=2;\n return v0+v1;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n return v3; int v3=1;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n return v3abc + v4;\n}\n", XI_CGEN_VERIFY_W4_FORWARD_REF, 2, "temporary v4 used before it is defined"},
+        {"void f(void) {\n return v3_ + v5;\n}\n", XI_CGEN_VERIFY_W4_FORWARD_REF, 2, "temporary v5 used before it is defined"},
+        {"void f(void) {\n return state->v3 + v6;\n}\n", XI_CGEN_VERIFY_W4_FORWARD_REF, 2, "temporary v6 used before it is defined"},
+        {"void f(void) {\n int v0=0, v1=1, v2=2, v3=3, v4=4, v5=5, v6=6, v7=7, v8=8, v9=9, v10=10, v11=11, v12=12, v13=13, v14=14, v15=15, v16=16, v17=17, v18=18, v19=19, v20=20, v21=21, v22=22, v23=23, v24=24, v25=25, v26=26, v27=27, v28=28, v29=29, v30=30, v31=31, v32=32, v33=33, v34=34, v35=35, v36=36, v37=37, v38=38, v39=39, v40=40, v41=41, v42=42, v43=43, v44=44, v45=45, v46=46, v47=47, v48=48, v49=49, v50=50, v51=51, v52=52, v53=53, v54=54, v55=55, v56=56, v57=57, v58=58, v59=59, v60=60, v61=61, v62=62, v63=63;\n return v63;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n int v0=0, v1=1, v2=2, v3=3, v4=4, v5=5, v6=6, v7=7, v8=8, v9=9, v10=10, v11=11, v12=12, v13=13, v14=14, v15=15, v16=16, v17=17, v18=18, v19=19, v20=20, v21=21, v22=22, v23=23, v24=24, v25=25, v26=26, v27=27, v28=28, v29=29, v30=30, v31=31, v32=32, v33=33, v34=34, v35=35, v36=36, v37=37, v38=38, v39=39, v40=40, v41=41, v42=42, v43=43, v44=44, v45=45, v46=46, v47=47, v48=48, v49=49, v50=50, v51=51, v52=52, v53=53, v54=54, v55=55, v56=56, v57=57, v58=58, v59=59, v60=60, v61=61, v62=62, v63=63, v64=64;\n return v64;\n}\n", XI_CGEN_VERIFY_W4_FORWARD_REF, 3, "temporary v64 used before it is defined"},
+    };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        size_t length = strlen(cases[i].source);
+        XrCompileResources *resources = ledger(unlimited); size_t before = calls;
+        XiCgenVerifyResult result = poisoned();
+        CHECK(xr_compile_cgen_verify_output(resources, cases[i].source, length, &result) ==
+            (cases[i].category == XI_CGEN_VERIFY_OK ? XI_CGEN_VERIFY_PASSED : XI_CGEN_VERIFY_MALFORMED));
+        CHECK(result.category == cases[i].category && result.line == cases[i].line);
+        CHECK(!strcmp(result.message, cases[i].message));
+        size_t points = calls - before; CHECK(points); release(resources);
+        for (size_t point = 0; point < points; ++point) {
+            resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
+            fail_at = calls + point;
+            CHECK(xr_compile_cgen_verify_output(resources, cases[i].source, length, &result) == XI_CGEN_VERIFY_OUT_OF_MEMORY);
+            CHECK(!memcmp(&result, &saved, sizeof(result)));
+            fail_at = SIZE_MAX; release(resources);
+        }
+    }
+    failed_work_preserves_diagnostic(xr_compile_cgen_verify_output,
+        "void f(void) {\n return v3abc + v4;\n}\n");
+}
+
+static void uses_growth_formula(void) {
+    const char source[] = "void f(void) {\n int v0=7;\n return v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0;\n}\n";
+    const uint64_t diagnostic = sizeof(XiCgenVerifyCategory) + sizeof(int) + 256;
+    const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
+    const uint64_t longest_line = sizeof(" return v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0;\n") - 1;
+    const uint64_t mask_bytes = (sizeof(source) - 1 + 7) / 8;
+    const uint64_t fixed = sizeof(OracleLedger) + 3 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line;
+    /* One seen block stays live while the uses vector grows 16, 32, 64, 128.
+     * Only the last two vector blocks coexist; every allocation is cumulative. */
+    const uint64_t cumulative = fixed + 5 * sizeof(OracleHeader) + 1024 + (16 + 32 + 64 + 128) * sizeof(long);
+    const uint64_t peak = fixed + 3 * sizeof(OracleHeader) + 1024 + (64 + 128) * sizeof(long);
+    for (unsigned dimension = 0; dimension < 2; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
+        XrCompileResourceLimits limits = unlimited;
+        if (dimension == 0) limits.allocated_bytes = cumulative - minus;
+        else limits.live_bytes = peak - minus;
+        XrCompileResources *resources = ledger(limits); physical_peak = physical;
+        XiCgenVerifyResult result = poisoned(), saved = result;
+        CHECK(xr_compile_cgen_verify_output(resources, source, sizeof(source) - 1, &result) ==
+            (minus ? XI_CGEN_VERIFY_BUDGET : XI_CGEN_VERIFY_PASSED));
+        if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
+        else {
+            XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
+            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 9);
+            CHECK(physical_peak == peak && stats.live_bytes == sizeof(OracleLedger));
+        }
+        release(resources);
+    }
+}
+
+static void fused_line_vectors(void) {
+    static const struct {
+        const char *source;
+        XiCgenVerifyCategory category;
+        int line;
+        const char *message;
+    } cases[] = {
+        {"void f(void) {\n return v7 + v3; int v3=1; int v7=2;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n return v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3; int v3=7;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n int v3=7;\n return v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v9 + v8;\n}\n", XI_CGEN_VERIFY_W4_FORWARD_REF, 3, "temporary v9 used before it is defined"},
+        {"void f(void) {\n return v7 + v3; int v7=1;\n}\n", XI_CGEN_VERIFY_W4_FORWARD_REF, 2, "temporary v3 used before it is defined"},
+        {"void f(void) {\n const char *s=\"v8 ../ } (\"; /* v9 */\n int v3=7;\n return v3;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n return v8 + pkg/../oops;\n}\n", XI_CGEN_VERIFY_W2_IDENTIFIER, 2, "path fragment '../' in emitted code"},
+        {"void f(void) {\n return v8 + pkg/../oops; )\n}\n", XI_CGEN_VERIFY_W1_BALANCE, 2, "unbalanced ')' (closes with no matching '(')"},
+        {"void f(void) {\n return v8 + pkg/../oops;\n}\n/* late", XI_CGEN_VERIFY_W1_BALANCE, 4, "unterminated block comment"},
+        {"void f(void) {\n#if FEATURE\n return v9; )\n#endif\n#define v3 frame_slot\n return v3;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+        {"void f(void) {\n int v3=7;\n return v3;\n}\nvoid g(void) {\n return v3;\n}\n", XI_CGEN_VERIFY_W4_FORWARD_REF, 6, "temporary v3 used before it is defined"},
+        {"void f(void) {\n return v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3; int v3=7;\n return v3;\n}\n", XI_CGEN_VERIFY_OK, 0, ""},
+    };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        size_t length = strlen(cases[i].source);
+        XrCompileResources *resources = ledger(unlimited); size_t before = calls;
+        XiCgenVerifyResult result = poisoned();
+        CHECK(xr_compile_cgen_verify_output(resources, cases[i].source, length, &result) ==
+            (cases[i].category == XI_CGEN_VERIFY_OK ? XI_CGEN_VERIFY_PASSED : XI_CGEN_VERIFY_MALFORMED));
+        CHECK(result.category == cases[i].category && result.line == cases[i].line);
+        CHECK(!strcmp(result.message, cases[i].message));
+        size_t points = calls - before; CHECK(points); release(resources);
+        for (size_t point = 0; point < points; ++point) for (unsigned wrapper = 0; wrapper < 2; ++wrapper) {
+            resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
+            fail_at = calls + point;
+            XiCgenVerifyStatus status = wrapper ? xr_compile_cgen_verify_output_or_ice(resources, cases[i].source, length, "fused-oom") :
+                xr_compile_cgen_verify_output(resources, cases[i].source, length, &result);
+            CHECK(status == XI_CGEN_VERIFY_OUT_OF_MEMORY); CHECK(!memcmp(&result, &saved, sizeof(result)));
+            fail_at = SIZE_MAX; release(resources);
+        }
+    }
+    failed_work_preserves_diagnostic(xr_compile_cgen_verify_output,
+        "void f(void) {\n return v7 + v3; int v7=1;\n}\n");
+    failed_work_preserves_diagnostic(xr_compile_cgen_verify_output,
+        "void f(void) {\n int v3=7;\n return v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v9 + v8;\n}\n");
 }
 
 static void arguments_and_cumulative(void) {
@@ -295,6 +459,6 @@ int main(int argc, char **argv) {
     comparison_formula(); categories(); scan_semantics(); allocation_failures(); growth_formula();
     failed_work_preserves_diagnostic(xr_compile_cgen_verify_output, "void f(void) {\n return v31;\n}\n");
     failed_work_preserves_diagnostic(xr_compile_cgen_verify_c90_output, "_Atomic");
-    arguments_and_cumulative();
+    line_scratch_boundaries(); w4_token_boundaries(); uses_growth_formula(); fused_line_vectors(); arguments_and_cumulative();
     puts("neutral compiler verifier resources and independent formulas passed"); return 0;
 }
