@@ -47,7 +47,13 @@ static bool checked_read_work(CheckedCursor *c, size_t bytes) {
     return true;
 }
 static uint64_t checked_integer(CheckedCursor *c, uint64_t value, unsigned width) {
-    if (!checked_room(c, width) || !checked_read_work(c,width)) return 0;
+    if (!checked_room(c, width)) return 0;
+    if (!c->reading && !c->output) {
+        if (!checked_read_work(c,1)) return 0;
+        c->position += width;
+        return value;
+    }
+    if (!checked_read_work(c,width)) return 0;
     if (c->reading) value = 0;
     for (unsigned i = 0; i < width; ++i) {
         if (c->reading) value |= (uint64_t) c->input[c->position + i] << (8 * i);
@@ -83,7 +89,13 @@ static void *checked_array(CheckedCursor *c, const void *source, uint32_t count,
 }
 static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *length) {
     *length = checked_u32(c, *length);
-    if (!checked_room(c, *length) || !checked_read_work(c,*length)) return NULL;
+    if (!checked_room(c, *length)) return NULL;
+    if (!c->reading && !c->output) {
+        if (!checked_read_work(c,1)) return NULL;
+        c->position += *length;
+        return bytes;
+    }
+    if (!checked_read_work(c,*length)) return NULL;
     if (c->reading) {
         char *copy = checked_array(c, NULL, *length, 1, 1);
         if (*length && !copy) return NULL;
