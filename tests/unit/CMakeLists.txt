@@ -2720,7 +2720,11 @@ foreach(module_case IN ITEMS output failure suspend)
         LABELS "unit;aot;canonical-program;generated-c;native;generation;module;task-310")
 endforeach()
 
+include("xir/module_state_zero.cmake")
 foreach(module_scenario RANGE 0 13)
+    if(module_scenario EQUAL 0)
+        continue() # The identical target name is defined by the source-owned consumer.
+    endif()
     set(module_target test_xr_program_aot_module_state_${module_scenario})
     set(module_source ${XR_PROGRAM_AOT_FIXTURE_DIR}/module_state_${module_scenario}.c)
     add_custom_command(

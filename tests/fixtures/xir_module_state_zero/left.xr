@@ -1,0 +1,2 @@
+import { zero } from "./base"
+export fn left()->i64 { return zero() }

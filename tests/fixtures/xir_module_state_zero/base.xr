@@ -1,0 +1,3 @@
+const count=Atomic(40)
+export fn next()->i64 { return count.fetchAdd(1)+1 }
+export fn zero()->i64 { return 0 }
