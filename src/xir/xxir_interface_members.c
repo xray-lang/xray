@@ -41,6 +41,7 @@ typedef struct MemberContext {
     const XrXirTypes *source, *base;
     XrXirTypes types;
     uint32_t capacity, root_count, ambient_count;
+    bool nodes_owned;
     XrXirType *root_arguments;
     MemberMemory *memory;
     MemberApplication *applications, *tail;
@@ -127,10 +128,15 @@ static XrXirType member_node(MemberContext *c, XrXirTypeNode node) {
     if (c->types.count == limit) { c->status = XR_XIR_BUDGET; return XR_XIR_UNIT; }
     if (c->types.count == c->capacity) {
         uint32_t capacity = c->capacity > limit / 2 ? limit : c->capacity ? c->capacity * 2 : 8;
+        /* Materialize the borrowed prefix with a small tail for new descriptors. */
+        if (!c->nodes_owned && c->capacity) {
+            uint32_t tail = limit - c->capacity < 8 ? limit - c->capacity : 8;
+            capacity = c->capacity + tail;
+        }
         XrXirTypeNode *nodes = member_alloc(c, capacity, sizeof(*nodes));
         if (!nodes || !member_work(c, (uint64_t)c->types.count * sizeof(*nodes))) return XR_XIR_UNIT;
         if (c->types.count) memcpy(nodes, c->types.nodes, c->types.count * sizeof(*nodes));
-        c->types.nodes = nodes; c->capacity = capacity;
+        c->types.nodes = nodes; c->capacity = capacity; c->nodes_owned = true;
     }
     ((XrXirTypeNode *)c->types.nodes)[c->types.count] = node;
     return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + c->types.count++);
@@ -138,6 +144,27 @@ static XrXirType member_node(MemberContext *c, XrXirTypeNode node) {
 static void member_span(MemberContext *c, XrXirTypeNode *node, XrXirType child) {
     uint32_t span = xr_xir_type_span(&c->types, child);
     if (span > node->parameter_span) node->parameter_span = span;
+}
+/* A complete descent may leave the immutable source descriptor unchanged.
+ * Only identical pool IDs preserve its fields, flags and parameter modes. */
+static bool member_reuses_node(MemberContext *c, const MemberApplication *app,
+    const MemberTypeMap *map, const XrXirTypeNode *node) {
+    if (!member_work(c,1) || c->source != c->base) return false;
+    uint32_t count = node->kind == XR_XIR_TYPE_CALLABLE ? node->parameter_count + 1 :
+        node->kind == XR_XIR_TYPE_NOMINAL ? node->nominal.argument_count : 1;
+    uint32_t span = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!member_work(c,1)) return false;
+        XrXirType original = node->element;
+        if (node->kind == XR_XIR_TYPE_CALLABLE)
+            original = i == node->parameter_count ? node->result : node->parameters[i].type;
+        else if (node->kind == XR_XIR_TYPE_NOMINAL) original = node->nominal.arguments[i];
+        XrXirType actual = member_remap(c,app,map,original);
+        if (c->status != XR_XIR_OK || actual != original) return false;
+        uint32_t child_span = xr_xir_type_span(&c->types,actual);
+        if (child_span > span) span = child_span;
+    }
+    return span == node->parameter_span && c->status == XR_XIR_OK;
 }
 static XrXirType member_substitute_node(MemberContext *c, const MemberApplication *app,
     const MemberTypeMap *map, XrXirTypeNode node) {
@@ -186,7 +213,8 @@ static XrXirType member_resolve(MemberContext *c, const MemberApplication *app,
         uint32_t components = node->kind == XR_XIR_TYPE_NOMINAL ? node->nominal.argument_count :
             node->kind == XR_XIR_TYPE_CALLABLE ? node->parameter_count + 1 : 1;
         if (frame->next == components) {
-            result = member_substitute_node(c,app,map,*node);
+            result = member_reuses_node(c,app,map,node) ? frame->source :
+                member_substitute_node(c,app,map,*node);
             MemberTypeValue *value = member_alloc(c,1,sizeof(*value));
             if (!value) break;
             *value = (MemberTypeValue){map->values,frame->source,result}; map->values = value;
@@ -322,7 +350,7 @@ static void member_expand_parents(MemberContext *c, const MemberApplication *app
 static void member_roots(MemberContext *c, const XrXirInterfaceApplication *roots, uint32_t count) {
     if (c->base) {
         c->types = *c->base; c->types.interfaces = NULL;
-        c->capacity = c->types.count;
+        c->capacity = c->types.count; c->nodes_owned = false;
     }
     for (uint32_t r = 0; r < count && member_work(c,1); ++r) {
         const XrXirInterfaceApplication *root = &roots[r];
@@ -396,7 +424,7 @@ XR_FUNC XrXirStatus xr_xir_compile_interface_closure_substitute(const XrXirCompi
     c.base = request->actual_types; c.remaining = *budget;
     c.ambient_count = request->ambient_parameter_count;
     if (!member_identity(&c,c.ambient_count)) { member_dispose(&c); return c.status; }
-    if (c.base) { c.types = *c.base; c.capacity = c.types.count; }
+    if (c.base) { c.types = *c.base; c.capacity = c.types.count; c.nodes_owned = false; }
     MemberApplication substitution = {0};
     substitution.arguments = (XrXirType *)request->arguments; substitution.count = request->argument_count;
     MemberTypeMap map = {0};

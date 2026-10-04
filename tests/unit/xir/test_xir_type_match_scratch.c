@@ -11,6 +11,8 @@
  */
 #include "xir/xxir_type_match_internal.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_interface_members.h"
+#include "xir/xxir_nominal.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -269,7 +271,267 @@ static void deep_body(void) {
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered);owner_free(&c,baseline);
 }
-int main(void) {
+
+typedef struct ClosureFixture {
+    XrXirTypeNode nodes[65];
+    XrXirCallableParameter parameters[2];
+    XrXirType arguments[2];
+    XrXirConstraint empty;
+    XrXirNominalDeclaration nominal;
+    XrXirNominalTable nominals;
+    XrXirInterfaceMethod methods[3];
+    XrXirInterfaceDeclaration declaration;
+    XrXirInterfaceTable interfaces;
+    XrXirTypes types;
+    XrXirInterfaceApplication root;
+} ClosureFixture;
+static void closure_fixture(ClosureFixture *f) {
+    memset(f,0,sizeof(*f));f->arguments[0]=parameter();
+    f->arguments[1]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1);
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=parameter(),.parameter_span=1};
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(0),.parameter_span=1};
+    f->parameters[0]=(XrXirCallableParameter){constructed(1),0};
+    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->parameters,
+        .parameter_count=1,.result=parameter(),.parameter_span=1,.flags=XR_XIR_CALLABLE_NO_SUSPEND};
+    f->nominal=(XrXirNominalDeclaration){.module={"m",1},.name={"Box",3},.exported=1,
+        .constraints=&f->empty,.parameter_count=1,.kind=XR_XIR_NOMINAL_STRUCT};
+    f->nominals=(XrXirNominalTable){&f->nominal,1,NULL};
+    f->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.parameter_span=1,
+        .nominal={.declaration=0,.arguments=f->arguments,.argument_count=1}};
+    f->parameters[1]=(XrXirCallableParameter){constructed(3),0};
+    f->nodes[4]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->parameters+1,
+        .parameter_count=1,.result=constructed(1),.parameter_span=1};
+    f->nodes[5]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=f->arguments[1],.parameter_span=2};
+    for(uint32_t i=6;i<65;++i)f->nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,
+        .element=constructed(i-1),.parameter_span=2};
+    f->methods[0]=(XrXirInterfaceMethod){.name={"array",5},.signature=constructed(2)};
+    f->methods[1]=(XrXirInterfaceMethod){.name={"box",3},.signature=constructed(4)};
+    f->methods[2]=(XrXirInterfaceMethod){.name={"own",3},.signature=constructed(5),
+        .own_parameter_count=1,.constraints=&f->empty};
+    f->declaration=(XrXirInterfaceDeclaration){.module={"m",1},.name={"View",4},.exported=1,
+        .constraints=&f->empty,.parameter_count=1,.methods=f->methods,.method_count=3};
+    f->interfaces=(XrXirInterfaceTable){&f->declaration,1};
+    f->types=(XrXirTypes){f->nodes,65,&f->nominals,&f->interfaces};
+    f->root=(XrXirInterfaceApplication){0,f->arguments,1};
+}
+static void closure_expect(const XrXirInterfaceClosure *closure,bool unchanged,
+    XrXirType argument,XrXirType own) {
+    const XrXirTypes *types=xr_xir_interface_closure_types(closure);
+    CHECK(types && xr_xir_interface_closure_requirement_count(closure)==3);
+    for(uint32_t i=0;i<3;++i) {
+        const XrXirInterfaceRequirement *r=xr_xir_interface_closure_requirement(closure,i);
+        const XrXirTypeNode *signature=xr_xir_type_node(types,r->signature);
+        CHECK(signature && signature->kind==XR_XIR_TYPE_CALLABLE);
+        if(unchanged)CHECK(r->signature==constructed(i==0?2:i==1?4:5));
+        if(i==0) {
+            CHECK(signature->flags==XR_XIR_CALLABLE_NO_SUSPEND && signature->parameter_count==1);
+            CHECK(signature->parameters[0].mode==0 && signature->result==argument);
+            const XrXirTypeNode *nullable=xr_xir_type_node(types,signature->parameters[0].type);
+            CHECK(nullable && nullable->kind==XR_XIR_TYPE_NULLABLE);
+            const XrXirTypeNode *array=xr_xir_type_node(types,nullable->element);
+            CHECK(array && array->kind==XR_XIR_TYPE_ARRAY && array->element==argument);
+        } else if(i==1) {
+            CHECK(signature->parameter_count==1 && signature->parameters[0].mode==0);
+            const XrXirTypeNode *nominal=xr_xir_type_node(types,signature->parameters[0].type);
+            CHECK(nominal && nominal->kind==XR_XIR_TYPE_NOMINAL && nominal->nominal.declaration==0);
+            CHECK(nominal->nominal.argument_count==1 && nominal->nominal.arguments[0]==argument);
+        } else CHECK(!signature->parameter_count && signature->result==own && r->own_parameter_count==1);
+    }
+}
+static XrXirStatus closure_sequence(const XrXirCompileContext *c) {
+    ClosureFixture f,other;closure_fixture(&f);closure_fixture(&other);
+    XrXirStatus status=xr_xir_compile_types_structure_verify(c,&f.types);
+    if(status!=XR_XIR_OK)return status;
+    for(unsigned mode=0;mode<4;++mode) {
+        XrXirInterfaceClosure *closure=NULL;uint64_t live_before=stats(c).live_bytes;
+        XrXirType argument=mode==1?XR_XIR_STRING:parameter();
+        XrXirInterfaceApplication app={0,&argument,1};
+        if(mode==3) {
+            XrXirInterfaceClosureRequest request={&f.types,&other.types,&app,1,&argument,1,1};
+            status=xr_xir_compile_interface_closure_substitute(c,&request,&closure);
+        } else {
+            XrXirInterfaceClosureRoots request={&f.interfaces,&f.types,&app,1,mode==2?3u:1u};
+            status=xr_xir_compile_interface_closure_build(c,&request,&closure);
+        }
+        if(status==XR_XIR_OK) {
+            CHECK(closure);closure_expect(closure,mode==0,argument,
+                (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+(mode==2?3:1)));
+            const XrXirTypes *types=xr_xir_interface_closure_types(closure);
+            if(mode==0)CHECK(types->nodes==f.types.nodes && types->count==f.types.count);
+            if(mode==1 || mode==2 || mode==3)CHECK(types->nodes!=f.types.nodes && types->count>65);
+            if(mode==3)CHECK(types->nodes!=other.types.nodes);
+        } else CHECK(!closure);
+        xr_xir_compile_interface_closure_free(closure);CHECK(stats(c).live_bytes==live_before);
+        if(status!=XR_XIR_OK)return status;
+    }
+    return status;
+}
+static XrCompileResourceStats closure_measured(XrCompileResourceLimits limits,XrXirStatus expected) {
+    XrXirCompileContext c=owner_new(limits);uint64_t baseline=stats(&c).live_bytes;
+    CHECK(closure_sequence(&c)==expected);XrCompileResourceStats s=stats(&c);owner_free(&c,baseline);return s;
+}
+static void closure_boundaries(void) {
+    size_t sites=0;
+    for(size_t pass=0;pass<=sites;++pass) {
+        XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
+        attempts=0;injected=false;fail_at=pass?pass-1:SIZE_MAX;
+        XrXirStatus status=closure_sequence(&c);size_t actual=attempts;fail_at=SIZE_MAX;
+        if(!pass){CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites && sites<500);}
+        else CHECK(injected && actual==pass && status==XR_XIR_OUT_OF_MEMORY);
+        owner_free(&c,baseline);
+    }
+    XrCompileResourceStats s=closure_measured(caps(),XR_XIR_OK);
+    XrCompileResourceLimits exact={s.allocated_bytes,s.peak_bytes,s.work};
+    XrCompileResourceStats again=closure_measured(exact,XR_XIR_OK);
+    CHECK(again.allocated_bytes==s.allocated_bytes && again.peak_bytes==s.peak_bytes && again.work==s.work);
+    XrCompileResourceLimits less=exact;--less.allocated_bytes;(void)closure_measured(less,XR_XIR_BUDGET);
+    less=exact;--less.live_bytes;(void)closure_measured(less,XR_XIR_BUDGET);
+    less=exact;--less.work;(void)closure_measured(less,XR_XIR_BUDGET);
+    printf("interface closure identity/changed/alpha/cross-pool: %zu OOM sites, work=%llu, physical=0/0\n",
+        sites,(unsigned long long)s.work);
+}
+
+
+/* A nonempty, structurally checked inline layout belongs to its exact pool. */
+typedef struct LayoutClosureFixture {
+    ClosureFixture base;
+    XrXirNominalField declared_field;
+    XrXirType instance_field;
+} LayoutClosureFixture;
+static void closure_layout_fixture(LayoutClosureFixture *f,unsigned mode) {
+    closure_fixture(&f->base);
+    f->declared_field=(XrXirNominalField){.name={"value",5},.type=parameter()};
+    f->instance_field=parameter();
+    f->base.nominal.fields=&f->declared_field;f->base.nominal.field_count=1;
+    f->base.nodes[3].nominal.fields=&f->instance_field;f->base.nodes[3].nominal.field_count=1;
+    if(mode==7)f->base.nodes[2].result=XR_XIR_I64;
+    if(mode==8)f->base.parameters[0].type=XR_XIR_I64;
+}
+static void closure_layout_nullable(const XrXirTypes *types,XrXirType type,XrXirType argument) {
+    const XrXirTypeNode *nullable=xr_xir_type_node(types,type);
+    CHECK(nullable && nullable->kind==XR_XIR_TYPE_NULLABLE);
+    const XrXirTypeNode *array=xr_xir_type_node(types,nullable->element);
+    CHECK(array && array->kind==XR_XIR_TYPE_ARRAY && array->element==argument);
+}
+static void closure_layout_expect(const XrXirInterfaceClosure *closure,
+    const LayoutClosureFixture *f,unsigned mode,XrXirType argument) {
+    const XrXirTypes *types=xr_xir_interface_closure_types(closure);
+    CHECK(types && xr_xir_interface_closure_application_count(closure)==1);
+    CHECK(xr_xir_interface_closure_requirement_count(closure)==3);
+    const XrXirInterfaceApplication *application=xr_xir_interface_closure_application(closure,0);
+    CHECK(application && application->declaration==0 && application->argument_count==1);
+    CHECK(application->arguments[0]==argument);
+    bool different_pool=mode>=3 && mode<=5;
+    for(uint32_t i=0;i<3;++i) {
+        const XrXirInterfaceRequirement *r=xr_xir_interface_closure_requirement(closure,i);
+        CHECK(r && r->application==0 && r->origin_interface==0 && r->member==i && r->receiver==0);
+        CHECK(r->name.length==f->base.methods[i].name.length &&
+            !memcmp(r->name.bytes,f->base.methods[i].name.bytes,r->name.length));
+        const XrXirTypeNode *signature=xr_xir_type_node(types,r->signature);
+        CHECK(signature && signature->kind==XR_XIR_TYPE_CALLABLE);
+        uint32_t original=i==0?2:i==1?4:5;
+        bool same=i==2?!different_pool && mode!=2:mode==0 || mode==2;
+        CHECK((r->signature==constructed(original))==same);
+        if(i==0) {
+            CHECK(!r->own_parameter_count && signature->flags==XR_XIR_CALLABLE_NO_SUSPEND);
+            CHECK(signature->parameter_count==1 && signature->parameters[0].mode==0);
+            CHECK(signature->result==(mode==7?XR_XIR_I64:argument));
+            if(mode==8)CHECK(signature->parameters[0].type==XR_XIR_I64);
+            else closure_layout_nullable(types,signature->parameters[0].type,argument);
+        } else if(i==1) {
+            CHECK(!r->own_parameter_count && !signature->flags && signature->parameter_count==1);
+            CHECK(signature->parameters[0].mode==0);
+            const XrXirTypeNode *nominal=xr_xir_type_node(types,signature->parameters[0].type);
+            CHECK(nominal && nominal->kind==XR_XIR_TYPE_NOMINAL && !nominal->nominal.declaration);
+            CHECK(nominal->nominal.argument_count==1 && nominal->nominal.arguments[0]==argument);
+            if(mode==0 || mode==2) {
+                CHECK(signature->parameters[0].type==constructed(3));
+                CHECK(nominal->nominal.field_count==1 && nominal->nominal.fields==&f->instance_field);
+                CHECK(nominal->nominal.fields[0]==parameter());
+            } else CHECK(!nominal->nominal.field_count && !nominal->nominal.fields);
+            closure_layout_nullable(types,signature->result,argument);
+        } else {
+            CHECK(!signature->flags && !signature->parameter_count && r->own_parameter_count==1);
+            CHECK(signature->result==(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+(mode==2?3:1)));
+        }
+    }
+}
+static XrXirStatus closure_layout_case(const XrXirCompileContext *c,unsigned mode) {
+    CHECK(mode<9);LayoutClosureFixture f,other;
+    closure_layout_fixture(&f,mode);closure_layout_fixture(&other,mode);
+    XrXirTypes view=f.base.types;XrXirNominalTable view_nominals=f.base.nominals;
+    XrXirInterfaceTable view_interfaces=f.base.interfaces;
+    if(mode==5){view.nominals=&view_nominals;view.interfaces=&view_interfaces;}
+    const XrXirTypes *actual=mode==3?&other.base.types:mode==4 || mode==5?&view:&f.base.types;
+    XrXirStatus status=xr_xir_compile_types_structure_verify(c,&f.base.types);
+    if(status==XR_XIR_OK && actual!=&f.base.types)status=xr_xir_compile_types_structure_verify(c,actual);
+    if(status!=XR_XIR_OK)return status;
+    uint64_t baseline=stats(c).live_bytes;XrXirInterfaceClosure *closure=NULL;
+    XrXirType argument=mode==1 || mode==7 || mode==8?XR_XIR_STRING:mode==6?constructed(0):parameter();
+    XrXirInterfaceApplication app={0,&argument,1};
+    if(mode>=3 && mode<=5) {
+        CHECK(actual!=&f.base.types);
+        if(mode==4 || mode==5)CHECK(actual->nodes==f.base.types.nodes);
+        XrXirInterfaceClosureRequest request={&f.base.types,actual,&app,1,&argument,1,1};
+        status=xr_xir_compile_interface_closure_substitute(c,&request,&closure);
+    } else {
+        XrXirInterfaceClosureRoots request={&f.base.interfaces,&f.base.types,&app,1,mode==2?3u:1u};
+        status=xr_xir_compile_interface_closure_build(c,&request,&closure);
+    }
+    if(status==XR_XIR_OK) {
+        CHECK(closure);closure_layout_expect(closure,&f,mode,argument);
+        const XrXirTypes *types=xr_xir_interface_closure_types(closure);
+        if(!mode)CHECK(types->nodes==f.base.types.nodes && types->count==65);
+        else CHECK(types->nodes!=actual->nodes && types->count>65);
+        if(mode==6)CHECK(xr_xir_type_span(&f.base.types,parameter())==
+            xr_xir_type_span(&f.base.types,argument) && parameter()!=argument);
+    } else CHECK(!closure);
+    xr_xir_compile_interface_closure_free(closure);CHECK(stats(c).live_bytes==baseline);return status;
+}
+static XrCompileResourceStats closure_layout_measured(XrCompileResourceLimits limits,
+    unsigned mode,XrXirStatus expected) {
+    XrXirCompileContext c=owner_new(limits);uint64_t baseline=stats(&c).live_bytes;attempts=0;
+    CHECK(closure_layout_case(&c,mode)==expected);XrCompileResourceStats result=stats(&c);
+    size_t count=attempts;owner_free(&c,baseline);
+    if(expected==XR_XIR_OK)printf("closure layout mode=%u attempts=%zu work=%llu allocations=%llu\n",
+        mode,count,(unsigned long long)result.work,(unsigned long long)result.allocation_count);
+    return result;
+}
+static void closure_layout_boundaries(void) {
+    for(unsigned mode=0;mode<9;++mode) {
+        size_t sites=0;
+        for(size_t pass=0;pass<=sites;++pass) {
+            XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
+            attempts=0;injected=false;fail_at=pass?pass-1:SIZE_MAX;
+            XrXirStatus status=closure_layout_case(&c,mode);size_t actual=attempts;fail_at=SIZE_MAX;
+            if(!pass){CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites && sites<500);}
+            else CHECK(injected && actual==pass && status==XR_XIR_OUT_OF_MEMORY);
+            owner_free(&c,baseline);
+        }
+        XrCompileResourceStats s=closure_layout_measured(caps(),mode,XR_XIR_OK);
+        XrCompileResourceLimits exact={s.allocated_bytes,s.peak_bytes,s.work};
+        XrCompileResourceStats actual=closure_layout_measured(exact,mode,XR_XIR_OK);
+        CHECK(actual.allocated_bytes==s.allocated_bytes && actual.peak_bytes==s.peak_bytes && actual.work==s.work);
+        XrCompileResourceLimits less=exact;--less.allocated_bytes;(void)closure_layout_measured(less,mode,XR_XIR_BUDGET);
+        less=exact;--less.live_bytes;(void)closure_layout_measured(less,mode,XR_XIR_BUDGET);
+        less=exact;--less.work;(void)closure_layout_measured(less,mode,XR_XIR_BUDGET);
+        printf("closure layout mode=%u complete OOM sites=%zu physical=0/0\n",mode,sites);
+    }
+}
+static void closure_layout_rejection(void) {
+    LayoutClosureFixture f;closure_layout_fixture(&f,0);
+    XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
+    CHECK(xr_xir_compile_types_structure_verify(&c,&f.base.types)==XR_XIR_OK);
+    f.instance_field=XR_XIR_I64;
+    /* The descriptor's actual inline field no longer equals Box<P0>'s field. */
+    CHECK(xr_xir_compile_types_structure_verify(&c,&f.base.types)==XR_XIR_BAD_TYPE);
+    CHECK(stats(&c).live_bytes==baseline);
+    f.instance_field=parameter();
+    CHECK(xr_xir_compile_types_structure_verify(&c,&f.base.types)==XR_XIR_OK);
+    owner_free(&c,baseline);
+}
+
+int main(void) { closure_boundaries();closure_layout_boundaries();closure_layout_rejection();
     cross_pool();nested_freshness();growth_reuse();faults();limits();deep_body();
     puts("fresh type substitution, claimed stacks, owned deep body, finite axes and physical release PASS");return 0;
 }
