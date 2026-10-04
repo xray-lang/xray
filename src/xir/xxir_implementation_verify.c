@@ -12,6 +12,7 @@
  */
 #include "xxir_implementation_verify.h"
 #include "xxir_compile_memory.h"
+#include "xxir_constraint_proof_internal.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
 #include "../base/xmalloc.h"
@@ -152,12 +153,10 @@ static XrXirStatus implementation_record_prior(const XrXirModule *module,
 static XrXirStatus implementation_record_conditions(const XrXirModule *module,
     const XrXirImplementation *record, XrXirCompileContext *budget) {
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_NOMINAL,record->nominal_declaration,0}};
-    XrXirStatus status = XR_XIR_OK;
-    for (uint32_t a = 0; status == XR_XIR_OK && a < record->interface.argument_count; ++a) {
-        XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_INTERFACE,record->interface.declaration,0},a,
-            record->interface.arguments,record->interface.argument_count};
-        status = xr_xir_compile_constraints_prove(budget, &context, &use);
-    }
+    XirConstraintArguments interface_arguments = {module,
+        {XR_XIR_CONTEXT_INTERFACE,record->interface.declaration,0},
+        record->interface.arguments,record->interface.argument_count};
+    XrXirStatus status = xr_xir_compile_constraint_arguments_prove(budget,&context,&interface_arguments);
     for (uint32_t b = 0; status == XR_XIR_OK && b < record->binding_count; ++b) {
         uint32_t function = record->bindings[b].function;
         uint32_t count = module->generics ? module->generics[function].parameter_count : 0;
@@ -165,10 +164,8 @@ static XrXirStatus implementation_record_conditions(const XrXirModule *module,
         status = implementation_identity_arguments(count,budget,&arguments);
         context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CONFORMANCE_METHOD,
             (uint32_t)(record-module->declarations->implementations->records),b};
-        for (uint32_t a = 0; status == XR_XIR_OK && a < count; ++a) {
-            XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_FUNCTION,function,0},a,arguments,count};
-            status = xr_xir_compile_constraints_prove(budget, &context, &use);
-        }
+        XirConstraintArguments use = {module,{XR_XIR_CONTEXT_FUNCTION,function,0},arguments,count};
+        if (status == XR_XIR_OK) status = xr_xir_compile_constraint_arguments_prove(budget,&context,&use);
         implementation_arguments_free(arguments);
     }
     return status;

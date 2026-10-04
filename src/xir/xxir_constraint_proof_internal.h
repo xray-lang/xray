@@ -21,5 +21,15 @@ typedef struct XirConstraintScratch {
 } XirConstraintScratch;
 XR_FUNC XrXirStatus xr_xir_compile_type_use_verify_scratch(const XrXirCompileContext *context,
     const XrXirProofContext *proof, XrXirType type, XirConstraintScratch *scratch);
+/* A whole declaration argument vector is one operation. Every binder remains
+ * a goal; only authentic declaration constraints seed its environment. */
+typedef struct XirConstraintArguments {
+    const XrXirModule *declaration_module;
+    XrXirDeclarationContext declaration;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+} XirConstraintArguments;
+XR_FUNC XrXirStatus xr_xir_compile_constraint_arguments_prove(const XrXirCompileContext *context,
+    const XrXirProofContext *proof, const XirConstraintArguments *use);
 XR_FUNC void xr_xir_constraint_scratch_free(XirConstraintScratch *scratch);
 #endif // XXIR_CONSTRAINT_PROOF_INTERNAL_H

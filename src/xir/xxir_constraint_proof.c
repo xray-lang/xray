@@ -404,11 +404,18 @@ static XrXirStatus proof_requirement_task(ConstraintProof *proof, const Constrai
     }
     xr_xir_compile_interface_closure_free(closure);  return status;
 }
-static XrXirStatus proof_run(ConstraintProof *proof, XrXirStatus status) {
+static XrXirStatus proof_drain(ConstraintProof *proof, XrXirStatus status) {
     for (ConstraintObligation *task = proof->first; status == XR_XIR_OK && task; task = task->next) {
         if (!constraint_charge(proof->budget,0,1)) { status = XR_XIR_BUDGET; break; }
         status = task->type_use ? proof_type_task(proof,task->subject) : proof_requirement_task(proof,task);
     }
+    /* Only a completely drained FIFO can start another binder. Storage remains
+     * owned until operation disposal; no pending obligation supplies a fact. */
+    if (status == XR_XIR_OK) proof->first = proof->last = NULL;
+    return status;
+}
+static XrXirStatus proof_run(ConstraintProof *proof, XrXirStatus status) {
+    status = proof_drain(proof,status);
     proof_dispose(proof); return status;
 }
 static XrXirStatus proof_conformance_seed(ConstraintProof *proof) {
@@ -463,10 +470,46 @@ static XrXirStatus proof_begin(ConstraintProof *proof, const XrXirProofContext *
     if (context->owner.kind == XR_XIR_CONTEXT_CONFORMANCE_METHOD) return proof_conformance_seed(proof);
     return constraint_environment(context->module,context->owner,&proof->environment);
 }
-XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirConstraintUse *use) {
+static bool proof_result_binder(const XirConstraintArguments *use, uint32_t parameter) {
+    return use->declaration.kind == XR_XIR_CONTEXT_FUNCTION && use->declaration_module->generics &&
+        xr_xir_binder_kind(&use->declaration_module->generics[use->declaration.declaration],parameter) ==
+            XR_XIR_BINDER_RESULT_VARIABLE;
+}
+static XrXirStatus proof_prepare_arguments(ConstraintProof *proof,
+    const XirConstraintArguments *use, const XrXirConstraintEnvironment *formal) {
+    XrXirStatus status = XR_XIR_OK;
+    for (uint32_t a = 0; status == XR_XIR_OK && a < use->argument_count; ++a) {
+        bool result = proof_result_binder(use,a);
+        const XrXirConstraint *fact = constraint_fact(formal,a);
+        if (result && (fact->markers || fact->interface_count || fact->interfaces)) status = XR_XIR_BAD_TYPE;
+        else if (result && use->arguments[a] == XR_XIR_UNIT) continue;
+        else if (!constraint_argument_shape(proof->environment.types,use->arguments[a],proof->environment.parameter_count))
+            status = XR_XIR_BAD_TYPE;
+        else status = proof_type(proof,use->arguments[a]);
+    }
+    return status;
+}
+static XrXirStatus proof_selected_requirement(ConstraintProof *proof,
+    const XirConstraintArguments *use, const XrXirConstraintEnvironment *formal, uint32_t parameter) {
+    if (proof_result_binder(use,parameter)) return XR_XIR_OK;
+    ConstraintObligation task = {0}; task.declaration_module = use->declaration_module;
+    task.requirement = *constraint_fact(formal,parameter); task.arguments = use->arguments;
+    task.argument_count = use->argument_count; task.subject = use->arguments[parameter];
+    return proof_enqueue(proof,task);
+}
+static XrXirStatus proof_argument_selection(const XrXirCompileContext *compile_context,
+    const XrXirProofContext *context, const XirConstraintArguments *use, uint32_t first, bool all) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
+    /* An empty whole-vector operation checks its formal shape but preserves the
+     * old empty caller loop: no authentic seed, allocation or requirement run. */
+    if (all && use && !use->argument_count) {
+        XrXirConstraintEnvironment formal = {0};
+        if (!use->declaration_module || use->arguments) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status = constraint_environment(use->declaration_module,use->declaration,&formal);
+        return status == XR_XIR_OK && formal.parameter_count ? XR_XIR_BAD_STRUCTURE : status;
+    }
     ConstraintProof proof = {0};
     XrXirStatus status = proof_begin(&proof,context,budget,NULL);
     if (status != XR_XIR_OK || !use || !use->declaration_module)
@@ -474,26 +517,29 @@ XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *compile_
     XrXirConstraintEnvironment formal = {0};
     status = constraint_environment(use->declaration_module,use->declaration,&formal);
     if (status != XR_XIR_OK) return proof_run(&proof,status);
-    if (use->argument_count != formal.parameter_count || use->parameter >= use->argument_count || !use->arguments)
+    if (use->argument_count != formal.parameter_count || first >= use->argument_count || !use->arguments)
         return proof_run(&proof,XR_XIR_BAD_STRUCTURE);
-    for (uint32_t a = 0; status == XR_XIR_OK && a < use->argument_count; ++a) {
-        bool result = use->declaration.kind == XR_XIR_CONTEXT_FUNCTION && use->declaration_module->generics &&
-            xr_xir_binder_kind(&use->declaration_module->generics[use->declaration.declaration],a) == XR_XIR_BINDER_RESULT_VARIABLE;
-        const XrXirConstraint *fact = constraint_fact(&formal,a);
-        if (result && (fact->markers || fact->interface_count || fact->interfaces)) status = XR_XIR_BAD_TYPE;
-        else if (result && use->arguments[a] == XR_XIR_UNIT) continue;
-        else if (!constraint_argument_shape(proof.environment.types,use->arguments[a],proof.environment.parameter_count))
-            status = XR_XIR_BAD_TYPE;
-        else status = proof_type(&proof,use->arguments[a]);
+    status = proof_prepare_arguments(&proof,use,&formal);
+    uint32_t end = all ? use->argument_count : first + 1;
+    for (uint32_t a = first; status == XR_XIR_OK && a < end; ++a) {
+        status = proof_selected_requirement(&proof,use,&formal,a);
+        /* Keep the first TYPE roots + selected requirement FIFO unchanged. All
+         * derived obligations finish before the next binder is even enqueued. */
+        status = proof_drain(&proof,status);
     }
-    if (use->declaration.kind == XR_XIR_CONTEXT_FUNCTION && use->declaration_module->generics &&
-        xr_xir_binder_kind(&use->declaration_module->generics[use->declaration.declaration],use->parameter) == XR_XIR_BINDER_RESULT_VARIABLE)
-        return proof_run(&proof,status);
-    ConstraintObligation task = {0}; task.declaration_module = use->declaration_module;
-    task.requirement = *constraint_fact(&formal,use->parameter); task.arguments = use->arguments;
-    task.argument_count = use->argument_count; task.subject = use->arguments[use->parameter];
-    if (status == XR_XIR_OK) status = proof_enqueue(&proof,task);
     return proof_run(&proof,status);
+}
+XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *compile_context,
+    const XrXirProofContext *context, const XrXirConstraintUse *use) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XirConstraintArguments arguments = {0};
+    if (use) arguments = (XirConstraintArguments){use->declaration_module,use->declaration,
+        use->arguments,use->argument_count};
+    return proof_argument_selection(compile_context,context,use ? &arguments : NULL,use ? use->parameter : 0,false);
+}
+XR_FUNC XrXirStatus xr_xir_compile_constraint_arguments_prove(const XrXirCompileContext *compile_context,
+    const XrXirProofContext *context, const XirConstraintArguments *use) {
+    return proof_argument_selection(compile_context,context,use,0,true);
 }
 XR_FUNC XrXirStatus xr_xir_compile_type_use_verify_scratch(const XrXirCompileContext *compile_context,
     const XrXirProofContext *context, XrXirType type, XirConstraintScratch *scratch) {
