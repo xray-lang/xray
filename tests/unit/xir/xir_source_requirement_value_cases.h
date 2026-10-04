@@ -71,12 +71,12 @@ static void source_requirement_value_negative(XrXirSourceRequest *request) {
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {
         write_source(request->entry_path,rejected[i].source);
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+        XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
         if (status!=XR_XIR_BAD_TYPE || !strstr(diagnostic.message,rejected[i].reason))
             fprintf(stderr,"requirement value rejection %u: %u %s\n",i,status,diagnostic.message);
-        CHECK(status==XR_XIR_BAD_TYPE && !result.checked && strstr(diagnostic.message,rejected[i].reason));
-        if (result.snapshot) CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-        xr_xir_source_result_free(&result);
+        CHECK(status==XR_XIR_BAD_TYPE && !result.checked && !result.snapshot && strstr(diagnostic.message,rejected[i].reason));
+        CHECK(!result.snapshot);
+        xr_xir_compile_source_result_free(&result);
     }
 }
 #endif // XIR_SOURCE_REQUIREMENT_VALUE_CASES_H

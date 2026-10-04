@@ -109,35 +109,37 @@ static void source_witness_inheritance_obligations(const XrXirModule *module,
 static XrXirArtifact *source_witness_inheritance_packet(XrXirSourceRequest *request,
     const SourceWitnessInheritanceCase *test) {
     write_source(request->entry_path,test->source);
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
     XrXirSourceRequest local = *request; local.session = session;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_source_check(&local,&result,&diagnostic);
+    XrXirStatus status = xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr,"inheritance %s: %u %d:%d %s\n",test->name,status,
         diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
-    xr_compiler_session_delete(session);
+    xr_compile_session_free(session);
     write_source(request->entry_path,"const overwritten=0\n");
-    source_witness_inheritance_obligations(xr_xir_artifact_module(result.checked),test);
-    CHECK(xr_xir_artifact_verify(result.checked,NULL,NULL) == XR_XIR_OK);
+    source_witness_inheritance_obligations(xr_xir_compile_artifact_module(result.checked),test);
+    CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(result.checked,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_source_result_free(&result);
+    const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(result.checked);
+    CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result);
     XrXirArtifact *copy = NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&copy,NULL) == XR_XIR_OK && copy);
-    xr_xir_checked_packet_free(&packet);
-    source_witness_inheritance_obligations(xr_xir_artifact_module(copy),test);
+    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &copy, NULL) == XR_XIR_OK && copy);
+    xr_xir_compile_checked_packet_free(&packet);
+    source_witness_inheritance_obligations(xr_xir_compile_artifact_module(copy),test);
     return copy;
 }
 
 static void source_witness_inheritance_execute(XrXirArtifact *checked) {
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_specialize(checked,NULL,&closed,NULL) == XR_XIR_OK && closed);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK && closed);
+    xr_xir_compile_artifact_free(checked);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK && lowered);
-    xr_xir_artifact_free(closed);
-    const XrXirModule *module = xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK && lowered);
+    xr_xir_compile_artifact_free(closed);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     uint32_t measured = UINT32_MAX;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
@@ -147,7 +149,7 @@ static void source_witness_inheritance_execute(XrXirArtifact *checked) {
     }
     CHECK(measured != UINT32_MAX);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
     for (uint32_t run = 0; run < 2; ++run) {
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
@@ -157,7 +159,7 @@ static void source_witness_inheritance_execute(XrXirArtifact *checked) {
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
 }
 
 static void source_witness_inheritance_rejections(XrXirSourceRequest *request) {
@@ -183,13 +185,14 @@ static void source_witness_inheritance_rejections(XrXirSourceRequest *request) {
     };
     for (uint32_t i = 0; i < sizeof(sources)/sizeof(*sources); ++i) {
         write_source(request->entry_path,sources[i]);
-        XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+        XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
         XrXirSourceRequest local = *request; local.session = session;
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_source_check(&local,&result,&diagnostic);
+        XrXirStatus status = xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);
         if (status != XR_XIR_BAD_TYPE) fprintf(stderr,"inheritance negative %u: %u %s\n",i,status,diagnostic.message);
-        CHECK(status == XR_XIR_BAD_TYPE && !result.checked);
-        xr_xir_source_result_free(&result); xr_compiler_session_delete(session);
+        CHECK(status == XR_XIR_BAD_TYPE && !result.checked && !result.snapshot);
+        xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     }
 }
 

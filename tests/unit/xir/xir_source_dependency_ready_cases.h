@@ -102,10 +102,10 @@ static void source_dependency_ready_cases(XrXirSourceRequest *request) {
         for (uint32_t n=0;n<sizeof(negative)/sizeof(*negative);++n) {
             write_source(request->entry_path,negative[n]);
             XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-            XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+            XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
             if (status!=XR_XIR_BAD_TYPE || strcmp(messages[n],diagnostic.message)) fprintf(stderr,"ready negative %u %u %s\n",n,status,diagnostic.message);
-            CHECK(status==XR_XIR_BAD_TYPE && !result.checked && !strcmp(messages[n],diagnostic.message));
-            if(result.snapshot) CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-            xr_xir_source_result_free(&result);
+            CHECK(status==XR_XIR_BAD_TYPE && !result.checked && !result.snapshot && !strcmp(messages[n],diagnostic.message));
+            CHECK(!result.snapshot);
+            xr_xir_compile_source_result_free(&result);
         }
 }

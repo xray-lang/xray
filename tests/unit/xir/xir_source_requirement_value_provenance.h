@@ -41,7 +41,7 @@ static void requirement_value_poison(XrXirArtifact *artifact) {
     CHECK(proof->origins[helpers[0]].argument_count==4 && proof->origins[helpers[1]].argument_count==4);
     int64_t original_target=references[0]->immediate;
     references[0]->immediate=helpers[1]; witness_reject_derived(artifact);
-    references[0]->immediate=original_target; CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_OK);
+    references[0]->immediate=original_target; CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
     XrXirOrigin *origin=&proof->origins[helpers[0]];
     XrXirType *tuple=(XrXirType *)origin->arguments;
     XrXirType original_key=tuple[2],other_key=proof->origins[helpers[1]].arguments[2];
@@ -49,7 +49,7 @@ static void requirement_value_poison(XrXirArtifact *artifact) {
     /* Both K arguments implement Evidence<A> and do not occur in the physical
      * helper signature. Only original caller-to-helper correspondence fixes K. */
     tuple[2]=other_key; witness_reject_derived(artifact); tuple[2]=original_key;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
     uint32_t helper_source=origin->function;
     XrXirFunction *original=&((XrXirFunction *)source->functions)[helper_source];
     XrXirInstruction *requirement=NULL,*call=NULL,*alternate=NULL;
@@ -70,20 +70,20 @@ static void requirement_value_poison(XrXirArtifact *artifact) {
     requirement_value_same_signature(&module->functions[call->immediate],&module->functions[alternate->immediate]);
     int64_t method=call->immediate;
     call->immediate=alternate->immediate; witness_reject_derived(artifact); call->immediate=method;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
     uint32_t member=requirement->targets[1];
     CHECK(member==0); requirement->targets[1]=1;
     /* Changing map to identically typed other remains a legal original program,
      * but no longer justifies the already-derived map implementation target. */
-    CHECK(xr_xir_artifact_verify(proof->source,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(proof->source, NULL)==XR_XIR_OK);
     witness_reject_derived(artifact); requirement->targets[1]=member;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
     XrXirType own=application[1]; application[1]=application[0];
     /* A and U happen to close to i64, but only U has a definition-site Sendable
      * premise. Concrete equality cannot repair the poisoned symbolic origin. */
-    CHECK(xr_xir_artifact_verify(proof->source,NULL,NULL)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_artifact_verify(proof->source, NULL)==XR_XIR_BAD_TYPE);
     witness_reject_derived(artifact); application[1]=own;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
 }
 static void source_requirement_value_provenance(XrXirSourceRequest *request) {
     write_source(request->entry_path,
@@ -97,16 +97,17 @@ static void source_requirement_value_provenance(XrXirSourceRequest *request) {
         "export fn number()->i64{const f=bind<i64,Adapter<string,i64>,Token,i64>(Adapter<string,i64>{},Token{});return f(0,41)}\n"
         "export fn otherNumber()->i64{const f=bindOther<i64,Adapter<string,i64>,OtherToken,i64>(Adapter<string,i64>{},OtherToken{});return f(0,41)}\n");
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-    CHECK(xr_xir_source_check(request,&result,&diagnostic)==XR_XIR_OK && result.checked);
+    CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, NULL)==XR_XIR_OK && result.checked);
     XrXirArtifact *closed=NULL,*copy=NULL,*lowered=NULL;
-    CHECK(xr_xir_specialize(result.checked,NULL,&closed,NULL)==XR_XIR_OK);
-    xr_xir_source_result_free(&result); requirement_value_poison(closed);
+    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result); requirement_value_poison(closed);
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(closed,NULL,&packet,NULL)==XR_XIR_OK); xr_xir_artifact_free(closed);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&copy,NULL)==XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet); requirement_value_poison(copy);
+    const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(closed);
+    CHECK(xr_xir_compile_checked_write(closed, &packet, NULL)==XR_XIR_OK); xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &copy, NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet); requirement_value_poison(copy);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(copy,&target,NULL,&lowered,NULL)==XR_XIR_OK); xr_xir_artifact_free(copy);
-    requirement_value_poison(lowered); xr_xir_artifact_free(lowered);
+    CHECK(xr_xir_compile_lower(copy, &target, &lowered, NULL)==XR_XIR_OK); xr_xir_compile_artifact_free(copy);
+    requirement_value_poison(lowered); xr_xir_compile_artifact_free(lowered);
 }
 #endif // XIR_SOURCE_REQUIREMENT_VALUE_PROVENANCE_H

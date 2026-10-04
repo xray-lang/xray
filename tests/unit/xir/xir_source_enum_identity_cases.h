@@ -15,11 +15,11 @@
 static void source_enum_identity_run(XrXirSourceRequest *request, const char *source, const char *expected) {
     write_source(request->entry_path,source);
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+    XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"generic requirement: %u %d:%d %s\n",status,
         diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
-    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
     const XrXirSourceDeclaration *owner=declaration(view,"Box",0);
     if(owner){
         CHECK(declaration(view,"name",owner->id)->kind==XR_XIR_SOURCE_INTRINSIC);
@@ -29,7 +29,7 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
         /* Private payload syntax is not admitted by source. Exercise its real
          * XIR authority separately on a local producer view, never mutate the
          * owned Checked artifact or claim this view has Checked provenance. */
-        XrXirModule private_view=*xr_xir_artifact_module(result.checked);
+        XrXirModule private_view=*xr_xir_compile_artifact_module(result.checked);
         XrXirTypes private_types=*private_view.types;
         CHECK(private_types.nominals->count==1);
         XrXirNominalTable table=*private_types.nominals;
@@ -37,22 +37,22 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
         CHECK(record.field_count==1);
         XrXirNominalField field=record.fields[0];field.flags|=XR_XIR_FIELD_PRIVATE;
         record.fields=&field;table.declarations=&record;private_types.nominals=&table;private_view.types=&private_types;
-        XrXirBudget budget=xr_xir_default_budget();
-        CHECK(xr_xir_nominal_structure_verify(&table,&private_types,&budget)==XR_XIR_BAD_STRUCTURE);
-        CHECK(xr_xir_verify(&private_view,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
+                CHECK(xr_xir_compile_nominal_structure_verify(request->context, &table, &private_types)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_verify(request->context, &private_view, NULL)==XR_XIR_BAD_STRUCTURE);
     }
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(result.checked,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(result.checked); result.checked=NULL;
+    const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(result.checked);
+    CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(result.checked); result.checked=NULL;
     write_source(request->entry_path,"const replaced=0\n");
     if(owner) CHECK(declaration(view,"name",owner->id)->type.type==XR_XIR_STRING);
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
     XrXirArtifact *checked=NULL,*specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&checked,NULL)==XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &checked, NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
     XrXirEffects *effects=NULL;
-    CHECK(xr_xir_effects_analyze(checked,NULL,&effects)==XR_XIR_OK);
-    const XrXirModule *checked_module=xr_xir_artifact_module(checked);
+    CHECK(xr_xir_compile_effects_analyze(checked, &effects)==XR_XIR_OK);
+    const XrXirModule *checked_module=xr_xir_compile_artifact_module(checked);
     for(uint32_t f=0;f<checked_module->function_count;++f) {
         const XrXirFunction *function=&checked_module->functions[f];
         if(function->name_length==4 && !memcmp(function->name,"text",4)) {
@@ -60,13 +60,13 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
             CHECK(fact && fact->suspend==XR_XIR_EFFECT_NONE && fact->throws==XR_XIR_EFFECT_NONE);
         }
     }
-    xr_xir_effects_free(effects);
-    CHECK(xr_xir_specialize(checked,NULL,&specialized,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    xr_xir_compile_effects_free(effects);
+    CHECK(xr_xir_compile_specialize(checked, &specialized, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(specialized,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(specialized);
-    const XrXirModule *module=xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(specialized, &target, &lowered, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(specialized);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t entries[2]={UINT32_MAX,UINT32_MAX};
     const char *names[]={"genericMethodNumber","genericMethodText"};
     for (uint32_t f=0;f<module->function_count;++f) {
@@ -77,7 +77,7 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
     }
     CHECK(entries[0]!=UINT32_MAX && entries[1]!=UINT32_MAX);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program)==XR_XIR_OK);
     XrXirValue retained[2]={{0},{0}};
     for (uint32_t run=0;run<2;++run) {
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance=NULL;
@@ -94,7 +94,7 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
         CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (uint32_t run=0;run<2;++run) {
         const char *bytes=NULL; size_t length=0;
         CHECK(retained[run].type==XR_XIR_STRING && xr_xir_string_view(&retained[run],&bytes,&length));
@@ -129,12 +129,12 @@ static void source_enum_identity_cases(XrXirSourceRequest *request) {
     for(uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i){
         write_source(request->entry_path,rejected[i].source);
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+        XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
         if(status!=XR_XIR_BAD_TYPE || !strstr(diagnostic.message,rejected[i].reason))
             fprintf(stderr,"enum identity rejection %u: %u %s\n",i,status,diagnostic.message);
-        CHECK(status==XR_XIR_BAD_TYPE && !result.checked && strstr(diagnostic.message,rejected[i].reason));
-        if(result.snapshot)CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-        xr_xir_source_result_free(&result);
+        CHECK(status==XR_XIR_BAD_TYPE && !result.checked && !result.snapshot && strstr(diagnostic.message,rejected[i].reason));
+        CHECK(!result.snapshot);
+        xr_xir_compile_source_result_free(&result);
     }
     char enum_name[302],variant_name[402],expected[705],source[4096];
     memset(enum_name,'E',sizeof(enum_name)-1);enum_name[sizeof(enum_name)-1]=0;
@@ -167,17 +167,17 @@ static void source_enum_identity_cases(XrXirSourceRequest *request) {
         "import {make,Secret} from \"./enum-identity-owner\"\n"
         "fn unused()->Secret{const identity=make().toString();return Secret{n:41}}\n");
     XrXirSourceResult denied={0};XrXirSourceDiagnostic denied_diagnostic={0};
-    XrXirStatus denied_status=xr_xir_source_check(request,&denied,&denied_diagnostic);
+    XrXirStatus denied_status=xr_xir_compile_source_check(request, &denied, &denied_diagnostic, NULL);
     if(denied_status!=XR_XIR_BAD_TYPE || !strstr(denied_diagnostic.message,"field access is not permitted"))
         fprintf(stderr,"enum identity does not grant construction: %u %s\n",denied_status,denied_diagnostic.message);
     CHECK(denied_status==XR_XIR_BAD_TYPE && !denied.checked && strstr(denied_diagnostic.message,"field access is not permitted"));
-    xr_xir_source_result_free(&denied);
+    xr_xir_compile_source_result_free(&denied);
     write_source(library,"enum Original<T>{Empty,Full{value:T}}\n");
     write_source(request->entry_path,"import {Original as Alias} from \"./enum-identity-owner\"\nfn unused(value:Alias<i64>)->string{return value.toString()}\n");
     XrXirSourceResult hidden={0};XrXirSourceDiagnostic hidden_diagnostic={0};
-    CHECK(xr_xir_source_check(request,&hidden,&hidden_diagnostic)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_source_check(request, &hidden, &hidden_diagnostic, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!hidden.checked && strstr(hidden_diagnostic.message,"import requires an exported declaration"));
-    xr_xir_source_result_free(&hidden);CHECK(xr_test_unlink(library)==0);
+    xr_xir_compile_source_result_free(&hidden);CHECK(xr_test_unlink(library)==0);
 
 }
 #endif

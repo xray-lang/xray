@@ -24,8 +24,8 @@ static const char requirement_value_mixed_source[] =
 static void source_requirement_value_boundaries(XrXirSourceRequest *request) {
     write_source(request->entry_path,requirement_value_mixed_source);
     XrXirSourceResult baseline={0}; XrXirSourceDiagnostic diagnostic={0};
-    CHECK(xr_xir_source_check(request,&baseline,&diagnostic)==XR_XIR_OK && baseline.checked);
-    const XrXirModule *module=xr_xir_artifact_module(baseline.checked);
+    CHECK(xr_xir_compile_source_check(request, &baseline, &diagnostic, NULL)==XR_XIR_OK && baseline.checked);
+    const XrXirModule *module=xr_xir_compile_artifact_module(baseline.checked);
     uint32_t required=module->function_count, helpers=0, closures=0, cleanups=0, defaults=0;
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *function=&module->functions[f];
@@ -38,22 +38,35 @@ static void source_requirement_value_boundaries(XrXirSourceRequest *request) {
         cleanups+=function->name_length>=8 && !memcmp(function->name,"$cleanup",8);
         defaults+=function->name_length==17 && !memcmp(function->name,"$argument_default",17);
     }
-    CHECK(helpers==3 && closures==2 && cleanups==1 && defaults==1 && required>helpers);
+    CHECK(helpers==3 && closures==2 && cleanups==1 && defaults==1 && required==15);
     CHECK(module->declarations->entry_function==required-helpers-1);
     const XrXirFunction *entry=&module->functions[module->declarations->entry_function];
     CHECK(entry->name_length==6 && !memcmp(entry->name,"$entry",6) && !entry->parameter_count && entry->result==XR_XIR_I64);
-    xr_xir_source_result_free(&baseline);
+    xr_xir_compile_source_result_free(&baseline);
+    bool capacity_matched = true;
+    const XrXirCompileContext original = *request->context;
     for (uint32_t exact=0;exact<2;++exact) {
-        XrXirBudget budget=xr_xir_default_budget(); budget.functions=required-(exact ? 0u : 1u);
-        XrXirSourceRequest limited=*request; limited.budget=&budget;
+        XrXirCompileContext context = *request->context; context.limits.functions = required - (exact ? 0u : 1u);
+        const XrXirCompileContext frozen = context;
+        const XrCompileResourceStats before = stage_stats(&context);
+        XrXirSourceRequest limited = *request; limited.context = &context;
         XrXirSourceResult result={0}; diagnostic=(XrXirSourceDiagnostic){0};
-        XrXirStatus status=xr_xir_source_check(&limited,&result,&diagnostic);
-        if (exact) CHECK(status==XR_XIR_OK && result.checked && result.snapshot &&
-            xr_xir_artifact_module(result.checked)->function_count==required);
-        else CHECK(status==XR_XIR_BUDGET && !result.checked && !result.snapshot &&
-            !strcmp(diagnostic.message,"bound requirement function budget exhausted"));
-        xr_xir_source_result_free(&result);
+        XrXirStatus status=xr_xir_compile_source_check(&limited, &result, &diagnostic, NULL);
+        fprintf(stderr, "requirement capacity: exact=%u functions=%u status=%u location=%d:%d\n",
+            exact, context.limits.functions, status, diagnostic.line, diagnostic.column);
+        if (exact) capacity_matched &= status==XR_XIR_OK && result.checked && result.snapshot &&
+            xr_xir_compile_artifact_module(result.checked)->function_count==required;
+        else capacity_matched &= status==XR_XIR_BUDGET && !result.checked && !result.snapshot &&
+            diagnostic.status == XR_XIR_BUDGET && !diagnostic.message[0];
+        CHECK(status == XR_XIR_OK || (!result.checked && !result.snapshot));
+        xr_xir_compile_source_result_free(&result);
+        const XrCompileResourceStats after = stage_stats(&context);
+        CHECK(after.live_bytes == before.live_bytes && after.work > before.work &&
+            after.allocated_bytes > before.allocated_bytes);
+        CHECK(!memcmp(&context, &frozen, sizeof(context)) &&
+            !memcmp(request->context, &original, sizeof(original)));
     }
+    CHECK(capacity_matched);
     source_generic_requirement_run(request,requirement_value_mixed_source);
 }
 #endif // XIR_SOURCE_REQUIREMENT_VALUE_BOUNDARIES_H

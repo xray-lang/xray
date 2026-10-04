@@ -46,13 +46,13 @@ static void generic_witness_origin_mutations(XrXirArtifact *artifact) {
         provenance->origins[calls[1]->immediate].function);
     int64_t saved = calls[0]->immediate;
     calls[0]->immediate = calls[1]->immediate;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_BAD_TYPE);
     if (module->stage == XR_XIR_CHECKED) {
         XrXirCheckedPacket rejected = {0};
-        CHECK(xr_xir_checked_write(artifact,NULL,&rejected,NULL) == XR_XIR_BAD_TYPE && !rejected.bytes);
+        CHECK(xr_xir_compile_checked_write(artifact, &rejected, NULL) == XR_XIR_BAD_TYPE && !rejected.bytes);
     }
     calls[0]->immediate = saved;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL) == XR_XIR_OK);
 }
 static void generic_witness_provenance_cases(XrXirSourceRequest *request) {
     write_source(request->entry_path,
@@ -63,21 +63,22 @@ static void generic_witness_provenance_cases(XrXirSourceRequest *request) {
         "export fn first()->i64{return read<i64,Box<i64,string>,i64,string>(Box<i64,string>{value:41})}\n"
         "export fn second()->i64{return read<i64,Box<i64,string>,string,i64>(Box<i64,string>{value:41})}\n");
     XrXirSourceResult result = {0};
-    CHECK(xr_xir_source_check(request,&result,NULL) == XR_XIR_OK && result.checked);
+    CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL) == XR_XIR_OK && result.checked);
     XrXirArtifact *closed = NULL, *copy = NULL, *lowered = NULL;
-    CHECK(xr_xir_specialize(result.checked,NULL,&closed,NULL) == XR_XIR_OK && closed);
-    xr_xir_source_result_free(&result);
+    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL) == XR_XIR_OK && closed);
+    xr_xir_compile_source_result_free(&result);
     generic_witness_origin_mutations(closed);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(closed,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&copy,NULL) == XR_XIR_OK && copy);
-    xr_xir_checked_packet_free(&packet);
+    const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(closed);
+    CHECK(xr_xir_compile_checked_write(closed, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &copy, NULL) == XR_XIR_OK && copy);
+    xr_xir_compile_checked_packet_free(&packet);
     generic_witness_origin_mutations(copy);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(copy,&target,NULL,&lowered,NULL) == XR_XIR_OK && lowered);
-    xr_xir_artifact_free(copy);
+    CHECK(xr_xir_compile_lower(copy, &target, &lowered, NULL) == XR_XIR_OK && lowered);
+    xr_xir_compile_artifact_free(copy);
     generic_witness_origin_mutations(lowered);
-    xr_xir_artifact_free(lowered);
+    xr_xir_compile_artifact_free(lowered);
 }
 #endif // XIR_GENERIC_WITNESS_PROVENANCE_CASES_H

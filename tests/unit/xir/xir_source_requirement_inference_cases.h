@@ -67,15 +67,15 @@ static void source_requirement_inference_negative(XrXirSourceRequest *request) {
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {
         write_source(request->entry_path,rejected[i]);
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+        XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
         if (status!=XR_XIR_BAD_TYPE) fprintf(stderr,"inference rejection %u: %u %s\n",i,status,diagnostic.message);
-        CHECK(status==XR_XIR_BAD_TYPE && !result.checked);
+        CHECK(status==XR_XIR_BAD_TYPE && !result.checked && !result.snapshot);
         if (strcmp(diagnostic.message,expected_messages[i]))
             fprintf(stderr,"inference diagnostic %u: expected '%s', got '%s'\n",
                 i,expected_messages[i],diagnostic.message);
         CHECK(strcmp(diagnostic.message,expected_messages[i])==0);
-        if (result.snapshot) CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-        xr_xir_source_result_free(&result);
+        CHECK(!result.snapshot);
+        xr_xir_compile_source_result_free(&result);
     }
 }
 static void source_requirement_inference_cases(XrXirSourceRequest *request) {

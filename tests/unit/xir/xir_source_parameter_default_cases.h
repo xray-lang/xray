@@ -17,12 +17,12 @@
 static XrXirArtifact *source_parameter_defaults_check(XrXirSourceRequest *request, const char *text) {
     write_source(request->entry_path,text);
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+    XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"parameter defaults %u %d:%d %s\n",status,
         diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
     XrXirArtifact *owned=result.checked;result.checked=NULL;
-    const XrXirModule *module=xr_xir_artifact_module(owned);
+    const XrXirModule *module=xr_xir_compile_artifact_module(owned);
     CHECK(module->defaults && module->defaults->count);
     for(uint32_t i=0;i<module->defaults->count;++i){
         const XrXirDefaultBinding *binding=&module->defaults->records[i];
@@ -34,25 +34,26 @@ static XrXirArtifact *source_parameter_defaults_check(XrXirSourceRequest *reques
         uint32_t helper=module->generics?module->generics[binding->function].parameter_count:0;
         CHECK(owner==helper);
     }
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
     write_source(request->entry_path,"const poisoned=0\n");
     return owned;
 }
 static void source_parameter_defaults_execute(XrXirArtifact *owned) {
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(owned,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(owned);owned=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&owned,NULL)==XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
+    const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(owned);
+    CHECK(xr_xir_compile_checked_write(owned, &packet, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(owned);owned=NULL;
+    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &owned, NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_specialize(owned,NULL,&specialized,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(owned);
-    CHECK(!xr_xir_artifact_module(specialized)->defaults);
-    CHECK(xr_xir_artifact_verify(specialized,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(owned, &specialized, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(owned);
+    CHECK(!xr_xir_compile_artifact_module(specialized)->defaults);
+    CHECK(xr_xir_compile_artifact_verify(specialized, NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(specialized,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(specialized);
-    const XrXirModule *module=xr_xir_artifact_module(lowered);uint32_t entry=UINT32_MAX;
+    CHECK(xr_xir_compile_lower(specialized, &target, &lowered, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(specialized);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t entry=UINT32_MAX;
     CHECK(!module->defaults);
     for(uint32_t f=0;f<module->function_count;++f){
         const XrXirFunction *function=&module->functions[f];
@@ -61,7 +62,7 @@ static void source_parameter_defaults_execute(XrXirArtifact *owned) {
     }
     CHECK(entry!=UINT32_MAX);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program)==XR_XIR_OK);
     for(uint32_t i=0;i<2;++i){
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
@@ -72,7 +73,7 @@ static void source_parameter_defaults_execute(XrXirArtifact *owned) {
         CHECK(value.type==XR_XIR_I64 && value.payload==41);xr_xir_value_drop(&value);
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
 }
 static void source_parameter_default_cases(XrXirSourceRequest *request) {
     XrXirArtifact *owned=source_parameter_defaults_check(request,
@@ -92,13 +93,13 @@ static void source_parameter_default_cases(XrXirSourceRequest *request) {
         "fn value()->i64{Coro.yield();return 41}\n"
         "final class Box{value:i64;constructor(value:i64=value()){this.value=value}}\n"
         "export fn answer()->i64{return Box().value}\n");
-    xr_xir_artifact_free(owned);
+    xr_xir_compile_artifact_free(owned);
     write_source(request->entry_path,
         "fn phantom<T>(value:i64=41)->i64{return value}\nexport fn answer()->i64{return phantom()}\n");
     XrXirSourceResult rejected={0};XrXirSourceDiagnostic diagnostic={0};
-    CHECK(xr_xir_source_check(request,&rejected,&diagnostic)==XR_XIR_BAD_TYPE);
-    CHECK(!rejected.checked && strstr(diagnostic.message,"cannot infer all declaration type arguments"));
-    xr_xir_source_result_free(&rejected);
+    CHECK(xr_xir_compile_source_check(request, &rejected, &diagnostic, NULL)==XR_XIR_BAD_TYPE);
+    CHECK(!rejected.checked && !rejected.snapshot && strstr(diagnostic.message,"cannot infer all declaration type arguments"));
+    xr_xir_compile_source_result_free(&rejected);
     const char *denied[]={
         "interface Measure{measure(extra:i64)->i64}\nstruct Meter implements Measure{value:i64;measure(extra:i64=0)->i64{return this.value+extra}}\nfn unused<T:Measure>(value:T)->i64{return value.measure()}\n",
         "fn value(extra:i64=41)->i64{return extra}\nfn unused()->i64{const f=value;return f()}\n"
@@ -106,9 +107,9 @@ static void source_parameter_default_cases(XrXirSourceRequest *request) {
     const char *reasons[]={"interface method argument arity mismatch","indirect call requires its declared signature"};
     for(uint32_t i=0;i<2;++i){
         write_source(request->entry_path,denied[i]);rejected=(XrXirSourceResult){0};diagnostic=(XrXirSourceDiagnostic){0};
-        CHECK(xr_xir_source_check(request,&rejected,&diagnostic)==XR_XIR_BAD_TYPE);
-        CHECK(!rejected.checked && strstr(diagnostic.message,reasons[i]));
-        xr_xir_source_result_free(&rejected);
+        CHECK(xr_xir_compile_source_check(request, &rejected, &diagnostic, NULL)==XR_XIR_BAD_TYPE);
+        CHECK(!rejected.checked && !rejected.snapshot && strstr(diagnostic.message,reasons[i]));
+        xr_xir_compile_source_result_free(&rejected);
     }
 }
 #endif // XIR_SOURCE_PARAMETER_DEFAULT_CASES_H

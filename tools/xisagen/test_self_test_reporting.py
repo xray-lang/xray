@@ -26,6 +26,7 @@ EXPECTED_COUNTS = {'binding': 8, 'discovery': 26, 'source': 58}
 SUITES = (
     '_test_generated_file_writes', '_test_sexpr_parser', '_test_xi_ops_parser',
     '_test_xi_semantic_ops_parser', '_test_xi_preprocessor_content_cache',
+    '_test_xi_lexical_projections',
     '_test_xi_lowering_parser', '_test_xi_lowering_build_artifacts',
     '_test_xi_lowering_ninja_failed_edge', '_test_xi_lowering_actual_ninja_edge',
     '_test_xi_verifier_parser', '_test_aot_rep_parser', '_test_aot_abi_parser',
@@ -411,8 +412,8 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(set(fast), set(exhaustive) - exhaustive_only)
         self.assertEqual(len(exhaustive), len(set(exhaustive)))
         self.assertEqual(len(fast), len(set(fast)))
-        self.assertEqual(len(exhaustive), 16)
-        self.assertEqual(len(fast), 14)
+        self.assertEqual(len(exhaustive), 17)
+        self.assertEqual(len(fast), 15)
 
     def test_expensive_discovery_probes_are_exhaustive_only(self):
         exhaustive_labels = set()

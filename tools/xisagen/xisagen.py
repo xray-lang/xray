@@ -2663,7 +2663,7 @@ def _xi_c_file_scope_function_bodies(text: str) -> dict[str, list[str]]:
     }
 
 
-@functools.lru_cache(maxsize=256)
+@functools.lru_cache(maxsize=512)
 def _xi_c_file_scope_function_value_parameters(text: str) -> dict[str, set[str]]:
     """Return XiValue pointer parameter names for file-scope definitions."""
     source = _xi_c_source_without_literals(text)
@@ -2751,8 +2751,15 @@ def _xi_split_c_arguments(text: str) -> tuple[str, ...]:
     return tuple(parts)
 
 
-def _xi_c_call_records(text: str, symbol: str
-                       ) -> list[tuple[int, int, tuple[str, ...]]]:
+@functools.lru_cache(maxsize=8192)
+def _xi_c_literal_call_identifiers(text: str) -> frozenset[str]:
+    """Keep the existing raw-text C-identifier call pattern, including bad calls."""
+    return frozenset(re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', text))
+
+
+@functools.lru_cache(maxsize=4096)
+def _xi_c_call_record_facts(text: str, symbol: str
+                       ) -> tuple[tuple[int, int, tuple[str, ...]], ...]:
     records = []
     for match in re.finditer(rf'\b{re.escape(symbol)}\s*\(', text):
         open_paren = text.find('(', match.start())
@@ -2761,7 +2768,18 @@ def _xi_c_call_records(text: str, symbol: str
             continue
         records.append((match.start(), close_paren + 1,
                         _xi_split_c_arguments(text[open_paren + 1:close_paren])))
-    return records
+    return tuple(records)
+
+
+
+def _xi_c_call_records(text: str, symbol: str
+                       ) -> list[tuple[int, int, tuple[str, ...]]]:
+    if symbol.isascii() and symbol.isidentifier():
+        if symbol not in _xi_c_literal_call_identifiers(text):
+            return []
+    elif re.search(rf'\b{re.escape(symbol)}\s*\(', text) is None:
+        return []
+    return list(_xi_c_call_record_facts(text, symbol))
 
 
 def _xi_exact_guard_call_count(body: str, symbol: str,
@@ -3121,9 +3139,10 @@ def _xi_guarded_selector_present(
         body[guard.end():], r'\breturn\s+true\s*;', known_emitters, terminators)
 
 
-def _xi_if_statement_records(
+@functools.lru_cache(maxsize=512)
+def _xi_if_statement_facts(
         text: str, *, top_level_only: bool = False
-) -> list[tuple[int, int, str, str, str]]:
+) -> tuple[tuple[int, int, str, str, str], ...]:
     statements = []
     depths = _xi_brace_depths(text)
     for match in re.finditer(r'\bif\s*\(', text):
@@ -3169,7 +3188,14 @@ def _xi_if_statement_records(
         statements.append((match.start(), statement_end,
                            text[open_paren + 1:close_paren],
                            then_branch, else_branch))
-    return statements
+    return tuple(statements)
+
+
+
+def _xi_if_statement_records(
+        text: str, *, top_level_only: bool = False
+) -> list[tuple[int, int, str, str, str]]:
+    return list(_xi_if_statement_facts(text, top_level_only=top_level_only))
 
 
 def _xi_if_statements(text: str, *, top_level_only: bool = False
@@ -3225,6 +3251,28 @@ def _xi_selector_routes_to_owner(body: str, selector: str, owner: str,
     return False
 
 
+@functools.lru_cache(maxsize=1024)
+def _xi_function_definition_facts(text: str, symbol: str) -> tuple[str, int, str]:
+    """Memoize lexical definition facts only for exact immutable text and symbol."""
+    ranges = _xi_c_file_scope_function_body_ranges(text).get(symbol, [])
+    if len(ranges) != 1:
+        return ('definition-count', len(ranges), '')
+    start, end = ranges[0]
+    if _xi_conditional_preprocessor_depth(text, start) != 0:
+        return ('enclosed', 1, '')
+    directive_source = _xi_c_source_without_literals(
+        text, blank_preprocessor=False)[start:end]
+    if re.search(r'^\s*#\s*(?:if|ifdef|ifndef|elif|else|endif)\b',
+                 directive_source, re.MULTILINE):
+        return ('conditional', 1, '')
+    body = _xi_c_source_without_literals(text)[start:end]
+    if any(_xi_condition_has_static_false_gate(condition)
+           for condition, _, _ in _xi_if_statements(body)):
+        return ('static-false', 1, '')
+    return ('ok', 1, body)
+
+
+
 def _xi_require_function_body(source_root: Path, source_path: str, symbol: str,
                               context: str,
                               source_text: dict[str, str]) -> str:
@@ -3233,23 +3281,17 @@ def _xi_require_function_body(source_root: Path, source_path: str, symbol: str,
     if text is None:
         die(f"{context}: consumer source is outside the validated xi_cgen.c "
             f"translation unit: {source_path}")
-    ranges = _xi_c_file_scope_function_body_ranges(text).get(symbol, [])
-    if len(ranges) != 1:
+    status, count, body = _xi_function_definition_facts(text, symbol)
+    if status == 'definition-count':
         die(f"{context}: expected one file-scope definition of {source_path}::{symbol}, "
-            f"found {len(ranges)}")
-    start, end = ranges[0]
-    if _xi_conditional_preprocessor_depth(text, start) != 0:
+            f"found {count}")
+    if status == 'enclosed':
         die(f"{context}: governed consumer function {source_path}::{symbol} "
             "is enclosed by conditional preprocessing")
-    directive_source = _xi_c_source_without_literals(
-        text, blank_preprocessor=False)[start:end]
-    if re.search(r'^\s*#\s*(?:if|ifdef|ifndef|elif|else|endif)\b',
-                 directive_source, re.MULTILINE):
+    if status == 'conditional':
         die(f"{context}: governed consumer function {source_path}::{symbol} "
             "contains conditional preprocessing")
-    body = _xi_c_source_without_literals(text)[start:end]
-    if any(_xi_condition_has_static_false_gate(condition)
-           for condition, _, _ in _xi_if_statements(body)):
+    if status == 'static-false':
         die(f"{context}: governed consumer function {source_path}::{symbol} "
             "contains a statically false conditional branch")
     return body
@@ -4403,17 +4445,156 @@ def xi_lowering_input_watch_paths(
     return [source_root / relative for relative in sorted(relatives)]
 
 
-def xi_lowering_noreturn_symbols(source_text: dict[str, str]) -> set[str]:
-    symbols = {'abort', 'exit', '_Exit', 'quick_exit',
-               '__builtin_trap', '__builtin_unreachable'}
+@functools.lru_cache(maxsize=1024)
+def _xi_noreturn_file_symbols(text: str) -> frozenset[str]:
+    """Return immutable lexical noreturn symbols for exact file text."""
     declaration = re.compile(
         r'(?m)^\s*(?:_Noreturn|XR_NORETURN|noreturn|\[\[noreturn\]\])\b'
         r'[^;{}]*?\b([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+    source = _xi_c_source_without_literals(text, blank_preprocessor=False)
+    return frozenset(match.group(1) for match in declaration.finditer(source))
+
+
+def xi_lowering_noreturn_symbols(source_text: dict[str, str]) -> set[str]:
+    symbols = {'abort', 'exit', '_Exit', 'quick_exit',
+               '__builtin_trap', '__builtin_unreachable'}
     for text in source_text.values():
-        source = _xi_c_source_without_literals(
-            text, blank_preprocessor=False)
-        symbols.update(match.group(1) for match in declaration.finditer(source))
+        symbols.update(_xi_noreturn_file_symbols(text))
     return symbols
+
+
+@functools.lru_cache(maxsize=1024)
+def _xi_governed_preprocessor_facts(
+        text: str, governed: tuple[str, ...], generated_projection: bool
+) -> tuple[tuple[tuple[str, str], ...], tuple[str, str] | None]:
+    """Return ordered macro definitions and lexical issue for exact policy/text."""
+    governed_pattern = re.compile(
+        r'\b(?:' + '|'.join(re.escape(token) for token in governed) + r')\b')
+    macro_definitions: list[tuple[str, str]] = []
+    definition_pattern = re.compile(
+        r'^\s*(?:#|%:)\s*define\s+([A-Za-z_][A-Za-z0-9_]*)'
+        r'(?:\s*\([^\r\n]*?\))?\s*(.*?)\s*$')
+    logical, error = _xi_preprocessor_logical_content(text)
+    if error:
+        return (), ('lexical', error)
+    for line in logical.splitlines():
+        if not re.match(r'\s*(?:#|%:)', line):
+            continue
+        definition = definition_pattern.match(line)
+        if definition is not None:
+            macro_definitions.append((definition.group(1), definition.group(2)))
+        if not generated_projection:
+            hidden = sorted(set(governed_pattern.findall(line)))
+            if hidden:
+                return tuple(macro_definitions), ('directive', ', '.join(hidden))
+
+    return tuple(macro_definitions), None
+
+
+@functools.lru_cache(maxsize=1024)
+def _xi_behavioral_function_symbols(
+        text: str, symbols: tuple[str, ...]) -> frozenset[str]:
+    symbol_pattern = re.compile(
+        r'\b(?:' + '|'.join(re.escape(symbol) for symbol in symbols) + r')\b')
+    behavioral_functions = set()
+    for symbol, bodies in _xi_c_file_scope_function_bodies(text).items():
+        if any(re.search(r'(?:->|\.)\s*op\b', body) is not None and
+               symbol_pattern.search(body) is not None for body in bodies):
+            behavioral_functions.add(symbol)
+    return frozenset(behavioral_functions)
+
+
+@functools.lru_cache(maxsize=1024)
+def _xi_governed_alias_file_issue(
+        text: str, selectors: tuple[str, ...], symbols: tuple[str, ...],
+        behavioral_calls: tuple[str, ...],
+        predicate_range_rows: tuple[tuple[str, tuple[tuple[int, int], ...]], ...],
+        passthrough_helpers: tuple[str, ...]) -> tuple[str, int, str] | None:
+    """Cache per-file lexical issues, never capture membership or diagnostics."""
+    symbol_pattern = re.compile(
+        r'\b(?:' + '|'.join(re.escape(symbol) for symbol in symbols) + r')\b')
+    selector_pattern = re.compile(
+        r'\b(?:' + '|'.join(re.escape(selector) for selector in selectors) + r')\b')
+    behavioral_call_pattern = None
+    if behavioral_calls:
+        behavioral_call_pattern = re.compile(
+            r'\b(?:' + '|'.join(re.escape(symbol) for symbol in behavioral_calls) + r')\s*\(')
+    predicate_ranges = dict(predicate_range_rows)
+    code = _xi_c_source_without_literals(text)
+    for match in symbol_pattern.finditer(code):
+        if re.match(r'\s*\(', code[match.end():]) is None:
+            return ('function-alias', 0, match.group(0))
+    for match in selector_pattern.finditer(code):
+        prefix = code[max(code.rfind(';', 0, match.start()),
+                          code.rfind('{', 0, match.start()),
+                          code.rfind('}', 0, match.start()),
+                          code.rfind('\n', 0, match.start())) + 1:match.start()]
+        designated_op = re.search(
+            r'(?:^|[,;{])\s*\.\s*op\s*=\s*'
+            r'(?:\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*)*$',
+            prefix) is not None
+        aggregate_open = code.rfind('{', 0, match.start())
+        aggregate_boundary = max(
+            code.rfind(';', 0, match.start()),
+            code.rfind('}', 0, match.start()),
+            code.rfind('\n', 0, match.start()))
+        aggregate_prefix = ''
+        if aggregate_open > aggregate_boundary:
+            aggregate_prefix = code[
+                max(code.rfind(';', 0, aggregate_open),
+                    code.rfind('}', 0, aggregate_open),
+                    code.rfind('\n', 0, aggregate_open)) + 1:aggregate_open]
+        aggregate_alias = (
+            not designated_op and aggregate_open > aggregate_boundary and
+            re.search(r'=\s*$', aggregate_prefix) is not None)
+        suffix = code[match.end():code.find('\n', match.end())
+                      if code.find('\n', match.end()) >= 0 else len(code)]
+        direct_field_comparison = (
+            re.search(r'(?:->|\.)\s*[A-Za-z_][A-Za-z0-9_]*\s*==\s*$',
+                      prefix) is not None or
+            re.match(r'\s*==\s*[A-Za-z_][A-Za-z0-9_]*'
+                     r'\s*(?:->|\.)\s*[A-Za-z_][A-Za-z0-9_]*\b',
+                     suffix) is not None)
+        unmatched_call = None
+        call_matches = list(re.finditer(
+            r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', prefix))
+        for call_match in reversed(call_matches):
+            if prefix[call_match.end():].count('(') + 1 > \
+                    prefix[call_match.end():].count(')'):
+                unmatched_call = call_match.group(1)
+                break
+        selector_typed_storage = re.search(
+            r'\bXiOp\b[^;{}=]*=', prefix) is not None
+        assignment_rhs = (
+            not designated_op and not direct_field_comparison and re.search(
+                r'(?<![.!>])\b[A-Za-z_][A-Za-z0-9_]*\s*'
+                r'(?<![=!<>])=(?!=)', prefix) is not None and
+            (unmatched_call is None or selector_typed_storage or
+             unmatched_call in passthrough_helpers))
+        alias_form = (re.search(
+                r'(?<![.!>])\b[A-Za-z_][A-Za-z0-9_]*\s*='
+                r'\s*(?:\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*)*'
+                r'&?\s*$', prefix) or re.search(r'&\s*$', prefix) or
+                aggregate_alias or assignment_rhs)
+        selector = match.group(0)
+        predicate_alias = any(
+            start <= match.start() < end
+            for start, end in predicate_ranges.get(selector, ()))
+        if alias_form and not predicate_alias:
+            line = code.count('\n', 0, match.start()) + 1
+            return ('initializer-alias', line, match.group(0))
+    if behavioral_call_pattern is not None:
+        for match in behavioral_call_pattern.finditer(code):
+            open_paren = match.end() - 1
+            end = _xi_matching_delimiter(code, open_paren, '(', ')')
+            if end is None:
+                return ('unmatched-call', 0, '')
+            hidden = sorted(set(
+                selector_pattern.findall(code[open_paren + 1:end])))
+            if hidden:
+                return ('macro-argument', 0, ', '.join(hidden))
+
+    return None
 
 
 def _xi_validate_governed_token_aliases(
@@ -4442,28 +4623,26 @@ def _xi_validate_governed_token_aliases(
         'src/plan/target/xr_target_instruction_gen.h',
     }
     governed = selectors | symbols
+    governed_rows = tuple(sorted(governed))
+    symbol_rows = tuple(sorted(symbols))
+    selector_rows = tuple(sorted(selectors))
+    passthrough_rows = tuple(sorted(passthrough_helpers))
     governed_pattern = re.compile(
         r'\b(?:' + '|'.join(re.escape(token) for token in sorted(governed)) + r')\b')
     symbol_pattern = re.compile(
         r'\b(?:' + '|'.join(re.escape(symbol) for symbol in sorted(symbols)) + r')\b')
     macro_definitions: dict[str, str] = {}
-    definition_pattern = re.compile(
-        r'^\s*(?:#|%:)\s*define\s+([A-Za-z_][A-Za-z0-9_]*)'
-        r'(?:\s*\([^\r\n]*?\))?\s*(.*?)\s*$')
     for relative, text in sorted(source_text.items()):
-        logical = _xi_preprocessor_logical_source(
-            text, f'{context}: {relative}')
-        for line in logical.splitlines():
-            if not re.match(r'\s*(?:#|%:)', line):
-                continue
-            definition = definition_pattern.match(line)
-            if definition is not None:
-                macro_definitions[definition.group(1)] = definition.group(2)
-            if relative not in generated_macro_projections:
-                hidden = sorted(set(governed_pattern.findall(line)))
-                if hidden:
-                    die(f"{context}: governed token appears in preprocessing "
-                        f"directive in {relative}: {', '.join(hidden)}")
+        definitions, issue = _xi_governed_preprocessor_facts(
+            text, governed_rows, relative in generated_macro_projections)
+        if issue is not None:
+            kind, detail = issue
+            if kind == 'lexical':
+                die(f"{context}: {relative}: {detail}")
+            die(f"{context}: governed token appears in preprocessing "
+                f"directive in {relative}: {detail}")
+        for name, replacement in definitions:
+            macro_definitions[name] = replacement
 
     behavioral_macros = {
         name for name, replacement in macro_definitions.items()
@@ -4483,15 +4662,13 @@ def _xi_validate_governed_token_aliases(
 
     behavioral_functions = set()
     for text in source_text.values():
-        for symbol, bodies in _xi_c_file_scope_function_bodies(text).items():
-            if any(re.search(r'(?:->|\.)\s*op\b', body) is not None and
-                   symbol_pattern.search(body) is not None
-                   for body in bodies):
-                behavioral_functions.add(symbol)
+        behavioral_functions.update(
+            _xi_behavioral_function_symbols(text, symbol_rows))
 
     selector_pattern = re.compile(
         r'\b(?:' + '|'.join(re.escape(selector) for selector in sorted(selectors)) + r')\b')
     behavioral_calls = behavioral_macros | behavioral_functions
+    behavioral_call_rows = tuple(sorted(behavioral_calls))
     behavioral_call_pattern = None
     if behavioral_calls:
         behavioral_call_pattern = re.compile(
@@ -4509,83 +4686,25 @@ def _xi_validate_governed_token_aliases(
             ]
 
     for relative, text in sorted(source_text.items()):
-        code = _xi_c_source_without_literals(text)
-        for match in symbol_pattern.finditer(code):
-            if re.match(r'\s*\(', code[match.end():]) is None:
-                die(f"{context}: governed function token is used through an "
-                    f"alias in {relative}: {match.group(0)}")
-        for match in selector_pattern.finditer(code):
-            prefix = code[max(code.rfind(';', 0, match.start()),
-                              code.rfind('{', 0, match.start()),
-                              code.rfind('}', 0, match.start()),
-                              code.rfind('\n', 0, match.start())) + 1:match.start()]
-            designated_op = re.search(
-                r'(?:^|[,;{])\s*\.\s*op\s*=\s*'
-                r'(?:\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*)*$',
-                prefix) is not None
-            aggregate_open = code.rfind('{', 0, match.start())
-            aggregate_boundary = max(
-                code.rfind(';', 0, match.start()),
-                code.rfind('}', 0, match.start()),
-                code.rfind('\n', 0, match.start()))
-            aggregate_prefix = ''
-            if aggregate_open > aggregate_boundary:
-                aggregate_prefix = code[
-                    max(code.rfind(';', 0, aggregate_open),
-                        code.rfind('}', 0, aggregate_open),
-                        code.rfind('\n', 0, aggregate_open)) + 1:aggregate_open]
-            aggregate_alias = (
-                not designated_op and aggregate_open > aggregate_boundary and
-                re.search(r'=\s*$', aggregate_prefix) is not None)
-            suffix = code[match.end():code.find('\n', match.end())
-                          if code.find('\n', match.end()) >= 0 else len(code)]
-            direct_field_comparison = (
-                re.search(r'(?:->|\.)\s*[A-Za-z_][A-Za-z0-9_]*\s*==\s*$',
-                          prefix) is not None or
-                re.match(r'\s*==\s*[A-Za-z_][A-Za-z0-9_]*'
-                         r'\s*(?:->|\.)\s*[A-Za-z_][A-Za-z0-9_]*\b',
-                         suffix) is not None)
-            unmatched_call = None
-            call_matches = list(re.finditer(
-                r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', prefix))
-            for call_match in reversed(call_matches):
-                if prefix[call_match.end():].count('(') + 1 > \
-                        prefix[call_match.end():].count(')'):
-                    unmatched_call = call_match.group(1)
-                    break
-            selector_typed_storage = re.search(
-                r'\bXiOp\b[^;{}=]*=', prefix) is not None
-            assignment_rhs = (
-                not designated_op and not direct_field_comparison and re.search(
-                    r'(?<![.!>])\b[A-Za-z_][A-Za-z0-9_]*\s*'
-                    r'(?<![=!<>])=(?!=)', prefix) is not None and
-                (unmatched_call is None or selector_typed_storage or
-                 unmatched_call in passthrough_helpers))
-            alias_form = (re.search(
-                    r'(?<![.!>])\b[A-Za-z_][A-Za-z0-9_]*\s*='
-                    r'\s*(?:\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*)*'
-                    r'&?\s*$', prefix) or re.search(r'&\s*$', prefix) or
-                    aggregate_alias or assignment_rhs)
-            selector = match.group(0)
-            predicate_alias = any(
-                start <= match.start() < end
-                for start, end in predicate_ranges.get((relative, selector), []))
-            if alias_form and not predicate_alias:
-                line = code.count('\n', 0, match.start()) + 1
-                die(f"{context}: governed selector is used through an "
-                    f"initializer alias in {relative}:{line}: {match.group(0)}")
-        if behavioral_call_pattern is not None:
-            for match in behavioral_call_pattern.finditer(code):
-                open_paren = match.end() - 1
-                end = _xi_matching_delimiter(code, open_paren, '(', ')')
-                if end is None:
-                    die(f"{context}: behavioral macro or function call is "
-                        f"unmatched in {relative}")
-                hidden = sorted(set(
-                    selector_pattern.findall(code[open_paren + 1:end])))
-                if hidden:
-                    die(f"{context}: governed selector is hidden in a macro argument "
-                        f"in {relative}: {', '.join(hidden)}")
+        issue = _xi_governed_alias_file_issue(
+            text, selector_rows, symbol_rows, behavioral_call_rows,
+            tuple((selector, tuple(predicate_ranges[(relative, selector)]))
+                  for selector in sorted(predicate_helpers)),
+            passthrough_rows)
+        if issue is None:
+            continue
+        kind, line, detail = issue
+        if kind == 'function-alias':
+            die(f"{context}: governed function token is used through an "
+                f"alias in {relative}: {detail}")
+        if kind == 'initializer-alias':
+            die(f"{context}: governed selector is used through an "
+                f"initializer alias in {relative}:{line}: {detail}")
+        if kind == 'unmatched-call':
+            die(f"{context}: behavioral macro or function call is "
+                f"unmatched in {relative}")
+        die(f"{context}: governed selector is hidden in a macro argument "
+            f"in {relative}: {detail}")
 
 
 @functools.lru_cache(maxsize=4096)
@@ -4954,28 +5073,33 @@ def _xi_hidden_selector_route_present(
 def _xi_transitive_terminal_emitters(
         aot_functions: tuple[tuple[str, str, str], ...], seeds: set[str],
         terminators: set[str]) -> set[str]:
-    """Close exact terminal-emitter wrappers over bounded helper call edges."""
+    """Close the unchanged exact wrapper grammar over precomputed call edges."""
     terminal = set(seeds)
     symbols = {symbol for _, symbol, _ in aot_functions}
-    for _ in range(len(symbols) + 1):
-        added = set()
-        for _, symbol, body in aot_functions:
-            if symbol in terminal:
-                continue
-            for callee in terminal:
-                direct_call = rf'{re.escape(callee)}\s*\([^;{{}}]*\)'
-                if (re.fullmatch(
-                        rf'\s*(?:{direct_call}\s*;|return\s+{direct_call}\s*;)'
-                        r'\s*(?:return\s*;\s*)?', body, re.S) is not None and
-                        not any(_xi_c_call_records(body, terminator)
-                                for terminator in terminators)):
-                    added.add(symbol)
-                    break
-        if not added:
-            break
-        terminal.update(added)
-    else:
-        die("xi-lowering: terminal emitter transitive closure did not converge")
+    possible = terminal | symbols
+    if not possible:
+        return terminal
+    names = '|'.join(re.escape(callee) for callee in sorted(
+        possible, key=lambda value: (-len(value), value)))
+    calls = re.compile(
+        r'\s*(?:(?P<bare>' + names + r')\s*\([^;{}]*\)\s*;|return\s+'
+        r'(?P<returned>' + names + r')\s*\([^;{}]*\)\s*;)'
+        r'\s*(?:return\s*;\s*)?', re.S)
+    callers: dict[str, set[str]] = {}
+    for _, symbol, body in aot_functions:
+        match = calls.fullmatch(body)
+        if match is None:
+            continue
+        callee = match.group('bare') or match.group('returned')
+        if not any(_xi_c_call_records(body, terminator)
+                   for terminator in terminators):
+            callers.setdefault(callee, set()).add(symbol)
+    pending = list(terminal)
+    while pending:
+        for caller in callers.get(pending.pop(), ()):
+            if caller not in terminal:
+                terminal.add(caller)
+                pending.append(caller)
     return terminal
 
 
@@ -5000,15 +5124,42 @@ def _xi_terminal_selector_census(
     factory_rows = tuple(
         (selector, tuple(sorted(factory_helpers[selector])))
         for selector in sorted(selectors))
+    empty_helper_rows = tuple((selector, ()) for selector, _ in predicate_rows)
+    helper_row_indices: dict[str, list[tuple[int, int]]] = {}
+    for kind, rows in enumerate((predicate_rows, factory_rows)):
+        for index, (_, helpers) in enumerate(rows):
+            for helper in helpers:
+                helper_row_indices.setdefault(helper, []).append((kind, index))
     declared_by_function: dict[tuple[str, str], set[str]] = {}
     for selector, routes in declared_routes.items():
         for route in routes:
             declared_by_function.setdefault(route, set()).add(selector)
     for source_path, symbol, function_body in aot_functions:
+        # Route evidence only depends on helper/emitter/terminator names that
+        # can be called in this exact body. Keep the complete function census,
+        # and every selector row (including empty helper rows), while avoiding
+        # global helper additions invalidating unrelated immutable bodies.
+        called_symbols = frozenset(re.findall(
+            r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', function_body))
+        referenced: tuple[dict[int, set[str]], dict[int, set[str]]] = ({}, {})
+        for helper in called_symbols:
+            for kind, index in helper_row_indices.get(helper, ()):
+                referenced[kind].setdefault(index, set()).add(helper)
+        projected_rows = []
+        for referenced_rows in referenced:
+            if not referenced_rows:
+                projected_rows.append(empty_helper_rows)
+                continue
+            rows = list(empty_helper_rows)
+            for index, helpers in referenced_rows.items():
+                rows[index] = (empty_helper_rows[index][0], tuple(sorted(helpers)))
+            projected_rows.append(tuple(rows))
+        relevant_predicates, relevant_factories = projected_rows
         discovered = _xi_terminal_selector_routes_for_function(
-            function_body, selector_rows, emitter_rows, terminator_rows,
+            function_body, selector_rows, emitter_rows & called_symbols,
+            terminator_rows & called_symbols,
             frozenset(declared_by_function.get((source_path, symbol), set())),
-            predicate_rows, factory_rows,
+            relevant_predicates, relevant_factories,
             frozenset(root_values.get((source_path, symbol), set())))
         for selector in discovered:
             census[selector].add((source_path, symbol))
@@ -5030,6 +5181,8 @@ def _xi_terminal_selector_routes_for_function(
     lexical/control-flow evidence computed under the exact same selector,
     emitter, helper, terminator, declared-route and root-value inputs.
     """
+    if not known_emitters:
+        return frozenset()
     emitter_pattern = re.compile(
         r'\b(?:' + '|'.join(
             re.escape(symbol) for symbol in sorted(known_emitters)) + r')\s*\(')
@@ -5040,14 +5193,14 @@ def _xi_terminal_selector_routes_for_function(
     factory_helpers = {selector: set(helpers)
                        for selector, helpers in factory_rows}
     candidates = set(re.findall(r'\bXI_[A-Z0-9_]+\b', function_body)) & selectors
+    called_symbols = frozenset(re.findall(
+        r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', function_body))
     candidates.update(
         selector for selector, helpers in predicate_helpers.items()
-        if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
-               for helper in helpers))
+        if called_symbols.intersection(helpers))
     candidates.update(
         selector for selector, helpers in factory_helpers.items()
-        if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
-               for helper in helpers))
+        if called_symbols.intersection(helpers))
     discovered = set()
     for selector in candidates - declared_selectors:
         if _xi_direct_selector_present(
@@ -10998,12 +11151,12 @@ def _test_xi_lowering_parser(
         'switch (v->op) { case XI_GO: return true; xicgen_go(); return true; }',
         'XI_GO', 'xicgen_go')
     real_consumers = [entry for entry in real_entries if entry.target_consumers]
-    assert len(real_consumers) == 33
+    assert len(real_consumers) == 35
     assert sum(len(bindings) for entry in real_consumers
-            for bindings in entry.target_consumers.values()) == 44
+            for bindings in entry.target_consumers.values()) == 46
     assert sum(len(binding.predicates) for entry in real_consumers
                for bindings in entry.target_consumers.values()
-               for binding in bindings) == 6
+               for binding in bindings) == 8
     assert sum(1 for entry in real_consumers
                for bindings in entry.target_consumers.values()
                for binding in bindings
@@ -11044,6 +11197,34 @@ def _test_xi_lowering_parser(
         for op_name in {
             'xi.call', 'xi.call.method', 'xi.call.method.direct',
             'xi.call.builtin'}
+    }
+    byte_statement_consumers = {
+        (entry.op_name, target, binding.source_path, binding.symbol,
+         binding.witness_kind,
+         tuple((emitter.source_path, emitter.symbol)
+               for emitter in binding.emitters))
+        for entry in real_consumers
+        if entry.op_name in {'xi.byte.slice.copy', 'xi.byte.array.append.from'}
+        for target, bindings in entry.target_consumers.items()
+        for binding in bindings
+    }
+    assert byte_statement_consumers == {
+        (op_name, 'aot-c', 'src/aot/xi_cgen.c', 'emit_value_stmt',
+         'selector', (('src/aot/xi_cgen.c', 'emit_value_rhs'),))
+        for op_name in {'xi.byte.slice.copy', 'xi.byte.array.append.from'}
+    }
+    assert {
+        (entry.op_name, predicate.source_path, predicate.symbol,
+         predicate.domain_source_path, predicate.domain_symbol)
+        for entry in real_consumers
+        if entry.op_name in {'xi.byte.slice.copy', 'xi.byte.array.append.from'}
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for predicate in binding.predicates
+    } == {
+        (op_name, 'src/aot/xi_cgen.c',
+         'cg_unused_byte_append_emits_statement', None, None)
+        for op_name in {'xi.byte.slice.copy', 'xi.byte.array.append.from'}
     }
     assert sum(len(binding.routers) for entry in real_consumers
                for bindings in entry.target_consumers.values()

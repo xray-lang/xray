@@ -5334,6 +5334,30 @@ if(BUILD_TESTS)
             HINTS "$ENV{ProgramFiles}/LLVM/bin" REQUIRED)
     endif()
     add_test(
+        NAME xi_terminal_emitter_closure
+        COMMAND ${XRAY_PYTHON} -B
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/xisagen/test_terminal_emitter_closure.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xi_terminal_emitter_closure PROPERTIES
+        LABELS "meta;xi;generator;target-machine;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xi_terminal_selector_dependencies
+        COMMAND ${XRAY_PYTHON} -B
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/xisagen/test_terminal_selector_dependencies.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xi_terminal_selector_dependencies PROPERTIES
+        LABELS "meta;xi;generator;target-machine;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME xi_generator_fast_self_test
         COMMAND ${XRAY_PYTHON} -B
                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/xisagen/xisagen.py test-fast

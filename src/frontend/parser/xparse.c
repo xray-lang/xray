@@ -539,7 +539,7 @@ void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
 // Report error at a specific token (shared implementation)
 static void xr_parser_error_at(Parser *parser, Token *token, const char *message) {
     if (!xr_parser_healthy(parser)) return;
-    if (parser->panic_mode)
+    if (parser->panic_mode || (parser->max_errors > 0 && parser->error_count >= parser->max_errors))
         return;  // Avoid error cascade
 
     parser->panic_mode = 1;
@@ -548,8 +548,8 @@ static void xr_parser_error_at(Parser *parser, Token *token, const char *message
 
     // Call error callback if set (for LSP)
     if (parser->error_callback) {
-        parser->error_callback(parser->error_callback_data, token->line, 0, token->line,
-                               token->length, message);
+        parser->error_callback(parser->error_callback_data, token->line, token->column, token->line,
+                               token->column + token->length, message);
         return;
     }
 
@@ -600,7 +600,7 @@ void xr_parser_error_coded_note(Parser *parser, Token *token, int code, const ch
     XR_DCHECK(token != NULL, "error_coded_note: NULL token");
     XR_DCHECK(title != NULL, "error_coded_note: NULL title");
 
-    if (parser->panic_mode)
+    if (parser->panic_mode || (parser->max_errors > 0 && parser->error_count >= parser->max_errors))
         return;
 
     parser->panic_mode = 1;

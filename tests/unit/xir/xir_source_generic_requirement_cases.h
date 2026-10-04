@@ -11,14 +11,52 @@
  */
 #ifndef XIR_SOURCE_GENERIC_REQUIREMENT_CASES_H
 #define XIR_SOURCE_GENERIC_REQUIREMENT_CASES_H
+#include "frontend/parser/xparse.h"
+
+typedef struct SourceQuerySyntaxExpectation {
+    const char *reason;
+    unsigned count;
+} SourceQuerySyntaxExpectation;
+static void source_query_syntax_diagnostic(void *data, int line, int column,
+    int end_line, int end_column, const char *message) {
+    SourceQuerySyntaxExpectation *expected = data;
+    ++expected->count;
+    if (!(line > 0 && column > 0 && end_line == line && end_column >= column))
+        fprintf(stderr, "parser rejection range: %d:%d..%d:%d %s\n", line, column, end_line, end_column, message);
+    /* EOF has a zero-width insertion point; ordinary tokens span their bytes. */
+    CHECK(line > 0 && column > 0 && end_line == line && end_column >= column);
+    if (strcmp(message, expected->reason))
+        fprintf(stderr, "parser rejection %u: expected %s; got %s\n", expected->count, expected->reason, message);
+    CHECK(!strcmp(message, expected->reason));
+}
+static void source_query_syntax_boundary(const XrXirSourceRequest *request,
+    const char *source, const char *reason) {
+    XrCompileResourceStats before = {0}, after = {0};
+    CHECK(xr_compile_resources_stats(request->context->resources, &before) == XR_COMPILE_RESOURCE_OK);
+    SourceQuerySyntaxExpectation expected = {reason, 0};
+    XrParseDiagnostics diagnostics = {source_query_syntax_diagnostic, &expected, 1};
+    AstNode *ast = NULL;
+    CHECK(xr_compile_parse_with_trivia(request->session, source, request->entry_path,
+        &diagnostics, &ast) == XR_PARSE_SYNTAX);
+    CHECK(expected.count == 1 && !ast);
+    CHECK(xr_compile_session_resource_status(request->session) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_resources_stats(request->context->resources, &after) == XR_COMPILE_RESOURCE_OK);
+    CHECK(after.live_bytes == before.live_bytes && after.work > before.work &&
+        after.allocated_bytes > before.allocated_bytes);
+}
+static void source_query_syntax_graph_diagnostic(const XrXirSourceDiagnostic *diagnostic) {
+    CHECK(diagnostic->status == XR_XIR_BAD_STRUCTURE && diagnostic->module == 0 &&
+        !diagnostic->line && !diagnostic->column);
+    CHECK(!strcmp(diagnostic->message, "module graph build failed"));
+}
 static void source_generic_requirement_run(XrXirSourceRequest *request, const char *source) {
     write_source(request->entry_path,source);
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+    XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"generic requirement: %u %d:%d %s\n",status,
         diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
-    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
     const XrXirSourceDeclaration *owner=declaration(view,"Mapper",0);
     if (owner) {
     const XrXirSourceDeclaration *method=declaration(view,"map",owner->id);
@@ -29,20 +67,21 @@ static void source_generic_requirement_run(XrXirSourceRequest *request, const ch
     CHECK(method->type.type==(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1));
     }
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(result.checked,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(result.checked); result.checked=NULL;
+    const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(result.checked);
+    CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(result.checked); result.checked=NULL;
     write_source(request->entry_path,"const replaced=0\n");
     if (owner) CHECK(declaration(view,"map",owner->id)->generic_constraints[1].markers==XR_XIR_CONSTRAINT_SENDABLE);
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
     XrXirArtifact *checked=NULL,*specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&checked,NULL)==XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(checked,NULL,&specialized,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &checked, NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(checked, &specialized, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(specialized,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(specialized);
-    const XrXirModule *module=xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(specialized, &target, &lowered, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(specialized);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t entries[2]={UINT32_MAX,UINT32_MAX};
     const char *names[]={"genericMethodNumber","genericMethodText"};
     for (uint32_t f=0;f<module->function_count;++f) {
@@ -53,7 +92,7 @@ static void source_generic_requirement_run(XrXirSourceRequest *request, const ch
     }
     CHECK(entries[0]!=UINT32_MAX && entries[1]!=UINT32_MAX);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program)==XR_XIR_OK);
     XrXirValue retained[2]={{0},{0}};
     for (uint32_t run=0;run<2;++run) {
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance=NULL;
@@ -70,7 +109,7 @@ static void source_generic_requirement_run(XrXirSourceRequest *request, const ch
         CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (uint32_t run=0;run<2;++run) {
         const char *bytes=NULL; size_t length=0;
         CHECK(retained[run].type==XR_XIR_STRING && xr_xir_string_view(&retained[run],&bytes,&length));
@@ -147,7 +186,7 @@ static void source_generic_requirement_rejections(XrXirSourceRequest *request) {
     };
     const char *reasons[] = {
         "method type argument does not prove", "implementation witness definition obligations failed",
-        "implementation witness definition obligations failed", "duplicates or shadows", "failed to parse module",
+        "implementation witness definition obligations failed", "duplicates or shadows", "module graph build failed",
         "matching own parameters", "cannot infer all method type arguments", "exact explicit type arguments",
         "implementation witness definition obligations failed", "source declaration type structure is invalid",
         "source declaration type structure is invalid"
@@ -162,14 +201,16 @@ static void source_generic_requirement_rejections(XrXirSourceRequest *request) {
     _Static_assert(sizeof(reasons)/sizeof(*reasons)==sizeof(rejected)/sizeof(*rejected),
         "Every rejection requires an independent diagnostic expectation");
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {
+        if (i == 4) source_query_syntax_boundary(request, rejected[i], "duplicate type parameter name 'U'");
         write_source(request->entry_path,rejected[i]);
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+        XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
         if (status!=statuses[i] || !strstr(diagnostic.message,reasons[i]))
             fprintf(stderr,"generic requirement rejection %u: %u %s\n",i,status,diagnostic.message);
-        CHECK(status==statuses[i] && !result.checked && strstr(diagnostic.message,reasons[i]));
-        if (result.snapshot) CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-        xr_xir_source_result_free(&result);
+        CHECK(status==statuses[i] && !result.checked && !result.snapshot && strstr(diagnostic.message,reasons[i]));
+        if (i == 4) source_query_syntax_graph_diagnostic(&diagnostic);
+        CHECK(!result.snapshot);
+        xr_xir_compile_source_result_free(&result);
     }
 }
 #endif // XIR_SOURCE_GENERIC_REQUIREMENT_CASES_H

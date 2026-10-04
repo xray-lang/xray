@@ -504,7 +504,7 @@ set_tests_properties(test_xir_source_product_vm_modules test_xir_source_product_
 target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 add_xray_bootstrap_executable(test_xir_source_admission xir/test_xir_source_admission.c)
 add_xray_bootstrap_executable(test_xir_source_generics xir/test_xir_source_generics.c)
-add_xray_bootstrap_executable(test_xir_source_query xir/test_xir_source_query.c)
+add_executable(test_xir_source_query xir/test_xir_source_query.c)
 add_xray_bootstrap_executable(test_xir_source_packages xir/test_xir_source_packages.c)
 target_link_libraries(test_xir_source_packages PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 if(MSVC)

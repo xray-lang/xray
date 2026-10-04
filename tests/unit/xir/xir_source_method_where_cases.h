@@ -60,25 +60,34 @@ static void source_interface_method_where_rejections(XrXirSourceRequest *request
         {("interface Evidence<A> {}\n"
           "interface I { map<U>(value:U)->U where U:Evidence<U> }\n"
           "fn unused<T:I,U>(mapper:T,value:U)->U{return mapper.map<U>(value)}\n"), XR_XIR_BAD_TYPE,"method type argument does not prove"},
-        {"interface I<A> { map<U>(value:U)->U where A:Sendable }\n", XR_XIR_BAD_STRUCTURE,"failed to parse module"},
-        {"interface I<A:Sendable> { map<U>(value:U)->U where A:Sendable }\n", XR_XIR_BAD_STRUCTURE,"failed to parse module"},
-        {"interface I<A> { map(value:A)->A where A:Sendable }\n", XR_XIR_BAD_STRUCTURE,"failed to parse module"},
-        {"interface I { map<U>(value:U)->U where Missing:Sendable }\n", XR_XIR_BAD_STRUCTURE,"failed to parse module"},
-        {"interface I { map<U>(value:U)->U where U.Member:Sendable }\n", XR_XIR_BAD_STRUCTURE,"failed to parse module"},
+        {"interface I<A> { map<U>(value:U)->U where A:Sendable }\n", XR_XIR_BAD_STRUCTURE,"module graph build failed"},
+        {"interface I<A:Sendable> { map<U>(value:U)->U where A:Sendable }\n", XR_XIR_BAD_STRUCTURE,"module graph build failed"},
+        {"interface I<A> { map(value:A)->A where A:Sendable }\n", XR_XIR_BAD_STRUCTURE,"module graph build failed"},
+        {"interface I { map<U>(value:U)->U where Missing:Sendable }\n", XR_XIR_BAD_STRUCTURE,"module graph build failed"},
+        {"interface I { map<U>(value:U)->U where U.Member:Sendable }\n", XR_XIR_BAD_STRUCTURE,"module graph build failed"},
         {("interface I { map<U>(value:U)->U where U:Sendable }\n"
           "fn unused<T:I,U>(receiver:T,value:U)->U{return receiver.map<U>(value)}\n"), XR_XIR_BAD_TYPE,"method type argument does not prove"},
         {("interface I { map<U>(value:U)->U }\n"
           "struct S implements I { map<V>(value:V)->V where V:Sendable{return value} }\n"), XR_XIR_BAD_TYPE,"implementation witness definition obligations failed"}
     };
+    const char *syntax_reasons[] = {
+        "'where' names 'A', which is not a type parameter here",
+        "'where' names 'A', which is not a type parameter here",
+        "'where' requires type parameters to constrain",
+        "'where' names 'Missing', which is not a type parameter here",
+        "expected ':' after type parameter in 'where'"
+    };
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {
+        if (i >= 1 && i <= 5) source_query_syntax_boundary(request, rejected[i].source, syntax_reasons[i - 1]);
         write_source(request->entry_path,rejected[i].source);
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+        XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
         if (status!=rejected[i].status || !strstr(diagnostic.message,rejected[i].reason))
             fprintf(stderr,"method where rejection %u: %u %s\n",i,status,diagnostic.message);
-        CHECK(status==rejected[i].status && !result.checked && strstr(diagnostic.message,rejected[i].reason));
-        if (result.snapshot) CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-        xr_xir_source_result_free(&result);
+        CHECK(status==rejected[i].status && !result.checked && !result.snapshot && strstr(diagnostic.message,rejected[i].reason));
+        if (i >= 1 && i <= 5) source_query_syntax_graph_diagnostic(&diagnostic);
+        CHECK(!result.snapshot);
+        xr_xir_compile_source_result_free(&result);
     }
 }
 #endif // XIR_SOURCE_METHOD_WHERE_CASES_H

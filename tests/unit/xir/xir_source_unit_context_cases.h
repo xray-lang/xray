@@ -47,12 +47,12 @@ static void source_unit_context_cases(XrXirSourceRequest *request) {
  for (unsigned i=0;i<sizeof(bad_sources)/sizeof(bad_sources[0]);++i) {
   write_source(request->entry_path,bad_sources[i]);
   XrXirSourceResult rejected={0}; XrXirSourceDiagnostic error={0};
-  CHECK(xr_xir_source_check(request,&rejected,&error)==XR_XIR_BAD_TYPE&&!rejected.checked);
+  CHECK(xr_xir_compile_source_check(request, &rejected, &error, NULL)==XR_XIR_BAD_TYPE&&!rejected.checked && !rejected.snapshot);
   if(strcmp(error.message,messages[i])) fprintf(stderr,"Unit helper case %u: %s\n",i,error.message);
-  CHECK(!strcmp(error.message,messages[i]));xr_xir_source_result_free(&rejected);
+  CHECK(!strcmp(error.message,messages[i]));xr_xir_compile_source_result_free(&rejected);
  }
  write_source(request->entry_path,"fn bad(){return 41}\n");
  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
- CHECK(xr_xir_source_check(request,&result,&diagnostic)==XR_XIR_BAD_TYPE&&!result.checked);
- CHECK(!strcmp(diagnostic.message,"expression cannot satisfy its declared type"));xr_xir_source_result_free(&result);
+ CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, NULL)==XR_XIR_BAD_TYPE&&!result.checked && !result.snapshot);
+ CHECK(!strcmp(diagnostic.message,"expression cannot satisfy its declared type"));xr_xir_compile_source_result_free(&result);
 }

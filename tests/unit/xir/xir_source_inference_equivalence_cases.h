@@ -60,9 +60,9 @@ static void inference_equivalence_closed(XrXirArtifact *artifact) {
     CHECK(calls[0]->immediate==calls[1]->immediate && calls[1]->immediate!=calls[2]->immediate);
     CHECK(provenance->origins[calls[0]->immediate].function==provenance->origins[calls[2]->immediate].function);
     int64_t saved=calls[1]->immediate; calls[1]->immediate=calls[2]->immediate;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_BAD_TYPE);
     calls[1]->immediate=saved;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
 }
 static void source_inference_equivalence_cases(XrXirSourceRequest *request) {
     write_source(request->entry_path,
@@ -74,25 +74,27 @@ static void source_inference_equivalence_cases(XrXirSourceRequest *request) {
         "export fn first()->i64{return explicitRead<i64,Box<i64,string>>(Box<i64,string>{value:41})}\n"
         "export fn second()->i64{return inferredRead<i64,Box<i64,string>>(Box<i64,string>{value:41})}\n"
         "export fn third()->i64{return differentRead<i64,Box<i64,string>>(Box<i64,string>{value:41})}\n");
-    XrCompilerSession *session=xr_compiler_session_new(NULL); CHECK(session);
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
     XrXirSourceRequest local=*request; local.session=session;
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(&local,&result,&diagnostic);
+    XrXirStatus status=xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"inference equivalence: %u %s\n",status,diagnostic.message);
     CHECK(status==XR_XIR_OK && result.checked);
-    xr_compiler_session_delete(session);
-    inference_equivalence_original(xr_xir_artifact_module(result.checked));
+    xr_compile_session_free(session);
+    inference_equivalence_original(xr_xir_compile_artifact_module(result.checked));
     XrXirArtifact *closed=NULL,*copy=NULL,*lowered=NULL;
-    CHECK(xr_xir_specialize(result.checked,NULL,&closed,NULL)==XR_XIR_OK);
-    xr_xir_source_result_free(&result); inference_equivalence_closed(closed);
+    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result); inference_equivalence_closed(closed);
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(closed,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&copy,NULL)==XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet); inference_equivalence_closed(copy);
+    const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(closed);
+    CHECK(xr_xir_compile_checked_write(closed, &packet, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &copy, NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet); inference_equivalence_closed(copy);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(copy,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(copy); inference_equivalence_closed(lowered); xr_xir_artifact_free(lowered);
+    CHECK(xr_xir_compile_lower(copy, &target, &lowered, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(copy); inference_equivalence_closed(lowered); xr_xir_compile_artifact_free(lowered);
 }
 static void source_inference_phantom_cases(XrXirSourceRequest *request) {
     const char *sources[]={
@@ -108,23 +110,24 @@ static void source_inference_phantom_cases(XrXirSourceRequest *request) {
     XrXirSourceResult described={0};
     for (unsigned mode=0;mode<2;++mode) {
         write_source(request->entry_path,sources[mode]);
-        XrCompilerSession *session=xr_compiler_session_new(NULL); CHECK(session);
+        XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
         XrXirSourceRequest local=*request; local.session=session;
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(&local,&result,&diagnostic);
-        xr_compiler_session_delete(session);
+        XrXirStatus status=xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);
+        xr_compile_session_free(session);
         if (!mode) {
             CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
-            xr_xir_artifact_free(result.checked); result.checked=NULL; described=result;
+            xr_xir_compile_artifact_free(result.checked); result.checked=NULL; described=result;
         } else {
-            CHECK(status==XR_XIR_BAD_TYPE && !result.checked);
+            CHECK(status==XR_XIR_BAD_TYPE && !result.checked && !result.snapshot);
             CHECK(strstr(diagnostic.message,"cannot infer all method type arguments; supply an explicit list"));
-            if (result.snapshot) CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-            CHECK(xr_xir_source_snapshot_view(described.snapshot)->complete);
-            xr_xir_source_result_free(&result);
+            CHECK(!result.snapshot);
+            CHECK(xr_xir_compile_source_snapshot_view(described.snapshot)->complete);
+            xr_xir_compile_source_result_free(&result);
         }
     }
-    xr_xir_source_result_free(&described);
+    xr_xir_compile_source_result_free(&described);
 }
 #endif // XIR_SOURCE_INFERENCE_EQUIVALENCE_CASES_H
 
