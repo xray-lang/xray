@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_runtime_allocations.h"
 #include "xir_local_cases.h"
 XR_DATA const XrXirCallEntry fixture_local_entries[];
-int main(void) { local_cases(fixture_local_entries); numeric_cleanup(fixture_local_entries + 1); phi_cases(fixture_local_entries + 2); local_cases(fixture_local_entries + 3); phi_cases(fixture_local_entries + 4); puts("Native local ownership passed"); return 0; }
+int main(void) { local_cases(fixture_local_entries); numeric_cleanup(fixture_local_entries + 1); phi_cases(fixture_local_entries + 2); local_cases(fixture_local_entries + 3); phi_cases(fixture_local_entries + 4); CHECK(!runtime_live && !runtime_bytes); puts("Native local ownership passed"); return 0; }

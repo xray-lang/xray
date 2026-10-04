@@ -69,6 +69,7 @@ static void packet_free(void *p) {
 #include "xir/xxir_program_match.c"
 #include "xir_checked_fixture.h"
 #include "xir_generic_fixture.h"
+#include "xir_source_fixture_owner.h"
 #include "xir_local_fixture.h"
 #include "xir_types_fixture.h"
 #include "xir_array_metadata_fixture.h"
@@ -89,8 +90,10 @@ static XrXirArtifact *array_packet_fixture(void) {
     return checked;
 }
 static void packet_failures(unsigned kind) {
+    SourceFixtureOwner local_owner = {0};
+    if (kind == 2) source_fixture_owner_new(&local_owner);
     XrXirArtifact *checked = kind >= 20 ? cleanup_role_fixture() : kind == 19 ? enum_checked_fixture() : kind >= 17 ? nominal_expression_fixture() : kind == 16 ? struct_set_checked(0) : kind == 15 ? struct_ops_checked(0) : kind == 14 ? nominal_chain_fixture(3, 2) : kind >= 9 ? nominal_checked_fixture(kind >= 12 ? 3 : kind == 11 ? 2 : kind == 10 ? 1 : 0) : kind == 8 ? array_generic_fixture() : kind == 7 ? array_packet_fixture() :
-        kind == 6 ? constructed_fixture() : kind == 5 ? generic_callable_fixture() : kind == 4 ? function_ir_fixture() : kind == 3 ? callable_fixture() : kind == 2 ? local_fixture() : kind == 1 ? generic_fixture() : checked_fixture();
+        kind == 6 ? constructed_fixture() : kind == 5 ? generic_callable_fixture() : kind == 4 ? function_ir_fixture() : kind == 3 ? callable_fixture() : kind == 2 ? local_fixture(&local_owner.context) : kind == 1 ? generic_fixture() : checked_fixture();
     if (kind == 13 || kind == 18 || kind == 21) {
         XrXirArtifact *closed = NULL;
         CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
@@ -130,7 +133,9 @@ static void packet_failures(unsigned kind) {
         xr_xir_artifact_free(decoded); CHECK(live == 1);
         packet.bytes[i] ^= 0xFF;
     }
-    xr_xir_checked_packet_free(&packet); CHECK(!live);
+    xr_xir_checked_packet_free(&packet);
+    if (kind == 2) source_fixture_owner_free(&local_owner);
+    CHECK(!live);
     printf("%s packet physical release: %zu writer and %zu reader allocation sites\n",
         kind == 18 ? "Specialized nominal expressions" : kind == 17 ? "Abstract nominal expressions" : kind == 14 ? "Nominal field graph" : kind == 13 ? "Closed nominal fields" : kind == 12 ? "Nominal field expression" : kind == 11 ? "Nominal instance" : kind == 10 ? "Nominal Array field" : kind == 9 ? "Nominal declaration" : kind == 8 ? "Generic Array" : kind == 7 ? "Array operations" : kind == 6 ? "Constructed" : kind == 5 ? "Generic callable" : kind == 4 ? "Function" : kind == 3 ? "Callable" : kind == 2 ? "Local" : kind == 1 ? "Generic" : "Closed", write_sites, read_sites);
 }

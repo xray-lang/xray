@@ -11,7 +11,7 @@
  */
 #ifndef XIR_LOCAL_FIXTURE_H
 #define XIR_LOCAL_FIXTURE_H
-static XrXirArtifact *local_fixture(void) {
+static XrXirArtifact *local_fixture(const XrXirCompileContext *context) {
     const XrXirType parameters[] = {XR_XIR_STRING, XR_XIR_STRING, XR_XIR_BOOL};
     const XrXirInstruction ops[] = {
         {XR_XIR_LOCAL_NEW, XR_XIR_STRING, {0}, {0}, 0, {0}},
@@ -95,7 +95,7 @@ static XrXirArtifact *local_fixture(void) {
         {"reset", 5, fault_parameters, 3, XR_XIR_STRING, reset_blocks, 4, reset_ops, 17, reset_inputs, 12}};
     const XrXirModule built = {XR_XIR_BUILT, functions, 5, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 #endif

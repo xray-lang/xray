@@ -151,7 +151,8 @@ static void function_allocation_failures(void) {
 }
 
 static void phi_snapshot_failure(void) {
-    XrXirArtifact *checked = local_fixture(), *lowered = NULL;
+    SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
+    XrXirArtifact *checked = local_fixture(&owner.context), *lowered = NULL;
     size_t baseline = live, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
@@ -188,7 +189,7 @@ static void phi_snapshot_failure(void) {
     for (uint32_t i = layout->owned_count; i > 0; --i) xr_xir_owned_slot_clear(frame, layout->owned_offsets[i - 1]);
     CHECK(atomic_load(&object_pointer(&a)->references) == 1 && atomic_load(&object_pointer(&b)->references) == 1);
     xr_free(frame); xr_xir_value_drop(&a); xr_xir_value_drop(&b); xr_xir_domain_drop(domain);
-    xr_xir_artifact_free(lowered); CHECK(!live);
+    xr_xir_artifact_free(lowered); source_fixture_owner_free(&owner); CHECK(!live);
     printf("PHI lower physical release: %zu allocation sites; partial snapshot failure leaves destinations unchanged\n", sites);
 }
 
