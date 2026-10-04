@@ -1,0 +1,10 @@
+# Observe the canonical compiler allocator and private reachability failure.
+add_executable(test_xir_provenance_budget_release xir/test_xir_provenance_budget_release.c)
+target_link_libraries(test_xir_provenance_budget_release PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_provenance_budget_release PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_provenance_budget_release PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_provenance_budget_release COMMAND test_xir_provenance_budget_release)
+set_tests_properties(test_xir_provenance_budget_release PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 300)

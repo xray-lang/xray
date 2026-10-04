@@ -198,10 +198,12 @@ XrXirStatus xr_xir_compile_initialization_check(const XrXirCompileContext *compi
     XrXirCompileContext *remaining = &compile_state;
     if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     if (!module || !module->functions || function>=module->function_count || !remaining) return XR_XIR_BAD_STRUCTURE;
-    VerifyContext context={*remaining,{XR_XIR_OK,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE},module};
+    VerifyContext context={*remaining,{XR_XIR_OK,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE},module,{remaining->resources,NULL},{remaining->resources,NULL,0}};
     XrXirStatus status=initialization_check(&module->functions[function],regions,&context);
     *remaining=context.remaining;
     context.location.status=status;
     if (diagnostic) *diagnostic=context.location;
+    xir_type_scratch_free(&context.pending);
+    xr_xir_constraint_scratch_free(&context.scratch);
     return status;
 }

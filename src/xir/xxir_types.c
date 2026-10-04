@@ -10,6 +10,7 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_type_match_internal.h"
 #include "xxir_compile_memory.h"
 
 XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {

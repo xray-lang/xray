@@ -23,6 +23,8 @@
 #include "xxir_operand_roles.h"
 #include "xxir_initialization.h"
 #include "xxir_constraint_proof.h"
+#include "xxir_constraint_proof_internal.h"
+#include "xxir_type_scratch_internal.h"
 #include "xxir_implementation_verify.h"
 #include "../base/xmalloc.h"
 #include <limits.h>
@@ -50,6 +52,8 @@ typedef struct VerifyContext {
     XrXirCompileContext remaining;
     XrXirDiagnostic location;
     const XrXirModule *module;
+    XirConstraintScratch scratch;
+    XirTypeScratch pending;
 } VerifyContext;
 
 typedef struct Graph {
@@ -270,15 +274,25 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
 
 static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, XrXirType type) {
     XrXirProofContext proof = {context->module, {XR_XIR_CONTEXT_FUNCTION,function,0}};
-    XrXirStatus status = xr_xir_compile_type_use_verify(&context->remaining, &proof, type);
+    XrXirStatus status = xr_xir_compile_type_use_verify_scratch(&context->remaining, &proof, type, &context->scratch);
     /* Naming checks for substituted types are discharged by original-definition
      * verification and complete correspondence before this module can publish. */
     if (status != XR_XIR_OK || context->module->provenance) return status;
-    return xr_xir_compile_type_access(&context->remaining, context->module, function, type);
+    return xr_xir_compile_type_access_scratch(&context->remaining, context->module, function, type, &context->pending);
 }
 
+/* The module declaration pass proves signatures in their function contexts.
+ * Naming and access remain ordered with the function's structural checks. */
+static XrXirStatus signature_type_use_context(VerifyContext *context, uint32_t function,
+    XrXirType type, bool constraints_proved) {
+    if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+    if (!constraints_proved) return type_use_context(context, function, type);
+    if (context->module->provenance) return XR_XIR_OK;
+    return xr_xir_compile_type_access_scratch(&context->remaining, context->module,
+        function, type, &context->pending);
+}
 static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stage,
-                                 VerifyContext *context) {
+                                 VerifyContext *context, bool signature_constraints_proved) {
     if (!spend_count(&context->remaining.limits.parameters, function->parameter_count) ||
         !spend_count(&context->remaining.limits.blocks, function->block_count) ||
         !spend_count(&context->remaining.limits.instructions, function->instruction_count))
@@ -301,7 +315,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
     if (xr_xir_type_is_cell(context->module->types, function->result)) return XR_XIR_BAD_TYPE;
     if (function->result != XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->result))
         return XR_XIR_BAD_TYPE;
-    XrXirStatus visibility = type_use_context(context, function_id, function->result);
+    XrXirStatus visibility = signature_type_use_context(context, function_id, function->result, signature_constraints_proved);
     if (visibility != XR_XIR_OK) return visibility;
     if (!xir_compile_work(&context->remaining, function->name_length))
         return XR_XIR_BUDGET;
@@ -312,7 +326,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             return XR_XIR_BUDGET;
         if (!xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
             return XR_XIR_BAD_TYPE;
-        visibility = type_use_context(context, function_id, function->parameters[p]);
+        visibility = signature_type_use_context(context, function_id, function->parameters[p], signature_constraints_proved);
         if (visibility != XR_XIR_OK) return visibility;
         /* A cell parameter is a ref parameter or a closure capture, both internal to the module
          * graph; it needs the declaration table to know which functions are entries. */
@@ -896,8 +910,8 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
 #include "xxir_initialization.inc.c"
 #include "xxir_cleanup_frontier.inc.c"
 static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage stage,
-                                 VerifyContext *context) {
-    XrXirStatus status = function_shape(function, stage, context);
+                                 VerifyContext *context, bool signature_constraints_proved) {
+    XrXirStatus status = function_shape(function, stage, context, signature_constraints_proved);
     if (status != XR_XIR_OK)
         return status;
     Graph graph = {0};
@@ -969,20 +983,23 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirCompileCont
 }
 
 static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCompileContext *remaining) {
+    XirTypeScratch scratch = {remaining->resources, NULL, 0};
+    XrXirStatus status = XR_XIR_OK;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
-        if (!!function->parameters != !!function->parameter_count) return XR_XIR_BAD_STRUCTURE;
+        if (!!function->parameters != !!function->parameter_count) { status = XR_XIR_BAD_STRUCTURE; break; }
         if (function->parameter_count > remaining->limits.parameters ||
-            !xir_compile_work(remaining,(uint64_t)function->parameter_count + 1)) return XR_XIR_BUDGET;
+            !xir_compile_work(remaining,(uint64_t)function->parameter_count + 1)) { status = XR_XIR_BUDGET; break; }
         uint32_t count = module->generics ? module->generics[f].parameter_count : 0;
-        XrXirStatus status = xr_xir_compile_type_expression_shape(remaining, module->types, function->result, count);
+        status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->result, count, &scratch);
         for (uint32_t p = 0; p < function->parameter_count && status == XR_XIR_OK; ++p) {
-            if (function->parameters[p] == XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
-            status = xr_xir_compile_type_expression_shape(remaining, module->types, function->parameters[p], count);
+            if (function->parameters[p] == XR_XIR_UNIT) { status = XR_XIR_BAD_TYPE; break; }
+            status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->parameters[p], count, &scratch);
         }
-        if (status != XR_XIR_OK) return status;
+        if (status != XR_XIR_OK) break;
     }
-    return XR_XIR_OK;
+    xir_type_scratch_free(&scratch);
+    return status;
 }
 
 #include "xxir_effect_obligations.inc.c"
@@ -1010,8 +1027,9 @@ XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, co
         return XR_XIR_BAD_STRUCTURE;
     }
     VerifyContext context = {*remaining,
-                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module};
+                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}};
     XrXirStatus status = XR_XIR_OK;
+    bool signature_constraints_proved = false;
     if (!module || !module->functions || !module->function_count)
         status = XR_XIR_BAD_STRUCTURE;
     else if (module->linkage_kind != XR_XIR_PROGRAM && module->linkage_kind != XR_XIR_LIBRARY)
@@ -1050,7 +1068,13 @@ XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, co
     if (status == XR_XIR_OK) status = xr_xir_compile_implementations_verify(&context.remaining, module);
     if (status == XR_XIR_OK) status = xr_xir_compile_defaults_verify(&context.remaining, module);
     if (status == XR_XIR_OK) status = xr_xir_compile_result_binders_verify(&context.remaining, module);
-    if (status == XR_XIR_OK) status = xr_xir_compile_module_constraints_verify(&context.remaining, module);
+    if (status == XR_XIR_OK) {
+        status = xr_xir_compile_module_constraints_verify(&context.remaining, module);
+        if (status == XR_XIR_OK && (module->types || module->generics)) {
+            if (!xir_compile_work(&context.remaining, 1)) status = XR_XIR_BUDGET;
+            else signature_constraints_proved = true;
+        }
+    }
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;
         if (module->linkage_kind == XR_XIR_PROGRAM) {
@@ -1077,7 +1101,7 @@ XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, co
                 status = XR_XIR_BAD_TYPE;
                 break;
             }
-            status = verify_function(&module->functions[f], module->stage, &context);
+            status = verify_function(&module->functions[f], module->stage, &context, signature_constraints_proved);
             if (status != XR_XIR_OK)
                 break;
         }
@@ -1089,5 +1113,7 @@ XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, co
     *remaining = context.remaining;
     if (diagnostic)
         *diagnostic = context.location;
+    xir_type_scratch_free(&context.pending);
+    xr_xir_constraint_scratch_free(&context.scratch);
     return status;
 }

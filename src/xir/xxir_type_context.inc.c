@@ -9,6 +9,8 @@
  * KEY CONCEPT:
  *   Shared expression identities never share evidence from different scopes.
  */
+#include "xxir_type_scratch_internal.h"
+
 typedef struct TypeContextProof {
     const XrXirTypes *types;
     uint32_t parameter_count;
@@ -47,7 +49,7 @@ static XrXirStatus type_context_nominal(TypeContextProof *c, const XrXirTypeNode
     }
     return XR_XIR_OK;
 }
-static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) {
+static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type, XirTypeScratch *scratch) {
     XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirTypes *types = proof->types;
     XrXirCompileContext *remaining = proof->remaining;
@@ -58,7 +60,7 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) 
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
     if (!xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
 
-    c.pending = xir_compile_calloc(proof->remaining, count, 1, &allocation_status);
+    c.pending = xir_type_scratch_pending(proof->remaining, scratch, count, &allocation_status);
     if (!c.pending) {  return allocation_status; }
     XrXirStatus status = type_context_edge(&c, type, count);
     /* Descending expression IDs visit each reachable node once without recursion. */
@@ -77,12 +79,22 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type) 
                 status = type_context_edge(&c, node->parameters[p].type, i);
         } else status = XR_XIR_BAD_TYPE;
     }
-    xr_compile_resources_free(c.pending);  return status;
+    return status;
 }
-XR_FUNC XrXirStatus xr_xir_compile_type_expression_shape(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type, uint32_t parameter_count) {
-    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+XR_FUNC XrXirStatus xr_xir_compile_type_expression_shape_scratch(const XrXirCompileContext *compile_context,
+    const XrXirTypes *types, XrXirType type, uint32_t parameter_count, XirTypeScratch *scratch) {
+    if (!xir_compile_context_valid(compile_context) || !scratch ||
+        scratch->resources != compile_context->resources) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
-    XrXirCompileContext *remaining = &compile_state;
-    TypeContextProof proof = {types, parameter_count, remaining, NULL};
-    return type_context_verify(&proof, type);
+    TypeContextProof proof = {types, parameter_count, &compile_state, NULL};
+    return type_context_verify(&proof, type, scratch);
+}
+XR_FUNC XrXirStatus xr_xir_compile_type_expression_shape(const XrXirCompileContext *compile_context,
+    const XrXirTypes *types, XrXirType type, uint32_t parameter_count) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XirTypeScratch scratch = {compile_context->resources, NULL, 0};
+    XrXirStatus status = xr_xir_compile_type_expression_shape_scratch(
+        compile_context, types, type, parameter_count, &scratch);
+    xir_type_scratch_free(&scratch);
+    return status;
 }

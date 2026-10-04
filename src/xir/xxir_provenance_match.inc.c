@@ -11,6 +11,7 @@
  */
 #include <stdio.h>
 #include "xxir_constraints.h"
+#include "xxir_type_match_internal.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_implementation_verify.h"
@@ -21,6 +22,7 @@ typedef struct ProvenanceMatch {
     uint32_t count;
     XrXirCompileContext *remaining;
     XrXirDiagnostic *diagnostic;
+    XrXirTypeMatchScratch scratch;
 } ProvenanceMatch;
 static XrXirStatus provenance_call_match(ProvenanceMatch *c, const XrXirOrigin *origin,
     const XrXirInstruction *from, const XrXirInstruction *to) {
@@ -34,7 +36,7 @@ static XrXirStatus provenance_call_match(ProvenanceMatch *c, const XrXirOrigin *
     if (from->type_arguments[0] > arguments || target->argument_count > arguments - from->type_arguments[0])
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t a = 0; a < target->argument_count; ++a) {
-        XrXirStatus status = xr_xir_compile_type_substitution_matches_between(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, generic->arguments[from->type_arguments[0] + a], target->arguments[a]);
+        XrXirStatus status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, generic->arguments[from->type_arguments[0] + a], target->arguments[a], &c->scratch);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -101,9 +103,9 @@ static XrXirStatus provenance_requirement_match(ProvenanceMatch *c, const XrXirO
             target->function != witness.function || target->argument_count != witness.argument_count+own))
             status = XR_XIR_BAD_STRUCTURE;
         for (uint32_t a = 0; a < witness.argument_count && status == XR_XIR_OK; ++a)
-            status = xr_xir_compile_type_substitution_matches_between(c->remaining, actual.types, c->destination->types, NULL, 0, witness.arguments[a], target->arguments[a]);
+            status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, actual.types, c->destination->types, NULL, 0, witness.arguments[a], target->arguments[a], &c->scratch);
         for (uint32_t a = 0; a < own && status == XR_XIR_OK; ++a)
-            status = xr_xir_compile_type_substitution_matches_between(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, generic->arguments[from->type_arguments[0]+parent+a], target->arguments[witness.argument_count+a]);
+            status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, generic->arguments[from->type_arguments[0]+parent+a], target->arguments[witness.argument_count+a], &c->scratch);
         if (status == XR_XIR_OK && own) {
             uint32_t total = parent+own;
             uint64_t bytes = (uint64_t)total*sizeof(XrXirType);
@@ -252,7 +254,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 if (a->type_arguments[0] || a->type_arguments[1] || b->type_arguments[0] || b->type_arguments[1] ||
                     a->immediate < 0 || b->immediate < 0 || (uint64_t) a->immediate > UINT32_MAX ||
                     (uint64_t) b->immediate > UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-                XrXirStatus status = xr_xir_compile_type_substitution_matches_between(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, (XrXirType) a->immediate, (XrXirType) b->immediate);
+                XrXirStatus status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, (XrXirType) a->immediate, (XrXirType) b->immediate, &c->scratch);
                 if (status != XR_XIR_OK) return status;
             } else if (a->immediate != b->immediate || a->type_arguments[0] != b->type_arguments[0] || a->type_arguments[1] != b->type_arguments[1])
                 return XR_XIR_BAD_STRUCTURE;
@@ -262,7 +264,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 from->instructions[t - from->parameter_count - 1].type;
             XrXirType actual = !t ? to->result : t <= to->parameter_count ? to->parameters[t - 1] :
                 to->instructions[t - to->parameter_count - 1].type;
-            XrXirStatus status = xr_xir_compile_type_substitution_matches_between(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, expected, actual);
+            XrXirStatus status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, origin->arguments, origin->argument_count, expected, actual, &c->scratch);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -293,7 +295,7 @@ static XrXirStatus provenance_nominal_fields(ProvenanceMatch *c,
         if (from->flags != to->flags) { status = XR_XIR_BAD_STRUCTURE; break; }
         status = provenance_bytes(c, from->name.bytes, from->name.length, to->name.bytes, to->name.length);
         if (status != XR_XIR_OK) break;
-        status = xr_xir_compile_type_substitution_matches_between(c->remaining, c->source->types, c->destination->types, parameters, a->parameter_count, from->type, to->type);
+        status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, parameters, a->parameter_count, from->type, to->type, &c->scratch);
         if (status != XR_XIR_OK) break;
     }
     xr_compile_resources_free(parameters);
@@ -332,7 +334,7 @@ static XrXirStatus provenance_nominal_instances(ProvenanceMatch *c, const XrXirN
             if (status != XR_XIR_OK) return status;
         }
         for (uint32_t f = 0; f < d->field_count; ++f) {
-            XrXirStatus status = xr_xir_compile_type_substitution_matches_between(c->remaining, c->source->types, types, node->nominal.arguments, node->nominal.argument_count, d->fields[f].type, node->nominal.fields[f]);
+            XrXirStatus status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, types, node->nominal.arguments, node->nominal.argument_count, d->fields[f].type, node->nominal.fields[f], &c->scratch);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -439,7 +441,7 @@ static XrXirStatus provenance_declarations(ProvenanceMatch *c) {
     for (uint32_t s = 0; s < a->slot_count; ++s) {
         if (a->slots[s].module != b->slots[s].module || a->slots[s].mutable != b->slots[s].mutable)
             return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status = xr_xir_compile_type_substitution_matches_between(c->remaining, c->source->types, c->destination->types, NULL, 0, a->slots[s].type, b->slots[s].type);
+        XrXirStatus status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, NULL, 0, a->slots[s].type, b->slots[s].type, &c->scratch);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -457,7 +459,7 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
     if (!queue) return allocation_status;
     uint8_t *seen = (uint8_t *)(queue + c->count), *roots = seen + c->count;
     if (!xir_compile_work(c->remaining, (uint64_t)c->count + c->source->function_count)) {
-        xr_compile_resources_free(seen); return XR_XIR_BUDGET;
+        xr_compile_resources_free(queue); return XR_XIR_BUDGET;
     }
     memset(seen, 0, (size_t)c->count + c->source->function_count);
     uint32_t tail = 0;
@@ -553,11 +555,13 @@ XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext 
             }
         }
         if (status == XR_XIR_OK) {
-            ProvenanceMatch context = {source, destination, origins, destination->function_count, remaining, &location};
+            ProvenanceMatch context = {source, destination, origins, destination->function_count, remaining, &location,
+                {remaining->resources, NULL}};
             status = provenance_nominals(&context);
             if (status == XR_XIR_OK) status = provenance_functions_match(&context);
             if (status == XR_XIR_OK) status = provenance_declarations(&context);
             if (status == XR_XIR_OK) status = provenance_reachable(&context);
+            xr_xir_type_match_scratch_free(&context.scratch);
         }
     }
     location.status = status;

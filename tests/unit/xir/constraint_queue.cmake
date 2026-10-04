@@ -1,0 +1,10 @@
+# Real production queue symbols; the test TU observes the current compiler allocator.
+add_executable(test_xir_constraint_queue xir/test_xir_constraint_queue.c)
+target_link_libraries(test_xir_constraint_queue PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_constraint_queue PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_constraint_queue PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_constraint_queue COMMAND test_xir_constraint_queue)
+set_tests_properties(test_xir_constraint_queue PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 300)

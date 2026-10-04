@@ -13,6 +13,7 @@
 
 #include "xxir_types.h"
 #include "xxir_compile_memory.h"
+#include "xxir_type_scratch_internal.h"
 #include "xxir_implementation.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_utf8_core.h"

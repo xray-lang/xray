@@ -1,0 +1,10 @@
+# Exercise the production matching worker and physical compiler allocator.
+add_executable(test_xir_type_match_scratch xir/test_xir_type_match_scratch.c)
+target_link_libraries(test_xir_type_match_scratch PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_type_match_scratch PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_type_match_scratch PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_type_match_scratch COMMAND test_xir_type_match_scratch)
+set_tests_properties(test_xir_type_match_scratch PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 300)

@@ -63,9 +63,10 @@ static XrXirStatus type_access_edge(const XrXirTypes *types, XrXirType type,
     if (index >= earlier) return XR_XIR_BAD_TYPE;
     pending[index] = 1; return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type) {
+XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, XirTypeScratch *scratch) {
     XrXirStatus allocation_status = XR_XIR_OK;
-    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(compile_context) || !scratch ||
+        scratch->resources!=compile_context->resources) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
     if (!module || !remaining || function >= module->function_count) return XR_XIR_BAD_STRUCTURE;
@@ -74,7 +75,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compil
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
     if (!xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
 
-    unsigned char *pending = xir_compile_calloc(compile_context, count, 1, &allocation_status);
+    unsigned char *pending = xir_type_scratch_pending(compile_context, scratch, count, &allocation_status);
     if (!pending) {  return allocation_status; }
     pending[count - 1] = 1;
     XrXirStatus status = XR_XIR_OK;
@@ -94,5 +95,13 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compil
             status = type_access_edge(types, node->element, i, pending, remaining);
         else status = XR_XIR_BAD_TYPE;
     }
-    xr_compile_resources_free(pending);  return status;
+    return status;
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compile_context,
+    const XrXirModule *module, uint32_t function, XrXirType type) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XirTypeScratch scratch={compile_context->resources,NULL,0};
+    XrXirStatus status=xr_xir_compile_type_access_scratch(compile_context,module,function,type,&scratch);
+    xir_type_scratch_free(&scratch);return status;
 }

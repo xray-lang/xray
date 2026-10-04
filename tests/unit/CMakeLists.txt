@@ -4241,3 +4241,10 @@ add_xray_bootstrap_unit_test(test_callable_variadic_declaration
     plan/test_callable_variadic_declaration.c plan/test_callable52_attacker_encoder.c)
 set_tests_properties(test_callable_variadic_declaration PROPERTIES
     LABELS "unit;source;ownership;semantic" TIMEOUT 120)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/constraint_queue.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/type_access_scratch.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/provenance_budget_release.cmake")
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/declaration_proof_scratch.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/type_match_scratch.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/signature_shape_scratch.cmake)

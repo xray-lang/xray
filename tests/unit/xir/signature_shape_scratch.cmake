@@ -1,0 +1,10 @@
+# Real production signature worker and resource allocator observation.
+add_executable(test_xir_signature_shape_scratch xir/test_xir_signature_shape_scratch.c)
+target_link_libraries(test_xir_signature_shape_scratch PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_signature_shape_scratch PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_signature_shape_scratch PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_signature_shape_scratch COMMAND test_xir_signature_shape_scratch)
+set_tests_properties(test_xir_signature_shape_scratch PROPERTIES LABELS "unit;xir;metadata;ownership;budget" TIMEOUT 300)
