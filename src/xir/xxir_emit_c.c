@@ -1267,10 +1267,14 @@ static void emit_proof(CBuffer *buffer, const XrXirArtifact *artifact, const cha
     append(buffer, "static const uint8_t %s_checked[] = {", prefix);
     for (size_t i = 0; i < proof.length && emit_work(buffer, 1); ++i) {
         if (!(i % 16)) append(buffer, "\n    ");
-        append(buffer, "%u,", (unsigned)proof.bytes[i]);
+        emit_unsigned(buffer, (unsigned)proof.bytes[i], 10, 0);
+        emit_byte(buffer, ',');
     }
     append(buffer, "\n};\nstatic const uint8_t %s_identity[32] = {", prefix);
-    for (unsigned i = 0; i < 32 && emit_work(buffer, 1); ++i) append(buffer, "%u,", (unsigned)proof.identity[i]);
+    for (unsigned i = 0; i < 32 && emit_work(buffer, 1); ++i) {
+        emit_unsigned(buffer, (unsigned)proof.identity[i], 10, 0);
+        emit_byte(buffer, ',');
+    }
     append(buffer, "};\n");
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f) {
         const XrXirFunctionLayout *layout = &proof.layouts[f];

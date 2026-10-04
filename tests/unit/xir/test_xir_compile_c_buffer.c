@@ -289,9 +289,130 @@ static void numeric_sizing_limits_and_labels(void) {
     xr_compile_resources_free(real.text); xr_compile_resources_release(context.resources);
     CHECK(!live && !physical);
 }
+/* The fixed literal covers every uint8_t spelling without using printf as
+ * the expected-output oracle. The input-read fee precedes each real read. */
+static void proof_byte_sequence(CBuffer *buffer, const uint8_t *bytes, size_t count) {
+    for (size_t i = 0; i < count && emit_work(buffer, 1); ++i) {
+        emit_unsigned(buffer, bytes[i], 10, 0);
+        emit_byte(buffer, ',');
+    }
+}
+static void proof_byte_literals(void) {
+    static const char expected[] =
+        "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,3"
+        "3,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,6"
+        "3,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,9"
+        "3,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,11"
+        "7,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,"
+        "140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,16"
+        "2,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,"
+        "185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,20"
+        "7,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,"
+        "230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,25"
+        "2,253,254,255,"
+        ;
+    uint8_t bytes[256];
+    for (unsigned i = 0; i < 256; ++i) bytes[i] = (uint8_t)i;
+    CHECK(strlen(expected) == 914);
+    for (unsigned tracking = 0; tracking < 2; ++tracking) {
+        reset_observer();
+        XrXirCompileContext context = context_new(UINT64_MAX);
+        CBuffer measured = {.limit = sizeof(expected), .status = XR_XIR_OK,
+            .context = &context, .measuring = true, .tracking = tracking != 0};
+        proof_byte_sequence(&measured, bytes, sizeof(bytes));
+        CHECK(measured.status == XR_XIR_OK && measured.length == sizeof(expected) - 1);
+        CHECK(!measured.text && !measured.capacity);
+        /* 658 real divisions, 256 source reads and two updates per byte. */
+        if (!tracking) CHECK(stats(&context).work == 1427 && stats(&context).allocation_count == 1);
+        CBuffer real = {.limit = sizeof(expected), .status = XR_XIR_OK,
+            .context = &context, .tracking = tracking != 0};
+        void *memory = NULL;
+        CHECK(xr_compile_resources_alloc(context.resources, sizeof(expected), &memory) == XR_COMPILE_RESOURCE_OK);
+        real.text = memory; real.capacity = sizeof(expected);
+        proof_byte_sequence(&real, bytes, sizeof(bytes));
+        CHECK(emit_finalize(&real) && real.length == measured.length);
+        CHECK(!memcmp(real.text, expected, sizeof(expected)));
+        CHECK(!real.label_used[0] && !real.label_used[1] && !measured.label_used[0] && !measured.label_used[1]);
+        CHECK(!real.label_match[0] && !real.label_match[1] && !measured.label_match[0] && !measured.label_match[1]);
+        /* Real: allocation1 + reads256 + conversion/stack/write 3*658
+         * + comma writes256 + final NUL1, in addition to measuring1427. */
+        if (!tracking) CHECK(stats(&context).work == 3915 && stats(&context).allocation_count == 2);
+        xr_compile_resources_free(real.text); xr_compile_resources_release(context.resources);
+        CHECK(!live && !physical);
+    }
+}
+static void proof_byte_work_prefixes(void) {
+    static const uint8_t bytes[] = {0, 1, 9, 10, 99, 100, 255};
+    static const char expected[] = "0,1,9,10,99,100,255,";
+    CHECK(strlen(expected) == 20);
+    /* Measuring35, actual allocation1, actual writes/reads/conversions53,
+     * final NUL1: exact90. Every smaller real-work prefix must fail closed. */
+    for (uint64_t limit = 1; limit <= 90; ++limit) {
+        reset_observer();
+        XrXirCompileContext context = context_new(limit);
+        CBuffer measured = {.limit = sizeof(expected), .status = XR_XIR_OK,
+            .context = &context, .measuring = true};
+        proof_byte_sequence(&measured, bytes, sizeof(bytes));
+        CBuffer real = {.limit = sizeof(expected), .status = measured.status, .context = &context};
+        if (measured.status == XR_XIR_OK) {
+            CHECK(measured.length == sizeof(expected) - 1);
+            void *memory = NULL;
+            real.status = xir_compile_resource_status(xr_compile_resources_alloc(context.resources, sizeof(expected), &memory));
+            if (real.status == XR_XIR_OK) {
+                real.text = memory; real.capacity = sizeof(expected); memset(real.text, 'q', real.capacity);
+                proof_byte_sequence(&real, bytes, sizeof(bytes));
+                (void)emit_finalize(&real);
+            } else CHECK(!memory);
+        }
+        CHECK(real.status == (limit == 90 ? XR_XIR_OK : XR_XIR_BUDGET));
+        CHECK(stats(&context).work == limit);
+        CHECK(!measured.text && !measured.capacity);
+        if (real.text) {
+            CHECK(real.length <= sizeof(expected) - 1 && !memcmp(real.text, expected, real.length));
+            CHECK(real.text[real.length] == (limit == 90 ? '\0' : 'q'));
+        }
+        if (limit != 90) {
+            size_t saved = real.length;
+            proof_byte_sequence(&real, (const uint8_t *)(uintptr_t)1, 1);
+            CHECK(real.length == saved && stats(&context).work == limit);
+        }
+        xr_compile_resources_free(real.text); xr_compile_resources_release(context.resources);
+        CHECK(!live && !physical);
+    }
+}
+static void proof_byte_bounds(void) {
+    static const uint8_t bytes[] = {0, 1, 9, 10, 99, 100, 255};
+    for (size_t limit = 0; limit <= 21; ++limit) {
+        reset_observer();
+        XrXirCompileContext context = context_new(UINT64_MAX);
+        CBuffer measured = {.limit = limit, .status = XR_XIR_OK, .context = &context, .measuring = true};
+        proof_byte_sequence(&measured, bytes, sizeof(bytes));
+        CHECK(measured.status == (limit == 21 ? XR_XIR_OK : XR_XIR_BUDGET));
+        CHECK(measured.length < limit || (!limit && !measured.length));
+        CHECK(!measured.text && !measured.capacity && stats(&context).allocation_count == 1);
+        if (limit != 21) {
+            uint64_t work = stats(&context).work; size_t saved = measured.length;
+            proof_byte_sequence(&measured, (const uint8_t *)(uintptr_t)1, 1);
+            CHECK(stats(&context).work == work && measured.length == saved);
+        }
+        xr_compile_resources_release(context.resources);
+        CHECK(!live && !physical);
+    }
+    for (unsigned measuring = 0; measuring < 2; ++measuring) {
+        reset_observer();
+        XrXirCompileContext context = context_new(1);
+        CBuffer buffer = {.limit = 32, .status = XR_XIR_OK, .context = &context, .measuring = measuring != 0};
+        proof_byte_sequence(&buffer, (const uint8_t *)(uintptr_t)1, 1);
+        CHECK(buffer.status == XR_XIR_BUDGET && !buffer.length && !buffer.text);
+        CHECK(stats(&context).work == 1 && stats(&context).allocation_count == 1);
+        xr_compile_resources_release(context.resources);
+        CHECK(!live && !physical);
+    }
+}
 int main(void) {
     formatting(); exact_work(); measured_work(); charged_before_reads(); growth_failures();
     numeric_sizing_vectors(); numeric_sizing_work_prefixes(); numeric_sizing_limits_and_labels();
+    proof_byte_literals(); proof_byte_work_prefixes(); proof_byte_bounds();
     puts("C formatting: fixed outputs, exact final-write work 16/15 and sizing+write 26/25, numeric sizing fixed outputs and all work prefixes, pre-read limits, three allocation OOMs, physical zero");
     return 0;
 }
