@@ -2,7 +2,7 @@
 set(XIR_ASSERT_EQUAL_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/assert-equal-source)
 set(XIR_ASSERT_EQUAL_C ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_assert_equal.c)
 file(MAKE_DIRECTORY ${XIR_ASSERT_EQUAL_DIR})
-add_xray_bootstrap_executable(test_xir_equal_values ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_equal_values.c)
+add_executable(test_xir_equal_values ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_equal_values.c)
 target_link_libraries(test_xir_equal_values PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 add_xray_bootstrap_executable(test_xir_assert_equal ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_assert_equal.c)
 target_link_libraries(test_xir_assert_equal PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)

@@ -10,9 +10,10 @@
 #define XIR_ARRAY_ALLOCATION_CASES_H
 static XrXirTypeArena *array_allocation_arena(XrXirDomain *domain,
                                             const XrXirTypeNode *nodes, uint32_t count) {
+    (void)domain;
     XrXirTypes types = {nodes, count, NULL, NULL}; XrXirTypeArena *arena = NULL;
-    XrXirBudget budget = {0}; budget.work = UINT64_MAX; budget.metadata_bytes = 1024 * 1024;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    XrCompileResourceLimits limits = value_compile_limits(1024 * 1024, 0, 8388608);
+    CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static void array_compact_payloads(void) {
@@ -40,7 +41,7 @@ static void array_compact_payloads(void) {
         CHECK(xr_xir_array_get(&array, 0, &admission, &read, &fault) == XR_XIR_VALUE_OK);
         CHECK(read.type == values[i].type && read.payload == values[i].payload && !read.reserved);
         xr_xir_value_drop(&read); xr_xir_value_drop(&array);
-        xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
+        xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
     }
 }
 static size_t array_allocation_failure(unsigned mode, size_t offset) {
@@ -49,7 +50,7 @@ static size_t array_allocation_failure(unsigned mode, size_t offset) {
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(65536, &receiver) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = allocation_arena(domain);
-    XrXirValueAdmission admission = {arena, domain, NULL, NULL, UINT64_MAX, 65536};
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, UINT64_C(10000000), 65536};
     XrXirValue string = {0}, array = {0}, copy = {0}, output = {0};
     CHECK(xr_xir_string_new(domain, "alias", 5, &string) == XR_XIR_VALUE_OK);
     XrXirValue inputs[] = {string, string, string, string};
@@ -78,7 +79,7 @@ static size_t array_allocation_failure(unsigned mode, size_t offset) {
             CHECK(storage_leaf_value(original->element, original->data + i * original->stride, original->stride).payload == string.payload);
     }
     xr_xir_value_drop(&output); xr_xir_value_drop(&copy); xr_xir_value_drop(&array); xr_xir_value_drop(&string);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(receiver); CHECK(!live);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(receiver); CHECK(!live);
     return count;
 }
 static void array_allocation_failures(void) {
@@ -94,7 +95,7 @@ static void array_cross_domain_accounting(void) {
     CHECK(xr_xir_domain_new(65536, &origin) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(65536, &receiver) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = allocation_arena(origin);
-    XrXirValueAdmission admission = {arena, origin, NULL, NULL, UINT64_MAX, 65536};
+    XrXirValueAdmission admission = {arena, origin, NULL, NULL, UINT64_C(10000000), 65536};
     XrXirValue string = {0}, array = {0}, copy = {0};
     CHECK(xr_xir_string_new(origin, "held", 4, &string) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType) 260, &string, 1, &admission, &array) == XR_XIR_VALUE_OK);
@@ -124,13 +125,13 @@ static void array_cross_domain_accounting(void) {
     CHECK(xr_xir_array_set(&place, 0, &string, &admission, &fault) == XR_XIR_VALUE_OK);
     CHECK(array.payload != copy.payload && object_pointer(&array)->domain == origin);
     xr_xir_value_drop(&copy); xr_xir_value_drop(&array); xr_xir_value_drop(&string);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(origin); xr_xir_domain_drop(receiver); CHECK(!live);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(origin); xr_xir_domain_drop(receiver); CHECK(!live);
 }
 static void array_retain_atomicity(void) {
     fail_at = SIZE_MAX; XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = allocation_arena(domain);
-    XrXirValueAdmission admission = {arena, domain, NULL, NULL, UINT64_MAX, 65536};
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, UINT64_C(10000000), 65536};
     XrXirValue strings[2] = {{0}}, array = {0}, copy = {0}, rejected = {0};
     CHECK(xr_xir_string_new(domain, "first", 5, strings) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "second", 6, strings + 1) == XR_XIR_VALUE_OK);
@@ -163,7 +164,7 @@ static void array_retain_atomicity(void) {
     CHECK(xr_xir_array_new((XrXirType) 260, strings, 1, &admission, &rejected) == XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(!rejected.type); atomic_store(&domain->references, domain_references);
     xr_xir_value_drop(strings); xr_xir_value_drop(strings + 1);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
 }
 static void array_nested_gate_scratch(void) {
     fail_at = SIZE_MAX; XrXirDomain *domain = NULL;
@@ -203,7 +204,7 @@ static void array_nested_gate_scratch(void) {
     int64_t length = -1;
     CHECK(xr_xir_array_len(&nested, &admission, &length) == XR_XIR_VALUE_OK && length == 1);
     atomic_store(&object_pointer(&nested)->references, 1);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     xr_xir_value_drop(&function); xr_xir_value_drop(&array); xr_xir_value_drop(&nested);
     CHECK(releases == 1 && !live);
 }
@@ -212,7 +213,7 @@ static void array_copy_work_budget(void) {
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(65536, &receiver) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = allocation_arena(domain);
-    XrXirValueAdmission admission = {arena, domain, NULL, NULL, UINT64_MAX, 65536};
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, UINT64_C(10000000), 65536};
     XrXirValue string = {0}, array = {0}, copy = {0}, inputs[64];
     CHECK(xr_xir_string_new(domain, "work", 4, &string) == XR_XIR_VALUE_OK);
     for (size_t i = 0; i < 64; ++i) inputs[i] = string;
@@ -240,7 +241,7 @@ static void array_copy_work_budget(void) {
         if (mode == 2) CHECK(domain->stats.reallocations == before.reallocations + 1);
         xr_xir_value_drop(&array); xr_xir_value_drop(&copy);
     }
-    xr_xir_value_drop(&string); xr_xir_type_arena_drop(arena);
+    xr_xir_value_drop(&string); xr_xir_compile_type_arena_drop(arena);
     xr_xir_domain_drop(domain); xr_xir_domain_drop(receiver); CHECK(!live);
 }
 static void array_deep_release(void) {
@@ -261,7 +262,7 @@ static void array_deep_release(void) {
         CHECK(xr_xir_array_new((XrXirType) (256 + i), &previous, 1, &admission, &next) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&previous); previous = next;
     }
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     size_t allocations = calls; fail_at = calls;
     xr_xir_value_drop(&previous); CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
     puts("Array cleanup: 2048 nested compact backings; zero cleanup allocations; zero live blocks");

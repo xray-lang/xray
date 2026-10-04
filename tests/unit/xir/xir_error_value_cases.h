@@ -21,9 +21,9 @@ static void error_deep_value_cases(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_ERROR}};
     const XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
+    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
     CHECK(!live && xr_xir_domain_new(4194304, &domain) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 10000000, 65536};
     XrXirValue concrete = {0}, error = {0}, array = {0};
     CHECK(xr_xir_enum_new((XrXirType)256, 0, NULL, 0, &admission, &concrete) == XR_XIR_VALUE_OK);
@@ -35,9 +35,9 @@ static void error_deep_value_cases(void) {
         CHECK(xr_xir_error_erase(&concrete, &admission, &error) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&concrete);
     }
-    CHECK(DEPTH > xr_xir_type_arena_types(arena)->count);
+    CHECK(DEPTH > xr_xir_compile_type_arena_types(arena)->count);
     CHECK(xr_xir_array_new((XrXirType)257, &error, 1, &admission, &array) == XR_XIR_VALUE_OK);
-    xr_xir_value_drop(&error); xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&error); xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     size_t baseline = live, begin = calls; uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
     CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_OK);
     size_t sites = calls - begin; CHECK(sites > 1);
@@ -75,9 +75,9 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     }
     ids[2].kind = XR_XIR_NOMINAL_STRUCT; ids[2].variants = NULL; ids[2].variant_count = 0;
     XrXirNominalTable table = {NULL, 3, ids}; XrXirTypes local = {nodes, 3, &table, NULL};
-    XrXirBudget budget = {.parameters = 1000, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 100000};
+    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 100000);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(admission->domain, &local, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&local, 1000, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = arena;
     XrXirValue concrete = {0}, error = {0}, output = {0}, record = {0};
     CHECK(xr_xir_enum_new((XrXirType)256, 0, NULL, 0, &receiving, &concrete) == XR_XIR_VALUE_OK);
@@ -100,7 +100,7 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     CHECK(!xr_xir_value_valid(&forged));
     CHECK(xr_xir_value_admit(&forged, XR_XIR_ERROR, &receiving) == XR_XIR_VALUE_BAD_ARGUMENT);
     xr_xir_value_drop(&record); xr_xir_value_drop(&concrete); xr_xir_value_drop(&error);
-    xr_xir_type_arena_drop(arena); CHECK(live == baseline);
+    xr_xir_compile_type_arena_drop(arena); CHECK(live == baseline);
 }
 static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     const XrXirValue *pair, XrXirValueAdmission *admission) {
@@ -134,15 +134,15 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     CHECK(xr_xir_error_erase(empty, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     atomic_store(&arena->references, leases);
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
+    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
     XrXirTypeArena *foreign = NULL;
-    CHECK(xr_xir_type_arena_new(admission->domain, types, &budget, &foreign) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(types, 100, limits, &foreign) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = foreign;
     CHECK(!xr_xir_value_argument(&error, foreign, XR_XIR_ERROR));
     CHECK(xr_xir_value_admit(&error, XR_XIR_ERROR, &receiving) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_error_erase(empty, &receiving, &copy) == XR_XIR_VALUE_BAD_ARGUMENT && !copy.type);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, &receiving, &copy) == XR_XIR_VALUE_BAD_ARGUMENT && !copy.type);
-    xr_xir_type_arena_drop(foreign);
+    xr_xir_compile_type_arena_drop(foreign);
     int64_t slot = 0;
     CHECK(xr_xir_owned_slot_copy(&slot, 0, arena, XR_XIR_ERROR, error.payload) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&error); xr_xir_owned_slot_clear(&slot, 0); CHECK(!slot);

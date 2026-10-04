@@ -9,6 +9,7 @@
 #ifndef XIR_VALUE_PATH_CASES_H
 #define XIR_VALUE_PATH_CASES_H
 static XrXirTypeArena *value_path_arena(XrXirDomain *domain) {
+    (void)domain;
     const XrXirNominalFieldIdentity inner_fields[] = {
         {{"n", 1}, XR_XIR_FIELD_MUTABLE}, {{"text", 4}, XR_XIR_FIELD_MUTABLE}};
     const XrXirNominalFieldIdentity outer_fields[] = {
@@ -24,9 +25,9 @@ static XrXirTypeArena *value_path_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {1, NULL, 0, outer, 2}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};
     const XrXirTypes types = {nodes, 4, &table, NULL};
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
+    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static XrXirValue value_path_root(XrXirValueAdmission *admission, bool boxed) {
@@ -216,7 +217,7 @@ static void value_path_empty(void) {
     CHECK(array->length == 6 && !array->stride && !array->data);
     CHECK(((XirArray *)object_pointer(&root))->length == 1);
     xr_xir_value_drop(&empty); xr_xir_value_drop(&copy); xr_xir_value_drop(&root);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
 }
 static void value_path_cases(void) {
     CHECK(!live); XrXirDomain *domain = NULL;
@@ -263,7 +264,7 @@ static void value_path_cases(void) {
         xr_xir_value_drop(&root);
         value_path_append(&admission, boxed != 0);
     }
-    xr_xir_type_arena_drop(arena); CHECK(domain->stats.live_bytes == sizeof(*domain));
+    xr_xir_compile_type_arena_drop(arena); CHECK(domain->stats.live_bytes == sizeof(*domain));
     xr_xir_domain_drop(domain); CHECK(!live);
     value_path_deep();
     value_path_empty();

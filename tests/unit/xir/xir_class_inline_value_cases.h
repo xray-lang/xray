@@ -12,6 +12,7 @@
 #ifndef XIR_CLASS_INLINE_VALUE_CASES_H
 #define XIR_CLASS_INLINE_VALUE_CASES_H
 static XrXirTypeArena *class_inline_arena(XrXirDomain *domain) {
+    (void)domain;
     XrXirNominalFieldIdentity rf[]={{{"n",1},0},{{"text",4},0},{{"tail",4},0}};
     XrXirNominalFieldIdentity ef[]={{{"value",5},0}};
     XrXirNominalFieldIdentity cf[]={{{"record",6},XR_XIR_FIELD_MUTABLE},{{"choice",6},XR_XIR_FIELD_MUTABLE},
@@ -32,9 +33,9 @@ static XrXirTypeArena *class_inline_arena(XrXirDomain *domain) {
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={1,NULL,0,efields,1}},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={2,NULL,0,NULL,0}},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={3,NULL,0,cfields,4}}};
-    XrXirTypes types={nodes,4,&table,NULL};XrXirBudget budget={.parameters=100,.metadata_bytes=65536,.scratch_bytes=65536,.work=10000};
-    XrXirTypeArena *arena=NULL;CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena)==XR_XIR_VALUE_OK);
-    const XrXirStorageLayout *layout=xr_xir_type_arena_storage(arena,XR_XIR_CONSTRUCTED_TYPE_BASE+3);
+    XrXirTypes types={nodes,4,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
+    const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(arena,XR_XIR_CONSTRUCTED_TYPE_BASE+3);
     CHECK(layout && layout->value.size==8 && layout->body.size==64);
     return arena;
 }
@@ -64,37 +65,36 @@ static void class_inline_capabilities(void) {
     XrXirNominalTable table={NULL,1,&id};XrXirType field=XR_XIR_I64;
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&field,1}},{0}};
     XrXirTypes types={nodes,2,&table,NULL};
-    XrXirBudget budget={.work=100,.scratch_bytes=1024};uint64_t scratch=budget.scratch_bytes;
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_OK);
-    CHECK(budget.scratch_bytes==scratch && !budget.metadata_bytes);
-    uint64_t used=100-budget.work;
-    uint64_t needed=2*(sizeof(ClassFieldFrame)+sizeof(unsigned char));
-    budget=(XrXirBudget){.work=used,.scratch_bytes=needed};
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_OK);
-    CHECK(!budget.work && budget.scratch_bytes==needed);
-    budget=(XrXirBudget){.work=used-1,.scratch_bytes=needed};
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_BUDGET);
-    CHECK(budget.scratch_bytes==needed);
-    budget=(XrXirBudget){.work=100,.scratch_bytes=needed-1};
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_BUDGET);
-    size_t baseline=live;calls=0;fail_at=0;
-    budget=(XrXirBudget){.work=100,.scratch_bytes=needed};
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_OUT_OF_MEMORY);
-    CHECK(calls==1 && live==baseline && budget.scratch_bytes==needed);fail_at=SIZE_MAX;
-
-    budget.work=100;budget.scratch_bytes=0;
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_BUDGET);
-    field=XR_XIR_CONSTRUCTED_TYPE_BASE;budget.work=100;budget.scratch_bytes=scratch;
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_BAD_TYPE);
-    CHECK(budget.scratch_bytes==scratch);
+    const XrCompileResourceLimits limits=value_compile_limits(0,1024,100);
+    const ValueCompileProbe probe={&types,NULL,XR_XIR_CONSTRUCTED_TYPE_BASE,3,65536};
+    value_compile_boundaries(&probe,limits);
+    ValueCompileOwner owner={0};CHECK(value_compile_owner_new(&owner,limits,65536)==XR_XIR_OK);
+    XrXirCompileLimits structural=owner.context.limits;
+    CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_OK);
+    field=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_BAD_TYPE);
     field=XR_XIR_CONSTRUCTED_TYPE_BASE+1;
     const uint32_t kinds[]={XR_XIR_TYPE_CALLABLE,XR_XIR_TYPE_CELL,XR_XIR_TYPE_ARRAY};
-    for(unsigned i=0;i<3;++i){nodes[1].kind=kinds[i];nodes[1].element=XR_XIR_BOOL;budget.work=100;
-        CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_BAD_TYPE);}
-    field=XR_XIR_ERROR;budget.work=100;
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_BAD_TYPE);
-    field=XR_XIR_I64;id.kind=XR_XIR_NOMINAL_CLASS;budget.work=100;
-    CHECK(xr_xir_class_field_verify(&types,XR_XIR_CONSTRUCTED_TYPE_BASE,&budget)==XR_XIR_BAD_TYPE);
+    for(unsigned i=0;i<3;++i){nodes[1].kind=kinds[i];nodes[1].element=XR_XIR_BOOL;
+        CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==
+            (i==2 ? XR_XIR_OK : XR_XIR_BAD_TYPE));}
+    /* A structurally valid array may still lack class-field capability. */
+    const XrXirTypeNode excluded_nodes[]={
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_CONSTRUCTED_TYPE_BASE}};
+    const XrXirTypes excluded_types={excluded_nodes,2,NULL,NULL};
+    CHECK(xr_xir_compile_types_structure_verify(&owner.context,&excluded_types)==XR_XIR_OK);
+    CHECK(xr_xir_compile_class_field_verify(&owner.context,&excluded_types,
+        XR_XIR_CONSTRUCTED_TYPE_BASE+1)==XR_XIR_BAD_TYPE);
+    field=XR_XIR_ERROR;
+    CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_BAD_TYPE);
+    field=XR_XIR_I64;id.kind=XR_XIR_NOMINAL_CLASS;
+    CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_OK);
+    id.kind=UINT32_MAX;
+    CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_BAD_TYPE);
+    CHECK(!memcmp(&structural,&owner.context.limits,sizeof(structural)));
+    CHECK(value_compile_stats(&owner.context).live_bytes==owner.baseline.live_bytes);
+    value_compile_owner_release(&owner);
 }
 static void class_inline_value_cases(void) {
     class_inline_capabilities();
@@ -119,7 +119,7 @@ static void class_inline_value_cases(void) {
     XrXirTypeArena *foreign=class_inline_arena(owner);
     XrXirValueAdmission wrong={foreign,reader,NULL,NULL,10000,65536};
     CHECK(xr_xir_class_get(&object,0,&wrong,&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);
-    xr_xir_type_arena_drop(foreign);
+    xr_xir_compile_type_arena_drop(foreign);
     XirObject *string_object=object_pointer(&text);uint32_t refs=atomic_load(&string_object->references);
     atomic_store(&string_object->references,UINT32_MAX);
     CHECK(xr_xir_class_set(&object,0,&record,&a)==XR_XIR_VALUE_REFCOUNT_LIMIT);
@@ -135,7 +135,7 @@ static void class_inline_value_cases(void) {
     CHECK(xr_xir_class_get(&object,0,&bounded,&out)==XR_XIR_VALUE_LIMIT && !out.type);
     bounded=b;bounded.scratch_bytes=0;
     CHECK(xr_xir_class_get(&object,0,&bounded,&out)==XR_XIR_VALUE_LIMIT && !out.type && !bounded.scratch_bytes);
-    uint64_t scratch=(uint64_t)xr_xir_type_arena_storage(arena,XR_XIR_CONSTRUCTED_TYPE_BASE)->depth*sizeof(StorageUnpackFrame);
+    uint64_t scratch=(uint64_t)xr_xir_compile_type_arena_storage(arena,XR_XIR_CONSTRUCTED_TYPE_BASE)->depth*sizeof(StorageUnpackFrame);
     bounded=b;bounded.scratch_bytes=scratch-1;
     CHECK(xr_xir_class_get(&object,0,&bounded,&out)==XR_XIR_VALUE_LIMIT && !out.type);
     bounded=b;bounded.scratch_bytes=scratch;
@@ -160,7 +160,7 @@ static void class_inline_value_cases(void) {
     CHECK(xr_xir_enum_variant(&out,&variant)==XR_XIR_VALUE_OK && variant==0);xr_xir_value_drop(&out);xr_xir_value_drop(&none);
     CHECK(xr_xir_class_get(&object,0,&b,&out)==XR_XIR_VALUE_OK);
     xr_xir_value_drop(&object);xr_xir_value_drop(&record);xr_xir_value_drop(&choice);xr_xir_value_drop(&empty);xr_xir_value_drop(&text);
-    xr_xir_type_arena_drop(arena);xr_xir_domain_drop(owner);xr_xir_domain_drop(reader);
+    xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(owner);xr_xir_domain_drop(reader);
     XrXirValue held={0};XrXirValueAdmission retained={xr_xir_value_arena(&out),reader,NULL,NULL,100,65536};
     CHECK(xr_xir_struct_get(&out,1,&retained,&held)==XR_XIR_VALUE_OK);xr_xir_value_drop(&out);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&held,&bytes,&length)&&length==6&&!memcmp(bytes,"mapped",6));

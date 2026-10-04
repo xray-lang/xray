@@ -11,15 +11,16 @@
 #include "xir/xxir_struct.h"
 #include "xir_nominal_fixture.h"
 static XrXirTypeArena *struct_value_arena(XrXirDomain *domain) {
+    (void)domain;
     NominalIdentityFixture f; nominal_identity_fixture(&f);
     XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING, (XrXirType)256, XR_XIR_STRING};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 2}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 2, 2}}};
     XrXirTypes types = {nodes, 2, &f.table, NULL};
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 10000);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes));
     return arena;
 }
@@ -37,8 +38,8 @@ static XrXirValue struct_deep_value(void) {
     XrXirNominalTable table = {NULL, DEPTH, identities}; XrXirTypes types = {nodes, DEPTH, &table, NULL};
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = NULL;
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 10000; budget.metadata_bytes = 1048576; budget.work = 1000000;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    XrCompileResourceLimits limits = value_compile_limits(1048576, 1048576, 1000000);
+    CHECK(value_compile_arena(&types, 10000, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 1000000, 65536};
     XrXirValue child = {XR_XIR_I64, 0, 71};
     for (uint32_t i = DEPTH; i; --i) {
@@ -46,7 +47,7 @@ static XrXirValue struct_deep_value(void) {
         CHECK(xr_xir_struct_new((XrXirType)(255 + i), &child, 1, &admission, &parent) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&child); child = parent;
     }
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     return child;
 }
 typedef struct StructGate { bool active; uint32_t releases; } StructGate;
@@ -70,9 +71,9 @@ static void struct_function_gate(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 1}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 1, 1}}};
     XrXirTypes types = {nodes, 3, &f.table, NULL};
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 10000);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     StructGate gate = {true, 0};
     XrXirFunctionBinding binding = {&gate, struct_gate_release, 0, NULL, 0};
     XrXirValueAdmission admission = {arena, domain, struct_gate_admit, &gate, 100000, 65536};
@@ -87,7 +88,7 @@ static void struct_function_gate(void) {
     CHECK(xr_xir_struct_new((XrXirType)258, &leaf, 1, &admission, &rejected) == XR_XIR_VALUE_BAD_ARGUMENT && !rejected.type);
     admission.work = 0;
     CHECK(xr_xir_value_admit(&parent, (XrXirType)258, &admission) == XR_XIR_VALUE_LIMIT);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(other);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(other);
     xr_xir_value_drop(&function); xr_xir_value_drop(&leaf); CHECK(!gate.releases);
     xr_xir_value_drop(&parent); CHECK(gate.releases == 1);
 }
@@ -126,7 +127,7 @@ static void struct_value_cases(void) {
     xr_xir_value_drop(&old_leaf); xr_xir_value_drop(&new_leaf);
     xr_xir_value_drop(&old_number); xr_xir_value_drop(&new_number);
     xr_xir_value_drop(&parent); xr_xir_value_drop(&copy); xr_xir_value_drop(&leaf); xr_xir_value_drop(&fields[1]);
-    xr_xir_type_arena_drop(arena); xr_xir_type_arena_drop(foreign); xr_xir_domain_drop(other);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_compile_type_arena_drop(foreign); xr_xir_domain_drop(other);
     CHECK(xr_xir_domain_stats(domain).live_bytes > baseline);
     xr_xir_domain_drop(domain);
     const char *bytes = NULL; size_t length = 0;

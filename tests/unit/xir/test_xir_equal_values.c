@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_equal_compile_owner.h"
 #include "xir_runtime_allocations.h"
 
 static XrXirValueAdmission equal_admission(XrXirDomain *domain, XrXirTypeArena *arena) {
@@ -69,17 +70,16 @@ static void equal_strings(void) {
     xr_xir_value_drop(&a);xr_xir_value_drop(&b);xr_xir_value_drop(&empty);
     xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
 }
-static XrXirTypeArena *equal_arena(XrXirDomain *domain, const XrXirTypeNode *nodes, uint32_t count) {
+static XrXirTypeArena *equal_arena(const XrXirTypeNode *nodes, uint32_t count) {
     XrXirTypes types={nodes,count,NULL,NULL};XrXirTypeArena *arena=NULL;
-    XrXirBudget budget=xr_xir_default_budget();
-    CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_compile_type_arena_new(&equal_owner.context,&types,&arena)==XR_XIR_VALUE_OK);
     return arena;
 }
 static void equal_nan_backing(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     const XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_F64},
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_CONSTRUCTED_TYPE_BASE}};
-    XrXirTypeArena *arena=equal_arena(domain,nodes,2);
+    XrXirTypeArena *arena=equal_arena(nodes,2);
     XrXirValueAdmission admission=equal_admission(domain,arena);
     XrXirValue nan={XR_XIR_F64,0,INT64_C(0x7ff8000000000000)},array={0},copy={0},nested={0};
     CHECK(xr_xir_array_new(XR_XIR_CONSTRUCTED_TYPE_BASE,&nan,1,&admission,&array)==XR_XIR_VALUE_OK);
@@ -97,7 +97,7 @@ static void equal_nan_backing(void) {
     CHECK(az.payload!=bz.payload);
     CHECK(xr_xir_value_equal(&az,&bz,XR_XIR_CONSTRUCTED_TYPE_BASE,&admission,&result)==XR_XIR_VALUE_OK && result);
     xr_xir_value_drop(&az);xr_xir_value_drop(&bz);xr_xir_value_drop(&nested);
-    xr_xir_value_drop(&array);xr_xir_value_drop(&copy);xr_xir_type_arena_drop(arena);
+    xr_xir_value_drop(&array);xr_xir_value_drop(&copy);xr_xir_compile_type_arena_drop(arena);
     xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
 }
 static void equal_deep_resource(void) {
@@ -105,7 +105,7 @@ static void equal_deep_resource(void) {
     XrXirTypeNode nodes[257]={0};
     for (uint32_t i=0;i<257;++i) nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,
         .element=i ? (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i-1) : XR_XIR_I64};
-    XrXirTypeArena *arena=equal_arena(domain,nodes,257);
+    XrXirTypeArena *arena=equal_arena(nodes,257);
     XrXirValueAdmission admission=equal_admission(domain,arena);
     XrXirValue value={XR_XIR_I64,0,7};
     for (uint32_t i=0;i<257;++i) {
@@ -146,13 +146,13 @@ static void equal_deep_resource(void) {
         xr_xir_domain_drop(scratch);CHECK(runtime_bytes==baseline && runtime_live==live);
     }
     printf("typed equality depth257, actualOOM=%zu, work1037/1036, scratch/domain24576/24575 PASS\n",sites);
-    xr_xir_value_drop(&value);xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&value);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);
     CHECK(!runtime_live && !runtime_bytes);
 }
 static void equal_arena_authority(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     const XrXirTypeNode node={.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
-    XrXirTypeArena *actual=equal_arena(domain,&node,1),*foreign=equal_arena(domain,&node,1);
+    XrXirTypeArena *actual=equal_arena(&node,1),*foreign=equal_arena(&node,1);
     CHECK(actual!=foreign);
     XrXirValueAdmission admission=equal_admission(domain,actual);
     XrXirValue leaf={XR_XIR_I64,0,7},array={0};
@@ -164,13 +164,13 @@ static void equal_arena_authority(void) {
     admission=equal_admission(domain,NULL);
     CHECK(xr_xir_value_equal(&array,&array,(XrXirType)array.type,&admission,&result)==XR_XIR_VALUE_BAD_ARGUMENT && result);
     CHECK(xr_xir_value_equal(&array,&array,XR_XIR_I64,&admission,&result)==XR_XIR_VALUE_BAD_ARGUMENT && result);
-    xr_xir_value_drop(&array);xr_xir_type_arena_drop(actual);xr_xir_type_arena_drop(foreign);
+    xr_xir_value_drop(&array);xr_xir_compile_type_arena_drop(actual);xr_xir_compile_type_arena_drop(foreign);
     xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
 }
 static void equal_excluded_carriers(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     const XrXirTypeNode node={.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
-    XrXirTypeArena *arena=equal_arena(domain,&node,1);
+    XrXirTypeArena *arena=equal_arena(&node,1);
     XrXirValueAdmission admission=equal_admission(domain,arena);
     XrXirValue values[3]={{0}},integer={XR_XIR_I64,0,7};
     CHECK(xr_xir_atomic_i64_new(domain,7,&values[0])==XR_XIR_VALUE_OK);
@@ -185,10 +185,13 @@ static void equal_excluded_carriers(void) {
         CHECK(result && !runtime_attempts && !memcmp(&original,&values[i],sizeof(original)) && runtime_live==live && runtime_bytes==bytes);
         xr_xir_value_drop(&values[i]);
     }
-    xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
+    xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
 }
 int main(void) {
+    source_fixture_owner_new(&equal_owner);
     equal_scalars();equal_strings();equal_nan_backing();equal_deep_resource();equal_arena_authority();
     equal_excluded_carriers();
+    source_fixture_owner_free(&equal_owner);
+    CHECK(!equal_compile_live && !equal_compile_bytes && !equal_compile_records);
     puts("typed equality scalar/STRING/shared-backing IEEE/physical PASS");return 0;
 }

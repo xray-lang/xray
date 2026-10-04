@@ -11,6 +11,7 @@
 #include "xir/xxir_array.h"
 
 static XrXirTypeArena *array_value_arena(XrXirDomain *domain) {
+    (void)domain;
     const XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_STRING},
@@ -20,9 +21,9 @@ static XrXirTypeArena *array_value_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 257},
     };
     XrXirTypes types = {nodes, 6, NULL, NULL};
-    XrXirBudget budget = {0}; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrCompileResourceLimits limits = value_compile_limits(65536, 0, 10000);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static void array_expected_string(const XrXirValue *array, int64_t index,
@@ -71,7 +72,7 @@ static void array_strings_and_bounds(void) {
     admission.work = 0;
     CHECK(xr_xir_array_get(&array, 0, &admission, &rejected, &fault) == XR_XIR_VALUE_LIMIT);
     CHECK(xr_xir_fault_empty(fault) && !rejected.type);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     for (size_t i = 0; i < 3; ++i) xr_xir_value_drop(&elements[i]);
     xr_xir_value_drop(&array); xr_xir_value_drop(&copy); xr_xir_value_drop(&empty);
     bytes_equal(&read, "red", 3); xr_xir_value_drop(&read);
@@ -100,8 +101,8 @@ static void array_arena_domain_and_cell(void) {
     admission.arena = foreign;
     CHECK(xr_xir_value_admit(&array, (XrXirType) 257, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
     admission.arena = arena; admission.domain = NULL;
-    xr_xir_type_arena_drop(foreign); xr_xir_domain_drop(receiver);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(origin);
+    xr_xir_compile_type_arena_drop(foreign); xr_xir_domain_drop(receiver);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(origin);
     xr_xir_value_drop(&string); xr_xir_value_drop(&cell); xr_xir_value_drop(&copy);
     xr_xir_value_drop(&array);
     XrXirValue child = {0}; XrXirFaultDetail fault = {0};
@@ -148,7 +149,7 @@ static void array_function_gates(void) {
     CHECK(!admission.work && gate.admissions == admitted);
     CHECK(xr_xir_domain_stats(domain).allocations == before.allocations);
     CHECK(xr_xir_value_copy(&nested, &output) == XR_XIR_VALUE_OK);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(receiver);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(receiver);
     xr_xir_value_drop(&function); xr_xir_value_drop(&array); xr_xir_value_drop(&nested);
     xr_xir_value_drop(&empty); CHECK(!gate.releases && !receiving_gate.releases);
     xr_xir_value_drop(&received); CHECK(receiving_gate.releases == 1);

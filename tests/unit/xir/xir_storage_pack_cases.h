@@ -172,7 +172,7 @@ static void storage_pack_cases(void) {
     allocations = calls; fail_at = calls;
     storage_pack_drop(arena, bytes);
     CHECK(domain->stats.live_bytes == empty_bytes && calls == allocations);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
 }
 #endif // XIR_STORAGE_PACK_CASES_H

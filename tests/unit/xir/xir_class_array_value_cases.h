@@ -12,6 +12,7 @@
 #ifndef XIR_CLASS_ARRAY_VALUE_CASES_H
 #define XIR_CLASS_ARRAY_VALUE_CASES_H
 static XrXirTypeArena *class_array_field_arena(XrXirDomain *domain) {
+    (void)domain;
     XrXirNominalFieldIdentity fields[]={{{"flag",4},0},{{"items",5},XR_XIR_FIELD_MUTABLE},{{"text",4},XR_XIR_FIELD_MUTABLE}};
     XrXirNominalIdentity identity={{"module",6},{"Bag",3},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL};
     XrXirNominalTable table={NULL,1,&identity};XrXirType field_types[]={XR_XIR_BOOL,(XrXirType)256,(XrXirType)257};
@@ -19,8 +20,8 @@ static XrXirTypeArena *class_array_field_arena(XrXirDomain *domain) {
         {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0,{0}},
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,{0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,field_types,3}}};
-    XrXirTypes types={nodes,3,&table,NULL};XrXirBudget budget={.parameters=100,.metadata_bytes=65536,.scratch_bytes=65536,.work=10000};
-    XrXirTypeArena *arena=NULL;CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena)==XR_XIR_VALUE_OK);
+    XrXirTypes types={nodes,3,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
     return arena;
 }
 static void class_array_field_value_cases(void) {
@@ -28,7 +29,7 @@ static void class_array_field_value_cases(void) {
     CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(1048576,&foreign)==XR_XIR_VALUE_OK);
     XrXirTypeArena *arena=class_array_field_arena(domain);
-    const XrXirStorageLayout *layout=xr_xir_type_arena_storage(arena,(XrXirType)258);
+    const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(arena,(XrXirType)258);
     CHECK(layout && layout->value.size==8 && layout->value.alignment==8 && layout->body.size==24);
     CHECK(layout->field_offsets[0]==0 && layout->field_offsets[1]==8 && layout->field_offsets[2]==16);
     XrXirValueAdmission admission={arena,domain,NULL,NULL,1000000,65536};
@@ -65,7 +66,7 @@ static void class_array_field_value_cases(void) {
     fail_at=SIZE_MAX;
     xr_xir_value_drop(&old);xr_xir_value_drop(&alias);xr_xir_value_drop(&number);xr_xir_value_drop(&texts);xr_xir_value_drop(&text);
     CHECK(xr_xir_class_get(&object,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&observed)==XR_XIR_VALUE_OK);
-    xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
+    xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
     size_t before=calls;fail_at=calls;xr_xir_value_drop(&object);CHECK(calls==before);
     XrXirValueAdmission retained={xr_xir_value_arena(&observed),NULL,NULL,NULL,64,0};XrXirFaultDetail fault={0};
     CHECK(xr_xir_array_get(&observed,0,&retained,&text,&fault)==XR_XIR_VALUE_OK);

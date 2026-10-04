@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_value_compile_owner.h"
 static size_t calls, live, fail_at = SIZE_MAX;
 
 static void *counted_malloc(size_t size) {
@@ -222,6 +223,7 @@ static XrXirValueStatus capture_admit(void *context, const XrXirFunctionBinding 
         binding->entry <= 7 ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 static XrXirTypeArena *allocation_arena(XrXirDomain *domain) {
+    (void)domain;
     const XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING},
@@ -232,14 +234,14 @@ static XrXirTypeArena *allocation_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
     XrXirTypes types = {nodes, 7, NULL, NULL};
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.metadata_bytes = 65536; budget.work = 65536;
+    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 65536);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static XrXirValueAdmission allocation_admission(XrXirDomain *domain, XrXirTypeArena *arena,
                                                size_t *owner) {
-    return (XrXirValueAdmission) {arena, domain, capture_admit, owner, UINT64_MAX, 0};
+    return (XrXirValueAdmission) {arena, domain, capture_admit, owner, UINT64_C(10000000), 0};
 }
 static void capture_ownership(void) {
     XrXirDomain *domain = NULL; XrXirValue values[2] = {{0}}, output = {0};
@@ -271,7 +273,7 @@ static void capture_ownership(void) {
     const char *text; size_t length;
     CHECK(owned->captures != values && owned->capture_count == 2);
     CHECK(xr_xir_string_view(owned->captures,&text,&length) && length == 5 && !memcmp(text,"first",5));
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_value_drop(values); xr_xir_value_drop(values+1);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_value_drop(values); xr_xir_value_drop(values+1);
     xr_xir_value_drop(&output); CHECK(!releases);
     xr_xir_value_drop(&copy); CHECK(releases == 1 && !live);
 }
@@ -287,7 +289,7 @@ static void deep_capture_release(void) {
         CHECK(xr_xir_function_new(domain,arena,(XrXirType)256,&binding,&admission,&next) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&previous); previous = next;
     }
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     size_t allocations = calls;
     fail_at = calls;
     xr_xir_value_drop(&previous);
@@ -304,56 +306,42 @@ static void arena_allocation_cases(void) {
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter,
         .parameter_count = 1, .result = XR_XIR_I64};
     XrXirTypes types = {&node, 1, NULL, NULL};
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 10; budget.metadata_bytes = 65536; budget.work = 100;
-    XrXirBudget before = budget;
-    XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
-    uint64_t storage_bytes = before.metadata_bytes - budget.metadata_bytes;
-    uint64_t storage_work = before.work - budget.work;
-    CHECK(xr_xir_domain_stats(domain).live_bytes == bytes + storage_bytes);
-    xr_xir_type_arena_drop(arena); arena = NULL; budget = before;
-    fail_at = calls;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OOM && !arena);
-    CHECK(!memcmp(&budget, &before, sizeof(budget)));
-    CHECK(live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
-    fail_at = SIZE_MAX;
-    atomic_store(&domain->references, UINT32_MAX);
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_REFCOUNT_LIMIT && !arena);
-    CHECK(!memcmp(&budget, &before, sizeof(budget)));
-    atomic_store(&domain->references, 1);
-    budget.work = 0;
-    before = budget;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_LIMIT && !arena);
-    CHECK(!memcmp(&budget, &before, sizeof(budget)));
-    budget.work = 100;
-    budget.metadata_bytes = storage_bytes - 1;
-    before = budget;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_LIMIT && !arena);
-    CHECK(!memcmp(&budget, &before, sizeof(budget)));
-    budget.metadata_bytes++;
-    before = budget;
-    domain->limit = bytes + budget.metadata_bytes - 1;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_LIMIT && !arena);
-    CHECK(!memcmp(&budget, &before, sizeof(budget)));
-    domain->limit = 65536;
-    parameter.type = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_BAD_ARGUMENT && !arena);
-    CHECK(!memcmp(&budget, &before, sizeof(budget)));
-    parameter.type = XR_XIR_STRING; node.parameter_span = 0;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_domain_stats(domain).live_bytes == bytes + before.metadata_bytes);
-    CHECK(budget.metadata_bytes == 0 && budget.work == 100 - storage_work && budget.parameters == 9);
+    const XrCompileResourceLimits limits=value_compile_limits(65536,1048576,100);
+    const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,10};
+    value_compile_boundaries(&probe,limits);
+    XrXirTypeArena *arena=NULL;
+    CHECK(value_compile_arena(&types,0,limits,&arena)==XR_XIR_VALUE_LIMIT && !arena);
+    CHECK(value_compile_arena(&types,1,limits,&arena)==XR_XIR_VALUE_OK);
+    xr_xir_compile_type_arena_drop(arena);arena=NULL;
+    /* Compiler metadata does not acquire runtime-domain references or bytes. */
+    atomic_store(&domain->references,UINT32_MAX);
+    CHECK(value_compile_arena(&types,10,limits,&arena)==XR_XIR_VALUE_OK);
+    CHECK(atomic_load(&domain->references)==UINT32_MAX && xr_xir_domain_stats(domain).live_bytes==bytes);
+    xr_xir_compile_type_arena_drop(arena);arena=NULL;atomic_store(&domain->references,1);
+    domain->limit=bytes;
+    CHECK(value_compile_arena(&types,10,limits,&arena)==XR_XIR_VALUE_OK);
+    xr_xir_compile_type_arena_drop(arena);arena=NULL;domain->limit=65536;
+    parameter.type=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE;node.parameter_span=1;
+    CHECK(value_compile_arena(&types,10,limits,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
+    parameter.type=XR_XIR_STRING;node.parameter_span=0;
+    CHECK(value_compile_arena(&types,10,limits,&arena)==XR_XIR_VALUE_OK);
+    CHECK(live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);
     size_t releases = 0;
     XrXirFunctionBinding binding = {&releases, capture_release, 0, NULL, 0};
     XrXirValueAdmission admission = allocation_admission(domain, arena, &releases);
     XrXirValue function = {0};
+    domain->limit=bytes;
+    size_t runtime_blocks=live;
+    CHECK(xr_xir_function_new(domain,arena,(XrXirType)256,&binding,&admission,&function)==XR_XIR_VALUE_LIMIT);
+    CHECK(!function.type && !releases && live==runtime_blocks && xr_xir_domain_stats(domain).live_bytes==bytes);
+    domain->limit=65536;
     atomic_store(&arena->references, UINT32_MAX);
-    CHECK(!xr_xir_type_arena_retain(arena));
+    CHECK(!xr_xir_compile_type_arena_retain(arena));
     CHECK(xr_xir_function_new(domain, arena, (XrXirType) 256, &binding, &admission, &function) == XR_XIR_VALUE_REFCOUNT_LIMIT);
-    CHECK(!function.type && !releases && atomic_load(&domain->references) == 2);
+    CHECK(!function.type && !releases && atomic_load(&domain->references) == 1);
     atomic_store(&arena->references, 1);
     CHECK(xr_xir_function_new(domain, arena, (XrXirType) 256, &binding, &admission, &function) == XR_XIR_VALUE_OK);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     size_t allocations = calls; fail_at = calls;
     CHECK(xr_xir_value_valid(&function));
     xr_xir_value_drop(&function);
@@ -369,15 +357,15 @@ static void deep_arena_release(void) {
         nodes[i].element = i ? (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i - 1) : XR_XIR_STRING;
     }
     XrXirTypes types = {nodes, count, NULL, NULL};
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.metadata_bytes = 1024 * 1024; budget.work = 8 * 1024 * 1024;
+    XrCompileResourceLimits limits = value_compile_limits(1024 * 1024, 1048576, 8 * 1024 * 1024);
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1024 * 1024, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     counted_free(nodes);
     xr_xir_domain_drop(domain);
     size_t allocations = calls; fail_at = calls;
-    xr_xir_type_arena_drop(arena);
+    xr_xir_compile_type_arena_drop(arena);
     CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
 }
 #include "xir_cell_allocation_cases.h"
@@ -392,23 +380,19 @@ static void nominal_arena_allocation(void) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     size_t baseline = live;
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
-    XrXirTypeArena *arena = NULL;
-    for (size_t i = 0; i < 3; ++i) {
-        calls = 0; fail_at = i;
-        CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OOM);
-        CHECK(!arena && live == baseline && budget.metadata_bytes == 65536 && budget.work == 10000);
-    }
-    calls = 0; fail_at = SIZE_MAX;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
-    CHECK(calls == 3 && live == baseline + 1);
+    const XrCompileResourceLimits limits=value_compile_limits(65536,1048576,10000);
+    const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,100};
+    value_compile_boundaries(&probe,limits);
+    XrXirTypeArena *arena=NULL;
+    CHECK(value_compile_arena(&types,100,limits,&arena)==XR_XIR_VALUE_OK);
+    CHECK(calls==1 && live==baseline);
     memset(&f, 0xCC, sizeof(f)); memset(field_types, 0xCC, sizeof(field_types)); memset(&node, 0xCC, sizeof(node));
-    CHECK(xr_xir_type_arena_types(arena)->nodes[0].nominal.fields[0] == XR_XIR_I64);
-    CHECK(xr_xir_type_arena_types(arena)->nodes[0].nominal.fields[1] == XR_XIR_STRING);
+    CHECK(xr_xir_compile_type_arena_types(arena)->nodes[0].nominal.fields[0] == XR_XIR_I64);
+    CHECK(xr_xir_compile_type_arena_types(arena)->nodes[0].nominal.fields[1] == XR_XIR_STRING);
     xr_xir_domain_drop(domain);
-    CHECK(!memcmp(xr_xir_type_arena_types(arena)->nominals->identities[0].name.bytes, "Pair", 4));
+    CHECK(!memcmp(xr_xir_compile_type_arena_types(arena)->nominals->identities[0].name.bytes, "Pair", 4));
     size_t allocations = calls; fail_at = calls;
-    xr_xir_type_arena_drop(arena);
+    xr_xir_compile_type_arena_drop(arena);
     CHECK(live == 0 && calls == allocations);
     fail_at = SIZE_MAX; calls = 0;
 }
@@ -453,7 +437,7 @@ static void struct_allocation_failures(void) {
     CHECK(!rejected.type && live == baseline);
     atomic_store(&string->references, references);
     xr_xir_value_drop(&parent); xr_xir_value_drop(&leaf); xr_xir_value_drop(&fields[1]);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
     XrXirValue deep = struct_deep_value(); size_t before = calls; fail_at = calls;
     xr_xir_value_drop(&deep); CHECK(!live && calls == before); fail_at = SIZE_MAX;
 }
@@ -497,55 +481,51 @@ static void string_predicate_allocations(void) {
 }
 #include "xir_enum_metadata_fixture.h"
 static void enum_arena_allocations(void) {
-    EnumMetadataFixture f; enum_metadata_fixture(&f);
-    XrXirBudget b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000}; XrXirNominalTable *projection = NULL;
-    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &b) == XR_XIR_OK);
-    size_t sites = 0;
-    for (size_t attempt = 0; attempt <= sites; ++attempt) {
-        calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX; b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
-        XrXirStatus status = xr_xir_nominal_project(&f.table, &b, &projection);
-        if (!attempt) { CHECK(status == XR_XIR_OK); sites = calls; }
-        else CHECK(status == XR_XIR_OUT_OF_MEMORY && !projection);
-        xr_xir_nominal_free(projection); CHECK(!live);
-    }
-    fail_at = SIZE_MAX; b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
-    CHECK(xr_xir_nominal_project(&f.table, &b, &projection) == XR_XIR_OK);
-    XrXirTypes types = {NULL, 0, projection, NULL}; XrXirTypeArena *arena = NULL;
-    XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
-    size_t baseline = live; b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000}; calls = 0; fail_at = 0;
-    CHECK(xr_xir_type_arena_new(domain, &types, &b, &arena) == XR_XIR_VALUE_OOM && !arena && live == baseline);
-    fail_at = SIZE_MAX; b = (XrXirBudget) {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
-    CHECK(xr_xir_type_arena_new(domain, &types, &b, &arena) == XR_XIR_VALUE_OK);
-    xr_xir_nominal_free(projection); memset(&f, 0xCC, sizeof(f)); xr_xir_domain_drop(domain);
-    const XrXirNominalIdentity *id = xr_xir_type_arena_types(arena)->nominals->identities;
-    CHECK(id->kind == XR_XIR_NOMINAL_ENUM && id->variant_count == 3);
-    CHECK(id->variants[2].field_begin == 1 && !memcmp(id->variants[2].name.bytes, "Right", 5));
-    xr_xir_type_arena_drop(arena); CHECK(!live); calls = 0;
+    EnumMetadataFixture f;enum_metadata_fixture(&f);
+    const XrCompileResourceLimits limits=value_compile_limits(65536,65536,10000);
+    ValueCompileOwner owner={0};XrXirNominalTable *projection=NULL;
+    CHECK(value_compile_owner_new(&owner,limits,100)==XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_structure_verify(&owner.context,&f.table,NULL)==XR_XIR_OK);
+    const ValueCompileProbe project_probe={NULL,&f.table,XR_XIR_UNIT,1,100};
+    value_compile_boundaries(&project_probe,limits);
+    CHECK(xr_xir_compile_nominal_project(&owner.context,&f.table,&projection)==XR_XIR_OK);
+    CHECK(projection->count==1 && projection->identities[0].kind==XR_XIR_NOMINAL_ENUM);
+    XrXirTypes types={NULL,0,projection,NULL};XrXirDomain *domain=NULL;
+    CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+    const ValueCompileProbe arena_probe={&types,NULL,XR_XIR_UNIT,0,100};
+    value_compile_boundaries(&arena_probe,limits);
+    XrXirTypeArena *arena=NULL;size_t baseline=live;
+    value_compile_injected=false;value_compile_fail_at=value_compile_calls;
+    CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena)==XR_XIR_VALUE_OOM && !arena);
+    CHECK(value_compile_injected && live==baseline);value_compile_fail_at=SIZE_MAX;
+    CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_compile_type_arena_types(arena)->nominals!=projection);
+    memset(&f,0xCC,sizeof(f));xr_xir_compile_nominal_free(projection);value_compile_owner_release(&owner);
+    xr_xir_domain_drop(domain);
+    const XrXirNominalIdentity *identity=&xr_xir_compile_type_arena_types(arena)->nominals->identities[0];
+    CHECK(identity->kind==XR_XIR_NOMINAL_ENUM && identity->variant_count==3);
+    CHECK(identity->variants[2].field_begin==1 && !memcmp(identity->variants[2].name.bytes,"Right",5));
+    xr_xir_compile_type_arena_drop(arena);CHECK(!live);calls=0;
 }
 
 static void enum_layout_allocation_failures(const XrXirTypes *types) {
-    XrXirBudget initial = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
-    XrXirBudget budget = initial; XrXirLayout layout = {0}; uint32_t offsets[2] = {99, 99};
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    size_t begin = calls, baseline = live;
-    CHECK(xr_xir_nominal_layout(types, (XrXirType)256, &target, &budget, &layout, offsets, 2) == XR_XIR_OK);
-    CHECK(layout.size == 24 && layout.alignment == 8 && offsets[0] == 8 && offsets[1] == 16);
-    size_t count = calls - begin;
-    for (size_t i = 0; i < count; ++i) {
-        budget = initial; offsets[0] = offsets[1] = 99; fail_at = calls + i;
-        CHECK(xr_xir_nominal_layout(types, (XrXirType)256, &target, &budget, &layout, offsets, 2) == XR_XIR_OUT_OF_MEMORY);
-        CHECK(!layout.size && !layout.alignment && offsets[0] == 99 && offsets[1] == 99);
-        CHECK(live == baseline && !memcmp(&budget, &initial, sizeof(budget))); fail_at = SIZE_MAX;
-    }
+    const XrCompileResourceLimits limits=value_compile_limits(65536,65536,10000);
+    const ValueCompileProbe probe={types,NULL,(XrXirType)256,2,100};
+    value_compile_boundaries(&probe,limits);
+    ValueCompileOwner owner={0};ValueCompileResult result={0};
+    CHECK(value_compile_owner_new(&owner,limits,100)==XR_XIR_OK);
+    CHECK(value_compile_probe(&owner.context,&probe,&result)==XR_XIR_OK);
+    CHECK(result.layout.size==24 && result.layout.alignment==8 && result.offsets[0]==8 && result.offsets[1]==16);
+    value_compile_owner_release(&owner);
 }
 static void enum_arena_and_slot_boundaries(const XrXirTypes *types, const XrXirValue *empty,
     XrXirValueAdmission *admission) {
     size_t baseline = live;
     XrXirNominalIdentity identity = types->nominals->identities[0]; identity.module = (XrXirLiteral) {"beta", 4};
     XrXirNominalTable table = {NULL, 1, &identity}; XrXirTypes other = *types; other.nominals = &table;
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
+    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(admission->domain, &other, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&other, 100, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = arena;
     XrXirValue value = {0}, owned = {0};
     CHECK(xr_xir_enum_new((XrXirType)256, 0, NULL, 0, &receiving, &value) == XR_XIR_VALUE_OK);
@@ -559,9 +539,9 @@ static void enum_arena_and_slot_boundaries(const XrXirTypes *types, const XrXirV
     CHECK(slot == previous);
     CHECK(xr_xir_value_copy(&value, &owned) == XR_XIR_VALUE_OK);
     xr_xir_owned_slot_move(&slot, 0, &owned); CHECK(!owned.type && !owned.payload);
-    xr_xir_type_arena_drop(arena); xr_xir_value_drop(&value);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_value_drop(&value);
     XrXirValue borrowed = {(uint32_t)256, 0, slot};
-    const XrXirNominalIdentity *escaped = &xr_xir_type_arena_types(xr_xir_value_arena(&borrowed))->nominals->identities[0];
+    const XrXirNominalIdentity *escaped = &xr_xir_compile_type_arena_types(xr_xir_value_arena(&borrowed))->nominals->identities[0];
     CHECK(escaped->module.length == 4 && !memcmp(escaped->module.bytes, "beta", 4));
     xr_xir_owned_slot_clear(&slot, 0); CHECK(!slot && live == baseline);
 }
@@ -577,30 +557,13 @@ static void enum_value_ownership(void) {
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     node.nominal.fields = field_types; node.nominal.field_count = 2;
     const XrXirTypes types = {&node, 1, &table, NULL};
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
-    XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
-    CHECK(live == 0 && xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
-    XrXirBudget initial = budget;
-    size_t arena_start = calls;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
-    size_t arena_calls = calls - arena_start;
-    uint64_t required_metadata = initial.metadata_bytes - budget.metadata_bytes;
-    uint64_t required_work = initial.work - budget.work;
-    xr_xir_type_arena_drop(arena); arena = NULL; CHECK(live == 1);
-    for (size_t i = 0; i < arena_calls; ++i) {
-        budget = initial; fail_at = calls + i;
-        CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OOM && !arena);
-        CHECK(live == 1 && !memcmp(&budget, &initial, sizeof(budget))); fail_at = SIZE_MAX;
-    }
-    for (uint32_t i = 0; i < 2; ++i) {
-        budget = initial;
-        if (i) budget.work = required_work - 1; else budget.metadata_bytes = required_metadata - 1;
-        XrXirBudget saved = budget;
-        CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_LIMIT && !arena);
-        CHECK(live == 1 && !memcmp(&budget, &saved, sizeof(budget)));
-    }
-    budget = initial;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    const XrCompileResourceLimits limits=value_compile_limits(65536,65536,10000);
+    XrXirDomain *domain=NULL;XrXirTypeArena *arena=NULL;
+    CHECK(live==0 && xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+    const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,100};
+    value_compile_boundaries(&probe,limits);
+    CHECK(live==1);
+    CHECK(value_compile_arena(&types,100,limits,&arena)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {0}; admission.domain = domain; admission.arena = arena;
     admission.work = 100000; admission.scratch_bytes = 65536;
     XrXirValue empty = {0}, pair = {0}, values[2] = {{0}}, out = {0};
@@ -655,7 +618,7 @@ static void enum_value_ownership(void) {
     CHECK(xr_xir_error_erase(&empty, &admission, &erased_empty) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_erase(&pair, &admission, &erased_pair) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&empty); xr_xir_value_drop(&pair);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(xr_xir_error_narrow(&erased_pair, type, &admission, &pair) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_narrow(&erased_empty, type, &admission, &empty) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&erased_pair); xr_xir_value_drop(&erased_empty);
@@ -664,7 +627,7 @@ static void enum_value_ownership(void) {
     CHECK(xr_xir_string_view(&out, &text, &length) && length == 4 && !memcmp(text, "left", 4));
     xr_xir_value_drop(&out); xr_xir_value_drop(&pair);
     CHECK(xr_xir_enum_variant(&empty, &ordinal) == XR_XIR_VALUE_OK && ordinal == 0);
-    const XrXirNominalIdentity *escaped = &xr_xir_type_arena_types(xr_xir_value_arena(&empty))->nominals->identities[0];
+    const XrXirNominalIdentity *escaped = &xr_xir_compile_type_arena_types(xr_xir_value_arena(&empty))->nominals->identities[0];
     CHECK(escaped->module.length == 5 && !memcmp(escaped->module.bytes, "alpha", 5));
     xr_xir_value_drop(&empty); CHECK(live == 0);
 }
@@ -722,5 +685,6 @@ int main(void) {
     cell_allocation_cases(); cell_cycles_and_domains(); deep_cell_release();
     arena_allocation_cases(); deep_arena_release(); array_allocation_cases();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
+    CHECK(!value_compile_live && !value_compile_bytes);
     return 0;
 }

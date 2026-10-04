@@ -9,6 +9,7 @@
 #ifndef XIR_STORAGE_CURSOR_CASES_H
 #define XIR_STORAGE_CURSOR_CASES_H
 static XrXirTypeArena *storage_cursor_arena(XrXirDomain *domain) {
+    (void)domain;
     const XrXirNominalVariant variants[] = {{{"Empty", 5}, 0, 0}, {{"Pair", 4}, 0, 2}};
     const XrXirNominalFieldIdentity fields[] = {{{"a", 1}, 0}, {{"b", 1}, 0}};
     const XrXirNominalIdentity identities[] = {
@@ -26,12 +27,12 @@ static XrXirTypeArena *storage_cursor_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)257},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};
     const XrXirTypes types = {nodes, 6, &table, NULL};
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
+    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
     XrXirTypeArena *arena = NULL;
-    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
-    const XrXirStorageLayout *choice = xr_xir_type_arena_storage(arena, (XrXirType)256);
-    const XrXirStorageLayout *box = xr_xir_type_arena_storage(arena, (XrXirType)257);
-    const XrXirStorageLayout *empty = xr_xir_type_arena_storage(arena, (XrXirType)258);
+    CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
+    const XrXirStorageLayout *choice = xr_xir_compile_type_arena_storage(arena, (XrXirType)256);
+    const XrXirStorageLayout *box = xr_xir_compile_type_arena_storage(arena, (XrXirType)257);
+    const XrXirStorageLayout *empty = xr_xir_compile_type_arena_storage(arena, (XrXirType)258);
     CHECK(choice->value.size == 24 && choice->depth == 1 && choice->owned_depth == 1 && choice->tag_bytes == 1);
     CHECK(box->value.size == 48 && box->depth == 2 && box->owned_depth == 2 && !box->tag_bytes);
     CHECK(empty->value.size == 0 && empty->depth == 1 && empty->owned_depth == 0);
@@ -86,7 +87,7 @@ static void storage_cursor_cases(void) {
     CHECK(storage_cursor_next(&cursor, NULL, &leaf, &found) == XR_XIR_VALUE_OK && !found);
     CHECK(storage_cursor_init(arena, (StorageSpan){XR_XIR_STRING, NULL}, NULL, 0, true, &cursor) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(calls == allocations);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live && calls == allocations);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live && calls == allocations);
     fail_at = SIZE_MAX;
 }
 #endif // XIR_STORAGE_CURSOR_CASES_H

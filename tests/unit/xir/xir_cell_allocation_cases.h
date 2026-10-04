@@ -48,7 +48,7 @@ static void cell_allocation_cases(void) {
     CHECK(xr_xir_string_view(&snapshot, &text, &length) && length == 3 && !memcmp(text, "old", 3));
     XrXirValue latest = {0}; CHECK(xr_xir_cell_read(&cell, &latest) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_view(&latest, &text, &length) && length == 3 && !memcmp(text, "new", 3));
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(other);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(other);
     xr_xir_value_drop(&cell); xr_xir_value_drop(&alias); xr_xir_value_drop(&initial);
     xr_xir_value_drop(&replacement); xr_xir_value_drop(&snapshot); xr_xir_value_drop(&latest);
     CHECK(!live); fail_at = SIZE_MAX;
@@ -58,7 +58,7 @@ static void cell_allocation_cases(void) {
     domain->limit = xr_xir_domain_stats(domain).live_bytes + sizeof(XirCell) - 1;
     XrXirValue number = {XR_XIR_I64, 0, 1};
     CHECK(xr_xir_cell_new(domain, arena, (XrXirType) 259, &number, &admission, &cell) == XR_XIR_VALUE_LIMIT && !cell.type);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
 }
 static void cell_cycles_and_domains(void) {
     XrXirDomain *domain = NULL, *other = NULL;
@@ -88,7 +88,7 @@ static void cell_cycles_and_domains(void) {
     CHECK(live + 2 == retained && calls == allocations && releases == 1);
     observed = (XrXirValue) {0};
     xr_xir_value_drop(&empty); xr_xir_value_drop(&foreign);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(other);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(other);
     CHECK(releases == 3 && !live); fail_at = SIZE_MAX;
     puts("Shared cells: aliases, copy-before-write rollback, domain rejection and measured strong-cycle retention passed");
 }
@@ -108,7 +108,7 @@ static void deep_cell_release(void) {
         CHECK(xr_xir_function_new(domain, arena, (XrXirType) 256, &binding, &admission, &next) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&previous); xr_xir_value_drop(&cell); previous = next;
     }
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); size_t allocations = calls; fail_at = calls;
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); size_t allocations = calls; fail_at = calls;
     xr_xir_value_drop(&previous);
     CHECK(releases == 100001 && !live && calls == allocations); fail_at = SIZE_MAX;
     puts("Shared cell cleanup: 100000 alternating environments/cells, zero cleanup allocations and zero live blocks");

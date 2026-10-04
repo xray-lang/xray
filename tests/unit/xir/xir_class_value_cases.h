@@ -14,15 +14,15 @@
 #include "xir/xxir_class.h"
 /* Include in the counted value-runtime amalgam, with calls/live/fail_at. */
 static XrXirTypeArena *class_value_arena(XrXirDomain *domain) {
+    (void)domain;
     XrXirNominalFieldIdentity fields[]={{{"count",5},XR_XIR_FIELD_MUTABLE},{{"label",5},0},{{"text",4},XR_XIR_FIELD_MUTABLE}};
     XrXirNominalIdentity identity={{"module",6},{"Counter",7},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL};
     XrXirNominalTable table={NULL,1,&identity};XrXirType types_[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_STRING};
     XrXirTypeNode nodes[]={
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,types_,3}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0,{0}}};
-    XrXirTypes types={nodes,2,&table,NULL};XrXirBudget budget={0};
-    budget.scratch_bytes=1048576;budget.metadata_bytes=1048576;budget.work=1000000;budget.parameters=100;
-    XrXirTypeArena *arena=NULL;CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena)==XR_XIR_VALUE_OK);
+    XrXirTypes types={nodes,2,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(1048576, 1048576, 1000000);
+    XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
     memset(fields,0xcc,sizeof(fields));memset(nodes,0xcc,sizeof(nodes));
     return arena;
 }
@@ -35,7 +35,7 @@ static void class_value_cases(void) {
     CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(1048576,&foreign)==XR_XIR_VALUE_OK);
     XrXirTypeArena *arena=class_value_arena(domain);
-    const XrXirStorageLayout *layout=xr_xir_type_arena_storage(arena,(XrXirType)256);
+    const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(arena,(XrXirType)256);
     CHECK(layout && layout->value.size==8 && layout->value.alignment==8);
     CHECK(layout->body.size==24 && layout->body.alignment==8 && layout->field_count==3);
     CHECK(layout->field_offsets[0]==0 && layout->field_offsets[1]==8 && layout->field_offsets[2]==16);
@@ -83,7 +83,7 @@ static void class_value_cases(void) {
     CHECK(xr_xir_class_get(&first,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK && observed.payload==label.payload);
     xr_xir_value_drop(&observed);
     xr_xir_value_drop(&label);xr_xir_value_drop(&text);xr_xir_value_drop(&alias);xr_xir_value_drop(&separate);
-    xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
+    xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
     CHECK(xr_xir_class_get(&first,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK);
     size_t before=calls;xr_xir_value_drop(&first);CHECK(calls==before);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&observed,&bytes,&length));
@@ -104,7 +104,7 @@ static void class_value_allocation_failures(void) {
         size_t before=calls;xr_xir_value_drop(&value);CHECK(calls==before);
         CHECK(live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);
     }
-    fail_at=SIZE_MAX;xr_xir_value_drop(&text);xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(live==initial);
+    fail_at=SIZE_MAX;xr_xir_value_drop(&text);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(live==initial);
 }
 static void class_array_allocation_failures(void) {
     size_t initial=live;XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
@@ -127,6 +127,6 @@ static void class_array_allocation_failures(void) {
         fail_at=SIZE_MAX;class_value_count(&object,40);
         size_t before=calls;xr_xir_value_drop(&alias);xr_xir_value_drop(&array);CHECK(calls==before);
     }
-    xr_xir_value_drop(&object);xr_xir_value_drop(&text);xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(live==initial);
+    xr_xir_value_drop(&object);xr_xir_value_drop(&text);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(live==initial);
 }
 #endif // XIR_CLASS_VALUE_CASES_H
