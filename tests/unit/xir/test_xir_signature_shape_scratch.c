@@ -106,17 +106,17 @@ static void faults(void) {
     puts("signature shape: three real growth OOM points, stage physical baseline restored");
 }
 static void limits(void) {
-    /* Five zero-parameter signature visits cost 5; roots of lengths 1,9,33,9,1
-     * cost 3*53 for iteration allowance, actual zeroing and child-edge checks.
-     * Each of five queries additionally seeds its root with one charged edge
-     * check. Three growth allocations add 3; ledger creation adds 1: total173. */
-    XrCompileResourceStats measured=run(caps(),XR_XIR_OK);CHECK(measured.work==173);
-    XrCompileResourceLimits exact={measured.allocated_bytes,measured.peak_bytes,173};
+    /* Five signature visits and ledger creation cost six. Dense roots contain
+     * 53 nodes: five pop units, one child edge and two child marks per node.
+     * Root seeding adds five after subtracting absent scalar child marks;
+     * bitmap clears total 1+2+5+2+1=11, and three growth attempts add three. */
+    XrCompileResourceStats measured=run(caps(),XR_XIR_OK);CHECK(measured.work==449);
+    XrCompileResourceLimits exact={measured.allocated_bytes,measured.peak_bytes,449};
     XrCompileResourceStats again=run(exact,XR_XIR_OK);
-    CHECK(again.work==173 && again.allocated_bytes==measured.allocated_bytes && again.peak_bytes==measured.peak_bytes);
+    CHECK(again.work==449 && again.allocated_bytes==measured.allocated_bytes && again.peak_bytes==measured.peak_bytes);
     XrCompileResourceLimits less=exact;--less.allocated_bytes;(void)run(less,XR_XIR_BUDGET);
     less=exact;--less.live_bytes;(void)run(less,XR_XIR_BUDGET);
-    for(uint64_t work=1;work<173;++work){less=exact;less.work=work;(void)run(less,XR_XIR_BUDGET);}
+    for(uint64_t work=1;work<449;++work){less=exact;less.work=work;(void)run(less,XR_XIR_BUDGET);}
 }
 static void scopes(void) {
     ShapeFixture f;fixture(&f,false);XrXirCompileContext context=owner_new(caps());
@@ -349,6 +349,123 @@ static void signature_resources(void) {
     printf("signature declaration proof: full verify sites=%zu, work=%llu, physical 0/0\n",sites,(unsigned long long)measured.work);
 }
 
-int main(void){faults();limits();scopes();bad_signatures();public_and_output();
+static void bitmap_atomic_outputs(void) {
+    for (uint64_t cut=1;cut<=6;++cut) {
+        XrCompileResourceLimits limits=caps();limits.work=cut;
+        XrXirCompileContext context=owner_new(limits);uint64_t baseline=stats(&context).live_bytes;
+        unsigned char pending=0x82;uint32_t ceiling=8,index=99;bool found=false;
+        XrXirStatus status=xir_type_pending_next(&context,&pending,&ceiling,&index,&found);
+        CHECK(status==(cut<6?XR_XIR_BUDGET:XR_XIR_OK));
+        uint64_t expected=1+(cut>=2?1:0)+(cut>=5?3:0)+(cut>=6?1:0);
+        CHECK(stats(&context).work==expected);
+        if(cut<6) CHECK(pending==0x82 && ceiling==8 && index==99 && !found);
+        else CHECK(pending==2 && ceiling==7 && index==7 && found);
+        owner_free(&context,baseline);
+    }
+    for (uint64_t cut=1;cut<=9;++cut) {
+        XrCompileResourceLimits limits=caps();limits.work=cut;
+        XrXirCompileContext context=owner_new(limits);uint64_t baseline=stats(&context).live_bytes;
+        unsigned char pending[4]={1,0,0,0};uint32_t ceiling=32,index=99;bool found=false;
+        XrXirStatus status=xir_type_pending_next(&context,pending,&ceiling,&index,&found);
+        CHECK(status==(cut<9?XR_XIR_BUDGET:XR_XIR_OK));
+        uint64_t expected=(cut<5?cut:5)+(cut>=8?3:0)+(cut>=9?1:0);
+        CHECK(stats(&context).work==expected);
+        if(cut<9)CHECK(pending[0]==1 && ceiling==32 && index==99 && !found);
+        else CHECK(!pending[0] && !ceiling && !index && found);
+        CHECK(!pending[1] && !pending[2] && !pending[3]);owner_free(&context,baseline);
+    }
+    for (uint64_t cut=1;cut<=5;++cut) {
+        XrCompileResourceLimits limits=caps();limits.work=cut;
+        XrXirCompileContext context=owner_new(limits);uint64_t baseline=stats(&context).live_bytes;
+        unsigned char pending[4]={0};uint32_t ceiling=32,index=99;bool found=true;
+        CHECK(xir_type_pending_next(&context,pending,&ceiling,&index,&found)==(cut<5?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(stats(&context).work==cut && index==99);
+        if(cut<5)CHECK(ceiling==32 && found);else CHECK(!ceiling && !found);
+        owner_free(&context,baseline);
+    }
+    for (uint64_t cut=1;cut<=3;++cut) {
+        XrCompileResourceLimits limits=caps();limits.work=cut;
+        XrXirCompileContext context=owner_new(limits);uint64_t baseline=stats(&context).live_bytes;
+        unsigned char pending=0x80;
+        CHECK(xir_type_pending_mark(&context,&pending,1)==(cut<3?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(pending==(cut<3?0x80:0x82) && stats(&context).work==(cut<3?1:3));
+        owner_free(&context,baseline);
+    }
+    XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
+    XirTypeScratch scratch={context.resources,NULL,0};XrXirStatus status=XR_XIR_OK;
+    CHECK(!xir_type_scratch_pending(&context,&scratch,0,&status) && status==XR_XIR_BAD_STRUCTURE);
+    CHECK(!scratch.bytes && !scratch.capacity && stats(&context).work==1);
+    CHECK(xr_xir_compile_type_expression_shape_scratch(&context,NULL,XR_XIR_UNIT,0,&scratch)==XR_XIR_OK);
+    CHECK(!scratch.bytes && !scratch.capacity && stats(&context).work==2);
+    xir_type_scratch_free(&scratch);owner_free(&context,baseline);
+}
+static void bitmap_same_byte_and_order(void) {
+    XrXirTypeNode nodes[10]={0};XrXirTypes types={.nodes=nodes,.count=10};
+    XrXirCallableParameter parameters[2]={{constructed(0),0},{constructed(0),0}};
+    nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
+    nodes[7]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(0)};
+    nodes[9]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=constructed(7),.parameters=parameters,.parameter_count=2};
+    XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
+    XirTypeScratch scratch={context.resources,NULL,0};
+    CHECK(xr_xir_compile_type_expression_shape_scratch(&context,&types,constructed(9),0,&scratch)==XR_XIR_OK);
+    /* Node seven seeds node zero after its byte was read; duplicate roots do not skip its check. */
+    nodes[0].element=constructed(0);
+    CHECK(xr_xir_compile_type_expression_shape_scratch(&context,&types,constructed(9),0,&scratch)==XR_XIR_BAD_TYPE);
+    nodes[0].element=XR_XIR_I64;
+    parameters[0].type=constructed(6);parameters[1].type=constructed(6);
+    nodes[6]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.parameter_count=1};
+    nodes[7].kind=0;
+    CHECK(xr_xir_compile_type_expression_shape_scratch(&context,&types,constructed(9),0,&scratch)==XR_XIR_BAD_TYPE);
+    nodes[7]=nodes[6];nodes[6].kind=0;
+    CHECK(xr_xir_compile_type_expression_shape_scratch(&context,&types,constructed(9),0,&scratch)==XR_XIR_BAD_STRUCTURE);
+    nodes[7]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64};
+    nodes[6]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64};
+    CHECK(xr_xir_compile_type_expression_shape_scratch(&context,&types,constructed(9),0,&scratch)==XR_XIR_OK);
+    xir_type_scratch_free(&scratch);owner_free(&context,baseline);
+}
+static XrCompileResourceStats bitmap_large_run(XrCompileResourceLimits limits,bool dense,XrXirStatus expected) {
+    enum { COUNT=XR_XIR_CONSTRUCTED_TYPE_LIMIT-XR_XIR_CONSTRUCTED_TYPE_BASE };
+    static XrXirTypeNode nodes[COUNT];
+    memset(nodes,0,sizeof(nodes));nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
+    if(dense) for(uint32_t i=1;i<COUNT;++i)
+        nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(i-1)};
+    else nodes[COUNT-1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(0)};
+    XrXirTypes types={.nodes=nodes,.count=COUNT};
+    XrXirCompileContext context=owner_new(limits);uint64_t baseline=stats(&context).live_bytes;
+    CHECK(xr_xir_compile_type_expression_shape(&context,&types,constructed(COUNT-1),0)==expected);
+    XrCompileResourceStats result=stats(&context);owner_free(&context,baseline);return result;
+}
+static void bitmap_large_boundaries(void) {
+    const uint64_t count=XR_XIR_CONSTRUCTED_TYPE_LIMIT-XR_XIR_CONSTRUCTED_TYPE_BASE;
+    const uint64_t bytes=count/8;
+    /* Sparse: two pops cost ten, zero-byte reads cost bytes-1, edges/marks seven,
+     * zeroing costs bytes, and allocation plus ledger creation cost two. */
+    const uint64_t sparse_work=2*bytes+18;
+    XrCompileResourceStats sparse=bitmap_large_run(caps(),false,XR_XIR_OK);
+    CHECK(sparse.work==sparse_work && sparse.allocation_count==2);
+    const uint64_t storage=sizeof(XrCompileResources)+sizeof(CompileAllocation)+bytes;
+    CHECK(sparse.allocated_bytes==storage && sparse.peak_bytes==storage);
+    XrCompileResourceStats dense=bitmap_large_run(caps(),true,XR_XIR_OK);
+    CHECK(dense.work==8*count+bytes+3 && dense.allocation_count==2);
+    for(unsigned axis=0;axis<3;++axis) for(unsigned below=0;below<2;++below) {
+        XrCompileResourceLimits limits=caps();
+        if(!axis) limits.work=sparse_work-below;
+        else if(axis==1) limits.allocated_bytes=storage-below;
+        else limits.live_bytes=storage-below;
+        (void)bitmap_large_run(limits,false,below?XR_XIR_BUDGET:XR_XIR_OK);
+    }
+    for(size_t pass=0;pass<2;++pass) {
+        XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
+        XrXirTypeNode node={.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
+        XrXirTypes types={.nodes=&node,.count=1};XirTypeScratch scratch={context.resources,NULL,0};
+        attempts=0;injected=false;fail_at=pass?0:SIZE_MAX;
+        CHECK(xr_xir_compile_type_expression_shape_scratch(&context,&types,constructed(0),0,&scratch)==(pass?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
+        fail_at=SIZE_MAX;CHECK(attempts==1 && injected==(pass!=0));
+        if(pass)CHECK(!scratch.bytes && !scratch.capacity);
+        xir_type_scratch_free(&scratch);owner_free(&context,baseline);
+    }
+}
+
+int main(void){bitmap_atomic_outputs();bitmap_same_byte_and_order();bitmap_large_boundaries();faults();limits();scopes();bad_signatures();public_and_output();
     signature_priority_and_freshness();signature_instruction_proof();signature_scalar_proof();signature_owned_output();signature_resources();
     puts("signature shape fresh scopes/edges, finite axes and physical 0/0");return 0;}

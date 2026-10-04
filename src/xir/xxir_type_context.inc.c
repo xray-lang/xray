@@ -29,8 +29,7 @@ static XrXirStatus type_context_edge(TypeContextProof *c, XrXirType type, uint32
         type == XR_XIR_PANIC_INFO ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     uint32_t index = id - XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (index >= earlier || node->parameter_span > c->parameter_count) return XR_XIR_BAD_TYPE;
-    c->pending[index] = 1;
-    return XR_XIR_OK;
+    return xir_type_pending_mark(c->remaining,c->pending,index);
 }
 static XrXirStatus type_context_nominal(TypeContextProof *c, const XrXirTypeNode *node, uint32_t index) {
     const XrXirNominalTable *table = c->types->nominals;
@@ -58,15 +57,15 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type, 
     const XrXirTypeNode *root = xr_xir_type_node(types, type);
     if (!root) return type_context_edge(&c, type, 0);
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
-    if (!xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
-
     c.pending = xir_type_scratch_pending(proof->remaining, scratch, count, &allocation_status);
     if (!c.pending) {  return allocation_status; }
     XrXirStatus status = type_context_edge(&c, type, count);
     /* Descending expression IDs visit each reachable node once without recursion. */
-    for (uint32_t at = count; at && status == XR_XIR_OK; --at) {
-        uint32_t i = at - 1;
-        if (!c.pending[i]) continue;
+    uint32_t at=count;
+    while (at && status==XR_XIR_OK) {
+        uint32_t i=0; bool found=false;
+        status=xir_type_pending_next(remaining,c.pending,&at,&i,&found);
+        if (status!=XR_XIR_OK || !found) break;
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL) status = type_context_nominal(&c, node, i);
         else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||

@@ -155,4 +155,27 @@ static void authority(void) {
     CHECK(xr_xir_compile_type_access_scratch(&other,&f.module,0,f.root,&scratch)==XR_XIR_BAD_STRUCTURE);
     xr_compile_resources_release(foreign);xir_type_scratch_free(&scratch);owner_free(&context,baseline);
 }
-int main(void) { faults();limits();authority();puts("type access scratch fresh authority, growth, fault and three-axis ownership PASS");return 0; }
+static void sparse_same_byte_authority(void) {
+    AccessFixture f;fixture(&f,33);
+    for(uint32_t i=1;i<32;++i)f.nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
+    f.nodes[7]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(0)};
+    XrXirCallableParameter parameters[2]={{constructed(0),0},{constructed(0),0}};
+    f.nodes[32]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=constructed(7),.parameters=parameters,.parameter_count=2};
+    XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
+    XirTypeScratch scratch={context.resources,NULL,0};
+    CHECK(xr_xir_compile_type_access_scratch(&context,&f.module,0,f.root,&scratch)==XR_XIR_OK);
+    uint64_t allocated=stats(&context).allocation_count;
+    CHECK(xr_xir_compile_type_access_scratch(&context,&f.module,1,f.root,&scratch)==XR_XIR_BAD_TYPE);
+    f.nominal.exported=1;f.imported=0;f.modules[1].dependencies=&f.imported;f.modules[1].dependency_count=1;
+    CHECK(xr_xir_compile_type_access_scratch(&context,&f.module,1,f.root,&scratch)==XR_XIR_OK);
+    f.nominal.exported=0;
+    CHECK(xr_xir_compile_type_access_scratch(&context,&f.module,1,f.root,&scratch)==XR_XIR_BAD_TYPE);
+    f.nodes[7].element=constructed(7);
+    CHECK(xr_xir_compile_type_access_scratch(&context,&f.module,0,f.root,&scratch)==XR_XIR_BAD_TYPE);
+    f.nodes[7].element=constructed(0);
+    CHECK(xr_xir_compile_type_access_scratch(&context,&f.module,0,f.root,&scratch)==XR_XIR_OK);
+    CHECK(stats(&context).allocation_count==allocated);
+    xir_type_scratch_free(&scratch);owner_free(&context,baseline);
+}
+
+int main(void) { sparse_same_byte_authority();faults();limits();authority();puts("type access scratch fresh authority, growth, fault and three-axis ownership PASS");return 0; }

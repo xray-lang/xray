@@ -61,7 +61,7 @@ static XrXirStatus type_access_edge(const XrXirTypes *types, XrXirType type,
     if (!xr_xir_type_node(types, type)) return XR_XIR_OK;
     uint32_t index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (index >= earlier) return XR_XIR_BAD_TYPE;
-    pending[index] = 1; return XR_XIR_OK;
+    return xir_type_pending_mark(remaining,pending,index);
 }
 XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, XirTypeScratch *scratch) {
     XrXirStatus allocation_status = XR_XIR_OK;
@@ -73,15 +73,14 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
     const XrXirTypes *types = module->types;
     if (!types || !types->nominals || !xr_xir_type_node(types, type)) return XR_XIR_OK;
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
-    if (!xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
-
     unsigned char *pending = xir_type_scratch_pending(compile_context, scratch, count, &allocation_status);
     if (!pending) {  return allocation_status; }
-    pending[count - 1] = 1;
-    XrXirStatus status = XR_XIR_OK;
-    for (uint32_t at = count; at && status == XR_XIR_OK; --at) {
-        uint32_t i = at - 1;
-        if (!pending[i]) continue;
+    XrXirStatus status=xir_type_pending_mark(remaining,pending,count-1);
+    uint32_t at=count;
+    while (at && status==XR_XIR_OK) {
+        uint32_t i=0; bool found=false;
+        status=xir_type_pending_next(remaining,pending,&at,&i,&found);
+        if (status!=XR_XIR_OK || !found) break;
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL) {
             status = xr_xir_compile_nominal_access(remaining, module, function, node->nominal.declaration, 0, XR_XIR_NOMINAL_TYPE);
