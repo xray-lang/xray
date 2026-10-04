@@ -52,4 +52,11 @@ XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_compile_recheck(const XrXirCompileContext *compile_context, const XrXirModule *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact);
 
+/* Couples fresh owned decoding and its full verification to immediate lowering.
+ * Accepts bytes only; no published artifact grants a verification exemption. */
+XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext *context,
+    const void *bytes, size_t length, const XrXirTarget *target,
+    XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+
+
 #endif // XXIR_INTERNAL_H

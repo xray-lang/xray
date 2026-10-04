@@ -168,9 +168,11 @@ static void pipeline_failures(unsigned kind) {
         (unsigned long long)measured.work);
 }
 #include "resource_cases.h"
+#include "reader_lower_cases.h"
 
 int main(void) {
     mandatory_context();
+    reader_lower_cases();
     constraint_formula();
     exhausted_owner();
     structural_caps();

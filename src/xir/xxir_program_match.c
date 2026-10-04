@@ -178,11 +178,9 @@ XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContex
     xr_sha256(proof->bytes, proof->length, digest);
     if (!xir_compile_work(context, sizeof(digest))) return XR_XIR_BUDGET;
     if (memcmp(digest, proof->identity, sizeof(digest))) return XR_XIR_BAD_STRUCTURE;
-    XrXirArtifact *checked = NULL, *lowered = NULL;
-    XrXirStatus status = xr_xir_compile_checked_read(context, proof->bytes, proof->length, &checked, NULL);
-    if (status == XR_XIR_OK)
-        status = xr_xir_compile_lower(checked, &spec->target, &lowered, NULL);
-    xr_xir_compile_artifact_free(checked);
+    XrXirArtifact *lowered = NULL;
+    XrXirStatus status = xr_xir_compile_checked_read_lower(context, proof->bytes, proof->length,
+        &spec->target, &lowered, NULL);
     if (status == XR_XIR_OK)
         status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered);
     xr_xir_compile_artifact_free(lowered);
