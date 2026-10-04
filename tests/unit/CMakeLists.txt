@@ -4248,6 +4248,7 @@ set_tests_properties(test_callable_variadic_declaration PROPERTIES
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/constraint_queue.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/type_access_scratch.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/error_flow_scratch.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/provenance_budget_release.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/declaration_proof_scratch.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/type_match_scratch.cmake)

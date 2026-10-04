@@ -1168,9 +1168,30 @@ Ranges work with `for-in`, range patterns in `match`, and collection queries. Se
 
 Assignments and ordinary calls try exact type matching first; an exact match adds no wrapper. A single T→T? widening is permitted only when the source type is exactly the target Optional's element type T. When T is itself Optional, this adds only one outer layer and preserves its inner state. A bare `null` constructs the outermost None under an exact Optional expected type; the nesting depth does not select an inner state. A context-free `null` does not invent an Optional type.
 
-`x == null` / `x != null` inspect only the outer presence tag of the Optional operand in that operation, without requiring Equal for its element. `x!` unwraps one layer and produces a null-unwrap panic for outer None; `x ?? d` handles only the outer layer and evaluates d only when that layer is absent. Optional access adds one Optional layer around its result without flattening an already Optional result. Narrowing subjects and propagation remain governed by §2.13; this section does not choose narrowing provenance for repeated tests or unwrapping.
+`x == null` / `x != null` inspect only the outer presence tag of the Optional operand in that operation, without requiring Equal for its element. `x!` unwraps one layer and produces a null-unwrap panic for outer None; `x ?? d` handles only the outer layer and evaluates d only when that layer is absent. Optional access adds one Optional layer around its result without flattening an already Optional result. Narrowing subjects and propagation remain governed by §2.13; nested read provenance and explicit claims for the same binding follow the rules below.
 
-This is the language contract, not a claim of current Source execution qualification; see §17 for declaration-family admission and unfinished surfaces.
+#### Reading and Explicit Consumption of Nested Optional
+
+A binding keeps its declared storage type D. For the same binding permitted by §2.13 N-1, flow facts record a consecutive outer Some prefix p. A normal read consumes those p layers, produces its exact read type R, and records q=p layers that explicit operations in this expression may still claim. Each step obtains an owned exact payload; inner None is never treated as outer None.
+
+`!` first claims a layer from q: when q>0 it decreases q and returns the value already read, without another unwrap or reverse wrapping to an intermediate declared type. At q=0 it actually unwraps one layer only if the current value is Optional; None produces the existing null-unwrap panic, while a non-Optional value remains unchanged. `??` also first claims q: at q>0 it never evaluates the default and keeps result type R; only at q=0 does it inspect the current outer layer and handle absence. An external expected conversion follows its own exact conversion contract and cannot fabricate a narrowing claim by wrapping.
+
+| Declared D / known p | Normal read R | After first `!` | After second `!` |
+|---|---|---|---|
+| i64?? / 0 | i64?? | i64? | i64 |
+| i64?? / 1 | i64? | i64? | i64 |
+| i64?? / 2 | i64 | i64 | i64 |
+| i64??? / 2 | i64? | i64? | i64? |
+
+With outer Some proven, Some(None) therefore remains inner None after `x!`, and `x!!` panics. In the last row only the third `!` actually consumes the third layer. Grouping forwards the same read plan; `(x!)!` continues the child's decreased q without restoring it. A separate `x!` starts its own normal read and q. Assignment to a new binding, argument passing, return/call results, arithmetic, construction, conversion, and phi do not transfer the original binding's q. A receiving binding may establish only its own declaration/flow facts. A factory result obtains no binding fact: `factory()!!` evaluates the factory once and then consumes layers in order.
+
+A null test always observes the outer layer of this read's R. The first test proves D's first layer; inside its Some branch a second test proves the next layer. Evidence identifies the binding, D, tested layer, and binding mutation generation rather than one non-null Boolean. After ref/assignment changes the generation, earlier Some evidence cannot be resurrected in a short-circuit true branch; it must be checked against the current generation. The right side of a short-circuit condition is checked under left-side facts. A join keeps only the common consecutive prefix min; assignment/ref/closure/loop invalidation continues to follow N-11. Fields, indexing, and calls gain no simple-binding fact, and a None direction does not promote the tested layer to Some. Read type, queries, and emission share the same checked plan; they must not infer facts from the last IR opcode, infer the operand again, or evaluate it again.
+
+For an unclaimed Optional<E>, `??` first selects exact E when no expected type is present. A null default keeps E if E is already Optional, and selects Optional<E> only when E is not Optional. An exact expected Optional<E> permits the existing single wrapper conversion: the Some branch keeps/wraps E once and the absent branch constructs the expected outer None. For example, Some(None):i64?? with context-free `x ?? null` yields None:i64?, while exact expected i64?? yields Some(None). When q>0, the default is checked against the corresponding claimed declaration layer's contract and the result remains R; no intermediate D layer is restored.
+
+Laziness controls runtime evaluation only. Even an unreachable default must undergo full type, visibility, construction-authority, generic-constraint, and effect checking in the same Built→Checked→specialization/reverification pipeline. Neither an early narrowed return nor a discarded marker may hide an invalid body. Default side effects occur only on the required absent branch. This rule adds no concrete Some/None spelling, leaves the original N-4 table/examples unchanged, and makes no claim that this Source slice is execution-qualified.
+
+This is the language contract. See §17 for execution qualification and unfinished Source/VM/native declaration families; implementation records identify the actual tests and remaining gates.
 
 ```xray
 var x: i64? = null      // OK

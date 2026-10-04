@@ -1,0 +1,23 @@
+// Ref places alone do not write; earlier calls do, and prior values stay held.
+fn reset(x: ref i64?) -> i64 { x = null; return 1 }
+fn takeRef(x: ref i64?, value: i64) -> i64 { return value }
+fn takeSecond(first: i64, second: i64) -> i64 { return second }
+fn takeFirst(first: i64, second: i64) -> i64 { return first }
+fn directRef(x: i64?) -> i64 {
+    var y = x
+    if (y != null) { return takeRef(ref y, y + 1) }
+    return 0
+}
+fn earlierCall(x: i64?) -> i64 {
+    var y = x
+    if (y != null) { return takeSecond(reset(ref y), y ?? 9) }
+    return 0
+}
+fn earlierRead(x: i64?) -> i64 {
+    var y = x
+    if (y != null) { return takeFirst(y!, reset(ref y)) }
+    return 0
+}
+print(directRef(7))
+print(earlierCall(7))
+print(earlierRead(7))

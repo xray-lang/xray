@@ -1,0 +1,12 @@
+fn layer<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+// A receiving binding keeps only its own declaration and flow facts.
+fn probe(x: i64??) -> i64 {
+    if (x != null) {
+        const held = x
+        print(held == null)
+        return held!
+    }
+    return 0
+}
+print(probe(layer<i64?>(none<i64>())))

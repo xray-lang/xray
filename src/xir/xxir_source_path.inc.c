@@ -77,7 +77,11 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
         if (saved.kind == SOURCE_LOCAL && saved.mutable &&
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,saved.type,{saved.index,0},{0},0,{0}},&handle)) return false;
         /* A binding narrowed to hold a value roots the path at that value. */
-        if (narrowed && !source_unwrap_value(ctx,node,handle,&handle)) return false;
+        if (narrowed) {
+            uint32_t prefix=source_fact_depth(ctx,root);
+            for (uint32_t layer=0;layer<prefix;++layer)
+                if (!source_work(ctx,node) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
+        }
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,root_type,{handle.id,0},{0},0,{0}},place)) return false;
     } else if (!source_recipe_record(ctx,(XrXirInstruction){saved.kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
             saved.type,{saved.kind == SOURCE_SLOT ? 0 : saved.index,0},{0},

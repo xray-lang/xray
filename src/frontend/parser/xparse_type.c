@@ -346,48 +346,18 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
 
 static XrTypeRef *parse_type_annotation_base(Parser *parser);
 
-static bool tref_is_json(Parser *parser, const XrTypeRef *t) {
-    return t && t->kind == XR_TREF_NAMED && t->name && xr_parser_compare_string(parser, t->name, "JSON.Value") == 0;
-}
-
-static bool tref_is_null(const XrTypeRef *t) {
-    return t && t->kind == XR_TREF_NULL;
-}
-
-static bool tref_intrinsically_includes_null(Parser *parser, const XrTypeRef *t) {
-    return tref_is_json(parser, t);
-}
-
-static XrTypeRef *parse_nullable_suffix(Parser *parser, XrTypeRef *base) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    if (tref_intrinsically_includes_null(parser, base)) {
-        do {
-            xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
-                                "'JSON.Value?'");
+static XrTypeRef *parse_nullable_suffixes(Parser *parser, XrTypeRef *base) {
+    while (xr_parser_healthy(parser) &&
+        (xr_parser_check(parser,TK_QUESTION) || xr_parser_check(parser,TK_NULLISH_COALESCE))) {
+        unsigned layers=xr_parser_check(parser,TK_NULLISH_COALESCE)?2u:1u;
+        xr_parser_advance(parser);
+        for (unsigned layer=0;layer<layers;++layer) {
+            if (!xr_parser_step(parser)) return NULL;
+            base=xr_tref_optional(parser->compiler_session,base);
             if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        return base;
+        }
     }
-    return xr_tref_optional(parser->compiler_session, base);
-}
-
-static void reject_redundant_null_union(Parser *parser, XrTypeRef **members, int count) {
-    if (!xr_parser_healthy(parser)) return;
-    bool has_null = false;
-    bool has_intrinsic_null = false;
-    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
-        if (tref_is_null(members[i]))
-            has_null = true;
-        if (tref_intrinsically_includes_null(parser, members[i]))
-            has_intrinsic_null = true;
-    }
-    if (has_null && has_intrinsic_null) {
-        do {
-            xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
-                                "'JSON.Value | null'");
-            if (!xr_parser_healthy(parser)) return;
-        } while (0);
-    }
+    return base;
 }
 
 /* ---- Top-level: base + optional '?' + optional '|' union ---- */
@@ -406,12 +376,9 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
     if (base && !base->line && (base->kind == XR_TREF_NAMED || base->kind == XR_TREF_GENERIC))
         xr_tref_set_source_position(base, annotation_start.line, annotation_start.column);
 
-    /* Optional type suffix: T? */
-    if (xr_parser_match(parser, TK_QUESTION))
-        do {
-            base = parse_nullable_suffix(parser, base);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
+    /* Only the type parser interprets ?? as two Optional suffixes. */
+    base=parse_nullable_suffixes(parser,base);
+    if (!xr_parser_healthy(parser)) return NULL;
 
     /* Union type: T | U | ... */
     if (xr_parser_check(parser, TK_PIPE)) {
@@ -422,11 +389,8 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
         while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_PIPE) && count < XR_TREF_UNION_MAX + 1) {
             XrTypeRef *next = parse_type_annotation_base(parser);
             if (!xr_parser_healthy(parser)) return NULL;
-            if (xr_parser_match(parser, TK_QUESTION))
-                do {
-                    next = parse_nullable_suffix(parser, next);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
+            next=parse_nullable_suffixes(parser,next);
+            if (!xr_parser_healthy(parser)) return NULL;
             if (count < XR_TREF_UNION_MAX + 1)
                 members[count++] = next;
         }
@@ -439,7 +403,6 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
             return xr_tref_error(parser->compiler_session);
         }
 
-        reject_redundant_null_union(parser, members, count);
         XrTypeRef *union_ref = xr_tref_union(parser->compiler_session, members, count);
         if (!xr_parser_healthy(parser)) return NULL;
         xr_tref_set_source_position(union_ref, annotation_start.line, annotation_start.column);

@@ -37,3 +37,5 @@ endforeach()
 add_test(NAME test_xir_nested_nullable_vectors COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_nested_nullable_vectors.py)
 set_tests_properties(test_xir_nested_nullable_vectors PROPERTIES LABELS "unit;xir;abi" TIMEOUT 30)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/source_nested_nullable.cmake)

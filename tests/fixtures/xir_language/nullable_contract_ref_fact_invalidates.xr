@@ -1,0 +1,12 @@
+fn reset(x: ref i64?) -> bool {
+    x = null
+    return true
+}
+fn probe() -> i64 {
+    var x: i64? = 7
+    if (x != null && reset(ref x)) {
+        return x + 1
+    }
+    return 9
+}
+print(probe())

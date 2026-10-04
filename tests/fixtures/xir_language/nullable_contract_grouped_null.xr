@@ -1,0 +1,8 @@
+// Grouping does not remove an exact null literal's context or fact.
+fn coalesced(x: i64?) -> i64 { return (x ?? (null)) ?? 9 }
+fn checked(x: i64?) -> i64 {
+    if (x != (null)) { return x + 1 }
+    return 0
+}
+print(coalesced(null))
+print(checked(7))

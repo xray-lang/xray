@@ -1,0 +1,2 @@
+fn bad<T>(x:T?)->T{if(x!=null){return x??1};return x!}
+export fn main()->i64{return 41}

@@ -1,0 +1,9 @@
+fn layer<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+// A caller cannot inherit a callee binding's narrowing claims.
+fn inner(x: i64??) -> i64? {
+    if (x != null) { return x! }
+    return null
+}
+print(inner(layer<i64?>(none<i64>())) == null)
+print(inner(layer<i64?>(none<i64>()))!)

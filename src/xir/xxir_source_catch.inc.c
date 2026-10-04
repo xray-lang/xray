@@ -98,6 +98,7 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
     SourceFunction *body = &ctx->bodies[ctx->function], saved = *body;
     XrXirGeneric generic = ctx->generics[ctx->function];
     bool returned = ctx->returned;
+    SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;
     uint32_t count = 0;
     for (SourceLoop *loop = ctx->loop; loop; loop = loop->parent) ++count;
     SourceLoop *loops = count ? source_alloc(ctx,count,sizeof(*loops)) : NULL;
@@ -123,6 +124,7 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
     saved.recipe_storage=body->recipe_storage;
     saved.expressions=body->expressions;saved.expression_count=body->expression_count;
     *body = saved; ctx->generics[ctx->function] = generic; ctx->returned = returned;
+    ctx->facts=facts;ctx->epochs=epochs;
     return ok;
 }
 static bool source_catch_join(SourceContext *ctx, uint32_t *joins, uint32_t *count) {

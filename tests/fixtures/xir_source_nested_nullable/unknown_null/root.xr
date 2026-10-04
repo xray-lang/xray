@@ -1,0 +1,2 @@
+fn layer<T>(v:T)->T?{return v}
+export fn main()->i64{const x=layer(null);return 41}

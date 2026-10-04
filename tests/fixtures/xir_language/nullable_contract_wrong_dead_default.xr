@@ -1,0 +1,6 @@
+// A known Some layer makes the default unreachable, not unchecked.
+fn probe(x: i64?) -> i64 {
+    if (x != null) { return x ?? "bad" }
+    return 0
+}
+print(probe(7))

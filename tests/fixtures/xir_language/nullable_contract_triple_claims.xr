@@ -1,0 +1,13 @@
+fn layer<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+// Two proven Some layers give two claims, not a third unwrap.
+fn probe(x: i64???) -> i64 {
+    if (x != null && x != null) {
+        print(x! == null)
+        print(x!! == null)
+        print((x!)! == null)
+        return 14
+    }
+    return -1
+}
+print(probe(layer<i64??>(layer<i64?>(none<i64>()))))

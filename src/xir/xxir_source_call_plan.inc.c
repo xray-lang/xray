@@ -102,8 +102,27 @@ static bool source_reference_argument(SourceContext *ctx, AstNode *node, uint32_
     if (!source_cell_type(ctx,symbol->type,&cell) ||
         !source_query_reference(ctx,argument,symbol,symbol,XR_XIR_SOURCE_READ_WRITE)) return false;
     *value=(SourceValue){symbol->index,cell};
-    /* A callee may rebind the binding, so nothing is known about it afterwards. */
-    return source_fact_push(ctx,symbol,false);
+    return true;
+}
+/* Earlier argument effects invalidate only later argument planning. Values
+ * still complete once in source order, and already read SSA values stay valid. */
+static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const SourceCallPlan *plan,
+    SourceExpressionPlan **arguments,bool *references) {
+    CallExprNode *call=&node->as.call_expr;
+    SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;bool ok=true;
+    for (uint32_t a=0;ok && a<(uint32_t)call->arg_count;++a) {
+        if (!source_work(ctx,node)) {ok=false;break;}
+        uint32_t parameter=a+plan->parameter_offset;
+        references[a]=plan->family!=SOURCE_CALL_REQUIREMENT && xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
+        arguments[a]=NULL;
+        if (references[a]) {
+            /* Resolving an outer ref place does not execute the callee. */
+        } else {
+            arguments[a]=source_plan_collect(ctx,call->arguments[a],(SourceExpectedType){false,XR_XIR_UNIT,false});
+            ok=arguments[a] && source_planned_effects(ctx,arguments[a],0);
+        }
+    }
+    ctx->facts=facts;ctx->epochs=epochs;return ok && ctx->diagnostic.status==XR_XIR_OK;
 }
 static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const SourceCallPlan *plan) {
     CallExprNode *call=&node->as.call_expr;
@@ -124,15 +143,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
     SourceExpressionPlan **arguments=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*arguments)) : NULL;
     bool *references=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*references)) : NULL;
     if (argument_count && (!arguments || !references)) goto done;
-    for (uint32_t a=0;a<argument_count;++a) {
-        if (!source_work(ctx,node)) goto done;
-        uint32_t parameter=a+plan->parameter_offset;
-        references[a]=!requirement && xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
-        arguments[a]=NULL;
-        if (references[a]) continue;
-        arguments[a]=source_plan_collect(ctx,call->arguments[a],(SourceExpectedType){false,XR_XIR_UNIT, false});
-        if (!arguments[a]) goto done;
-    }
+    if (!source_call_collect_arguments(ctx,node,plan,arguments,references)) goto done;
     if (inferred) {
         /* Nullable evidence fixes an ordinary binder before narrower values
          * acquire their conversion recipes. This visits types only: all value
@@ -237,6 +248,12 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         if (status!=XR_XIR_OK) { source_fail(ctx,node,status,requirement ?
             "cannot infer all method type arguments; supply an explicit list" :
             "cannot infer all declaration type arguments; supply an explicit list"); goto done; }
+    }
+    /* The call's borrow begins after every argument value has completed. */
+    for (uint32_t a=0;a<argument_count;++a) if (references[a]) {
+        if (!source_work(ctx,node)) goto done;
+        SourceName *binding=visible_name(ctx,call->arguments[a]->as.variable.name);
+        if (!binding || !source_fact_push(ctx,binding,0)) goto done;
     }
     ok=true;
 done:

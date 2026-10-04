@@ -1,0 +1,15 @@
+// Only a test after a mutation establishes the new generation's fact.
+fn fill(x: ref i64?) -> bool { x = 7; return true }
+fn fillFalse(x: ref i64?) -> bool { x = 11; return false }
+fn afterAnd() -> i64 {
+    var y: i64? = 3
+    if (y != null && fill(ref y) && y != null) { return y + 1 }
+    return -1
+}
+fn afterOr() -> i64 {
+    var y: i64? = null
+    if (fillFalse(ref y) || y == null) { return -1 }
+    return y + 1
+}
+print(afterAnd())
+print(afterOr())

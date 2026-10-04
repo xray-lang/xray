@@ -573,9 +573,30 @@ for (i in 3..=5) {
 
 赋值和普通调用先尝试准确类型匹配；准确匹配不增加包装层。只有源类型准确为目标 `T?` 的元素类型 T 时，才允许一次 T→T? widening。即使 T 本身是 Optional，该转换也只增加外层一层并保留内层状态。裸 `null` 在准确的 Optional 期望类型下构造最外层 None，不从嵌套层数猜测内层状态；无期望类型的 `null` 不自动发明一个 Optional 类型。
 
-`x == null` / `x != null` 只检查本次 Optional 操作数的最外层存在标签，元素不需要 Equal；`x!` 只解包一层，外层 None 产生 null-unwrap panic；`x ?? d` 只处理外层，只有该层缺席才求值 d。可选访问为本次结果增加一层 Optional，不隐式展平结果已有的 Optional。流敏感收窄的主体与传播仍由 §2.13 负责，本节不选择重复测试或解包时的收窄 provenance。
+`x == null` / `x != null` 只检查本次 Optional 操作数的最外层存在标签，元素不需要 Equal；`x!` 只解包一层，外层 None 产生 null-unwrap panic；`x ?? d` 只处理外层，只有该层缺席才求值 d。可选访问为本次结果增加一层 Optional，不隐式展平结果已有的 Optional。流敏感收窄的主体与传播仍由 §2.13 负责；同 binding 的嵌套读取 provenance 与显式认领遵守下方规则。
 
-这是语言合同，不等于当前 Source 的执行资格；新 XIR 的分族准入与未完成表面见 §17。
+#### 嵌套 Optional 的读取与显式消费
+
+绑定的声明存储类型 D 不变。对 §2.13 N-1 允许的同一 binding，流事实记录已经证明为 Some 的连续外层前缀 p；本次正常读取消费这 p 层，产生准确读取类型 R，并为本表达式记录尚可由显式消费认领的层数 q=p。每层取得准确的拥有式载荷，不把 inner None 当作 outer None。
+
+`!` 先认领一层 q：q>0 时只令 q减一并返回已经读取的值，不再解包，也不反向重新包装为声明中间类型。q=0 时，当前值仍为 Optional 才实际解包一层；None 产生原 null-unwrap panic，当前非 Optional 保持恒等行为。`??` 同样先认领一层 q：q>0 时不执行 default，结果类型保持 R；q=0 时才检查当前值最外层并按缺席分支处理。合法的外部 expected 转换是独立转换合同，不能拿包装伪造收窄的显式认领。
+
+| 声明 D／已知 p | 裸读取 R | 第一个 `!` 后 | 第二个 `!` 后 |
+|---|---|---|---|
+| i64??／0 | i64?? | i64? | i64 |
+| i64??／1 | i64? | i64? | i64 |
+| i64??／2 | i64 | i64 | i64 |
+| i64???／2 | i64? | i64? | i64? |
+
+因此，已知 outer Some 的 Some(None) 在 `x!` 后仍为 inner None，`x!!` 才 panic；最后一行的第三个 `!` 才实际消费第三层。括号透传同一读取计划，`(x!)!` 接续 child 已减的 q，不重新恢复额度。另一个独立的 `x!` 有自己的正常读取与 q。赋给新 binding、实参传递、函数返回/call 结果、算术、构造、类型转换与 phi 不传播原 binding 的 q；接收 binding 只能建立自己的声明/流事实。工厂结果不获 binding 事实，`factory()!!` 求值工厂恰一次，再逐层消费。
+
+null 测试始终观察本次 R 的最外层；同一 binding 的第一次测试证明 D 的第一层，进入 Some 分支后第二次测试才证明下一层。事实携带 binding、D、被检查层及 binding mutation generation，不是单个“非空”布尔值。ref/赋值改变generation后，较早Some证据不能在短路true分支重新加入，必须以当前generation检查。短路右侧在左侧事实下检查；join 只保两路径共有的连续前缀 min，赋值/ref/闭包/loop 失效仍遵守 N-11。字段、索引、call 不因此取得简单绑定事实，None 方向不升级被检查层为 Some。读取类型、查询及发射共用同一次检查的计划，不能从最后 IR opcode 猜事实、再次推断或再次执行 operand。
+
+对未认领的 Optional<E>，`??` 无 expected 时首先选择准确 E；default 为 null 且 E 已是 Optional 时仍选择 E，E 非 Optional 时才选择 Optional<E>。显式 expected 准确为 Optional<E> 时，按原准确转换允许一次包装；Some 分支保留/包装 E 一次，None 分支形成准确 expected 的 outer None。例如 Some(None):i64?? 的无 expected `x ?? null` 得 i64? 的 None，准确 expected i64?? 时得 Some(None)。对 q>0 的 `??`，检查对应已认领声明层的 default 合同而结果仍 R；不恢复 D 的中间层。
+
+惰性只限制运行时求值。default 即使在已证明不可达的分支也必须由同一 Built→Checked→特化复验管线完整检查类型、可见性、构造权限、泛型约束和效应；不得以收窄早返回或 discarded 标记跳过非法 body。default 的实际副作用只在需要的缺席分支发生。本规则不新增 Some/None 源码拼写，不改变 N-4 的原形态表/例子，也不代表本 Source 切片已有执行资格。
+
+这是语言合同；各 Source／VM／native 声明族的实际执行资格与未完成表面见 §17，具体测试与剩余门由同批实现记录说明。
 
 ```xray @id=types-nullable
 var x: i64? = null      // OK
@@ -1644,9 +1665,30 @@ Ranges work with `for-in`, range patterns in `match`, and collection queries. Se
 
 Assignments and ordinary calls try exact type matching first; an exact match adds no wrapper. A single T→T? widening is permitted only when the source type is exactly the target Optional's element type T. When T is itself Optional, this adds only one outer layer and preserves its inner state. A bare `null` constructs the outermost None under an exact Optional expected type; the nesting depth does not select an inner state. A context-free `null` does not invent an Optional type.
 
-`x == null` / `x != null` inspect only the outer presence tag of the Optional operand in that operation, without requiring Equal for its element. `x!` unwraps one layer and produces a null-unwrap panic for outer None; `x ?? d` handles only the outer layer and evaluates d only when that layer is absent. Optional access adds one Optional layer around its result without flattening an already Optional result. Narrowing subjects and propagation remain governed by §2.13; this section does not choose narrowing provenance for repeated tests or unwrapping.
+`x == null` / `x != null` inspect only the outer presence tag of the Optional operand in that operation, without requiring Equal for its element. `x!` unwraps one layer and produces a null-unwrap panic for outer None; `x ?? d` handles only the outer layer and evaluates d only when that layer is absent. Optional access adds one Optional layer around its result without flattening an already Optional result. Narrowing subjects and propagation remain governed by §2.13; nested read provenance and explicit claims for the same binding follow the rules below.
 
-This is the language contract, not a claim of current Source execution qualification; see §17 for declaration-family admission and unfinished surfaces.
+#### Reading and Explicit Consumption of Nested Optional
+
+A binding keeps its declared storage type D. For the same binding permitted by §2.13 N-1, flow facts record a consecutive outer Some prefix p. A normal read consumes those p layers, produces its exact read type R, and records q=p layers that explicit operations in this expression may still claim. Each step obtains an owned exact payload; inner None is never treated as outer None.
+
+`!` first claims a layer from q: when q>0 it decreases q and returns the value already read, without another unwrap or reverse wrapping to an intermediate declared type. At q=0 it actually unwraps one layer only if the current value is Optional; None produces the existing null-unwrap panic, while a non-Optional value remains unchanged. `??` also first claims q: at q>0 it never evaluates the default and keeps result type R; only at q=0 does it inspect the current outer layer and handle absence. An external expected conversion follows its own exact conversion contract and cannot fabricate a narrowing claim by wrapping.
+
+| Declared D / known p | Normal read R | After first `!` | After second `!` |
+|---|---|---|---|
+| i64?? / 0 | i64?? | i64? | i64 |
+| i64?? / 1 | i64? | i64? | i64 |
+| i64?? / 2 | i64 | i64 | i64 |
+| i64??? / 2 | i64? | i64? | i64? |
+
+With outer Some proven, Some(None) therefore remains inner None after `x!`, and `x!!` panics. In the last row only the third `!` actually consumes the third layer. Grouping forwards the same read plan; `(x!)!` continues the child's decreased q without restoring it. A separate `x!` starts its own normal read and q. Assignment to a new binding, argument passing, return/call results, arithmetic, construction, conversion, and phi do not transfer the original binding's q. A receiving binding may establish only its own declaration/flow facts. A factory result obtains no binding fact: `factory()!!` evaluates the factory once and then consumes layers in order.
+
+A null test always observes the outer layer of this read's R. The first test proves D's first layer; inside its Some branch a second test proves the next layer. Evidence identifies the binding, D, tested layer, and binding mutation generation rather than one non-null Boolean. After ref/assignment changes the generation, earlier Some evidence cannot be resurrected in a short-circuit true branch; it must be checked against the current generation. The right side of a short-circuit condition is checked under left-side facts. A join keeps only the common consecutive prefix min; assignment/ref/closure/loop invalidation continues to follow N-11. Fields, indexing, and calls gain no simple-binding fact, and a None direction does not promote the tested layer to Some. Read type, queries, and emission share the same checked plan; they must not infer facts from the last IR opcode, infer the operand again, or evaluate it again.
+
+For an unclaimed Optional<E>, `??` first selects exact E when no expected type is present. A null default keeps E if E is already Optional, and selects Optional<E> only when E is not Optional. An exact expected Optional<E> permits the existing single wrapper conversion: the Some branch keeps/wraps E once and the absent branch constructs the expected outer None. For example, Some(None):i64?? with context-free `x ?? null` yields None:i64?, while exact expected i64?? yields Some(None). When q>0, the default is checked against the corresponding claimed declaration layer's contract and the result remains R; no intermediate D layer is restored.
+
+Laziness controls runtime evaluation only. Even an unreachable default must undergo full type, visibility, construction-authority, generic-constraint, and effect checking in the same Built→Checked→specialization/reverification pipeline. Neither an early narrowed return nor a discarded marker may hide an invalid body. Default side effects occur only on the required absent branch. This rule adds no concrete Some/None spelling, leaves the original N-4 table/examples unchanged, and makes no claim that this Source slice is execution-qualified.
+
+This is the language contract. See §17 for execution qualification and unfinished Source/VM/native declaration families; implementation records identify the actual tests and remaining gates.
 
 ```xray @id=types-nullable
 var x: i64? = null      // OK

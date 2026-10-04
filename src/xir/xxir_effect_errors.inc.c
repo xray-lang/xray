@@ -39,6 +39,8 @@ typedef struct ErrorFlow {
     uint64_t *states, *work, *edge, *snapshot, *escaping;
     uint8_t *reachable;
     uint32_t *roots;
+    uint8_t *storage;
+    size_t storage_capacity;
     size_t stride;
     uint32_t values;
     bool changed, summary_changed, restart;
@@ -298,8 +300,28 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b) {
     }
     return XR_XIR_OK;
 }
+/* Reusable owned bytes belong to one analysis, never to a cached proof. */
+static void error_storage_free(ErrorFlow *flow) {
+    xr_compile_resources_free(flow->storage);
+    flow->storage = NULL; flow->storage_capacity = 0;
+    flow->states = flow->work = flow->edge = flow->snapshot = NULL;
+    flow->roots = NULL; flow->reachable = NULL; flow->escaping = NULL;
+}
+static XrXirStatus error_storage_prepare(ErrorFlow *flow, size_t bytes) {
+    if (!bytes) return XR_XIR_BAD_STRUCTURE;
+    if (bytes > flow->storage_capacity) {
+        XrXirStatus status = XR_XIR_OK;
+        uint8_t *storage = xir_compile_calloc(flow->remaining, bytes, 1, &status);
+        if (!storage) return status;
+        xr_compile_resources_free(flow->storage);
+        flow->storage = storage; flow->storage_capacity = bytes;
+    } else {
+        if (!xir_compile_work(flow->remaining, bytes)) return XR_XIR_BUDGET;
+        memset(flow->storage, 0, bytes);
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
-    XrXirStatus allocation_status = XR_XIR_OK;
     flow->function = &flow->module->functions[f];
     flow->values = flow->function->parameter_count + flow->function->instruction_count;
     uint64_t stride = (uint64_t)flow->values * flow->effects->words;
@@ -312,11 +334,12 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         return XR_XIR_BUDGET;
 
     flow->stride = (size_t)stride;
-    flow->states = xir_compile_calloc(flow->remaining, (size_t)(stride * rows), sizeof(uint64_t), &allocation_status);
-    flow->roots = xir_compile_calloc(flow->remaining, flow->values, sizeof(uint32_t), &allocation_status);
-    flow->reachable = xir_compile_calloc(flow->remaining, flow->function->block_count, 1, &allocation_status);
-    XrXirStatus status = allocation_status;
-    if (flow->states && flow->roots && flow->reachable) {
+    XrXirStatus status = error_storage_prepare(flow, (size_t)bytes);
+    if (status == XR_XIR_OK) {
+        size_t state_bytes = (size_t)(stride * rows) * sizeof(uint64_t);
+        flow->states = (uint64_t *)flow->storage;
+        flow->roots = (uint32_t *)(flow->storage + state_bytes);
+        flow->reachable = flow->storage + state_bytes + (size_t)flow->values * sizeof(uint32_t);
         flow->work = flow->states + (size_t)flow->function->block_count * flow->stride;
         flow->edge = flow->work + flow->stride; flow->snapshot = flow->edge + flow->stride;
         flow->escaping = flow->effects->errors + (size_t)f * flow->effects->words;
@@ -333,8 +356,6 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
             }
         } while (status == XR_XIR_OK && flow->changed && !flow->restart);
     }
-    xr_compile_resources_free(flow->states); xr_compile_resources_free(flow->roots); xr_compile_resources_free(flow->reachable);
-
     return status;
 }
 static uint32_t error_variant_count(const XrXirTypes *types, uint32_t t) {
@@ -406,6 +427,7 @@ static XrXirStatus effect_errors_analyze(const XrXirModule *module, XrXirEffects
             status = error_function(&flow, f);
         if (status == XR_XIR_OK && flow.restart) status = error_summary_resize(effects, remaining);
     } while (status == XR_XIR_OK && (flow.summary_changed || flow.restart));
+    error_storage_free(&flow);
     effect_terms_free(&terms);
     if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < effects->count; ++f) {

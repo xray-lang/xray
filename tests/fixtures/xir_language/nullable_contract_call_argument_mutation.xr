@@ -1,0 +1,9 @@
+// Arguments are checked and evaluated left to right under current facts.
+fn reset(x: ref i64?) -> i64 { x = null; return 0 }
+fn sum(a: i64, b: i64) -> i64 { return a + b }
+fn probe(x: i64?) -> i64 {
+    var y = x
+    if (y != null) { return sum(reset(ref y), y + 1) }
+    return 9
+}
+print(probe(7))

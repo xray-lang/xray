@@ -1,0 +1,2 @@
+fn layer<T>(v:T)->T?{return v}
+export fn main()->i64{const xs=[1,2];const x=layer<Array<i64>>([7]);if(x!=null){const y=x??xs.reverse();return xs[0]==1?41:0};return 0}

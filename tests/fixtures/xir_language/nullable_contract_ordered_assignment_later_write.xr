@@ -1,0 +1,7 @@
+fn clear(y: ref i64?) -> i64 { y = null; return 0 }
+fn sum3(a: i64, b: i64, c: i64) -> i64 { return a + b + c }
+fn probe() -> i64 {
+    var y: i64? = null
+    return sum3((y = 7)!, clear(ref y), y)
+}
+print(probe())

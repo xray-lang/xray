@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_xir_nested_nullable_source.c - Source generic substitutions stay fail-closed
+ * test_xir_nested_nullable_source.c - Source generic substitutions preserve every optional layer
  *
  * KEY CONCEPT:
- *   SourceProduct cannot publish an unsupported optional layer.
+ *   Source definitions, direct substitutions and transitive substitutions agree.
  */
 #include "program/xr_xir_source_product.h"
 #include "xir/xxir_types.h"
@@ -49,10 +49,12 @@ static void nested_source_case(const char *name,bool accept,bool hidden) {
         CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
         CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&closed,NULL)==XR_XIR_OK);
         const XrXirModule *module=xr_xir_compile_artifact_module(closed);
+        bool nested=false;
         for(uint32_t i=0;module->types && i<module->types->count;++i){
             const XrXirTypeNode *node=&module->types->nodes[i];
-            CHECK(node->kind!=XR_XIR_TYPE_NULLABLE || !xr_xir_type_is_nullable(module->types,node->element));
+            if (node->kind==XR_XIR_TYPE_NULLABLE && xr_xir_type_is_nullable(module->types,node->element)) nested=true;
         }
+        CHECK(nested==(!strcmp(name,"definition")?false:strcmp(name,"single")!=0));
         xr_xir_compile_artifact_free(closed);
     }else if(hidden){
         CHECK(!product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_SPECIALIZE && diagnostic.xir.status==XR_XIR_BAD_TYPE);
@@ -86,10 +88,10 @@ static uint64_t nested_source_quota(uint64_t work,XrXirStatus expected) {
 }
 int main(void){
     nested_source_case("definition",true,false);nested_source_case("single",true,false);
-    nested_source_case("layer",false,false);nested_source_case("none",false,false);nested_source_case("reference",false,false);nested_source_case("inferred",false,false);
-    nested_source_case("hidden_local",false,true);nested_source_case("hidden_transitive",false,true);
+    nested_source_case("layer",true,false);nested_source_case("none",true,false);nested_source_case("reference",true,false);nested_source_case("inferred",true,false);
+    nested_source_case("hidden_local",true,true);nested_source_case("hidden_transitive",true,true);
     uint64_t work=nested_source_quota(UINT64_C(128000000),XR_XIR_OK);CHECK(work>1);
     CHECK(nested_source_quota(work,XR_XIR_OK)==work);
     (void)nested_source_quota(work-1,XR_XIR_BUDGET);
-    puts("Source definitions and single-layer products accepted; resolved nesting rejected at Check; hidden nesting rejected at Product specialization PASS");return 0;
+    puts("Original eight Source inputs retain bytes; direct, inferred and hidden nested products accepted with exact layers PASS");return 0;
 }

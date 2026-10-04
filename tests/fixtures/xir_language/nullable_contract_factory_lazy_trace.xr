@@ -1,0 +1,36 @@
+fn layer<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+// Tags, exact context and lazy traces are independent golden facts.
+var trace = 0
+fn factory(mode: i64) -> i64?? {
+    trace = trace + 1
+    if (mode == 0) { return none<i64?>() }
+    if (mode == 1) { return layer<i64?>(none<i64>()) }
+    return layer<i64?>(layer<i64>(7))
+}
+fn fallback() -> i64? {
+    trace = trace + 100
+    return layer<i64>(9)
+}
+fn show(mode: i64) {
+    trace = 0
+    const result = factory(mode) ?? fallback()
+    print(result ?? -1)
+    print(trace)
+    trace = 0
+    print((factory(mode) ?? none<i64>()) ?? 9)
+    print(trace)
+}
+fn innerAbsent(value: i64?) -> bool { return value == null }
+fn outerAbsent(value: i64??) -> bool { return value == null }
+show(0)
+show(1)
+show(2)
+trace = 0
+const uncontexted = factory(1) ?? null
+print(innerAbsent(uncontexted))
+print(trace)
+trace = 0
+const outer: i64?? = factory(1) ?? null
+print(outerAbsent(outer))
+print(trace)

@@ -1,0 +1,1 @@
+export fn main()->i64{const x:i64??=null;if(x!=null){const y=x??"bad";return 41};return 0}

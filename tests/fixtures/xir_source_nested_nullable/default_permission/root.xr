@@ -1,0 +1,1 @@
+export fn main()->i64{const xs=[1];const x:i64?=7;if(x!=null){return x??xs.push(2)};return 0}

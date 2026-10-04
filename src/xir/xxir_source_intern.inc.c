@@ -30,10 +30,6 @@ static SourceName *source_nominal_name(SourceContext *ctx, const char *name);
 static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTypeRef **arguments,
     uint32_t count, XrXirType *type);
 static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
-    /* Source consumers currently require one optional layer, including
-     * generic substitutions that reach interning without nullable syntax. */
-    if (node.kind == XR_XIR_TYPE_NULLABLE && xr_xir_type_is_nullable(&ctx->types, node.element))
-        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "nested nullable types are not admitted by source");
     uint32_t span = xr_xir_type_span(&ctx->types,
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
@@ -104,8 +100,8 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
 static bool source_nullable_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
-    if (!element || xr_xir_type_is_cell(&ctx->types,element) || xr_xir_type_is_nullable(&ctx->types,element))
-        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable element must be an ordinary nonnullable value type");
+    if (!element || xr_xir_type_is_cell(&ctx->types,element))
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable element must be an ordinary value type");
     return source_intern_type(ctx,(XrXirTypeNode){XR_XIR_TYPE_NULLABLE,element,NULL,0,XR_XIR_UNIT,0,0,{0}},type);
 }
 static XrGenericParam **source_type_parameters(SourceContext *ctx, int *count) {

@@ -148,23 +148,6 @@ static XrXirStatus source_product_compare(const XrXirCompileContext *context,
     }
     return XR_XIR_OK;
 }
-/* Product execution currently requires Source consumers with one optional
- * layer. This capability boundary is removed when nested Source consumption
- * is implemented; it adds no constraint to ordinary generic definitions. */
-static XrXirStatus source_product_optional_boundary(const XrXirCompileContext *context,
-    const XrXirArtifact *closed, XrXirDiagnostic *diagnostic) {
-    const XrXirTypes *types=xr_xir_compile_artifact_module(closed)->types;
-    XrXirStatus status=XR_XIR_OK;
-    for (uint32_t i=0;types && i<types->count;++i) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
-        const XrXirTypeNode *node=&types->nodes[i];
-        if (node->kind==XR_XIR_TYPE_NULLABLE && xr_xir_type_is_nullable(types,node->element)) {
-            status=XR_XIR_BAD_TYPE;break;
-        }
-    }
-    if (diagnostic && status!=XR_XIR_OK) diagnostic->status=status;
-    return status;
-}
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic) {
     if (!source_diagnostic_empty(diagnostic)) return XR_XIR_BAD_STRUCTURE;
@@ -189,8 +172,6 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_SPECIALIZE;
         status=xr_xir_compile_specialize(source.checked,&closed,
-            diagnostic ? &diagnostic->xir : NULL);
-        if (status==XR_XIR_OK) status=source_product_optional_boundary(context,closed,
             diagnostic ? &diagnostic->xir : NULL);
     }
     if (status==XR_XIR_OK) {
@@ -303,7 +284,6 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduc
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,product->source_packet.bytes,product->source_packet.length,&source,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,product->closed_packet.bytes,product->closed_packet.length,&decoded_closed,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(source,&closed,diagnostic);
-    if (status==XR_XIR_OK) status=source_product_optional_boundary(context,closed,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(closed,&packet,diagnostic);
     if (status==XR_XIR_OK) status=packet.length!=product->closed_packet.length ? XR_XIR_BAD_STRUCTURE :
         source_product_compare(context,packet.bytes,product->closed_packet.bytes,packet.length);

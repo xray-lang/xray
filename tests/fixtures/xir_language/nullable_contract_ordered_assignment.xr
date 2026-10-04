@@ -1,0 +1,22 @@
+var trace: i64 = 0
+fn mark() -> i64 { trace += 1; return 7 }
+fn sum(a: i64, b: i64) -> i64 { return a + b }
+fn clear(y: ref i64?) -> i64 { y = null; return 0 }
+fn binary() -> i64 {
+    var y: i64? = null
+    return (y = mark())! + y
+}
+fn ordered() -> i64 {
+    var y: i64? = null
+    return sum((y = mark())!, y)
+}
+fn saved() -> i64 {
+    var y: i64? = 7
+    return sum(y!, clear(ref y))
+}
+print(binary())
+print(trace)
+print(ordered())
+print(trace)
+print(saved())
+print(trace)

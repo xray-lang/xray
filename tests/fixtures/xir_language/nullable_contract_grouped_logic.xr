@@ -1,0 +1,16 @@
+// Grouping keeps Boolean control flow and its post-write read evidence.
+fn fill(x:ref i64?)->bool{x=7;return true}
+fn shallow(x:i64?)->i64{
+ var y=x
+ return (fill(ref y) && y!=null)?y+1:0
+}
+fn layer<T>(x:T)->T?{return x}
+fn fillDeep(x:ref i64??)->bool{x=layer<i64?>(layer<i64>(7));return true}
+fn deep(x:i64??)->i64{
+ var y=x
+ return (y!=null && y!=null && fillDeep(ref y) && y!=null && y!=null)?y+1:0
+}
+fn booleanArgument(value:bool)->i64{if(value){return 7};return 0}
+print(shallow(3))
+print(deep(layer<i64?>(layer<i64>(3))))
+print(booleanArgument((false || true)))

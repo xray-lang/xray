@@ -1,0 +1,11 @@
+// An unreachable default is checked without committing its ref write.
+fn reset(x: ref i64?) -> i64 { x = null; return 9 }
+fn probe(x: i64?) -> i64 {
+    var y = x
+    if (y != null) {
+        const held = y ?? reset(ref y)
+        return y + held
+    }
+    return 0
+}
+print(probe(7))

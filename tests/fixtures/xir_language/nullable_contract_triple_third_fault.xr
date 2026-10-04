@@ -1,0 +1,12 @@
+fn layer<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+// The third explicit operation consumes the remaining inner None.
+fn probe(x: i64???) -> i64 {
+    if (x != null && x != null) {
+        print(x! == null)
+        print(x!! == null)
+        return x!!!
+    }
+    return 0
+}
+print(probe(layer<i64??>(layer<i64?>(none<i64>()))))

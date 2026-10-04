@@ -30,7 +30,8 @@
       "heading": "Nullable",
       "fences": [
         "types-nullable"
-      ]
+      ],
+      "markdown": "Each T? adds an independent outer Optional layer. i64?? distinguishes outer None, Some(None), and Some(Some(7)); layers never flatten. Implicit widening wraps an exact element once, so typed i64 cannot directly fill i64??. JSON.Value? is a legal independent outer Optional even though JSON.Value itself includes JSON null. Some/None describe tags, not newly introduced source constructors. These are language contracts; complete Source admission and execution qualification are tracked separately in Task 319."
     },
     {
       "heading": "Collections",

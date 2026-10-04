@@ -1,0 +1,99 @@
+var trace:i64=0
+fn layer<T>(v:T)->T?{return v}
+fn none<T>()->T?{return null}
+class Box { value:i64
+    constructor(value:i64){this.value=value} }
+export fn main()->i64{return 41}
+export fn current()->i64{return trace}
+export fn factory(mode:i64)->i64??{
+    trace+=1
+    if(mode==0){return none<i64?>()}
+    if(mode==1){return layer<i64?>(none<i64>())}
+    return layer<i64?>(layer<i64>(7))
+}
+fn fallback()->i64?{trace+=100;return layer<i64>(9)}
+export fn coalesced(mode:i64)->i64?{trace=0;return factory(mode)??fallback()}
+export fn forced(mode:i64)->i64?{return factory(mode)!}
+export fn doubled(mode:i64)->i64{return factory(mode)!!}
+export fn narrowed(mode:i64)->i64?{
+    const x=factory(mode)
+    if(x!=null){return x!}
+    return null
+}
+export fn narrowCoalesce(mode:i64)->i64?{
+    trace=0
+    const x=factory(mode)
+    if(x!=null){return ((x))??fallback()}
+    return fallback()
+}
+export fn narrowDouble(mode:i64)->i64{
+    const x=factory(mode)
+    if(x!=null){return (x!)!}
+    return 0
+}
+export fn twoFacts(mode:i64)->i64{
+    const x=factory(mode)
+    if(x!=null){if(x!=null){return x!+x!!};return 41}
+    return 0
+}
+export fn shortFacts(mode:i64)->i64{
+    const x=factory(mode)
+    if(x!=null && x!=null){return x!+x!!}
+    return 0
+}
+export fn deepClaims(mode:i64)->i64{
+    const x:i64???=layer<i64??>(factory(mode))
+    if(x!=null){if(x!=null){const a:i64?=x!;const b:i64?=x!!;return a==null && b==null?41:42}}
+    return 0
+}
+export fn deepUnwrap(mode:i64)->i64{
+    const x:i64???=layer<i64??>(factory(mode))
+    if(x!=null){if(x!=null){return x!!!}}
+    return 0
+}
+export fn returned()->i64{return narrowed(1)!}
+export fn rebound()->i64{
+    const x=factory(1)
+    if(x!=null){const y=x;return y!}
+    return 0
+}
+export fn nullDefault(mode:i64)->i64?{return factory(mode)??null}
+export fn nullOuter(mode:i64)->i64??{const y:i64??=factory(mode)??null;return y}
+fn fail()->i64?{return none<i64>()!}
+export fn throwing(mode:i64)->i64?{return factory(mode)??fail()}
+export fn stringOwned()->string??{return layer<string?>(layer<string>("a\0中"))}
+export fn arrayOwned()->Array<i64>??{return layer<Array<i64>?>(layer<Array<i64>>([7]))}
+export fn classOwned()->Box??{return layer<Box?>(layer<Box>(Box(7)))}
+export fn classPlace()->i64{
+    const x=classOwned()
+    if(x!=null && x!=null){x.value=9;return x.value}
+    return 0
+}
+fn stringFactory(mode:i64)->string??{
+    trace+=1
+    if(mode==0){return none<string?>()}
+    if(mode==1){return layer<string?>(none<string>())}
+    return layer<string?>(layer<string>("a\0中"))
+}
+export fn capturedDefault(mode:i64)->string?{
+    trace=0
+    const x=stringFactory(mode)
+    const captured="cap\0"
+    const d=fn()->string?{trace+=100;return captured}
+    if(x!=null){return x??d()}
+    return d()
+}
+
+fn twice<T>(value:T)->T??{return layer<T?>(layer<T>(value))}
+struct Record{value:i64
+    constructor(value:i64){this.value=value} }
+enum Flag{V}
+export fn callableProbe()->i64{
+    const captured=7
+    const f=twice(fn()->i64{return captured})!!
+    return f()
+}
+export fn recordProbe()->i64{const r=twice(Record(7));if(r!=null&&r!=null){return r.value};return 0}
+export fn enumProbe()->i64{const e=twice(Flag.V);if(e!=null&&e!=null){return e.name=="V"?7:0};return 0}
+export fn boolProbe()->i64{const b=twice(true);if(b!=null&&b!=null){return b?7:0};return 0}
+export fn floatProbe()->i64{const f=twice(1.5);if(f!=null&&f!=null){return f==1.5?7:0};return 0}
