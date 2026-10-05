@@ -512,11 +512,11 @@ static void library_independent_goldens(void) {
  {"minimal20-51.xrc",library_golden_30,sizeof(library_golden_30)-1,false},
  };
  for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
-  XrXirArtifact *artifact=NULL;XrXirStatus status=xr_xir_checked_read(cases[i].bytes,cases[i].length,NULL,&artifact,NULL);
+  XrXirArtifact *artifact=NULL;XrXirStatus status=xr_xir_compile_checked_read(library_context,cases[i].bytes,cases[i].length,&artifact,NULL);
   CHECK(status==(cases[i].valid?XR_XIR_OK:XR_XIR_BAD_STRUCTURE));
-  if(cases[i].valid){XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(artifact,NULL,&packet,NULL)==XR_XIR_OK);
-   CHECK(packet.length==cases[i].length&&!memcmp(packet.bytes,cases[i].bytes,packet.length));xr_xir_checked_packet_free(&packet);}
-  else CHECK(!artifact);xr_xir_artifact_free(artifact);
+  if(cases[i].valid){XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_OK);
+   CHECK(packet.length==cases[i].length&&!memcmp(packet.bytes,cases[i].bytes,packet.length));xr_xir_compile_checked_packet_free(&packet);}
+  else CHECK(!artifact);xr_xir_compile_artifact_free(artifact);
  }
 }
 #endif // XIR_LIBRARY_GOLDENS_H

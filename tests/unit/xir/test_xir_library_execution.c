@@ -17,6 +17,7 @@
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
 #include "base/xsha256.c"
+#include "xir_library_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_specialize.c"
 #include "xir/xxir_effects.c"
@@ -39,32 +40,32 @@ static bool pair(XrXirProgram *program){
   if(status!=XR_XIR_CALL_RETURNED)return false;
  }return true;
 }
-int main(int argc,char **argv){CHECK(argc==1||argc==2);(void)argv;XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;XrXirProgram *program=NULL;
+int main(int argc,char **argv){LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);CHECK(argc==1||argc==2);(void)argv;XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;XrXirProgram *program=NULL;
 #if CONSUMER_KIND==0
  FILE *f=fopen(XR_CHECKED_FIXTURE,"rb");CHECK(f&&!fseek(f,0,SEEK_END));long n=ftell(f);CHECK(n>=64&&n<=262144&&!fseek(f,0,SEEK_SET));
  void *bytes=malloc((size_t)n);CHECK(bytes&&fread(bytes,1,(size_t)n,f)==(size_t)n&&!fclose(f));
- CHECK(xr_xir_checked_read(bytes,(size_t)n,NULL,&checked,NULL)==XR_XIR_OK);free(bytes);
- CHECK(xr_xir_artifact_module(checked)->defaults&&xr_xir_artifact_module(checked)->defaults->count==2);
- CHECK(xr_xir_specialize(checked,NULL,&special,NULL)==XR_XIR_OK);xr_xir_artifact_free(checked);checked=NULL;
- CHECK(!xr_xir_artifact_module(special)->defaults&&xr_xir_artifact_module(special)->provenance->source->module.defaults->count==2);
- XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_lower(special,&target,NULL,&lowered,NULL)==XR_XIR_OK);
- xr_xir_artifact_free(special);special=NULL;
- XrXirCSource generated={0};CHECK(xr_xir_emit_c(lowered,"source_library",1048576,&generated)==XR_XIR_OK);
- if(argc==2){FILE *cfile=fopen(argv[1],"wb");CHECK(cfile);CHECK(fwrite(generated.text,1,generated.length,cfile)==generated.length);CHECK(!fclose(cfile));}xr_xir_c_source_free(&generated);
- CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){1048576,1048576},&program)==XR_XIR_OK);
+ CHECK(xr_xir_compile_checked_read(&compiler.context,bytes,(size_t)n,&checked,NULL)==XR_XIR_OK);free(bytes);
+ CHECK(xr_xir_compile_artifact_module(checked)->defaults&&xr_xir_compile_artifact_module(checked)->defaults->count==2);
+ CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
+ CHECK(!xr_xir_compile_artifact_module(special)->defaults&&xr_xir_compile_artifact_module(special)->provenance->source->module.defaults->count==2);
+ XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);
+ xr_xir_compile_artifact_free(special);special=NULL;
+ XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(lowered,"source_library",1048576,&generated)==XR_XIR_OK);
+ if(argc==2){FILE *cfile=fopen(argv[1],"wb");CHECK(cfile);CHECK(fwrite(generated.text,1,generated.length,cfile)==generated.length);CHECK(!fclose(cfile));}xr_xir_compile_c_source_free(&generated);
+ CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
 #else
  XrXirProgramSpec spec=source_library_program;
 #if CONSUMER_KIND==2
- CHECK(xr_xir_checked_read(spec.proof.bytes,spec.proof.length,NULL,&checked,NULL)==XR_XIR_OK);
- CHECK(xr_xir_lower(checked,&spec.target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(checked);checked=NULL;
+ CHECK(xr_xir_compile_checked_read(&compiler.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
  XrXirCallEntry entries[8];XrXirVmBinding bindings[8];CHECK(spec.entry_count==8);
- for(uint32_t f=0;f<8;++f){CHECK(xr_xir_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);if(f%2)entries[f]=spec.entries[f];}
- spec.entries=entries;const XrXirModule *module=xr_xir_artifact_module(lowered);spec.types=module->types;spec.declarations=module->declarations;spec.proof=xr_xir_program_proof(lowered);
+ for(uint32_t f=0;f<8;++f){CHECK(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);if(f%2)entries[f]=spec.entries[f];}
+ spec.entries=entries;const XrXirModule *module=xr_xir_compile_artifact_module(lowered);spec.types=module->types;spec.declarations=module->declarations;spec.proof=xr_xir_compile_program_proof(lowered);
 #endif
- CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){1048576,1048576},&program)==XR_XIR_OK);
+ CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program)==XR_XIR_OK);
 #endif
  runtime_attempts=0;CHECK(pair(program));size_t sites=runtime_attempts,live=runtime_live,bytes_live=runtime_bytes;
  for(size_t fail=0;fail<sites;++fail){runtime_attempts=0;runtime_fail_at=fail;CHECK(!pair(program));CHECK(runtime_live==live&&runtime_bytes==bytes_live);}
- runtime_fail_at=SIZE_MAX;xr_xir_program_drop(program);xr_xir_artifact_free(lowered);xr_xir_artifact_free(special);xr_xir_artifact_free(checked);
- CHECK(!runtime_live&&!runtime_bytes);printf("Checked Library consumer=%u twoInstance41 runtimeOOM=%zu physicalzero\n",CONSUMER_KIND,sites);return 0;
+ runtime_fail_at=SIZE_MAX;xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(special);xr_xir_compile_artifact_free(checked);
+ CHECK(!runtime_live&&!runtime_bytes);library_compile_owner_drop(&compiler);library_compile_observer_free();printf("Checked Library consumer=%u twoInstance41 runtimeOOM=%zu physicalzero\n",CONSUMER_KIND,sites);return 0;
 }

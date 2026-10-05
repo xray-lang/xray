@@ -77,18 +77,18 @@ static void defaults_invoke_rehash(uint8_t *bytes, size_t length) {
 static void defaults_invoke_golden_cases(void) {
     size_t live=runtime_live, physical=runtime_bytes;
     XrXirArtifact *producer=NULL,*owned=NULL;
-    CHECK(xr_xir_checked_read(defaults_invoke_golden,sizeof(defaults_invoke_golden),NULL,&producer,NULL)==XR_XIR_OK);
-    const XrXirModule *module=xr_xir_artifact_module(producer);
+    CHECK(xr_xir_compile_checked_read(library_context,defaults_invoke_golden,sizeof(defaults_invoke_golden),&producer,NULL)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(producer);
     CHECK(module->linkage_kind==XR_XIR_PROGRAM && module->function_count==4);
     CHECK(module->declarations->entry_function==3 && module->declarations->modules[0].initializer==1);
     CHECK(module->functions[3].operand_count==0 && module->functions[3].instructions[0].args[0]==2);
-    CHECK(xr_xir_recheck(module,NULL,&owned,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(producer); producer=NULL;
+    CHECK(xr_xir_compile_recheck(library_context,module,&owned,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(producer); producer=NULL;
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(owned,NULL,&packet,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length==sizeof(defaults_invoke_golden));
     CHECK(!memcmp(packet.bytes,defaults_invoke_golden,packet.length));
-    xr_xir_checked_packet_free(&packet); xr_xir_artifact_free(owned);
+    xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(owned);
     CHECK(runtime_live==live && runtime_bytes==physical);
     /* Byte offsets refer to the independently encoded caller instruction0. */
     const struct {uint32_t offset, value;} changes[]={
@@ -111,7 +111,7 @@ static void defaults_invoke_golden_cases(void) {
         uint8_t bad[sizeof(defaults_invoke_golden)]; memcpy(bad,defaults_invoke_golden,sizeof(bad));
         for(unsigned b=0;b<4;++b) bad[changes[i].offset+b]=(uint8_t)(changes[i].value>>(8*b));
         defaults_invoke_rehash(bad,sizeof(bad));
-        XrXirStatus status=xr_xir_checked_read(bad,sizeof(bad),NULL,&producer,NULL);
+        XrXirStatus status=xr_xir_compile_checked_read(library_context,bad,sizeof(bad),&producer,NULL);
         XrXirStatus expected=i==9 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE;
         /* Missing error projection uses CONST_INT with ERROR type: type admission fails first. */
         if(status!=expected) fprintf(stderr,"invoke golden mutation %zu status %u\n",i,status);
@@ -121,7 +121,7 @@ static void defaults_invoke_golden_cases(void) {
     uint8_t swapped[sizeof(defaults_invoke_golden)]; memcpy(swapped,defaults_invoke_golden,sizeof(swapped));
     swapped[469]=2; swapped[473]=1;
     defaults_invoke_rehash(swapped,sizeof(swapped));
-    CHECK(xr_xir_checked_read(swapped,sizeof(swapped),NULL,&producer,NULL)==XR_XIR_BAD_STRUCTURE && !producer);
+    CHECK(xr_xir_compile_checked_read(library_context,swapped,sizeof(swapped),&producer,NULL)==XR_XIR_BAD_STRUCTURE && !producer);
     CHECK(runtime_live==live && runtime_bytes==physical);
 }
 #endif // XIR_DEFAULTS_INVOKE_GOLDEN_H

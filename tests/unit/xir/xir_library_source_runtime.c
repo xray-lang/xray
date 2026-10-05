@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
+#define CONSUMER_KIND 3
+#include "xir_library_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_specialize.c"
 #include "xir/xxir_effects.c"
@@ -36,21 +38,21 @@ static bool pair(XrXirProgram *program){
  }return true;
 }
 XR_FUNC void xr_test_library_source_run(XrXirArtifact *owned) {
- CHECK(xr_xir_artifact_verify(owned,NULL,NULL)==XR_XIR_OK);
- const XrXirModule *original=xr_xir_artifact_module(owned);
+ CHECK(xr_xir_compile_artifact_verify(owned,NULL)==XR_XIR_OK);
+ const XrXirModule *original=xr_xir_compile_artifact_module(owned);
  uint32_t defaults=original->defaults?original->defaults->count:0;
  XrXirArtifact *specialized=NULL,*lowered=NULL;
- CHECK(xr_xir_specialize(owned,NULL,&specialized,NULL)==XR_XIR_OK);xr_xir_artifact_free(owned);
- CHECK(xr_xir_artifact_verify(specialized,NULL,NULL)==XR_XIR_OK);
- const XrXirModule *projected=xr_xir_artifact_module(specialized);CHECK(!projected->defaults);
+ CHECK(xr_xir_compile_specialize(owned,&specialized,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
+ CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
+ const XrXirModule *projected=xr_xir_compile_artifact_module(specialized);CHECK(!projected->defaults);
  if(defaults){CHECK(projected->provenance&&projected->provenance->source->module.defaults);
   CHECK(projected->provenance->source->module.defaults->count==defaults);}
 
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
- CHECK(xr_xir_lower(specialized,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(specialized);
- XrXirProgram *program=NULL;CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){1048576,1048576},&program)==XR_XIR_OK);
+ CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);
+ XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
  runtime_attempts=0;CHECK(pair(program));size_t sites=runtime_attempts,live=runtime_live,bytes=runtime_bytes;
  for(size_t f=0;f<sites;++f){runtime_attempts=0;runtime_fail_at=f;CHECK(!pair(program));CHECK(runtime_live==live&&runtime_bytes==bytes);}
- runtime_fail_at=SIZE_MAX;xr_xir_program_drop(program);CHECK(!runtime_live&&!runtime_bytes);
+ runtime_fail_at=SIZE_MAX;xr_xir_compile_program_drop(program);CHECK(!runtime_live&&!runtime_bytes);
  printf("direct Source Checked VM41 two instances runtime OOM %zu physical zero\n",sites);
 }

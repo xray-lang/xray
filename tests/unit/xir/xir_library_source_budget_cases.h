@@ -9,59 +9,29 @@
  * KEY CONCEPT:
  *   Arena owners and imported verification consume the same remaining quota.
  */
+static XrXirStatus library_shared_metadata_operation(const XrXirCompileContext *context,void *opaque) {
+    const XrXirLibraryInput *input=opaque;XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_compile_library_catalog_new(context,input,1,&catalog);
+    if(status!=XR_XIR_OK){CHECK(!catalog);return status;}
+    size_t count=0;const XrModuleResourceBinding *resource=xr_xir_compile_library_catalog_resources(catalog,&count);CHECK(resource&&count==1);
+    XrModuleSpec spec={0};spec.resource=resource;XrModuleGraph graph={0};graph.specs=&spec;graph.spec_count=1;
+    SourceContext ctx={0};ctx.graph=&graph;ctx.compile=*context;
+    void *owned=source_alloc(&ctx,1,1);if(owned){const XrXirModule *module=source_library_module(&ctx,0);if(module)CHECK(module->linkage_kind==XR_XIR_LIBRARY);}
+    status=ctx.diagnostic.status;while(ctx.memory)source_release_private(ctx.memory+1);xr_xir_compile_library_catalog_free(catalog);return status;
+}
 static void library_source_metadata_cases(const XrXirLibraryCatalog *catalog) {
-    size_t live=source_live,bytes=source_bytes,rlive=runtime_live,rbytes=runtime_bytes;
-    size_t resource_count=0;
-    const XrModuleResourceBinding *resource=xr_xir_library_catalog_resources(catalog,&resource_count);
-    CHECK(resource&&resource_count==1);
-    const XrXirModule *module=xr_xir_artifact_module(resource->checked);
-    XrXirBudget budget=xr_xir_default_budget(),before=budget;
-    CHECK(xr_xir_verify_remaining(module,&budget,NULL)==XR_XIR_OK);
-    uint64_t fee=before.metadata_bytes-budget.metadata_bytes;
-    CHECK(fee>sizeof(SourceMemory));
-    for(unsigned tight=0;tight<2;++tight){
-        XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
-        XrXirBudget quota=xr_xir_default_budget();if(tight)quota.metadata_bytes=fee+1;
-        XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&resource->authority,&quota,NULL,NULL,XR_XIR_PROGRAM,catalog};
-        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-        source_peak=source_bytes;
-        XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
-        CHECK(source_peak-bytes<=quota.metadata_bytes);
-        if(tight){CHECK(status==XR_XIR_BUDGET&&!result.checked&&!result.snapshot);
-            CHECK(!strcmp(diagnostic.message,"Checked library verification failed"));}
-        else CHECK(status==XR_XIR_OK&&result.checked&&result.snapshot);
-        xr_xir_source_result_free(&result);xr_compiler_session_delete(session);
-        CHECK(source_live==live&&source_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);
+    size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources(catalog,&count);CHECK(resources&&count==1);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(resources[0].checked,&packet,NULL)==XR_XIR_OK);
+    XrXirLibraryInput input={resources[0].authority,resources[0].logical_path,packet.bytes,packet.length,{0}};xr_sha256(packet.bytes,packet.length,input.sha256);
+    library_compile_operation_cases("Source same-ledger allocation/library verify",library_shared_metadata_operation,&input);xr_xir_compile_checked_packet_free(&packet);
+    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);SourceContext ctx={0};ctx.compile=owner.context;
+    XrCompileResourceStats before=library_compile_stats(&owner.context);void *owned=source_alloc(&ctx,7,1);CHECK(owned);XrCompileResourceStats required=library_compile_stats(&owner.context);source_release_private(owned);
+    CHECK(!ctx.memory&&library_compile_stats(&owner.context).allocated_bytes==required.allocated_bytes);library_compile_owner_drop(&owner);
+    for(unsigned mode=0;mode<4;++mode){XrCompileResourceLimits limits=library_compile_limits;limits.allocated_bytes=required.allocated_bytes-(mode==1);CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);
+        ctx=(SourceContext){0};ctx.compile=owner.context;if(mode==2)source_program_compile_fail_at=source_program_compile_attempts;
+        owned=source_alloc(&ctx,mode==3?SIZE_MAX:7,1);source_program_compile_fail_at=SIZE_MAX;
+        if(!mode){CHECK(owned);source_release_private(owned);CHECK(!ctx.memory);CHECK(!source_alloc(&ctx,1,1)&&ctx.diagnostic.status==XR_XIR_BUDGET);}
+        else CHECK(!owned&&!ctx.memory&&ctx.diagnostic.status==(mode==2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET));
+        CHECK(library_compile_stats(&owner.context).live_bytes==before.live_bytes);library_compile_owner_drop(&owner);
     }
-    XrModuleSpec spec={0};spec.resource=resource;
-    XrModuleGraph graph={0};graph.specs=&spec;graph.spec_count=1;
-    SourceContext ctx={0};ctx.graph=&graph;ctx.budget=xr_xir_default_budget();
-    ctx.budget.metadata_bytes=fee+1;
-    CHECK(source_alloc(&ctx,1,1));
-    CHECK(ctx.budget.metadata_bytes==fee-sizeof(SourceMemory));
-    CHECK(!source_library_module(&ctx,0));
-    CHECK(ctx.diagnostic.status==XR_XIR_BUDGET);
-    CHECK(!strcmp(ctx.diagnostic.message,"Checked library verification failed"));
-    CHECK(ctx.budget.metadata_bytes<=fee-sizeof(SourceMemory));
-    while(ctx.memory){SourceMemory *next=ctx.memory->next;source_release_private(ctx.memory+1);ctx.memory=next;}
-    CHECK(source_live==live&&source_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);
-    for(unsigned mode=0;mode<4;++mode){
-        memset(&ctx,0,sizeof(ctx));ctx.budget=xr_xir_default_budget();
-        uint64_t exact=sizeof(SourceMemory)+7;ctx.budget.metadata_bytes=exact;
-        if(mode==1)--ctx.budget.metadata_bytes;
-        if(mode==2)source_fail_at=source_attempts;
-        uint64_t available=ctx.budget.metadata_bytes;
-        void *owned=source_alloc(&ctx,mode==3?SIZE_MAX:7,1);
-        source_fail_at=SIZE_MAX;
-        if(!mode){
-            CHECK(owned&&!ctx.budget.metadata_bytes);
-            source_release_private(owned);CHECK(!ctx.memory&&!ctx.budget.metadata_bytes);
-            CHECK(!source_alloc(&ctx,1,1)&&ctx.diagnostic.status==XR_XIR_BUDGET);
-        }else{
-            CHECK(!owned&&!ctx.memory&&ctx.budget.metadata_bytes==available);
-            CHECK(ctx.diagnostic.status==(mode==2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET));
-        }
-        CHECK(source_live==live&&source_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);
-    }
-    printf("Source metadata shared verification fee=%llu exact/minus1/OOM/overflow/privatefree PASS\n",(unsigned long long)fee);
+    puts("Source shared metadata and private7 exact/minus1/OOM/overflow/free preserves debit PASS");
 }

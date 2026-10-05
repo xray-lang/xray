@@ -13,7 +13,7 @@
 #define XIR_LIBRARY_STRING_RUNTIME_H
 #include "xir/xxir.h"
 XR_FUNC size_t *xr_test_library_string_runtime_counter(unsigned index);
-XR_FUNC void xr_test_library_string_run(XrXirArtifact *owned);
+XR_FUNC void xr_test_library_string_run(const XrXirCompileContext *context,XrXirArtifact *owned);
 #ifndef XR_LIBRARY_STRING_RUNTIME_IMPLEMENTATION
 #define runtime_attempts (*xr_test_library_string_runtime_counter(0))
 #define runtime_fail_at (*xr_test_library_string_runtime_counter(1))
@@ -64,15 +64,14 @@ static bool library_string_pair(XrXirProgram *program,const uint32_t ids[LIBRARY
     }
     return true;
 }
+static XrXirStatus library_string_seal_operation(const XrXirCompileContext *context,void *opaque) {
+    XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(context,opaque,&program);
+    CHECK(status==XR_XIR_OK ? program!=NULL : program==NULL);xr_xir_compile_program_drop(program);return status;
+}
 static void library_string_seal_faults(const XrXirProgramSpec *spec) {
-    size_t live=runtime_live,bytes=runtime_bytes,sites=0;
-    for(size_t p=0;p<=sites;++p){runtime_attempts=0;runtime_fail_at=p?p-1:SIZE_MAX;XrXirProgram *program=NULL;
-        XrXirStatus status=xr_xir_program_seal(spec,(XrXirProgramBudget){1048576,1048576},&program);
-        if(!p){CHECK(status==XR_XIR_OK&&program);sites=runtime_attempts;CHECK(sites);xr_xir_program_drop(program);}
-        else CHECK(status==XR_XIR_OUT_OF_MEMORY&&!program);
-        CHECK(runtime_live==live&&runtime_bytes==bytes);
-    }
-    runtime_fail_at=SIZE_MAX;printf("Library strings seal OOM=%zu physical baseline restored\n",sites);
+    size_t live=runtime_live,bytes=runtime_bytes;
+    library_compile_operation_cases("Library strings seal",library_string_seal_operation,(void *)spec);
+    CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 static void library_string_runtime_faults(XrXirProgram *program,const uint32_t ids[LIBRARY_STRING_EXPORTS]) {
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
@@ -83,12 +82,12 @@ static void library_string_runtime_faults(XrXirProgram *program,const uint32_t i
     }
     runtime_fail_at=SIZE_MAX;printf("Library strings runtime OOM=%zu physical baseline restored\n",sites);
 }
-static void library_string_finish(XrXirProgramSpec *spec,XrXirArtifact *lowered,
+static void library_string_finish(const XrXirCompileContext *context,XrXirProgramSpec *spec,XrXirArtifact *lowered,
     const uint32_t ids[LIBRARY_STRING_EXPORTS]) {
     library_string_seal_faults(spec);XrXirProgram *program=NULL;
-    CHECK(xr_xir_program_seal(spec,(XrXirProgramBudget){1048576,1048576},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_program_seal(context,spec,&program)==XR_XIR_OK);
     library_string_runtime_faults(program,ids);XrXirValue held[2][LIBRARY_STRING_EXPORTS]={0};
-    CHECK(library_string_pair(program,ids,held));xr_xir_program_drop(program);xr_xir_artifact_free(lowered);
+    CHECK(library_string_pair(program,ids,held));xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(lowered);
     runtime_attempts=0;runtime_fail_at=0;
     for(uint32_t i=0;i<2;++i)for(uint32_t e=0;e<LIBRARY_STRING_EXPORTS;++e)library_string_expect(&held[i][e],e);
     library_string_drop(held);CHECK(!runtime_attempts&&!runtime_live&&!runtime_bytes);runtime_fail_at=SIZE_MAX;

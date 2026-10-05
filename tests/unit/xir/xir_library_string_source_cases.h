@@ -4,98 +4,51 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_library_string_source_cases.h - Literal inventory budget and remap boundaries
- *
- * KEY CONCEPT:
- *   Declaration collection never emits expressions or borrows library bytes.
+ * xir_library_string_source_cases.h - Original literal and growth boundaries
  */
+typedef struct StringLiteralFixture {bool grow;unsigned mode;} StringLiteralFixture;
+static XrXirStatus string_literal_operation(const XrXirCompileContext *context,void *opaque) {
+    const StringLiteralFixture *fixture=opaque;SourceContext ctx={0};ctx.compile=*context;
+    XrXirLiteral original[16];uint32_t id=99;
+    if(fixture->grow){for(unsigned i=0;i<16;++i)original[i]=(XrXirLiteral){"owned",5};ctx.literals=original;ctx.literal_count=ctx.literal_capacity=16;}
+    if(fixture->mode==4){if(fixture->grow)ctx.literal_count=ctx.literal_capacity=UINT32_MAX/2+1;else ctx.literal_count=UINT32_MAX;}
+    bool ok=source_literal_append(&ctx,NULL,(!fixture->grow&&fixture->mode==5)?NULL:"",
+        fixture->grow&&fixture->mode==3?(size_t)UINT32_MAX+1:!fixture->grow&&fixture->mode==5?1:0,
+        fixture->grow&&fixture->mode==5?NULL:&id);
+    if(ok){CHECK(fixture->mode==0&&id==(fixture->grow?16u:0u));CHECK(ctx.literal_count==(fixture->grow?17u:1u)&&!ctx.functions);
+        CHECK(ctx.literals[id].length==0);if(fixture->grow)CHECK(ctx.literal_capacity==32&&ctx.literals!=original&&!memcmp(ctx.literals,original,sizeof(original)));}
+    else {CHECK(id==99);CHECK(ctx.literal_count==(fixture->mode==4?(fixture->grow?UINT32_MAX/2+1:UINT32_MAX):fixture->grow?16u:0u));if(fixture->grow)CHECK(ctx.literals==original);}
+    while(ctx.memory)source_release_private(ctx.memory+1);
+    return ok?XR_XIR_OK:ctx.diagnostic.status;
+}
+static void string_literal_boundaries(bool grow) {
+    StringLiteralFixture fixture={grow,0};LibraryCompileOwner owner={0};
+    CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);CHECK(string_literal_operation(&owner.context,&fixture)==XR_XIR_OK);
+    XrCompileResourceStats required=library_compile_stats(&owner.context);library_compile_owner_drop(&owner);
+    for(unsigned mode=0;mode<6;++mode){XrCompileResourceLimits caps=library_compile_limits;
+        if(!grow){caps.allocated_bytes=required.allocated_bytes;if(mode==1)--caps.allocated_bytes;if(mode==2)caps.work=1;}
+        else {if(mode==1)caps.work=required.work-1;if(mode==2)caps.allocated_bytes=required.allocated_bytes-1;}
+        CHECK(library_compile_owner_new(&owner,&caps)==XR_XIR_OK);fixture.mode=mode<3?0:mode;
+        if(!grow&&mode==3){fixture.mode=0;source_program_compile_fail_at=source_program_compile_attempts;source_program_compile_injected=false;}
+        XrXirStatus status=string_literal_operation(&owner.context,&fixture);source_program_compile_fail_at=SIZE_MAX;
+        XrXirStatus expected=mode==0?XR_XIR_OK:(!grow&&mode==3)?XR_XIR_OUT_OF_MEMORY:mode==5?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;
+        CHECK(status==expected);if(!grow&&mode==3)CHECK(source_program_compile_injected);library_compile_owner_drop(&owner);
+    }
+    fixture.mode=0;library_compile_operation_cases(grow?"String literal growth17":"String literal empty",string_literal_operation,&fixture);
+}
 static void library_string_source_boundaries(void) {
-    size_t live=source_live,bytes=source_bytes;
-    for(unsigned mode=0;mode<6;++mode){
-        SourceContext ctx={0};ctx.budget=xr_xir_default_budget();
-        ctx.budget.metadata_bytes=sizeof(SourceMemory)+16*sizeof(XrXirLiteral);
-        ctx.budget.work=1;uint64_t before=ctx.budget.metadata_bytes;uint32_t id=99;
-        if(mode==1)--ctx.budget.metadata_bytes;
-        if(mode==2)ctx.budget.work=0;
-        if(mode==3)source_fail_at=source_attempts;
-        if(mode==4)ctx.literal_count=UINT32_MAX;
-        bool ok=source_literal_append(&ctx,NULL,mode==5?NULL:"",mode==5?1:0,&id);
-        source_fail_at=SIZE_MAX;
-        CHECK(ok==(mode==0));
-        if(ok){CHECK(id==0&&ctx.literal_count==1&&!ctx.budget.metadata_bytes&&!ctx.budget.work);
-            CHECK(ctx.literals[0].length==0&&!ctx.functions);}
-        else {CHECK(id==99&&ctx.literal_count==(mode==4?UINT32_MAX:0));
-            CHECK(ctx.diagnostic.status==(mode==3?XR_XIR_OUT_OF_MEMORY:mode==5?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET));
-            CHECK(ctx.budget.metadata_bytes==before-(mode==1?1:0));}
-        while(ctx.memory)source_release_private(ctx.memory+1);
-        CHECK(source_live==live&&source_bytes==bytes);
-    }
-    SourceContext ctx={0};ctx.budget=xr_xir_default_budget();
-    SourceLibraryMap map={0};map.literal_begin=100;map.literal_count=1;
+    string_literal_boundaries(false);LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    SourceContext ctx={0};ctx.compile=owner.context;SourceLibraryMap map={0};map.literal_begin=100;map.literal_count=1;
     XrXirInstruction op={XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},1,{0}},output={0};
-    CHECK(!source_library_instruction(&ctx,&map,&op,&output));
-    CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE&&!strcmp(ctx.diagnostic.message,"library literal identity is invalid"));
-    CHECK(source_live==live&&source_bytes==bytes);
+    CHECK(!source_library_instruction(&ctx,&map,&op,&output));CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE&&!strcmp(ctx.diagnostic.message,"library literal identity is invalid"));
+    library_compile_owner_drop(&owner);
 }
-
-static void library_string_growth_boundaries(void) {
-    size_t live=source_live,bytes=source_bytes;
-    for(unsigned mode=0;mode<6;++mode){
-        SourceContext ctx={0};ctx.budget=xr_xir_default_budget();XrXirLiteral original[16];
-        for(unsigned i=0;i<16;++i)original[i]=(XrXirLiteral){"owned",5};
-        ctx.literals=original;ctx.literal_count=16;ctx.literal_capacity=16;
-        ctx.budget.work=17;ctx.budget.metadata_bytes=sizeof(SourceMemory)+32*sizeof(XrXirLiteral);
-        if(mode==1)--ctx.budget.work;if(mode==2)--ctx.budget.metadata_bytes;
-        if(mode==4)ctx.literal_count=ctx.literal_capacity=UINT32_MAX/2+1;
-        uint32_t id=99;uint64_t metadata=ctx.budget.metadata_bytes;
-        bool ok=source_literal_append(&ctx,NULL,"",mode==3?(size_t)UINT32_MAX+1:0,mode==5?NULL:&id);
-        CHECK(ok==(mode==0));
-        if(ok){CHECK(id==16&&ctx.literal_count==17&&ctx.literal_capacity==32&&!ctx.budget.work&&!ctx.budget.metadata_bytes);
-            CHECK(ctx.literals!=original&&!memcmp(ctx.literals,original,sizeof(original)));}
-        else {CHECK(id==99&&ctx.literals==original&&ctx.budget.metadata_bytes==metadata);
-            CHECK(ctx.literal_count==(mode==4?UINT32_MAX/2+1:16));
-            CHECK(ctx.diagnostic.status==(mode==5?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET));}
-        while(ctx.memory)source_release_private(ctx.memory+1);
-        CHECK(source_live==live&&source_bytes==bytes);
-    }
-    puts("Library STRING inventory growth17/exact/minus1/overflow PASS");
-}
-static void library_string_source_budgets(const XrXirSourceRequest *request) {
-    size_t live=source_live,bytes=source_bytes,rlive=runtime_live,rbytes=runtime_bytes;
-    for(unsigned dimension=0;dimension<2;++dimension){
-        XrXirBudget full=xr_xir_default_budget();uint64_t lo=0,hi=dimension?full.metadata_bytes:full.work;unsigned rounds=0;
-        while(lo<hi){CHECK(++rounds<=64);uint64_t mid=lo+(hi-lo)/2;XrXirBudget budget=full;
-            if(dimension)budget.metadata_bytes=mid;else budget.work=mid;
-            XrXirSourceRequest limited=*request;limited.budget=&budget;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-            source_peak=source_bytes;
-            XrXirStatus status=xr_xir_source_check(&limited,&result,&diagnostic);
-            CHECK(source_peak>=bytes&&source_peak-bytes<=budget.metadata_bytes);
-            CHECK(status==XR_XIR_OK||status==XR_XIR_BUDGET);
-            if(status==XR_XIR_OK){CHECK(result.checked&&result.snapshot);hi=mid;}else{CHECK(!result.checked&&!result.snapshot);lo=mid+1;}
-            xr_xir_source_result_free(&result);CHECK(source_live==live&&source_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);
-        }
-        CHECK(lo);for(unsigned less=0;less<2;++less){XrXirBudget budget=full;
-            if(dimension)budget.metadata_bytes=lo-less;else budget.work=lo-less;
-            XrXirSourceRequest limited=*request;limited.budget=&budget;XrXirSourceResult result={0};
-            source_peak=source_bytes;
-            CHECK(xr_xir_source_check(&limited,&result,NULL)==(less?XR_XIR_BUDGET:XR_XIR_OK));
-            CHECK(source_peak>=bytes&&source_peak-bytes<=budget.metadata_bytes);
-            printf("Source peak dimension%u less%u actual%zu quota%llu\n",dimension,less,source_peak-bytes,(unsigned long long)budget.metadata_bytes);
-            CHECK(less?(!result.checked&&!result.snapshot):(result.checked&&result.snapshot));xr_xir_source_result_free(&result);
-            CHECK(source_live==live&&source_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);}
-        printf("Library STRING Source dimension%u exact%llu/minus1 PASS\n",dimension,(unsigned long long)lo);
-    }
-}
+static void library_string_growth_boundaries(void) {string_literal_boundaries(true);}
 static void library_string_source_negatives(const XrXirSourceRequest *request) {
-    const char *names[]={"private.xr"};
-    size_t live=source_live,bytes=source_bytes,rlive=runtime_live,rbytes=runtime_bytes;
-    for(unsigned i=0;i<1;++i){char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,names[i])>0);
-        XrXirSourceRequest negative=*request;negative.entry_path=path;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(&negative,&result,&diagnostic);
-        fprintf(stderr,"negative %s status%u reason%s\n",names[i],status,diagnostic.message);
-        CHECK(status==XR_XIR_BAD_STRUCTURE&&!result.checked);
-        if(result.snapshot)CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);
-        CHECK(!strcmp(diagnostic.message,"import requires an exported declaration"));
-        xr_xir_source_result_free(&result);CHECK(source_live==live&&source_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);
-    }
+    size_t blocks=source_program_compile_live,bytes=source_program_compile_bytes,rlive=runtime_live,rbytes=runtime_bytes;
+    XrXirSourceRequest negative=*request;negative.entry_path=XR_SOURCE_FIXTURES "/private.xr";XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_check(&negative,&result,&diagnostic,NULL);
+    fprintf(stderr,"negative private.xr status%u reason%s\n",status,diagnostic.message);
+    CHECK(status==XR_XIR_BAD_STRUCTURE&&!result.checked&&!result.snapshot&&!strcmp(diagnostic.message,"import requires an exported declaration"));
+    xr_xir_compile_source_result_free(&result);CHECK(source_program_compile_live==blocks&&source_program_compile_bytes==bytes&&runtime_live==rlive&&runtime_bytes==rbytes);
 }

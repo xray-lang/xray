@@ -3,7 +3,7 @@ set(XIR_LIBRARY_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_library.xrc)
 set(XIR_LIBRARY_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_library.c)
 set(XIR_LIBRARY_SOURCE_WORK ${CMAKE_CURRENT_BINARY_DIR}/library-source-work)
 file(MAKE_DIRECTORY ${XIR_LIBRARY_SOURCE_WORK})
-add_xray_bootstrap_executable(test_xir_library_source xir/test_xir_library_source.c)
+add_executable(test_xir_library_source xir/test_xir_library_source.c)
 target_sources(test_xir_library_source PRIVATE xir/xir_library_source_runtime.c)
 target_link_libraries(test_xir_library_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_library_source PRIVATE
