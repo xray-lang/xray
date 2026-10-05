@@ -1,7 +1,7 @@
 # Dedicated enum identity fixture stays below the existing packet budget.
 set(XIR_ENUM_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_enum_identity.xrc)
 set(XIR_ENUM_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_enum_identity.c)
-add_xray_bootstrap_executable(test_xir_enum_source xir/test_xir_enum_source.c)
+add_executable(test_xir_enum_source xir/test_xir_enum_source.c)
 target_link_libraries(test_xir_enum_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_enum_source PRIVATE
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_enum_identity"
@@ -24,7 +24,7 @@ add_custom_command(OUTPUT ${XIR_ENUM_GENERATED}
     VERBATIM)
 add_executable(test_xir_enum_native xir/test_xir_enum_native.c ${XIR_ENUM_GENERATED})
 target_link_libraries(test_xir_enum_native PRIVATE xray_xir_scalar)
-add_xray_bootstrap_executable(test_xir_enum_mixed xir/test_xir_enum_mixed.c ${XIR_ENUM_GENERATED})
+add_executable(test_xir_enum_mixed xir/test_xir_enum_mixed.c ${XIR_ENUM_GENERATED})
 target_link_libraries(test_xir_enum_mixed PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_enum_mixed PRIVATE
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_enum_identity"
