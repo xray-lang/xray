@@ -105,6 +105,9 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         }
     } else if (node->type==AST_LITERAL_TRUE || node->type==AST_LITERAL_FALSE || node->type==AST_LITERAL_STRING || node->type==AST_LITERAL_RUNE) {
         plan->type_ready=true;plan->ground_type=node->type==AST_LITERAL_STRING ? XR_XIR_STRING : node->type==AST_LITERAL_RUNE ? XR_XIR_RUNE : XR_XIR_BOOL;
+    } else if (node->type==AST_NEW_EXPR && node->as.new_expr.class_name) {
+        plan->binding=visible_name(ctx,node->as.new_expr.module_name ?
+            node->as.new_expr.module_name : node->as.new_expr.class_name);
     } else if (node->type==AST_CALL_EXPR && node->as.call_expr.callee && node->as.call_expr.callee->type==AST_VARIABLE) {
         plan->binding=visible_name(ctx,node->as.call_expr.callee->as.variable.name);
         if (plan->binding && plan->binding->kind==SOURCE_FUNCTION && !ctx->generics[plan->binding->index].parameter_count) {

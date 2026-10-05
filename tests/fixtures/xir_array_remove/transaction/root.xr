@@ -1,0 +1,75 @@
+import "./producer" as producer
+
+var tail: Array<i64?> = [1, null, 3]
+var head: Array<i64?> = [1, null, 3]
+var trace = 0
+struct Item { values: Array<i64> }
+var items = [Item{values: [11, 22, 33]}]
+fn pathIndex() -> i64 { trace = trace * 10 + 1; return 0 }
+
+export fn savedTail() -> Array<i64?> { return tail }
+export fn savedHead() -> Array<i64?> { return head }
+export fn removeTail() -> i64?? { return tail.pop() }
+export fn removeHead() -> i64?? { return head.shift() }
+export fn tailCount() -> i64 { return len(tail) }
+export fn headCount() -> i64 { return len(head) }
+export fn currentTrace() -> i64 { return trace }
+
+export fn numbersPop() -> Array<i64> {
+    var values = [1, 2, 3]
+    const old = values
+    const result = producer.back<i64>(ref values)
+    return [result ?? -99, len(values), values[0], values[1], len(old), old[2]]
+}
+export fn numbersShift() -> Array<i64> {
+    var values = [1, 2, 3]
+    const old = values
+    const result = producer.front<i64>(ref values)
+    return [result ?? -99, len(values), values[0], values[1], len(old), old[2]]
+}
+export fn emptyPop() -> i64? {
+    var values: Array<i64> = []
+    return values.pop()
+}
+export fn emptyShift() -> i64? {
+    var values: Array<i64> = []
+    return values.shift()
+}
+export fn textPop() -> string? {
+    var values = ["kept", "a\0中"]
+    return producer.back<string>(ref values)
+}
+export fn textShift() -> string? {
+    var values = ["a\0中", "kept"]
+    return producer.front<string>(ref values)
+}
+export fn nestedPop() -> i64? {
+    trace = 0
+    items = [Item{values: [11, 22, 33]}]
+    return items[pathIndex()].values.pop()
+}
+export fn nestedShift() -> i64? {
+    trace = 0
+    items = [Item{values: [11, 22, 33]}]
+    return items[pathIndex()].values.shift()
+}
+export fn nestedCount() -> i64 { return len(items[0].values) }
+
+var vacant:Array<i64>=[]
+export fn savedEmpty()->Array<i64>{return vacant}
+export fn removeEmptyPop()->i64?{return vacant.pop()}
+export fn removeEmptyShift()->i64?{return vacant.shift()}
+fn rebindIndex()->i64{trace=trace*10+1;items=[Item{values:[71,73]}];return 0}
+export fn reboundPop()->i64?{trace=0;items=[Item{values:[11,22,33]}];return items[rebindIndex()].values.pop()}
+export fn reboundShift()->i64?{trace=0;items=[Item{values:[11,22,33]}];return items[rebindIndex()].values.shift()}
+class Handle{values:Array<i64>=[1,2]}
+fn readHandleBody(handle:Handle)->i64?{return handle.values.pop()}
+export fn readHandle()->Array<i64?>{const handle=Handle();const first=readHandleBody(handle);return [first,handle.values.shift()]}
+export fn retainedCallable()->(fn()->i64)?{
+    const captured=7
+    var values=[fn()->i64{return captured}]
+    return values.pop()
+}
+
+export fn floatPop(values:Array<f64>)->f64?{var root=values;return root.pop()}
+export fn floatShift(values:Array<f64>)->f64?{var root=values;return root.shift()}

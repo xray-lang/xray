@@ -1,0 +1,20 @@
+import "./producer" as producer
+struct Record { value:i64
+    constructor(value:i64){this.value=value} }
+struct Empty {}
+enum Flag{ Empty,Text{text:string} }
+class Box{value:i64
+    constructor(value:i64){this.value=value} }
+fn layer<T>(item:T)->T?{return item}
+export fn case0()->Array<i64??> {return producer.round<i64?>(null)}
+export fn case1()->Array<i64???> {return producer.round<i64??>(layer<i64?>(null))}
+export fn case2()->i64{
+    var values=[fn()->i64{return 7},fn()->i64{return 7}]
+    const first=values.shift()!
+    const last=values.pop()!
+    const empty=values.pop()
+    const empty2=values.shift()
+    if(empty!=null||empty2!=null){return -1}
+    return first()+last()
+}
+export fn case3()->Array<Box?> {return producer.round<Box>(Box(7))}

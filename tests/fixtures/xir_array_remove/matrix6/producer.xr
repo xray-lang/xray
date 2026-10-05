@@ -1,0 +1,11 @@
+export fn round<T>(item:T)->Array<T?> {
+    var values=[item,item]
+    const alias=values
+    const first=values.shift()
+    const last=values.pop()
+    const empty=values.pop()
+    const empty2=values.shift()
+    return [first,last,empty,empty2]
+}
+
+export fn identity<T>(item:T)->T{return item}

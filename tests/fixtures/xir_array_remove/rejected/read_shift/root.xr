@@ -1,0 +1,1 @@
+fn bad(values:Array<i64>)->i64?{return values.shift()}

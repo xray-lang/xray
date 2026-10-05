@@ -4210,3 +4210,5 @@ include(xir/atomic_source_admission_owner.cmake)
 include(module/module_graph_logical_source.cmake)
 
 include(xir/atomic_a2_runtime_fault.cmake)
+
+include(xir/array_remove.cmake)

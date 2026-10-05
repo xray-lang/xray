@@ -1,0 +1,2 @@
+class C{const values:Array<i64>;constructor(){this.values=[1]}}
+fn bad()->i64?{const c=C();return c.values.pop()}

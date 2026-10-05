@@ -904,7 +904,7 @@ typedef enum SourceArrayRecipe {
     SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,
     SOURCE_ARRAY_FIND, SOURCE_ARRAY_FIND_INDEX, SOURCE_ARRAY_EVERY, SOURCE_ARRAY_SOME,
     SOURCE_ARRAY_CONTAINS, SOURCE_ARRAY_INDEX_OF, SOURCE_ARRAY_JOIN, SOURCE_ARRAY_CLEAR,
-    SOURCE_ARRAY_REVERSE, SOURCE_ARRAY_UNSHIFT
+    SOURCE_ARRAY_REVERSE, SOURCE_ARRAY_UNSHIFT, SOURCE_ARRAY_POP, SOURCE_ARRAY_SHIFT
 } SourceArrayRecipe;
 static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
@@ -1446,6 +1446,8 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         return source_literal(ctx, node, value);
     case AST_TEMPLATE_STRING: return source_template(ctx, node, value);
     case AST_NEW_EXPR:
+        if (ctx->active_expression->binding)
+            return source_constructor_new(ctx, node, value);
         if (node->as.new_expr.class_name && source_text_same(ctx,NULL,node->as.new_expr.class_name,"Atomic"))
             return source_atomic_explicit_construct(ctx,node,value);
         return source_array_construct(ctx, node, value);

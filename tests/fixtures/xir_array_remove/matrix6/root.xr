@@ -1,0 +1,9 @@
+import "./producer" as producer
+struct Array<T>{
+    value:T
+    constructor(value:T){this.value=value}
+    pop()->T{return this.value}
+    shift()->T{return this.value}
+}
+export fn case0()->i64{const value=Array<i64>{value:7};return value.pop()+value.shift()+producer.identity<i64>(2)}
+export fn case1()->bool{const value=Array<bool>{value:true};return value.pop()&&value.shift()&&producer.identity<bool>(true)}

@@ -1,0 +1,1 @@
+fn bad()->i64?{const values=[1];return values.shift()}

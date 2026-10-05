@@ -1,0 +1,2 @@
+class Array<T>{value:T constructor(value:T){this.value=value} pop()->T{return this.value} shift()->T{return this.value}}
+fn unused(){var v:i64=7;const a=Array<i64>(ref v)}

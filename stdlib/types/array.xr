@@ -15,7 +15,9 @@ struct Array<T> {
     ptr() -> Ptr<T>
     // @lowered
     mutPtr() -> MutPtr<T>
+    // @native-operation ARRAY_POP allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref pop() -> T?
+    // @native-operation ARRAY_SHIFT allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref shift() -> T?
     // @native-operation ARRAY_UNSHIFT allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref unshift(value: T)

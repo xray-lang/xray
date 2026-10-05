@@ -64,7 +64,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr', 'pop', 'shift',
+                         {'withCapacity', 'capacity', 'ptr', 'mutPtr',
                           'reserve', 'resize', 'concat', 'sort', 'fill', 'toString',
                           'iterator', 'entriesIterator', 'entries'})
 
@@ -94,6 +94,13 @@ class NativeDeclarations(unittest.TestCase):
             ('indexOf(value: T)', 'indexOf(...value: T)'),
             ('join(separator?: string)', 'join(separator: string)'),
             ('join(separator?: string)', 'join(separator?: T)'),
+            ('ref pop() -> T?', 'pop() -> T?'),
+            ('ref pop() -> T?', 'ref pop() -> T'),
+            ('ref pop() -> T?', 'ref pop() -> T??'),
+            ('ref pop() -> T?', 'ref pop(value: T) -> T?'),
+            ('ref shift() -> T?', 'shift() -> T?'),
+            ('ref shift() -> T?', 'ref shift(value?: T) -> T?'),
+            ('ref shift() -> T?', 'ref shift() -> Unknown?'),
             ('ref clear()', 'clear()'),
             ('ref clear()', 'ref clear(value: T)'),
             ('ref reverse() -> Array<T>', 'reverse() -> Array<T>'),

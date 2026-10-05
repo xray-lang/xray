@@ -141,13 +141,19 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe，共 15 个 operation；32 个成员中其余 17 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe及reverse/unshift/pop/shift，共 19 个 operation；32 个成员中其余 13 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
 下一声明片冻结 `ref unshift(value: T)`（普通 READ 的精确 T，返回 unit）和 `ref reverse() -> Array<T>`（零参数，拥有式结果）；冻结不表示已准入或验证。两者只要求 Array 原有的可复制、可保存能力，不额外要求 Equal、Compare 或 ToString；普通泛型在定义处检查，不从未来实例补权限。receiver 必须是可写逻辑 place，root/path 的选择器只求一次；unshift 实参成功后读取 binding 的当前 Array，实参的已完成副作用不回滚。负整数 T 是普通元素，不是长度参数。
 
 两方法先准备独立拥有式候选，reverse 取反向排列，unshift 将输入置于原元素之前；空 reverse 返回空 Array，空 unshift 得到单元素 Array。元素复制在 class 身份处停止。reverse 的结果拥有关系在最终单次回写前准备完成，发布后结果与 receiver 是独立逻辑副本；方法准备或发布失败、发布前取消不改变提交前的逻辑值，临时拥有关系正常释放。方法发布后的后续语句、整个函数的结果交接失败或取消遵循普通调用规则，不撤销已完成的方法副作用；内部循环不新增语言挂起点或用户回调。私有候选构造可能重选 backing 容量，不能声称保持旧容量；capacity/withCapacity/reserve 的公开增长与分离保证仍在该声明族准入时另冻。
+
+冻结 `ref pop() -> T?` 与 `ref shift() -> T?`：零显式、可选、默认、variadic及方法类型参数，分别移除尾／头元素，receiver不被消费。空数组返回外层None且不发布Array写入；非空取得精确T的独立拥有式逻辑副本，再包一层Some。T本身Nullable时不展平：Array<i64?>删除null得到Some(None):i64??，删除7得到Some(Some(7)):i64??，空数组才得到None:i64??。不增加Some/None源码构造语法或Equal/Compare/ToString/NotNullable要求；普通泛型定义处检查，Checked特化后复验。
+
+receiver须为已有权限的可写逻辑place；root/path选择器只求值一次，路径完成后读取绑定当前Array，已完成路径副作用不回滚。const/read Array值参数、临时Array、不可访问或const字段拒绝；read class handle的可变Array字段沿用既有class身份与字段权限。非空先准备完整拥有式Nullable结果及私有Array候选（pop保前n−1项，shift保后n−1项原序），再只向真实place发布一次。复制在class或同步身份处停止，结果不借backing内部地址。所有可失败的方法结果持有／cell读取在发布前完成；准备／发布失败和发布前取消保全提交前逻辑值、别名及身份，正常释放临时拥有关系。发布后的普通父表达式、函数结果交接失败或取消不撤销方法副作用。内部循环不增加语言挂起点或用户回调；空路径无元素读取／发布，但不承诺零分配或免于准入、持有及预算失败。
+
+pop/shift资格为allocation=may_heap、failures=allocation,retain,limit、ownership=owned，无callback效应。候选可重选backing容量，不保证旧capacity；capacity/withCapacity/reserve的公开增长／分离保证仍属其声明族另冻，与reverse/unshift一致。合同冻结不等于新操作已经通过实施验收。
 
 | 成员 | 类型/说明 |
 |--|--|
@@ -490,10 +496,16 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-The table retains the complete method denominator. The current frozen XIR boundary comprises the three get/set/push primitives and twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. These are 15 operations; the other 17 of the 32 members remain unadmitted. Execution identities come from the same structured declarations in `stdlib/types/array.xr`; names serve member lookup only. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+The table retains the complete method denominator. The current frozen XIR boundary comprises the three get/set/push primitives and twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. Together with reverse/unshift/pop/shift these are 19 operations; the other 13 of the 32 members remain unadmitted. Execution identities come from the same structured declarations in `stdlib/types/array.xr`; names serve member lookup only. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
 
 These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/rune/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
 
+
+The `ref pop() -> T?` and `ref shift() -> T?` declarations are frozen: no explicit, optional, default, variadic or method type arguments; they remove the tail/head element without consuming the receiver. An empty Array returns outer None without publishing an Array write. A nonempty result owns an exact T logical copy wrapped in one Some. Nullable elements are not flattened: removing null from Array<i64?> returns Some(None):i64??, removing 7 returns Some(Some(7)):i64??, and only an empty Array returns None:i64??. This adds neither Some/None source syntax nor Equal/Compare/ToString/NotNullable requirements. Ordinary generic definitions are checked before Checked specialization and revalidation.
+
+The receiver is an already authorized writable logical place. Root/path selectors run once; after path evaluation the current bound Array is read, and completed path effects are not rolled back. Const/read Array value parameters, temporary Arrays, inaccessible and const fields reject. Mutable Array fields reached through read class handles retain existing class identity and field authority. Before the sole publication, nonempty removal prepares the complete owned Nullable result and a private Array candidate: pop retains the first n-1 elements; shift retains the last n-1 in their original order. Copying stops at class or synchronization identity, and results never borrow backing interior addresses. Every fallible method result hold/cell read precedes publication. Preparation/publication failure or prepublication cancellation preserves the logical root, aliases and identities and releases temporary ownership normally. Later parent-expression/function result handoff failure or cancellation does not undo the method effect. Internal loops introduce no language suspension or user callback. The empty path reads no element and publishes no write, but promises neither zero allocation nor exemption from admission, retain or budget failure.
+
+Both declarations have allocation=may_heap, failures=allocation,retain,limit and ownership=owned, without callback effects. Candidates may select another backing capacity; old capacity is not preserved by contract. Public growth/detachment guarantees for capacity/withCapacity/reserve remain separately frozen on that family's admission, as for reverse/unshift. Freezing this contract does not qualify the new operations.
 | Member | Type / Description |
 |--|--|
 | `len(arr)` | global `i64` query |

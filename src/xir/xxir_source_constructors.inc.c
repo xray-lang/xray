@@ -147,35 +147,71 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
         decl->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0};
     return source_query_parameters(ctx, symbol.declaration);
 }
-static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType type,
-    SourceName *binding, SourceName *target, SourceValue *value) {
+typedef struct SourceConstructorCall {
+    AstNode *reference;
+    AstNode **arguments;
+    XrCallArgAccess *accesses;
+    uint32_t count;
+    SourceName *binding, *target;
+    XrXirType type;
+} SourceConstructorCall;
+static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
+    const SourceConstructorCall *call, SourceValue *value) {
+    XrXirType type = call->type;
+    SourceName *binding = call->binding, *target = call->target;
     const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, type);
     uint32_t index = ctx->nominal_constructors[nominal->nominal.declaration];
     if (!index) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type has no admitted constructor");
     const XrXirFunction *function = &ctx->functions[index];
-    CallExprNode *call = &node->as.call_expr;
-    if (!source_argument_arity(ctx, node, index, (uint32_t)call->arg_count) ||
+    if (!source_argument_arity(ctx, node, index, call->count) ||
         (ctx->identities[index].member_access && ctx->identities[ctx->function].nominal_owner != ctx->identities[index].nominal_owner))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor arity or authority mismatch");
     SourceName called = *target;
     if (ctx->bodies[index].node->type == AST_METHOD_DECL) called.declaration = ctx->bodies[index].declaration;
-    if (!source_query_reference(ctx, call->callee, binding, &called, XR_XIR_SOURCE_CALL)) return false;
+    if (!source_query_reference(ctx, call->reference, binding, &called, XR_XIR_SOURCE_CALL)) return false;
     SourceSubstitution substitution = {nominal->nominal.arguments, nominal->nominal.argument_count};
     SourceValue *arguments = function->parameter_count ? source_alloc(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
     if (function->parameter_count && !arguments) return false;
-    for (uint32_t p = 0; p < (uint32_t)call->arg_count; ++p) {
+    for (uint32_t p = 0; p < call->count; ++p) {
         XrXirType expected;
-        if (call->arg_accesses && call->arg_accesses[p] != XR_CALL_ARG_PLAIN)
+        if (call->accesses && call->accesses[p] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument requires a value");
         if (!source_substitute(ctx, &substitution, function->parameters[p], 0, &expected) ||
             !source_plan_expression(ctx, call->arguments[p], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false}, &arguments[p])) return false;
         if (arguments[p].type != expected) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument type mismatch");
     }
-    for (uint32_t p = (uint32_t)call->arg_count; p < function->parameter_count; ++p)
+    for (uint32_t p = call->count; p < function->parameter_count; ++p)
         if (!source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
     XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, index, {0}};
     return source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
         source_recipe_group(ctx, op, arguments, function->parameter_count, value);
+}
+static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType type,
+    SourceName *binding, SourceName *target, SourceValue *value) {
+    const CallExprNode *syntax = &node->as.call_expr;
+    SourceConstructorCall call = {syntax->callee, syntax->arguments, syntax->arg_accesses,
+        (uint32_t)syntax->arg_count, binding, target, type};
+    return source_constructor_invoke(ctx, node, &call, value);
+}
+static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    const NewExprNode *syntax = &node->as.new_expr;
+    SourceName *binding = ctx->active_expression->binding, *target = binding;
+    if (syntax->is_type_namespace || syntax->arg_count < 0 || syntax->arg_count > 65536 ||
+        syntax->type_arg_count < 0 || syntax->type_arg_count > 65536 ||
+        (syntax->arg_count && !syntax->arguments) || !syntax->class_name)
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nominal construction shape is not admitted");
+    if (syntax->module_name) {
+        if (!target || target->kind != SOURCE_MODULE)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor namespace is not an imported module");
+        target = imported_declaration(ctx, target, syntax->class_name);
+    } else if (target && target->kind == SOURCE_IMPORT)
+        target = imported_declaration(ctx, target, target->imported);
+    if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    XrXirType type;
+    if (!source_nominal_apply(ctx, target, syntax->type_args, (uint32_t)syntax->type_arg_count, &type)) return false;
+    SourceConstructorCall call = {node, syntax->arguments, syntax->arg_accesses,
+        (uint32_t)syntax->arg_count, binding, target, type};
+    return source_constructor_invoke(ctx, node, &call, value);
 }
 static bool source_constructor_body(SourceContext *ctx) {
     SourceFunction *body = &ctx->bodies[ctx->function];

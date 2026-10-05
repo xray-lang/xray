@@ -1,0 +1,2 @@
+export fn back<T>(values: ref Array<T>) -> T? { return values.pop() }
+export fn front<T>(values: ref Array<T>) -> T? { return values.shift() }

@@ -1,0 +1,14 @@
+import "./producer" as producer
+struct Record { value:i64
+    constructor(value:i64){this.value=value} }
+struct Empty {}
+enum Flag{ Empty,Text{text:string} }
+class Box{value:i64
+    constructor(value:i64){this.value=value} }
+fn layer<T>(item:T)->T?{return item}
+export fn case0()->Array<u32?> {return producer.round<u32>(7)}
+export fn case1()->Array<u64?> {return producer.round<u64>(7)}
+export fn case2()->Array<bool?> {return producer.round<bool>(true)}
+export fn case3()->Array<rune?> {return producer.round<rune>('中')}
+export fn case4()->Array<f32?> {return producer.round<f32>(1.5)}
+export fn case5()->Array<f64?> {return producer.round<f64>(1.5)}

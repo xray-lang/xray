@@ -1,0 +1,1 @@
+fn bad()->i64?{var values=[1];return values.pop<i64>()}

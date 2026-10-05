@@ -1,0 +1,1 @@
+fn bad()->i64?{var values:Array<i64?>=[null];return values.pop()}
