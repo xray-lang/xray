@@ -3,7 +3,7 @@
 # One frozen Checked packet feeds those three independent source-free executions.
 set(XIR_UNIT_SLOTS_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_unit_slots.xrc)
 set(XIR_UNIT_SLOTS_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_unit_slots.c)
-add_xray_bootstrap_executable(test_xir_unit_slots_source xir/test_xir_unit_slots_source.c)
+add_executable(test_xir_unit_slots_source xir/test_xir_unit_slots_source.c)
 target_sources(test_xir_unit_slots_source PRIVATE xir/xir_unit_slots_source_runtime.c)
 target_link_libraries(test_xir_unit_slots_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_unit_slots_source PRIVATE

@@ -17,23 +17,12 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
-static size_t source_attempts,source_fail_at=SIZE_MAX,source_live;
-static void *ready_alloc(size_t count,size_t size){if(source_attempts++==source_fail_at)return NULL;void *p=xr_calloc(count,size);if(p)++source_live;return p;}
-static void ready_free(void *p){if(p){CHECK(source_live);--source_live;}xr_free(p);}
-#undef xr_calloc
-#undef xr_free
-#define xr_calloc(c,s) ready_alloc(c,s)
-#define xr_free(p) ready_free(p)
-#include "xir/xxir_source_query.c"
-#include "xir/xxir_type_inference.c"
-#include "xir/xxir_source.c"
-#undef xr_calloc
-#undef xr_free
+#include "xir_unit_compile_owner.h"
 XR_FUNC void xr_test_unit_slots_source_run(XrXirArtifact **checked);
 XR_FUNC size_t xr_test_unit_slots_runtime_live(void);
 XR_FUNC size_t xr_test_unit_slots_runtime_bytes(void);
 static void unit_query_facts(const XrXirSourceResult *result){
- const XrXirSourceView *view=xr_xir_source_snapshot_view(result->snapshot);CHECK(view&&view->complete);
+ const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result->snapshot);CHECK(view&&view->complete);
  const char *names[]={"empty","fixed","mutable","inferred","chosen","matched"};
  const bool mutable[]={true,false,true,true,false,false};
  for(unsigned n=0;n<sizeof(names)/sizeof(names[0]);++n){const XrXirSourceDeclaration *found=NULL;
@@ -47,32 +36,43 @@ static void unit_query_facts(const XrXirSourceResult *result){
   }
   CHECK(reads);if(mutable[n])CHECK(writes);
  }
- CHECK(xr_xir_artifact_verify(result->checked,NULL,NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_artifact_verify(result->checked,NULL)==XR_XIR_OK);
  /* Canonical Checked verifier rejects Unit operands and private sentinel IDs.
   * All hidden physical parameters therefore remain ordinary admitted values. */
- const XrXirModule *m=xr_xir_artifact_module(result->checked);
+ const XrXirModule *m=xr_xir_compile_artifact_module(result->checked);
  for(uint32_t f=0;f<m->function_count;++f)
   for(uint32_t p=0;p<m->functions[f].parameter_count;++p)CHECK(m->functions[f].parameters[p]!=XR_XIR_UNIT);
 }
 #include "xir_unit_slot_contract_cases.h"
 #include "xir_generic_storage_cases.h"
 int main(int argc,char **argv){generic_storage_cases();
- CHECK(argc==1||argc==2);XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
+ CHECK(argc==1||argc==2);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
- XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
- size_t sites=0,retained_live=0,retained_bytes=0;XrXirArtifact *owned=NULL;
+ size_t sites=0,retained_live=0,retained_bytes=0;XrXirArtifact *owned=NULL;UnitCompileOwner retained_owner={0};
  for(size_t pass=0;pass<=sites;++pass){
-  source_attempts=0;source_fail_at=pass?pass-1:SIZE_MAX;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-  XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
-  if(!pass){if(status!=XR_XIR_OK)fprintf(stderr,"%u %d %s\n",status,diagnostic.line,diagnostic.message);CHECK(status==XR_XIR_OK&&result.checked&&result.snapshot);sites=source_attempts;unit_query_facts(&result);unit_slot_contracts(result.checked);
-   XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(result.checked,NULL,&packet,NULL)==XR_XIR_OK&&packet.length<=262144);
+  UnitCompileOwner owner;unit_compile_owner_new(&owner);
+  effects_compile_attempts=0;effects_compile_injected=false;effects_compile_fail_at=pass?pass-1:SIZE_MAX;
+  XrCompilerSession *session=NULL;XrCompilerSessionStatus session_status=xr_compile_session_new(owner.context.resources,&session);
+  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+  XrXirStatus status=session_status==XR_COMPILER_SESSION_OK?xr_xir_compile_source_check(&request,&result,&diagnostic,NULL):session_status==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+  size_t actual=effects_compile_attempts;effects_compile_fail_at=SIZE_MAX;
+  if(!pass){
+   if(status!=XR_XIR_OK)fprintf(stderr,"%u %d %s\n",status,diagnostic.line,diagnostic.message);
+   CHECK(status==XR_XIR_OK&&result.checked&&result.snapshot);sites=actual;unit_query_facts(&result);unit_slot_contracts(result.checked);
+   XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK&&packet.length<=262144);
    if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file&&fwrite(packet.bytes,1,packet.length,file)==packet.length&&!fclose(file));}
-   xr_xir_checked_packet_free(&packet);owned=result.checked;result.checked=NULL;
-  }else{CHECK(status==XR_XIR_OUT_OF_MEMORY&&!result.checked);if(result.snapshot)CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);}
-  xr_xir_source_result_free(&result);CHECK(!source_live);
-  if(!pass){retained_live=xr_test_unit_slots_runtime_live();retained_bytes=xr_test_unit_slots_runtime_bytes();CHECK(retained_live&&retained_bytes);}
-  CHECK(xr_test_unit_slots_runtime_live()==retained_live&&xr_test_unit_slots_runtime_bytes()==retained_bytes);
+   xr_xir_compile_checked_packet_free(&packet);owned=result.checked;result.checked=NULL;
+  }else CHECK(effects_compile_injected&&status==XR_XIR_OUT_OF_MEMORY&&!result.checked&&!result.snapshot);
+  xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+  if(!pass){
+   retained_owner=owner;retained_live=effects_compile_live;retained_bytes=effects_compile_bytes;
+   CHECK(retained_live>1&&retained_bytes>owner.baseline.live_bytes);
+  }else unit_compile_owner_free(&owner);
+  CHECK(effects_compile_live==retained_live&&effects_compile_bytes==retained_bytes);
+  CHECK(!xr_test_unit_slots_runtime_live()&&!xr_test_unit_slots_runtime_bytes());
  }
- source_fail_at=SIZE_MAX;
- xr_compiler_session_delete(session);CHECK(!source_live);xr_test_unit_slots_source_run(&owned);CHECK(!owned);printf("Unit logical locals source %zu OOM sites; producer destroyed\n",sites);return 0;
+ xr_test_unit_slots_source_run(&owned);CHECK(!owned);unit_compile_owner_report(&retained_owner,"unit_slots Source");unit_compile_owner_free(&retained_owner);
+ CHECK(!effects_compile_live&&!effects_compile_bytes);
+ printf("unit_slots Source whole-resource %zu OOM sites; producer destroyed, compiler physical zero\n",sites);return 0;
 }

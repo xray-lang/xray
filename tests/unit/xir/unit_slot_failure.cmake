@@ -3,7 +3,7 @@
 # One frozen Checked packet feeds those three independent source-free executions.
 set(XIR_UNIT_SLOT_FAILURE_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_unit_slot_failure.xrc)
 set(XIR_UNIT_SLOT_FAILURE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_unit_slot_failure.c)
-add_xray_bootstrap_executable(test_xir_unit_slot_failure_source xir/test_xir_unit_slot_failure_source.c)
+add_executable(test_xir_unit_slot_failure_source xir/test_xir_unit_slot_failure_source.c)
 target_sources(test_xir_unit_slot_failure_source PRIVATE xir/xir_unit_slot_failure_source_runtime.c)
 target_link_libraries(test_xir_unit_slot_failure_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_unit_slot_failure_source PRIVATE

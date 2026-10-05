@@ -16,9 +16,10 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
+#include "xir_unit_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_unit_slot_failure_execution.h"
-int main(int argc,char **argv){CHECK(argc==1||argc==2);
+int main(int argc,char **argv){UnitCompileOwner owner;unit_compile_owner_new(&owner);const XrXirCompileContext *context=&owner.context;CHECK(argc==1||argc==2);
 FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");
 CHECK(file&&!fseek(file,0,SEEK_END));
 long size=ftell(file);
@@ -27,33 +28,33 @@ uint8_t *bytes=malloc((size_t)size);
 CHECK(bytes&&fread(bytes,1,(size_t)size,file)==(size_t)size&&!fclose(file));
 
  XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;
-CHECK(xr_xir_checked_read(bytes,(size_t)size,NULL,&checked,NULL)==XR_XIR_OK);
+CHECK(xr_xir_compile_checked_read(context,bytes,(size_t)size,&checked,NULL)==XR_XIR_OK);
 free(bytes);
-CHECK(xr_xir_specialize(checked,NULL,&special,NULL)==XR_XIR_OK);
-xr_xir_artifact_free(checked);
-CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_OK);
+CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);
+xr_xir_compile_artifact_free(checked);
+CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
 
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-CHECK(xr_xir_lower(special,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-xr_xir_artifact_free(special);
-const XrXirModule *module=xr_xir_artifact_module(lowered);
+CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);
+xr_xir_compile_artifact_free(special);
+const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
 
  uint32_t entry=module->declarations->entry_function;
  XrXirCSource c={0};
-CHECK(xr_xir_emit_c(lowered,"unit_slot_failure",1048576,&c)==XR_XIR_OK);
+CHECK(xr_xir_compile_emit_c(lowered,"unit_slot_failure",1048576,&c)==XR_XIR_OK);
 if(argc==2){file=fopen(argv[1],"wb");
 CHECK(file&&fwrite(c.text,1,c.length,file)==c.length&&!fclose(file));
-}xr_xir_c_source_free(&c);
+}xr_xir_compile_c_source_free(&c);
 
  XrXirProgram *program=NULL;
-CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
+CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
 XrXirValue held[3]={{0}};
 init_pair(program,entry,held);
 init_protocol_failures(program,entry);
 init_runtime_faults(program,entry);
-xr_xir_program_drop(program);
+xr_xir_compile_program_drop(program);
 init_retained(held);
 CHECK(!runtime_live&&!runtime_bytes);
 puts("source-free VM initialization failure41 reverse-release retained string PASS");
-return 0;
+unit_compile_owner_report(&owner,"unit_slot_failure packet");unit_compile_owner_free(&owner);return 0;
 }

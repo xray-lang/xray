@@ -31,13 +31,14 @@ static void unit_wire_attack(const uint8_t *original,size_t size,uint8_t *copy,s
  for(unsigned i=0;i<width;++i)copy[at+i]=(uint8_t)(value>>(8*i));unit_wire_digest(copy,size);
  size_t live=runtime_live,bytes=runtime_bytes,points=0;
  for(size_t pass=0;pass<=points;++pass){
-  runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;XrXirArtifact *artifact=NULL;
-  XrXirStatus status=xr_xir_checked_read(copy,size,NULL,&artifact,NULL);
-  CHECK(!artifact&&status==(pass?XR_XIR_OUT_OF_MEMORY:expected));
-  CHECK(runtime_live==live&&runtime_bytes==bytes);
-  if(!pass&&faults)points=runtime_attempts;
+  UnitCompileOwner owner;unit_compile_owner_new(&owner);
+  effects_compile_attempts=0;effects_compile_injected=false;effects_compile_fail_at=pass?pass-1:SIZE_MAX;XrXirArtifact *artifact=NULL;
+  XrXirStatus status=xr_xir_compile_checked_read(&owner.context,copy,size,&artifact,NULL);
+  if(artifact||status!=(pass?XR_XIR_OUT_OF_MEMORY:expected)){XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(owner.context.resources,&stats)==XR_COMPILE_RESOURCE_OK);fprintf(stderr,"wire attack at=%zu width=%u value=%llu pass=%zu status=%u expected=%u work=%llu allocated=%llu\n",at,width,(unsigned long long)value,pass,status,pass?XR_XIR_OUT_OF_MEMORY:expected,(unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes);}CHECK(!artifact&&status==(pass?XR_XIR_OUT_OF_MEMORY:expected));
+  if(pass)CHECK(effects_compile_injected);
+  if(!pass&&faults)points=effects_compile_attempts;effects_compile_fail_at=SIZE_MAX;
+  unit_compile_owner_free(&owner);CHECK(runtime_live==live&&runtime_bytes==bytes);
  }
- runtime_fail_at=SIZE_MAX;
  if(faults)printf("Unit slot malformed packet %zu OOM points, no partial artifact and physical baseline restored\n",points);
 }
 static void unit_slot_wire_cases(const uint8_t *bytes,size_t size){
@@ -57,7 +58,7 @@ static void unit_slot_wire_cases(const uint8_t *bytes,size_t size){
  (void)unit_wire_read(&c,4);(void)unit_wire_read(&c,4);(void)unit_wire_read(&c,4);
  CHECK(modules<=size/12&&slots<=size/12);
  for(uint32_t m=0;m<modules;++m){unit_wire_vector(&c,1);unit_wire_vector(&c,4);(void)unit_wire_read(&c,4);}
- for(uint32_t f=0;f<functions;++f){owners[f]=(uint32_t)unit_wire_read(&c,4);unit_wire_skip(&c,6,4);}
+ for(uint32_t f=0;f<functions;++f){owners[f]=(uint32_t)unit_wire_read(&c,4);unit_wire_skip(&c,8,4);}
  size_t slot_at=c.at;unit_wire_skip(&c,slots,12);
  uint8_t *copy=malloc(size);CHECK(copy);unsigned attacks=0,unit_writes=0,unit_reads=0;
  for(size_t o=0;o<used;++o){UnitWireCursor in={bytes,size,ops[o].at};uint32_t op=(uint32_t)unit_wire_read(&in,4);
@@ -84,9 +85,9 @@ static void unit_slot_wire_cases(const uint8_t *bytes,size_t size){
  unit_wire_attack(bytes,size,copy,12,4,48,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,8,4,18,XR_XIR_BAD_STRUCTURE,false);
  unit_wire_attack(bytes,size,copy,20,4,1,XR_XIR_BAD_STRUCTURE,false);
- XrXirArtifact *artifact=NULL;size_t live=runtime_live,physical=runtime_bytes;
- CHECK(xr_xir_checked_read(bytes,size-1,NULL,&artifact,NULL)==XR_XIR_BAD_STRUCTURE&&!artifact);
- CHECK(runtime_live==live&&runtime_bytes==physical);
+ XrXirArtifact *artifact=NULL;size_t live=runtime_live,physical=runtime_bytes;UnitCompileOwner owner;unit_compile_owner_new(&owner);
+ CHECK(xr_xir_compile_checked_read(&owner.context,bytes,size-1,&artifact,NULL)==XR_XIR_BAD_STRUCTURE&&!artifact);
+ CHECK(runtime_live==live&&runtime_bytes==physical);unit_compile_owner_free(&owner);
  free(copy);free(ops);free(owners);printf("Unit slot %u independently located field attacks and old revision/reserved/truncation PASS\n",attacks);
 }
 #endif

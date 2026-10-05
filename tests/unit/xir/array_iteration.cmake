@@ -1,7 +1,7 @@
 # One source Checked packet and generated C feed VM/native/mixed Array iteration tests.
 set(XIR_ITERATION_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_iteration.xrc)
 set(XIR_ITERATION_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_iteration.c)
-add_xray_bootstrap_executable(test_xir_iteration_source xir/test_xir_iteration_source.c)
+add_executable(test_xir_iteration_source xir/test_xir_iteration_source.c)
 target_link_libraries(test_xir_iteration_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_iteration_source PRIVATE
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_iteration"
