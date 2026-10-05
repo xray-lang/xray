@@ -19,28 +19,44 @@ import gen_api_inventory as inventory  # noqa: E402
 class ConstraintPredicateInventoryTest(unittest.TestCase):
     def test_equal_has_real_declaration_span_and_identity(self) -> None:
         rows = inventory.collect_constraint_predicates(ROOT)
-        self.assertEqual(1, len(rows))
-        row = rows[0]
-        self.assertEqual("Equal", row["name"])
-        self.assertEqual("Equal", row["qualified"])
-        self.assertEqual("Equal", row["signature"])
-        self.assertEqual("constraint-predicate", row["category"])
-        self.assertEqual("predicate", row["kind"])
-        self.assertEqual(0, row["arity"])
-        self.assertEqual("VALUE_EQUAL", row["predicate_identity"])
-        lines = (ROOT / row["source"]).read_text(encoding="utf-8").splitlines()
-        self.assertEqual('XR_BUILTIN_PREDICATE("Equal", 0, VALUE_EQUAL)',
-                         lines[row["line"] - 1])
-        self.assertFalse(any(entry["name"] == "Equal"
-                             for entry in inventory.collect_interfaces(ROOT)))
+        expected = (
+            ("Equal", "VALUE_EQUAL"),
+            ("AtomicValue", "ATOMIC_VALUE"),
+            ("AtomicNumber", "ATOMIC_NUMBER"),
+            ("AtomicBoolean", "ATOMIC_BOOLEAN"),
+        )
+        self.assertEqual([name for name, _ in expected], [row["name"] for row in rows])
+        self.assertEqual(4, len(rows))
+        interfaces = inventory.collect_interfaces(ROOT)
+        lines = (ROOT / "stdlib/prelude/builtin_symbols.def").read_text(
+            encoding="utf-8").splitlines()
+        for row, (name, identity) in zip(rows, expected):
+            with self.subTest(name=name):
+                self.assertEqual(name, row["name"])
+                self.assertEqual(name, row["qualified"])
+                self.assertEqual(name, row["signature"])
+                self.assertEqual("constraint-predicate", row["category"])
+                self.assertEqual("predicate", row["kind"])
+                self.assertEqual(0, row["arity"])
+                self.assertEqual(identity, row["predicate_identity"])
+                self.assertEqual("stdlib/prelude/builtin_symbols.def", row["source"])
+                self.assertGreater(row["line"], 0)
+                self.assertLessEqual(row["line"], len(lines))
+                self.assertEqual(f'XR_BUILTIN_PREDICATE("{name}", 0, {identity})',
+                                 lines[row["line"] - 1])
+                self.assertFalse(any(entry["name"] == name for entry in interfaces))
 
     def test_complete_inventory_includes_the_predicate(self) -> None:
         with patch("subprocess.run", side_effect=AssertionError("inventory must read source")):
             data = inventory.build_inventory(ROOT)
         rows = [entry for entry in data["items"]
                 if entry["category"] == "constraint-predicate"]
-        self.assertEqual(inventory.collect_constraint_predicates(ROOT), rows)
-        self.assertEqual(1, len(rows))
+        expected_order = ["AtomicBoolean", "AtomicNumber", "AtomicValue", "Equal"]
+        self.assertEqual(expected_order, [row["name"] for row in rows])
+        collected = {row["name"]: row for row in inventory.collect_constraint_predicates(ROOT)}
+        self.assertEqual(set(expected_order), set(collected))
+        self.assertEqual([collected[name] for name in expected_order], rows)
+        self.assertEqual(4, len(rows))
 
     def test_private_provider_inventory_keeps_source_denominator(self) -> None:
         data = inventory.build_inventory(ROOT)

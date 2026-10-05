@@ -29,7 +29,7 @@ def main(argv: list[str]) -> int:
         suffix = ".exe" if os.name == "nt" else ""
         binary = work.path(f"stdio{suffix}")
         build = proc.run(
-            [xray, "build", "-O", "2", "-o", binary, SCRIPT_DIR / "bytecode_build_stdio.xr"],
+            [xray, "build", "-o", binary, SCRIPT_DIR / "bytecode_build_stdio.xr"],
             cwd=PROJECT_DIR,
             timeout=timeout,
         )
