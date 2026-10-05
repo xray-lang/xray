@@ -8,29 +8,44 @@
  */
 #ifndef XIR_SOURCE_CONDITIONAL_CASES_H
 #define XIR_SOURCE_CONDITIONAL_CASES_H
-#include "frontend/analyzer/xanalyzer.h"
-#include "frontend/parser/xparse.h"
-static void source_conditional_legacy_rejection(void) {
+static void source_conditional_definitions(const XrXirSourceRequest *request,const char *path) {
+    AdmissionCase case_owner={0};
     const char *sources[] = {
         "struct C<T>{value:T;checked()->T where T:Sendable{return this.value}}\n",
-        "fn outer(callback:fn()->i64=fn()->i64{struct C<T>{checked()->i64 where T:Sendable{return 7}};return 7}){}\n"
+        "fn outer(callback:fn()->i64=fn()->i64{struct C<T>{checked()->i64 where T:Sendable{return 7}};return 7}){}\n",
+        "struct C<T>{value:T;checked()->T where T:Sendable{return this.value}}\nfn outer(callback:fn()->i64=fn()->i64{return 7}){}\n"
     };
-    for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
-        XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
-        AstNode *ast = xr_parse(session, sources[i]); CHECK(ast);
-        XaAnalyzer *analyzer = xa_analyzer_new(session); CHECK(analyzer);
-        xa_analyzer_analyze(analyzer, "conditional.xr", ast);
-        int count = 0;
-        XaDiagnostic *diagnostic = xa_analyzer_get_diagnostics(analyzer, &count);
-        CHECK(count == 1 && diagnostic && diagnostic->severity == XR_DIAG_SEV_ERROR);
-        CHECK(strstr(diagnostic->message, "conditional method requirements are not supported"));
-        xa_analyzer_free(analyzer);
-        xr_program_destroy(ast);
-        xr_compiler_session_delete(session);
+    for (size_t i=0;i<sizeof(sources)/sizeof(sources[0]);++i) {
+        write_source(path,sources[i]);
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        admission_case_begin(request,&case_owner);
+        XrXirStatus status=xr_xir_compile_source_check(&case_owner.request,&result,&diagnostic,NULL);
+        if(i==1){
+            CHECK(status==XR_XIR_BAD_STRUCTURE && !result.checked && !result.snapshot);
+            CHECK(diagnostic.status==status && strstr(diagnostic.message,"nested declarations are not admitted"));
+            xr_xir_compile_source_result_free(&result);
+            continue;
+        }
+        if(status!=XR_XIR_OK)fprintf(stderr,"conditional definition %zu: %u %s\n",i,status,diagnostic.message);
+        CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
+        const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);CHECK(view && view->complete);
+        bool found=false;
+        for(uint32_t d=0;d<view->declaration_count;++d){
+            const XrXirSourceDeclaration *decl=&view->declarations[d];
+            if(!strcmp(decl->name,"checked")){
+                CHECK(decl->generic_parameter_count==1 && decl->generic_parent_count==1);
+                CHECK(decl->generic_constraints && decl->generic_constraints[0].markers==XR_XIR_CONSTRAINT_SENDABLE);found=true;
+            }
+        }
+        CHECK(found);
+        XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK && closed);
+        xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&result);
     }
+    admission_case_end(&case_owner);
 }
 static void source_conditional_cases(XrXirSourceRequest *request, const char *path) {
-    source_conditional_legacy_rejection();
+    AdmissionCase case_owner={0};
+    source_conditional_definitions(request,path);
     const char *prefix = "fn bound<T:Sendable>(x:T)->T{return x}\n"
         "struct Box<T>{value:T;checked()->T where T:Sendable{return bound<T>(this.value)}}\n";
     const struct { const char *source; bool valid; bool box; } cases[] = {
@@ -63,16 +78,17 @@ static void source_conditional_cases(XrXirSourceRequest *request, const char *pa
         CHECK(snprintf(source, sizeof(source), "%s%s", cases[i].box ? prefix : "", cases[i].source) > 0);
         write_source(path, source);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        admission_case_begin(request,&case_owner);
+        XrXirStatus status = xr_xir_compile_source_check(&case_owner.request, &result, &diagnostic,NULL);
         if ((status == XR_XIR_OK) != cases[i].valid)
             fprintf(stderr, "conditional case %zu: %u at %d: %s\n", i, status, diagnostic.line, diagnostic.message);
         CHECK((status == XR_XIR_OK) == cases[i].valid);
         CHECK((result.checked != NULL) == cases[i].valid);
         if (result.checked) {
             XrXirArtifact *closed = NULL;
-            CHECK(xr_xir_specialize(result.checked, NULL, &closed, NULL) == XR_XIR_OK);
-            xr_xir_artifact_free(closed); xr_xir_artifact_free(result.checked); result.checked = NULL;
-            const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+            CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL) == XR_XIR_OK);
+            xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(result.checked); result.checked = NULL;
+            const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
             if (cases[i].box) {
                 bool found = false;
                 for (uint32_t d = 0; d < view->declaration_count; ++d) {
@@ -92,7 +108,9 @@ static void source_conditional_cases(XrXirSourceRequest *request, const char *pa
                 CHECK(found);
             }
         }
-        xr_xir_source_result_free(&result);
+        CHECK(status==XR_XIR_OK || (!result.checked && !result.snapshot));
+        xr_xir_compile_source_result_free(&result);
     }
+    admission_case_end(&case_owner);
 }
 #endif // XIR_SOURCE_CONDITIONAL_CASES_H

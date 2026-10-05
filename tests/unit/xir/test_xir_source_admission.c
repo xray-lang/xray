@@ -24,34 +24,59 @@ static void write_source(const char *path, const char *source) {
     size_t length = strlen(source);
     CHECK(fwrite(source, 1, length, file) == length && fclose(file) == 0);
 }
+#include "xir_library_compile_owner.h"
+typedef struct AdmissionCase {
+    LibraryCompileOwner owner;
+    XrCompilerSession *session;
+    XrXirSourceRequest request;
+} AdmissionCase;
+static void admission_case_end(AdmissionCase *scope) {
+    if(scope->session)xr_compile_session_free(scope->session);
+    scope->session=NULL;
+    if(scope->owner.context.resources)library_compile_owner_drop(&scope->owner);
+    scope->request=(XrXirSourceRequest){0};
+}
+static void admission_case_begin(const XrXirSourceRequest *request,AdmissionCase *scope) {
+    XrXirSourceRequest next=*request;
+    admission_case_end(scope);
+    CHECK(library_compile_owner_new(&scope->owner,&library_compile_limits)==XR_XIR_OK);
+    if(next.context)scope->owner.context.limits=next.context->limits;
+    CHECK(xr_compile_session_new(scope->owner.context.resources,&scope->session)==XR_COMPILER_SESSION_OK);
+    scope->request=next;scope->request.context=&scope->owner.context;scope->request.session=scope->session;
+}
+static void admission_case_continue(const XrXirSourceRequest *request,AdmissionCase *scope) {
+    CHECK(scope->session && scope->owner.context.resources);
+    scope->request=*request;scope->request.context=&scope->owner.context;scope->request.session=scope->session;
+}
 #include "xir_source_catch_cases.h"
 #include "xir_source_panic_cases.h"
 #include "xir_source_cleanup_admission.h"
 #include "xir_source_conditional_cases.h"
-static void stdlib_resolution(void) {
-    XrModuleResolverConfig config = {XR_SOURCE_STDLIB, NULL, NULL, 0};
-    XrModuleResolver *resolver = xr_module_resolver_new(&config); CHECK(resolver);
+static void stdlib_resolution(const XrXirCompileContext *context) {
+    XrModuleResolverConfig config = {.stdlib_path=XR_SOURCE_STDLIB};
+    XrModuleResolver *resolver = NULL; CHECK(xr_compile_module_resolver_new(context->resources,&config,&resolver)==XR_MODULE_OK && resolver);
     XrModuleId first = {0}, second = {0}; char *error = NULL;
-    CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &first, &error) == 0 && !error);
+    CHECK(xr_compile_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &first, &error) == 0 && !error);
     CHECK(first.kind == XR_MOD_STDLIB && first.authority.kind == XR_MODULE_IDENTITY_STDLIB);
     CHECK(!strcmp(first.authority.namespace_id, "io") && !strcmp(first.logical_path, "io/output.xr"));
     CHECK(xr_module_identity_valid(first.canonical, NULL));
-    CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &second, &error) == 0 && !error);
+    CHECK(xr_compile_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &second, &error) == 0 && !error);
     CHECK(!strcmp(first.canonical, second.canonical) && first.canonical != second.canonical);
-    xr_module_id_cleanup(&first); xr_module_id_cleanup(&second);
+    xr_compile_module_id_cleanup(&first); xr_compile_module_id_cleanup(&second);
     const char *invalid[] = {"std/io", "std/io/io", "std/io/../io/output", "std/io//output", "std/io/output.xr",
         "std/io/output/", "std/io/output/index", "std/io/output:bad", "std/io/0output", "std/unknown/output"};
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
-        CHECK(xr_module_resolver_resolve(resolver, invalid[i], NULL, NULL, &first, &error) != 0);
+        CHECK(xr_compile_module_resolver_resolve(resolver, invalid[i], NULL, NULL, &first, &error) != 0);
         CHECK(!first.canonical && !first.source_path && !first.authority.physical_root);
-        xr_free(error); error = NULL;
+        xr_compile_resources_free(error); error = NULL;
     }
-    xr_module_resolver_free(resolver);
-    config.stdlib_path = NULL; resolver = xr_module_resolver_new(&config); CHECK(resolver);
-    CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &first, &error) != 0);
-    CHECK(error && !first.canonical); xr_free(error); xr_module_resolver_free(resolver);
+    xr_compile_module_resolver_free(resolver);
+    config.stdlib_path = NULL; resolver = NULL; CHECK(xr_compile_module_resolver_new(context->resources,&config,&resolver)==XR_MODULE_OK && resolver);
+    CHECK(xr_compile_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &first, &error) != 0);
+    CHECK(error && !first.canonical); xr_compile_resources_free(error); xr_compile_module_resolver_free(resolver);
 }
-static void primitive_authority(XrCompilerSession *session, const char *directory) {
+static void primitive_authority(XrCompilerSession *session, const XrXirCompileContext *context, const char *directory) {
+    AdmissionCase case_owner={0};
     char io[XR_TEST_PATH_MAX], output[XR_TEST_PATH_MAX], other[XR_TEST_PATH_MAX];
     CHECK(snprintf(io, sizeof(io), "%s/io", directory) > 0 && xr_test_mkdir(io) == 0);
     CHECK(snprintf(output, sizeof(output), "%s/output.xr", io) > 0);
@@ -59,66 +84,86 @@ static void primitive_authority(XrCompilerSession *session, const char *director
     const char *body = "export fn emit(value: string) -> bool { return __writeStderr(value) }\n";
     write_source(output, body); write_source(other, body);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, directory};
-    XrXirSourceRequest request = {session, output, &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, output, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_1 = {0};
-    XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, NULL);
+        admission_case_begin(&request,&case_owner);
+        admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_1 = xr_xir_compile_source_check(&case_owner.request, &query_result_1, NULL,NULL);
     artifact = query_result_1.checked; query_result_1.checked = NULL;
-    xr_xir_source_result_free(&query_result_1);
+    CHECK(query_status_1 == XR_XIR_OK || (!query_result_1.checked && !query_result_1.snapshot));
+    xr_xir_compile_source_result_free(&query_result_1);
     CHECK(query_status_1 != XR_XIR_OK && !artifact);
     authority.kind = XR_MODULE_IDENTITY_STDLIB; authority.namespace_id = "math";
     XrXirSourceResult query_result_2 = {0};
-    XrXirStatus query_status_2 = xr_xir_source_check(&request, &query_result_2, NULL);
+        admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_2 = xr_xir_compile_source_check(&case_owner.request, &query_result_2, NULL,NULL);
     artifact = query_result_2.checked; query_result_2.checked = NULL;
-    xr_xir_source_result_free(&query_result_2);
+    CHECK(query_status_2 == XR_XIR_OK || (!query_result_2.checked && !query_result_2.snapshot));
+    xr_xir_compile_source_result_free(&query_result_2);
     CHECK(query_status_2 != XR_XIR_OK && !artifact);
     authority.namespace_id = "io"; request.entry_path = other;
     XrXirSourceResult query_result_3 = {0};
-    XrXirStatus query_status_3 = xr_xir_source_check(&request, &query_result_3, NULL);
+        admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_3 = xr_xir_compile_source_check(&case_owner.request, &query_result_3, NULL,NULL);
     artifact = query_result_3.checked; query_result_3.checked = NULL;
-    xr_xir_source_result_free(&query_result_3);
+    CHECK(query_status_3 == XR_XIR_OK || (!query_result_3.checked && !query_result_3.snapshot));
+    xr_xir_compile_source_result_free(&query_result_3);
     CHECK(query_status_3 != XR_XIR_OK && !artifact);
     request.entry_path = output;
     XrXirSourceResult query_result_4 = {0};
-    XrXirStatus query_status_4 = xr_xir_source_check(&request, &query_result_4, NULL);
+        admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_4 = xr_xir_compile_source_check(&case_owner.request, &query_result_4, NULL,NULL);
     artifact = query_result_4.checked; query_result_4.checked = NULL;
-    xr_xir_source_result_free(&query_result_4);
+    CHECK(query_status_4 == XR_XIR_OK || (!query_result_4.checked && !query_result_4.snapshot));
+    xr_xir_compile_source_result_free(&query_result_4);
     CHECK(query_status_4 == XR_XIR_OK && artifact);
-    xr_xir_artifact_free(artifact); artifact = NULL;
+    xr_xir_compile_artifact_free(artifact); artifact = NULL;
     write_source(output, "export fn emit() -> bool { return __writeStderr(1) }\n");
     XrXirSourceResult query_result_5 = {0};
-    XrXirStatus query_status_5 = xr_xir_source_check(&request, &query_result_5, NULL);
+        admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_5 = xr_xir_compile_source_check(&case_owner.request, &query_result_5, NULL,NULL);
     artifact = query_result_5.checked; query_result_5.checked = NULL;
-    xr_xir_source_result_free(&query_result_5);
+    CHECK(query_status_5 == XR_XIR_OK || (!query_result_5.checked && !query_result_5.snapshot));
+    xr_xir_compile_source_result_free(&query_result_5);
     CHECK(query_status_5 != XR_XIR_OK && !artifact);
     write_source(output, "export fn emit() -> bool { return __writeStderr() }\n");
     XrXirSourceResult query_result_6 = {0};
-    XrXirStatus query_status_6 = xr_xir_source_check(&request, &query_result_6, NULL);
+        admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_6 = xr_xir_compile_source_check(&case_owner.request, &query_result_6, NULL,NULL);
     artifact = query_result_6.checked; query_result_6.checked = NULL;
-    xr_xir_source_result_free(&query_result_6);
+    CHECK(query_status_6 == XR_XIR_OK || (!query_result_6.checked && !query_result_6.snapshot));
+    xr_xir_compile_source_result_free(&query_result_6);
     CHECK(query_status_6 != XR_XIR_OK && !artifact);
     write_source(output, "fn __writeStderr(value: i64) -> i64 { return value }\nprint(__writeStderr(7))\n");
     XrXirSourceResult query_result_7 = {0};
-    XrXirStatus query_status_7 = xr_xir_source_check(&request, &query_result_7, NULL);
+        admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_7 = xr_xir_compile_source_check(&case_owner.request, &query_result_7, NULL,NULL);
     artifact = query_result_7.checked; query_result_7.checked = NULL;
-    xr_xir_source_result_free(&query_result_7);
+    CHECK(query_status_7 == XR_XIR_OK || (!query_result_7.checked && !query_result_7.snapshot));
+    xr_xir_compile_source_result_free(&query_result_7);
     CHECK(query_status_7 == XR_XIR_OK && artifact);
-    xr_xir_artifact_free(artifact);
+    xr_xir_compile_artifact_free(artifact);
     CHECK(xr_test_unlink(output) == 0 && xr_test_unlink(other) == 0 && xr_test_rmdir(io) == 0);
+    admission_case_end(&case_owner);
 }
 static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
+    AdmissionCase case_owner={0};
     write_source(root, "import \"./lib\" as Coro\nprint(Coro.visible())\n");
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_8 = {0};
-    XrXirStatus query_status_8 = xr_xir_source_check(request, &query_result_8, NULL);
+        admission_case_begin(request,&case_owner);
+    XrXirStatus query_status_8 = xr_xir_compile_source_check(&case_owner.request, &query_result_8, NULL,NULL);
     artifact = query_result_8.checked; query_result_8.checked = NULL;
-    xr_xir_source_result_free(&query_result_8);
+    CHECK(query_status_8 == XR_XIR_OK || (!query_result_8.checked && !query_result_8.snapshot));
+    xr_xir_compile_source_result_free(&query_result_8);
     CHECK(query_status_8 == XR_XIR_OK && artifact);
-    const XrXirModule *module = xr_xir_artifact_module(artifact);
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     for (uint32_t f = 0; f < module->function_count; ++f)
         for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i)
             CHECK(module->functions[f].instructions[i].op != XR_XIR_SUSPEND);
-    xr_xir_artifact_free(artifact);
+    xr_xir_compile_artifact_free(artifact);
+    admission_case_end(&case_owner);
 }
 static const char *const rejected[] = {
     "var a=[1]\na[0]+=2\n",
@@ -474,6 +519,7 @@ static const char *const rejected[] = {
 #include "xir_source_integer_context.h"
 #include "xir_source_decimal_context.h"
 static void static_import_authority(const XrXirSourceRequest *request, const char *root, const char *library) {
+    AdmissionCase case_owner={0};
     write_source(library,
         "export struct Factory<T> { const value:T\n private constructor(value){this.value=value}\n"
         " static make(value:T)->Factory<T>{return Factory<T>(value)}\n"
@@ -496,14 +542,18 @@ static void static_import_authority(const XrXirSourceRequest *request, const cha
         for (size_t i = 0; i < count; ++i) {
             write_source(root, sources[i]);
             XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-            XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        admission_case_begin(request,&case_owner);
+        admission_case_continue(request,&case_owner);
+            XrXirStatus status = xr_xir_compile_source_check(&case_owner.request, &result, &diagnostic,NULL);
             if (!group && status != XR_XIR_OK) fprintf(stderr, "static import %zu: %s\n", i, diagnostic.message);
             CHECK(group ? status != XR_XIR_OK && !result.checked : status == XR_XIR_OK && result.checked);
-            xr_xir_source_result_free(&result);
+            xr_xir_compile_source_result_free(&result);
         }
     }
+    admission_case_end(&case_owner);
 }
 static void constructor_admission(const XrXirSourceRequest *request, const char *root) {
+    AdmissionCase case_owner={0};
     const char *const sources[] = {
         "struct C<T>{static f<U>(value:U)->U{return value}}\nC<i64>.f(1)\n",
         "fn require<T:Sendable>(value:T)->T{return value}\nstruct C<T:Sendable>{static f<U:Sendable>(outer:T,value:U)->U{return require<U>(value)}}\nprint(C<i64>.f<string>(7,\"yes\"))\n",
@@ -535,13 +585,16 @@ static void constructor_admission(const XrXirSourceRequest *request, const char 
     for (unsigned i = 0; i < sizeof(sources)/sizeof(sources[0]); ++i) {
         write_source(root, sources[i]);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        admission_case_begin(request,&case_owner);
+        XrXirStatus status = xr_xir_compile_source_check(&case_owner.request, &result, &diagnostic,NULL);
         if (status != XR_XIR_OK) fprintf(stderr, "constructor case %u: %s\n", i, diagnostic.message);
         CHECK(status == XR_XIR_OK && result.checked);
-        xr_xir_source_result_free(&result);
+        xr_xir_compile_source_result_free(&result);
     }
+    admission_case_end(&case_owner);
 }
 static void enum_admission(const XrXirSourceRequest *request, const char *root) {
+    AdmissionCase case_owner={0};
     const char *sources[] = {
         "enum E{Bad}\nfn erase<T:Error>(value:T)->Error{return value}\nfn raise(value:Error){throw value}\nraise(erase<E>(E.Bad))\n",
         "enum E{Bad}\nstruct Box{value:Error}\nfn raise(value:Box){throw value.value}\nraise(Box{value:E.Bad})\n",
@@ -597,55 +650,50 @@ static void enum_admission(const XrXirSourceRequest *request, const char *root) 
     for (unsigned i=0;i<sizeof(sources)/sizeof(sources[0]);++i) {
         write_source(root,sources[i]);
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+        admission_case_begin(request,&case_owner);
+        XrXirStatus status=xr_xir_compile_source_check(&case_owner.request,&result,&diagnostic,NULL);
         if(status!=XR_XIR_OK) fprintf(stderr,"enum case %u: %s\n",i,diagnostic.message);
         CHECK(status==XR_XIR_OK && result.checked);
         XrXirArtifact *closed=NULL,*lowered=NULL;
-        CHECK(xr_xir_specialize(result.checked,NULL,&closed,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);
         XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-        CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-        xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed);
-        xr_xir_source_result_free(&result);
+        CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+        xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(closed);
+        xr_xir_compile_source_result_free(&result);
     }
+    admission_case_end(&case_owner);
 }
-static void nested_pattern_budgets(const XrXirSourceRequest *request, const char *root) {
+typedef struct AdmissionFixture { const char *path; const XrModuleIdentityAuthority *authority; } AdmissionFixture;
+static XrXirStatus admission_operation(const XrXirCompileContext *context,void *opaque) {
+    AdmissionFixture *fixture=(AdmissionFixture *)opaque;
+    XrCompilerSession *session=NULL;
+    XrCompilerSessionStatus creation=xr_compile_session_new(context->resources,&session);
+    if(creation!=XR_COMPILER_SESSION_OK)return creation==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirSourceRequest request={session,fixture->path,fixture->authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceResult result={0};
+    XrXirStatus status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
+    CHECK(status==XR_XIR_OK?(result.checked && result.snapshot):(!result.checked && !result.snapshot));
+    xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);return status;
+}
+static void nested_pattern_budgets(const XrXirSourceRequest *request,const char *root) {
     write_source(root,"enum I{A,B{value:string}}\nenum O{Wrap{inner:I,flag:bool}}\n"
         "fn f(v:O)->string{return match(v){O.Wrap{inner:I.A}->\"empty\","
         "O.Wrap{inner:I.B{value},flag:true}->value,O.Wrap{inner:I.B{value},flag:false}->\"false\"}}\n");
-    for (unsigned kind=0;kind<2;++kind) {
-        XrXirBudget budget=xr_xir_default_budget();
-        uint64_t low=0,high=kind?budget.work:budget.metadata_bytes;
-        XrXirSourceRequest bounded=*request; bounded.budget=&budget;
-        while (low+1<high) {
-            uint64_t middle=low+(high-low)/2;
-            if (kind) budget.work=middle; else budget.metadata_bytes=middle;
-            XrXirSourceResult result={0};
-            XrXirStatus status=xr_xir_source_check(&bounded,&result,NULL);
-            CHECK(status==XR_XIR_OK || status==XR_XIR_BUDGET);
-            if (status==XR_XIR_OK) {CHECK(result.checked && result.snapshot);high=middle;}
-            else {CHECK(!result.checked && !result.snapshot);low=middle;}
-            xr_xir_source_result_free(&result);
-        }
-        for (unsigned exact=0;exact<2;++exact) {
-            if (kind) budget.work=exact?high:high-1; else budget.metadata_bytes=exact?high:high-1;
-            XrXirSourceResult result={0};
-            XrXirStatus status=xr_xir_source_check(&bounded,&result,NULL);
-            CHECK(status==(exact?XR_XIR_OK:XR_XIR_BUDGET));
-            CHECK(exact?(result.checked && result.snapshot):(!result.checked && !result.snapshot));
-            xr_xir_source_result_free(&result);
-        }
-    }
+    AdmissionFixture fixture={root,request->authority};
+    library_compile_operation_cases("nested pattern Source admission",admission_operation,&fixture);
 }
 static void unit_slot_admission(const XrXirSourceRequest *request, const char *root) {
+    AdmissionCase case_owner={0};
     const char *sources[] = {"const x = Coro.yield()\n",
         "const x:() = Coro.yield()\n", "var x:()\n"};
     for (uint32_t run=0;run<3;++run) {
         write_source(root,sources[run]);
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-        CHECK(xr_xir_source_check(request,&result,&diagnostic)==XR_XIR_OK);
+        admission_case_begin(request,&case_owner);
+        CHECK(xr_xir_compile_source_check(&case_owner.request,&result,&diagnostic,NULL)==XR_XIR_OK);
         CHECK(result.checked && result.snapshot && diagnostic.status==XR_XIR_OK);
-        CHECK(xr_xir_artifact_verify(result.checked,NULL,NULL)==XR_XIR_OK);
-        const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+        CHECK(xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
+        const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
         CHECK(view && view->complete);
         uint32_t bindings=0;
         for (uint32_t d=0;d<view->declaration_count;++d) {
@@ -656,7 +704,7 @@ static void unit_slot_admission(const XrXirSourceRequest *request, const char *r
             ++bindings;
         }
         CHECK(bindings==1);
-        const XrXirModule *module=xr_xir_artifact_module(result.checked);
+        const XrXirModule *module=xr_xir_compile_artifact_module(result.checked);
         const XrXirDeclarations *declarations=module->declarations;
         CHECK(declarations && declarations->slot_count==1 &&
             declarations->slots[0].type==XR_XIR_UNIT && declarations->slots[0].mutable==(run==2 ? 1u : 0u));
@@ -672,11 +720,70 @@ static void unit_slot_admission(const XrXirSourceRequest *request, const char *r
             }
         }
         CHECK(publishes==1 && suspends==(run<2 ? 1u : 0u));
-        xr_xir_source_result_free(&result);
+        xr_xir_compile_source_result_free(&result);
     }
+    admission_case_end(&case_owner);
+}
+static void rejected_source_cases(const XrXirSourceRequest *request,const char *root) {
+    AdmissionCase case_owner={0};
+    size_t admission_failures=0;
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
+        write_source(root, rejected[i]);
+        XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;
+        XrXirSourceResult query_result_9 = {0};
+        admission_case_begin(request,&case_owner);
+        XrXirStatus query_status_9 = xr_xir_compile_source_check(&case_owner.request, &query_result_9, &diagnostic,NULL);
+        artifact = query_result_9.checked; query_result_9.checked = NULL;
+        CHECK(query_status_9 == XR_XIR_OK || (!query_result_9.checked && !query_result_9.snapshot));
+        xr_xir_compile_source_result_free(&query_result_9);
+        XrXirStatus status = query_status_9;
+        bool newly_admitted=i==146 || i==289 || i==318 || i==331;
+        if(!newly_admitted){
+            if(status==XR_XIR_OK)fprintf(stderr,"incorrectly admitted source case %zu\n",i);
+            if(!(status!=XR_XIR_OK && !artifact && diagnostic.status==status && diagnostic.message[0]))++admission_failures;
+        }else{
+            CHECK(status==XR_XIR_OK && artifact);
+            XrXirArtifact *closed=NULL,*lowered=NULL;
+            CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_OK);
+            XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+            CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+            if(i==289 || i==318){
+                const XrXirModule *module=xr_xir_compile_artifact_module(lowered);bool found=false;
+                for(uint32_t f=0;f<module->function_count;++f){
+                    const XrXirFunction *function=&module->functions[f];
+                    if(function->name_length==6 && !memcmp(function->name,"unused",6)){
+                        found=true;
+                        for(uint32_t op=0;op<function->instruction_count;++op)CHECK(function->instructions[op].op!=XR_XIR_PRINT);
+                    }
+                }
+                CHECK(found);
+            }
+            xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
+        }
+        xr_xir_compile_artifact_free(artifact);
+        /* Reuse the same session after every original input; failed declarations
+         * and cached syntax must not contaminate a different successful source. */
+        write_source(root,"fn f()->i64{return 7}\nprint(f())\n");
+        XrXirSourceResult retried={0};
+        CHECK(xr_xir_compile_source_check(&case_owner.request,&retried,NULL,NULL)==XR_XIR_OK);
+        CHECK(retried.checked && retried.snapshot);
+        const XrXirModule *clean=xr_xir_compile_artifact_module(retried.checked);uint32_t found=0;
+        for(uint32_t f=0;f<clean->function_count;++f){
+            const XrXirFunction *function=&clean->functions[f];
+            if(function->name_length==1 && function->name[0]=='f'){
+                CHECK(function->parameter_count==0 && function->result==XR_XIR_I64);++found;
+            }
+        }
+        CHECK(found==1);
+        xr_xir_compile_source_result_free(&retried);
+    }
+    CHECK(!admission_failures);
+    admission_case_end(&case_owner);
 }
 int main(void) {
-    stdlib_resolution();
+    AdmissionCase case_owner={0};
+    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    stdlib_resolution(&owner.context);
 
     char directory[XR_TEST_PATH_MAX] = "xir-source-admission-XXXXXX";
     CHECK(xr_test_mkdtemp(directory));
@@ -686,10 +793,10 @@ int main(void) {
     CHECK(snprintf(root, sizeof(root), "%s/root.xr", absolute) > 0);
     CHECK(snprintf(library, sizeof(library), "%s/lib.xr", absolute) > 0);
     write_source(library, "fn hidden() -> i64 { return 1 }\nexport fn visible() -> i64 { return 2 }\n");
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
-    primitive_authority(session, absolute);
+    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK && session);
+    primitive_authority(session,&owner.context,absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, root, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     unit_slot_admission(&request,root);
     source_integer_contexts(&request, root);
     source_decimal_contexts(&request, root);
@@ -697,71 +804,74 @@ int main(void) {
     nested_pattern_budgets(&request, root);
     write_source(root,"const x:i8 = (1 + 2) + 3\n");
     XrXirSourceResult recursive_literal = {0};
-    CHECK(xr_xir_source_check(&request,&recursive_literal,NULL) == XR_XIR_OK);
+        admission_case_begin(&request,&case_owner);
+    CHECK(xr_xir_compile_source_check(&case_owner.request,&recursive_literal,NULL,NULL) == XR_XIR_OK);
     CHECK(recursive_literal.checked != NULL);
-    const XrXirModule *literal_module = xr_xir_artifact_module(recursive_literal.checked);
+    const XrXirModule *literal_module = xr_xir_compile_artifact_module(recursive_literal.checked);
     CHECK(literal_module && literal_module->declarations->slot_count == 1);
     CHECK(literal_module->declarations->slots[0].type == XR_XIR_I8);
-    xr_xir_source_result_free(&recursive_literal);
-    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
-        write_source(root, rejected[i]);
-        XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;
-        XrXirSourceResult query_result_9 = {0};
-        XrXirStatus query_status_9 = xr_xir_source_check(&request, &query_result_9, &diagnostic);
-        artifact = query_result_9.checked; query_result_9.checked = NULL;
-        xr_xir_source_result_free(&query_result_9);
-        XrXirStatus status = query_status_9;
-        if (status == XR_XIR_OK) fprintf(stderr, "incorrectly admitted source case %zu\n", i);
-        CHECK(status != XR_XIR_OK && !artifact && diagnostic.status == status && diagnostic.message[0]);
-    }
+    xr_xir_compile_source_result_free(&recursive_literal);
+    rejected_source_cases(&request,root);
     write_source(root,"fn unused<T>(f:fn(T)->T) {}\n");
     XrXirArtifact *unused = NULL, *closed_unused = NULL;
     XrXirSourceResult query_result_10 = {0};
-    XrXirStatus query_status_10 = xr_xir_source_check(&request, &query_result_10, NULL);
+        admission_case_begin(&request,&case_owner);
+    XrXirStatus query_status_10 = xr_xir_compile_source_check(&case_owner.request, &query_result_10, NULL,NULL);
     unused = query_result_10.checked; query_result_10.checked = NULL;
-    xr_xir_source_result_free(&query_result_10);
+    CHECK(query_status_10 == XR_XIR_OK || (!query_result_10.checked && !query_result_10.snapshot));
+    xr_xir_compile_source_result_free(&query_result_10);
     CHECK(query_status_10 == XR_XIR_OK && unused);
-    CHECK(xr_xir_specialize(unused,NULL,&closed_unused,NULL) == XR_XIR_OK && closed_unused);
-    CHECK(!xr_xir_artifact_module(closed_unused)->types);
-    xr_xir_artifact_free(closed_unused); xr_xir_artifact_free(unused);
+    CHECK(xr_xir_compile_specialize(unused,&closed_unused,NULL) == XR_XIR_OK && closed_unused);
+    CHECK(!xr_xir_compile_artifact_module(closed_unused)->types);
+    xr_xir_compile_artifact_free(closed_unused); xr_xir_compile_artifact_free(unused);
     const char *valid = "import { visible } from \"./lib\"\nprint(visible(), true)\n";
     write_source(root, valid);
-    for (unsigned mode = 0; mode < 5; ++mode) {
-        XrXirBudget budget = xr_xir_default_budget();
-        if (mode == 0) budget.metadata_bytes = 1;
-        if (mode == 1) budget.work = 0;
-        if (mode == 2) budget.instructions = 1;
-        if (mode == 3) budget.functions = 1;
-        if (mode == 4) budget.blocks = 0;
-        request.budget = &budget;
-        XrXirArtifact *artifact = NULL;
-        XrXirSourceResult query_result_11 = {0};
-        XrXirStatus query_status_11 = xr_xir_source_check(&request, &query_result_11, NULL);
-        artifact = query_result_11.checked; query_result_11.checked = NULL;
-        xr_xir_source_result_free(&query_result_11);
-        CHECK(query_status_11 == XR_XIR_BUDGET && !artifact);
+    for (unsigned mode=0;mode<5;++mode) {
+        if(mode<2){
+            XrCompileResourceLimits limits=library_compile_limits;
+            if(!mode)limits.allocated_bytes=1;else limits.work=0;
+            LibraryCompileOwner bounded={0};XrXirStatus status=library_compile_owner_new(&bounded,&limits);
+            if(status==XR_XIR_OK){AdmissionFixture fixture={root,&authority};status=admission_operation(&bounded.context,&fixture);}
+            CHECK(status==XR_XIR_BUDGET);library_compile_owner_drop(&bounded);
+        }else{
+            XrXirCompileContext context=owner.context;
+            if(mode==2)context.limits.instructions=1;
+            if(mode==3)context.limits.functions=1;
+            if(mode==4)context.limits.blocks=0;
+            XrXirSourceRequest bounded=request;bounded.context=&context;XrXirSourceResult result={0};
+        admission_case_begin(&bounded,&case_owner);
+            CHECK(xr_xir_compile_source_check(&case_owner.request,&result,NULL,NULL)==XR_XIR_BUDGET);
+            CHECK(!result.checked && !result.snapshot);xr_xir_compile_source_result_free(&result);
+        }
     }
-    request.budget = NULL;
     write_source(library, "var forbidden = 1\nexport fn visible() -> i64 { return forbidden }\n");
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_12 = {0};
-    XrXirStatus query_status_12 = xr_xir_source_check(&request, &query_result_12, NULL);
+        admission_case_begin(&request,&case_owner);
+    XrXirStatus query_status_12 = xr_xir_compile_source_check(&case_owner.request, &query_result_12, NULL,NULL);
     artifact = query_result_12.checked; query_result_12.checked = NULL;
-    xr_xir_source_result_free(&query_result_12);
+    CHECK(query_status_12 == XR_XIR_OK || (!query_result_12.checked && !query_result_12.snapshot));
+    xr_xir_compile_source_result_free(&query_result_12);
     CHECK(query_status_12 != XR_XIR_OK && !artifact);
     write_source(library, "import \"./root\" as root\nexport fn visible() -> i64 { return 1 }\n");
     XrXirSourceResult query_result_13 = {0};
-    XrXirStatus query_status_13 = xr_xir_source_check(&request, &query_result_13, NULL);
+        admission_case_begin(&request,&case_owner);
+    admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_13 = xr_xir_compile_source_check(&case_owner.request, &query_result_13, NULL,NULL);
     artifact = query_result_13.checked; query_result_13.checked = NULL;
-    xr_xir_source_result_free(&query_result_13);
+    CHECK(query_status_13 == XR_XIR_OK || (!query_result_13.checked && !query_result_13.snapshot));
+    xr_xir_compile_source_result_free(&query_result_13);
     CHECK(query_status_13 != XR_XIR_OK && !artifact);
     write_source(library, "export fn visible() -> i64 { return 2 }\n");
     XrXirSourceResult query_result_14 = {0};
-    XrXirStatus query_status_14 = xr_xir_source_check(&request, &query_result_14, NULL);
+        admission_case_begin(&request,&case_owner);
+    admission_case_continue(&request,&case_owner);
+    XrXirStatus query_status_14 = xr_xir_compile_source_check(&case_owner.request, &query_result_14, NULL,NULL);
     artifact = query_result_14.checked; query_result_14.checked = NULL;
-    xr_xir_source_result_free(&query_result_14);
+    CHECK(query_status_14 == XR_XIR_OK || (!query_result_14.checked && !query_result_14.snapshot));
+    xr_xir_compile_source_result_free(&query_result_14);
     CHECK(query_status_14 == XR_XIR_OK && artifact);
-    xr_xir_artifact_free(artifact);
+    xr_xir_compile_artifact_free(artifact);
     static_import_authority(&request, root, library);
     write_source(library, "export fn visible() -> i64 { return 2 }\n");
     constructor_admission(&request, root);
@@ -770,7 +880,11 @@ int main(void) {
     source_panic_cases(&request, root);
     source_cleanup_admission(&request, root);
     source_conditional_cases(&request, root);
-    xr_compiler_session_delete(session);
+    admission_case_end(&case_owner);
+    xr_compile_session_free(session);
+    XrCompileResourceStats stats=library_compile_stats(&owner.context);
+    fprintf(stderr,"admission main allocated=%llu peak=%llu work=%llu\n",(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
+    library_compile_owner_drop(&owner);library_compile_observer_free();
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
     puts("Source declaration, visibility, type, graph and budget rejection passed");
     return 0;

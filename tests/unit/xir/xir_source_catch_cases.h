@@ -10,6 +10,7 @@
  * intended rule rather than for an unrelated mistake in the probe source.
  */
 static void source_catch_cases(XrXirSourceRequest *request, const char *path, const char *library) {
+    AdmissionCase case_owner={0};
     write_source(library,
         "export enum Shared<T> { Failed { message:T }, Empty }\n"
         "enum Hidden { Bad }\n"
@@ -106,7 +107,8 @@ static void source_catch_cases(XrXirSourceRequest *request, const char *path, co
     for (uint32_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         write_source(path,cases[i].source);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_source_check(request,&result,&diagnostic);
+        admission_case_begin(request,&case_owner);
+        XrXirStatus status = xr_xir_compile_source_check(&case_owner.request,&result,&diagnostic,NULL);
         bool wrong_reason = !cases[i].valid && cases[i].diagnostic && status != XR_XIR_OK &&
             !strstr(diagnostic.message,cases[i].diagnostic);
         if ((status == XR_XIR_OK) != cases[i].valid || wrong_reason)
@@ -115,7 +117,9 @@ static void source_catch_cases(XrXirSourceRequest *request, const char *path, co
         failures += ((status == XR_XIR_OK) != cases[i].valid);
         failures += ((result.checked != NULL) != cases[i].valid);
         failures += wrong_reason;
-        xr_xir_source_result_free(&result);
+        CHECK(status==XR_XIR_OK || (!result.checked && !result.snapshot));
+        xr_xir_compile_source_result_free(&result);
     }
     CHECK(failures == 0);
+    admission_case_end(&case_owner);
 }

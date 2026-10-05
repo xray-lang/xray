@@ -9,6 +9,61 @@
 #ifndef XIR_CLEANUP_SOURCE_CASES_H
 #define XIR_CLEANUP_SOURCE_CASES_H
 #include "xir/xxir_array.h"
+#include "xir/xxir_compile_context.h"
+#include "xir/xxir_vm.h"
+static XrXirCompileContext cleanup_source_context(XrCompileResourceLimits limits) {
+    XrXirCompileContext context={0};
+    CHECK(limits.allocated_bytes<=67108864 && limits.live_bytes<=8388608 && limits.work<=128000000);
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits(); return context;
+}
+static XrCompileResourceStats cleanup_source_stats(const XrXirCompileContext *context) {
+    XrCompileResourceStats stats={0};
+    CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);return stats;
+}
+static void cleanup_source_owner_free(XrXirCompileContext *context, XrCompileResourceStats baseline) {
+    CHECK(cleanup_source_stats(context).live_bytes==baseline.live_bytes);
+    xr_compile_resources_release(context->resources);*context=(XrXirCompileContext){0};
+    instance_compile_zero();CHECK(!runtime_live && !runtime_bytes && !runtime_owned);
+}
+static void cleanup_source_primary_stats(const XrXirCompileContext *context,unsigned variant) {
+    XrCompileResourceStats stats=cleanup_source_stats(context);
+    printf("Cleanup normal variant%u allocated/live/peak/work=%llu/%llu/%llu/%llu; malloc attempts=%zu\n",variant,
+        (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes,
+        (unsigned long long)stats.peak_bytes,(unsigned long long)stats.work,instance_compile_attempts);
+}
+typedef XrXirStatus (*CleanupCompilerBuild)(const XrXirCompileContext *,unsigned,XrXirProgram **);
+static void cleanup_source_compiler(CleanupCompilerBuild build,unsigned variant) {
+    size_t sites=0;XrCompileResourceStats exact={0};
+    for(size_t pass=0;pass<=sites;++pass) {
+        XrXirCompileContext context=cleanup_source_context((XrCompileResourceLimits){67108864,8388608,128000000});
+        XrCompileResourceStats baseline=cleanup_source_stats(&context);
+        instance_compile_attempts=0;instance_compile_injected=false;
+        instance_compile_fail_at=pass?pass-1:SIZE_MAX;
+        XrXirProgram *program=NULL;XrXirStatus status=build(&context,variant,&program);
+        size_t seen=instance_compile_attempts;instance_compile_fail_at=SIZE_MAX;
+        if(!pass) {CHECK(status==XR_XIR_OK && program);sites=seen;CHECK(sites && sites<20000);exact=cleanup_source_stats(&context);}
+        else {
+            if(status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"cleanup compiler variant%u ordinal%zu/%zu status%u\n",variant,pass,sites,status);
+            CHECK(status==XR_XIR_OUT_OF_MEMORY && !program && instance_compile_injected && seen>=pass);
+        }
+        xr_xir_compile_program_drop(program);cleanup_source_owner_free(&context,baseline);
+    }
+    for(unsigned axis=0;axis<4;++axis) {
+        XrCompileResourceLimits limits={exact.allocated_bytes,exact.peak_bytes,exact.work};
+        if(axis==1)--limits.allocated_bytes;if(axis==2)--limits.live_bytes;if(axis==3)--limits.work;
+        XrXirCompileContext context=cleanup_source_context(limits);XrCompileResourceStats baseline=cleanup_source_stats(&context);
+        XrXirProgram *program=NULL;XrXirStatus status=build(&context,variant,&program);
+        CHECK(axis?(status==XR_XIR_BUDGET && !program):(status==XR_XIR_OK && program));
+        xr_xir_compile_program_drop(program);cleanup_source_owner_free(&context,baseline);
+    }
+    XrCompileResourceLimits creation_limits={67108864,8388608,128000000};XrCompileResources *failed=NULL;
+    instance_compile_injected=false;instance_compile_fail_at=instance_compile_attempts;
+    CHECK(xr_compile_resources_new(&creation_limits,&failed)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY && !failed);
+    instance_compile_fail_at=SIZE_MAX;CHECK(instance_compile_injected);instance_compile_zero();
+    printf("Cleanup compiler variant%u OOM%zu exact allocated/live/work=%llu/%llu/%llu; physical0\n",variant,sites,
+        (unsigned long long)exact.allocated_bytes,(unsigned long long)exact.peak_bytes,(unsigned long long)exact.work);
+}
 enum { CLEANUP_SCOPES, CLEANUP_LOOPS, CLEANUP_ERRORS, CLEANUP_PANIC, CLEANUP_CANCELLED,
     CLEANUP_GENERICS, CLEANUP_SNAPSHOT, CLEANUP_CONSTRUCTOR, CLEANUP_CONSTRUCTOR_NESTED, CLEANUP_CONSTRUCTOR_BARE, CLEANUP_CONSTRUCTOR_UNCAPTURED, CLEANUP_MEMBER, CLEANUP_MEMBER_OPERATORS, CLEANUP_MEMBER_RESUME, CLEANUP_MEMBER_CANCEL, CLEANUP_MEMBER_FAILURE, CLEANUP_SOURCE_FUNCTIONS };
 typedef struct CleanupExpected { XrXirType type; int64_t number; const char *text; } CleanupExpected;
@@ -50,7 +105,7 @@ static void cleanup_source_cases(XrXirProgram *program, const uint32_t *function
         config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, cleanup_source_output, &logs[i]};
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (unsigned i = 0; i < CLEANUP_SOURCE_FUNCTIONS; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions[i], NULL, 0) == XR_XIR_CALL_READY);
         XrXirInstanceResult step = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
@@ -137,7 +192,7 @@ static void cleanup_source_fatal(XrXirProgram *program, uint32_t function) {
     XrXirInstance *instance = NULL;
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance, function, NULL, 0) == XR_XIR_CALL_READY);
     XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
     if (result.status == XR_XIR_CALL_SUSPENDED) {

@@ -7,6 +7,7 @@
  * xir_source_cleanup_admission.h - Cleanup definition effects and control boundaries
  */
 static void source_cleanup_admission(XrXirSourceRequest *request, const char *path) {
+    AdmissionCase case_owner={0};
     const struct { const char *source; const char *code; } cases[] = {
         {"enum E{Bad}\nfn unused(){defer{throw E.Bad}}\n", "E0387"},
         {"fn unused<T:Error>(e:T){defer{throw e}}\n", "E0387"},
@@ -50,21 +51,24 @@ static void source_cleanup_admission(XrXirSourceRequest *request, const char *pa
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         write_source(path, cases[i].source);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
-        const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+        char canonical[XR_TEST_PATH_MAX];CHECK(xr_test_realpath_buf(path,canonical,sizeof(canonical)));
+        char *failure_path=NULL;
+        admission_case_begin(request,&case_owner);
+        XrXirStatus status = xr_xir_compile_source_check(&case_owner.request, &result, &diagnostic,&failure_path);
         bool valid = cases[i].code == NULL;
         bool correct = valid ? status == XR_XIR_OK && result.checked && result.snapshot :
-            status != XR_XIR_OK && !result.checked && view && !view->complete &&
-            view->diagnostic.status == status && diagnostic.status == status &&
-            view->diagnostic.line == diagnostic.line && view->diagnostic.column == diagnostic.column &&
-            !strcmp(view->diagnostic.message, diagnostic.message) &&
+            status != XR_XIR_OK && !result.checked && !result.snapshot &&
+            diagnostic.status == status && failure_path && !strcmp(failure_path,canonical) &&
             diagnostic.line > 0 && strstr(diagnostic.message, cases[i].code) != NULL;
         if (!correct) {
             fprintf(stderr, "cleanup source case %u: %u at %d:%d: %s\n", i, status,
                 diagnostic.line, diagnostic.column, diagnostic.message);
+            fprintf(stderr,"failure path actual=%s expected=%s\n",failure_path?failure_path:"NULL",path);
             ++failures;
         }
-        xr_xir_source_result_free(&result);
+        xr_compile_resources_free(failure_path);
+        xr_xir_compile_source_result_free(&result);
     }
     CHECK(!failures);
+    admission_case_end(&case_owner);
 }

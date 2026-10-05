@@ -7,6 +7,7 @@
  * xir_source_panic_cases.h - Panic binding, channel and initialization admission
  */
 static void source_panic_cases(XrXirSourceRequest *request, const char *path) {
+    AdmissionCase case_owner={0};
     const struct { const char *source; bool valid; } cases[] = {
         {"fn run()->i64 {try{return 10/0}catch panic{return 17}}\nrun()\n", true},
         {"fn run()->i64 {try{return 10/0}catch panic(p){return p.code}}\nrun()\n", true},
@@ -44,13 +45,16 @@ static void source_panic_cases(XrXirSourceRequest *request, const char *path) {
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         write_source(path, cases[i].source);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        admission_case_begin(request,&case_owner);
+        XrXirStatus status = xr_xir_compile_source_check(&case_owner.request, &result, &diagnostic,NULL);
         if ((status == XR_XIR_OK) != cases[i].valid || (result.checked != NULL) != cases[i].valid) {
             fprintf(stderr, "panic source case %u: %u at %d:%d: %s\n", i, status,
                 diagnostic.line, diagnostic.column, diagnostic.message);
             ++failures;
         }
-        xr_xir_source_result_free(&result);
+        CHECK(status==XR_XIR_OK || (!result.checked && !result.snapshot));
+        xr_xir_compile_source_result_free(&result);
     }
     CHECK(!failures);
+    admission_case_end(&case_owner);
 }
