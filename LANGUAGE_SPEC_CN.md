@@ -759,6 +759,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；无效操作与 NaN 结果统一为正 canonical quiet NaN。禁止隐式融合或重排操作，不依赖或改变宿主浮点舍入状态与异常标志。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
 
+运行 `f64` 值允许全部 binary64 payload，包括带符号/载荷的 quiet 和 signaling NaN；合法值的复制、保存、参数、返回及已准入容器保留精确位型。这个载体合同不把 NaN 改成普通相等值，也不改变 `f32` 高32位为零且只准正 canonical quiet NaN 的运行值规则。CONST_FLOAT 的 wire 编码仍只准 canonical NaN；四则、转换（包括同宽转换）和负号的 NaN 结果仍 canonical，不能把运行值搬运当作数值运算。§17.24/§17.27 规定同一 VM/native/typed output 边界；不新增 raw-bit 字面量或编译器反射后门。
+
 #### 2.3.3 `bool`
 
 `true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: i64 = true`，也不能 `var b: bool = 1`）。
@@ -5729,6 +5731,8 @@ enum Ordering {
 
 省略 ordering 或合法 None 使用 SeqCst。必须是精确 prelude Ordering 声明/variant 身份，不按名字、整数或用户 backing value 准入。静态已知非法 load/store 序在 Checked 拒绝；动态非法序在 receiver 和所有实参按原顺序各一次求值后、任何原子读写前，结束为 CALL_BAD_ARGUMENT，fault detail 全零、不发布结果、不修改原子状态。此终态不属于普通 Error 或 panic，不被保护 panic handler 消费；初始化失败粘滞和清理沿既有合同。伪造 variant 在值准入先拒绝；不能降级为其他序、接受未知 tag 或将非法 C11 order 传给 provider。结构错误原 RUN_BAD_ARGUMENT→CALL_BAD_STATE 规则不变，Atomic 无效序使用独立 reason 精确接线。
 
+Ordering 的声明 module 由实际身份 factory 使用 STDLIB authority、namespace_id="prelude"、logical="prelude/builtin_symbols.def" 生成，physical root 不进入身份；Source 仍需真实同源 generated module、Unit initializer 与正常依赖/权限检查，不造可导入 prelude.xr 或按 query URI 授权。Ordering 的名义 Declaration/Identity 持久拥有 native id 与32字节同源治理 fingerprint；本族的 Ordering id 为4，普通用户名义声明的该记录必须全零。Checked/特化复验完整检查 governed VALUE 登记与 ENUM shape：零类型参数/约束/字段、exported、flags为零、五个精确有序无载荷 variant，以及 canonical prelude 声明 module、合法 initializer/dependency。clone、wire、投影、TypeArena 和 Program 对应检查保留这一事实。词法/hoisted/import 解析优先于 prelude；同名用户 enum 仍是不同名义身份，不获得内建资格。原可见性、构造和模块依赖检查不得被 id/flags/query 指针绕过。fingerprint 是公开同源治理事实而非不可复制认证签名；完整合法公共 builtin descriptor 可经普通 Checked 复验接受，但不授予任何用户私有权限或外部包真实性。
+
 compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不可见虚假失败。单个 ordering 决定成功/失败序：
 
 | ordering | 成功 | 失败 |
@@ -5739,9 +5743,13 @@ compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不�
 | AcquireRelease | AcquireRelease | Acquire |
 | SeqCst | SeqCst | SeqCst |
 
-失败返回实际观察到的 old 且不写状态；成功返回线性化前 old。CAS 前必须准备所有可能失败的 Tuple carrier/domain/arena retain/预算资源，CAS 后填字段和发布不得再分配或 retain。准备失败状态不变；CAS 成功之后的父帧失败或取消不能回滚已发生的操作。
+失败返回实际观察到的 old 且不写状态；成功返回线性化前 old。CAS 前以唯一真实 Tuple 表示私有预备精确 `(T,bool)` 的合法 scalar 字段和全部可失败 carrier/domain/arena retain、admission/work/预算、空结果槽及发布许可，最后检查取消/执行许可；预备值无别名、borrow 或公开 setter。准备失败不读写 cell、不发布结果，释放部分 owner。CAS 后只能不可失败地填 observed 和 success 两个 scalar payload 并转移已许可结果，不能再分配/retain/copy/admit或运行可能失败的验证。CAS 成功之后的父帧失败、预算失败或取消不能回滚已发生的操作；失败 CAS 仍返回实际 observed，不能返回原 expected 的副本。
 
 i64 加减沿 §2.3.1 的模 2^64 环绕；MIN delta 的 sub 不执行宿主有符号取负。f64 构造/load/store/swap/CAS 保完整 binary64 位型，CAS 按 bits 比较：正负零不同，同 payload NaN 可匹配，不同 payload 不匹配；不改变普通浮点相等规则。f64 RMW 每次用当前软件浮点核的 ADD/SUBTRACT 计算候选，再对 u64 bits CAS；失败须按最新 observed 重新计算，沿 §2.3.2 的 ties-even、次正规数与 canonical 算术 NaN，不用宿主 FPU/fenv、不融合或用加负数替代减法。每次实际尝试收费并检查取消/限额；成功后不把限额失败当作原子回滚。toString 取一次 SeqCst 快照，之后按既有 bool/i64/软件 f64 格式化产生独立拥有式 string。
+
+f64 add/sub/fetchAdd/fetchSub 每次 resume 至多尝试一次值 cell CAS。失败保存最新 observed 与已一次求值的实参，返回 canonical Unit CONTINUE；活动帧和 pc 保持 READY，下一 resume 重算软件候选。CONTINUE 不产生 SUSPEND、wake、language yield 或第二执行管线；poll/frame/work 真实收费、取消和释放沿同一个 Call driver，不能把无界内部重试藏在单次 resume。停止在成功之前不改 cell，成功后的取消不回滚；无竞争下的首次 load 仍只用合法读序。
+
+不支持目标使用唯一显式 UNSUPPORTED 路线。Checked、查询、特化复验及普通 Lower 的合法性不由宿主无锁能力决定；provider/SDK/Target 须以准确目标、flags、真实 cell/ref 布局及运行探针核能力，未运行或坏形结果不授准入。含 constructed Atomic 的闭合 Program 在版本/shape/完整 proof 后、发布及任何 initializer 前由所链接共同 runtime 核实际能力；不足不发布 Program、不转移原 Lowered owner。构造的未发布真实对齐 cell 再作防御性 lock-free 检查；false 不执行值 load/store/CAS/RMW、不发布值并释放所有临时 owner。atomic_init 仅为未发布准备，不承诺零写或零分配；引用 cell 能力先核查。运行时 UNSUPPORTED 是 canonical Unit、wake零、panic空的非panic终态，handler不可消费；原非法对象、OOM、预算和引用饱和保各自first failure，初始化失败粘滞/释放沿原非panic失败路线。无 mutex/libatomic 非无锁后备，也不把未知或未验证 target 伪装为已有能力。
 
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
 
@@ -7329,13 +7337,14 @@ Checked与Program、值和调用边界使用§17.6的现行版本，不接受先
 
 ### 17.24 XIR 浮点值与执行边界
 
-f32/f64 使用规范 IEEE 位型：f32 高32位为零，NaN 仅允许正 canonical quiet NaN。
+运行 f64 接受全部 binary64 位型，含带符号、任意 payload 的 quiet/signaling NaN；运行 f32 高32位为零，NaN 仍只准正 canonical quiet NaN。
+CONST_FLOAT 是独立 wire 编码边界：两精度的 NaN 常量仍必须正 canonical quiet，不能因 runtime f64 扩域接受非 canonical 包常量。
 存储为4/8字节，SSA/frame 为8字节，boxed/参数/结果为16字节且对齐8。
 CONST_FLOAT、NEG_FLOAT、六种浮点比较与唯一 CONVERT_NUMBER 经同一 Checked/Lowered 管线执行。
 CONVERT_NUMBER 原子替换先前仅限整数的转换指令；浮点转整数先截断再检查完整范围，失败为 NUMERIC_RANGE，清理后结果为 unit。
 NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。所有转换遵循17.23且不改变宿主浮点环境。
 源码接受显式数值 cast、浮点负号/比较、f32 到 f64 隐式宽化及条件合流；整数/浮点混合必须显式 cast。
-拷贝、槽、cell、闭包、泛型实例与挂起保留位型。十进制字面量及精确整数上下文准入见§17.25；浮点算术及浮点输出见§17.27。
+拷贝、槽、cell、闭包、泛型实例、参数/返回、Tuple/Array/Nullable/已准入名义存储与挂起保留合法值的精确位型；跨界仍核 exact 类型、arena、owner 和既有执行权限。浮点比较遇任一 NaN 为 unordered（EQ 为 false、NE 为 true、有序关系为 false）；整数 payload 搬运不能暗中 canonicalize。十进制字面量及精确整数上下文准入见§17.25；四则、转换和负号的 NaN 结果仍 canonical，浮点输出见§17.27。
 唯一协议版本遵循§17.6，旧版本拒绝，无兼容路径。
 
 ### 17.25 精确十进制字面量
@@ -7365,11 +7374,11 @@ GET及索引读返回独立拥有的元素，并保留索引求值前选定的�
 
 ### 17.27 浮点四则与 typed 输出
 
-ADD/SUB/MUL/DIV_FLOAT 追加为70–73，OP_COUNT为74；stage mask为7，两个输入及结果为同一具体f32/f64，其他字段为零。唯一Checked语义、schema及值/调用/Program版本由§17.6的实现常量定义；新增准入规则拒绝旧语义包，既有值与调用布局不变。普通泛型必须在定义处取得具体数值证明，特化与复验不授予额外权限。源码四则和复合赋值沿既有求值/提交顺序，f32/f64混合先精确宽化，typed整数与浮点混合、浮点余数和位运算拒绝。
+ADD/SUB/MUL/DIV_FLOAT 在历史引入时编号70–73、OP_COUNT为74；现行opcode编号以唯一实现表为准。stage mask为7，两个输入及结果为同一具体f32/f64，其他字段为零。唯一Checked语义、schema及值/调用/Program版本由§17.6的实现常量定义；新增准入规则拒绝旧语义包，既有值与调用布局不变。普通泛型必须在定义处取得具体数值证明，特化与复验不授予额外权限。源码四则和复合赋值沿既有求值/提交顺序，f32/f64混合先精确宽化，typed整数与浮点混合、浮点余数和位运算拒绝。
 
 每次算术按原宽度round-to-nearest ties-to-even，不融合或重排，不使用宿主浮点状态。完整宽乘和除法余数保留最终舍入依据，逐次保留subnormal与负零，溢出为带符号无穷；零除零、无穷除无穷、零乘无穷、异号无穷相加和NaN输入得到canonical NaN。有限非零数除零为带符号无穷，不是整数除零fault。
 
-PRINT/OUTPUT接受规范f32/f64位型。有限非零数使用原精度最少有效数字往返十进制：同长度候选选最接近者，精确中点取末位偶数，不通过先宽化f32决定格式。最短系数无尾零；十进制指数k在[-4,16)时用普通形式，整数结果加`.0`；其他值用一位整数部分、小写`e`、显式指数正负号且无冗余指数零。特殊值固定`nan`、`inf`、`-inf`、`0.0`、`-0.0`。全部ASCII、固定整数空间、无堆分配；单值32字节缓冲包含终止符足够。宿主locale、舍入模式及异常标志不影响结果。
+PRINT/OUTPUT按§17.24接受合法运行f32/f64值，包括全部f64 NaN payload；所有NaN文本仍为`nan`，不会修改输入位型。有限非零数使用原精度最少有效数字往返十进制：同长度候选选最接近者，精确中点取末位偶数，不通过先宽化f32决定格式。最短系数无尾零；十进制指数k在[-4,16)时用普通形式，整数结果加`.0`；其他值用一位整数部分、小写`e`、显式指数正负号且无冗余指数零。特殊值固定`nan`、`inf`、`-inf`、`0.0`、`-0.0`。全部ASCII、固定整数空间、无堆分配；单值32字节缓冲包含终止符足够。宿主locale、舍入模式及异常标志不影响结果。
 
 输出仍先完成所有参数求值，再验证预算、渲染整组并一次发布；失败不发布半组，沿用OUTPUT_ERROR和清理责任。上述合同不代表完整源码、默认产品、安全或跨平台资格已通过；这些必须由重建后的独立VM/native/包消费者/混合程序、所有权与物理释放、失败注入和批次门逐项证明。
 

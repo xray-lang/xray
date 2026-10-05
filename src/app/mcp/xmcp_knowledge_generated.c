@@ -7787,6 +7787,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Atomic\n"
             "`Atomic<T>` wraps `i64`/`f64`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`).\n"
             "\n"
+            "Frozen next cutover: Ordering uses an owned governed nominal identity, with ordinary visibility/construction/dependency checks. compareExchange prepares a real owned Tuple before any cell access. Each f64 RMW resume attempts at most one cell CAS and continues in the same frame after failure. Complete Atomic execution remains pending implementation and qualification (spec 10.9).\n"
+            "\n"
             "### Synchronization handles\n"
             "Name `Channel`, `Atomic`, coroutine-domain `sync.*` handles, and OS-thread-domain `sys.Os*` handles with `const`. Use `sync.*` inside coroutine code; use `sys.Os*` inside `sys.Thread` or other blocking OS-thread contexts.\n"
             "",
@@ -9009,6 +9011,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Admitted XIR floating semantics\n"
             "In the new-XIR subset, f32 and f64 preserve their original IEEE precision across arithmetic and output (spec section 17.27). Zero signs and gradual subnormal values are preserved; invalid floating operations produce canonical NaN, and finite nonzero division by zero produces signed infinity. VM and native AOT use the same integer-only arithmetic implementation with independent exact-result tests; this does not imply the entire language or standard library is migrated.\n"
+            "\n"
+            "Frozen next Atomic cutover: runtime f64 admits every binary64 payload and preserves bits in transport; runtime f32 and CONST_FLOAT retain canonical-NaN restrictions. Arithmetic, conversions including same-width conversion, and negation canonicalize NaN results. This expanded carrier domain remains pending implementation and qualification (spec 2.3.2/17.24/17.27).\n"
             "",
     },
     {
@@ -11763,6 +11767,8 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "var (old, ok) = counter.compareExchange(1, 42)\n"
     "print(counter.load())  // 42\n"
     "```\n"
+    "\n"
+    "Frozen next cutover: Ordering identity and permissions are rechecked; compareExchange returns a real owned Tuple prepared before cell access. f64 transport preserves every binary64 payload, while numeric results stay canonical. One f64 CAS attempt per resume continues on failure without suspension or a second pipeline. Complete execution and unsupported-target admission remain pending implementation and qualification (spec 10.9/17.24).\n"
     "\n"
     "## Locks \xe2\x80\x94 explicit execution domain\n"
     "`sync.*` locks are coroutine-domain primitives: they may suspend and require `import sync`. `sys.Os*` locks are OS-thread-domain primitives: they block the current OS thread and require `import sys`. Name synchronization handles with `const`; their audited methods provide synchronized interior mutation.\n"

@@ -172,6 +172,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；无效操作与 NaN 结果统一为正 canonical quiet NaN。禁止隐式融合或重排操作，不依赖或改变宿主浮点舍入状态与异常标志。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
 
+运行 `f64` 值允许全部 binary64 payload，包括带符号/载荷的 quiet 和 signaling NaN；合法值的复制、保存、参数、返回及已准入容器保留精确位型。这个载体合同不把 NaN 改成普通相等值，也不改变 `f32` 高32位为零且只准正 canonical quiet NaN 的运行值规则。CONST_FLOAT 的 wire 编码仍只准 canonical NaN；四则、转换（包括同宽转换）和负号的 NaN 结果仍 canonical，不能把运行值搬运当作数值运算。§17.24/§17.27 规定同一 VM/native/typed output 边界；不新增 raw-bit 字面量或编译器反射后门。
+
 #### 2.3.3 `bool`
 
 `true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: i64 = true`，也不能 `var b: bool = 1`）。
@@ -1269,6 +1271,8 @@ fault. Invalid operations and NaN results produce the positive canonical quiet
 NaN. Operations are not implicitly fused or reassociated and neither depend on
 nor alter host rounding state or exception flags. Floating remainder and bitwise
 operations reject; already typed integer/float mixing still requires an explicit cast.
+
+Runtime `f64` values admit every binary64 payload, including signed, payload-bearing quiet and signaling NaNs. Copying, storage, parameters, returns and admitted containers preserve exact bits. This carrier rule neither makes NaN ordinarily equal nor changes runtime `f32`: its high 32 bits remain zero and its only NaN is the positive canonical quiet NaN. CONST_FLOAT wire encoding still requires canonical NaN. Arithmetic, conversions including same-width conversion, and negation still canonicalize NaN results; transporting a value is not a numeric operation. §17.24/§17.27 govern the common VM/native/typed-output boundary. No raw-bit literal or reflection bypass is introduced.
 
 #### 2.3.3 `bool`
 

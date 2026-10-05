@@ -82,7 +82,7 @@
     },
     {
       "heading": "Admitted XIR floating semantics",
-      "markdown": "In the new-XIR subset, f32 and f64 preserve their original IEEE precision across arithmetic and output (spec section 17.27). Zero signs and gradual subnormal values are preserved; invalid floating operations produce canonical NaN, and finite nonzero division by zero produces signed infinity. VM and native AOT use the same integer-only arithmetic implementation with independent exact-result tests; this does not imply the entire language or standard library is migrated."
+      "markdown": "In the new-XIR subset, f32 and f64 preserve their original IEEE precision across arithmetic and output (spec section 17.27). Zero signs and gradual subnormal values are preserved; invalid floating operations produce canonical NaN, and finite nonzero division by zero produces signed infinity. VM and native AOT use the same integer-only arithmetic implementation with independent exact-result tests; this does not imply the entire language or standard library is migrated.\n\nFrozen next Atomic cutover: runtime f64 admits every binary64 payload and preserves bits in transport; runtime f32 and CONST_FLOAT retain canonical-NaN restrictions. Arithmetic, conversions including same-width conversion, and negation canonicalize NaN results. This expanded carrier domain remains pending implementation and qualification (spec 2.3.2/17.24/17.27)."
     }
   ]
 }
