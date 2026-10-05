@@ -1,0 +1,559 @@
+{
+  "contract": {
+    "wire": 25,
+    "previous_semantic": 64,
+    "current_semantic": 65,
+    "stage": 2,
+    "old_opcode_count": 145,
+    "new_opcode_count": 146,
+    "append": "SLOT_GROUP_INIT145"
+  },
+  "previous_opcode_names": [
+    "CONST_BOOL",
+    "CONST_INT",
+    "CONST_STRING",
+    "SLOT_LOAD",
+    "SLOT_INIT",
+    "SLOT_STORE",
+    "ATOMIC_NEW",
+    "ATOMIC_LOAD",
+    "ATOMIC_STORE",
+    "ATOMIC_ADD",
+    "ATOMIC_SUB",
+    "ATOMIC_FETCH_ADD",
+    "ATOMIC_FETCH_SUB",
+    "ATOMIC_SWAP",
+    "ATOMIC_COMPARE_EXCHANGE",
+    "ATOMIC_TOGGLE",
+    "ATOMIC_TO_STRING",
+    "COPY",
+    "SCALAR_COPY",
+    "OWNED_RETAIN",
+    "CONCAT_STRING",
+    "OUTPUT",
+    "WRITE_STREAM",
+    "PRINT",
+    "ADD_INT",
+    "EQ_INT",
+    "LT_INT",
+    "CALL",
+    "SUSPEND",
+    "THROW",
+    "JUMP",
+    "BRANCH",
+    "RETURN",
+    "LOCAL_NEW",
+    "LOCAL_READ",
+    "LOCAL_WRITE",
+    "SCALAR_LOCAL_NEW",
+    "SCALAR_LOCAL_READ",
+    "SCALAR_LOCAL_WRITE",
+    "OWNED_LOCAL_NEW",
+    "OWNED_LOCAL_READ",
+    "OWNED_LOCAL_WRITE",
+    "SUB_INT",
+    "MUL_INT",
+    "DIV_INT",
+    "REM_INT",
+    "NE_INT",
+    "LE_INT",
+    "GT_INT",
+    "GE_INT",
+    "AND_INT",
+    "OR_INT",
+    "XOR_INT",
+    "SHL_INT",
+    "SHR_INT",
+    "PHI",
+    "FUNCTION_REF",
+    "CALL_INDIRECT",
+    "CELL_NEW",
+    "CELL_READ",
+    "CELL_WRITE",
+    "CONVERT_NUMBER",
+    "CONST_FLOAT",
+    "NEG_FLOAT",
+    "EQ_FLOAT",
+    "NE_FLOAT",
+    "LT_FLOAT",
+    "LE_FLOAT",
+    "GT_FLOAT",
+    "GE_FLOAT",
+    "CELL_PLACE",
+    "SLOT_PLACE",
+    "ARRAY_NEW",
+    "ARRAY_GET",
+    "ARRAY_SET",
+    "ARRAY_PUSH",
+    "ARRAY_LEN",
+    "ADD_FLOAT",
+    "SUB_FLOAT",
+    "MUL_FLOAT",
+    "DIV_FLOAT",
+    "STRUCT_NEW",
+    "STRUCT_GET",
+    "STRUCT_SET",
+    "LOCAL_UNINIT",
+    "STRING_LEN",
+    "EQ_STRING",
+    "NE_STRING",
+    "STRING_CONTAINS",
+    "STRING_STARTS_WITH",
+    "STRING_ENDS_WITH",
+    "STRING_INDEX_OF",
+    "STRING_LAST_INDEX_OF",
+    "ENUM_NEW",
+    "ENUM_TAG",
+    "ENUM_GET",
+    "MATCH_FAIL",
+    "ERROR_ERASE",
+    "INVOKE",
+    "INVOKE_INDIRECT",
+    "INVOKE_RESULT",
+    "INVOKE_ERROR",
+    "ERROR_IS",
+    "ERROR_NARROW",
+    "PANIC_CATCH",
+    "PANIC_CODE",
+    "PANIC_MESSAGE",
+    "CLEANUP_REGISTER",
+    "CLEANUP_LEAVE",
+    "CLEANUP_ERROR",
+    "CELL_LOCAL_WRITE",
+    "FIELD_PLACE",
+    "INDEX_PLACE",
+    "PLACE_READ",
+    "PLACE_WRITE",
+    "FUNCTION_WEAKEN",
+    "CALL_REQUIREMENT",
+    "CLASS_NEW",
+    "CLASS_GET",
+    "CLASS_SET",
+    "CALL_DEFAULT",
+    "INVOKE_DEFAULT",
+    "ASSERT_CONDITION",
+    "INVOKE_DISCARD",
+    "EQUAL",
+    "NULLABLE_NONE",
+    "NULLABLE_SOME",
+    "CLOCK_NANOS",
+    "UTC_OFFSET_AT",
+    "TIMER_AFTER_MS",
+    "TO_STRING",
+    "OBJECT_PLACE",
+    "ARRAY_REPEAT",
+    "NULLABLE_IS_SOME",
+    "NULLABLE_UNWRAP",
+    "CONST_RUNE",
+    "RUNE_TO_INTEGER",
+    "INTEGER_TO_RUNE",
+    "LT_STRING",
+    "LE_STRING",
+    "GT_STRING",
+    "GE_STRING",
+    "TUPLE_NEW",
+    "TUPLE_FIELD"
+  ],
+  "basis": "Existing independent family role encoders; two added narrow named fixtures (Atomic3 signature and governed Ordering). No general wire decoder/encoder.",
+  "records": [
+    {
+      "previous": {
+        "path": "tests/unit/xir/compile_owner/checked_sizing64_golden.h",
+        "name": "sizing64_golden",
+        "bytes": 224,
+        "sha256": "4e250f30fadf13fb1a943de2533dd597842d54cc4e01a40d037ff3125e254ef9",
+        "body_sha256": "8f1005ebdd7902663e48886a3a2e57eb285853a95fd94c22a427c1957edbcb82",
+        "line": 14,
+        "users": [
+          "tests/unit/xir/compile_owner/checked_sizing_cases.h",
+          "tests/unit/xir/compile_owner/derive_checked_sizing64_golden.py"
+        ]
+      },
+      "name": "sizing65_golden",
+      "header": "tests/unit/xir/compile_owner/checked_sizing65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/compile_owner/checked_sizing64_golden.h",
+        "name": "sizing64_embedded_golden",
+        "bytes": 224,
+        "sha256": "8f452d48c7edb0e727ecc0271bcbbab2bd603536910b1c6e7bdfa31da15006ff",
+        "body_sha256": "74ad8e8b929ff8a9a1a2d6a9de5474ee1788e3c7b888398d13e54c6f9b8b4c19",
+        "line": 35,
+        "users": [
+          "tests/unit/xir/compile_owner/checked_sizing_cases.h",
+          "tests/unit/xir/compile_owner/derive_checked_sizing64_golden.py"
+        ]
+      },
+      "name": "sizing65_embedded_golden",
+      "header": "tests/unit/xir/compile_owner/checked_sizing65_golden.h",
+      "reader_positive": false
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/compile_owner/checked_sizing64_golden.h",
+        "name": "sizing64_empty_golden",
+        "bytes": 220,
+        "sha256": "1ed3a0170192e3d711afd84dcdfe46fb6a660f186d7af1dfcd9ea57dcfcf1c01",
+        "body_sha256": "33a92fc203dc6783e74ba0d726d70b839167338686aa78594ab7257f608d9d5d",
+        "line": 56,
+        "users": [
+          "tests/unit/xir/compile_owner/checked_sizing_cases.h",
+          "tests/unit/xir/compile_owner/derive_checked_sizing64_golden.py"
+        ]
+      },
+      "name": "sizing65_empty_golden",
+      "header": "tests/unit/xir/compile_owner/checked_sizing65_golden.h",
+      "reader_positive": false
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/test_xir_rune.c",
+        "name": "rune_current_golden",
+        "bytes": 264,
+        "sha256": "23d2f54f884974211924d646261dc35239bd6f35a15293ec35a9dcd3b68284d9",
+        "body_sha256": "9621d2b265bd826d4731eb3209b40db598e52a797c61684f58b3a83a581ef74e",
+        "line": 182,
+        "users": []
+      },
+      "name": "rune65_golden",
+      "header": "tests/unit/xir/xir_rune65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_assert_condition64_golden.h",
+        "name": "assert_condition64_golden",
+        "bytes": 666,
+        "sha256": "54156447bae135cfb1c71a690b71868425c0c78ae52cbeb1da964dea7927e574",
+        "body_sha256": "e3e0630323a270c443f977d6e91790d04ca03dcfe64880a8c6ae54c1684a6e17",
+        "line": 2,
+        "users": [
+          "tests/unit/xir/derive_assert_condition_vector.py",
+          "tests/unit/xir/xir_assert_condition_packet_gates.inc.c"
+        ]
+      },
+      "name": "assert_condition65_golden",
+      "header": "tests/unit/xir/xir_assert_condition65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_assert_equal64_golden.h",
+        "name": "assert_equal64_golden",
+        "bytes": 1975,
+        "sha256": "d41fc07abe3735fc37362eeceec34efb8ecfdf693aed1da0ad7013ded1f4c7d4",
+        "body_sha256": "e0f6170c7694dbcebbe57582125875c4038c293ef371bea783e9c24385e85a19",
+        "line": 2,
+        "users": [
+          "tests/unit/xir/derive_assert_equal_vector.py",
+          "tests/unit/xir/xir_assert_equal_packet.inc.c"
+        ]
+      },
+      "name": "assert_equal65_golden",
+      "header": "tests/unit/xir/xir_assert_equal65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_assert_panics64_golden.h",
+        "name": "assert_panics64_golden",
+        "bytes": 1975,
+        "sha256": "d41fc07abe3735fc37362eeceec34efb8ecfdf693aed1da0ad7013ded1f4c7d4",
+        "body_sha256": "e0f6170c7694dbcebbe57582125875c4038c293ef371bea783e9c24385e85a19",
+        "line": 2,
+        "users": [
+          "tests/unit/xir/derive_assert_panics_vector.py",
+          "tests/unit/xir/xir_assert_panics_packet.inc.c"
+        ]
+      },
+      "name": "assert_panics65_golden",
+      "header": "tests/unit/xir/xir_assert_panics65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_atomic_type_wire_cases.h",
+        "name": "legacy_atomic_types_golden",
+        "bytes": 233,
+        "sha256": "7e7d788f1f83d5423c91abee6160b8a09ca1957ac8b8278780de9f5dde1cf33c",
+        "body_sha256": "c6448ab5a5dbb2aa3be79aa31c4940086bb955f3a6c25da93ea030736fd51062",
+        "line": 11,
+        "users": [
+          "tests/unit/xir/test_xir_atomic_legacy_admission_owner.c"
+        ]
+      },
+      "name": "atomic_types65_golden",
+      "header": "tests/unit/xir/xir_atomic_types65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_checked_scalar64_golden.h",
+        "name": "checked_scalar64_golden",
+        "bytes": 221,
+        "sha256": "373f9f571fc6c1b9c3dcafc053a6610117690133c3e8225ff80b72012cb9f920",
+        "body_sha256": "ed8c33c95c09b498372dee6160679fac41fecf25a401b99b460d34faa40c6c55",
+        "line": 2,
+        "users": [
+          "tests/unit/xir/derive_equal57_migration.py",
+          "tests/unit/xir/test_xir_checked.c",
+          "tests/unit/xir/test_xir_tuple_slot_group_checked.c"
+        ]
+      },
+      "name": "checked_scalar65_golden",
+      "header": "tests/unit/xir/xir_checked_scalar65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_defaults64_golden_bytes.h",
+        "name": "defaults64_golden_7",
+        "bytes": 566,
+        "sha256": "3a629e36c6c86b4c9ee217c123e3955417cff2c185000b9d932bceef58c691b3",
+        "body_sha256": "722018f4b254987f2bc52547fa545f12772de0320eabc33ee14beefb3019e103",
+        "line": 4,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/xir_defaults_invoke_golden.h",
+          "tests/unit/xir/xir_defaults_wire_cases.h"
+        ]
+      },
+      "name": "defaults65_golden_7",
+      "header": "tests/unit/xir/xir_defaults65_golden_bytes.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_defaults64_golden_bytes.h",
+        "name": "defaults64_golden_8",
+        "bytes": 221,
+        "sha256": "373f9f571fc6c1b9c3dcafc053a6610117690133c3e8225ff80b72012cb9f920",
+        "body_sha256": "ed8c33c95c09b498372dee6160679fac41fecf25a401b99b460d34faa40c6c55",
+        "line": 54,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/xir_defaults_invoke_golden.h",
+          "tests/unit/xir/xir_defaults_wire_cases.h"
+        ]
+      },
+      "name": "defaults65_golden_8",
+      "header": "tests/unit/xir/xir_defaults65_golden_bytes.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_defaults64_golden_bytes.h",
+        "name": "defaults64_golden_9",
+        "bytes": 616,
+        "sha256": "b3c165fddc61a89c3f6197f6ab6cfcb3000ee59083c6fa2501e2c14cac39f3df",
+        "body_sha256": "c599e78e4e5d6f4300791cb1616f75d9549595a16940dcd5809af500c5ecc4ba",
+        "line": 75,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/xir_defaults_invoke_golden.h",
+          "tests/unit/xir/xir_defaults_wire_cases.h"
+        ]
+      },
+      "name": "defaults65_golden_9",
+      "header": "tests/unit/xir/xir_defaults65_golden_bytes.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_defaults64_golden_bytes.h",
+        "name": "defaults64_golden_10",
+        "bytes": 421,
+        "sha256": "02dc7701685e877987942b4e8b9d6aebfa89ecd8a13d6b86fd57a08b56dca76d",
+        "body_sha256": "b5fb8d5651dc03e6da6dd2b357505995fb4ef1ce3bb2bd311789c2ed5363f85f",
+        "line": 129,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/xir_defaults_invoke_golden.h",
+          "tests/unit/xir/xir_defaults_wire_cases.h"
+        ]
+      },
+      "name": "defaults65_golden_10",
+      "header": "tests/unit/xir/xir_defaults65_golden_bytes.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_defaults64_golden_bytes.h",
+        "name": "defaults64_invoke_golden",
+        "bytes": 921,
+        "sha256": "7986442d659b10e1ddeae53aeb3769710ab4353dae0bb41bbf3486f5ae8cec52",
+        "body_sha256": "4640cc37d3d34f455c4bba4b033301a38fde5e72d21b6a126bc37ab837533a7e",
+        "line": 167,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/xir_defaults_invoke_golden.h",
+          "tests/unit/xir/xir_defaults_wire_cases.h"
+        ]
+      },
+      "name": "defaults65_invoke_golden",
+      "header": "tests/unit/xir/xir_defaults65_golden_bytes.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_generic_method64_golden.h",
+        "name": "generic_method64_golden",
+        "bytes": 616,
+        "sha256": "b3c165fddc61a89c3f6197f6ab6cfcb3000ee59083c6fa2501e2c14cac39f3df",
+        "body_sha256": "c599e78e4e5d6f4300791cb1616f75d9549595a16940dcd5809af500c5ecc4ba",
+        "line": 15,
+        "users": [
+          "tests/unit/xir/xir_generic_method_packet_cases.h"
+        ]
+      },
+      "name": "generic_method65_golden",
+      "header": "tests/unit/xir/xir_generic_method65_golden.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_library_string64_goldens.h",
+        "name": "library_string64_alpha",
+        "bytes": 715,
+        "sha256": "bb8aeb8d28c7b6f22c14043d8a4fa995b7487c6d9c83f42819d10f72837192b1",
+        "body_sha256": "9868d20be0d9167b78354b5f7308924a5b0f029946fa4c6254f81628e2050453",
+        "line": 4,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/test_xir_library_string_source.c",
+          "tests/unit/xir/xir_library_string_catalog_cases.h"
+        ]
+      },
+      "name": "library_string65_alpha",
+      "header": "tests/unit/xir/xir_library_string65_goldens.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_library_string64_goldens.h",
+        "name": "library_string64_beta",
+        "bytes": 713,
+        "sha256": "b5a3286402c99cf4c836fa18f74c3d3a7c172b5ec8f039ef6ca4999090184367",
+        "body_sha256": "1c38f1e1d9df1887611dec76c1a6987e5f2f224821e985f38cbf88cb394ff01c",
+        "line": 66,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/test_xir_library_string_source.c",
+          "tests/unit/xir/xir_library_string_catalog_cases.h"
+        ]
+      },
+      "name": "library_string65_beta",
+      "header": "tests/unit/xir/xir_library_string65_goldens.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_library_string64_goldens.h",
+        "name": "library_string64_nul",
+        "bytes": 709,
+        "sha256": "234aebaa0f174f785cfd6be668c63d73937256c8e5a4d55b87199ee37dff5f07",
+        "body_sha256": "41d146cdae9d6022428729f94358b92d7c380febcba31baa648524eb33b66c96",
+        "line": 128,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/test_xir_library_string_source.c",
+          "tests/unit/xir/xir_library_string_catalog_cases.h"
+        ]
+      },
+      "name": "library_string65_nul",
+      "header": "tests/unit/xir/xir_library_string65_goldens.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_library_string64_goldens.h",
+        "name": "library_string64_empty",
+        "bytes": 705,
+        "sha256": "5f405ec1ae68119e6218c3e6219d1f8243d7ac53c00fa427d8265a6d51e85dc4",
+        "body_sha256": "e8f0a5f419647c28fc540253455beec6bbbb0af948268c41652f8db44fe6c861",
+        "line": 190,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/test_xir_library_string_source.c",
+          "tests/unit/xir/xir_library_string_catalog_cases.h"
+        ]
+      },
+      "name": "library_string65_empty",
+      "header": "tests/unit/xir/xir_library_string65_goldens.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_library_string64_goldens.h",
+        "name": "library_string64_long",
+        "bytes": 1410,
+        "sha256": "caf7d6cdc3f328015a555c35417e6343e75816aec2f2676adf85e3ea944d6458",
+        "body_sha256": "7488d83b4009534640b47274beddf153e0df678831e1fd39e2012e5da598b511",
+        "line": 251,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/test_xir_library_string_source.c",
+          "tests/unit/xir/xir_library_string_catalog_cases.h"
+        ]
+      },
+      "name": "library_string65_long",
+      "header": "tests/unit/xir/xir_library_string65_goldens.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_library_string64_goldens.h",
+        "name": "library_string64_equal",
+        "bytes": 712,
+        "sha256": "22e462dc35bc78743a2b6bc66a3c47120c84f4c07adf1036de8ebd1b3c1921a4",
+        "body_sha256": "40fdd9fa0617acbdf106724c6a5ff8f267fc6136d0952fd4b12c7d57d51a445f",
+        "line": 371,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/test_xir_library_string_source.c",
+          "tests/unit/xir/xir_library_string_catalog_cases.h"
+        ]
+      },
+      "name": "library_string65_equal",
+      "header": "tests/unit/xir/xir_library_string65_goldens.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_library_string64_goldens.h",
+        "name": "library_string64_unused",
+        "bytes": 718,
+        "sha256": "63b30057369dfe582f2125215aa765ea2d68f9b23064f8418630e876225b0264",
+        "body_sha256": "fa0a88a4473ed981c8fa17fe226513552093ab848f1e5c79d74ef35c071def0d",
+        "line": 433,
+        "users": [
+          "tests/unit/xir/derive_library_atomic64_vectors.py",
+          "tests/unit/xir/test_xir_library_string_source.c",
+          "tests/unit/xir/xir_library_string_catalog_cases.h"
+        ]
+      },
+      "name": "library_string65_unused",
+      "header": "tests/unit/xir/xir_library_string65_goldens.h",
+      "reader_positive": true
+    },
+    {
+      "previous": {
+        "path": "tests/unit/xir/xir_ordering25_golden.h",
+        "name": "ordering25_golden",
+        "bytes": 905,
+        "sha256": "a530dccd3b5fb7951ffcf60a9064fa1acc44120093c6d28bc02a7b8c7653ac74",
+        "body_sha256": "f2f651cce4c69ea0ab784743df9b0d26c7d92d6cfa60b247e4878cd1349818b3",
+        "line": 4,
+        "users": [
+          "tests/unit/xir/xir_atomic_nominal_cases.h",
+          "tests/unit/xir/xir_atomic_nominal_packet_cases.h"
+        ]
+      },
+      "name": "ordering65_golden",
+      "header": "tests/unit/xir/xir_ordering65_golden.h",
+      "reader_positive": true
+    }
+  ]
+}

@@ -3,7 +3,7 @@ set(XIR_STDLIB_OUTPUT_C ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_stdlib_output.
 add_library(xir_stdlib_output_runtime OBJECT ${CMAKE_CURRENT_LIST_DIR}/test_xir_stdlib_output_execution.c)
 target_compile_definitions(xir_stdlib_output_runtime PRIVATE CONSUMER_KIND=0)
 target_link_libraries(xir_stdlib_output_runtime PRIVATE xray_xir_vm xray_xir_cgen)
-add_xray_bootstrap_executable(test_xir_stdlib_output_source
+add_executable(test_xir_stdlib_output_source
     ${CMAKE_CURRENT_LIST_DIR}/test_xir_stdlib_output_source.c
     ${CMAKE_CURRENT_LIST_DIR}/xir_stdlib_output_module_probe.c $<TARGET_OBJECTS:xir_stdlib_output_runtime>)
 target_link_libraries(test_xir_stdlib_output_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)

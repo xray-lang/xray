@@ -157,6 +157,22 @@ static void query_declaration_place(SourceQueryCopy *copy, unsigned char *storag
     if (signatures && query_work(copy, signatures)) memcpy(storage + *offset, source->signature, signatures);
     *offset += signatures;
 }
+static bool query_declaration_admit(SourceQueryCopy *copy, size_t extent, size_t table_bytes,
+    uint64_t row_work) {
+    if (extent > SIZE_MAX - sizeof(SourceQueryMemory)) {
+        copy->status = XR_XIR_BUDGET; return false;
+    }
+    size_t payload = sizeof(SourceQueryMemory) + extent;
+    uint64_t work = payload;
+    if (table_bytes > UINT64_MAX - work || row_work > UINT64_MAX - work - table_bytes) {
+        copy->status = XR_XIR_BUDGET; return false;
+    }
+    work += table_bytes + row_work;
+    XrCompileResourceStatus status = xr_compile_resources_admit(
+        copy->snapshot->context.resources, payload, work);
+    if (status != XR_COMPILE_RESOURCE_OK) copy->status = xir_compile_resource_status(status);
+    return copy->status == XR_XIR_OK;
+}
 static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *source) {
     copy->snapshot->view.declarations = NULL;
     if (copy->status != XR_XIR_OK || !source->declaration_count) return;
@@ -165,11 +181,13 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
         copy->status = XR_XIR_BUDGET; return;
     }
     size_t table_bytes = count * sizeof(XrXirSourceDeclaration), extent = table_bytes;
+    if (!query_declaration_admit(copy, extent, table_bytes, 2 * (uint64_t)count)) return;
     for (size_t i = 0; i < count && query_work(copy, 1); ++i) {
         if (!query_declaration_extent(copy, &source->declarations[i], &extent)) {
             if (copy->status == XR_XIR_OK) copy->status = XR_XIR_BUDGET;
             return;
         }
+        if (!query_declaration_admit(copy, extent, table_bytes, (uint64_t)count + count - i - 1)) return;
     }
     unsigned char *storage = query_allocate(copy, extent, 1);
     if (!storage || !query_work(copy, table_bytes)) return;

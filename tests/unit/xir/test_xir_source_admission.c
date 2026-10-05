@@ -11,6 +11,7 @@
  */
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include "module/xmodule_resolver.h"
 #include "base/xmalloc.h"
@@ -724,6 +725,40 @@ static void unit_slot_admission(const XrXirSourceRequest *request, const char *r
     }
     admission_case_end(&case_owner);
 }
+static void admission_atomic_bool(const XrXirArtifact *artifact) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    CHECK(module && module->types && module->declarations);
+    const XrXirDeclarations *declarations=module->declarations;
+    CHECK(declarations->slot_count==1 && declarations->root_module<declarations->module_count);
+    const XrXirSlot *slot=&declarations->slots[0];
+    CHECK(slot->module==declarations->root_module && !slot->mutable &&
+        xr_xir_type_is_atomic(module->types,slot->type) &&
+        xr_xir_atomic_element(module->types,slot->type)==XR_XIR_BOOL);
+    uint32_t initializer=declarations->modules[declarations->root_module].initializer;
+    CHECK(initializer<module->function_count);
+    uint32_t constructors=0,publishes=0;
+    for(uint32_t f=0;f<module->function_count;++f){
+        const XrXirFunction *function=&module->functions[f];
+        for(uint32_t i=0;i<function->instruction_count;++i){
+            const XrXirInstruction *op=&function->instructions[i];
+            if(op->op==XR_XIR_ATOMIC_NEW){
+                CHECK(f==initializer && op->type==slot->type && !op->args[1]);
+                CHECK(op->args[0]>=function->parameter_count);
+                uint32_t value=op->args[0]-function->parameter_count;
+                CHECK(value<i);
+                const XrXirInstruction *input=&function->instructions[value];
+                CHECK(input->op==XR_XIR_CONST_BOOL && input->type==XR_XIR_BOOL && input->immediate==1);
+                ++constructors;
+            }
+            if(op->op==XR_XIR_SLOT_INIT){
+                CHECK(f==initializer && !op->immediate &&
+                    xr_xir_operand_type(function,op->args[0])==slot->type);
+                ++publishes;
+            }
+        }
+    }
+    CHECK(constructors==1 && publishes==1);
+}
 static void rejected_source_cases(const XrXirSourceRequest *request,const char *root) {
     AdmissionCase case_owner={0};
     size_t admission_failures=0;
@@ -737,16 +772,21 @@ static void rejected_source_cases(const XrXirSourceRequest *request,const char *
         CHECK(query_status_9 == XR_XIR_OK || (!query_result_9.checked && !query_result_9.snapshot));
         xr_xir_compile_source_result_free(&query_result_9);
         XrXirStatus status = query_status_9;
-        bool newly_admitted=i==146 || i==289 || i==318 || i==331;
+        bool newly_admitted=i==146 || i==263 || i==289 || i==318 || i==331;
         if(!newly_admitted){
             if(status==XR_XIR_OK)fprintf(stderr,"incorrectly admitted source case %zu\n",i);
             if(!(status!=XR_XIR_OK && !artifact && diagnostic.status==status && diagnostic.message[0]))++admission_failures;
         }else{
             CHECK(status==XR_XIR_OK && artifact);
+            if(i==263)admission_atomic_bool(artifact);
             XrXirArtifact *closed=NULL,*lowered=NULL;
             CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_OK);
             XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
             CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+            if(i==263){
+                admission_atomic_bool(lowered);
+                puts("Source admission case263 Atomic<bool>: unique NEW(true)/root publication Checked and Lowered PASS");
+            }
             if(i==289 || i==318){
                 const XrXirModule *module=xr_xir_compile_artifact_module(lowered);bool found=false;
                 for(uint32_t f=0;f<module->function_count;++f){

@@ -14,13 +14,18 @@
 #define XIR_DEFAULTS_WIRE_CASES_H
 #include "xir_defaults_golden_bytes.h"
 #include "xir_defaults64_golden_bytes.h"
+#include "xir_defaults65_golden_bytes.h"
 #include "xir_library_prior_packet_rejection.h"
 #include "xir_defaults_invoke_golden.h"
 static void defaults_wire_goldens(void) {
     library_prior_packet_rejection(library_context,defaults_golden_7,sizeof(defaults_golden_7));
+    library_prior_packet_rejection(library_context,defaults64_golden_7,sizeof(defaults64_golden_7));
     library_prior_packet_rejection(library_context,defaults_golden_8,sizeof(defaults_golden_8));
+    library_prior_packet_rejection(library_context,defaults64_golden_8,sizeof(defaults64_golden_8));
     library_prior_packet_rejection(library_context,defaults_golden_9,sizeof(defaults_golden_9));
+    library_prior_packet_rejection(library_context,defaults64_golden_9,sizeof(defaults64_golden_9));
     library_prior_packet_rejection(library_context,defaults_golden_10,sizeof(defaults_golden_10));
+    library_prior_packet_rejection(library_context,defaults64_golden_10,sizeof(defaults64_golden_10));
     struct { const uint8_t *bytes; size_t length; bool valid; } cases[] = {
         {defaults_golden_0,sizeof(defaults_golden_0),false},
         {defaults_golden_1,sizeof(defaults_golden_1),false},
@@ -33,10 +38,14 @@ static void defaults_wire_goldens(void) {
         {defaults_golden_8,sizeof(defaults_golden_8),false},
         {defaults_golden_9,sizeof(defaults_golden_9),false},
         {defaults_golden_10,sizeof(defaults_golden_10),false},
-        {defaults64_golden_7,sizeof(defaults64_golden_7),true},
-        {defaults64_golden_8,sizeof(defaults64_golden_8),true},
-        {defaults64_golden_9,sizeof(defaults64_golden_9),true},
-        {defaults64_golden_10,sizeof(defaults64_golden_10),true}
+        {defaults64_golden_7,sizeof(defaults64_golden_7),false},
+        {defaults64_golden_8,sizeof(defaults64_golden_8),false},
+        {defaults64_golden_9,sizeof(defaults64_golden_9),false},
+        {defaults64_golden_10,sizeof(defaults64_golden_10),false},
+        {defaults65_golden_7,sizeof(defaults65_golden_7),true},
+        {defaults65_golden_8,sizeof(defaults65_golden_8),true},
+        {defaults65_golden_9,sizeof(defaults65_golden_9),true},
+        {defaults65_golden_10,sizeof(defaults65_golden_10),true}
     };
     size_t live = runtime_live, physical = runtime_bytes;
     for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
@@ -56,7 +65,7 @@ static void defaults_wire_goldens(void) {
 static void defaults_wire_ownership(void) {
     size_t live = runtime_live, physical = runtime_bytes;
     XrXirArtifact *producer = NULL, *copy = NULL;
-    CHECK(xr_xir_compile_checked_read(library_context,defaults64_golden_7,sizeof(defaults64_golden_7),&producer,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(library_context,defaults65_golden_7,sizeof(defaults65_golden_7),&producer,NULL) == XR_XIR_OK);
     const XrXirModule *original = xr_xir_compile_artifact_module(producer);
     CHECK(original->defaults && original->defaults->count == 1);
     CHECK(original->defaults->records[0].function == 0 && original->defaults->records[0].owner == 2);
@@ -67,14 +76,14 @@ static void defaults_wire_ownership(void) {
     CHECK(xr_xir_compile_artifact_verify(copy,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(copy,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(defaults64_golden_7) && !memcmp(packet.bytes,defaults64_golden_7,packet.length));
+    CHECK(packet.length == sizeof(defaults65_golden_7) && !memcmp(packet.bytes,defaults65_golden_7,packet.length));
     xr_xir_compile_artifact_free(copy); xr_xir_compile_checked_packet_free(&packet);
     CHECK(runtime_live == live && runtime_bytes == physical);
 }
 static void defaults_clone_failures(void) {
     size_t live = runtime_live, physical = runtime_bytes;
     XrXirArtifact *producer = NULL, *copy = NULL;
-    CHECK(xr_xir_compile_checked_read(library_context,defaults64_golden_7,sizeof(defaults64_golden_7),&producer,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(library_context,defaults65_golden_7,sizeof(defaults65_golden_7),&producer,NULL) == XR_XIR_OK);
     const XrXirModule *original = xr_xir_compile_artifact_module(producer);
     LibraryPacketFixture fixture={NULL,0,original};library_compile_operation_cases("defaults owned clone",library_packet_operation,&fixture);
     XrXirModule bad = *original;
@@ -87,10 +96,10 @@ static void defaults_clone_failures(void) {
 static void defaults_wire_failure_prefix(void) {
     size_t live = runtime_live, physical = runtime_bytes;
     XrXirArtifact *artifact = NULL;
-    LibraryPacketFixture fixture={defaults64_golden_7,sizeof(defaults64_golden_7),NULL};
+    LibraryPacketFixture fixture={defaults65_golden_7,sizeof(defaults65_golden_7),NULL};
     library_compile_operation_cases("defaults packet reader/writer",library_packet_operation,&fixture);
-    uint8_t bad[sizeof(defaults64_golden_7)];
-    memcpy(bad,defaults64_golden_7,sizeof(bad));
+    uint8_t bad[sizeof(defaults65_golden_7)];
+    memcpy(bad,defaults65_golden_7,sizeof(bad));
     /* The independent fixture's count is at 542, before its 20-byte record. */
     memset(bad+542,255,4);
     XrSHA256Context digest; xr_sha256_init(&digest); xr_sha256_update(&digest,bad,32);
@@ -98,7 +107,7 @@ static void defaults_wire_failure_prefix(void) {
     CHECK(xr_xir_compile_checked_read(library_context,bad,sizeof(bad),&artifact,NULL) == XR_XIR_BAD_STRUCTURE && !artifact);
     CHECK(runtime_live == live && runtime_bytes == physical);
     for (size_t length = 518; length < sizeof(bad); ++length) {
-        memcpy(bad,defaults64_golden_7,sizeof(bad));
+        memcpy(bad,defaults65_golden_7,sizeof(bad));
         uint64_t payload = length - 64;
         for (unsigned j = 0; j < 8; ++j) bad[24+j] = (uint8_t)(payload >> (j*8));
         xr_sha256_init(&digest); xr_sha256_update(&digest,bad,32);
@@ -107,7 +116,7 @@ static void defaults_wire_failure_prefix(void) {
         CHECK(runtime_live == live && runtime_bytes == physical);
     }
     for (unsigned field = 0; field < 4; ++field) {
-        memcpy(bad,defaults64_golden_7,sizeof(bad));
+        memcpy(bad,defaults65_golden_7,sizeof(bad));
         memset(bad+546+field*4,255,4);
         xr_sha256_init(&digest); xr_sha256_update(&digest,bad,32);
         xr_sha256_update(&digest,bad+64,sizeof(bad)-64); xr_sha256_final(&digest,bad+32);

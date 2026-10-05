@@ -10,6 +10,13 @@
  *   Owned Checked artifacts and decoded packets share explicit runtime expectations.
  */
 #include "xir/xxir_array.h"
+typedef struct ReadyEntries {uint32_t answer,retained,values;} ReadyEntries;
+static inline ReadyEntries ready_select(const XrXirModule *module){
+ const char *names[]={"answer","retained","values"};uint32_t ids[3]={UINT32_MAX,UINT32_MAX,UINT32_MAX};
+ for(uint32_t f=0;f<module->function_count;++f)for(unsigned n=0;n<3;++n){const XrXirFunction *fn=&module->functions[f];
+  if(fn->name_length==strlen(names[n])&&!memcmp(fn->name,names[n],fn->name_length)){CHECK(ids[n]==UINT32_MAX&&!fn->parameter_count);ids[n]=f;}}
+ CHECK(ids[0]!=UINT32_MAX&&ids[1]!=UINT32_MAX&&ids[2]!=UINT32_MAX);return (ReadyEntries){ids[0],ids[1],ids[2]};
+}
 static XrXirCallStatus ready_call(XrXirInstance *instance,uint32_t function,XrXirValue *value){
  XrXirCallStatus status=xr_xir_instance_start(instance,function,NULL,0);
 
@@ -19,7 +26,7 @@ static XrXirCallStatus ready_call(XrXirInstance *instance,uint32_t function,XrXi
 return status;
 
 }
-static void ready_pair(XrXirProgram *program,XrXirValue held[2][2]){
+static void ready_pair(XrXirProgram *program,ReadyEntries entries,XrXirValue held[2][2]){
  XrXirInstance *instances[2]={NULL,NULL};
 XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
 
@@ -30,12 +37,12 @@ i<2;
  for(unsigned i=0;
 i<2;
 ++i){XrXirValue number={0};
-CHECK(ready_call(instances[i],3,&number)==XR_XIR_CALL_RETURNED);
+CHECK(ready_call(instances[i],entries.answer,&number)==XR_XIR_CALL_RETURNED);
 CHECK(number.type==XR_XIR_I64&&number.payload==41);
 xr_xir_value_drop(&number);
 
- CHECK(ready_call(instances[i],4,&held[i][0])==XR_XIR_CALL_RETURNED);
-CHECK(ready_call(instances[i],5,&held[i][1])==XR_XIR_CALL_RETURNED);
+ CHECK(ready_call(instances[i],entries.retained,&held[i][0])==XR_XIR_CALL_RETURNED);
+CHECK(ready_call(instances[i],entries.values,&held[i][1])==XR_XIR_CALL_RETURNED);
 }
  for(unsigned i=0;
 i<2;
@@ -66,7 +73,7 @@ xr_xir_value_drop(&extracted);
 xr_xir_domain_drop(receiving);
 }
 }
-static void ready_runtime_faults(XrXirProgram *program){size_t baseline=runtime_live,bytes=runtime_bytes,sites=0;
+static void ready_runtime_faults(XrXirProgram *program,ReadyEntries entries){size_t baseline=runtime_live,bytes=runtime_bytes,sites=0;
 
  for(size_t pass=0;
 pass<=sites;
@@ -78,12 +85,11 @@ XrXirValue value={0};
 
  XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
 
- for(uint32_t f=3;
-f<=5&&status==XR_XIR_CALL_READY;
-++f){status=ready_call(instance,f,&value);
-if(status==XR_XIR_CALL_RETURNED){if(f==3)CHECK(value.type==XR_XIR_I64&&value.payload==41);
+ const uint32_t functions[]={entries.answer,entries.retained,entries.values};
+ for(unsigned f=0;f<3&&status==XR_XIR_CALL_READY;++f){status=ready_call(instance,functions[f],&value);
+if(status==XR_XIR_CALL_RETURNED){if(f==0)CHECK(value.type==XR_XIR_I64&&value.payload==41);
 xr_xir_value_drop(&value);
-if(f<5)status=XR_XIR_CALL_READY;
+if(f<2)status=XR_XIR_CALL_READY;
 }}
  if(!pass){CHECK(status==XR_XIR_CALL_RETURNED);
 sites=runtime_attempts;

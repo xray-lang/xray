@@ -49,6 +49,14 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
 /* Charge actual operations before starting them. Failed stages never refund work. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources, uint64_t units);
 
+/* Check one prospective payload allocation and its specified payload work at
+ * this instant, without allocating, charging, or reserving resources. Actual
+ * allocators must still perform their own admission and charge exactly once;
+ * a successful check does not guarantee a later allocation can succeed. The
+ * caller must keep its ledger reference alive throughout this call. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_admit(XrCompileResources *resources,
+    size_t bytes, uint64_t payload_work);
+
 /* Scan at most 64 readable source bytes while holding the ledger lock. Each
  * byte read consumes one work unit before access. Each non-delimiter byte
  * additionally consumes one unit before advancing. A found delimiter is not

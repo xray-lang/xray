@@ -87,7 +87,7 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [25, 64, 21, 26, 29]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [25, 65, 21, 26, 29]
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
@@ -103,7 +103,7 @@ def main():
     status('current-sdk-positive', manifest, 0)
     old_manifest = json.loads((old / 'sdk/sdk_manifest.json').read_text())
     status('old-sdk-identity', old_manifest, 1, old / 'sdk')
-    for name,value in [('value_abi',17),('call_abi',21),('program_abi',26),
+    for name,value in [('semantic',64),('value_abi',17),('call_abi',21),('program_abi',26),
                        ('value_abi',20),('call_abi',25),('program_abi',28)]:
         changed = json.loads(json.dumps(manifest)); changed[name] = value
         status('old-' + name+'-'+str(value), changed, 1)

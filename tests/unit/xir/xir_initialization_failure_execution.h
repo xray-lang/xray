@@ -11,7 +11,27 @@
  */
 #include "xir/xxir_error.h"
 #include "xir/xxir_enum.h"
-typedef struct InitTrace {uint32_t output,begins,ready,published,released,stack[16];bool reject;} InitTrace;
+#include "xir/xxir_type_arena.h"
+typedef struct InitModules {uint32_t root,base,failing,prelude;} InitModules;
+static InitModules init_modules;
+static void init_module_roles(const XrXirDeclarations *declarations){
+ const char *names[]={"module-id-v1:kind=6:script:namespace=0::path=7:root.xr",
+ "module-id-v1:kind=6:script:namespace=0::path=7:base.xr",
+ "module-id-v1:kind=6:script:namespace=0::path=10:failing.xr",
+ "stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def"};
+ uint32_t ids[4]={UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX};CHECK(declarations->module_count==4);
+ for(uint32_t m=0;m<declarations->module_count;++m)for(unsigned role=0;role<4;++role){const XrXirSourceModule *decl=&declarations->modules[m];
+  if(decl->name_length==strlen(names[role])&&!memcmp(decl->name,names[role],decl->name_length)){CHECK(ids[role]==UINT32_MAX);ids[role]=m;}}
+ for(unsigned role=0;role<4;++role)CHECK(ids[role]!=UINT32_MAX);
+ CHECK(declarations->root_module==ids[0]);init_modules=(InitModules){ids[0],ids[1],ids[2],ids[3]};
+}
+typedef struct InitTrace {uint32_t output,begins,ready,published,released,stack[16],module_begins[4],module_ready[4];bool reject;} InitTrace;
+static void init_ready_prefix(const InitTrace *trace){
+ CHECK(trace->module_begins[init_modules.root]==0&&trace->module_ready[init_modules.root]==0);
+ CHECK(trace->module_begins[init_modules.base]==1&&trace->module_ready[init_modules.base]==1);
+ CHECK(trace->module_begins[init_modules.failing]==1&&trace->module_ready[init_modules.failing]==0);
+ CHECK(trace->module_begins[init_modules.prelude]==1&&trace->module_ready[init_modules.prelude]==1);
+}
 static XrXirOutputStatus init_output(void *context,const XrXirOutputGroup *group){
     InitTrace *trace=context;const char *text=NULL;size_t size=0;
     CHECK(group->stream==XR_XIR_STDOUT&&group->line&&group->count==1&&trace->output<2);
@@ -20,15 +40,15 @@ static XrXirOutputStatus init_output(void *context,const XrXirOutputGroup *group
 }
 static void init_trace(void *context,XrXirLifecycleEvent event,uint32_t index){
     InitTrace *trace=context;
-    if(event==XR_XIR_MODULE_BEGIN)++trace->begins;
-    else if(event==XR_XIR_MODULE_READY)++trace->ready;
+    if(event==XR_XIR_MODULE_BEGIN){CHECK(index<4);++trace->begins;++trace->module_begins[index];}
+    else if(event==XR_XIR_MODULE_READY){CHECK(index<4);++trace->ready;++trace->module_ready[index];}
     else if(event==XR_XIR_SLOT_PUBLISHED){CHECK(trace->published<16);trace->stack[trace->published++]=index;}
     else {CHECK(event==XR_XIR_SLOT_RELEASED&&trace->released<trace->published);
         CHECK(index==trace->stack[trace->published-1-trace->released++]);}
 }
 static void init_failure_value(const XrXirValue *error){
     XrXirValue concrete=*error;
-    CHECK(xr_xir_type_is_enum(xr_xir_type_arena_types(xr_xir_value_arena(error)),(XrXirType)error->type));
+    CHECK(xr_xir_type_is_enum(xr_xir_compile_type_arena_types(xr_xir_value_arena(error)),(XrXirType)error->type));
     XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission={xr_xir_value_arena(error),reader,NULL,NULL,10000,65536};
     XrXirValue text={0},count={0};
@@ -44,12 +64,13 @@ static void init_pair(XrXirProgram *program,uint32_t entry,XrXirValue held[3]){
         CHECK(xr_xir_instance_new(program,&c,&instances[i])==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_READY);
         paused[i]=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);CHECK(paused[i].outcome.status==XR_XIR_CALL_SUSPENDED);
-        CHECK(traces[i].output==2&&traces[i].begins==2&&traces[i].ready==1&&!traces[i].released);
+        fprintf(stderr,"init observed instance%u output%u begins%u ready%u published%u released%u\n",i,traces[i].output,traces[i].begins,traces[i].ready,traces[i].published,traces[i].released);
+        CHECK(traces[i].output==2&&traces[i].begins==3&&traces[i].ready==2&&!traces[i].released);init_ready_prefix(&traces[i]);
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_BUSY);
     }
     for(unsigned i=0;i<2;++i){CHECK(xr_xir_instance_resume(instances[i],paused[i].epoch,paused[i].outcome.wake)==XR_XIR_CALL_READY);
         XrXirInstanceResult failed=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);CHECK(failed.outcome.status==XR_XIR_CALL_THROWN);init_failure_value(&failed.outcome.value);
-        CHECK(traces[i].released==traces[i].published&&traces[i].published==3&&traces[i].output==2&&traces[i].ready==1);
+        CHECK(traces[i].released==traces[i].published&&traces[i].published==3&&traces[i].output==2&&traces[i].ready==2);init_ready_prefix(&traces[i]);
         if(!i)CHECK(xr_xir_instance_state(instances[1])==XR_XIR_INSTANCE_INITIALIZING&&!traces[1].released);
         for(unsigned n=0;n<3;++n){CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_THROWN);
             CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status==XR_XIR_CALL_THROWN&&traces[i].output==2);}

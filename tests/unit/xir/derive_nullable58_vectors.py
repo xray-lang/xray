@@ -8,6 +8,7 @@ from derive_test_roles_vectors import upgrade
 from derive_semantic61_migration import semantic61_packet
 from derive_tuple62_migration import tuple62_packet
 from derive_tuple63_migration import tuple63_packet
+from derive_role_nullable65_packets import arrays,nullable_header
 
 
 def sum_vector(some):
@@ -49,11 +50,7 @@ def main():
         path=directory/record['path'];text=path.read_text(encoding='utf-8')
         match=re.search(r'\b'+record['name']+r'\s*\[[^\]]*\]\s*=\s*\{(.*?)\};',text,re.S)
         actual=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',match[1]))
-        if args.write:
-            assert actual==expected
-            content=header(record['name'],expected).split('{',1)[1].split('};',1)[0]
-            path.write_text(text[:match.start(1)]+content+text[match.end(1):],encoding='utf-8')
-        else: assert actual==expected
+        assert actual==expected
     scalar=scalar_packet(59,23)
     assert product_layout(16).hex()=='a4f36107af3fd82c6fe19e1b99ba2ca1f7f7dd818c75f04e931e26f470abc953'
     assert product_layout(19,25,28).hex()=='40e4c991f0d0f1cbd78ca0d05de11da20c51760d8e4982ec30cc72d1bb1516b4'
@@ -61,28 +58,21 @@ def main():
              'xir_nullable_golden.h':header('nullable_none_golden',tuple63_packet(tuple62_packet(semantic61_packet(sum_vector(False)))))+
                                       header('nullable_some_golden',tuple63_packet(tuple62_packet(semantic61_packet(sum_vector(True)))))}
     for name,content in outputs.items():
-        if args.write:(directory/name).write_text(content,encoding='utf-8')
-        else:
-            actual_text=(directory/name).read_text(encoding='utf-8')
-            arrays=re.compile(r'const uint8_t (\w+)\[\]=\{(.*?)\};',re.S)
-            expected_arrays=list(arrays.finditer(content))
-            for expected_array in expected_arrays:
-                actual_array=next(m for m in arrays.finditer(actual_text) if m[1]==expected_array[1])
-                decode=lambda text:bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',text))
-                assert decode(actual_array[2])==decode(expected_array[2]),expected_array[1]
-    if args.write:
-        checked=directory/'test_xir_checked.c';text=checked.read_text(encoding='utf-8')
-        digest=re.search(r'const uint8_t expected_digest\[32\] = \{(.*?)\};',text,re.S)
-        content='\n        '+', '.join(f'0x{v:02x}' for v in tuple63_packet(tuple62_packet(semantic61_packet(scalar)))[32:64])+'\n    '
-        checked.write_text(text[:digest.start(1)]+content+text[digest.end(1):],encoding='utf-8')
-        identity=directory/'xir_source_product_identity.h';text=identity.read_text(encoding='utf-8')
-        expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',text,re.S)
-        content=','.join(f'0x{v:02x}' for v in product_layout(20,25,28))
-        identity.write_text(text[:expected.start(1)]+content+text[expected.end(1):],encoding='utf-8')
-    else:
-        identity=(directory/'xir_source_product_identity.h').read_text(encoding='utf-8')
-        expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',identity,re.S)
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(20,25,28)
+        actual_text=(directory/name).read_text(encoding='utf-8')
+        array_pattern=re.compile(r'const uint8_t (\w+)\[\]=\{(.*?)\};',re.S)
+        expected_arrays=list(array_pattern.finditer(content))
+        for expected_array in expected_arrays:
+            actual_array=next(m for m in array_pattern.finditer(actual_text) if m[1]==expected_array[1])
+            decode=lambda text:bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',text))
+            assert decode(actual_array[2])==decode(expected_array[2]),expected_array[1]
+    identity=(directory/'xir_source_product_identity.h').read_text(encoding='utf-8')
+    expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',identity,re.S)
+    # Same independent198-byte/43-word layout facts, current Value21/Call26/Program29.
+    assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(21,26,29)
+    current=nullable_header(arrays(directory/'xir_nullable_golden.h'))
+    target=directory/'xir_nullable65_golden.h'
+    if args.write:target.write_text(current,encoding='utf-8',newline='\n')
+    else:assert target.read_text(encoding='utf-8')==current
     print(json.dumps({'ordinary_vectors_reframed_with_role_zero':len(records),
         'historical59_nullable_none_sha256':hashlib.sha256(sum_vector(False)).hexdigest(),
         'current63_nullable_none_sha256':hashlib.sha256(tuple63_packet(tuple62_packet(semantic61_packet(sum_vector(False))))).hexdigest(),

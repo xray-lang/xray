@@ -1,7 +1,7 @@
 # One frozen Checked packet feeds VM and the same generated-C native/mixed program.
 set(XIR_DEPENDENCY_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_dependency_ready.xrc)
 set(XIR_DEPENDENCY_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_dependency_ready.c)
-add_xray_bootstrap_executable(test_xir_dependency_source xir/test_xir_dependency_source.c)
+add_executable(test_xir_dependency_source xir/test_xir_dependency_source.c)
 target_link_libraries(test_xir_dependency_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_dependency_source PRIVATE
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_dependency_ready"

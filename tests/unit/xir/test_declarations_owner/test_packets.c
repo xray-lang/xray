@@ -11,19 +11,28 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
+#include "../xir_library_compile_owner.h"
 int main(int argc,char **argv) {
-    CHECK(argc==2);XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
-    XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
-    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    CHECK(argc==2);LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
+    XrXirCompileContext context=compiler.context;
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    for(unsigned i=0;i<18;++i)for(unsigned current=0;current<2;++current) {
-        char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%02u-%s.chk",argv[1],i,current?"current":"old")>0);
+    for(unsigned i=0;i<18;++i)for(unsigned current=0;current<4;++current) {
+        char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%02u-%s.chk",argv[1],i,current==1?"current":current==2?"old63":current==3?"old64":"old")>0);
         FILE *file=fopen(path,"rb");CHECK(file && !fseek(file,0,SEEK_END));long size=ftell(file);
         CHECK(size>64 && size<16384 && !fseek(file,0,SEEK_SET));uint8_t bytes[16384];
         CHECK(fread(bytes,1,(size_t)size,file)==(size_t)size && !fclose(file));
-        XrXirArtifact *artifact=current?NULL:(XrXirArtifact *)(uintptr_t)1;
+        XrXirArtifact *artifact=current==1?NULL:(XrXirArtifact *)(uintptr_t)1;
+        XrCompileResourceStats reject_before=library_compile_stats(&context);
         XrXirStatus status=xr_xir_compile_checked_read(&context,bytes,(size_t)size,&artifact,NULL);
-        if(!current) {CHECK(status==XR_XIR_BAD_STRUCTURE && artifact==(XrXirArtifact *)(uintptr_t)1);continue;}
+        if(current!=1) {
+            CHECK(status==XR_XIR_BAD_STRUCTURE && artifact==(XrXirArtifact *)(uintptr_t)1);
+            XrCompileResourceStats reject_after=library_compile_stats(&context);
+            CHECK(reject_after.allocation_count==reject_before.allocation_count &&
+                reject_after.allocated_bytes==reject_before.allocated_bytes &&
+                reject_after.live_bytes==reject_before.live_bytes &&
+                reject_after.peak_bytes==reject_before.peak_bytes);
+            continue;
+        }
         if(status!=XR_XIR_OK)fprintf(stderr,"vector=%u status=%u\n",i,status);
         CHECK(status==XR_XIR_OK);XrXirCheckedPacket written={0};
         CHECK(xr_xir_compile_checked_write(artifact,&written,NULL)==XR_XIR_OK);
@@ -31,5 +40,7 @@ int main(int argc,char **argv) {
         xr_xir_compile_checked_packet_free(&written);xr_xir_compile_artifact_free(artifact);
         CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes);
     }
-    xr_compile_resources_release(context.resources);puts("18 complete old/current packet pairs: rejection, roundtrip, live refund PASS");return 0;
+    after=library_compile_stats(&context);
+    fprintf(stderr,"role finite allocated=%llu peak=%llu work=%llu\n",(unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes,(unsigned long long)after.work);
+    library_compile_owner_drop(&compiler);library_compile_observer_free();puts("18 complete old/current packet pairs: rejection, roundtrip, live refund PASS");return 0;
 }

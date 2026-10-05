@@ -1,0 +1,38 @@
+import { pair, extract, library_text } from "./library"
+var sequence = 0
+var (moduleText,moduleArray,moduleUnit) = ("module-owned",[10,20],())
+const (moduleAtomic,_) = (Atomic(30),())
+const (moduleSingle,) = ("module-single",)
+const (moduleCopy,_) = (moduleArray,())
+var () = ()
+var (_,_) = (moduleText,moduleUnit)
+fn fields() -> (string,Array<i64>,(),(i64,string),Atomic<i64>) {
+    sequence = sequence + 1
+    return ("owned中",[4,5],(),(7,"nested"),Atomic(9))
+}
+export fn make() -> (string,Array<i64>,(i64,string),i64,(),string,i64,Atomic<i64>) {
+    assert(moduleText=="module-owned" && moduleSingle=="module-single" && library_text()=="library-owned")
+    moduleArray[0]=33
+    assert(moduleArray[0]==33 && moduleCopy[0]==10 && moduleAtomic.load()==30)
+    var (text,items,unit,nested,atomic) = fields()
+    const () = ()
+    const (zero,_) = ((),())
+    const (single,) = ("singleton",)
+    const (generic,word) = pair<i64>(6)
+    var (copy,_) = (items,zero)
+    copy[0] = 44
+    assert(items[0]==4)
+    var outer = 22
+    { const (outer,_) = (3,zero); assert(outer==3) }
+    assert(outer==22)
+    const getter = fn() -> string {
+        const (local,_) = (text,nested)
+        return local
+    }
+    const (shared,_) = (atomic,unit)
+    assert(shared.fetchAdd(2)==9)
+    assert(atomic.load()==11)
+    const value = extract<i64>((generic,word))
+    print("destructure",getter(),sequence,items[0],copy[0],nested.0,single,value)
+    return (getter(),copy,nested,sequence,unit,single,value,shared)
+}

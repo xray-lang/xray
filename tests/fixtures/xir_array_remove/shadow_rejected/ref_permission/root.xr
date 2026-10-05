@@ -1,0 +1,2 @@
+fn Array<T>(value:T)->T{return value}
+export fn main()->i64{var value:i64=7;return Array<i64>(ref value)}

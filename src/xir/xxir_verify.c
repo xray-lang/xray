@@ -114,6 +114,7 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
 }
 
 #include "xxir_requirement_verify.inc.c"
+#include "xxir_slot_group_verify.inc.c"
 
 static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirInstruction *op, XrXirStage stage,
@@ -126,6 +127,10 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         return XR_XIR_BAD_STAGE;
     XrXirStatus declared = declaration_instruction(function, op, module);
     if (declared != XR_XIR_OK) return declared;
+    if(op->op==XR_XIR_SLOT_GROUP_INIT) {
+        XrXirStatus grouped=slot_group_shape(function,op,module,remaining);
+        if(grouped!=XR_XIR_OK)return grouped;
+    }
     bool range = xr_xir_op_uses_operand_table(op->op);
     if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
@@ -271,7 +276,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
-               op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
+               op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
                op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET && op->op != XR_XIR_TUPLE_FIELD &&
                op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS && op->immediate) {
@@ -757,6 +762,20 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!xir_compile_work(&context->remaining, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if(op->op==XR_XIR_SLOT_GROUP_INIT) {
+            uint64_t packed=(uint64_t)op->immediate;
+            uint32_t first=(uint32_t)(packed>>32),count=(uint32_t)packed,payload=0;
+            if(!xir_compile_work(&context->remaining,count))return XR_XIR_BUDGET;
+            for(uint32_t field=0;field<count;++field) {
+                XrXirType type=context->module->declarations->slots[first+field].type;
+                if(type==XR_XIR_UNIT)continue;
+                XrXirStatus status=type_use_context(context,context->location.function,type);
+                if(status==XR_XIR_OK)status=role_operand(function,graph,context,i,payload++,type);
+                if(status!=XR_XIR_OK)return status;
+            }
+            if(payload!=op->args[1])return XR_XIR_BAD_STRUCTURE;
+            continue;
+        }
         if (xr_xir_op_is_atomic(op->op)) {
             XrXirStatus status = atomic_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;

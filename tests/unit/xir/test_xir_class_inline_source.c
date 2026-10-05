@@ -12,69 +12,80 @@
 #include "base/xmalloc.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_generic.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
-static size_t source_attempts,source_fail_at=SIZE_MAX,source_live,source_bytes;
-typedef struct SourceOwned {void *pointer;size_t bytes;} SourceOwned;
-static SourceOwned *source_owned;
-static size_t source_capacity;
-static void *ready_alloc(size_t count,size_t size){
- CHECK(!size||count<=SIZE_MAX/size);
- if(source_attempts++==source_fail_at)return NULL;
- void *pointer=xr_calloc(count,size);if(!pointer)return NULL;
- if(source_live==source_capacity){
-  CHECK(source_capacity<=SIZE_MAX/2/sizeof(*source_owned));
-  size_t capacity=source_capacity?source_capacity*2:256;
-  SourceOwned *grown=xr_realloc(source_owned,capacity*sizeof(*grown));CHECK(grown);
-  source_owned=grown;source_capacity=capacity;
- }
- CHECK(count*size<=SIZE_MAX-source_bytes);
- source_owned[source_live++]=(SourceOwned){pointer,count*size};source_bytes+=count*size;return pointer;
-}
-static void ready_free(void *pointer){
- if(pointer){size_t index=0;while(index<source_live&&source_owned[index].pointer!=pointer)++index;
-  CHECK(index<source_live);source_bytes-=source_owned[index].bytes;
-  source_owned[index]=source_owned[--source_live];xr_free(pointer);
-  if(!source_live){CHECK(!source_bytes);xr_free(source_owned);source_owned=NULL;source_capacity=0;}
- }
-}
-#undef xr_calloc
-#undef xr_free
-#define xr_calloc(c,s) ready_alloc(c,s)
-#define xr_free(p) ready_free(p)
-#include "xir/xxir_source_query.c"
-#include "xir/xxir_type_inference.c"
-#include "xir/xxir_source.c"
-#undef xr_calloc
-#undef xr_free
-XR_FUNC void xr_test_class_inline_source_run(XrXirArtifact **checked);
+#include "xir_class_pipeline_owner.h"
+#include "xir/xxir_vm.h"
+#define SOURCE_CLASS_FUNCTIONS 19
+#define LOWERED_CLASS_FUNCTIONS 25
+XR_FUNC void xr_test_class_inline_source_run(const XrXirCompileContext *context,XrXirArtifact **checked);
 XR_FUNC size_t xr_test_class_inline_runtime_live(void);
 XR_FUNC size_t xr_test_class_inline_runtime_bytes(void);
-static void class_inline_query_facts(const XrXirSourceResult *result){
- CHECK(result->snapshot&&xr_xir_source_snapshot_view(result->snapshot)->complete);
- CHECK(xr_xir_artifact_verify(result->checked,NULL,NULL)==XR_XIR_OK);
- CHECK(xr_xir_artifact_module(result->checked)->function_count==19);
+
+static XrXirStatus class_source_owned(const XrXirCompileContext *context,XrXirArtifact **output) {
+    XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+    XrCompilerSessionStatus made=xr_compile_session_new(context->resources,&session);
+    XrXirStatus status=made==XR_COMPILER_SESSION_OK?XR_XIR_OK:made==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    if(status==XR_XIR_OK){
+        status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
+        if(status!=XR_XIR_OK){CHECK(diagnostic.status==status && !result.checked);
+            if(result.snapshot)CHECK(!xr_xir_compile_source_snapshot_view(result.snapshot)->complete);}
+    }
+    if(status==XR_XIR_OK){
+        CHECK(result.checked && result.snapshot && xr_xir_compile_source_snapshot_view(result.snapshot)->complete);
+        CHECK(xr_xir_compile_artifact_module(result.checked)->function_count==SOURCE_CLASS_FUNCTIONS);
+        *output=result.checked;result.checked=NULL;
+    }
+    xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+    if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(*output,NULL);
+    if(status!=XR_XIR_OK){xr_xir_compile_artifact_free(*output);*output=NULL;}
+    return status;
 }
-int main(int argc,char **argv){
- CHECK(argc==1||argc==2);XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
- XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
- XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
- size_t sites=0,retained_live=0,retained_bytes=0;XrXirArtifact *owned=NULL;
- for(size_t pass=0;pass<=sites;++pass){
-  source_attempts=0;source_fail_at=pass?pass-1:SIZE_MAX;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-  XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
-  if(!pass){if(status!=XR_XIR_OK)fprintf(stderr,"%u %d %s\n",status,diagnostic.line,diagnostic.message);CHECK(status==XR_XIR_OK&&result.checked&&result.snapshot);sites=source_attempts;class_inline_query_facts(&result);
-   XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(result.checked,NULL,&packet,NULL)==XR_XIR_OK&&packet.length<=262144);
-   if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file&&fwrite(packet.bytes,1,packet.length,file)==packet.length&&!fclose(file));}
-   XrXirArtifact *decoded=NULL;CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);xr_xir_artifact_free(decoded);xr_xir_checked_packet_free(&packet);owned=result.checked;result.checked=NULL;
-  }else{CHECK(status==XR_XIR_OUT_OF_MEMORY&&diagnostic.status==XR_XIR_OUT_OF_MEMORY&&!result.checked);if(result.snapshot)CHECK(!xr_xir_source_snapshot_view(result.snapshot)->complete);}
-  xr_xir_source_result_free(&result);CHECK(!source_live&&!source_bytes);
-  if(!pass){retained_live=xr_test_class_inline_runtime_live();retained_bytes=xr_test_class_inline_runtime_bytes();CHECK(retained_live&&retained_bytes);}
-  CHECK(xr_test_class_inline_runtime_live()==retained_live&&xr_test_class_inline_runtime_bytes()==retained_bytes);
- }
- source_fail_at=SIZE_MAX;
- xr_compiler_session_delete(session);CHECK(!source_live&&!source_bytes);xr_test_class_inline_source_run(&owned);CHECK(!owned);printf("inline class source %zu OOM sites; producer destroyed\n",sites);return 0;
+static XrXirStatus class_source_program(const XrXirCompileContext *context,XrXirProgram **output,const char *path) {
+    XrXirArtifact *owned=NULL,*decoded=NULL,*special=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
+    XrXirStatus status=class_source_owned(context,&owned);
+    if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(owned,&packet,NULL);
+    if(status==XR_XIR_OK){CHECK(packet.length<=262144);if(path){FILE *f=fopen(path,"wb");CHECK(f && fwrite(packet.bytes,1,packet.length,f)==packet.length && !fclose(f));}}
+    if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&decoded,NULL);
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(owned);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(decoded,&special,NULL);
+    xr_xir_compile_artifact_free(decoded);
+    if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target,&lowered,NULL);
+    xr_xir_compile_artifact_free(special);
+    if(status==XR_XIR_OK){const XrXirModule *m=xr_xir_compile_artifact_module(lowered);
+        CHECK(m->function_count==LOWERED_CLASS_FUNCTIONS && m->declarations->module_count==3);
+        CHECK(m->functions[3].name_length==6 && !memcmp(m->functions[3].name,"answer",6));
+        CHECK(m->functions[4].name_length==8 && !memcmp(m->functions[4].name,"retained",8));
+        status=xr_xir_compile_vm_program_take(&lowered,output);
+    }
+    xr_xir_compile_artifact_free(lowered);if(status!=XR_XIR_OK)CHECK(!*output);return status;
+}
+static XrXirStatus class_source_operation(const XrXirCompileContext *context,void *fixture) {
+    (void)fixture;XrXirProgram *program=NULL;XrXirStatus status=class_source_program(context,&program,NULL);
+    xr_xir_compile_program_drop(program);return status;
+}
+
+int main(int argc,char **argv) {
+    CHECK(argc==1 || argc==2);ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);
+    XrXirArtifact *owned=NULL;CHECK(class_source_owned(&owner.context,&owned)==XR_XIR_OK);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK && packet.length<=262144);
+    if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));}
+    XrXirArtifact *decoded=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);xr_xir_compile_checked_packet_free(&packet);
+    /* The original first Checked owner is retained while independent complete fault replays destroy all their producers. */
+    size_t blocks=source_program_compile_live,bytes=source_program_compile_bytes;
+    class_pipeline_faults("Class inline whole Source/Checked/VM",class_source_operation,NULL);
+    CHECK(source_program_compile_live==blocks && source_program_compile_bytes==bytes);
+    CHECK(xr_xir_compile_artifact_verify(owned,NULL)==XR_XIR_OK);
+    xr_test_class_inline_source_run(&owner.context,&owned);CHECK(!owned);
+    CHECK(!xr_test_class_inline_runtime_live() && !xr_test_class_inline_runtime_bytes());
+    class_pipeline_drop(&owner);class_pipeline_final_zero();puts("inline class first OwnedChecked; complete compiler FI/axes; both physical0 PASS");return 0;
 }

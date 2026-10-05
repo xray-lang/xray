@@ -1307,6 +1307,8 @@ var p2 = pair(1, "x")             // (i64, string)
 
 **Ownership and evaluation contract (frozen 2026-10-05; complete new XIR implementation pending)**: evaluate fields once each, left to right, and preserve their ordered type vector. `()` remains Unit; `(x,)` differs from `x`. Copying, saving parameters, returning, and projecting a field obtain independently owned values according to each field's contract. Copying stops at class and Atomic synchronization identities. Physical sharing does not permit field mutation. Destructuring evaluates its RHS once and prepares every field result before publishing the complete set of bindings; preparation failure releases partial results and publishes no new binding. Arguments and returns use the same Checked type, permission, layout, and value admission; untyped multiple returns or fabricated nominal declarations do not represent tuples.
 
+See §5.1.3/§17.35 for admitted flat destructuring and atomic module publication; admitted nested tuple values do not admit nested patterns. A zero-payload Unit field does not widen ordinary Unit formal or generic-argument domains.
+
 Sendable is the conjunction of all fields; this family does not automatically extend Equal to Tuple. Wrapping a view or noncopyable field inherits its borrowing, copying, and escape restrictions without granting ordinary-generic or cross-execution permissions. The first owned implementation must support currently admitted storable fields, strings, arrays, Atomic handles, and nested tuples. Unsupported view/resource combinations reject explicitly and remain obligations of §2.4/§2.14. The current parser represents at most 255 type fields: 256 requires an explicit bounded rejection, never truncation or acceptance of a different type. This temporary implementation bound is not a permanent language restriction.
 
 #### Worked Examples
@@ -2807,7 +2809,7 @@ ConstDecl ::= 'const' Binding
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
          | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
@@ -2876,6 +2878,8 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
 - Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
+
+The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array/object destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
 
 ### 5.2 `fn` function declaration
 
@@ -7647,6 +7651,16 @@ PRINT failure preserves the exact Call status. For a valid configured provider, 
 Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
 
 Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
+
+### 17.35 Flat Tuple destructuring and atomic module publication
+
+Flat `var` / `const` patterns admit identifier or `_` leaves, exact ordered arity, Unit and `(x,)` singletons. Evaluate the RHS once and prepare all field projections and mutable Cells before publishing local names; closure capture retains the existing Cell/ownership contract. An empty pattern accepts only Unit and an all-discard pattern creates no binding or module group. Actual types, Sendable, visibility, construction/execution authority and definition-time constraints with Checked specialization/revalidation remain mandatory; wrapping does not widen ordinary Unit or resource permissions. Nested/rest, array/object patterns, spread, match and leaf annotations reject specifically at the current entry while remaining language obligations.
+
+The sole new SLOT_GROUP_INIT appends ordinal145; current OP_COUNT146 preserves every earlier ordinal. type=Unit; args0 is an operand-table offset and args1=m counts non-Unit payloads. The immediate packs first_slot in high u32 and n contiguous actual bindings in low u32. Prevalidate n>0, the entire same-module range, actual initializer, unpublished state, exact n/m, types and permissions. Unused fields are zero; Unit consumes no SSA/payload and forged placeholder IDs reject. Outgoing layout is m. Every stage shares this operation and VM/generated C call the sole xr_xir_instance_slot_group_init(view,first,n,compact_values,m).
+
+The actual Call allocation domain, scratch, value limit and bounded work own preparation. Obtain every admission, copy, retained hold and cleanup resource in a private owned table before checking execution_status. Any failure or precommit cancellation frees preparation without a published slot or trace. The infallible commit installs all slots, flags/count/order before tracing; trace reentry sees the complete group and cancellation on the first trace does not roll back committed bindings. Cleanup allocates nothing and refunds each actual backing owner; initialization failures remain sticky.
+
+This operation uses Checked semantic65 while wire25 and Value21/Call26/Program29 structures remain unchanged; §17.6 implementation constants still solely define current versions. Complete previous25/64 packets reject at the header with zero allocation. Independent fixed family roles construct current packets and preserve complete64 preimages as rejection evidence rather than deriving expectations from the writer. The new SDK helper needs same-source qualification through the actual165-entry (160 source+5 archive) recipe and five-archive consumers; all original345 ABI expressions and139 object responsibilities remain. Qualification retains forged Checked shapes, independent VM/native/mixed outcomes, every actual OOM/three-axis boundary, retain saturation, cancellation, producer/Program/Instance first-drop lifetimes and final physical zero. The flat subset does not replace full default/product safety or final legacy deletion.
 
 ---
 

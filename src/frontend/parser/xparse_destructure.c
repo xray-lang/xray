@@ -123,6 +123,7 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
     XrDestructurePattern **elements = NULL;
     int count = 0;
     int capacity = 0;
+    bool had_comma = false;
 
     while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
         if (count >= capacity) {
@@ -140,6 +141,7 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
             elements = _new_elements;
         }
 
+        Token field_token=parser->current;
         if (xr_parser_match(parser, TK_UNDERSCORE)) {
             do {
                 elements[count++] = xr_pattern_skip(parser->compiler_session);
@@ -161,11 +163,16 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
             return NULL;
         }
 
+        elements[count-1]->line=field_token.line;
+        elements[count-1]->column=field_token.column;
+        elements[count-1]->end_line=field_token.line;
+        elements[count-1]->end_column=field_token.column+field_token.length;
         // A trailing comma at the end is allowed (and mandatory for
         // the unary form `(x,)`); otherwise comma separates elements.
         if (xr_parser_check(parser, TK_RPAREN))
             break;
-        if (!xr_parser_match(parser, TK_COMMA)) {
+        if (xr_parser_match(parser, TK_COMMA)) had_comma = true;
+        else {
             do {
                 xr_parser_error(parser, "expected ',' or ')'");
                 if (!xr_parser_healthy(parser)) return NULL;
@@ -174,6 +181,10 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
         }
     }
 
+    if (count == 1 && !had_comma) {
+        xr_parser_error(parser, "single-element tuple binding requires a trailing comma");
+        return NULL;
+    }
     do {
         xr_parser_consume(parser, TK_RPAREN, "expected ')'");
         if (!xr_parser_healthy(parser)) return NULL;
@@ -296,6 +307,7 @@ AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_destructure_declaration: NULL parser");
     int line = parser->previous.line;
+    int column = parser->previous.column;
 
     XrDestructurePattern *pattern = xr_parse_destructure_pattern(parser);
     if (!xr_parser_healthy(parser)) return NULL;
@@ -320,7 +332,11 @@ AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const) {
         return NULL;
     }
 
-    return xr_ast_destructure_decl(parser->compiler_session, pattern, initializer, is_const, line);
+    AstNode *node=xr_ast_destructure_decl(parser->compiler_session, pattern, initializer, is_const, line);
+    if(!xr_parser_healthy(parser) || !node)return NULL;
+    node->column=column;node->end_line=parser->previous.line;
+    node->end_column=parser->previous.column+parser->previous.length;
+    return node;
 }
 
 // ========== Destructuring assignment helpers ==========

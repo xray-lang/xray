@@ -955,6 +955,8 @@ static bool source_string_literal(SourceContext *ctx, AstNode *node, const char 
 #include "xxir_source_type_name.inc.c"
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_atomic_calls.inc.c"
+static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
+    SourceName *target,SourceExpectedType result_context,SourceValue *value);
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_panic.inc.c"
 static bool finish_body(SourceContext *ctx);
@@ -964,6 +966,17 @@ static bool finish_body(SourceContext *ctx);
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic);
 static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value);
 #include "xxir_source_rune.inc.c"
+static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
+    SourceName *target,SourceExpectedType result_context,SourceValue *value) {
+    SourceDirectRequest direct={target->index,{0},NULL,result_context};
+    SourceDirectArguments prepared={0};
+    if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
+    XrXirInstruction call_op={XR_XIR_CALL,prepared.result,{0},{0},target->index,{0}};
+    AstNode *reference=node->type==AST_CALL_EXPR?node->as.call_expr.callee:node;
+    return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&call_op) &&
+        source_query_reference(ctx,reference,binding,target,XR_XIR_SOURCE_CALL) &&
+        source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
+}
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -1102,6 +1115,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         return source_nominal_apply(ctx, target, call->type_args, (uint32_t)call->type_arg_count, &type) &&
             source_constructor_call(ctx, node, type, binding, target, value);
     }
+    if (target && target->kind == SOURCE_FUNCTION && !selected.method)
+        return source_function_call(ctx,node,binding,target,result_context,value);
     if (target && target->kind == SOURCE_FUNCTION) {
         SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL,result_context};
         SourceDirectArguments prepared = {0};
@@ -1447,7 +1462,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_TEMPLATE_STRING: return source_template(ctx, node, value);
     case AST_NEW_EXPR:
         if (ctx->active_expression->binding)
-            return source_constructor_new(ctx, node, value);
+            return source_constructor_new(ctx, node, context, value);
         if (node->as.new_expr.class_name && source_text_same(ctx,NULL,node->as.new_expr.class_name,"Atomic"))
             return source_atomic_explicit_construct(ctx,node,value);
         return source_array_construct(ctx, node, value);
@@ -1557,6 +1572,7 @@ static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value) {
     return source_plan_expression(ctx, node, (SourceExpectedType){false,XR_XIR_UNIT, false}, value);
 }
 #include "xxir_source_expression_plan.inc.c"
+#include "xxir_source_destructure.inc.c"
 static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     VarDeclNode *decl = &node->as.var_decl;
     if (decl->attr_count || (!decl->initializer && (decl->is_const || !decl->type_annotation)))
@@ -1837,6 +1853,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_IMPORT_STMT: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
+    case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
     case AST_EXPR_STMT: {
         SourceValue value; AstNode *expr=node->as.expr_stmt;
         if (expr->type!=AST_MATCH_EXPR) return expression(ctx,expr,&value);
@@ -2128,6 +2145,15 @@ static bool collect_declarations(SourceContext *ctx) {
                 }
             }
             if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) ++slots;
+            if(node->type==AST_DESTRUCTURE_DECL) {
+                uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
+                for(uint32_t f=0;f<fields;++f) {
+                    if(!source_work(ctx,node))return false;
+                    if(node->as.destructure_decl.pattern->as.array.elements[f]->type==PATTERN_SKIP)continue;
+                    if(slots==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
+                    ++slots;
+                }
+            }
         }
     }
     if (functions > ctx->compile.limits.functions || closures.defaults > ctx->compile.limits.functions - functions)
@@ -2211,6 +2237,21 @@ static bool collect_declarations(SourceContext *ctx) {
                 symbol->kind = SOURCE_SLOT; symbol->index = slot; symbol->mutable = !node->as.var_decl.is_const;
                 if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, 0, source_query_range(ctx, node, symbol->name))) return false;
                 ctx->slots[slot++] = (XrXirSlot) {m, XR_XIR_UNIT, symbol->mutable};
+            } else if(node->type==AST_DESTRUCTURE_DECL) {
+                uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
+                for(uint32_t f=0;f<fields;++f) {
+                    if(!source_work(ctx,node))return false;
+                    XrDestructurePattern *field=node->as.destructure_decl.pattern->as.array.elements[f];
+                    if(field->type==PATTERN_SKIP)continue;
+                    if(node->is_exported || (!node->as.destructure_decl.is_const &&
+                        (ctx->linkage_kind==XR_XIR_LIBRARY || m!=(uint32_t)ctx->graph->entry_index)))
+                        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"library mutable or exported state is not admitted");
+                    SourceName *symbol=add_name(ctx,&ctx->names[m],field->as.identifier.name,node);
+                    if(!symbol)return false;
+                    symbol->kind=SOURCE_SLOT;symbol->index=slot;symbol->mutable=!node->as.destructure_decl.is_const;
+                    if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,source_destructure_range(ctx,field)))return false;
+                    ctx->slots[slot++]=(XrXirSlot){m,XR_XIR_UNIT,symbol->mutable};
+                }
             }
         }
     }
@@ -2398,6 +2439,16 @@ static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
         break;
     case AST_VAR_DECL: case AST_CONST_DECL:
         return capture_scan(node->as.var_decl.initializer, scan) && capture_bind(scan, node->as.var_decl.name, node);
+    case AST_DESTRUCTURE_DECL: {
+        uint32_t count=0;
+        if (!source_destructure_pattern(scan->ctx,node,&count) ||
+            !capture_scan(node->as.destructure_decl.initializer,scan)) return false;
+        for (uint32_t i=0;i<count;++i) {
+            XrDestructurePattern *field=node->as.destructure_decl.pattern->as.array.elements[i];
+            if (field->type==PATTERN_IDENTIFIER && !capture_bind(scan,field->as.identifier.name,node)) return false;
+        }
+        return true;
+    }
     case AST_BLOCK: {
         SourceName *saved = scan->bound;
         for (int i = 0; i < node->as.block.count; ++i)

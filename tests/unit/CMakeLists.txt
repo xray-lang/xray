@@ -124,7 +124,8 @@ if(WIN32)
         COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_windows_unicode_paths.py
             --xray $<TARGET_FILE:xray>)
     set_tests_properties(test_windows_unicode_paths PROPERTIES
-        LABELS "integration;cli;windows;vm;aot" TIMEOUT 600 COST 180)
+        LABELS "integration;cli;windows;vm;aot" TIMEOUT 600 COST 180
+        ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
     add_executable(test_file_read_windows base/test_file_read_windows.c
         ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c
         ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c)
@@ -507,9 +508,9 @@ set_tests_properties(test_xir_source_product_vm_modules test_xir_source_product_
     PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
 target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 add_executable(test_xir_source_admission xir/test_xir_source_admission.c)
-add_xray_bootstrap_executable(test_xir_source_generics xir/test_xir_source_generics.c)
+add_executable(test_xir_source_generics xir/test_xir_source_generics.c)
 add_executable(test_xir_source_query xir/test_xir_source_query.c)
-add_xray_bootstrap_executable(test_xir_source_packages xir/test_xir_source_packages.c)
+add_executable(test_xir_source_packages xir/test_xir_source_packages.c)
 target_link_libraries(test_xir_source_packages PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 if(MSVC)
     target_compile_options(test_xir_source_packages PRIVATE /W4 /WX)
@@ -538,9 +539,9 @@ set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;executi
 
 
 target_link_libraries(test_xir_source_query PRIVATE xray_xir_source xray_xir_vm)
-target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source)
+target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
-add_xray_bootstrap_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
+add_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
 target_link_libraries(test_xir_source_allocations PRIVATE xray_xir_source xray_xir xray_xir_scalar)
 target_compile_definitions(test_xir_source_allocations PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 target_compile_definitions(test_xir_source_allocations PRIVATE XR_CLASS_ARRAY_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_class_array")
@@ -684,7 +685,7 @@ if(MSVC)
         target_compile_options(${cleanup_host} PRIVATE /O2 /Ob2 /Oy-)
     endforeach()
 endif()
-add_xray_bootstrap_executable(test_xir_panic_source xir/test_xir_panic_source.c)
+add_executable(test_xir_panic_source xir/test_xir_panic_source.c)
 target_link_libraries(test_xir_panic_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_panic_source PRIVATE XR_PANIC_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source")
 set(XIR_PANIC_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_panic_source.c)
@@ -717,7 +718,16 @@ foreach(xir_test IN ITEMS test_xir_cleanup_native test_xir_cleanup_mixed test_xi
     else()
         target_compile_options(${xir_test} PRIVATE -Wall -Wextra -Werror)
     endif()
-    add_test(NAME ${xir_test} COMMAND ${xir_test})
+    if(WIN32 AND xir_test STREQUAL "test_xir_source_allocations")
+        add_test(NAME ${xir_test} COMMAND ${Python3_EXECUTABLE}
+            "${CMAKE_CURRENT_SOURCE_DIR}/xir/run_source_allocation_shards.py"
+            --executable $<TARGET_FILE:${xir_test}>
+            --reports-root "${CMAKE_CURRENT_BINARY_DIR}/source-allocation-reports"
+            --source-root "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(${xir_test} PROPERTIES TIMEOUT 600 PROCESSORS 8)
+    else()
+        add_test(NAME ${xir_test} COMMAND ${xir_test})
+    endif()
     set_tests_properties(${xir_test} PROPERTIES LABELS "unit;xir;execution;ownership;abi")
 endforeach()
 
@@ -4211,4 +4221,8 @@ include(module/module_graph_logical_source.cmake)
 
 include(xir/atomic_a2_runtime_fault.cmake)
 
+include(xir/semantic65_vectors.cmake)
+
 include(xir/array_remove.cmake)
+
+include(xir/source_shadow_function.cmake)

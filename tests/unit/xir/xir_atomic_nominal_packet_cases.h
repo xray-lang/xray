@@ -14,14 +14,21 @@ static void ordering_packet_digest(uint8_t *bytes,size_t length) {
 }
 static void ordering_packet_cases(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
-    XrXirArtifact *sentinel=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,ordering25_golden,
-        sizeof(ordering25_golden),&sentinel,NULL)==XR_XIR_OK && sentinel);
+    size_t previous_attempts=source_program_compile_attempts;
+    size_t previous_live=source_program_compile_live,previous_bytes=source_program_compile_bytes;
+    XrXirArtifact *previous=NULL;
+    CHECK(xr_xir_compile_checked_read(&owner.context,ordering25_golden,sizeof(ordering25_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && !previous);
+    previous=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&owner.context,ordering25_golden,sizeof(ordering25_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(source_program_compile_attempts==previous_attempts && source_program_compile_live==previous_live && source_program_compile_bytes==previous_bytes);
+    XrXirArtifact *sentinel=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,ordering65_golden,
+        sizeof(ordering65_golden),&sentinel,NULL)==XR_XIR_OK && sentinel);
     XrCompileResourceStats baseline=library_compile_stats(&owner.context);
     XrXirArtifact *empty=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,generic_method_golden,
         sizeof(generic_method_golden),&empty,NULL)==XR_XIR_BAD_STRUCTURE && !empty);
     for(unsigned mutation=0;mutation<7;++mutation){
-        uint8_t bytes[sizeof(ordering25_golden)];memcpy(bytes,ordering25_golden,sizeof(bytes));
+        uint8_t bytes[sizeof(ordering65_golden)];memcpy(bytes,ordering65_golden,sizeof(bytes));
         switch(mutation){case 0:bytes[8]=24;bytes[12]=63;break;
         case 1:bytes[ORDERING25_RECORD_OFFSET]=0;break;
         case 2:bytes[ORDERING25_RECORD_OFFSET]=3;break;

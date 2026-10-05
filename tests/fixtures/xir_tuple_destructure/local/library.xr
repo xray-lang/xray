@@ -1,0 +1,7 @@
+export fn pair<T:Sendable>(value:T) -> (T,string) { return (value,"generic") }
+const (libraryText,libraryUnit) = ("library-owned",())
+export fn library_text() -> string { return libraryText }
+export fn extract<T:Sendable>(value:(T,string)) -> T {
+    const (first,_) = value
+    return first
+}

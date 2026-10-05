@@ -1299,6 +1299,8 @@ var p2 = pair(1, "x")             // (i64, string)
 
 **拥有与求值合同（2026-10-05 冻结，完整新 XIR 实施待完成）**：字段按源码从左到右各求值一次，类型保留有序字段向量；`()` 沿用 Unit，`(x,)` 与 `x` 不同。复制、保存参数、返回、字段投影取得符合字段合同的独立拥有式值，复制在 class/Atomic 同步身份边界停止；普通可复制元组不能因物理共享而允许修改字段。解构的 RHS 只求值一次，所有字段结果先准备，准备失败释放已取得的部分且不发布任何新绑定；准备完成后才发布整组绑定。调用参数和返回经过同一 Checked 类型/权限/布局与值准入，不能用无类型双返回或伪名义声明代替元组。
 
+当前平坦解构的准入与模块原子发布见 §5.1.3/§17.35；嵌套元组值合法不等于嵌套 pattern 已准入。Unit 字段零 payload 不扩大普通 Unit 形参或泛型实参域。
+
 Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。包含视图或不可复制字段时继承字段的借用、复制和逃逸限制，不能借 Tuple 包装扩大普通泛型或跨执行权限。首个拥有式实现须支持当前准入的可保存字段、string/Array/Atomic 和嵌套元组；尚未接通的视图/资源组合明确拒绝并继续承接 §2.4/§2.14，不删除这些语言目标。当前 parser 类型字段计数有 255 的实现边界，必须对 256 给出明确有界拒绝，不能截断、接受不同类型或把该临时边界写成永久语言限制。
 
 #### 完整可运行示例
@@ -2781,7 +2783,7 @@ ConstDecl ::= 'const' Binding
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
          | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
@@ -2850,6 +2852,8 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
 - 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
+
+当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组/对象解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
 
 ### 5.2 `fn` 函数声明
 
@@ -7478,6 +7482,16 @@ PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将
 当前Call ABI为21。Provider/Sink以abi_version与reserved=0开头；有callback先验21，无provider仅准canonical全零。CallConfig/InstanceConfig以abi_version和struct_size开头，在读取其它字段前验21及exact sizeof。Windows x86_64实测Provider24、Sink32、CallConfig136、InstanceConfig88；这些数值不代替其它target的实际ABI验证。唯一xr_xir_call_config_init(config,size)与xr_xir_instance_config_init(config,size)返回CallStatus，成功才写，失败保留全部output bytes；旧按值defaults符号删除，无别名或wrapper。旧Call20 entry必须在执行callback前拒绝；旧embedding defaults对象必须链接拒绝，不能用重编旧对象替代证据。
 
 Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
+
+### 17.35 平坦 Tuple 解构与模块整组发布
+
+平坦 `var` / `const` 模式接受名字或 `_`、精确有序 arity、Unit 与 `(x,)` singleton；RHS 一次求值，全部字段投影和可变 Cell 准备完成后再发布局部名字，闭包捕获沿原 Cell/拥有合同。空模式只接受 Unit；全 discard 不产生绑定或 module group。字段类型和 Sendable/visibility/构造/执行资格沿真实类型与 Checked 定义处约束及特化复验，不能借 Tuple 扩大泛型 Unit 或被包装资源权限。嵌套/rest、数组/对象模式、spread、match 和叶注解在当前入口具体拒绝，继续承接原合法语言目标。
+
+唯一新增操作 SLOT_GROUP_INIT 追加 ordinal145，当前 OP_COUNT146，旧 ordinal 不变。type=Unit；args0 为 operands 表 offset，args1=m 为非Unit payload数；immediate 高u32为 first_slot，低u32为 n 个连续实际bindings。n>0、整区间属于同模块、实际initializer、未发布、精确 n/m、类型与权限全部预验；unused字段为零，Unit项不占SSA/payload，也不准用伪值ID占位。outgoing layout 为 m。全部阶段使用同一操作，VM 与生成C调用唯一 xr_xir_instance_slot_group_init(view,first,n,compact_values,m)。
+
+真实 Call allocation domain、scratch、值上限和有界work承担整组准备：私有owned表先取得全部准入/复制/持有与清理资源，再核 execution_status。任一失败或提交前取消释放全部准备且不产生 published slot或trace。不可失败的commit先写完整slots、flags/count/order，再开始trace；trace重入可见整组，首trace取消不回滚已提交绑定。清理不临时分配，按真实backing owner返还物理存储；初始化失败继续粘滞。
+
+此操作的 Checked semantic 为65，wire25与 Value21/Call26/Program29结构未变；现行版本仍只由 §17.6 实现常量定义。旧完整25/64包必须header早拒且零分配，当前包由各族独立固定角色构造，旧64完整前像保留为历史拒例，不能以writer输出刷新oracle。新SDK helper须在同源165项（160源+5archive）recipe及真实五archive消费者复验，原345 ABI表达式和139对象职责不减少。完整资格保留 Checked forged-shape、独立VM/native/mixed预期、全部真实OOM/三轴、retain饱和、取消、producer/Program/Instance先drop与最终physical0；平坦子片不代替完整产品默认门、完整安全或最后旧链删除。
 
 ---
 

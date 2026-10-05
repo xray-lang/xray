@@ -1,0 +1,2 @@
+fn f(Array:i64)->i64{return Array<i64>(7)}
+export fn main()->i64{return f(2)}

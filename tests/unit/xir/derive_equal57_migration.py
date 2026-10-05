@@ -20,7 +20,8 @@ def nullable_frame(previous):
     head=bytearray(previous[:32]);struct.pack_into('<I',head,12,58)
     return bytes(head)+hashlib.sha256(head+previous[64:]).digest()+previous[64:]
 
-def atomic64_scalar(previous):
+def atomic64_scalar(previous, semantic=64):
+    assert semantic in (64,65)
     # This is the complete independent scalar body, not a general wire rewrite.
     from derive_panic_carrier_vector import packet
     assert previous[:8] == b'XRCHK\0\0\0' and len(previous) == 221
@@ -31,7 +32,7 @@ def atomic64_scalar(previous):
     assert struct.unpack_from('<I', previous, 113)[0] == 2  # CONST_INT.
     assert struct.unpack_from('<I', previous, 153)[0] == 25  # Historical RETURN.
     result = bytearray(previous)
-    struct.pack_into('<II', result, 8, 25, 64)
+    struct.pack_into('<II', result, 8, 25, semantic)
     struct.pack_into('<I', result, 153, 33)  # Current RETURN; all other body bytes stay fixed.
     assert result[64:153] == previous[64:153] and result[157:] == previous[157:]
     result[32:64] = hashlib.sha256(result[:32] + result[64:]).digest()
@@ -62,11 +63,16 @@ def main():
         current64=atomic64_scalar(historical63)
         scalar=(directory/'xir_checked_scalar64_golden.h').read_text(encoding='utf-8')
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==current64
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',digest[1]))==current64[32:64]
+        current65=atomic64_scalar(historical63,65)
+        scalar=(directory/'xir_checked_scalar65_golden.h').read_text(encoding='utf-8')
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==current65
+        assert current65[64:]==current64[64:]
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',digest[1]))==current65[32:64]
         print(json.dumps({'old56_whole_packets_reproduced':len(records)+1,
                           'historical57_whole_packets_reproduced':len(records)+1,
                           'historical63_whole_packets_verified':len(records)+1,
-                          'current64_scalar_whole_packet_verified':1}));return
+                          'previous64_scalar_whole_packet_verified':1,
+                          'current65_scalar_whole_packet_verified':1}));return
     assert not manifest.exists();records=[]
     for path in sorted(directory.iterdir()):
         if path.suffix not in ('.c','.h') or path.name=='xir_assert_panics_golden.h':continue

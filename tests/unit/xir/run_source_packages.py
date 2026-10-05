@@ -47,11 +47,14 @@ with tempfile.TemporaryDirectory(prefix="xir-locked-package-") as directory:
     environment["USERPROFILE"] = str(root)
     checksum = "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest()
     subprocess.run([sys.argv[1], str(root), str(entry), checksum, *sys.argv[2:]], env=environment, check=True)
-    # Each manifest fits the allowance alone; their combined parse work does not.
+    # The original 196608 whole-operation budget remains fail-closed.
+    # The C owner also checks actual single-manifest exact/minus1 fees and
+    # a shared-ledger two-manifest LIMIT using the unchanged padded inputs.
     bounded = dict(environment, XR_TEST_PACKAGE_WORK="196608")
     result = subprocess.run([sys.argv[1], str(root), str(entry), checksum], env=bounded,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
-    if result.returncode == 0 or "declaration manifest admission failed" not in result.stderr:
+    print(result.stderr, end="", file=sys.stderr)
+    if result.returncode == 0 or "Package work budget status=6 checked=NULL snapshot=NULL cap=196608" not in result.stderr:
         raise AssertionError(("cumulative package work", result.returncode, result.stdout, result.stderr))
     for content, expected in [
         (manifest.replace('["callback"]', '["missing"]'), "declaration parameter name is missing"),
@@ -62,5 +65,6 @@ with tempfile.TemporaryDirectory(prefix="xir-locked-package-") as directory:
         manifest_path.write_text(content, encoding="utf-8")
         result = subprocess.run([sys.argv[1], str(root), str(entry), checksum], env=environment,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+        print(result.stderr, end="", file=sys.stderr)
         if result.returncode == 0 or expected not in result.stderr:
             raise AssertionError((expected, result.returncode, result.stdout, result.stderr))

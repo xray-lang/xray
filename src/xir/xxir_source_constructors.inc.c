@@ -193,7 +193,7 @@ static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType
         (uint32_t)syntax->arg_count, binding, target, type};
     return source_constructor_invoke(ctx, node, &call, value);
 }
-static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceExpectedType context,SourceValue *value) {
     const NewExprNode *syntax = &node->as.new_expr;
     SourceName *binding = ctx->active_expression->binding, *target = binding;
     if (syntax->is_type_namespace || syntax->arg_count < 0 || syntax->arg_count > 65536 ||
@@ -207,6 +207,8 @@ static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceValu
     } else if (target && target->kind == SOURCE_IMPORT)
         target = imported_declaration(ctx, target, target->imported);
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    if (target && target->kind==SOURCE_FUNCTION)
+        return source_function_call(ctx,node,binding,target,context,value);
     XrXirType type;
     if (!source_nominal_apply(ctx, target, syntax->type_args, (uint32_t)syntax->type_arg_count, &type)) return false;
     SourceConstructorCall call = {node, syntax->arguments, syntax->arg_accesses,

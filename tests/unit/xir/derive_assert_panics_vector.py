@@ -87,6 +87,9 @@ def main():
                         (directory / 'xir_assert_panics64_golden.h').read_text(encoding='utf-8')))
         assert literal == executable
         assert json.loads((directory / 'assert_panics_packet_vectors.json').read_text(encoding='utf-8')) == data
+    executable65=current64_packet(tuple63_packet(tuple62_packet(semantic61_packet(current_vector()[0]))),65)
+    literal65=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',(directory/'xir_assert_panics65_golden.h').read_text(encoding='utf-8')))
+    assert literal65==executable65 and executable65[64:]==executable[64:]
     print(json.dumps({'historical56_bytes': len(current), 'historical56_sha256': data['core_packet_sha256'],
                      'current64_bytes':len(executable), 'current64_sha256':hashlib.sha256(executable).hexdigest(),
                      'historical56_offsets': offsets, 'current64_offsets':current_offsets}, indent=2))

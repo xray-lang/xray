@@ -31,14 +31,26 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
          * owned Checked artifact or claim this view has Checked provenance. */
         XrXirModule private_view=*xr_xir_compile_artifact_module(result.checked);
         XrXirTypes private_types=*private_view.types;
-        CHECK(private_types.nominals->count==1);
-        XrXirNominalTable table=*private_types.nominals;
-        XrXirNominalDeclaration record=table.declarations[0];
-        CHECK(record.field_count==1);
-        XrXirNominalField field=record.fields[0];field.flags|=XR_XIR_FIELD_PRIVATE;
-        record.fields=&field;table.declarations=&record;private_types.nominals=&table;private_view.types=&private_types;
-                CHECK(xr_xir_compile_nominal_structure_verify(request->context, &table, &private_types)==XR_XIR_BAD_STRUCTURE);
-        CHECK(xr_xir_compile_verify(request->context, &private_view, NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(owner->kind==XR_XIR_SOURCE_TYPE && !owner->native_identity);
+        CHECK(owner->range.module<view->module_count && private_types.nominals);
+        const XrXirTypeNode *box=xr_xir_type_node(&private_types,owner->type.type);
+        CHECK(box && box->kind==XR_XIR_TYPE_NOMINAL);
+        CHECK(box->nominal.declaration<private_types.nominals->count);
+        const char *module_identity=view->modules[owner->range.module].identity;
+        XrXirNominalTable *table=NULL;
+        CHECK(xr_xir_compile_nominal_clone(request->context,private_types.nominals,&private_types,&table)==XR_XIR_OK);
+        CHECK(table && table->declarations && table->count==private_types.nominals->count);
+        XrXirNominalDeclaration *record=(XrXirNominalDeclaration *)&table->declarations[box->nominal.declaration];
+        CHECK(record->name.length==strlen(owner->name) && !memcmp(record->name.bytes,owner->name,record->name.length));
+        CHECK(record->module.length==strlen(module_identity) && !memcmp(record->module.bytes,module_identity,record->module.length));
+        CHECK(record->kind==XR_XIR_NOMINAL_ENUM && !record->native.native_id);
+        CHECK(record->parameter_count==owner->generic_parameter_count && record->field_count==1);
+        private_types.nominals=table;private_view.types=&private_types;
+        CHECK(xr_xir_compile_nominal_structure_verify(request->context,table,&private_types)==XR_XIR_OK);
+        ((XrXirNominalField *)record->fields)[0].flags|=XR_XIR_FIELD_PRIVATE;
+        CHECK(xr_xir_compile_nominal_structure_verify(request->context,table,&private_types)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_verify(request->context,&private_view,NULL)==XR_XIR_BAD_STRUCTURE);
+        xr_xir_compile_nominal_free(table);
     }
     XrXirCheckedPacket packet={0};
     const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(result.checked);

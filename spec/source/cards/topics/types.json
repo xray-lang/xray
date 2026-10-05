@@ -51,6 +51,7 @@
     },
     {
       "heading": "Tuple types",
+      "markdown": "Tuples preserve ordered field types and independently owned immutable values. Flat destructuring uses exact arity and evaluates its RHS once; module bindings publish as one prepared group (spec §17.35). Unit fields carry no payload and do not admit ordinary Unit generic arguments or formals. Nested tuple values do not imply admitted nested patterns; Sendable remains the conjunction of fields and wrapping grants no execution permission.",
       "fences": [
         "types-tuple"
       ]

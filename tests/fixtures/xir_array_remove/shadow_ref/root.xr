@@ -1,0 +1,5 @@
+import "./producer" as producer
+fn Array<T:Sendable>(value:ref T,replacement:T)->T{value=replacement;return replacement}
+export fn case0()->i64{var y:i64?=7;if(y!=null){Array<i64?>(ref y,null);return (y??9)+producer.identity<i64>(0)};return 0}
+export fn case1()->i64{var y:i64=7;return Array<i64>(ref y,y+1)}
+export fn case2()->string{var value:string="old";return Array<string>(ref value,"mapped")}

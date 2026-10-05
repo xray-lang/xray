@@ -1,0 +1,2 @@
+fn Array<T>(value:ref T,replacement:T)->T{value=replacement;return replacement}
+export fn main()->i64{var y:i64?=7;if(y!=null){Array<i64?>(ref y,null);return y+1};return 0}

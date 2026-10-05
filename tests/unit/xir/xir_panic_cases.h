@@ -121,7 +121,7 @@ static void panic_cases(XrXirProgram *program, const uint32_t *functions) {
     XrXirValue recovered = panic_run(instance, functions[PANIC_DIRECT], 0);
     CHECK(recovered.type == XR_XIR_I64 && recovered.payload == 17); xr_xir_value_drop(&recovered);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program); xr_xir_value_drop(&info);
+    xr_xir_compile_program_drop(program); xr_xir_value_drop(&info);
     XrXirFaultDetail detail = {0}; XrXirValue message = {0};
     CHECK(xr_xir_panic_info_detail(&copy, &detail) && detail.code == 420);
     CHECK(xr_xir_panic_info_message(&copy, &message) == XR_XIR_VALUE_OK);
@@ -146,7 +146,7 @@ static void panic_sticky(XrXirProgram *program, uint32_t entry) {
         CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_DIVIDE_BY_ZERO);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(!runtime_live && !runtime_bytes);
 }
 #endif // XIR_PANIC_CASES_H

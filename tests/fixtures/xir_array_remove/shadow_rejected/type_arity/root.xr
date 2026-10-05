@@ -1,0 +1,2 @@
+fn Array<T>(value:T)->T{return value}
+export fn main()->i64{return Array<i64,bool>(7)}

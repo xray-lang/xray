@@ -1,0 +1,7 @@
+import "./producer" as producer
+var calls:i64=0
+fn next()->i64{calls+=1;return 7}
+fn Array<T:Sendable>(value:T,extra:i64=2)->T{return value}
+export fn case0()->i64{const value=Array<i64>(next());if(calls!=1){return 0};return value+9+producer.identity<i64>(0)}
+export fn case1()->bool{return Array<bool>(true)}
+export fn case2()->string{return Array<string>("mapped")}

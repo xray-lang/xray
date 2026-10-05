@@ -14,36 +14,28 @@
 #define XIR_GENERIC_METHOD_QUERY_ALLOCATIONS_H
 #include "xir_generic_method_owned_fixture.h"
 static void generic_method_query_allocations(void) {
-    CHECK(!live); size_t sites = 0;
-    for (size_t attempt = 0; attempt <= sites; ++attempt) {
+    CHECK(!source_fixture_compile_live); size_t sites = allocation_case_begin(6);
+    for(size_t attempt=allocation_first();allocation_more(attempt,sites);attempt=allocation_next(attempt)) {
         GenericMethodOwnedFixture fixture; generic_method_owned_fixture(&fixture);
         XrXirSourceView view = {0}; view.types = &fixture.types;
-        XrXirBudget initial = xr_xir_default_budget(), budget = initial;
-        attempts = 0; fail_at = attempt ? attempt-1 : SIZE_MAX;
+        XrCompileResourceLimits limits = allocation_limits();
+        source_fixture_compile_attempts = 0; source_fixture_compile_fail_at = attempt ? attempt-1 : SIZE_MAX; source_fixture_compile_injected=false;
         XrXirSourceSnapshot *snapshot = NULL;
-        XrXirStatus status = xr_xir_source_snapshot_copy(&view,&budget,&snapshot);
+        XrXirStatus status = allocation_snapshot_copy(&view,&limits,&snapshot);
         if (!attempt) {
-            CHECK(status == XR_XIR_OK && snapshot); sites = attempts;
-            XrXirBudget required = initial;
-            required.work -= budget.work; required.metadata_bytes -= budget.metadata_bytes;
-            CHECK(required.work && required.metadata_bytes);
-            for (unsigned boundary = 0; boundary < 3; ++boundary) {
-                XrXirBudget limited = required; XrXirSourceSnapshot *bounded = NULL;
-                if (!boundary) --limited.work;
-                if (boundary == 1) --limited.metadata_bytes;
-                CHECK(xr_xir_source_snapshot_copy(&view,&limited,&bounded) ==
-                    (boundary == 2 ? XR_XIR_OK : XR_XIR_BUDGET));
-                CHECK((bounded != NULL) == (boundary == 2)); xr_xir_source_snapshot_free(bounded);
-            }
-            const XrXirInterfaceTable *table = xr_xir_source_snapshot_view(snapshot)->types->interfaces;
+            CHECK(status == XR_XIR_OK && snapshot); sites = source_fixture_compile_attempts;
+                allocation_snapshot_boundaries(&view,allocation_last_stats);
+                const XrXirInterfaceTable *table = xr_xir_compile_source_snapshot_view(snapshot)->types->interfaces;
             CHECK(table != &fixture.table && table->declarations[1].methods != fixture.methods);
             CHECK(table->declarations[1].methods[1].constraints != fixture.own+1);
             memset(&fixture,0xCC,sizeof(fixture)); memset(&view,0xCC,sizeof(view));
             generic_method_owned_assert(table);
         } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
-        xr_xir_source_snapshot_free(snapshot); CHECK(!live);
-    }
-    fail_at = SIZE_MAX;
+        xr_xir_compile_source_snapshot_free(snapshot); CHECK(!source_fixture_compile_live);
+            if(attempt)allocation_point(attempt-1,XR_XIR_OUT_OF_MEMORY,true);
+}
+        allocation_case_end(sites);
+    source_fixture_compile_fail_at = SIZE_MAX; source_fixture_compile_injected=false;
     printf("Generic method query: %zu allocation failure sites\n",sites);
 }
 #endif // XIR_GENERIC_METHOD_QUERY_ALLOCATIONS_H

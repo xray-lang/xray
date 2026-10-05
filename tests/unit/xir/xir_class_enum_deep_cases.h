@@ -17,9 +17,9 @@ static XrXirTypeArena *class_enum_arena(XrXirDomain *domain) {
  XrXirNominalFieldIdentity ef[]={{{"object",6},0},{{"text",4},0},{{"holder",6},0}};
  XrXirNominalVariant variants[]={{{"Empty",5},0,0},{{"Object",6},0,1},{{"Text",4},1,1},{{"Aggregate",9},2,1}};
  XrXirNominalIdentity ids[]={
- {{"deep",4},{"Counter",7},1,0,cf,2,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL},
- {{"deep",4},{"Holder",6},1,0,sf,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0},
- {{"deep",4},{"Choice",6},1,0,ef,3,XR_XIR_NOMINAL_ENUM,variants,4,0}};
+ {{"deep",4},{"Counter",7},1,0,cf,2,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}},
+ {{"deep",4},{"Holder",6},1,0,sf,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
+ {{"deep",4},{"Choice",6},1,0,ef,3,XR_XIR_NOMINAL_ENUM,variants,4,0,{0}}};
  XrXirNominalTable table={NULL,3,ids};
  XrXirType cf_types[]={XR_XIR_I64,XR_XIR_STRING},sf_types[]={(XrXirType)256,XR_XIR_STRING};
  XrXirType ef_types[]={(XrXirType)256,XR_XIR_STRING,(XrXirType)257};
@@ -28,9 +28,9 @@ static XrXirTypeArena *class_enum_arena(XrXirDomain *domain) {
  {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,NULL,0,sf_types,2}},
  {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{2,NULL,0,ef_types,3}},
  {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0,{0}}};
- XrXirTypes types={nodes,4,&table,NULL};XrXirBudget budget=xr_xir_default_budget();XrXirTypeArena *arena=NULL;
- CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena)==XR_XIR_VALUE_OK);
- memset(ids,0xcc,sizeof(ids));memset(variants,0xcc,sizeof(variants));return arena;
+ XrXirTypes types={nodes,4,&table,NULL};ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);XrXirTypeArena *arena=NULL;
+ CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena)==XR_XIR_VALUE_OK);
+ class_pipeline_release_producer(&owner);(void)domain;memset(ids,0xcc,sizeof(ids));memset(variants,0xcc,sizeof(variants));return arena;
 }
 static XrXirValueStatus class_enum_sequence(XrXirTypeArena *arena,XrXirDomain *domain,XrXirValue text) {
  XrXirValue v[10]={{0}},fields[]={{XR_XIR_I64,0,40},text};XrXirValueStatus status=XR_XIR_VALUE_OK;
@@ -61,7 +61,7 @@ static XrXirValueStatus class_enum_sequence(XrXirTypeArena *arena,XrXirDomain *d
 static void class_enum_deep_cases(void) {
  CHECK(!runtime_live&&!runtime_bytes);XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
  XrXirTypeArena *arena=class_enum_arena(domain);XrXirValue text={0};CHECK(xr_xir_string_new(domain,"enum",4,&text)==XR_XIR_VALUE_OK);
- const XrXirStorageLayout *layout=xr_xir_type_arena_storage(arena,(XrXirType)258);
+ const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(arena,(XrXirType)258);
  CHECK(layout->value.size==24&&layout->value.alignment==8&&layout->depth==2&&layout->owned_depth==2);
  CHECK(layout->field_offsets[0]==8&&layout->field_offsets[1]==8&&layout->field_offsets[2]==8);
  CHECK(array_release_depth(arena,(XrXirType)258)==2);
@@ -72,6 +72,6 @@ static void class_enum_deep_cases(void) {
  if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=runtime_attempts;CHECK(sites>0);}else CHECK(status==XR_XIR_VALUE_OOM);
  CHECK(runtime_live==baseline&&runtime_bytes==bytes);}
  runtime_fail_at=SIZE_MAX;printf("inline enum class/string/aggregate OOM %zu sites\n",sites);
- xr_xir_value_drop(&text);xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(!runtime_live&&!runtime_bytes);
+ xr_xir_value_drop(&text);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(!runtime_live&&!runtime_bytes);
 }
 #endif

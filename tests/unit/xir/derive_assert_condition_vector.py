@@ -38,6 +38,10 @@ assert current==golden and packet(body,57).hex()==manifest['core_packet_hex']
 current64=current64_packet(current)
 header64=(directory/'xir_assert_condition64_golden.h').read_text(encoding='utf-8')
 assert bytes(int(value,16) for value in re.findall(r'0x[0-9a-fA-F]{2}',header64))==current64
+current65=current64_packet(current,65)
+header65=(directory/'xir_assert_condition65_golden.h').read_text(encoding='utf-8')
+assert bytes(int(value,16) for value in re.findall(r'0x[0-9a-fA-F]{2}',header65))==current65
+assert current65[64:]==current64[64:]
 assert hashlib.sha256(body).hexdigest()==manifest['core_body_sha256']
 assert packet(body,55,21).hex()==manifest['previous55_core_packet_hex']
 for record in manifest['same_body_vectors']:
@@ -49,7 +53,8 @@ for record in manifest['same_body_vectors']:
     assert packet(literal[64:],54,21)[32:64].hex()==record['old_digest']
     assert packet(literal[64:],55,21)[32:64].hex()==record['previous55_digest']
     assert packet(literal[64:],57)[32:64].hex()==record['current_digest']
-print(json.dumps({'core_bytes':len(current64),'core_digest':current64[32:64].hex(),
+print(json.dumps({'core_bytes':len(current65),'core_digest':current65[32:64].hex(),
+    'complete_previous25_64_sha256':hashlib.sha256(current64).hexdigest(),
     'complete_previous24_63_sha256':hashlib.sha256(current).hexdigest(),
     'previous54_whole_bodies_reproduced':len(manifest['same_body_vectors']),
     'historical_wire22_semantic58_whole_bodies_verified':len(manifest['same_body_vectors'])},indent=2))

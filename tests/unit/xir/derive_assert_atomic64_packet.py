@@ -3,7 +3,8 @@ import hashlib
 import struct
 
 
-def current64_packet(previous):
+def current64_packet(previous, semantic=64):
+    assert semantic in (64,65)
     assert previous[:8] == b'XRCHK\0\0\0' and len(previous) >= 64
     assert struct.unpack_from('<4I', previous, 8) == (24, 63, 2, 0)
     assert struct.unpack_from('<Q', previous, 24)[0] == len(previous) - 64
@@ -88,6 +89,6 @@ def current64_packet(previous):
     skip(16 * word())
     assert word() == 0 and at == len(previous)
     assert all(output[i] == previous[i] for i in range(64, len(previous)) if i not in changed)
-    struct.pack_into('<II', output, 8, 25, 64)
+    struct.pack_into('<II', output, 8, 25, semantic)
     output[32:64] = hashlib.sha256(output[:32] + output[64:]).digest()
     return bytes(output)

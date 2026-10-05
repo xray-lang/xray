@@ -153,8 +153,8 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileRes
     return status;
 }
 
-static XrCompileResourceStatus compile_allocate_locked(
-    XrCompileResources *resources, size_t bytes, size_t payload_work, void **output) {
+static XrCompileResourceStatus compile_allocation_admit_locked(
+    XrCompileResources *resources, size_t bytes, uint64_t payload_work) {
     if (bytes > SIZE_MAX - sizeof(CompileAllocation)) return XR_COMPILE_RESOURCE_BUDGET;
     size_t charged = sizeof(CompileAllocation) + bytes;
     uint64_t remaining_work = resources->limits.work - resources->stats.work;
@@ -163,6 +163,23 @@ static XrCompileResourceStatus compile_allocate_locked(
         !remaining_work || payload_work > remaining_work - 1 ||
         resources->references == UINT64_MAX || resources->stats.allocation_count == UINT64_MAX)
         return XR_COMPILE_RESOURCE_BUDGET;
+    return XR_COMPILE_RESOURCE_OK;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_admit(XrCompileResources *resources,
+    size_t bytes, uint64_t payload_work) {
+    if (!resources || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    compile_lock(resources);
+    XrCompileResourceStatus status = compile_allocation_admit_locked(resources, bytes, payload_work);
+    compile_unlock(resources);
+    return status;
+}
+
+static XrCompileResourceStatus compile_allocate_locked(
+    XrCompileResources *resources, size_t bytes, size_t payload_work, void **output) {
+    XrCompileResourceStatus status = compile_allocation_admit_locked(resources, bytes, payload_work);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
+    size_t charged = sizeof(CompileAllocation) + bytes;
     ++resources->stats.work;
     CompileAllocation *allocation = xr_malloc(charged);
     if (!allocation) return XR_COMPILE_RESOURCE_OUT_OF_MEMORY;

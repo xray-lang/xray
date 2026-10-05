@@ -55,7 +55,12 @@ def main() -> None:
             raise AssertionError("historical known-answer vector changed: " + old_name)
         if array(current, new_name) != fixed_program(name, 25, 64, 33):
             raise AssertionError("current independent vector mismatch: " + new_name)
-    print("3 historical + 3 current independent sizing packet vectors passed")
+    current65=(directory / 'checked_sizing65_golden.h').read_text()
+    for _,old64_name,name in rows:
+        new65_name=old64_name.replace('64','65')
+        match=re.search(r'static const uint8_t '+new65_name+r'\[\] = \{(.*?)\};',current65,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x[0-9a-f]{2}',match[1]))==fixed_program(name,25,65,33)
+    print('3 original63 + 3 complete64 + 3 current65 independent sizing packet vectors passed')
 
 
 if __name__ == "__main__":

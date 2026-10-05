@@ -36,8 +36,13 @@ else()
 endif()
 add_test(NAME test_xir_tuple_native COMMAND test_xir_tuple_native)
 set_tests_properties(test_xir_tuple_native PROPERTIES LABELS "unit;xir;ownership;tuple;native;execution" TIMEOUT 180)
-foreach(tuple_closed_case unit_parameter unit_generic equal spread destructure index set bounds)
+foreach(tuple_closed_case unit_parameter unit_generic equal spread index set bounds)
     add_test(NAME test_xir_tuple_closed_${tuple_closed_case} COMMAND test_xir_tuple_source --reject ${tuple_closed_case})
     set_tests_properties(test_xir_tuple_closed_${tuple_closed_case}
         PROPERTIES LABELS "unit;xir;ownership;tuple;source;rejection" TIMEOUT 180)
 endforeach()
+add_test(NAME test_xir_tuple_closed_destructure COMMAND test_xir_tuple_source --accept-destructure)
+set_tests_properties(test_xir_tuple_closed_destructure
+    PROPERTIES LABELS "unit;xir;ownership;tuple;source;execution" TIMEOUT 180)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/tuple_destructure.cmake)

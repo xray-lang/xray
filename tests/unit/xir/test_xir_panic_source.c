@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_effect_execution_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_panic_cases.h"
 static void panic_find(const XrXirModule *module, uint32_t *functions) {
@@ -34,7 +35,7 @@ static void panic_find(const XrXirModule *module, uint32_t *functions) {
 }
 static void panic_emit(XrXirArtifact *lowered, const uint32_t *functions, const char *path) {
     XrXirCSource source = {0};
-    CHECK(xr_xir_emit_c(lowered, functions ? "panic_source" : "panic_bad", 4194304, &source) == XR_XIR_OK);
+    CHECK(xr_xir_compile_emit_c(lowered, functions ? "panic_source" : "panic_bad", 4194304, &source) == XR_XIR_OK);
     CHECK(!strstr(source.text, "({"));
     if (path) {
         FILE *file = fopen(path, functions ? "wb" : "ab"); CHECK(file);
@@ -47,41 +48,44 @@ static void panic_emit(XrXirArtifact *lowered, const uint32_t *functions, const 
         }
         CHECK(fclose(file) == 0);
     }
-    xr_xir_c_source_free(&source);
+    xr_xir_compile_c_source_free(&source);
 }
 static XrXirArtifact *panic_source_lower(const char *path) {
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_PANIC_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_source_check(&request, &result, &diagnostic);
+    XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "panic source %u at %u:%d:%d %s\n", status,
         diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);
-    xr_xir_source_result_free(&result); xr_compiler_session_delete(session);
+    CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &checked, NULL) == XR_XIR_OK);
-    memset(packet.bytes, 0xCC, packet.length); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK); xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &checked, NULL) == XR_XIR_OK);
+    memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK); xr_xir_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(closed);
     return lowered;
 }
 int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 2);
     XrXirArtifact *lowered = panic_source_lower(XR_PANIC_FIXTURES "/root.xr");
-    uint32_t functions[PANIC_FUNCTIONS]; panic_find(xr_xir_artifact_module(lowered), functions);
+    uint32_t functions[PANIC_FUNCTIONS]; panic_find(xr_xir_compile_artifact_module(lowered), functions);
     panic_emit(lowered, functions, argc == 2 ? argv[1] : NULL);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {16777216, 64000000}, &program) == XR_XIR_OK);
-    CHECK(!lowered); panic_cases(program, functions);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK);
+    CHECK(!lowered); panic_cases(program, functions); program = NULL;
     lowered = panic_source_lower(XR_PANIC_FIXTURES "/initialization.xr");
-    uint32_t entry = xr_xir_artifact_module(lowered)->declarations->entry_function;
+    uint32_t entry = xr_xir_compile_artifact_module(lowered)->declarations->entry_function;
     panic_emit(lowered, NULL, argc == 2 ? argv[1] : NULL);
-    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {16777216, 64000000}, &program) == XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK);
     CHECK(!lowered); panic_sticky(program, entry);
+    effects_source_owners_free();
     puts("Panic source VM matched independent values, channels and physical ownership");
     return 0;
 }

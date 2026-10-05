@@ -1,7 +1,7 @@
 # One source Checked packet and generated C feed VM/native/mixed class identity tests.
 set(XIR_CLASS_INLINE_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_class_inline.xrc)
 set(XIR_CLASS_INLINE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_class_inline.c)
-add_xray_bootstrap_executable(test_xir_class_inline_source xir/test_xir_class_inline_source.c)
+add_executable(test_xir_class_inline_source xir/test_xir_class_inline_source.c)
 target_sources(test_xir_class_inline_source PRIVATE xir/xir_class_inline_source_runtime.c)
 target_link_libraries(test_xir_class_inline_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_class_inline_source PRIVATE

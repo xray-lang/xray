@@ -203,6 +203,7 @@ static const uint8_t rune_current_golden[]={
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
+#include "xir_rune65_golden.h"
 static void rune_wire(void) {
     XrXirInstruction ops[]={
         {XR_XIR_CONST_RUNE,XR_XIR_RUNE,{0},{0},0x1f600,{0}},
@@ -215,21 +216,26 @@ static void rune_wire(void) {
     XrXirArtifact *checked=NULL;XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_check(ctx,&built,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(rune_current_golden) && !memcmp(packet.bytes,rune_current_golden,packet.length));
+    CHECK(packet.length==sizeof(rune65_golden) && !memcmp(packet.bytes,rune65_golden,packet.length));
     XrXirArtifact *decoded=NULL;
-    CHECK(xr_xir_compile_checked_read(ctx,rune_current_golden,sizeof(rune_current_golden),&decoded,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(ctx,rune65_golden,sizeof(rune65_golden),&decoded,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(decoded);
     CHECK(module && module->functions[0].instructions[0].op==XR_XIR_CONST_RUNE &&
         module->functions[0].instructions[0].type==XR_XIR_RUNE && module->functions[0].instructions[0].immediate==0x1f600);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     CHECK(rune_checked_golden[8]==24 && rune_checked_golden[12]==63);
     XrXirArtifact *retired=NULL;
+    size_t previous_attempts=source_program_compile_attempts;
+    CHECK(xr_xir_compile_checked_read(ctx,rune_current_golden,sizeof(rune_current_golden),&retired,NULL)==XR_XIR_BAD_STRUCTURE && !retired);
+    retired=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(ctx,rune_current_golden,sizeof(rune_current_golden),&retired,NULL)==XR_XIR_BAD_STRUCTURE && retired==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(source_program_compile_attempts==previous_attempts);retired=NULL;
     CHECK(xr_xir_compile_checked_read(ctx,rune_checked_golden,sizeof(rune_checked_golden),&retired,NULL)==XR_XIR_BAD_STRUCTURE && !retired);
     /* Instruction 0 begins at 116; its full 64-bit immediate starts at 140.
      * These attacks retain a valid independent field framing and checksum. */
     static const int64_t rejected[]={-1,0xd800,0x110000,INT64_C(0x100000041)};
     for(size_t i=0;i<sizeof(rejected)/sizeof(rejected[0]);++i) {
-        uint8_t bad[sizeof(rune_current_golden)];memcpy(bad,rune_current_golden,sizeof(bad));
+        uint8_t bad[sizeof(rune65_golden)];memcpy(bad,rune65_golden,sizeof(bad));
         uint64_t bits=(uint64_t)rejected[i];
         for(unsigned byte=0;byte<8;++byte)bad[140+byte]=(uint8_t)(bits>>(8*byte));
         XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,bad,32);
@@ -258,6 +264,6 @@ static void rune_leaf(int argc,char **argv) {
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);
     _Static_assert(XR_XIR_RUNE==16 && XR_XIR_CONST_RUNE==136 && XR_XIR_GE_STRING==142,"A2 current Rune and text wire IDs; historical packet remains fixed");
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==25 && XR_XIR_CHECKED_CONTRACT==64 && XR_XIR_VALUE_ABI_VERSION==21 && XR_XIR_CALL_ABI_VERSION==26 && XR_XIR_PROGRAM_ABI_VERSION==29,"current admission versions");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==25 && XR_XIR_CHECKED_CONTRACT==65 && XR_XIR_VALUE_ABI_VERSION==21 && XR_XIR_CALL_ABI_VERSION==26 && XR_XIR_PROGRAM_ABI_VERSION==29,"current admission versions");
     rune_values();rune_text();rune_wire();rune_leaf(argc,argv);rune_execution();rune_resources();return 0;
 }

@@ -26,7 +26,8 @@ typedef struct SourceDirectArguments {
 static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     const SourceDirectRequest *request, SourceDirectArguments *output) {
     *output = (SourceDirectArguments){0};
-    CallExprNode *call = &node->as.call_expr;
+    SourceCallSyntax syntax;if (!source_call_syntax(ctx,node,&syntax)) return false;
+    const SourceCallSyntax *call=&syntax;
     uint32_t index = request->function, offset = request->receiver ? 1 : 0;
     XrXirFunction function = ctx->functions[index];
     uint32_t count = ctx->generics[index].parameter_count, prefix = request->prefix.count;

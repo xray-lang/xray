@@ -35,9 +35,9 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         write_generic_source(request->entry_path, rejected[i]);
         XrXirArtifact *checked = NULL; XrXirSourceDiagnostic diagnostic;
         XrXirSourceResult query_result_1 = {0};
-        XrXirStatus query_status_1 = xr_xir_source_check(request, &query_result_1, &diagnostic);
+        XrXirStatus query_status_1 = source_generic_check(request, &query_result_1, &diagnostic);
         checked = query_result_1.checked; query_result_1.checked = NULL;
-        xr_xir_source_result_free(&query_result_1);
+        xr_xir_compile_source_result_free(&query_result_1);
         XrXirStatus status = query_status_1;
         if (status == XR_XIR_OK) fprintf(stderr, "incorrectly accepted closure case %u\n", i);
         CHECK(status != XR_XIR_OK && !checked && diagnostic.status == status);
@@ -67,13 +67,13 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
         XrXirSourceDiagnostic diagnostic;
         XrXirSourceResult query_result_2 = {0};
-        XrXirStatus query_status_2 = xr_xir_source_check(request, &query_result_2, &diagnostic);
+        XrXirStatus query_status_2 = source_generic_check(request, &query_result_2, &diagnostic);
         checked = query_result_2.checked; query_result_2.checked = NULL;
-        xr_xir_source_result_free(&query_result_2);
+        xr_xir_compile_source_result_free(&query_result_2);
         XrXirStatus status = query_status_2;
         if (status != XR_XIR_OK) fprintf(stderr, "closure case %u: %s (%u)\n", i, diagnostic.message, status);
         CHECK(status == XR_XIR_OK && checked);
-        const XrXirModule *module = xr_xir_artifact_module(checked);
+        const XrXirModule *module = xr_xir_compile_artifact_module(checked);
         unsigned count = 0;
         for (uint32_t f = 0; f < module->function_count; ++f)
             for (uint32_t n = 0; n < module->functions[f].instruction_count; ++n) {
@@ -82,14 +82,14 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
             }
         CHECK(count == captures[i]);
         XrXirCheckedPacket packet = {0};
-        CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(checked);
-        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-        xr_xir_checked_packet_free(&packet);
-        CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(decoded);
-        CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(closed);
+        CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(checked);
+        CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_compile_checked_packet_free(&packet);
+        CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(decoded);
+        CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(closed);
     }
     puts("Source closures: 17 fail-closed cases and 16 exact lexical capture/Checked round-trips passed");
 }

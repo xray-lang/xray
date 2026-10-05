@@ -23,6 +23,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_source_compile_owner.h"
+static const XrXirCompileContext *generic_source_context;
+/* Each independent query owns one finite graph through its last consumer. */
+static XrXirStatus source_generic_check(const XrXirSourceRequest *request,
+    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
+    generic_source_context=source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    XrCompilerSession *session=NULL;
+    CHECK(xr_compile_session_new(generic_source_context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrXirSourceRequest owned=*request;owned.context=generic_source_context;owned.session=session;
+    XrXirStatus status=xr_xir_compile_source_check(&owned,output,diagnostic,NULL);
+    xr_compile_session_free(session);
+    return status;
+}
 static void write_generic_source(const char *path, const char *text) {
     FILE *file = fopen(path, "wb"); CHECK(file);
     CHECK(fwrite(text, 1, strlen(text), file) == strlen(text) && fclose(file) == 0);
@@ -80,18 +93,18 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
     for (unsigned mode = 0; mode < 4; ++mode) {
         write_generic_source(request->entry_path, sources[mode]);
         XrXirSourceResult result = {0};
-        CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK && result.checked);
+        CHECK(source_generic_check(request, &result, NULL) == XR_XIR_OK && result.checked);
         XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
-        CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);
-        xr_xir_source_result_free(&result);
-        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-        xr_xir_checked_packet_free(&packet);
+        CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK);
+        xr_xir_compile_source_result_free(&result);
+        CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_compile_checked_packet_free(&packet);
         XrXirDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_specialize(decoded, NULL, &closed, &diagnostic);
+        XrXirStatus status = xr_xir_compile_specialize(decoded, &closed, &diagnostic);
         {
             CHECK(status == XR_XIR_OK && closed);
             if (mode) {
-                const XrXirModule *module = xr_xir_artifact_module(closed);
+                const XrXirModule *module = xr_xir_compile_artifact_module(closed);
                 bool instance = false, helper = false;
                 for (uint32_t f = 0; f < module->function_count; ++f) {
                     const XrXirFunction *function = &module->functions[f];
@@ -111,9 +124,9 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
             XrXirProvenance *proof = (XrXirProvenance *)closed->module.provenance;
             CHECK(proof && proof->source);
             closed->module.provenance = NULL;
-            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_TYPE);
+            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_TYPE);
             XrXirCheckedPacket stripped = {0};
-            CHECK(xr_xir_checked_write(closed, NULL, &stripped, NULL) == XR_XIR_BAD_TYPE && !stripped.bytes);
+            CHECK(xr_xir_compile_checked_write(closed, &stripped, NULL) == XR_XIR_BAD_TYPE && !stripped.bytes);
             closed->module.provenance = proof;
             uint32_t instance = UINT32_MAX;
             for (uint32_t f = 0; f < closed->module.function_count; ++f)
@@ -122,7 +135,7 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
             CHECK(instance != UINT32_MAX);
             uint32_t original = proof->origins[instance].function;
             proof->origins[instance].function = UINT32_MAX;
-            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_STRUCTURE);
             proof->origins[instance].function = original;
             const XrXirTypes *types = proof->source->module.types;
             XrXirType opaque = XR_XIR_UNIT;
@@ -137,11 +150,11 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
             CHECK(opaque != XR_XIR_UNIT);
             XrXirFunction *definition = (XrXirFunction *)&proof->source->module.functions[original];
             XrXirType saved = definition->result; definition->result = opaque;
-            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_TYPE);
+            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_TYPE);
             definition->result = saved;
-            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
         }
-        xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
+        xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(decoded);
     }
 }
 static void member_call_authority(XrXirSourceRequest *request, bool is_static) {
@@ -151,7 +164,7 @@ static void member_call_authority(XrXirSourceRequest *request, bool is_static) {
         "struct S<T>{value:T;private hidden()->T{return this.value};get()->T{return this.hidden()}}\n"
         "const s=S<i64>{value:7};const n=s.get()\n");
     XrXirSourceResult result = {0};
-    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    CHECK(source_generic_check(request, &result, NULL) == XR_XIR_OK);
     XrXirModule *module = &result.checked->module;
     uint32_t hidden = UINT32_MAX, public_method = UINT32_MAX;
     for (uint32_t f = 0; f < module->function_count; ++f) {
@@ -163,11 +176,11 @@ static void member_call_authority(XrXirSourceRequest *request, bool is_static) {
     CHECK(identity->member_access == XR_XIR_MEMBER_PRIVATE && !identity->exported && identity->nominal_owner);
     uint32_t owner = identity->nominal_owner;
     identity->member_access = 3;
-    CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_BAD_STRUCTURE);
     identity->member_access = XR_XIR_MEMBER_PRIVATE; identity->exported = 1;
-    CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_BAD_STRUCTURE);
     identity->exported = 0; identity->nominal_owner = 0;
-    CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_BAD_STRUCTURE);
     identity->nominal_owner = owner;
     bool attacked = false;
     for (uint32_t f = 0; f < module->function_count; ++f) {
@@ -176,36 +189,36 @@ static void member_call_authority(XrXirSourceRequest *request, bool is_static) {
             XrXirInstruction *op = (XrXirInstruction *)&module->functions[f].instructions[i];
             if ((op->op != XR_XIR_CALL && op->op != XR_XIR_FUNCTION_REF) || op->immediate != public_method) continue;
             op->immediate = hidden;
-            CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+            CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_BAD_STRUCTURE);
             XrXirCheckedPacket bad = {0};
-            CHECK(xr_xir_checked_write(result.checked, NULL, &bad, NULL) == XR_XIR_BAD_STRUCTURE && !bad.bytes);
+            CHECK(xr_xir_compile_checked_write(result.checked, &bad, NULL) == XR_XIR_BAD_STRUCTURE && !bad.bytes);
             op->immediate = public_method; attacked = true;
         }
     }
-    CHECK(attacked && xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_OK);
+    CHECK(attacked && xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
-    CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);
-    xr_xir_source_result_free(&result);
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result);
+    CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
     bool specialized = false;
     for (uint32_t f = 0; f < closed->module.function_count; ++f) {
         identity = (XrXirFunctionIdentity *)&closed->module.declarations->functions[f];
         if (identity->member_access != XR_XIR_MEMBER_PRIVATE) continue;
         identity->member_access = XR_XIR_MEMBER_PUBLIC;
-        CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_STRUCTURE);
         identity->member_access = XR_XIR_MEMBER_PRIVATE; specialized = true;
     }
-    CHECK(specialized && xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
+    CHECK(specialized && xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(decoded);
 }
 static void member_reference_authority(XrXirSourceRequest *request, const char *library) {
     write_generic_source(request->entry_path,
         "struct S{get()->fn()->i64{return fn()->i64{return 1}}}\n"
         "const s=S();const f=s.get();const outsider=fn()->i64{return 2}\n");
     XrXirSourceResult result = {0};
-    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    CHECK(source_generic_check(request, &result, NULL) == XR_XIR_OK);
     XrXirModule *module = &result.checked->module;
     unsigned allowed = 0, denied = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
@@ -217,21 +230,21 @@ static void member_reference_authority(XrXirSourceRequest *request, const char *
             id->nominal_owner = 1; id->exported = 0; id->member_access = XR_XIR_MEMBER_PRIVATE;
             id->method_kind = XR_XIR_MEMBER_HELPER;
             bool same_owner = module->declarations->functions[f].nominal_owner == 1;
-            CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) ==
+            CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) ==
                 (same_owner ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE));
             if (same_owner) ++allowed; else ++denied;
             *id = saved;
         }
     }
     CHECK(allowed == 1 && denied == 1);
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
     write_generic_source(library, "export struct S{private secret()->i64{return 7};protected guarded()->i64{return 8}}\n");
     const char *sources[] = {"import \"./lib\" as lib\nlib.S().secret()\n",
         "import \"./lib\" as lib\nlib.S().guarded()\n"};
     for (unsigned i = 0; i < 2; ++i) {
         write_generic_source(request->entry_path, sources[i]);
-        CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_BAD_TYPE && !result.checked);
-        xr_xir_source_result_free(&result);
+        CHECK(source_generic_check(request, &result, NULL) == XR_XIR_BAD_TYPE && !result.checked);
+        xr_xir_compile_source_result_free(&result);
     }
 }
 int main(void) {
@@ -308,7 +321,7 @@ int main(void) {
     write_generic_source(library,
         "export fn required<T:Sendable>(x:T)->T { return x }\n"
         "fn hidden<T>(x:T)->T { return x }\n");
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    XrCompilerSession *session = NULL;
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     member_reference_authority(&request, library);
@@ -323,9 +336,9 @@ int main(void) {
         write_generic_source(root, rejected[i]);
         XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;
         XrXirSourceResult query_result_1 = {0};
-        XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, &diagnostic);
+        XrXirStatus query_status_1 = source_generic_check(&request, &query_result_1, &diagnostic);
         artifact = query_result_1.checked; query_result_1.checked = NULL;
-        xr_xir_source_result_free(&query_result_1);
+        xr_xir_compile_source_result_free(&query_result_1);
         XrXirStatus status = query_status_1;
         if (status == XR_XIR_OK) fprintf(stderr, "incorrectly accepted generic case %u\n", i);
         CHECK(status != XR_XIR_OK && !artifact && diagnostic.status == status && diagnostic.message[0]);
@@ -336,29 +349,29 @@ int main(void) {
         "fn relay<T>(value:T)->T where T:Sendable { const f = lib.required<T>; return f(value) }\n"
         "fn unused<T,U>(left:T,right:U)->T { const copy = left; return true ? copy : left }\n"
         "const text = relay<string>(\"yes\")\nconst number = relay<i64>(5)\n"
-        "const flag = relay<bool>(true)\nconst atomic = relay<Atomic<i64>>(Atomic(7))\n");
+        "const flag = relay<bool>(true)\nconst atomic = relay<Atomic<i64>>(Atomic<i64>(7))\n");
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
     XrXirSourceDiagnostic diagnostic;
     XrXirSourceResult query_result_2 = {0};
-    XrXirStatus query_status_2 = xr_xir_source_check(&request, &query_result_2, &diagnostic);
+    XrXirStatus query_status_2 = source_generic_check(&request, &query_result_2, &diagnostic);
     checked = query_result_2.checked; query_result_2.checked = NULL;
-    xr_xir_source_result_free(&query_result_2);
+    xr_xir_compile_source_result_free(&query_result_2);
     XrXirStatus status = query_status_2;
     if (status != XR_XIR_OK) fprintf(stderr, "%d:%d %s\n", diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK && checked);
-    xr_compiler_session_delete(session);
+
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
-    CHECK(xr_xir_artifact_module(checked)->generics);
+    CHECK(xr_xir_compile_artifact_module(checked)->generics);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
-    CHECK(!xr_xir_artifact_module(closed)->generics);
-    CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
-    const XrXirModule *module = xr_xir_artifact_module(closed);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);
+    CHECK(!xr_xir_compile_artifact_module(closed)->generics);
+    CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
+    const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     unsigned reference_instances = 0, references = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
@@ -373,8 +386,9 @@ int main(void) {
         }
     }
     CHECK(reference_instances == 4 && references == 4);
-    xr_xir_artifact_free(closed);
+    xr_xir_compile_artifact_free(closed);
     printf("Source generics: %zu definition, forwarding and call rejections; four concrete domains admitted\n",
         sizeof(rejected) / sizeof(rejected[0]));
+    source_fixture_source_owners_free();
     return 0;
 }

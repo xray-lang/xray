@@ -19,6 +19,7 @@
 static const XrXirCompileContext *nullable_context;
 #include "xir_runtime_allocations.h"
 #include "xir_nullable_golden.h"
+#include "xir_nullable65_golden.h"
 
 static void nullable_word(uint8_t *bytes,uint32_t word) {
     for (uint32_t i=0;i<4;++i) bytes[i]=(uint8_t)(word>>(8*i));
@@ -40,8 +41,8 @@ static XrXirStatus nullable_packet_operation(const XrXirCompileContext *context,
 }
 static void nullable_packets(void) {
     for (uint32_t some=0;some<2;++some) {
-        const uint8_t *golden=some ? nullable_some_golden : nullable_none_golden;
-        size_t length=some ? sizeof(nullable_some_golden) : sizeof(nullable_none_golden);
+        const uint8_t *golden=some ? nullable_some65_golden : nullable_none65_golden;
+        size_t length=some ? sizeof(nullable_some65_golden) : sizeof(nullable_none65_golden);
         XrXirArtifact *checked=NULL;XrXirCheckedPacket packet={0};
         CHECK(xr_xir_compile_checked_read(nullable_context,golden,length,&checked,NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
@@ -65,6 +66,18 @@ static void nullable_packets(void) {
         source_program_compile_attempts=0;checked=NULL;
         CHECK(xr_xir_compile_checked_read(nullable_context,packet.bytes,length,&checked,NULL)==XR_XIR_BAD_STRUCTURE);
         CHECK(!checked && !source_program_compile_attempts && runtime_live==live && runtime_bytes==bytes);
+        const uint8_t *historical[]={some?nullable_some_golden:nullable_none_golden,
+            some?nullable_some64_golden:nullable_none64_golden};
+        for(unsigned old=0;old<2;++old){
+            XrCompileResourceStats before=library_compile_stats(nullable_context);
+            for(unsigned occupied=0;occupied<2;++occupied){
+                checked=occupied?(XrXirArtifact *)(uintptr_t)1:NULL;XrXirArtifact *saved=checked;
+                CHECK(xr_xir_compile_checked_read(nullable_context,historical[old],length,&checked,NULL)==XR_XIR_BAD_STRUCTURE&&checked==saved);
+            }
+            XrCompileResourceStats after=library_compile_stats(nullable_context);
+            CHECK(after.allocation_count==before.allocation_count&&after.allocated_bytes==before.allocated_bytes&&after.live_bytes==before.live_bytes&&after.peak_bytes==before.peak_bytes);
+            checked=NULL;
+        }
         NullablePacketFixture fixture={golden,length,0};
         library_compile_operation_cases("Nullable independent packet",nullable_packet_operation,&fixture);
         size_t sites=fixture.last_sites;

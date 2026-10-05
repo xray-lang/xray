@@ -47,3 +47,6 @@ tests/unit/ir/test_xi_lowering_gen.c text eol=lf
 
 # The preserved generated C is verified against its original byte digest.
 tests/unit/xir/test_declarations_owner/old_program27.c text eol=lf
+
+# Public output oracles bind LF bytes independently of the checkout host.
+tests/fixtures/public_source_program/root.out text eol=lf

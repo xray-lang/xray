@@ -518,6 +518,17 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     uint32_t next = instruction + 1;
     int64_t value = 0;
     *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+    if(op->op==XR_XIR_SLOT_GROUP_INIT) {
+        if(!run->view)return XR_XIR_RUN_BAD_ARTIFACT;
+        for(uint32_t p=0;p<op->args[1];++p)
+            state->arguments[p]=vm_value_operand(run,run->function->operands[op->args[0]+p]);
+        uint64_t packed=(uint64_t)op->immediate;
+        XrXirCallStatus status=xr_xir_instance_slot_group_init(run->view,(uint32_t)(packed>>32),(uint32_t)packed,
+            op->args[1] ? state->arguments : NULL,op->args[1]);
+        state->instruction=next;
+        if(status!=XR_XIR_CALL_READY)*action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
+        return XR_XIR_RUN_OK;
+    }
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
@@ -937,7 +948,7 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if ((body->instructions[i].op >= XR_XIR_CONST_STRING &&
             body->instructions[i].op <= XR_XIR_SLOT_STORE) ||
-            xr_xir_op_is_atomic(body->instructions[i].op)) return XR_XIR_RUN_BAD_ARTIFACT;
+            xr_xir_op_is_atomic(body->instructions[i].op) || body->instructions[i].op==XR_XIR_SLOT_GROUP_INIT) return XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, function);
     void *frame = NULL;
     XrXirRunStatus status = xr_xir_scalar_frame_begin(context, layout->frame_bytes, &frame);

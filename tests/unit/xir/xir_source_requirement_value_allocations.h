@@ -12,7 +12,7 @@
 #ifndef XIR_SOURCE_REQUIREMENT_VALUE_ALLOCATIONS_H
 #define XIR_SOURCE_REQUIREMENT_VALUE_ALLOCATIONS_H
 #include "xir_requirement_value_fixture.h"
-static void source_requirement_value_allocations(XrCompilerSession *session) {
+static void source_requirement_value_allocations(void) {
     char directory[]="xir-requirement-values-XXXXXX",absolute[4096],path[8192],manifest[8192];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory,absolute,sizeof(absolute)));
     CHECK(snprintf(path,sizeof(path),"%s/root.xr",absolute)>0);
@@ -29,30 +29,36 @@ static void source_requirement_value_allocations(XrCompilerSession *session) {
         "[[declarations.function]]\nmodule=\"root.xr\"\nname=\"invoke\"\nno_suspend_parameters=[\"f\"]\nno_suspend=true\n"
         "[[declarations.function]]\nmodule=\"root.xr\"\nname=\"bind\"\nno_suspend=true\n")};
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={session,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};
     for (uint32_t mode=0;mode<2;++mode) {
         FILE *file=fopen(path,"wb"); CHECK(file);
         CHECK(fputs(programs[mode],file)>=0 && fclose(file)==0);
         file=fopen(manifest,"wb"); CHECK(file);
         CHECK(fputs(contracts[mode],file)>=0 && fclose(file)==0);
-        size_t sites=0;
-        for (size_t site=0;site<=sites;++site) {
-            CHECK(!live); attempts=0; fail_at=site ? site-1 : SIZE_MAX;
+        size_t sites=allocation_case_begin(20+mode);
+        for(size_t site=allocation_first();allocation_more(site,sites);site=allocation_next(site)) {
+            CHECK(!source_fixture_compile_live); source_fixture_compile_attempts=0; source_fixture_compile_fail_at=site ? site-1 : SIZE_MAX; source_fixture_compile_injected=false;
             XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
-            XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
+            XrXirStatus status=allocation_source_check(&request,&result,&diagnostic);
             if (!site) {
                 if (status!=XR_XIR_OK) fprintf(stderr,"requirement allocation mode %u: %u %s\n",mode,status,diagnostic.message);
-                CHECK(status==XR_XIR_OK && result.checked && result.snapshot); sites=attempts;
+                CHECK(status==XR_XIR_OK && result.checked && result.snapshot); sites=source_fixture_compile_attempts;
             } else {
                 CHECK(status==XR_XIR_OUT_OF_MEMORY && diagnostic.status==XR_XIR_OUT_OF_MEMORY);
                 CHECK(!result.checked && !result.snapshot);
-                CHECK(!strcmp(diagnostic.message,"source allocation failed") ||
+                CHECK(!diagnostic.message[0] ||
+                    !strcmp(diagnostic.message,"source allocation failed") ||
                     !strcmp(diagnostic.message,"source query snapshot publication failed") ||
-                    !strcmp(diagnostic.message,"source region identity allocation failed"));
+                    !strcmp(diagnostic.message,"source region identity allocation failed") ||
+                    !strcmp(diagnostic.message,"module graph allocation failed") ||
+                    !strcmp(diagnostic.message,"source parse failed") ||
+                    !strcmp(diagnostic.message,"source type inference allocation failed"));
             }
-            xr_xir_source_result_free(&result); CHECK(!live);
-        }
-        fail_at=SIZE_MAX;
+            xr_xir_compile_source_result_free(&result); CHECK(!source_fixture_compile_live);
+                if(site)allocation_point(site-1,XR_XIR_OUT_OF_MEMORY,true);
+}
+        allocation_case_end(sites);
+        source_fixture_compile_fail_at=SIZE_MAX; source_fixture_compile_injected=false;
         printf("Bound requirement producer mode %u: %zu OOM sites; no partial publication\n",mode,sites);
     }
     CHECK(xr_test_unlink(manifest)==0 && xr_test_unlink(path)==0 && xr_test_rmdir(directory)==0);

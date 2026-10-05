@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
+#include "../xir_library_compile_owner.h"
 static const char *packet_directory;
 static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint32_t timeout) {
     const XrXirInstruction unit={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
@@ -43,7 +44,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_role==role);
     CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_timeout_seconds==timeout);
     uint8_t current_digest[32];memcpy(current_digest,packet.bytes+32,32);
-    CHECK(packet.bytes[8]==24 && packet.bytes[12]==63);packet.bytes[12]=62;
+    CHECK(packet.bytes[8]==25 && packet.bytes[12]==65);packet.bytes[12]=62;
     XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,packet.bytes,32);
     xr_sha256_update(&hash,packet.bytes+64,packet.length-64);xr_sha256_final(&hash,packet.bytes+32);
     XrCompileResourceStats old_before={0},old_after={0};
@@ -57,12 +58,25 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_compile_resources_stats(context->resources,&old_after)==XR_COMPILE_RESOURCE_OK);
     CHECK(old_after.allocation_count==old_before.allocation_count && old_after.allocated_bytes==old_before.allocated_bytes &&
         old_after.live_bytes==old_before.live_bytes && old_after.peak_bytes==old_before.peak_bytes);
-    packet.bytes[12]=63;memcpy(packet.bytes+32,current_digest,32);
+    packet.bytes[12]=65;memcpy(packet.bytes+32,current_digest,32);
     for(uint32_t field=0;field<2;++field) {
         size_t offset=field?12:8;uint8_t saved=packet.bytes[offset];packet.bytes[offset]=(uint8_t)(saved-1);
         XrXirArtifact *sentinel=(XrXirArtifact *)(uintptr_t)1;
         CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE);
         CHECK(sentinel==(XrXirArtifact *)(uintptr_t)1);packet.bytes[offset]=saved;
+    }
+    if(packet_directory){
+        const char *history[]={"old24-62","old24-63","old25-64"};
+        for(unsigned h=0;h<3;++h){
+            char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%u-%u-%s.chk",packet_directory,role,timeout,history[h])>0);
+            FILE *file=fopen(path,"rb");CHECK(file&&!fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>64&&length<16384&&!fseek(file,0,SEEK_SET));
+            uint8_t bytes[16384];CHECK(fread(bytes,1,(size_t)length,file)==(size_t)length&&!fclose(file));
+            XrCompileResourceStats before=library_compile_stats(context);
+            for(unsigned occupied=0;occupied<2;++occupied){XrXirArtifact *out=occupied?(XrXirArtifact *)(uintptr_t)1:NULL,*saved=out;
+                CHECK(xr_xir_compile_checked_read(context,bytes,(size_t)length,&out,NULL)==XR_XIR_BAD_STRUCTURE&&out==saved);}
+            XrCompileResourceStats after=library_compile_stats(context);
+            CHECK(after.allocation_count==before.allocation_count&&after.allocated_bytes==before.allocated_bytes&&after.live_bytes==before.live_bytes&&after.peak_bytes==before.peak_bytes);
+        }
     }
     xr_xir_compile_artifact_free(roundtrip);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
@@ -143,9 +157,8 @@ static void invalid(const XrXirCompileContext *context) {
 }
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);if(argc==2)packet_directory=argv[1];
-    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
-    XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
-    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
+    XrXirCompileContext context=compiler.context;
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
     invalid(&context);
     match(&context,XR_XIR_TEST_ROLE_TEST,0,XR_XIR_TEST_ROLE_BEFORE_ALL,0);
@@ -153,6 +166,7 @@ int main(int argc,char **argv) {
     match(&context,XR_XIR_TEST_ROLE_TEST,7,XR_XIR_TEST_ROLE_TEST,8);
     match(&context,XR_XIR_TEST_ROLE_TEST,8,XR_XIR_TEST_ROLE_TEST,7);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes);
-    xr_compile_resources_release(context.resources);
+    fprintf(stderr,"role finite allocated=%llu peak=%llu work=%llu\n",(unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes,(unsigned long long)after.work);
+    library_compile_owner_drop(&compiler);library_compile_observer_free();
     puts("role/timeout: valid alternate proofs, Checked/provenance/native mismatch rejection PASS");return 0;
 }

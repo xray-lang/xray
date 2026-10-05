@@ -63,8 +63,10 @@ int main(int argc,char **argv) {
     XrXirSourceProductRequest request={{session,XR_TUPLE_FIXTURES "/root.xr",&authority,context,
         XR_TUPLE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     char rejected_path[1024]={0};
-    if (argc==3) {
-        int bytes=snprintf(rejected_path,sizeof(rejected_path),"%s/%s/root.xr",XR_TUPLE_CLOSED_ROOT,argv[2]);
+    bool accept_destructure=argc==2 && !strcmp(argv[1],"--accept-destructure");
+    if (argc==3 || accept_destructure) {
+        int bytes=snprintf(rejected_path,sizeof(rejected_path),"%s/%s/root.xr",XR_TUPLE_CLOSED_ROOT,
+            accept_destructure ? "destructure" : argv[2]);
         CHECK(bytes>0 && (size_t)bytes<sizeof(rejected_path));
         request.source.entry_path=rejected_path;authority.physical_root=XR_TUPLE_CLOSED_ROOT;
     }
@@ -73,13 +75,33 @@ int main(int argc,char **argv) {
     if (status!=XR_XIR_OK) fprintf(stderr,"source status=%u stage=%u line=%d: %s\n",status,
         diagnostic.stage,diagnostic.source.line,diagnostic.source.message);
     if (argc==3) {
-        CHECK(status==(!strcmp(argv[2],"destructure") ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !product);
+        CHECK(status==XR_XIR_BAD_TYPE && !product);
         CHECK(diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK && diagnostic.source.line>0);
         xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);
         source_program_owners_free();printf("Tuple Source %s closed at actual check status=%u PASS\n",argv[2],status);return 0;
     }
     CHECK(status==XR_XIR_OK && product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_session_free(session);memset(&request,0xcc,sizeof(request));memset(&authority,0xcc,sizeof(authority));
+    if(accept_destructure) {
+        XrXirCSource generated={0};XrXirProgram *program=NULL;XrXirInstance *instance=NULL;XrXirInstanceConfig config;
+        CHECK(xr_xir_compile_source_product_emit(product,"tuple_original_destructure",1048576,&generated)==XR_XIR_OK);
+        CHECK(strstr(generated.text,"xr_xir_instance_slot_group_init(view,0u,2u,") && !strstr(generated.text,"({"));
+        xr_xir_compile_c_source_free(&generated);
+        CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
+        xr_xir_compile_source_product_free(product);product=NULL;
+        CHECK(program->declarations->slot_count==2 && program->declarations->slots[0].type==XR_XIR_I64 &&
+            program->declarations->slots[1].type==XR_XIR_I64);
+        CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_start(instance,program->declarations->entry_function,NULL,0)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_poll_bounded(instance,1000000).outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(instance->publication_count==2 && instance->published[0] && instance->published[1] &&
+            instance->slots[0].type==XR_XIR_I64 && instance->slots[0].payload==1 &&
+            instance->slots[1].type==XR_XIR_I64 && instance->slots[1].payload==2);
+        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
+        CHECK(!runtime_live && !runtime_bytes);source_program_owners_free();
+        puts("Original module tuple declaration accepted, emitted actual group, VM slots1/2, physical0 PASS");return 0;
+    }
     XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);

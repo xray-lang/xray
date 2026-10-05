@@ -72,6 +72,30 @@
       "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a7631010000001900000040000000150000001a0000001d0000000f0000006f726967696e616c5f736f75726365",
       "length": 73,
       "sha256": "95fe03bd4107fb881698f42908f655115904779ecda1ca8bc3e658ab60116679"
+    },
+    {
+      "role": "linked",
+      "identity": "tuple-group-current",
+      "wire": 25,
+      "semantic": 65,
+      "value_abi": 21,
+      "call_abi": 26,
+      "program_abi": 29,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a7631010000001900000041000000150000001a0000001d0000000d0000006c696e6b65645f736f75726365",
+      "length": 71,
+      "sha256": "b8ba8fb63ea3d838ab97a435519b5516f1115c913ee1517a951b57dafe005cd9"
+    },
+    {
+      "role": "original",
+      "identity": "tuple-group-current",
+      "wire": 25,
+      "semantic": 65,
+      "value_abi": 21,
+      "call_abi": 26,
+      "program_abi": 29,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a7631010000001900000041000000150000001a0000001d0000000f0000006f726967696e616c5f736f75726365",
+      "length": 73,
+      "sha256": "751fa4a1bc2f0d27f7d3e3468746f43a0cf10f94239257ef2faad77b3b5164cd"
     }
   ]
 }

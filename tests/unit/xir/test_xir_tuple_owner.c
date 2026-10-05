@@ -21,6 +21,7 @@
 #include "tuple_old_23_61.inc.c"
 #include "tuple_24_62.inc.c"
 #include "tuple_24_63.inc.c"
+#include "tuple_25_65.inc.c"
 #include "xir/xxir_effect_terms.inc.c"
 static XrXirType constructed(uint32_t n) {return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n);}
 static XrXirType parameter(uint32_t n) {return (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+n);}
@@ -55,7 +56,7 @@ static XrXirStatus pipeline(const XrXirCompileContext *c) {
     XrXirCheckedPacket packet={0};XrXirTypes *clone=NULL;
     XrXirStatus status=xr_xir_compile_check(c,&f.module,&checked,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
-    if(status==XR_XIR_OK)CHECK(packet.length==sizeof(tuple_24_63) && !memcmp(packet.bytes,tuple_24_63,packet.length));
+    if(status==XR_XIR_OK)CHECK(packet.length==sizeof(tuple_25_65) && !memcmp(packet.bytes,tuple_25_65,packet.length));
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(c,packet.bytes,packet.length,&decoded,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_types_clone(c,xr_xir_compile_artifact_module(decoded)->types,&clone);
     if(status==XR_XIR_OK) {
@@ -159,8 +160,10 @@ static void old_rejection(void) {
     XrXirArtifact *artifact=NULL;
     CHECK(xr_xir_compile_checked_read(&c,old_23_61,sizeof(old_23_61),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
     CHECK(xr_xir_compile_checked_read(&c,tuple_24_62,sizeof(tuple_24_62),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
+    CHECK(xr_xir_compile_checked_read(&c,tuple_24_63,sizeof(tuple_24_63),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
+    CHECK(xr_xir_compile_checked_read(&c,tuple_25_64,sizeof(tuple_25_64),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
     CHECK(stats(&c).allocation_count==allocations);owner_free(&c,baseline);
-    puts("complete verified 23/61 and Tuple24/62 packets rejected before allocation PASS");
+    puts("complete 23/61, Tuple24/62,24/63 and25/64 packets rejected before allocation PASS");
 }
 static void markers(void) {
     TupleFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
@@ -181,9 +184,9 @@ static void markers(void) {
 }
 static void wire_rejection(void) {
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    uint8_t bytes[sizeof(tuple_24_63)+4];
+    uint8_t bytes[sizeof(tuple_25_65)+4];
     for(unsigned mode=0;mode<9;++mode) {
-        memcpy(bytes,tuple_24_63,sizeof(tuple_24_63));size_t length=sizeof(tuple_24_63);
+        memcpy(bytes,tuple_25_65,sizeof(tuple_25_65));size_t length=sizeof(tuple_25_65);
         size_t at=length-24;uint32_t value=0;
         switch(mode) {
         case 0:at=length-32;value=7;break;
@@ -197,13 +200,13 @@ static void wire_rejection(void) {
         case 8:at=length-24;value=4;break;
         }
         for(unsigned b=0;b<4;++b)bytes[at+b]=(uint8_t)(value>>(8*b));
-        uint8_t image[sizeof(tuple_24_63)];memcpy(image,bytes,32);memcpy(image+32,bytes+64,length-64);
+        uint8_t image[sizeof(tuple_25_65)];memcpy(image,bytes,32);memcpy(image+32,bytes+64,length-64);
         xr_sha256(image,length-32,bytes+32);XrXirArtifact *out=NULL;
         CHECK(xr_xir_compile_checked_read(&c,bytes,length,&out,NULL)!=XR_XIR_OK && !out);
         CHECK(stats(&c).live_bytes==baseline);
     }
-    for(size_t length=64;length<sizeof(tuple_24_63);++length) {
-        XrXirArtifact *out=NULL;CHECK(xr_xir_compile_checked_read(&c,tuple_24_63,length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
+    for(size_t length=64;length<sizeof(tuple_25_65);++length) {
+        XrXirArtifact *out=NULL;CHECK(xr_xir_compile_checked_read(&c,tuple_25_65,length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
     }
     owner_free(&c,baseline);puts("Tuple 9 correctly hashed hostile payloads and every packet truncation rejected PASS");
 }

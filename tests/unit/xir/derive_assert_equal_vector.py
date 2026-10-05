@@ -71,6 +71,9 @@ def main():
         assert json.loads((directory/'assert_equal_packet_vectors.json').read_text(encoding='utf-8'))==data
         text=(directory/'xir_assert_equal64_golden.h').read_text(encoding='utf-8')
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',text))==executable
+    executable65=current64_packet(tuple63_packet(tuple62_packet(semantic61_packet(vector()[0]))),65)
+    literal65=bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',(directory/'xir_assert_equal65_golden.h').read_text(encoding='utf-8')))
+    assert literal65==executable65 and executable65[64:]==executable[64:]
     print(json.dumps({'bytes':len(current),'historical59_sha256':data['core_packet_sha256'],'current64_sha256':hashlib.sha256(executable).hexdigest(),'old56_reproduced':True,'offsets':offsets},indent=2))
 
 if __name__=='__main__':main()

@@ -372,7 +372,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
                                const XrXirFunction *function, const XrXirInstruction *op,
                                const XrXirFunctionLayout *layout, uint32_t destination) {
     append(buffer, "        { XrXirCallStatus status = XR_XIR_CALL_READY;\n");
-    if (op->op != XR_XIR_CELL_WRITE) append(buffer, "        XrXirValue value = {0};\n");
+    if (op->op != XR_XIR_CELL_WRITE && op->op != XR_XIR_SLOT_GROUP_INIT) append(buffer, "        XrXirValue value = {0};\n");
     switch (op->op) {
     case XR_XIR_CELL_LOCAL_WRITE: {
         uint32_t offset = layout->offsets[op->args[0]];
@@ -425,6 +425,16 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         append(buffer,"        status = xr_xir_instance_slot_write(view, %uu, &value, %s);\n",
             (uint32_t) op->immediate, op->op == XR_XIR_SLOT_INIT ? "true" : "false");
         break;
+    case XR_XIR_SLOT_GROUP_INIT: {
+        for(uint32_t p=0;p<op->args[1] && emit_work(buffer,1);++p)
+            append(buffer,"        state->arguments[%u] = (XrXirValue) {%uu,0,xr_xir_scalar_load(state->frame,%uu)};\n",
+                p,(uint32_t)xr_xir_operand_type(function,function->operands[op->args[0]+p]),
+                layout->offsets[function->operands[op->args[0]+p]]);
+        uint64_t packed=(uint64_t)op->immediate;
+        append(buffer,"        status=xr_xir_instance_slot_group_init(view,%uu,%uu,%s,%uu);\n",
+            (uint32_t)(packed>>32),(uint32_t)packed,op->args[1] ? "state->arguments" : "NULL",op->args[1]);
+        break;
+    }
     case XR_XIR_TO_STRING:
         append(buffer, "        XrXirValue scalar = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             "        status = xr_xir_instance_scalar_text(view, &scalar, &value);\n",
@@ -790,7 +800,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         emit_array_step(buffer, function, op, layout, destination, index);
         return;
     }
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         emit_instance_step(buffer, module, function, op, layout, destination);

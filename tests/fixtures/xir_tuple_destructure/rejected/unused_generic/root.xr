@@ -1,0 +1,5 @@
+fn invalid<T>(value:(T,string))->T {
+    const (first,_)=value
+    first.fetchAdd(1)
+    return first
+}

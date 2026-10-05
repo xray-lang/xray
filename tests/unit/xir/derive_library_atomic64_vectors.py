@@ -12,7 +12,8 @@ def arrays(path):
             for name, body in re.findall(r'static const uint8_t (\w+)\[\]\s*=\s*\{(.*?)\};', text, re.S)}
 
 
-def current_packet(previous):
+def current_packet(previous, semantic=64):
+    assert semantic in (64,65)
     assert previous[:8] == b'XRCHK\0\0\0'
     assert struct.unpack_from('<4I', previous, 8) == (24, 63, 2, 0)
     assert struct.unpack_from('<Q', previous, 24)[0] == len(previous) - 64
@@ -110,7 +111,7 @@ def current_packet(previous):
     skip(16 * word())
     assert word() == 0 and at == len(previous)
     assert all(output[i] == previous[i] for i in range(64, len(previous)) if i not in changed)
-    struct.pack_into('<II', output, 8, 25, 64)
+    struct.pack_into('<II', output, 8, 25, semantic)
     output[32:64] = hashlib.sha256(output[:32] + output[64:]).digest()
     return bytes(output)
 
@@ -148,7 +149,13 @@ def main():
             (root / filename).write_bytes(expected.encode('utf-8'))
         else:
             assert (root / filename).read_text(encoding='utf-8') == expected
-    print('Independent current25/64 Library7/default4/invoke1 full packets; same body roles except opcode words; old24/63 preserved PASS')
+    current65_facts = {
+        'xir_library_string65_goldens.h': {name.replace('library_string_', 'library_string65_'): current_packet(packet,65) for name,packet in source.items()},
+        'xir_defaults65_golden_bytes.h': {'defaults65_golden_'+str(i): current_packet(old_defaults['defaults_golden_'+str(i)],65) for i in range(7,11)}}
+    current65_facts['xir_defaults65_golden_bytes.h']['defaults65_invoke_golden']=current_packet(invoke,65)
+    for filename,facts in current65_facts.items():
+        assert arrays(root/filename)==facts
+    print('Independent current25/65 Library7/default4/invoke1 full packets; complete previous25/64 and old24/63 verified unchanged PASS')
 
 
 if __name__ == '__main__':

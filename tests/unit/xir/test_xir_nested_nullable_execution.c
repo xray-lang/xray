@@ -80,7 +80,7 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
      * packet digest and full proof identity are independently verified below. */
     uint8_t old_nested[1689];uint8_t identity[32];XrSHA256Context sha;
     CHECK(spec->proof.length==sizeof(old_nested));memcpy(old_nested,spec->proof.bytes,sizeof(old_nested));
-    CHECK(old_nested[8]==25 && old_nested[12]==64 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
+    CHECK(old_nested[8]==25 && old_nested[12]==65 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
     /* Preserve the genuine complete prior body. Current opcodes moved, so
      * relabeling the current body would not reconstruct old62/59 packets. */
     _Static_assert(sizeof(nested_nullable_golden)==sizeof(old_nested),"complete historical packet width");

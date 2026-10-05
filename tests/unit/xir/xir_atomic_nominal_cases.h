@@ -16,6 +16,7 @@
 #include "base/xsha256.h"
 #include "xir_generic_method_golden.h"
 #include "xir_ordering25_golden.h"
+#include "xir_ordering65_golden.h"
 static const char *const ordering_variant_names[] = {"Relaxed","Acquire","Release","AcquireRelease","SeqCst"};
 static XrXirStatus ordering_factory(const XrXirCompileContext *context, char **name) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"prelude",NULL};
@@ -82,8 +83,8 @@ static XrXirStatus ordering_checked_pipeline(const XrXirCompileContext *context,
     xr_compile_resources_free(name);name=NULL;
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(checked,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes && !packet.length);}
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(ordering25_golden) &&
-            !memcmp(packet.bytes,ordering25_golden,sizeof(ordering25_golden)));
+    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(ordering65_golden) &&
+            !memcmp(packet.bytes,ordering65_golden,sizeof(ordering65_golden)));
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
     if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
     xr_xir_compile_artifact_free(read);read=NULL;

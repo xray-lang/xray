@@ -8,8 +8,8 @@
  */
 #ifndef XIR_ASSERT_ATOMIC64_PACKET_REJECTION_H
 #define XIR_ASSERT_ATOMIC64_PACKET_REJECTION_H
-static void assert_previous63_packet_rejected(const uint8_t *bytes, size_t length) {
-    CHECK(length >= 64 && bytes[8] == 24 && bytes[12] == 63);
+static void assert_previous_packet_rejected(const uint8_t *bytes, size_t length) {
+    CHECK(length >= 64 && ((bytes[8] == 24 && bytes[12] == 63) || (bytes[8] == 25 && bytes[12] == 64)));
     size_t attempts = source_program_compile_attempts;
     size_t blocks = source_program_compile_live, allocated = source_program_compile_bytes;
     size_t live = runtime_live, runtime_allocated = runtime_bytes;
@@ -22,6 +22,6 @@ static void assert_previous63_packet_rejected(const uint8_t *bytes, size_t lengt
         XR_XIR_BAD_STRUCTURE && occupied == sentinel);
     CHECK(source_program_compile_attempts == attempts && source_program_compile_live == blocks &&
         source_program_compile_bytes == allocated && runtime_live == live && runtime_bytes == runtime_allocated);
-    puts("Complete prior24/63 assertion packet rejected before allocation; empty/occupied output preserved PASS");
+    puts("Complete prior24/63 or25/64 assertion packet rejected before allocation; empty/occupied output preserved PASS");
 }
 #endif

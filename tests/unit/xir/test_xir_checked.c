@@ -23,6 +23,7 @@
 #include "xir_checked_scalar59_golden.h"
 #include "xir_checked_scalar60_golden.h"
 #include "xir_checked_scalar64_golden.h"
+#include "xir_checked_scalar65_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -147,7 +148,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 25 && XR_XIR_CHECKED_CONTRACT == 64 && XR_XIR_OP_COUNT == 145, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 25 && XR_XIR_CHECKED_CONTRACT == 65 && XR_XIR_OP_COUNT == 146, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -187,10 +188,11 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0xc1,0xa4,0x47,0x9a,0x89,0xdb,0xab,0xa0,0x06,0xe1,0x63,0x65,0x4d,0x9f,0x6a,0x64,0x2a,0x5c,0x74,0xe5,0x2b,0x32,0x93,0xd6,0x94,0xf1,0x63,0x0d,0xad,0x63,0x60,0x02
+        0xb5,0xa4,0xea,0x85,0xe4,0x3b,0x46,0x48,0xf8,0x52,0xda,0x00,0x4a,0x16,0x73,0xa7,0x40,0xe3,0xc1,0xc2,0xf7,0x36,0xc3,0x47,0x4f,0xc3,0x85,0x9a,0xc7,0xcf,0xcd,0xaf
     };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar64_golden) && !memcmp(packet.bytes,checked_scalar64_golden,packet.length));
+    CHECK(packet.length==sizeof(checked_scalar65_golden) && !memcmp(packet.bytes,checked_scalar65_golden,packet.length));
+    rejected(checked_scalar64_golden,sizeof(checked_scalar64_golden));
     rejected(checked_scalar57_golden,sizeof(checked_scalar57_golden));
     rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
     rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));

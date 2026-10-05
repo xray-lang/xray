@@ -18,7 +18,7 @@ ConstDecl ::= 'const' Binding
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
          | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
@@ -87,6 +87,8 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
 - 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
+
+当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组/对象解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
 
 ### 5.2 `fn` 函数声明
 
@@ -1276,7 +1278,7 @@ ConstDecl ::= 'const' Binding
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
          | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
@@ -1345,6 +1347,8 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
 - Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
+
+The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array/object destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
 
 ### 5.2 `fn` function declaration
 

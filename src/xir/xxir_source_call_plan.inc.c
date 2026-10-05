@@ -11,6 +11,33 @@
  *   value evidence and publishes a complete tuple before consumer-specific proof.
  */
 #include "xxir_type_inference.h"
+/* The parser's construction spelling is not declaration authority. Both
+ * syntax forms expose their authentic argument lists to the same call worker. */
+typedef struct SourceCallSyntax {
+    AstNode **arguments;
+    XrCallArgAccess *arg_accesses;
+    int arg_count;
+    XrTypeRef **type_args;
+    int type_arg_count;
+} SourceCallSyntax;
+static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax *output) {
+    *output=(SourceCallSyntax){0};
+    if (!node || !source_work(ctx,node)) return false;
+    if (node->type==AST_CALL_EXPR) {
+        const CallExprNode *call=&node->as.call_expr;
+        if (call->default_arg_count)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call arity or type arguments are not admitted");
+        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,call->type_args,call->type_arg_count};
+    } else if (node->type==AST_NEW_EXPR && !node->as.new_expr.is_type_namespace) {
+        const NewExprNode *call=&node->as.new_expr;
+        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,call->type_args,call->type_arg_count};
+    } else return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"direct call requires its authentic syntax");
+    if (output->arg_count<0 || output->arg_count>65536 || output->type_arg_count<0 ||
+        output->type_arg_count>65536 || (output->arg_count && !output->arguments) ||
+        (output->type_arg_count && !output->type_args))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call arity or type arguments are not admitted");
+    return true;
+}
 typedef enum SourceCallFamily { SOURCE_CALL_FUNCTION, SOURCE_CALL_REQUIREMENT } SourceCallFamily;
 typedef struct SourceCallStorage {
     XrXirType *types;
@@ -79,7 +106,8 @@ static bool source_call_observe(SourceContext *ctx,AstNode *node,XrXirInferenceS
  * rejected rather than mutated through a temporary copy. */
 static bool source_reference_argument(SourceContext *ctx, AstNode *node, uint32_t index,
     const bool *references, const SourceValue *values, SourceValue *value) {
-    CallExprNode *call=&node->as.call_expr;
+    SourceCallSyntax syntax;if (!source_call_syntax(ctx,node,&syntax)) return false;
+    const SourceCallSyntax *call=&syntax;
     AstNode *argument=call->arguments[index];
     if (!call->arg_accesses || call->arg_accesses[index]!=XR_CALL_ARG_REF)
         return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"a ref parameter requires a ref argument");
@@ -108,7 +136,8 @@ static bool source_reference_argument(SourceContext *ctx, AstNode *node, uint32_
  * still complete once in source order, and already read SSA values stay valid. */
 static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const SourceCallPlan *plan,
     SourceExpressionPlan **arguments,bool *references) {
-    CallExprNode *call=&node->as.call_expr;
+    SourceCallSyntax syntax;if (!source_call_syntax(ctx,node,&syntax)) return false;
+    const SourceCallSyntax *call=&syntax;
     SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;bool ok=true;
     for (uint32_t a=0;ok && a<(uint32_t)call->arg_count;++a) {
         if (!source_work(ctx,node)) {ok=false;break;}
@@ -125,7 +154,8 @@ static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const
     ctx->facts=facts;ctx->epochs=epochs;return ok && ctx->diagnostic.status==XR_XIR_OK;
 }
 static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const SourceCallPlan *plan) {
-    CallExprNode *call=&node->as.call_expr;
+    SourceCallSyntax syntax;if (!source_call_syntax(ctx,node,&syntax)) return false;
+    const SourceCallSyntax *call=&syntax;
     bool requirement=plan->family==SOURCE_CALL_REQUIREMENT;
     uint32_t prefix=plan->prefix.count, count=plan->substitution.count, own=count-prefix;
     XrXirType *types=(XrXirType *)plan->substitution.types;

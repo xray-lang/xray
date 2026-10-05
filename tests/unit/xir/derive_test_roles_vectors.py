@@ -8,6 +8,7 @@ import struct
 from derive_semantic61_migration import semantic61_packet
 from derive_tuple62_migration import tuple62_packet
 from derive_tuple63_migration import tuple63_packet
+from derive_role_nullable65_packets import current_packet
 
 DIRECTORY = Path(__file__).parent
 ARRAY = re.compile(r'(?:static\s+)?const\s+uint8_t\s+(\w+)\s*\[[^\]]*\]\s*=\s*\{(.*?)\};', re.S)
@@ -107,8 +108,11 @@ def main():
         previous = historical_vector(row['path'], row['name'])
         if args.output:
             (args.output/f'{index:02d}-old.chk').write_bytes(previous)
-            (args.output/f'{index:02d}-current.chk').write_bytes(tuple63_packet(tuple62_packet(semantic61_packet(upgrade(previous)))))
-    print(f'{len(rows)} independent role-zero packets: complete old22/58 and historical23/59 preserved; current24/63 verified')
+            historical63=tuple63_packet(tuple62_packet(semantic61_packet(upgrade(previous))))
+            (args.output/f'{index:02d}-old63.chk').write_bytes(historical63)
+            (args.output/f'{index:02d}-old64.chk').write_bytes(current_packet(historical63,64))
+            (args.output/f'{index:02d}-current.chk').write_bytes(current_packet(historical63))
+    print(f'{len(rows)} independent role-zero packets: complete old22/58 and historical23/59 preserved; historical24/63 verified; current25/65 explicit opcode roles verified')
 
 
 if __name__ == '__main__':

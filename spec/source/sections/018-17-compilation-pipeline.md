@@ -472,6 +472,16 @@ PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将
 
 Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
 
+### 17.35 平坦 Tuple 解构与模块整组发布
+
+平坦 `var` / `const` 模式接受名字或 `_`、精确有序 arity、Unit 与 `(x,)` singleton；RHS 一次求值，全部字段投影和可变 Cell 准备完成后再发布局部名字，闭包捕获沿原 Cell/拥有合同。空模式只接受 Unit；全 discard 不产生绑定或 module group。字段类型和 Sendable/visibility/构造/执行资格沿真实类型与 Checked 定义处约束及特化复验，不能借 Tuple 扩大泛型 Unit 或被包装资源权限。嵌套/rest、数组/对象模式、spread、match 和叶注解在当前入口具体拒绝，继续承接原合法语言目标。
+
+唯一新增操作 SLOT_GROUP_INIT 追加 ordinal145，当前 OP_COUNT146，旧 ordinal 不变。type=Unit；args0 为 operands 表 offset，args1=m 为非Unit payload数；immediate 高u32为 first_slot，低u32为 n 个连续实际bindings。n>0、整区间属于同模块、实际initializer、未发布、精确 n/m、类型与权限全部预验；unused字段为零，Unit项不占SSA/payload，也不准用伪值ID占位。outgoing layout 为 m。全部阶段使用同一操作，VM 与生成C调用唯一 xr_xir_instance_slot_group_init(view,first,n,compact_values,m)。
+
+真实 Call allocation domain、scratch、值上限和有界work承担整组准备：私有owned表先取得全部准入/复制/持有与清理资源，再核 execution_status。任一失败或提交前取消释放全部准备且不产生 published slot或trace。不可失败的commit先写完整slots、flags/count/order，再开始trace；trace重入可见整组，首trace取消不回滚已提交绑定。清理不临时分配，按真实backing owner返还物理存储；初始化失败继续粘滞。
+
+此操作的 Checked semantic 为65，wire25与 Value21/Call26/Program29结构未变；现行版本仍只由 §17.6 实现常量定义。旧完整25/64包必须header早拒且零分配，当前包由各族独立固定角色构造，旧64完整前像保留为历史拒例，不能以writer输出刷新oracle。新SDK helper须在同源165项（160源+5archive）recipe及真实五archive消费者复验，原345 ABI表达式和139对象职责不减少。完整资格保留 Checked forged-shape、独立VM/native/mixed预期、全部真实OOM/三轴、retain饱和、取消、producer/Program/Instance先drop与最终physical0；平坦子片不代替完整产品默认门、完整安全或最后旧链删除。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1054,5 +1064,15 @@ PRINT failure preserves the exact Call status. For a valid configured provider, 
 Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
 
 Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
+
+### 17.35 Flat Tuple destructuring and atomic module publication
+
+Flat `var` / `const` patterns admit identifier or `_` leaves, exact ordered arity, Unit and `(x,)` singletons. Evaluate the RHS once and prepare all field projections and mutable Cells before publishing local names; closure capture retains the existing Cell/ownership contract. An empty pattern accepts only Unit and an all-discard pattern creates no binding or module group. Actual types, Sendable, visibility, construction/execution authority and definition-time constraints with Checked specialization/revalidation remain mandatory; wrapping does not widen ordinary Unit or resource permissions. Nested/rest, array/object patterns, spread, match and leaf annotations reject specifically at the current entry while remaining language obligations.
+
+The sole new SLOT_GROUP_INIT appends ordinal145; current OP_COUNT146 preserves every earlier ordinal. type=Unit; args0 is an operand-table offset and args1=m counts non-Unit payloads. The immediate packs first_slot in high u32 and n contiguous actual bindings in low u32. Prevalidate n>0, the entire same-module range, actual initializer, unpublished state, exact n/m, types and permissions. Unused fields are zero; Unit consumes no SSA/payload and forged placeholder IDs reject. Outgoing layout is m. Every stage shares this operation and VM/generated C call the sole xr_xir_instance_slot_group_init(view,first,n,compact_values,m).
+
+The actual Call allocation domain, scratch, value limit and bounded work own preparation. Obtain every admission, copy, retained hold and cleanup resource in a private owned table before checking execution_status. Any failure or precommit cancellation frees preparation without a published slot or trace. The infallible commit installs all slots, flags/count/order before tracing; trace reentry sees the complete group and cancellation on the first trace does not roll back committed bindings. Cleanup allocates nothing and refunds each actual backing owner; initialization failures remain sticky.
+
+This operation uses Checked semantic65 while wire25 and Value21/Call26/Program29 structures remain unchanged; §17.6 implementation constants still solely define current versions. Complete previous25/64 packets reject at the header with zero allocation. Independent fixed family roles construct current packets and preserve complete64 preimages as rejection evidence rather than deriving expectations from the writer. The new SDK helper needs same-source qualification through the actual165-entry (160 source+5 archive) recipe and five-archive consumers; all original345 ABI expressions and139 object responsibilities remain. Qualification retains forged Checked shapes, independent VM/native/mixed outcomes, every actual OOM/three-axis boundary, retain saturation, cancellation, producer/Program/Instance first-drop lifetimes and final physical zero. The flat subset does not replace full default/product safety or final legacy deletion.
 
 <!-- /xr-spec:en -->

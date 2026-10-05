@@ -128,6 +128,8 @@ typedef struct XrDestructurePattern {
             uint32_t symbol_id;
         } identifier;
     } as;
+    /* Parser-owned exact binding token span; never grants type permissions. */
+    int line, column, end_line, end_column;
 } XrDestructurePattern;
 
 /* ========== Program / Block ==========

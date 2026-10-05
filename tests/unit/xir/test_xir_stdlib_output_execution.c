@@ -16,14 +16,11 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL %d %s\n",__LINE__,#x); exit(1); } } while (0)
-#include "xir_runtime_allocations.h"
-#include "xir/xxir_specialize.c"
-#include "xir/xxir_effects.c"
-#include "xir/xxir_vm.c"
-#if !CONSUMER_KIND
-#include "xir/xxir_emit_c.c"
-#include "xir/xxir_library_catalog.c"
+#include "xir/xxir_generic.h"
+#if CONSUMER_KIND
+#include "xir_effect_execution_owner.h"
 #endif
+#include "xir_runtime_allocations.h"
 #include "xir_stdlib_output_runtime.h"
 typedef struct PublicationProbe { unsigned vector, calls; XrXirOutputStatus status; } PublicationProbe;
 static const char *const publication_bytes[] = {"out\0\xe4\xb8\xad", "err!", ""};
@@ -93,7 +90,7 @@ static void publication_finish(XrXirProgram *program, const uint32_t ids[2]) {
         bool ok = publication_run(program,ids); runtime_fail_at = SIZE_MAX;
         CHECK(!ok && runtime_live == live && runtime_bytes == bytes);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(!runtime_live && !runtime_bytes);
     printf("stdlib output consumer=%u twoInstances streams/BOOL/NUL/empty OOM=%zu physicalzero\n",CONSUMER_KIND,sites);
 }
@@ -104,12 +101,12 @@ XR_FUNC size_t *xr_test_stdlib_output_counter(unsigned index) {
 }
 XR_FUNC void xr_test_stdlib_output_execute(XrXirArtifact *checked, const char *generated) {
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_specialize(checked,NULL,&closed,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    const XrXirModule *module = xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     const char *names[] = {"stdoutText","stderrText"}; uint32_t ids[2] = {UINT32_MAX,UINT32_MAX};
     for (uint32_t f = 0; f < module->function_count; ++f)
         for (unsigned i = 0; i < 2; ++i)
@@ -119,21 +116,22 @@ XR_FUNC void xr_test_stdlib_output_execute(XrXirArtifact *checked, const char *g
             }
     CHECK(ids[0] != UINT32_MAX && ids[1] != UINT32_MAX);
     XrXirCSource source = {0};
-    CHECK(xr_xir_emit_c(lowered,"stdlib_output",1048576,&source) == XR_XIR_OK);
+    CHECK(xr_xir_compile_emit_c(lowered,"stdlib_output",1048576,&source) == XR_XIR_OK);
     FILE *file = fopen(generated,"wb"); CHECK(file);
     CHECK(fwrite(source.text,1,source.length,file) == source.length);
     CHECK(fprintf(file,"\nconst uint32_t stdlib_output_exports[2]={%u,%u};\n",ids[0],ids[1]) > 0);
-    CHECK(!fclose(file)); xr_xir_c_source_free(&source);
+    CHECK(!fclose(file)); xr_xir_compile_c_source_free(&source);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){1048576,1048576},&program) == XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program) == XR_XIR_OK);
     CHECK(!lowered); publication_finish(program,ids);
 }
 #else
 extern const XrXirProgramSpec stdlib_output_program;
 extern const uint32_t stdlib_output_exports[2];
 int main(void) {
+    const XrXirCompileContext *context=effects_source_owner(1048576,1048576);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&stdlib_output_program,(XrXirProgramBudget){1048576,1048576},&program) == XR_XIR_OK);
-    publication_finish(program,stdlib_output_exports); return 0;
+    CHECK(xr_xir_compile_program_seal(context,&stdlib_output_program,&program) == XR_XIR_OK);
+    publication_finish(program,stdlib_output_exports);effects_source_owners_free();return 0;
 }
 #endif

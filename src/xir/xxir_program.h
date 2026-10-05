@@ -117,6 +117,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const Xr
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_write(XrXirCallView *view, uint32_t slot,
                                                  const XrXirValue *value, bool publish);
+/* Prepare every owned binding before publishing any slot or lifecycle event.
+ * Compact values omit Unit slots and borrow for this synchronous operation. */
+XR_FUNC XrXirCallStatus xr_xir_instance_slot_group_init(XrXirCallView *view, uint32_t first,
+    uint32_t count, const XrXirValue *compact_values, uint32_t payload_count);
 /* Enter a protected region's handler with a panic action: bind a new
  * PanicInfo at destination (UINT32_MAX for an unbound handler), store
  * handler_pc and continue. Every other action is returned unchanged; a
