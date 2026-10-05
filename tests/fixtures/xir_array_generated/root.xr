@@ -1,0 +1,54 @@
+export fn strings()->Array<string> {
+    var original=["a世", "a世"]
+    var saved=original
+    original=[]
+    return saved
+}
+export fn empty()->Array<string> { var original:Array<string>=[]; var saved=original; return saved }
+export fn integers()->Array<i64> { var original=[42, 42]; var saved=original; original=[]; return saved }
+export fn nested()->Array<Array<string>> {
+    var inner=["a世", "a世"]
+    var original=[inner]
+    var saved=original
+    original=[]
+    inner=[]
+    return saved
+}
+export fn aliasInitial()->Array<Array<i64>> {
+    var original=[42,42]
+    var saved=original
+    var returned=original
+    return [original,saved,returned]
+}
+export fn aliasChanged()->Array<Array<i64>> {
+    var original=[42,42]
+    var saved=original
+    var returned=original
+    original[0]=99
+    return [original,saved,returned]
+}
+export fn defaultCount(count:i64)->i64 { var values=Array<u8>(count); return len(values) }
+export fn appendNine(value:i64)->i64 {
+    var values:Array<i64>=[]
+    values.push(value); values.push(value); values.push(value)
+    values.push(value); values.push(value); values.push(value)
+    values.push(value); values.push(value); values.push(value)
+    return len(values)
+}
+export fn appendManaged()->i64 {
+    var value="a\0b"
+    var values:Array<string>=[]
+    values.push(value); values.push(value); values.push(value)
+    values.push(value); values.push(value); values.push(value)
+    values.push(value); values.push(value); values.push(value)
+    return len(values)
+}
+export fn managedValues()->Array<string> {
+    var value="a\0b"
+    var values:Array<string>=[]
+    values.push(value); values.push(value); values.push(value)
+    values.push(value); values.push(value); values.push(value)
+    values.push(value); values.push(value); values.push(value)
+    return values
+}
+export fn repeatedRead()->Array<string> { const value="a世"; return [value,value] }

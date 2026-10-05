@@ -1,0 +1,1 @@
+export fn invalid(count:i64)->i64 { var values=Array<string>(count); return len(values) }

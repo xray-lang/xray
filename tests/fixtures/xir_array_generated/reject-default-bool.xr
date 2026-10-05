@@ -1,0 +1,1 @@
+export fn invalid(count:bool)->i64 { var values=Array<u8>(count); return len(values) }

@@ -2395,28 +2395,16 @@ add_xr_program_aot_native_case(atomic_bool_update_7 atomic-bool-cas-7 1)
 add_xr_program_aot_native_case(atomic_bool_update_10 atomic-bool-cas-10 0)
 add_xr_program_aot_native_case(atomic_i64_allocations atomic-i64-allocations 0)
 add_xr_program_aot_native_case(atomic_bool_allocations atomic-bool-allocations 0)
-add_xr_program_aot_native_case(array_alias array-alias 0)
-add_xr_program_aot_native_case(array_strings array-values-0 2)
-add_xr_program_aot_native_case(array_empty array-values-1 0)
-add_xr_program_aot_native_case(array_integers array-values-2 2)
-add_xr_program_aot_native_case(array_nested array-values-3 1)
-foreach(scenario RANGE 0 4)
-    add_xr_program_aot_native_case(array_allocations_${scenario} array-allocations-${scenario} 0)
-endforeach()
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_generated.cmake)
 add_xr_program_aot_native_case(integer_values integer-values 0)
 add_xr_program_aot_native_case(integer_conversions integer-conversions 0)
 add_xr_program_aot_native_case(string_slice string-slice 0)
-add_xr_program_aot_native_case(array_default array-default 0)
-add_xr_program_aot_native_case(array_append array-append 0)
-add_xr_program_aot_native_case(array_append_allocations array-append-allocations 0)
-add_xr_program_aot_native_case(array_append_managed_allocations array-append-managed-allocations 0)
 foreach(byte_case RANGE 0 8)
     add_xr_program_aot_native_case(byte_compare_${byte_case} byte-compare-${byte_case} 0)
 endforeach()
 foreach(builder_case RANGE 0 3)
     add_xr_program_aot_native_case(string_builder_${builder_case} string-builder-${builder_case} 0)
 endforeach()
-add_xr_program_aot_native_case(array_default_allocations array-default-allocations 0)
 add_xr_program_aot_native_case(string_slice_allocations string-slice-allocations 0)
 add_xr_program_aot_native_case(integer_bitwise_values integer-bitwise 0)
 add_xr_program_aot_native_case(integer_divmod integer-divmod 0)
@@ -2696,38 +2684,8 @@ include("xir/module_state_zero.cmake")
 include("xir/module_state_one.cmake")
 include("xir/module_state_failures.cmake")
 include("xir/module_state_classes.cmake")
-foreach(module_scenario RANGE 0 13)
-    if(module_scenario LESS 6 OR module_scenario EQUAL 8)
-        continue() # The identical target name is defined by the source-owned consumer.
-    endif()
-    set(module_target test_xr_program_aot_module_state_${module_scenario})
-    set(module_source ${XR_PROGRAM_AOT_FIXTURE_DIR}/module_state_${module_scenario}.c)
-    add_custom_command(
-        OUTPUT ${module_source}
-        COMMAND $<TARGET_FILE:test_xr_program_aot> ${module_source} module-state-${module_scenario}
-        DEPENDS test_xr_program_aot
-        COMMENT "Generating native typed module state ${module_scenario} fixture"
-        VERBATIM)
-    set_source_files_properties(${module_source} PROPERTIES GENERATED TRUE HEADER_FILE_ONLY TRUE)
-    add_executable(${module_target}
-        aot/test_xr_program_aot_module_state.c ${XR_TARGET_PROFILE_TEST_FIXTURE} ${module_source})
-    target_compile_definitions(${module_target} PRIVATE
-        XR_TEST_HAS_PROCESS_SHUTDOWN=1 XR_MODULE_STATE_SCENARIO=${module_scenario}
-        XR_MODULE_STATE_GENERATED_C="module_state_${module_scenario}.c")
-    target_include_directories(${module_target} PRIVATE
-        ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR} ${XR_PROGRAM_AOT_FIXTURE_DIR})
-    target_link_libraries(${module_target} PRIVATE
-        xr_program_test_core xray_program_vm_runtime xray_program_aot_compiler)
-    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-            OR (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-        target_compile_options(${module_target} PRIVATE /W4 /WX)
-    else()
-        target_compile_options(${module_target} PRIVATE -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME ${module_target} COMMAND $<TARGET_FILE:${module_target}>)
-    set_tests_properties(${module_target} PROPERTIES
-        LABELS "unit;aot;canonical-program;generated-c;native;module;ownership;task-310")
-endforeach()
+include("xir/module_state_remaining.cmake")
+
 
 set(XR_PROGRAM_AOT_INVOKE_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_sealed_invoke.c)

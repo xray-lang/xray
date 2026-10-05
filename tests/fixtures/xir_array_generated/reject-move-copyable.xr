@@ -1,0 +1,1 @@
+export fn invalid(value:move string) { var values:Array<string>=[]; values.push(value) }
