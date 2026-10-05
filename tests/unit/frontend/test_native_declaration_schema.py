@@ -61,11 +61,17 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual((unshift.receiver, unshift.ownership, len(unshift.parameters),
                           schema.simple_term(unshift.parameters[0][1], 'T'),
                           schema.simple_term(unshift.result, 'T')), ('REF', 'unit', 1, 'ELEMENT', 'UNIT'))
+        resize = next(member for member in members if member.name == 'resize')
+        self.assertEqual((resize.receiver, resize.ownership, len(resize.parameters),
+                          schema.simple_term(resize.parameters[0][1], 'T'),
+                          schema.simple_term(resize.parameters[1][1], 'T'),
+                          schema.simple_term(resize.result, 'T')),
+                         ('REF', 'owned', 2, 'I64', 'ELEMENT', 'ARRAY_ELEMENT'))
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
                          {'withCapacity', 'capacity', 'ptr', 'mutPtr',
-                          'reserve', 'resize', 'concat', 'sort', 'fill', 'toString',
+                          'reserve', 'concat', 'sort', 'fill', 'toString',
                           'iterator', 'entriesIterator', 'entries'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
@@ -113,6 +119,13 @@ class NativeDeclarations(unittest.TestCase):
             ('ref unshift(value: T)', 'ref unshift(value: Unknown)'),
             ('ref unshift(value: T)', 'ref unshift(value: T) -> Array<T>'),
             ('ref unshift(value: T)', 'ref unshift(value: T, index: i64)'),
+            ('ref resize(length: i64, fill: T) -> Array<T>', 'resize(length: i64, fill: T) -> Array<T>'),
+            ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(length: i32, fill: T) -> Array<T>'),
+            ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(length: i64, fill?: T) -> Array<T>'),
+            ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(length: i64, ...fill: T) -> Array<T>'),
+            ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(fill: T, length: i64) -> Array<T>'),
+            ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(length: i64, fill: Unknown) -> Array<T>'),
+            ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(length: i64, fill: T) -> T'),
             ('struct Array<T>', 'struct Array<U>'),
         ]
         for before, after in cases:

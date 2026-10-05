@@ -1,0 +1,12 @@
+export fn round<T>(item:T)->Array<T> {
+    var values=[item]
+    const alias=values
+    const grown=values.resize(3,item)
+    const shrunk=values.resize(1,item)
+    const same=values.resize(1,item)
+    const vacant=values.resize(0,item)
+    if(len(vacant)!=0||len(values)!=0){return []}
+    return [alias[0],grown[0],grown[2],shrunk[0],same[0],item]
+}
+
+export fn divide(n:i64)->i64{return 10/n}

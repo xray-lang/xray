@@ -4248,4 +4248,6 @@ include(xir/semantic65_vectors.cmake)
 
 include(xir/array_remove.cmake)
 
+include(xir/array_resize.cmake)
+
 include(xir/source_shadow_function.cmake)

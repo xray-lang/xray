@@ -1,0 +1,1 @@
+fn bad<T>(value:T)->Array<i64>{var xs=[value];return xs.resize(2,value)}

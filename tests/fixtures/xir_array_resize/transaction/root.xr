@@ -1,0 +1,41 @@
+import "./producer" as producer
+var root:Array<i64?>=[1,null,3]
+var trace=0
+export fn saved()->Array<i64?>{return root}
+export fn count()->i64{return len(root)}
+export fn currentTrace()->i64{return trace}
+export fn grow()->Array<i64>{const value=root.resize(5,null);return [len(value),len(root)]}
+export fn shrink()->Array<i64>{const value=root.resize(1,null);return [len(value),len(root)]}
+export fn same()->Array<i64?>{return root.resize(3,null)}
+export fn zero()->Array<i64?>{return root.resize(0,null)}
+export fn numbers()->Array<i64>{
+    var xs=[1,2,3]
+    const old=xs
+    const grown=producer.change<i64>(ref xs,5,9)
+    const shrunk=xs.resize(2,8)
+    const same=xs.resize(2,7)
+    const empty=xs.resize(0,6)
+    return [len(old),old[2],len(grown),grown[0],grown[2],grown[3],grown[4],len(shrunk),shrunk[1],len(same),same[1],len(empty),len(xs)]
+}
+export fn independent()->Array<i64>{var xs=[1,2];var result=xs.resize(3,9);result[0]=99;xs[1]=42;return [result[0],result[1],xs[0],xs[1]]}
+export fn vacant()->Array<i64>{var xs:Array<i64>=[];const empty=xs.resize(0,9);const grown=xs.resize(2,7);return [len(empty),len(grown),grown[0],grown[1]]}
+struct Item{values:Array<i64>}
+var items=[Item{values:[11,22,33]}]
+fn pathIndex()->i64{trace=trace*10+1;return 0}
+fn lengthArg()->i64{trace=trace*10+2;items=[Item{values:[71,73]}];return 3}
+fn fillArg()->i64{trace=trace*10+3;items=[Item{values:[81,83]}];return 9}
+export fn rebound()->Array<i64>{trace=0;items=[Item{values:[11,22,33]}];return items[pathIndex()].values.resize(lengthArg(),fillArg())}
+fn negativeLength()->i64{trace=trace*10+1;return -1}
+fn negativeFill()->i64?{trace=trace*10+2;return null}
+export fn negative()->Array<i64?>{trace=0;return root.resize(negativeLength(),negativeFill())}
+fn sameLength()->i64{trace=trace*10+1;return 3}
+fn zeroLength()->i64{trace=trace*10+1;return 0}
+export fn sideSame()->Array<i64?>{trace=0;return root.resize(sameLength(),negativeFill())}
+export fn sideZero()->Array<i64?>{trace=0;return root.resize(zeroLength(),negativeFill())}
+export fn maximum()->Array<i64?>{return root.resize(9223372036854775807,null)}
+class Handle{values:Array<i64>=[1,2]}
+fn readHandleBody(handle:Handle)->Array<i64>{return handle.values.resize(3,7)}
+export fn readHandle()->Array<i64>{const h=Handle();const value=readHandleBody(h);return [len(h.values),value[2]]}
+export fn text()->Array<string>{var xs=["kept","a\0中"];return xs.resize(3,"a\0中")}
+export fn retainedCallable()->Array<fn()->i64>{const captured=7;var xs=[fn()->i64{return captured}];return xs.resize(2,fn()->i64{return captured})}
+export fn floatBits(values:Array<f64>)->Array<f64>{var xs=values;return xs.resize(2,values[0])}

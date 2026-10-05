@@ -24,6 +24,7 @@ struct Array<T> {
     // @native-operation ARRAY_CLEAR allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref clear()
     ref reserve(capacity: i64) -> Array<T>
+    // @native-operation ARRAY_RESIZE allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref resize(length: i64, fill: T) -> Array<T>
     concat(...arrays: Array<T>) -> Array<T>
     // @native-operation ARRAY_INDEX_OF allocation=may_heap failures=allocation,retain,limit ownership=owned

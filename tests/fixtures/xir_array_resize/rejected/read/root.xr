@@ -1,0 +1,1 @@
+fn bad(xs:Array<i64>)->Array<i64>{return xs.resize(2,7)}

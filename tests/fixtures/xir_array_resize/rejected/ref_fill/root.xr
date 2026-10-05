@@ -1,0 +1,1 @@
+var xs=[1];var value=7;xs.resize(2,ref value)

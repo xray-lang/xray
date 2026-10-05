@@ -194,6 +194,7 @@ def array_recipe_contracts(binder):
         'ARRAY_UNSHIFT': ('unshift', 'REF', f'(value: {binder})', ordinary, 'unit'),
         'ARRAY_POP': ('pop', 'REF', f'() -> {binder}?', ordinary, 'owned'),
         'ARRAY_SHIFT': ('shift', 'REF', f'() -> {binder}?', ordinary, 'owned'),
+        'ARRAY_RESIZE': ('resize', 'REF', f'(length: i64, fill: {binder}) -> Array<{binder}>', ordinary, 'owned'),
     }
 
 

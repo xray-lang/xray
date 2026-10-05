@@ -1,0 +1,13 @@
+import "./producer" as producer
+class Box{value:i64
+    constructor(value:i64){this.value=value} }
+enum Failure{Full{box:Box,text:string}}
+export fn case0()->Array<Error> {
+    const value:Error=Failure.Full{box:Box(7),text:"owned中"}
+    return producer.round<Error>(value)
+}
+export fn case1()->Array<PanicInfo> {
+    try{producer.divide(0)}
+    catch panic(info:PanicInfo){return producer.round<PanicInfo>(info)}
+    return []
+}

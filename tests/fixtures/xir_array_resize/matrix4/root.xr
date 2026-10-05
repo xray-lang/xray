@@ -1,0 +1,25 @@
+import "./producer" as producer
+struct Record { value:i64
+    constructor(value:i64){this.value=value} }
+struct Empty {}
+enum Flag{ Empty,Text{text:string} }
+class Box{value:i64
+    constructor(value:i64){this.value=value} }
+fn layer<T>(item:T)->T?{return item}
+export fn case0()->Array<i64?> {return producer.round<i64?>(null)}
+export fn case1()->Array<i64??> {return producer.round<i64??>(layer<i64?>(null))}
+export fn case2()->i64{
+    const captured=7
+    var values=[fn()->i64{return captured}]
+    const alias=values
+    const grown=values.resize(3,fn()->i64{return captured})
+    const shrunk=values.resize(1,fn()->i64{return captured})
+    const same=values.resize(1,fn()->i64{return captured})
+    const empty=values.resize(0,fn()->i64{return captured})
+    if(len(empty)!=0||len(values)!=0){return -1}
+    return alias[0]()+grown[2]()+shrunk[0]()+same[0]()
+}
+export fn case3()->Array<Box> {return producer.round<Box>(Box(7))}
+export fn case4()->Array<i64??>{return producer.round<i64??>(layer<i64?>(layer<i64>(7)))}
+export fn case5()->Array<i64???>{return producer.round<i64???>(layer<i64??>(layer<i64?>(null)))}
+export fn case6()->Array<i64???>{return producer.round<i64???>(layer<i64??>(layer<i64?>(layer<i64>(7))))}

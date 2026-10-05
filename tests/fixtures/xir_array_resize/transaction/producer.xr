@@ -1,0 +1,1 @@
+export fn change<T>(values:ref Array<T>,length:i64,fill:T)->Array<T>{return values.resize(length,fill)}

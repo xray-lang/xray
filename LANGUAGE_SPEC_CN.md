@@ -6385,7 +6385,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe及reverse/unshift/pop/shift，共 19 个 operation；32 个成员中其余 13 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe及reverse/unshift/pop/shift/resize，共 20 个 operation；32 个成员中其余 12 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
@@ -6399,11 +6399,11 @@ receiver须为已有权限的可写逻辑place；root/path选择器只求值一�
 
 pop/shift资格为allocation=may_heap、failures=allocation,retain,limit、ownership=owned，无callback效应。候选可重选backing容量，不保证旧capacity；capacity/withCapacity/reserve的公开增长／分离保证仍属其声明族另冻，与reverse/unshift一致。合同冻结不等于新操作已经通过实施验收。
 
-冻结下一声明族 `ref resize(length: i64, fill: T) -> Array<T>`，两个必需READ实参按length、fill各一次，无默认／可选／variadic／方法类型参数，length精确i64、fill精确T。只要求原可复制／可保存能力，不加Equal/Compare/ToString/NotNullable；普通泛型定义处检查并在Checked特化后复验。receiver为有权限的可写逻辑place，选择器仅一次，全部实参成功后读binding当前Array，已完成副作用不回滚；const/read Array值参数、临时值及无权字段拒绝，read class handle可变字段沿既有权限。
+冻结声明族 `ref resize(length: i64, fill: T) -> Array<T>`，两个必需READ实参按length、fill各一次，无默认／可选／variadic／方法类型参数，length精确i64、fill精确T。只要求原可复制／可保存能力，不加Equal/Compare/ToString/NotNullable；普通泛型定义处检查并在Checked特化后复验。receiver为有权限的可写逻辑place，选择器仅一次，全部实参成功后读binding当前Array，已完成副作用不回滚；const/read Array值参数、临时值及无权字段拒绝，read class handle可变字段沿既有权限。
 
 n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；返回拥有式Array与发布receiver为独立逻辑副本，旧alias保旧值，复制在class／同步身份处停止且保Nullable层。n=0返回拥有空Array，同长度不承诺零分配或backing不变。n<0在两个实参后经现有NUMERIC_RANGE/E0422 panic拒绝且无发布；不可表示尺寸及有限额度沿现有LIMIT／预算拒绝。候选允许重选容量，capacity/withCapacity/reserve观察保证另冻。
 
-完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。合同冻结尚未开放resize，当前19/32不变；VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放完成后才报告20/32。
+完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。resize现已准入，当前20/32；独立VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放均须保留。
 
 | 成员 | 类型/说明 |
 |--|--|
@@ -7376,7 +7376,7 @@ NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等�
 
 ### 17.26 XIR Array值与源码边界
 
-`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，冻结READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`三原语，以及map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear十二个声明recipe及reverse/unshift/pop/shift，共19个operation。其余13个成员保留清单身份，不因此获得执行资格。Source先查找准确public成员声明，再按已准入native operation/recipe identity选择实现，query记录原声明身份与CALL引用；不按名字另立执行表。回调、查询、清空的类型、求值、效应与所有权合同见§14.7。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
+`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，冻结READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`三原语，以及map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear十二个声明recipe及reverse/unshift/pop/shift/resize，共20个operation。其余12个成员保留清单身份，不因此获得执行资格。Source先查找准确public成员声明，再按已准入native operation/recipe identity选择实现，query记录原声明身份与CALL引用；不按名字另立执行表。回调、查询、清空的类型、求值、效应与所有权合同见§14.7。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
 
 源码准入显式`Array<T>`、同类型元素字面量、有Array上下文的空字面量、普通赋值复制、参数、返回、局部及入口模块状态。空字面量没有元素上下文时拒绝。元素从左到右求值，使用既有上下文类型规则；嵌套Array与函数元素遵循统一构造类型池的可复制、可存储准入，unit、内部CELL、视图和未准入的不可复制资源不能成为普通元素。`Array<T>`泛型体在定义处按约束检查，在Checked上特化后复验；普通实例在Program封存前完成，不能按具体实参补造定义处未证明的能力。其他容器与用户struct/class声明族仍须分别准入。
 
