@@ -22,24 +22,12 @@ static size_t assert_pattern(const XrXirCheckedPacket *packet,const uint8_t *byt
     CHECK(count==1);return position;
 }
 static void assert_packet_oom(const XrXirArtifact *checked) {
-    size_t sites=0,baseline=runtime_live,bytes=runtime_bytes;
-    XrXirCheckedPacket kept={0};CHECK(xr_xir_checked_write(checked,NULL,&kept,NULL)==XR_XIR_OK);
-    size_t packet_live=runtime_live,packet_bytes=runtime_bytes;
-    for (uint32_t group=0;group<2;++group) for (size_t point=0;point<=sites;++point) {
-        runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
-        XrXirArtifact *read=NULL;XrXirCheckedPacket packet={0};
-        XrXirStatus status=group ? xr_xir_checked_read(kept.bytes,kept.length,NULL,&read,NULL) :
-            xr_xir_checked_write(checked,NULL,&packet,NULL);
-        if (!point) {CHECK(status==XR_XIR_OK);sites=runtime_attempts;}
-        else CHECK(runtime_attempts>runtime_fail_at && status==XR_XIR_OUT_OF_MEMORY && !read && !packet.bytes);
-        runtime_fail_at=SIZE_MAX;xr_xir_artifact_free(read);xr_xir_checked_packet_free(&packet);
-        CHECK(runtime_live==packet_live && runtime_bytes==packet_bytes);
-        if (point==sites) {printf("Assertion complete packet %s actual OOM=%zu\n",group ? "reader" : "writer",sites);break;}
-    }
-    xr_xir_checked_packet_free(&kept);CHECK(runtime_live==baseline && runtime_bytes==bytes);
+    assert_compile_stage_cases(checked,ASSERT_COMPILE_WRITER,"Assertion framed writer/replay");
+    assert_compile_stage_cases(checked,ASSERT_COMPILE_READER,"Assertion framed reader");
 }
+
 static void assert_core_packet(const XrXirSourceResult *source) {
-    const XrXirModule *parent=xr_xir_artifact_module(source->checked);
+    const XrXirModule *parent=xr_xir_compile_artifact_module(source->checked);
     uint32_t begin=parent->declarations->modules[1].initializer;
     uint32_t helper_function=UINT32_MAX;
     for (uint32_t i=0;i<parent->defaults->count;++i) {
@@ -60,8 +48,8 @@ static void assert_core_packet(const XrXirSourceResult *source) {
     helper[0].immediate=0;functions[2].instructions=helper;
     XrXirModule built={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,&defaults};
     XrXirArtifact *checked=NULL;
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL)==XR_XIR_OK);
-    XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_check(assert_compile_context,&built,&checked,NULL)==XR_XIR_OK);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length==sizeof(assert_condition_golden) && !memcmp(packet.bytes,assert_condition_golden,packet.length));
     assert_packet_oom(checked);
     uint8_t instruction[40]={0};assert_word(instruction,115);assert_word(instruction+12,1);
@@ -80,16 +68,16 @@ static void assert_core_packet(const XrXirSourceResult *source) {
     for (uint32_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
         memcpy(packet.bytes,assert_condition_golden,packet.length);assert_word(packet.bytes+attacks[i].offset,attacks[i].value);
         assert_packet_hash(&packet);
-        XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL);
+        XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL);
         if (status!=attacks[i].status) fprintf(stderr,"assert rehashed packet attack=%u status=%u expected=%u\n",i,status,attacks[i].status);
         CHECK(status==attacks[i].status && !read && runtime_live==live && runtime_bytes==bytes);
     }
     for (uint32_t old=54;old<=57;++old) {
         memcpy(packet.bytes,assert_condition_golden,packet.length);assert_word(packet.bytes+12,old);
         if (old==57) assert_word(packet.bytes+8,21);
-        assert_packet_hash(&packet);runtime_attempts=0;XrXirArtifact *read=NULL;
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && !runtime_attempts);
+        assert_packet_hash(&packet);size_t early_attempts=source_program_compile_attempts;XrXirArtifact *read=NULL;
+        CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && source_program_compile_attempts==early_attempts);
     }
-    xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(checked);
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
     puts("Full 642-byte independent condition KAT and rehashed typed/default/unused/old54/55/56/wire21 rejection PASS");
 }

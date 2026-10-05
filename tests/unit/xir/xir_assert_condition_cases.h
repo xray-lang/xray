@@ -107,7 +107,7 @@ static void assert_cases(XrXirProgram *program, const uint32_t *functions) {
         CHECK(initialized==4);
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (uint32_t repeat=0;repeat<2;++repeat) {
         XrXirValue message={0};CHECK(xr_xir_panic_info_message(&held[repeat],&message)==XR_XIR_VALUE_OK);
         const char *bytes=NULL;size_t length=0;

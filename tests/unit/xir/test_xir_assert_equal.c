@@ -17,40 +17,29 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
-#include "xir_assert_panics_source_memory.inc.c"
+
+#include "xir_assert_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_effects.c"
 #include "xir/xxir_specialize.c"
 #include "xir/xxir_vm.c"
-#pragma push_macro("xr_malloc")
-#pragma push_macro("xr_calloc")
-#pragma push_macro("xr_free")
-#undef xr_malloc
-#undef xr_calloc
-#undef xr_free
-#define xr_malloc(s) panics_source_calloc(1,s)
-#define xr_calloc(c,s) panics_source_calloc(c,s)
-#define xr_free(p) panics_source_free(p)
 #include "xir/xxir_source_query.c"
 #include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
-#pragma pop_macro("xr_free")
-#pragma pop_macro("xr_calloc")
-#pragma pop_macro("xr_malloc")
 static void panics_write(const char *path,const char *source) {
     FILE *file=fopen(path,"wb");CHECK(file);
     size_t length=strlen(source);CHECK(fwrite(source,1,length,file)==length && fclose(file)==0);
 }
 static XrXirSourceResult panics_source(const char *directory,const char *path,const char *source,bool valid) {
     panics_write(path,source);
-    XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK);CHECK(session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
-    XrXirSourceRequest request={session,path,&authority,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,assert_compile_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
-    xr_compiler_session_delete(session);
+    XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
+    xr_compile_session_free(session);
     if ((status==XR_XIR_OK)!=valid) fprintf(stderr,"check=%u %d:%d %s\n%s\n",status,diagnostic.line,diagnostic.column,diagnostic.message,source);
-    CHECK((status==XR_XIR_OK)==valid && (result.checked!=NULL)==valid);
+    CHECK((status==XR_XIR_OK)==valid && (result.checked!=NULL)==valid && (result.snapshot!=NULL)==valid);
     return result;
 }
 static uint32_t panics_find(const XrXirModule *module,const char *name) {
@@ -59,22 +48,22 @@ static uint32_t panics_find(const XrXirModule *module,const char *name) {
     CHECK(false);return UINT32_MAX;
 }
 static XrXirArtifact *panics_lower(XrXirSourceResult *source) {
-    XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(source->checked,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_source_result_free(source);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(source);
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_OK);
-    memset(packet.bytes,0xcc,packet.length);xr_xir_checked_packet_free(&packet);
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_specialize(read,NULL,&closed,&diagnostic);
+    CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_specialize(read,&closed,&diagnostic);
     if (status!=XR_XIR_OK) {
-        const XrXirModule *module=xr_xir_artifact_module(read);
+        const XrXirModule *module=xr_xir_compile_artifact_module(read);
         fprintf(stderr,"panics specialize=%u f=%u b=%u i=%u source-name=%.*s\n",status,
             diagnostic.function,diagnostic.block,diagnostic.instruction,
             diagnostic.function<module->function_count ? (int)module->functions[diagnostic.function].name_length : 0,
             diagnostic.function<module->function_count ? module->functions[diagnostic.function].name : "");
     }
-    CHECK(status==XR_XIR_OK);xr_xir_artifact_free(read);
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(closed);return lowered;
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
 }
 #include "xir_assert_equal_packet.inc.c"
 #include "xir_assert_equal_source_oom.inc.c"
@@ -101,32 +90,32 @@ static void equal_rejections(const char *directory,const char *path) {
     };
     for (uint32_t i=0;i<sizeof(sources)/sizeof(*sources);++i) {
         XrXirSourceResult result=panics_source(directory,path,sources[i],false);
-        xr_xir_source_result_free(&result);
-        CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
+        xr_xir_compile_source_result_free(&result);
+        CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
     }
     const char *ordinary="interface Equal{};fn ordinary<T:Equal>(a:T){}";
     XrXirSourceResult result=panics_source(directory,path,ordinary,true);
-    const XrXirModule *module=xr_xir_artifact_module(result.checked);
+    const XrXirModule *module=xr_xir_compile_artifact_module(result.checked);
     uint32_t owner=panics_find(module,"ordinary");
     CHECK(!module->generics[owner].constraints[0].markers && module->generics[owner].constraints[0].interface_count==1);
-    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
     CHECK(view->module_count==1);
     for (uint32_t d=0;d<view->declaration_count;++d) CHECK(!view->declarations[d].native_identity);
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
     result=panics_source(directory,path,
         "fn assertEqual<T>(a:T,b:T,msg:string=\"\"){};assertEqual(fn(){},fn(){})",true);
-    module=xr_xir_artifact_module(result.checked);view=xr_xir_source_snapshot_view(result.snapshot);
+    module=xr_xir_compile_artifact_module(result.checked);view=xr_xir_compile_source_snapshot_view(result.snapshot);
     CHECK(module->declarations->module_count==1 && view->module_count==1);
     owner=panics_find(module,"assertEqual");CHECK(!module->generics[owner].constraints[0].markers);
     for (uint32_t f=0;f<module->function_count;++f) for (uint32_t i=0;i<module->functions[f].instruction_count;++i)
         CHECK(module->functions[f].instructions[i].op!=XR_XIR_EQUAL &&
             module->functions[f].instructions[i].op!=XR_XIR_ASSERT_CONDITION);
     for (uint32_t d=0;d<view->declaration_count;++d) CHECK(!view->declarations[d].native_identity);
-    xr_xir_source_result_free(&result);
+    xr_xir_compile_source_result_free(&result);
 }
 static void equal_default_owner(const XrXirSourceResult *result) {
-    const XrXirModule *module=xr_xir_artifact_module(result->checked);
-    const XrXirSourceView *view=xr_xir_source_snapshot_view(result->snapshot);
+    const XrXirModule *module=xr_xir_compile_artifact_module(result->checked);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result->snapshot);
     CHECK(module->defaults && module->defaults->count==3 && view->complete &&
         module->declarations->module_count==2 && view->module_count==4);
     CHECK(!strcmp(view->modules[1].identity,"xray-native:prelude/Array") &&
@@ -168,9 +157,9 @@ static void equal_run(XrXirArtifact *lowered,const char *generated_path) {
     const char *names[]={"bools","contextual","arrays","nan","zero","nulString","emptyMessage",
         "ownedMessage","once","forwarded","whereProof","arrayProof","operatorProof"};
     const int64_t expected[]={1,7,3,5,6,7,0,3,123,11,12,13,14};
-    uint32_t entries[13];const XrXirModule *module=xr_xir_artifact_module(lowered);
+    uint32_t entries[13];const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     for (uint32_t i=0;i<13;++i) entries[i]=panics_find(module,names[i]);
-    XrXirCSource output={0};CHECK(xr_xir_emit_c(lowered,"equal_checked",16777216,&output)==XR_XIR_OK);
+    XrXirCSource output={0};CHECK(xr_xir_compile_emit_c(lowered,"equal_checked",16777216,&output)==XR_XIR_OK);
     CHECK(strstr(output.text,"xr_xir_value_equal") && !strstr(output.text,"({"));
     FILE *generated=fopen(generated_path,"wb");CHECK(generated);
     CHECK(fwrite(output.text,1,output.length,generated)==output.length);
@@ -178,12 +167,12 @@ static void equal_run(XrXirArtifact *lowered,const char *generated_path) {
     for (uint32_t i=0;i<13;++i) CHECK(fprintf(generated,"%s%uu",i ? "," : "",entries[i])>0);
     CHECK(fputs("};\nconst uint32_t equal_checked_inputs[2]={",generated)>=0);
     uint32_t relation=panics_find(module,"rawEqual"),assertion=panics_find(module,"rawMessage");
-    CHECK(fprintf(generated,"%uu,%uu};\n",relation,assertion)>0 && fclose(generated)==0);xr_xir_c_source_free(&output);
+    CHECK(fprintf(generated,"%uu,%uu};\n",relation,assertion)>0 && fclose(generated)==0);xr_xir_compile_c_source_free(&output);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     equal_instance_oom(program,entries[2]);
     XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
+    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     for (uint32_t i=0;i<13;++i) {
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);
         XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
@@ -202,26 +191,27 @@ static void equal_existing_fixture(const char *directory,const char *path,const 
     char *source=xr_malloc((size_t)length+1);CHECK(source);
     CHECK(fread(source,1,(size_t)length,file)==(size_t)length && !fclose(file));source[length]=0;
     XrXirSourceResult result=panics_source(directory,path,source,true);xr_free(source);
-    XrXirArtifact *lowered=panics_lower(&result);const XrXirModule *module=xr_xir_artifact_module(lowered);
+    XrXirArtifact *lowered=panics_lower(&result);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t entry=module->declarations->entry_function;CHECK(entry<module->function_count);
     XrXirCSource generated={0};
-    CHECK(xr_xir_emit_c(lowered,"nullable_checked",16777216,&generated)==XR_XIR_OK);
+    CHECK(xr_xir_compile_emit_c(lowered,"nullable_checked",16777216,&generated)==XR_XIR_OK);
     CHECK(!strstr(generated.text,"({"));FILE *output=fopen(generated_path,"wb");CHECK(output);
     CHECK(fwrite(generated.text,1,generated.length,output)==generated.length && !fclose(output));
-    xr_xir_c_source_free(&generated);
+    xr_xir_compile_c_source_free(&generated);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
+    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(value.type==XR_XIR_I64 && !value.payload);xr_xir_value_drop(&value);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
-    CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
+    CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
     puts("Existing exact fixture bytes through Source/Checked/packet/VM PASS; public CLI consumer remains separate");
 }
 int main(int argc,char **argv) {
+    assert_compile_begin();
     CHECK(argc==3 || argc==4 || argc==5);char path[2048];CHECK(snprintf(path,sizeof(path),"%s/equal.xr",argv[1])>0);
     if (argc==5) {
         CHECK(!strcmp(argv[3],"fixture"));const char *name=argv[2];
@@ -230,7 +220,7 @@ int main(int argc,char **argv) {
         if (backslash && backslash>=name) name=backslash+1;
         int length=snprintf(path,sizeof(path),"%s/fixture-%s.xr",argv[1],name);
         CHECK(length>0 && (size_t)length<sizeof(path));
-        equal_existing_fixture(argv[1],path,argv[4],argv[2]);return 0;
+        equal_existing_fixture(argv[1],path,argv[4],argv[2]);assert_compile_end();return 0;
     }
     if (argc==4) {
         if (!strcmp(argv[3],"nullable-oom")) {
@@ -243,7 +233,7 @@ int main(int argc,char **argv) {
             equal_source_oom(argv[1],path,"fn same<T:Equal>(a:Array<T>,b:Array<T>)->bool{return a==b};export fn run(){assertEqual([1],[1]);assert(same([1],[1]))}\n");
             equal_pipeline_oom(argv[1],path,"export fn run(){assertPanics(fn(){assertEqual([[1]],[[1]])},\"normal return\")}\n");
         }
-        puts("Equal Source/default/proof/pipeline/runtime OOM and exact-budget physical refunds PASS");return 0;
+        puts("Equal Source/default/proof/pipeline/runtime OOM and exact-budget physical refunds PASS");assert_compile_end();return 0;
     }
     equal_packet_gates();
     equal_rejections(argv[1],path);
@@ -269,6 +259,6 @@ int main(int argc,char **argv) {
         "export fn rawMessage(msg:string)->PanicInfo{try{assertEqual(1,2,msg)}catch panic(p){return p};return rawMessage(\"fallback\")}\n";
     XrXirSourceResult result=panics_source(argv[1],path,source,true);equal_default_owner(&result);
     XrXirArtifact *lowered=panics_lower(&result);equal_run(lowered,argv[2]);
-    CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
-    puts("Equal declaration/default/proof negatives and 13 typed Source/packet/VM outcomes PASS");return 0;
+    CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
+    puts("Equal declaration/default/proof negatives and 13 typed Source/packet/VM outcomes PASS");assert_compile_end();return 0;
 }

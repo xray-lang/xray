@@ -34,41 +34,26 @@ static size_t panics_instruction_offset(const XrXirCheckedPacket *packet,uint32_
     CHECK(false);return 0;
 }
 static XrXirArtifact *panics_core_checked(void) {
-    XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
-    XrModuleResolverConfig config={0};XrModuleResolver *resolver=xr_module_resolver_new(&config);CHECK(resolver);
-    SourceContext core={0};core.budget=xr_xir_default_budget();core.linkage_kind=XR_XIR_LIBRARY;core.core_factory=true;
-    core.graph=xr_module_graph_new(session,resolver);CHECK(core.graph);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK);CHECK(session);
+    XrModuleResolverConfig config={0};XrModuleResolver *resolver=NULL;CHECK(xr_compile_module_resolver_new(assert_compile_context->resources,&config,&resolver)==XR_MODULE_OK);CHECK(resolver);
+    SourceContext core={0};core.compile=*assert_compile_context;core.remaining_blocks=core.compile.limits.blocks;core.remaining_instructions=core.compile.limits.instructions;core.linkage_kind=XR_XIR_LIBRARY;core.core_factory=true;
+    CHECK(xr_compile_module_graph_new(assert_compile_context->resources,session,resolver,&core.graph)==XR_MODULE_OK);CHECK(core.graph);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"xray-core-assertions-v1",NULL};char *error=NULL;
-    CHECK(!xr_module_graph_build_source(core.graph,&authority,xir_core_declaration_source,&error));
-    CHECK(!xr_module_graph_topological_sort(core.graph) && source_manifests_load(&core));
-    XrXirSourceResult result={0};XrXirBudget checking=core.budget;source_construct(&core,&checking,&result);
+    CHECK(!xr_compile_module_graph_build_source(core.graph,&authority,xir_core_declaration_source,&error));
+    CHECK(!xr_compile_module_graph_topological_sort(core.graph) && source_manifests_load(&core));
+    XrXirSourceResult result={0};source_construct(&core,&result);
     CHECK(core.diagnostic.status==XR_XIR_OK && result.checked);
-    source_core_dispose(&core);xr_module_resolver_free(resolver);xr_compiler_session_delete(session);xr_free(error);
+    source_core_dispose(&core);xr_compile_module_resolver_free(resolver);xr_compile_session_free(session);xr_compile_resources_free(error);
     return result.checked;
 }
 static void panics_packet_oom(const XrXirArtifact *checked) {
-    size_t live=runtime_live,bytes=runtime_bytes;XrXirCheckedPacket kept={0};
-    CHECK(xr_xir_checked_write(checked,NULL,&kept,NULL)==XR_XIR_OK);
-    size_t kept_live=runtime_live,kept_bytes=runtime_bytes;
-    for (uint32_t group=0;group<2;++group) {
-        size_t sites=0;
-        for (size_t point=0;point<=sites;++point) {
-            runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
-            XrXirArtifact *read=NULL;XrXirCheckedPacket packet={0};
-            XrXirStatus status=group ? xr_xir_checked_read(kept.bytes,kept.length,NULL,&read,NULL) :
-                xr_xir_checked_write(checked,NULL,&packet,NULL);
-            if (!point) {CHECK(status==XR_XIR_OK);sites=runtime_attempts;}
-            else CHECK(runtime_attempts>runtime_fail_at && status==XR_XIR_OUT_OF_MEMORY && !read && !packet.bytes);
-            runtime_fail_at=SIZE_MAX;xr_xir_artifact_free(read);xr_xir_checked_packet_free(&packet);
-            CHECK(runtime_live==kept_live && runtime_bytes==kept_bytes);
-        }
-        printf("Panics framed %s OOM=%zu complete refund\n",group ? "reader" : "writer",sites);
-    }
-    xr_xir_checked_packet_free(&kept);CHECK(runtime_live==live && runtime_bytes==bytes);
+    assert_compile_stage_cases(checked,ASSERT_COMPILE_WRITER,"Assertion framed writer/replay");
+    assert_compile_stage_cases(checked,ASSERT_COMPILE_READER,"Assertion framed reader");
 }
+
 static void panics_packet_gates(void) {
     XrXirArtifact *checked=panics_core_checked();XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     if (packet.length!=sizeof(assert_panics_golden) || memcmp(packet.bytes,assert_panics_golden,packet.length)) {
         size_t at=0;while (at<packet.length && at<sizeof(assert_panics_golden) && packet.bytes[at]==assert_panics_golden[at]) ++at;
         fprintf(stderr,"independent Core KAT mismatch length=%zu expected=%zu first=%zu\n",packet.length,sizeof(assert_panics_golden),at);
@@ -77,24 +62,24 @@ static void panics_packet_gates(void) {
     panics_packet_oom(checked);
     size_t op=panics_instruction_offset(&packet,2),live=runtime_live,bytes=runtime_bytes;
     const struct {size_t offset;uint32_t value;XrXirStatus expected;} attacks[]={
-        {1735,2,XR_XIR_BAD_STRUCTURE},{1739,2,XR_XIR_BAD_STRUCTURE},{1739,0,XR_XIR_BAD_STRUCTURE},
-        {1743,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},{1795,0,XR_XIR_BAD_STRUCTURE},
-        {1867,1,XR_XIR_BAD_STRUCTURE},{1891,0,XR_XIR_BAD_STRUCTURE},{1895,3,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS_VECTOR_GENERIC2+4,2,XR_XIR_BAD_STRUCTURE},{XR_PANICS_VECTOR_GENERIC2+8,2,XR_XIR_BAD_STRUCTURE},{XR_PANICS_VECTOR_GENERIC2+8,0,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS_VECTOR_GENERIC2+12,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},{XR_PANICS_VECTOR_GENERIC5+8,0,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS_VECTOR_DEFAULTS+4,1,XR_XIR_BAD_STRUCTURE},{XR_PANICS_VECTOR_DEFAULTS+28,0,XR_XIR_BAD_STRUCTURE},{XR_PANICS_VECTOR_DEFAULTS+32,3,XR_XIR_BAD_STRUCTURE},
         {op+2*40+24,0,XR_XIR_BAD_TYPE},{op+2*40+4,XR_XIR_I64,XR_XIR_BAD_TYPE},
         {op+4*40+12,0,XR_XIR_BAD_TYPE},{op+8*40+4,XR_XIR_PANIC_INFO,XR_XIR_BAD_TYPE}
     };
     for (uint32_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
         memcpy(packet.bytes,assert_panics_golden,packet.length);panics_word(packet.bytes+attacks[i].offset,attacks[i].value);panics_hash(&packet);
-        XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL);
+        XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL);
         if (status!=attacks[i].expected) fprintf(stderr,"panics packet attack=%u status=%u expected=%u\n",i,status,attacks[i].expected);
         CHECK(status==attacks[i].expected && !read && runtime_live==live && runtime_bytes==bytes);
     }
     for (uint32_t group=0;group<2;++group) {
         memcpy(packet.bytes,assert_panics_golden,packet.length);panics_word(packet.bytes+(group ? 12 : 8),group ? 56 : 21);
-        panics_hash(&packet);runtime_attempts=0;XrXirArtifact *read=NULL;
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && !runtime_attempts);
+        panics_hash(&packet);size_t early_attempts=source_program_compile_attempts;XrXirArtifact *read=NULL;
+        CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && source_program_compile_attempts==early_attempts);
     }
-    xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(checked);
-    CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
-    puts("Complete independent Core1919 KAT; rehashed role/recipe/helper attacks; old wire/semantic early refusal PASS");
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
+    CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
+    puts("Complete independent Core1975 KAT; rehashed role/recipe/helper attacks; old wire/semantic early refusal PASS");
 }

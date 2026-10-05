@@ -17,45 +17,15 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
-static size_t source_attempts,source_fail_at=SIZE_MAX,source_live,source_bytes,source_peak;
-typedef struct AssertSourceMemory {void *pointer;size_t bytes;} AssertSourceMemory;
-static AssertSourceMemory source_owned[4096];
-static void *assert_source_calloc(size_t count,size_t size) {
-    CHECK(!size || count<=SIZE_MAX/size);
-    if (source_attempts++==source_fail_at) return NULL;
-    void *pointer=xr_calloc(count,size);
-    if (pointer) {
-        CHECK(source_live<4096);source_owned[source_live++]=(AssertSourceMemory){pointer,count*size};
-        source_bytes+=count*size;if (source_bytes>source_peak) source_peak=source_bytes;
-    }
-    return pointer;
-}
-static void assert_source_free(void *pointer) {
-    for (size_t i=0;pointer && i<source_live;++i) if (source_owned[i].pointer==pointer) {
-        source_bytes-=source_owned[i].bytes;source_owned[i]=source_owned[--source_live];break;
-    }
-    xr_free(pointer);
-}
+#include "xir_assert_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_effects.c"
 #include "xir/xxir_specialize.c"
 #include "xir/xxir_vm.c"
 #include "xir_assert_condition_cases.h"
-#pragma push_macro("xr_malloc")
-#pragma push_macro("xr_calloc")
-#pragma push_macro("xr_free")
-#undef xr_malloc
-#undef xr_calloc
-#undef xr_free
-#define xr_malloc(s) assert_source_calloc(1,s)
-#define xr_calloc(c,s) assert_source_calloc(c,s)
-#define xr_free(p) assert_source_free(p)
 #include "xir/xxir_source_query.c"
 #include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
-#pragma pop_macro("xr_free")
-#pragma pop_macro("xr_calloc")
-#pragma pop_macro("xr_malloc")
 
 static void assert_write(const char *path, const char *source) {
     FILE *file=fopen(path,"wb"); CHECK(file);
@@ -72,20 +42,20 @@ static uint32_t assert_find(const XrXirModule *module, const char *name) {
 static XrXirSourceResult assert_source(const char *directory, const char *path,
     const char *source, bool valid) {
     assert_write(path,source);
-    XrCompilerSession *session=xr_compiler_session_new(NULL); CHECK(session);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK); CHECK(session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
-    XrXirSourceRequest request={session,path,&authority,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,assert_compile_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult output={0}; XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(&request,&output,&diagnostic);
-    xr_compiler_session_delete(session);
+    XrXirStatus status=xr_xir_compile_source_check(&request,&output,&diagnostic,NULL);
+    xr_compile_session_free(session);
     if ((status==XR_XIR_OK)!=valid) fprintf(stderr,"source status %u %d:%d %s\n%s\n",
         status,diagnostic.line,diagnostic.column,diagnostic.message,source);
-    CHECK((status==XR_XIR_OK)==valid && (output.checked!=NULL)==valid);
+    CHECK((status==XR_XIR_OK)==valid && (output.checked!=NULL)==valid && (output.snapshot!=NULL)==valid);
     return output;
 }
 static void assert_bindings(const XrXirSourceResult *source) {
-    const XrXirModule *module=xr_xir_artifact_module(source->checked);
-    const XrXirSourceView *view=xr_xir_source_snapshot_view(source->snapshot);
+    const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source->snapshot);
     CHECK(view && view->complete && view->module_count==2 && module->declarations->module_count==2);
     CHECK(module->defaults && module->defaults->count==3);
     const XrXirDefaultBinding *binding=&module->defaults->records[0];
@@ -129,21 +99,21 @@ static void assert_bindings(const XrXirSourceResult *source) {
     }
     CHECK(core==1 && parameters==7);
     XrXirEffects *effects=NULL;
-    CHECK(xr_xir_effects_analyze(source->checked,NULL,&effects)==XR_XIR_OK);
+    CHECK(xr_xir_compile_effects_analyze(source->checked,&effects)==XR_XIR_OK);
     const XrXirFunctionEffects *effect=xr_xir_effects_function(effects,binding->owner);
     CHECK(effect && effect->suspend==XR_XIR_EFFECT_NONE && effect->throws==XR_XIR_EFFECT_NONE);
-    xr_xir_effects_free(effects);
+    xr_xir_compile_effects_free(effects);
 }
 static XrXirArtifact *assert_lower(XrXirSourceResult *source) {
     XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_checked_write(source->checked,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_source_result_free(source);
+    CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(source);
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_OK);
-    memset(packet.bytes,0xCC,packet.length); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(read,NULL,&closed,NULL)==XR_XIR_OK); xr_xir_artifact_free(read);
+    CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xCC,packet.length); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK); xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK); xr_xir_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK); xr_xir_compile_artifact_free(closed);
     return lowered;
 }
 #include "xir_assert_condition_packet_gates.inc.c"
@@ -157,12 +127,13 @@ static void assert_entries(const XrXirModule *module,uint32_t *functions) {
     for (uint32_t i=0;i<ASSERT_FUNCTIONS;++i) functions[i]=assert_find(module,assert_names[i]);
 }
 static void assert_vm(XrXirArtifact *lowered) {
-    uint32_t functions[ASSERT_FUNCTIONS]; assert_entries(xr_xir_artifact_module(lowered),functions);
+    uint32_t functions[ASSERT_FUNCTIONS]; assert_entries(xr_xir_compile_artifact_module(lowered),functions);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     CHECK(!lowered); assert_cases(program,functions);
 }
 int main(int argc,char **argv) {
+    assert_compile_begin();
     CHECK(argc==3);
     char path[2048]; CHECK(snprintf(path,sizeof(path),"%s/root.xr",argv[1])>0);
     const char *source=
@@ -184,32 +155,32 @@ int main(int argc,char **argv) {
     assert_permissions(&result);
     assert_pipeline_oom(result.checked);
     XrXirArtifact *lowered=assert_lower(&result);
-    XrXirCSource generated={0}; CHECK(xr_xir_emit_c(lowered,"assert_condition",4194304,&generated)==XR_XIR_OK);
+    XrXirCSource generated={0}; CHECK(xr_xir_compile_emit_c(lowered,"assert_condition",4194304,&generated)==XR_XIR_OK);
     CHECK(!strstr(generated.text,"({"));
     FILE *file=fopen(argv[2],"wb");CHECK(file);
     CHECK(fwrite(generated.text,1,generated.length,file)==generated.length);
-    uint32_t functions[ASSERT_FUNCTIONS];assert_entries(xr_xir_artifact_module(lowered),functions);
+    uint32_t functions[ASSERT_FUNCTIONS];assert_entries(xr_xir_compile_artifact_module(lowered),functions);
     CHECK(fprintf(file,"\nconst uint32_t assert_condition_functions[%u]={",ASSERT_FUNCTIONS)>0);
     for (uint32_t i=0;i<ASSERT_FUNCTIONS;++i) CHECK(fprintf(file,"%s%uu",i ? "," : "",functions[i])>0);
     CHECK(fputs("};\n",file)>=0 && fclose(file)==0);
-    xr_xir_c_source_free(&generated); assert_vm(lowered);
+    xr_xir_compile_c_source_free(&generated); assert_vm(lowered);
     const char *invalid[]={"assert()","assert(1)","assert(true,1)","assert(true,null)","assert(true,\"x\",\"y\")",
         "assert<i64>(true)","const f=assert","check(true)",
         "var flag=true;assert(ref flag)","var flag=true;assert(move flag)",
         "fn unused(){assert(1)}", "fn wrong<T>(value:T){assert(value)}", "assertEqual(1,true)",
         "assertPanics(fn(value:i64){})"};
     for (uint32_t i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i) {
-        result=assert_source(argv[1],path,invalid[i],false);xr_xir_source_result_free(&result);
+        result=assert_source(argv[1],path,invalid[i],false);xr_xir_compile_source_result_free(&result);
     }
     result=assert_source(argv[1],path,"fn assert(cond:bool,msg:string=\"\"){}\nassert(false)\n",true);
-    CHECK(xr_xir_artifact_module(result.checked)->declarations->module_count==1);
-    CHECK(xr_xir_source_snapshot_view(result.snapshot)->module_count==1);
-    xr_xir_source_result_free(&result);
+    CHECK(xr_xir_compile_artifact_module(result.checked)->declarations->module_count==1);
+    CHECK(xr_xir_compile_source_snapshot_view(result.snapshot)->module_count==1);
+    xr_xir_compile_source_result_free(&result);
     assert_lexical(argv[1],path);
     assert_source_oom(argv[1],path);
     assert_ordinary_memory_origin();
     assert_initialization(argv[1],path);
-    CHECK(runtime_live==0 && runtime_bytes==0 && source_live==0 && source_bytes==0);
+    CHECK(runtime_live==0 && runtime_bytes==0 && !assert_compile_extra_blocks() && !assert_compile_extra_bytes());
     puts("Typed assert Source/default owner, owned packet, VM, lexical shadow and invalid calls PASS");
-    return 0;
+    assert_compile_end();return 0;
 }

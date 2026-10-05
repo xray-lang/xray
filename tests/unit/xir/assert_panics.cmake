@@ -3,7 +3,7 @@ set(XIR_ASSERT_PANICS_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/assert-panics-so
 set(XIR_ASSERT_PANICS_C ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_assert_panics.c)
 set(XIR_ASSERT_PANICS_MATRIX_C ${XIR_ASSERT_PANICS_C}.matrix.c)
 file(MAKE_DIRECTORY ${XIR_ASSERT_PANICS_DIR})
-add_xray_bootstrap_executable(test_xir_assert_panics ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_assert_panics.c)
+add_executable(test_xir_assert_panics ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_assert_panics.c)
 target_link_libraries(test_xir_assert_panics PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 add_dependencies(test_xir_assert_panics gen-xir-core-source)
 add_custom_command(OUTPUT ${XIR_ASSERT_PANICS_C} ${XIR_ASSERT_PANICS_MATRIX_C}
@@ -14,7 +14,6 @@ add_custom_command(OUTPUT ${XIR_ASSERT_PANICS_C} ${XIR_ASSERT_PANICS_MATRIX_C}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_assert_panics_execution.inc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_assert_panics_packet.inc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_assert_panics_authority.inc.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_assert_panics_source_memory.inc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_assert_panics_source_oom.inc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_assert_panics_pipeline_oom.inc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_assert_panics_resource.inc.c

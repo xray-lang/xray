@@ -9,35 +9,12 @@
 static void panics_pipeline_oom(const char *directory,const char *path) {
     XrXirSourceResult result=panics_source(directory,path,
         "export fn run(){assertPanics(fn()->string{return \"owned result\"},\"normal return\")}\n",true);
-    size_t live=runtime_live,bytes=runtime_bytes;XrXirArtifact *closed=NULL;
-    CHECK(xr_xir_specialize(result.checked,NULL,&closed,NULL)==XR_XIR_OK);
-    size_t kept=runtime_live,kept_bytes=runtime_bytes;const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    for (uint32_t group=0;group<2;++group) {
-        size_t sites=0;
-        for (size_t point=0;point<=sites;++point) {
-            runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;XrXirArtifact *output=NULL;
-            XrXirStatus status=group ? xr_xir_lower(closed,&target,NULL,&output,NULL) :
-                xr_xir_specialize(result.checked,NULL,&output,NULL);
-            if (!point) {CHECK(status==XR_XIR_OK);sites=runtime_attempts;}
-            else CHECK(runtime_attempts>runtime_fail_at && status==XR_XIR_OUT_OF_MEMORY && !output);
-            runtime_fail_at=SIZE_MAX;xr_xir_artifact_free(output);CHECK(runtime_live==kept && runtime_bytes==kept_bytes);
-        }
-        printf("Panics %s OOM=%zu actual full scan and refund\n",group ? "lower" : "specialize",sites);
-    }
-    size_t sites=0;
-    for (size_t point=0;point<=sites;++point) {
-        XrXirArtifact *lowered=NULL;CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-        XrXirArtifact *original=lowered;runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
-        XrXirProgram *program=NULL;XrXirStatus status=xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program);
-        if (!point) {CHECK(status==XR_XIR_OK && !lowered);sites=runtime_attempts;}
-        else CHECK(runtime_attempts>runtime_fail_at && status==XR_XIR_OUT_OF_MEMORY && !program && lowered==original);
-        runtime_fail_at=SIZE_MAX;xr_xir_artifact_free(lowered);xr_xir_program_drop(program);
-        CHECK(runtime_live==kept && runtime_bytes==kept_bytes);
-    }
-    printf("Panics owned VM seal OOM=%zu failed lease unchanged\n",sites);
-    xr_xir_artifact_free(closed);CHECK(runtime_live==live && runtime_bytes==bytes);
-    XrXirArtifact *lowered=panics_lower(&result);uint32_t entry=panics_find(xr_xir_artifact_module(lowered),"run");
-    XrXirProgram *program=NULL;CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
+    assert_compile_stage_cases(result.checked,ASSERT_COMPILE_SPECIALIZE,"Assertion specialize/replay");
+    assert_compile_stage_cases(result.checked,ASSERT_COMPILE_LOWER,"Assertion lower/replay");
+    assert_compile_stage_cases(result.checked,ASSERT_COMPILE_TAKE,"Assertion owned VM take/replay");
+    size_t kept=0,kept_bytes=0,sites=0;
+    XrXirArtifact *lowered=panics_lower(&result);uint32_t entry=panics_find(xr_xir_compile_artifact_module(lowered),"run");
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     kept=runtime_live;kept_bytes=runtime_bytes;sites=0;
     for (size_t point=0;point<=sites;++point) {
         runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
@@ -54,5 +31,5 @@ static void panics_pipeline_oom(const char *directory,const char *path) {
         CHECK(runtime_live==kept && runtime_bytes==kept_bytes);
     }
     printf("Panics runtime OOM=%zu no resource converted to success/panic; every physical baseline restored\n",sites);
-    xr_xir_program_drop(program);CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
+    xr_xir_compile_program_drop(program);CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
 }

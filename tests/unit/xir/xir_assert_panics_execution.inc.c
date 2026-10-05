@@ -7,22 +7,22 @@
  * xir_assert_panics_execution.inc.c - Independent typed outcomes and effect boundaries
  */
 static XrXirArtifact *panics_lower(XrXirSourceResult *source) {
-    XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(source->checked,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_source_result_free(source);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(source);
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_OK);
-    memset(packet.bytes,0xcc,packet.length);xr_xir_checked_packet_free(&packet);
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_specialize(read,NULL,&closed,&diagnostic);
+    CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_specialize(read,&closed,&diagnostic);
     if (status!=XR_XIR_OK) {
-        const XrXirModule *module=xr_xir_artifact_module(read);
+        const XrXirModule *module=xr_xir_compile_artifact_module(read);
         fprintf(stderr,"panics specialize=%u f=%u b=%u i=%u source-name=%.*s\n",status,
             diagnostic.function,diagnostic.block,diagnostic.instruction,
             diagnostic.function<module->function_count ? (int)module->functions[diagnostic.function].name_length : 0,
             diagnostic.function<module->function_count ? module->functions[diagnostic.function].name : "");
     }
-    CHECK(status==XR_XIR_OK);xr_xir_artifact_free(read);
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(closed);return lowered;
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
 }
 static void panics_execution(const char *directory,const char *path,const char *generated_path) {
     const char *source=
@@ -47,18 +47,18 @@ static void panics_execution(const char *directory,const char *path,const char *
         "innerAssertion","typedError","actionExpression","messageExpression","orderOnce","cleanupOnce","suspendPanic","suspendNormal"};
     const int64_t expected[]={445,445,445,445,445,0,11,11,420,420,123,3,19,445};
     XrXirSourceResult result=panics_source(directory,path,source,true);XrXirArtifact *lowered=panics_lower(&result);
-    uint32_t entries[14];for (uint32_t i=0;i<14;++i) entries[i]=panics_find(xr_xir_artifact_module(lowered),names[i]);
-    XrXirCSource generated={0};CHECK(xr_xir_emit_c(lowered,"panics_matrix",16777216,&generated)==XR_XIR_OK);
+    uint32_t entries[14];for (uint32_t i=0;i<14;++i) entries[i]=panics_find(xr_xir_compile_artifact_module(lowered),names[i]);
+    XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(lowered,"panics_matrix",16777216,&generated)==XR_XIR_OK);
     CHECK(!strstr(generated.text,"({"));
     char output_path[2048];CHECK(snprintf(output_path,sizeof(output_path),"%s.matrix.c",generated_path)>0);
     FILE *output=fopen(output_path,"wb");CHECK(output);
     CHECK(fwrite(generated.text,1,generated.length,output)==generated.length);
     CHECK(fputs("\nconst uint32_t panics_matrix_functions[14]={",output)>=0);
     for (uint32_t i=0;i<14;++i) CHECK(fprintf(output,"%s%uu",i ? "," : "",entries[i])>0);
-    CHECK(fputs("};\n",output)>=0 && fclose(output)==0);xr_xir_c_source_free(&generated);
-    XrXirProgram *program=NULL;CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
+    CHECK(fputs("};\n",output)>=0 && fclose(output)==0);xr_xir_compile_c_source_free(&generated);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
-    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
+    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     for (uint32_t i=0;i<14;++i) {
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);
         XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);uint32_t suspended=0;
@@ -75,6 +75,6 @@ static void panics_execution(const char *directory,const char *path,const char *
             names[i],(unsigned long long)value.payload,(long long)expected[i]);
         CHECK(value.type==XR_XIR_I64 && (int64_t)value.payload==expected[i]);xr_xir_value_drop(&value);
     }
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
     puts("Array/struct/enum/class/callable result drops; typed Error; outer expressions; once/order/cleanup; suspend outcomes PASS");
 }

@@ -3,7 +3,7 @@ set(XIR_ASSERT_CONDITION_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/assert-condit
 set(XIR_ASSERT_CONDITION_C ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_assert_condition.c)
 set(XIR_ASSERT_CONDITION_TEST_C ${CMAKE_CURRENT_BINARY_DIR}/assert-condition-test.c)
 file(MAKE_DIRECTORY ${XIR_ASSERT_CONDITION_DIR})
-add_xray_bootstrap_executable(test_xir_assert_condition ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_assert_condition.c)
+add_executable(test_xir_assert_condition ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_assert_condition.c)
 target_link_libraries(test_xir_assert_condition PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 add_dependencies(test_xir_assert_condition gen-xir-core-source)
 add_custom_command(OUTPUT ${XIR_ASSERT_CONDITION_C}

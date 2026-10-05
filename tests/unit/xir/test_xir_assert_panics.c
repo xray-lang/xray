@@ -17,26 +17,15 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
-#include "xir_assert_panics_source_memory.inc.c"
+
+#include "xir_assert_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_effects.c"
 #include "xir/xxir_specialize.c"
 #include "xir/xxir_vm.c"
-#pragma push_macro("xr_malloc")
-#pragma push_macro("xr_calloc")
-#pragma push_macro("xr_free")
-#undef xr_malloc
-#undef xr_calloc
-#undef xr_free
-#define xr_malloc(s) panics_source_calloc(1,s)
-#define xr_calloc(c,s) panics_source_calloc(c,s)
-#define xr_free(p) panics_source_free(p)
 #include "xir/xxir_source_query.c"
 #include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
-#pragma pop_macro("xr_free")
-#pragma pop_macro("xr_calloc")
-#pragma pop_macro("xr_malloc")
 #include "xir_assert_panics_inbox_gates.inc.c"
 static void panics_write(const char *path,const char *source) {
     FILE *file=fopen(path,"wb");CHECK(file);
@@ -45,14 +34,14 @@ static void panics_write(const char *path,const char *source) {
 #include "xir_assert_panics_source_oom.inc.c"
 static XrXirSourceResult panics_source(const char *directory,const char *path,const char *source,bool valid) {
     panics_write(path,source);
-    XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK);CHECK(session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
-    XrXirSourceRequest request={session,path,&authority,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,assert_compile_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
-    xr_compiler_session_delete(session);
+    XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
+    xr_compile_session_free(session);
     if ((status==XR_XIR_OK)!=valid) fprintf(stderr,"check=%u %d:%d %s\n%s\n",status,diagnostic.line,diagnostic.column,diagnostic.message,source);
-    CHECK((status==XR_XIR_OK)==valid && (result.checked!=NULL)==valid);
+    CHECK((status==XR_XIR_OK)==valid && (result.checked!=NULL)==valid && (result.snapshot!=NULL)==valid);
     return result;
 }
 static uint32_t panics_find(const XrXirModule *module,const char *name) {
@@ -74,19 +63,19 @@ static void panics_role_rejections(const char *directory,const char *path) {
         "fn unused(){assertPanics(fn(){},null)}"
     };
     for (uint32_t i=0;i<sizeof(reject)/sizeof(reject[0]);++i) {
-        XrXirSourceResult result=panics_source(directory,path,reject[i],false);xr_xir_source_result_free(&result);
+        XrXirSourceResult result=panics_source(directory,path,reject[i],false);xr_xir_compile_source_result_free(&result);
         CHECK(!runtime_live && !runtime_bytes);
     }
     const char *ordinary="fn assertPanics<T>(action:fn()->T,msg:string=\"ordinary\"){};assertPanics<i64>(fn()->i64{return 1})";
     XrXirSourceResult result=panics_source(directory,path,ordinary,true);
-    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
     CHECK(view && view->module_count==1);
     for (uint32_t d=0;d<view->declaration_count;++d) CHECK(!view->declarations[d].native_identity);
-    xr_xir_source_result_free(&result);CHECK(!runtime_live && !runtime_bytes);
+    xr_xir_compile_source_result_free(&result);CHECK(!runtime_live && !runtime_bytes);
 }
 static void panics_query_roles(const XrXirSourceResult *result) {
-    const XrXirModule *module=xr_xir_artifact_module(result->checked);
-    const XrXirSourceView *view=xr_xir_source_snapshot_view(result->snapshot);
+    const XrXirModule *module=xr_xir_compile_artifact_module(result->checked);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result->snapshot);
     CHECK(view && view->complete && view->module_count==2 && module->defaults && module->defaults->count==3);
     uint32_t owner=panics_find(module,"assertPanics");
     CHECK(module->generics && module->generics[owner].parameter_count==1 && module->generics[owner].parameter_kinds &&
@@ -112,10 +101,11 @@ static void panics_query_roles(const XrXirSourceResult *result) {
 #include "xir_assert_panics_pipeline_oom.inc.c"
 #include "xir_assert_panics_resource.inc.c"
 int main(int argc,char **argv) {
+    assert_compile_begin();
     CHECK(argc==3 || argc==4);char path[2048];CHECK(snprintf(path,sizeof(path),"%s/panics.xr",argv[1])>0);
     if (argc==4) {
         panics_source_oom(argv[1],path);panics_pipeline_oom(argv[1],path);
-        puts("Panics Source/pipeline/runtime actual OOM and exact budget PASS");return 0;
+        puts("Panics Source/pipeline/runtime actual OOM and exact budget PASS");assert_compile_end();return 0;
     }
     panics_inbox_gates();panics_role_rejections(argv[1],path);panics_packet_gates();
     panics_authority(argv[1],path);panics_execution(argv[1],path,argv[2]);panics_resource(argv[1],path);
@@ -126,27 +116,27 @@ int main(int argc,char **argv) {
         "export fn ownedNormal()->string {try{assertPanics(fn()->string{return \"owned-return\"},\"string\")}catch panic(p){return p.message};return \"bad\"}\n"
         "fn unused<T>(action:fn()->T){assertPanics(action)}\n";
     XrXirSourceResult result=panics_source(argv[1],path,source,true);panics_query_roles(&result);
-    XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(result.checked,NULL,&packet,NULL)==XR_XIR_OK);
-    xr_xir_source_result_free(&result);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result);
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,&diagnostic)==XR_XIR_OK);
-    memset(packet.bytes,0xcc,packet.length);xr_xir_checked_packet_free(&packet);
-    XrXirStatus status=xr_xir_specialize(read,NULL,&closed,&diagnostic);
+    CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,&diagnostic)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    XrXirStatus status=xr_xir_compile_specialize(read,&closed,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"specialize=%u f=%u b=%u i=%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
-    CHECK(status==XR_XIR_OK);xr_xir_artifact_free(read);
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,&diagnostic)==XR_XIR_OK);xr_xir_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,&diagnostic)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const char *names[]={"expected","unitNormal","integerNormal","ownedNormal"};uint32_t entries[4];
-    for (uint32_t i=0;i<4;++i) entries[i]=panics_find(xr_xir_artifact_module(lowered),names[i]);
-    XrXirCSource output={0};CHECK(xr_xir_emit_c(lowered,"panics_checked",16777216,&output)==XR_XIR_OK);
+    for (uint32_t i=0;i<4;++i) entries[i]=panics_find(xr_xir_compile_artifact_module(lowered),names[i]);
+    XrXirCSource output={0};CHECK(xr_xir_compile_emit_c(lowered,"panics_checked",16777216,&output)==XR_XIR_OK);
     FILE *generated=fopen(argv[2],"wb");CHECK(generated);
     CHECK(fwrite(output.text,1,output.length,generated)==output.length);
     CHECK(fputs("\nconst uint32_t panics_checked_functions[4]={",generated)>=0);
     for (uint32_t i=0;i<4;++i) CHECK(fprintf(generated,"%s%uu",i ? "," : "",entries[i])>0);
-    CHECK(fputs("};\n",generated)>=0 && fclose(generated)==0);xr_xir_c_source_free(&output);
-    XrXirProgram *program=NULL;CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK);
+    CHECK(fputs("};\n",generated)>=0 && fclose(generated)==0);xr_xir_compile_c_source_free(&output);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_program_drop(program);
+    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     for (uint32_t i=0;i<4;++i) {
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);
         XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
@@ -158,5 +148,5 @@ int main(int argc,char **argv) {
         xr_xir_value_drop(&value);
     }
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);CHECK(!runtime_live && !runtime_bytes);
-    puts("Typed action Source/default/roles and owned inbox physical gates PASS");return 0;
+    puts("Typed action Source/default/roles and owned inbox physical gates PASS");assert_compile_end();return 0;
 }

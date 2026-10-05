@@ -9,9 +9,9 @@
 static void assert_initialization(const char *directory,const char *path) {
     XrXirSourceResult source=assert_source(directory,path,"assert(false,\"init\")\n",true);
     XrXirArtifact *lowered=assert_lower(&source);
-    uint32_t entry=xr_xir_artifact_module(lowered)->declarations->entry_function;
+    uint32_t entry=xr_xir_compile_artifact_module(lowered)->declarations->entry_function;
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){16777216,64000000},&program)==XR_XIR_OK && !lowered);
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
     XrXirCallResult owned[2]={{0}};
     for (uint32_t i=0;i<2;++i) {
         XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -26,12 +26,12 @@ static void assert_initialization(const char *directory,const char *path) {
         CHECK(!empty.type && !empty.reserved && !empty.payload);
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (uint32_t i=0;i<2;++i) {
         const char *bytes=NULL;size_t length=0;
         CHECK(xr_xir_string_view(&owned[i].panic.message,&bytes,&length) && length==4 && !memcmp(bytes,"init",4));
         xr_xir_call_result_drop(&owned[i]);
     }
-    CHECK(!source_live && !source_bytes && !runtime_live && !runtime_bytes);
+    CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
     puts("Two initializer failures retain exact typed messages beyond Instance/Program destruction PASS");
 }
