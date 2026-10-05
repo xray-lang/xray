@@ -4013,23 +4013,44 @@ target_link_libraries(process_spawn_benchmark PRIVATE xray_core)
 set(_HARNESS_DIR ${CMAKE_SOURCE_DIR}/tests/test_harness)
 
 add_test(NAME harness_single_pass
-         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/single_pass.xr)
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/cli/test_harness_report_oracle.py
+            --cli $<TARGET_FILE:xray>
+            --fixture ${_HARNESS_DIR}/single_pass.xr
+            --case single_pass
+            --output ${CMAKE_CURRENT_BINARY_DIR}/harness-report-oracle/single_pass)
 add_test(NAME harness_multi_pass
-         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/multi_pass.xr)
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/cli/test_harness_report_oracle.py
+            --cli $<TARGET_FILE:xray>
+            --fixture ${_HARNESS_DIR}/multi_pass.xr
+            --case multi_pass
+            --output ${CMAKE_CURRENT_BINARY_DIR}/harness-report-oracle/multi_pass)
 add_test(NAME harness_with_skip
-         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/with_skip.xr)
-
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/cli/test_harness_report_oracle.py
+            --cli $<TARGET_FILE:xray>
+            --fixture ${_HARNESS_DIR}/with_skip.xr
+            --case with_skip
+            --output ${CMAKE_CURRENT_BINARY_DIR}/harness-report-oracle/with_skip)
 add_test(NAME harness_single_fail
-         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/single_fail.xr)
-set_tests_properties(harness_single_fail PROPERTIES WILL_FAIL TRUE)
-
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/cli/test_harness_report_oracle.py
+            --cli $<TARGET_FILE:xray>
+            --fixture ${_HARNESS_DIR}/single_fail.xr
+            --case single_fail
+            --output ${CMAKE_CURRENT_BINARY_DIR}/harness-report-oracle/single_fail)
 add_test(NAME harness_no_tests
-         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/no_tests.xr)
-set_tests_properties(harness_no_tests PROPERTIES WILL_FAIL TRUE)
-
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/cli/test_harness_report_oracle.py
+            --cli $<TARGET_FILE:xray>
+            --fixture ${_HARNESS_DIR}/no_tests.xr
+            --case no_tests
+            --output ${CMAKE_CURRENT_BINARY_DIR}/harness-report-oracle/no_tests)
 add_test(NAME harness_mixed_pass_fail
-         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/mixed_pass_fail.xr)
-set_tests_properties(harness_mixed_pass_fail PROPERTIES WILL_FAIL TRUE)
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/cli/test_harness_report_oracle.py
+            --cli $<TARGET_FILE:xray>
+            --fixture ${_HARNESS_DIR}/mixed_pass_fail.xr
+            --case mixed_pass_fail
+            --output ${CMAKE_CURRENT_BINARY_DIR}/harness-report-oracle/mixed_pass_fail)
+set_tests_properties(harness_single_pass harness_multi_pass harness_with_skip
+                     harness_single_fail harness_no_tests harness_mixed_pass_fail
+    PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # ============================================================================
 # Reverse-invariant checks for the Xi IR layer (static grep-based gates).
