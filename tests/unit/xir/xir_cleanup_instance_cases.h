@@ -101,8 +101,8 @@ static XrXirOutputStatus drain_output(void *context, const XrXirOutputGroup *gro
     ++w->outputs; return XR_XIR_OUTPUT_OK;
 }
 static void drain_lease(void *context) { ++((DrainWitness *)context)->leases; }
-static XrXirArtifact *drain_proof(const XrXirDeclarations *declarations, const XrXirTypes *types,
-    const XrXirType *parameters, bool late_gate) {
+static XrXirStatus drain_proof(const XrXirCompileContext *context, const XrXirDeclarations *declarations,
+    const XrXirTypes *types, const XrXirType *parameters, bool late_gate, XrXirArtifact **output) {
     XrXirInstruction unit = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirInstruction value[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
@@ -114,11 +114,11 @@ static XrXirArtifact *drain_proof(const XrXirDeclarations *declarations, const X
         {"cleanup",7,parameters,late_gate ? 1u : 2u,XR_XIR_UNIT,&unit_block,1,&unit,1,NULL,0},
         {"callee",6,parameters,1,XR_XIR_I64,&value_block,1,callee_value,2,NULL,0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
-    XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
+    XrXirArtifact *checked = NULL;
+    XrXirStatus status = xr_xir_compile_check(context,&built,&checked,NULL);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(checked,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked); return lowered;
+    if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked,&target,output,NULL);
+    xr_xir_compile_artifact_free(checked); return status;
 }
 static void cleanup_instance_case(bool late_gate, bool malformed) {
     DrainWitness w = {0}; w.late_gate = late_gate; w.malformed = malformed;
@@ -136,26 +136,28 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
     XrXirDeclarations declarations = {&module,1,ids,&slot,1,NULL,0,0,1, NULL};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
         entries,4,&declarations,{&w,drain_lease},&types,{0}};
-    XrXirArtifact *proof = drain_proof(&declarations,&types,parameters,late_gate);
-    spec.proof = xr_xir_program_proof(proof);
+    SourceFixtureOwner compiler={0}; cleanup_fixture_owner_new(&compiler);
+    XrXirArtifact *proof=NULL;
+    CHECK(drain_proof(&compiler.context,&declarations,&types,parameters,late_gate,&proof) == XR_XIR_OK);
+    spec.proof = xr_xir_compile_program_proof(proof);
     XrXirProgram *program = NULL;
     spec.abi_version = 18;
-    CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){16u<<20,1000000},&program) == XR_XIR_BAD_LAYOUT && !program);
+    CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program) == XR_XIR_BAD_LAYOUT && !program);
     spec.abi_version = XR_XIR_PROGRAM_ABI_VERSION;
     entries[1].abi_version = 18;
-    CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){16u<<20,1000000},&program) == XR_XIR_BAD_LAYOUT && !program);
+    CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program) == XR_XIR_BAD_LAYOUT && !program);
     entries[1].abi_version = XR_XIR_CALL_ABI_VERSION;
     entries[3].flags = XR_XIR_ENTRY_EXIT;
-    CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){16u<<20,1000000},&program) == XR_XIR_BAD_STRUCTURE && !program);
+    CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program) == XR_XIR_BAD_STRUCTURE && !program);
     entries[3].flags = 0; ids[2].cleanup_owner = entries[2].cleanup_owner = 1; entries[0].flags = XR_XIR_ENTRY_EXIT;
-    CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){16u<<20,1000000},&program) == XR_XIR_BAD_STRUCTURE && !program);
+    CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program) == XR_XIR_BAD_STRUCTURE && !program);
     ids[2].cleanup_owner = entries[2].cleanup_owner = 2; entries[0].flags = 0;
     CHECK(!w.leases);
-    CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){16u<<20,1000000},&program) == XR_XIR_OK);
-    xr_xir_artifact_free(proof);
+    CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(proof);
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, drain_output, &w};
     CHECK(xr_xir_instance_new(program,&config,&w.instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(w.instance,1,NULL,0) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll_bounded(w.instance, UINT64_MAX).outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_stop(w.instance) == (malformed ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_READY));
@@ -165,7 +167,122 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
     CHECK(xr_xir_instance_stop(w.instance) == XR_XIR_CALL_READY && w.bodies == 1);
     CHECK(xr_xir_instance_free(w.instance) == XR_XIR_CALL_READY && !w.leases);
     xr_xir_value_drop(&w.escaped); CHECK(!w.leases); xr_xir_value_drop(&w.generated); CHECK(w.leases == 1 && !live);
+    CHECK(!cleanup_runtime_live && !cleanup_runtime_bytes);
+    source_fixture_owner_free(&compiler); instance_compile_zero();
     puts("Draining cell, function admission, PanicInfo, output and revoked gate passed");
+}
+typedef struct CleanupCompilerFixture {
+    DrainWitness witness;
+    XrXirTypeNode nodes[2]; XrXirTypes types; XrXirType parameters[2];
+    XrXirCallEntry entries[4]; XrXirFunctionIdentity identities[4];
+    XrXirSourceModule module; XrXirSlot slot; XrXirDeclarations declarations;
+    XrXirProgramSpec spec;
+} CleanupCompilerFixture;
+static void cleanup_compiler_fixture(CleanupCompilerFixture *f, bool late) {
+    memset(f,0,sizeof(*f)); f->witness.late_gate=late;
+    f->nodes[0].kind=XR_XIR_TYPE_CALLABLE; f->nodes[0].result=XR_XIR_I64;
+    f->nodes[1].kind=XR_XIR_TYPE_CELL; f->nodes[1].element=XR_XIR_I64;
+    f->types=(XrXirTypes){f->nodes,2,NULL,NULL};
+    f->parameters[0]=(XrXirType)257; f->parameters[1]=(XrXirType)256;
+    f->entries[0]=(XrXirCallEntry){XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,drain_initializer,NULL,&f->witness,0,0};
+    f->entries[1]=(XrXirCallEntry){XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,sizeof(DrainState),drain_owner,drain_release,&f->witness,XR_XIR_ENTRY_EXIT,0};
+    f->entries[2]=(XrXirCallEntry){XR_XIR_CALL_ABI_VERSION,f->parameters,late?1u:2u,XR_XIR_UNIT,sizeof(uint32_t),drain_body,NULL,&f->witness,0,2};
+    f->entries[3]=(XrXirCallEntry){XR_XIR_CALL_ABI_VERSION,f->parameters,1,XR_XIR_I64,sizeof(DrainState),drain_callee,drain_release,&f->witness,0,0};
+    f->identities[1].exported=1; f->identities[2].cleanup_owner=2;
+    f->module=(XrXirSourceModule){"main",4,NULL,0,0}; f->slot=(XrXirSlot){0,XR_XIR_I64,1};
+    f->declarations=(XrXirDeclarations){&f->module,1,f->identities,&f->slot,1,NULL,0,0,1,NULL};
+    f->spec=(XrXirProgramSpec){XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        f->entries,4,&f->declarations,{&f->witness,drain_lease},&f->types,{0}};
+}
+static XrXirStatus cleanup_compiler_pipeline(const XrXirCompileContext *context,
+    CleanupCompilerFixture *f, XrXirProgram **output) {
+    XrXirArtifact *proof=NULL;
+    XrXirStatus status=drain_proof(context,&f->declarations,&f->types,f->parameters,f->witness.late_gate,&proof);
+    if (status==XR_XIR_OK) {
+        f->spec.proof=xr_xir_compile_program_proof(proof);
+        status=xr_xir_compile_program_seal(context,&f->spec,output);
+        f->spec.proof=(XrXirProgramProof){0};
+    }
+    xr_xir_compile_artifact_free(proof);
+    return status;
+}
+static XrCompileResourceStats cleanup_compiler_stats(const XrXirCompileContext *context) {
+    XrCompileResourceStats stats={0};
+    CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK); return stats;
+}
+static XrXirCompileContext cleanup_compiler_context(XrCompileResourceLimits limits) {
+    XrXirCompileContext context={0};
+    CHECK(limits.allocated_bytes<=40960 && limits.live_bytes<=8192 && limits.work<=65536);
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits(); return context;
+}
+static void cleanup_compiler_free(XrXirCompileContext *context, XrCompileResourceStats baseline) {
+    CHECK(cleanup_compiler_stats(context).live_bytes==baseline.live_bytes);
+    xr_compile_resources_release(context->resources); *context=(XrXirCompileContext){0};
+    instance_compile_zero(); CHECK(!cleanup_runtime_live && !cleanup_runtime_bytes);
+}
+static void cleanup_compiler_faults(bool late) {
+    size_t sites=0;
+    for(size_t pass=0;pass<=sites;++pass) {
+        XrXirCompileContext context=cleanup_compiler_context((XrCompileResourceLimits){40960,8192,65536});
+        XrCompileResourceStats baseline=cleanup_compiler_stats(&context);
+        CleanupCompilerFixture f; cleanup_compiler_fixture(&f,late);
+        instance_compile_attempts=0; instance_compile_injected=false;
+        instance_compile_fail_at=pass?pass-1:SIZE_MAX;
+        XrXirProgram *program=NULL;
+        XrXirStatus status=cleanup_compiler_pipeline(&context,&f,&program);
+        size_t seen=instance_compile_attempts; instance_compile_fail_at=SIZE_MAX;
+        if(!pass) {CHECK(status==XR_XIR_OK && program);sites=seen;CHECK(sites && sites<10000);}
+        else CHECK(status==XR_XIR_OUT_OF_MEMORY && !program && instance_compile_injected && seen>=pass);
+        CHECK(!f.witness.leases);
+        xr_xir_compile_program_drop(program);
+        CHECK(f.witness.leases==(pass?0u:1u));
+        cleanup_compiler_free(&context,baseline);
+    }
+    printf("Cleanup same-graph compiler OOM sites=%zu late=%u; no partial lease; physical0\n",sites,(unsigned)late);
+}
+static void cleanup_compiler_boundaries(bool late) {
+    XrCompileResourceStats exact={0};
+    for(unsigned pass=0;pass<5;++pass) {
+        XrCompileResourceLimits limits={40960,8192,65536};
+        if(pass) {
+            limits=(XrCompileResourceLimits){exact.allocated_bytes,exact.peak_bytes,exact.work};
+            if(pass==2)--limits.allocated_bytes;
+            if(pass==3)--limits.live_bytes;
+            if(pass==4)--limits.work;
+        }
+        XrXirCompileContext context=cleanup_compiler_context(limits);
+        XrCompileResourceStats baseline=cleanup_compiler_stats(&context);
+        CleanupCompilerFixture f; cleanup_compiler_fixture(&f,late);
+        XrXirProgram *program=NULL;
+        XrXirStatus status=cleanup_compiler_pipeline(&context,&f,&program);
+        XrCompileResourceStats actual=cleanup_compiler_stats(&context);
+        if(pass<2) {CHECK(status==XR_XIR_OK && program); if(!pass)exact=actual;}
+        else CHECK(status==XR_XIR_BUDGET && !program && !f.witness.leases);
+        xr_xir_compile_program_drop(program); CHECK(f.witness.leases==(pass<2?1u:0u));
+        cleanup_compiler_free(&context,baseline);
+    }
+    printf("Cleanup compiler exact allocated/live/work=%llu/%llu/%llu late=%u; all minus1 rejected\n",
+        (unsigned long long)exact.allocated_bytes,(unsigned long long)exact.peak_bytes,
+        (unsigned long long)exact.work,(unsigned)late);
+}
+static void cleanup_compiler_occupied(void) {
+    XrXirCompileContext context=cleanup_compiler_context((XrCompileResourceLimits){40960,8192,65536});
+    XrCompileResourceStats baseline=cleanup_compiler_stats(&context);
+    XrXirProgram *program=(XrXirProgram *)(uintptr_t)1;
+    CHECK(xr_xir_compile_program_seal(&context,(const XrXirProgramSpec *)(uintptr_t)1,&program)==XR_XIR_BAD_STRUCTURE);
+    CHECK(program==(XrXirProgram *)(uintptr_t)1);
+    XrCompileResourceStats after=cleanup_compiler_stats(&context);
+    CHECK(!memcmp(&baseline,&after,sizeof(after)));
+    cleanup_compiler_free(&context,baseline);
+    XrCompileResourceLimits limits={40960,8192,65536}; XrCompileResources *resources=NULL;
+    instance_compile_injected=false; instance_compile_fail_at=instance_compile_attempts;
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY && !resources);
+    instance_compile_fail_at=SIZE_MAX; CHECK(instance_compile_injected); instance_compile_zero();
+}
+static void cleanup_compiler_cases(void) {
+    cleanup_compiler_faults(false); cleanup_compiler_faults(true);
+    cleanup_compiler_boundaries(false); cleanup_compiler_boundaries(true); cleanup_compiler_occupied();
 }
 static void cleanup_instance_cases(void) {
     cleanup_instance_case(false,false); cleanup_instance_case(true,false); cleanup_instance_case(false,true);

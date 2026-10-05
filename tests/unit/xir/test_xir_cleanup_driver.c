@@ -11,14 +11,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_instance_compile_observer.h"
+#include "xir_cleanup_runtime_owner.h"
 #include "xir_error_fixture.h"
 #include "xir_source_fixture_owner.h"
+static void cleanup_fixture_owner_new(SourceFixtureOwner *owner) {
+    CHECK(!owner->context.resources);
+    const XrCompileResourceLimits limits={40960,8192,65536};
+    CHECK(xr_compile_resources_new(&limits,&owner->context.resources)==XR_COMPILE_RESOURCE_OK);
+    owner->context.limits=xr_xir_compile_default_limits();
+    CHECK(xr_compile_resources_stats(owner->context.resources,&owner->baseline)==XR_COMPILE_RESOURCE_OK);
+}
 static size_t attempts, fail_at = SIZE_MAX, live;
 static void *exit_calloc(size_t count, size_t size) {
     if (attempts++ == fail_at) return NULL;
-    void *p = calloc(count, size); if (p) ++live; return p;
+    void *p = cleanup_runtime_calloc(count, size); if (p) ++live; return p;
 }
-static void exit_free(void *p) { if (p) { CHECK(live); --live; free(p); } }
+static void exit_free(void *p) { if (p) { CHECK(live); --live; cleanup_runtime_free(p); } }
 #undef xr_calloc
 #undef xr_free
 #define xr_calloc exit_calloc
@@ -118,7 +127,7 @@ static size_t exit_run(uint32_t mode, uint64_t polls, uint32_t depth) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
     uint64_t domain_base = xr_xir_domain_stats(domain).live_bytes;
-    SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
+    SourceFixtureOwner owner={0}; cleanup_fixture_owner_new(&owner);
     XrXirTypeArena *arena=NULL; CHECK(error_fixture_arena(&owner.context,&arena)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = error_fixture_admission(domain,arena);
     ExitWitness w = {0}; w.domain = domain; w.mode = mode; w.error = error_fixture_code(&admission,91);
@@ -163,11 +172,14 @@ static size_t exit_run(uint32_t mode, uint64_t polls, uint32_t depth) {
     CHECK(xr_xir_domain_stats(domain).live_bytes == domain_base);
     xr_xir_domain_drop(domain);
     source_fixture_owner_free(&owner);
+    CHECK(!cleanup_runtime_live && !cleanup_runtime_bytes);
+    instance_compile_zero();
     return sites;
 }
 #include "xir_cleanup_instance_cases.h"
 int main(int argc, char **argv) {
     if (argc == 2) { exit_run((uint32_t)atoi(argv[1]),1000,16); return 1; }
+    cleanup_compiler_cases();
     cleanup_instance_cases();
     const uint32_t modes[] = {0,1,2,3,4,7,12,13,14,15,17,18,20,21,22};
     for (size_t i = 0; i < sizeof(modes)/sizeof(modes[0]); ++i) exit_run(modes[i],1000,16);
@@ -177,5 +189,8 @@ int main(int argc, char **argv) {
     for (size_t i = 0; i < sites; ++i) { fail_at = i; exit_run(0,1000,16); }
     fail_at = SIZE_MAX;
     printf("Cleanup exits, owned results, cancellation, budgets and %zu allocation failures passed\n",sites);
+    CHECK(!cleanup_runtime_live && !cleanup_runtime_bytes);
+    instance_compile_report();
+    printf("cleanup runtime physical blocks/bytes=0/0; peak=%zu\n",cleanup_runtime_peak);
     return 0;
 }
