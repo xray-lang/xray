@@ -30,29 +30,30 @@ static XrXirArtifact *default_gap_checked(const char *root,const char *path) {
         "export fn retained()->string{return take()}\n"
         "export fn construct()->i64{return Box().value}\n";
     default_gap_write(path,source);
-    XrCompilerSession *session=xr_compiler_session_new(NULL);CHECK(session);
+    const XrXirCompileContext *context=source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,path,&authority,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_source_check(&request,&result,&diagnostic);
+    XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"default gap %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
-    XrXirArtifact *owned=result.checked;result.checked=NULL;xr_xir_source_result_free(&result);
+    XrXirArtifact *owned=result.checked;result.checked=NULL;xr_xir_compile_source_result_free(&result);
     char manifest[8192];CHECK(snprintf(manifest,sizeof(manifest),"%s/xray.toml",root)>0);
     default_gap_write(manifest,"[declarations]\nversion=1\n[[declarations.function]]\nmodule=\"root.xr\"\nname=\"construct\"\nno_suspend=true\n");
-    CHECK(xr_xir_source_check(&request,&result,&diagnostic)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,NULL)==XR_XIR_BAD_TYPE);
     CHECK(!result.checked && strstr(diagnostic.message,"declared no_suspend"));
-    xr_xir_source_result_free(&result);xr_compiler_session_delete(session);
+    xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
     CHECK(xr_test_unlink(manifest)==0);default_gap_write(path,"const poisoned=0\n");
     return owned;
 }
 static void default_gap_execute(XrXirArtifact *checked) {
     XrXirArtifact *specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_specialize(checked,NULL,&specialized,NULL)==XR_XIR_OK);xr_xir_artifact_free(checked);
-    CHECK(xr_xir_artifact_verify(specialized,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(specialized,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(specialized);
-    const XrXirModule *module=xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const char *names[]={"order","retained","construct"};uint32_t entries[3]={UINT32_MAX,UINT32_MAX,UINT32_MAX};
     for(uint32_t f=0;f<module->function_count;++f)
         for(uint32_t e=0;e<3;++e)
@@ -60,7 +61,7 @@ static void default_gap_execute(XrXirArtifact *checked) {
                 !memcmp(module->functions[f].name,names[e],strlen(names[e])))entries[e]=f;
     CHECK(entries[0]!=UINT32_MAX && entries[1]!=UINT32_MAX && entries[2]!=UINT32_MAX);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     XrXirValue held[2]={{0},{0}};
     for(uint32_t n=0;n<2;++n){
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
@@ -80,7 +81,7 @@ static void default_gap_execute(XrXirArtifact *checked) {
         }
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for(uint32_t n=0;n<2;++n){
         const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&held[n],&bytes,&length));
         CHECK(length==13 && !memcmp(bytes,"default-owned",13));xr_xir_value_drop(&held[n]);

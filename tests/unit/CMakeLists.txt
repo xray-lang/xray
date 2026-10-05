@@ -442,7 +442,7 @@ endif()
 add_test(NAME test_xir_output_status COMMAND test_xir_output_status)
 set_tests_properties(test_xir_output_status PROPERTIES LABELS "unit;xir;ownership;abi")
 
-add_xray_bootstrap_executable(test_xir_source xir/test_xir_source.c)
+add_executable(test_xir_source xir/test_xir_source.c)
 target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
 add_executable(test_xir_source_product xir/test_xir_source_product.c)
 add_test(NAME test_xir_native_projection_policy COMMAND ${XRAY_PYTHON}
@@ -579,7 +579,7 @@ add_custom_command(OUTPUT ${XIR_SOURCE_GENERATED}
     VERBATIM)
 add_executable(test_xir_source_native xir/test_xir_source_native.c ${XIR_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_native PRIVATE xray_xir_scalar)
-add_xray_bootstrap_executable(test_xir_source_mixed xir/test_xir_source_mixed.c ${XIR_SOURCE_GENERATED})
+add_executable(test_xir_source_mixed xir/test_xir_source_mixed.c ${XIR_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_mixed PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_identity.cmake)

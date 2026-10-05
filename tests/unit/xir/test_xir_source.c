@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_source_compile_owner.h"
 #include "xir_source_runtime_allocations.h"
 #include "xir_source_method_value_execution.h"
 #include "xir_source_late_result_execution.h"
@@ -30,40 +31,10 @@
 #include "xir_source_default_runtime_gaps.h"
 int main(int argc, char **argv) {
     source_default_runtime_gaps();
-    XrCompilerSession *session = xr_compiler_session_new(NULL);
-    CHECK(session);
-    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirArtifact *checked = NULL, *lowered = NULL;
-    XrXirSourceDiagnostic diagnostic;
-    XrXirSourceResult query_result_1 = {0};
-    XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, &diagnostic);
-    checked = query_result_1.checked; query_result_1.checked = NULL;
-    xr_xir_source_result_free(&query_result_1);
-    XrXirStatus status = query_status_1;
-    if (status != XR_XIR_OK) fprintf(stderr, "source %u:%d:%d: %s (%u)\n", diagnostic.module,
-        diagnostic.line, diagnostic.column, diagnostic.message, (unsigned) status);
-    CHECK(status == XR_XIR_OK && checked);
-    xr_compiler_session_delete(session);
-    XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    if (argc == 2) {
-        FILE *file = fopen(argv[1], "wb"); CHECK(file);
-        CHECK(fwrite(packet.bytes, 1, packet.length, file) == packet.length);
-        CHECK(fclose(file) == 0);
-    } else CHECK(argc == 1);
-    xr_xir_checked_packet_free(&packet);
-    XrXirArtifact *specialized = NULL;
-    CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked); checked = specialized;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    XrXirDiagnostic lower_diagnostic;
-    status = xr_xir_lower(checked, &target, NULL, &lowered, &lower_diagnostic);
-    if (status != XR_XIR_OK) fprintf(stderr, "lower status %u function %u block %u instruction %u\n",
-        (unsigned) status, lower_diagnostic.function, lower_diagnostic.block, lower_diagnostic.instruction);
-    CHECK(status == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    const XrXirModule *module = xr_xir_artifact_module(lowered);
+    CHECK(argc==1 || argc==2);
+    const XrXirCompileContext context=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    XrXirArtifact *lowered=source_fixture_lower(&context,argc==2 ? argv[1] : NULL);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     SourceMethodValueEntries method_value_entries = source_method_value_select(module);
     SourceLateResultEntries late_result_entries = source_late_result_select(module);
     SourceInferenceEntries inference_entries = source_inference_select(module);
@@ -87,11 +58,27 @@ int main(int argc, char **argv) {
     CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX && bound_result != UINT32_MAX && witness_result != UINT32_MAX && enum_witness_result != UINT32_MAX && enum_generic_witness_result != UINT32_MAX && generic_method_number != UINT32_MAX && generic_method_text != UINT32_MAX && generic_method_array != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {1048576, 64000000}, &program) == XR_XIR_BUDGET);
-    CHECK(lowered && !program);
-    XrXirStatus seal_status = xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {33554432, 64000000}, &program);
-    if (seal_status != XR_XIR_OK) fprintf(stderr, "source seal status: %u\n", (unsigned)seal_status);
-    CHECK(seal_status == XR_XIR_OK && !lowered);
+    XrCompileResourceStats prefix={0};CHECK(xr_compile_resources_stats(context.resources,&prefix)==XR_COMPILE_RESOURCE_OK);
+    size_t negative_physical_blocks=source_fixture_compile_live,negative_physical_bytes=source_fixture_compile_bytes;
+    const XrXirCompileContext negative=*source_fixture_source_owner(prefix.allocated_bytes+UINT64_C(1048576),UINT64_C(128000000));
+    XrXirArtifact *negative_lowered=source_fixture_lower(&negative,NULL);
+    XrCompileResourceStats before_failure={0},after_failure={0};
+    CHECK(xr_compile_resources_stats(negative.resources,&before_failure)==XR_COMPILE_RESOURCE_OK);
+    CHECK(before_failure.allocated_bytes==prefix.allocated_bytes && before_failure.work==prefix.work);
+    XrXirArtifact *sentinel=negative_lowered;XrXirProgram *failed_program=NULL;
+    CHECK(xr_xir_compile_vm_program_take(&negative_lowered,&failed_program)==XR_XIR_BUDGET);
+    CHECK(negative_lowered==sentinel && !failed_program);
+    CHECK(xr_xir_compile_artifact_module(negative_lowered)->stage==XR_XIR_LOWERED);
+    CHECK(xr_compile_resources_stats(negative.resources,&after_failure)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after_failure.live_bytes==before_failure.live_bytes);
+    fprintf(stderr,"Source seal negative: prefix allocated=%llu work=%llu; failure allocated=%llu work=%llu live=%llu\n",
+        (unsigned long long)prefix.allocated_bytes,(unsigned long long)prefix.work,
+        (unsigned long long)after_failure.allocated_bytes,(unsigned long long)after_failure.work,(unsigned long long)after_failure.live_bytes);
+    xr_xir_compile_artifact_free(negative_lowered);source_fixture_source_owner_close(&negative);
+    CHECK(source_fixture_compile_live==negative_physical_blocks && source_fixture_compile_bytes==negative_physical_bytes);
+    XrXirStatus seal_status=xr_xir_compile_vm_program_take(&lowered,&program);
+    if(seal_status!=XR_XIR_OK)fprintf(stderr,"source seal status: %u\n",(unsigned)seal_status);
+    CHECK(seal_status==XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result, enum_witness_result, enum_generic_witness_result, generic_method_number, generic_method_text, generic_method_array}, results);
     runtime_source_failures(program, (RuntimeSourceEntries){entry, resume_text, numeric_pause, enum_witness_result, enum_generic_witness_result, generic_method_number, generic_method_text, generic_method_array});
@@ -104,7 +91,7 @@ int main(int argc, char **argv) {
     XrXirValue late_result_retained[2][3] = {{{0}}};
     source_late_result_pair(program,late_result_entries,late_result_retained);
     source_late_result_runtime_failures(program,late_result_entries);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     source_late_result_retained_drop(late_result_retained);
     source_method_value_retained_drop(method_value_retained);
     source_inference_retained_drop(inference_retained);
@@ -115,5 +102,6 @@ int main(int argc, char **argv) {
         runtime_report_residuals(stderr);
     }
     CHECK(!runtime_live && !runtime_bytes);
+    source_fixture_source_owners_free();
     return 0;
 }

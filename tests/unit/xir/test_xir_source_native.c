@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_source_compile_owner.h"
 #include "xir_source_runtime_allocations.h"
 #include "xir_source_method_value_execution.h"
 #include "xir_source_late_result_execution.h"
@@ -35,8 +36,10 @@ int main(void) {
         fixture_source_inference_values[2],fixture_source_inference_values[3],fixture_source_inference_values[4],
         fixture_source_inference_values[5]},fixture_source_inference_count};
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&fixture_source_program, (XrXirProgramBudget) {16777216, 1}, &program) == XR_XIR_BUDGET && !program);
-    CHECK(xr_xir_program_seal(&fixture_source_program, (XrXirProgramBudget) {33554432, 64000000}, &program) == XR_XIR_OK);
+    const XrXirCompileContext *negative=source_fixture_source_owner(UINT64_C(16)*1024*1024,1);
+    CHECK(xr_xir_compile_program_seal(negative,&fixture_source_program,&program)==XR_XIR_BUDGET && !program);
+    const XrXirCompileContext *context=source_fixture_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+    CHECK(xr_xir_compile_program_seal(context,&fixture_source_program,&program)==XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, fixture_source_program.declarations->entry_function,
         (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result, fixture_source_witness_result, fixture_source_enum_witness_result, fixture_source_enum_generic_witness_result, fixture_source_generic_method_number, fixture_source_generic_method_text, fixture_source_generic_method_array}, results);
@@ -50,12 +53,13 @@ int main(void) {
     XrXirValue late_result_retained[2][3] = {{{0}}};
     source_late_result_pair(program,late_result_entries,late_result_retained);
     source_late_result_runtime_failures(program,late_result_entries);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     source_late_result_retained_drop(late_result_retained);
     source_method_value_retained_drop(method_value_retained);
     source_inference_retained_drop(inference_retained);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Real source modules matched independent native expectations");
     CHECK(!runtime_live && !runtime_bytes);
+    source_fixture_source_owners_free();
     return 0;
 }

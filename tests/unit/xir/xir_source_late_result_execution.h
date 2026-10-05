@@ -25,7 +25,7 @@ static void source_late_result_value_check(const XrXirValue *value, uint32_t ind
         XrXirValueAdmission admission = {xr_xir_value_arena(value),NULL,NULL,NULL,1000000,65536};
         int64_t length = -1;
         CHECK(xr_xir_array_len(value,&admission,&length) == XR_XIR_VALUE_OK && length == 0);
-        const XrXirTypes *types = xr_xir_type_arena_types(xr_xir_value_arena(value));
+        const XrXirTypes *types = xr_xir_compile_type_arena_types(xr_xir_value_arena(value));
         const XrXirTypeNode *node = xr_xir_type_node(types,value->type);
         CHECK(node && node->kind == XR_XIR_TYPE_ARRAY && node->element == XR_XIR_STRING);
     }
