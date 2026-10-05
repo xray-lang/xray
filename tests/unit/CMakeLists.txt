@@ -2328,11 +2328,14 @@ add_test(NAME test_xr_program_aot_native
         --expected-exit 42)
 set_tests_properties(test_xr_program_aot_native PROPERTIES
     LABELS "unit;aot;canonical-program;generated-c;native;pure-aot;task-300")
-add_test(NAME test_xr_program_aot_real_artifact
-    COMMAND $<TARGET_FILE:test_xr_program_aot>
-        --seal $<TARGET_FILE:test_xr_program_aot_native>)
-set_tests_properties(test_xr_program_aot_real_artifact PROPERTIES
-    LABELS "unit;aot;canonical-program;native-artifact;identity;task-300")
+if(WIN32)
+    add_test(NAME test_xr_program_aot_real_artifact COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/cli/native_admission_owner/test_native_admission.py
+        $<TARGET_FILE:test_native_admission_production> ${PROJECT_SOURCE_DIR}
+        "${ADMISSION_MSVC}" "${ADMISSION_LINKER}" "${ADMISSION_SDK}" native)
+    set_tests_properties(test_xr_program_aot_real_artifact PROPERTIES
+        LABELS "unit;aot;native-artifact;identity;xir" TIMEOUT 300 RUN_SERIAL TRUE)
+endif()
 
 function(add_xr_program_aot_native_case case_name mode expected_exit)
     set(case_output_check)

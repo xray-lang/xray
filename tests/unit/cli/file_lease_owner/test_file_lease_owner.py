@@ -12,4 +12,10 @@ with tempfile.TemporaryDirectory(prefix='xray-file-lease-') as temporary:
     records=dict(line.split(' ',1) for line in result.stdout.decode('utf-8').splitlines() if line.startswith(('SHA ','BYTES ')))
     assert records['SHA']==hashlib.sha256(data).hexdigest()
     assert records['BYTES']==str(len(data))
+    if 'injected' in Path(sys.argv[1]).name:
+        fatal=subprocess.run([sys.argv[1],str(root),'--unmap-fatal'],capture_output=True,timeout=10)
+        assert fatal.returncode==3,(fatal.returncode,fatal.stdout,fatal.stderr)
+        assert b'[FATAL]' in fatal.stderr and b'Owned content proof view could not be released' in fatal.stderr,fatal.stderr
+        print('Proof fatal child exit=3; unreleased-view invariant remains always-on')
+
 print('independent length, SHA and repeated same-handle reads PASS')

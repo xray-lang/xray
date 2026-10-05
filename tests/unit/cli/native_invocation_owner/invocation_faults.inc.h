@@ -31,6 +31,8 @@ static size_t owner_allocation_count, owner_allocation_fail = SIZE_MAX;
 static DWORD owner_compare_error = ERROR_ACCESS_DENIED;
 static unsigned invocation_runs, invocation_process_fail = UINT_MAX;
 static unsigned invocation_tamper;
+static uint64_t owner_late_work_cap;
+static bool owner_late_spent;
 static bool invocation_image_difference, profile_image_outside;
 static const char *invocation_compiler;
 static const char *invocation_other_source;
@@ -205,6 +207,15 @@ static XrProcessStatus owner_run(const XrToolchainProcess *process, XrProcessCan
     }
     if (invocation_tamper == 3 && run == 5 && status == XTC_PROCESS_OK) {
         XrProcessView view; CHECK(xtc_process_view(process, &view) == XTC_PROCESS_OK); owner_tamper_link(&view);
+    }
+    if (owner_late_work_cap && run == 5 && status == XTC_PROCESS_OK) {
+        XrCompileResources *resources = xtc_process_resources(process);
+        XrCompileResourceStats current;
+        CHECK(xr_compile_resources_stats(resources, &current) == XR_COMPILE_RESOURCE_OK);
+        CHECK(output->exit_code == 0 && current.work < owner_late_work_cap);
+        /* Consume allowed work in this test; the next production fee must fail. */
+        CHECK(xr_compile_resources_work(resources, owner_late_work_cap - current.work) == XR_COMPILE_RESOURCE_OK);
+        owner_late_spent = true;
     }
     return status;
 }

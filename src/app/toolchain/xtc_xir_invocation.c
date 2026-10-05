@@ -14,6 +14,7 @@
 #include "xtc_xir_invocation.h"
 #include "xtc_xir_file_lease.h"
 #include "xtc_xir_images.h"
+#include "xtc_xir_sysroot_internal.h"
 #include "../../base/xio_policy.h"
 #include "../../base/xfileio.h"
 #include "../../base/xsha256.h"
@@ -46,6 +47,7 @@ struct XrXirInvocation {
     XrXirInvocationDiagnostic diagnostic;
     XrXirInvocationLimits limits;
     XrXirInvocationFacts facts;
+    XtcXirHashProofCache *proof_cache;
     XrXirInvocationProviderFacts provider;
     XrToolchainProcess *process[3];
     XrProcessView commands[3];
@@ -134,6 +136,20 @@ static bool invocation_sdk(XrXirInvocation *owner, XrXirRuntimeSdkStatus status)
     default: mapped = XR_XIR_INVOCATION_INVALID; break;
     }
     return invocation_fail(owner, mapped, XR_XIR_INVOCATION_SDK, status);
+}
+static XrXirTargetStatus invocation_file_open(XrXirInvocation *owner,const char *path,XtcXirFileLease **output) {
+#ifdef XR_OS_WINDOWS
+    return xtc_xir_file_lease_open_with_proof(owner->context.resources,path,owner->proof_cache,output);
+#else
+    return xtc_xir_file_lease_open(owner->context.resources,path,output);
+#endif
+}
+static XrXirTargetStatus invocation_images_new(XrXirInvocation *owner,XrXirImageCollector **output) {
+#ifdef XR_OS_WINDOWS
+    return xtc_xir_images_new_with_proof(owner->context.resources,owner->proof_cache,output);
+#else
+    return xtc_xir_images_new(owner->context.resources,output);
+#endif
 }
 static bool invocation_same(XrXirInvocation *owner, const char *a, const char *b, bool *same) {
     if (!a || !b) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
@@ -418,7 +434,7 @@ static bool invocation_create(XrXirInvocation *owner, const XrXirInvocationReque
     for (unsigned i = 0; i < 2; ++i) {
         owner->diagnostic.stage = (XrXirInvocationStage)i;
         XtcXirFileLease *lease = NULL;
-        bool okay = invocation_target(owner, xtc_xir_file_lease_open(owner->context.resources, paths[i], &lease));
+        bool okay = invocation_target(owner, invocation_file_open(owner, paths[i], &lease));
         const XtcXirFileFacts *facts = okay ? xtc_xir_file_lease_facts(lease) : NULL;
         if (okay) okay = facts->length == (i ? request->launcher_length : source->length) &&
             invocation_bytes(owner, facts->digest, i ? launcher_digest : owner->facts.projection.generated_digest.bytes, 32);
@@ -432,7 +448,7 @@ static bool invocation_create(XrXirInvocation *owner, const XrXirInvocationReque
 static bool invocation_open_add(XrXirInvocation *owner, const char *path,
     XrXirInvocationStage stage, XrXirInvocationFileKind kind) {
     XtcXirFileLease *lease = NULL;
-    bool okay = invocation_target(owner, xtc_xir_file_lease_open(owner->context.resources, path, &lease));
+    bool okay = invocation_target(owner, invocation_file_open(owner, path, &lease));
     if (okay && (kind == XR_XIR_INVOCATION_OBJECT || kind == XR_XIR_INVOCATION_OUTPUT) &&
         xtc_xir_file_lease_facts(lease)->length > owner->limits.artifact_bytes)
         okay = invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_SELF, 0);
@@ -496,7 +512,7 @@ static bool invocation_compile_inputs(XrXirInvocation *owner, const XrDependency
         XrXirInvocationFileKind kind = record->kind == XR_DEPENDENCY_SOURCE ?
             XR_XIR_INVOCATION_SOURCE : XR_XIR_INVOCATION_HEADER;
         XtcXirFileLease *lease = NULL;
-        bool okay = invocation_target(owner, xtc_xir_file_lease_open(owner->context.resources, record->path, &lease));
+        bool okay = invocation_target(owner, invocation_file_open(owner, record->path, &lease));
         uint32_t index = UINT32_MAX;
         if (okay) okay = invocation_profile_contains(owner, xtc_xir_file_lease_facts(lease)->path, false);
         if (okay) okay = invocation_file_find(owner, xtc_xir_file_lease_facts(lease), stage, kind, &index);
@@ -537,7 +553,7 @@ static bool invocation_link_inputs(XrXirInvocation *owner, const XrDependencyFac
             invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0); break;
         }
         XtcXirFileLease *actual = NULL;
-        if (!invocation_target(owner, xtc_xir_file_lease_open(owner->context.resources, record->path, &actual))) break;
+        if (!invocation_target(owner, invocation_file_open(owner, record->path, &actual))) break;
         const XtcXirFileFacts *facts = xtc_xir_file_lease_facts(actual);
         bool matched = false;
         for (uint32_t j = 0; owner->status == XR_XIR_INVOCATION_OK && j < owner->facts.file_count; ++j) {
@@ -617,7 +633,7 @@ static bool invocation_stage(XrXirInvocation *owner, const XrXirInvocationReques
     if (okay) okay = stage < 2 ? invocation_compile_inputs(owner, observed, stage, false) : invocation_link_inputs(owner, observed);
     if (okay) {
         owner->diagnostic.pass = XR_XIR_INVOCATION_REPLAY;
-        okay = invocation_target(owner, xtc_xir_images_new(owner->context.resources, &images));
+        okay = invocation_target(owner, invocation_images_new(owner, &images));
     }
     if (okay) {
         XrProcImageObserver observer = xtc_xir_images_observer(images);
@@ -667,7 +683,7 @@ static bool invocation_prepare(XrXirInvocation *owner, const XrXirInvocationRequ
     owner->facts.projection.prefix = owner->prefix;
     for (unsigned i = 0; i < 3; ++i) {
         owner->diagnostic.stage = (XrXirInvocationStage)i;
-        if (!invocation_target(owner, xtc_xir_images_new(owner->context.resources, &owner->images[i]))) return false;
+        if (!invocation_target(owner, invocation_images_new(owner, &owner->images[i]))) return false;
         XrProcImageObserver observer = xtc_xir_images_observer(owner->images[i]);
         const XrToolchainProcess *source = i < 2 ? request->compile[i].process : request->link;
         if (!invocation_process(owner, xtc_process_clone_observed(source, &observer, &owner->process[i])) ||
@@ -811,6 +827,10 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     owner->io = xr_compile_io_policy(context->resources);
     bool okay = invocation_copy(owner, &owner->context, context, sizeof(*context)) &&
         invocation_copy(owner, &owner->limits, &request->limits, sizeof(request->limits));
+#ifdef XR_OS_WINDOWS
+    if(okay)okay=invocation_target(owner,xtc_xir_hash_proof_cache_new(context->resources,
+        request->limits.files,&owner->proof_cache));
+#endif
     const char *sdk_libraries[5] = {0};
     if (okay) okay = invocation_prepare(owner, request, sdk_libraries);
     if (okay) okay = invocation_profile_derive(owner, request) &&
@@ -861,6 +881,9 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_read_output(XrXirInvocation *ow
 }
 XR_FUNC void xtc_xir_invocation_free(XrXirInvocation *owner) {
     if (!owner) return;
+#ifdef XR_OS_WINDOWS
+    xtc_xir_hash_proof_cache_free(owner->proof_cache);
+#endif
     for (unsigned stage = 0; stage < 3; ++stage) {
         xtc_process_free(owner->process[stage]);
         xtc_dependencies_free(owner->reports[stage]);

@@ -56,7 +56,7 @@ def run(mode):
         sys.stdout.buffer.write(result.stdout); sys.stderr.buffer.write(result.stderr)
         print(f'case={mode} wall={time.perf_counter()-started:.3f}s', flush=True)
         assert result.returncode == 0, (mode, result.returncode)
-        if mode in ('positive', 'full-program') or mode.startswith('headroom-'):
+        if mode in ('positive', 'full-program') or mode.startswith('headroom-') or (mode.startswith('budget-') and mode.endswith('-pass')):
             native = subprocess.run([str(output / 'program.exe')], capture_output=True, timeout=30)
             expected = b'owner\xe4\xb8\xad-ok 42 true\r\n' if mode == 'full-program' else b'native-invocation-ok\r\n'
             assert native.returncode == 0 and native.stdout == expected and native.stderr == b'', (native.returncode, native.stdout, native.stderr)
@@ -95,9 +95,11 @@ if faults:
     for axis, cuts in [('work', [50000000, 250000000, 500000000, 650000000]),
                        ('bytes', [10000000, 30000000, 50000000, 60000000]), ('live', [5000000, 15000000, 23000000])]:
         for cut in cuts:
-            run(f'budget-{axis}-{cut}')
+            passes = (axis == 'work' and cut >= 250000000) or (axis == 'live' and cut >= 15000000)
+            run(f'budget-{axis}-{cut}' + ('-pass' if passes else ''))
     for mode in ['headroom-work-800000000', 'headroom-bytes-70000000', 'headroom-live-28000000']:
         run(mode)
+    run('late-work-budget')
     run(f'io-all-{comparisons}')
 print('pre-execution profile gates; no provider execution' if preflight else
       'actual MSVC Source/SDK six calls; positive leases and exact native output; no full Target authority', flush=True)

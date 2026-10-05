@@ -24,6 +24,7 @@ struct XtcXirFileLease {
 #ifdef XR_OS_WINDOWS
 #include <windows.h>
 #include "xtc_xir_sysroot_windows.inc.c"
+#include "xtc_xir_hash_proof.inc.c"
 #include "xtc_xir_file_lease_windows.inc.c"
 #else
 XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetSnapshotRequest *request) {

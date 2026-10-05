@@ -41,6 +41,19 @@ XR_FUNC XrXirTargetStatus xtc_xir_images_new(XrCompileResources *resources, XrXi
     images->storage.resources = resources;
     *output = images; return XR_XIR_TARGET_OK;
 }
+#ifdef XR_OS_WINDOWS
+XR_FUNC XrXirTargetStatus xtc_xir_images_new_with_proof(XrCompileResources *resources,
+    XtcXirHashProofCache *cache,XrXirImageCollector **output) {
+    if(!cache || !resources || !output || *output || xtc_xir_hash_proof_cache_resources(cache)!=resources)return XR_XIR_TARGET_INVALID;
+    XrXirImageCollector *images=NULL;
+    XrXirTargetStatus status=xtc_xir_images_new(resources,&images);
+    if(status!=XR_XIR_TARGET_OK)return status;
+    if(!xtc_xir_target_work(&images->storage,sizeof(images->proof_cache))) {
+        status=images->storage.status;xtc_xir_images_free(images);return status;
+    }
+    images->proof_cache=cache;*output=images;return XR_XIR_TARGET_OK;
+}
+#endif
 XR_FUNC XrProcImageObserver xtc_xir_images_observer(XrXirImageCollector *images) {
     return (XrProcImageObserver){images, images ? images_observe : NULL};
 }
@@ -53,7 +66,13 @@ XR_FUNC XrXirTargetStatus xtc_xir_images_seal(XrXirImageCollector *images) {
     uint32_t index = 0;
     if (files) for (XtcXirImage *image = images->images; image; image = image->next) {
         XrXirTargetFile hashed = {0};
-        if (!xtc_xir_sysroot_hash(&images->storage, image->lease, &hashed) ||
+        #ifdef XR_OS_WINDOWS
+        bool hashed_ok=images->proof_cache?xtc_xir_sysroot_hash_with_proof(&images->storage,image->lease,&hashed,images->proof_cache):
+            xtc_xir_sysroot_hash(&images->storage,image->lease,&hashed);
+#else
+        bool hashed_ok=xtc_xir_sysroot_hash(&images->storage,image->lease,&hashed);
+#endif
+        if (!hashed_ok ||
             !xtc_xir_target_work(&images->storage, sizeof(*files))) break;
         files[index] = (XrXirImageFile){image->path, image->kind_mask, hashed.length, {0}};
         memcpy(files[index].digest, hashed.digest, sizeof(hashed.digest));

@@ -1266,28 +1266,6 @@ static void retire_instance(XrInstance **instance) {
     REQUIRE(xr_execution_instance_free(instance, &diagnostic) == XR_EXECUTION_OK);
 }
 
-static XrFingerprint fingerprint_text(const char *text) {
-    XrFingerprint fingerprint;
-    xr_semantic_fingerprint((const uint8_t *) text, strlen(text), &fingerprint);
-    return fingerprint;
-}
-
-static XrAotToolchainBinding toolchain_for(XrFingerprint profile_id) {
-    XrAotToolchainInput input = {
-        .schema_version = XR_AOT_TOOLCHAIN_SCHEMA_VERSION,
-        .provider = XR_AOT_TOOLCHAIN_CLANG,
-        .provider_version = "test-clang-21",
-        .target_triple = "aarch64-apple-darwin",
-        .codegen_options = "c11;strict;O2",
-        .sysroot_id = fingerprint_text("test-sysroot"),
-        .runtime_objects_id = fingerprint_text("test-runtime-objects"),
-        .target_profile_id = profile_id,
-    };
-    XrAotToolchainBinding binding;
-    REQUIRE(xr_aot_toolchain_binding_build(&input, &binding));
-    return binding;
-}
-
 static XrBackendIR *build_ir(const XrValidatedProgram *program, const XrTargetProfile *profile,
                              uint8_t optimization_policy) {
     XrBackendOptions options = xr_backend_default_options();
@@ -1772,27 +1750,6 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrTarget
     REQUIRE(strstr(generated_none.bytes, "int main(void)") != NULL);
     REQUIRE(strstr(generated_none.bytes, "    return xr_aot_make(4, 0, 0);\n}\n") == NULL);
 
-    XrAotToolchainBinding toolchain = toolchain_for(generated_none.target_profile_id);
-    static const uint8_t native_bytes[] = {0x7f, 'X', 'R', 'A', 'O', 'T'};
-    XrNativeArtifact artifact = {0};
-    REQUIRE(xr_native_artifact_seal(&generated_none, &toolchain, native_bytes, sizeof(native_bytes),
-                                    &artifact) == XR_BACKEND_OK);
-    REQUIRE(xr_native_artifact_verify(&artifact, generated_none.execution_id,
-                                      generated_none.backend_id,
-                                      generated_none.optimization_policy_id, &toolchain));
-    artifact.bytes[1] ^= UINT8_C(1);
-    REQUIRE(!xr_native_artifact_verify(&artifact, generated_none.execution_id,
-                                       generated_none.backend_id,
-                                       generated_none.optimization_policy_id, &toolchain));
-    artifact.bytes[1] ^= UINT8_C(1);
-    XrAotToolchainBinding wrong_toolchain = toolchain;
-    wrong_toolchain.sysroot_id.bytes[0] ^= UINT8_C(1);
-    REQUIRE(!xr_native_artifact_verify(&artifact, generated_none.execution_id,
-                                       generated_none.backend_id,
-                                       generated_none.optimization_policy_id, &wrong_toolchain));
-
-    xr_native_artifact_free(&artifact);
-    xr_generated_c_free(&generated_portable);
     xr_generated_c_free(&generated_none);
     xr_backend_ir_free(portable);
     xr_backend_ir_free(none);
@@ -3313,41 +3270,6 @@ static void write_condition_assert_generated_fixture(const char *path,
     REQUIRE(fclose(output) == 0);
 }
 
-static void seal_native_file(const char *path, const XrValidatedProgram *program,
-                             const XrTargetProfile *profile) {
-    FILE *input = fopen(path, "rb");
-    REQUIRE(input != NULL);
-    REQUIRE(fseek(input, 0, SEEK_END) == 0);
-    long end = ftell(input);
-    REQUIRE(end > 0);
-    REQUIRE(fseek(input, 0, SEEK_SET) == 0);
-    size_t size = (size_t) end;
-    uint8_t *bytes = xr_malloc(size);
-    REQUIRE(bytes != NULL);
-    REQUIRE(fread(bytes, 1u, size, input) == size);
-    REQUIRE(fclose(input) == 0);
-
-    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
-    XrGeneratedC generated = {0};
-    XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_compile_backend_ir_emit_c(
-                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
-                &generated, &diagnostic) == XR_BACKEND_OK);
-    XrAotToolchainBinding toolchain = toolchain_for(generated.target_profile_id);
-    XrNativeArtifact artifact = {0};
-    REQUIRE(xr_native_artifact_seal(&generated, &toolchain, bytes, size, &artifact) ==
-            XR_BACKEND_OK);
-    REQUIRE(xr_native_artifact_verify(&artifact, generated.execution_id, generated.backend_id,
-                                      generated.optimization_policy_id, &toolchain));
-    char artifact_id[XR_FINGERPRINT_BYTES * 2u + 1u];
-    xr_fingerprint_hex(artifact.id, artifact_id);
-    printf("sealed native artifact %s (%lu bytes)\n", artifact_id, (unsigned long) artifact.size);
-    xr_native_artifact_free(&artifact);
-    xr_generated_c_free(&generated);
-    xr_backend_ir_free(ir);
-    xr_free(bytes);
-}
-
 #include "../program/xr_program_module_fixture.h"
 
 static void test_module_operations_have_typed_native_storage(void) {
@@ -4305,7 +4227,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     REQUIRE(argc >= 1 && argc <= 3);
-    bool seal_mode = argc == 3 && strcmp(argv[1], "--seal") == 0;
+    REQUIRE(argc < 2 || strcmp(argv[1], "--seal") != 0);
     bool invoke_object_mode = argc == 3 && strcmp(argv[2], "sealed-invoke-object") == 0;
     bool panic_object_mode = argc == 3 && strcmp(argv[2], "typed-panic-object") == 0;
     bool assertion_mode = argc == 3 && strcmp(argv[2], "condition-assert") == 0;
@@ -4345,9 +4267,7 @@ int main(int argc, char **argv) {
         xr_program_artifact_free(&artifact);
     } else if (owned_drop_mode) {
         /* This fixture writes its own allocation and lifecycle observer. */
-    } else if (seal_mode)
-        program = build_full_program();
-    else if (argc == 3 && strcmp(argv[2], "checked-overflow") == 0)
+    } else if (argc == 3 && strcmp(argv[2], "checked-overflow") == 0)
         program = build_binary_program(XR_CORE_OP_CORE_ADD_I64, INT64_MAX, 1, 0u);
     else if (argc == 3 && strcmp(argv[2], "wrapping-overflow") == 0)
         program = build_binary_program(XR_CORE_OP_CORE_ADD_I64, INT64_MAX, 1, 1u);
@@ -4434,8 +4354,6 @@ int main(int argc, char **argv) {
         program = build_pipe_program();
     if (owned_drop_mode) {
         write_compound_owned_drop_fixture(argv[1], profile);
-    } else if (seal_mode) {
-        seal_native_file(argv[2], program, profile);
     } else if (argc >= 2) {
         if (provider_call_mode)
             write_provider_generated_fixture(argv[1], program, profile,

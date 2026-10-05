@@ -8,6 +8,8 @@
  * test_file_lease_owner.c - Native input ownership and same-handle read failures
  */
 #include "app/toolchain/xtc_xir_file_lease.h"
+#include "app/toolchain/xtc_xir_sysroot_internal.h"
+#include "base/xsha256.h"
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +22,7 @@
 #undef xr_compile_resources_work
 #undef xr_compile_resources_calloc
 #undef xr_compile_resources_alloc
-static bool record_work;
+static bool record_work,poison_alloc;
 static uint64_t boundaries[32768];static size_t boundary_count;
 static XrCompileResourceStatus remember_work(XrCompileResources *r,XrCompileResourceStatus status) {
     if(record_work&&status==XR_COMPILE_RESOURCE_OK) {
@@ -38,7 +40,9 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(XrCompileResources *
     return remember_work(r,lease_real_calloc(r,count,bytes,out));
 }
 XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(XrCompileResources *r,size_t bytes,void **out) {
-    return remember_work(r,lease_real_alloc(r,bytes,out));
+    XrCompileResourceStatus status=lease_real_alloc(r,bytes,out);
+    if(status==XR_COMPILE_RESOURCE_OK&&poison_alloc)memset(*out,0xCD,bytes);
+    return remember_work(r,status);
 }
 #ifndef LEASE_PRODUCTION
 static size_t io_attempts,io_fail_at=SIZE_MAX;
@@ -47,6 +51,25 @@ static bool short_read;
 static bool fail_io(void) {
     if (io_attempts++!=io_fail_at)return false;
     SetLastError(io_error);return true;
+}
+static size_t proof_views;
+static bool page_error,permanent_unmap_failure;
+static LPVOID lease_map(HANDLE mapping,DWORD access,DWORD high,DWORD low,SIZE_T length) {
+    if(fail_io())return NULL;
+    LPVOID view=MapViewOfFile(mapping,access,high,low,length);
+    if(view)++proof_views;
+    return view;
+}
+static BOOL lease_unmap(LPCVOID view) {
+    if(permanent_unmap_failure) { SetLastError(ERROR_INVALID_ADDRESS);return FALSE; }
+    if(fail_io())return FALSE;
+    BOOL result=UnmapViewOfFile(view);
+    if(result) { CHECK(proof_views);--proof_views; }
+    return result;
+}
+static void lease_hash_update(XrSHA256Context *hash,const uint8_t *bytes,size_t length) {
+    if(page_error)RaiseException(EXCEPTION_IN_PAGE_ERROR,0,0,NULL);
+    xr_sha256_update(hash,bytes,length);
 }
 static BOOL lease_read(HANDLE file,LPVOID data,DWORD bytes,LPDWORD count,LPOVERLAPPED over) {
     if(fail_io())return FALSE;
@@ -64,6 +87,11 @@ static BOOL lease_read(HANDLE file,LPVOID data,DWORD bytes,LPDWORD count,LPOVERL
 #define WideCharToMultiByte(...) (fail_io()?0:WideCharToMultiByte(__VA_ARGS__))
 #define CompareStringOrdinal(...) (fail_io()?0:CompareStringOrdinal(__VA_ARGS__))
 #define SetFilePointerEx(...) (fail_io()?FALSE:SetFilePointerEx(__VA_ARGS__))
+#define DuplicateHandle(...) (fail_io()?FALSE:DuplicateHandle(__VA_ARGS__))
+#define CreateFileMappingW(...) (fail_io()?NULL:CreateFileMappingW(__VA_ARGS__))
+#define MapViewOfFile lease_map
+#define UnmapViewOfFile lease_unmap
+#define xr_sha256_update lease_hash_update
 #include "app/toolchain/xtc_xir_target.c"
 #include "app/toolchain/xtc_xir_sysroot.c"
 #include "app/toolchain/xtc_xir_images.c"
@@ -78,6 +106,11 @@ static BOOL lease_read(HANDLE file,LPVOID data,DWORD bytes,LPDWORD count,LPOVERL
 #undef WideCharToMultiByte
 #undef CompareStringOrdinal
 #undef SetFilePointerEx
+#undef DuplicateHandle
+#undef CreateFileMappingW
+#undef MapViewOfFile
+#undef UnmapViewOfFile
+#undef xr_sha256_update
 #endif
 static char input_path[4096],empty_path[4096],child_path[4096];
 static const char expected[]="same handle\0\xE4\xB8\xAD\xE6\x96\x87\r\n";
@@ -178,11 +211,150 @@ static void short_owned_read(void) {
     xtc_xir_file_lease_free(file);xr_compile_resources_release(r);empty();
 }
 #endif
+static const XrCompileResourceLimits proof_limits={64u*1024u*1024u,8u*1024u*1024u,128000000u};
+static XrXirTargetStatus proof_transaction(const XrCompileResourceLimits *limits,XrCompileResourceStats *stats) {
+    XrCompileResources *r=NULL;XtcXirHashProofCache *cache=NULL;
+    XtcXirFileLease *first=NULL,*second=NULL,*other=NULL;void *bytes=NULL;size_t length=0;
+    memset(stats,0,sizeof(*stats));
+    XrCompileResourceStatus made=xr_compile_resources_new(limits,&r);
+    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_TARGET_BUDGET:XR_XIR_TARGET_OUT_OF_MEMORY;
+    XrXirTargetStatus status=xtc_xir_hash_proof_cache_new(r,8,&cache);
+    if(status!=XR_XIR_TARGET_OK)CHECK(!cache);
+    if(status==XR_XIR_TARGET_OK) {
+        status=xtc_xir_file_lease_open_with_proof(r,input_path,cache,&first);
+        if(status!=XR_XIR_TARGET_OK)CHECK(!first);
+    }
+    if(status==XR_XIR_TARGET_OK) {
+        const uint8_t expected_sha[32]={0xea,0x4e,0xfb,0x10,0xcc,0x03,0x9a,0x7e,0x1b,0x5d,0x6c,0xd9,0x46,0x60,0xaf,0xe1,0x46,0x0e,0x52,0x7d,0xef,0x68,0xab,0xbd,0x1b,0x5f,0x6a,0x83,0xe1,0x1e,0xa6,0x39};
+        CHECK(xtc_xir_file_lease_facts(first)->length==sizeof(expected)-1);
+        CHECK(!memcmp(xtc_xir_file_lease_facts(first)->digest,expected_sha,32));
+        xtc_xir_file_lease_free(first);first=NULL;
+        status=xtc_xir_file_lease_open_with_proof(r,input_path,cache,&second);
+        if(status!=XR_XIR_TARGET_OK)CHECK(!second);
+    }
+    if(status==XR_XIR_TARGET_OK) {
+        status=xtc_xir_file_lease_open_with_proof(r,empty_path,cache,&other);
+        if(status!=XR_XIR_TARGET_OK)CHECK(!other);
+    }
+    if(status==XR_XIR_TARGET_OK) {
+        const uint8_t empty_sha[32]={0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,
+            0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55};
+        CHECK(!xtc_xir_file_lease_facts(other)->length&&!memcmp(xtc_xir_file_lease_facts(other)->digest,empty_sha,32));
+        xtc_xir_hash_proof_cache_free(cache);cache=NULL;
+        status=xtc_xir_file_lease_read(second,4096,&bytes,&length);
+        if(status==XR_XIR_TARGET_OK)CHECK(length==sizeof(expected)-1&&!memcmp(bytes,expected,length));
+        else CHECK(!bytes&&!length);
+    }
+    *stats=sdk_stats(r);
+    xr_compile_resources_release(r);
+    xtc_xir_file_lease_free(first);xtc_xir_file_lease_free(second);xtc_xir_file_lease_free(other);
+    xtc_xir_hash_proof_cache_free(cache);xr_compile_resources_free(bytes);
+#ifndef LEASE_PRODUCTION
+    CHECK(!proof_views);
+#endif
+    empty();return status;
+}
+static void proof_guards(void) {
+    XrCompileResources *r=sdk_ledger(&proof_limits),*foreign=sdk_ledger(&proof_limits);
+    XtcXirHashProofCache *cache=NULL,*occupied=(XtcXirHashProofCache *)(uintptr_t)0x1234;
+    size_t attempts=runtime_attempts;
+    CHECK(xtc_xir_hash_proof_cache_new(r,0,&cache)==XR_XIR_TARGET_INVALID&&!cache);
+    CHECK(xtc_xir_hash_proof_cache_new(r,4097,&cache)==XR_XIR_TARGET_INVALID&&!cache);
+    CHECK(xtc_xir_hash_proof_cache_new(r,1,&occupied)==XR_XIR_TARGET_INVALID&&occupied==(XtcXirHashProofCache *)(uintptr_t)0x1234);
+    CHECK(runtime_attempts==attempts);
+    CHECK(xtc_xir_hash_proof_cache_new(r,1,&cache)==XR_XIR_TARGET_OK);
+    XtcXirFileLease *first=NULL,*second=NULL;
+    attempts=runtime_attempts;
+    CHECK(xtc_xir_file_lease_open_with_proof(foreign,input_path,cache,&first)==XR_XIR_TARGET_INVALID&&!first);
+    CHECK(runtime_attempts==attempts);
+    CHECK(xtc_xir_file_lease_open_with_proof(r,input_path,cache,&first)==XR_XIR_TARGET_OK);
+    wchar_t path[4096];CHECK(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,input_path,-1,path,4096));
+    xtc_xir_file_lease_free(first);first=NULL;
+    HANDLE denied=CreateFileW(path,GENERIC_WRITE,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);
+    CHECK(denied==INVALID_HANDLE_VALUE&&!DeleteFileW(path));
+    CHECK(xtc_xir_file_lease_open_with_proof(r,empty_path,cache,&second)==XR_XIR_TARGET_BUDGET&&!second);
+    CHECK(xtc_xir_file_lease_open_with_proof(r,input_path,cache,&first)==XR_XIR_TARGET_OK);
+    xtc_xir_hash_proof_cache_free(cache);xtc_xir_file_lease_free(first);
+    xr_compile_resources_release(r);xr_compile_resources_release(foreign);empty();
+}
+static void proof_mapping(void) {
+    wchar_t path[4096];CHECK(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,input_path,-1,path,4096));
+    HANDLE file=CreateFileW(path,GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,0,NULL);
+    CHECK(file!=INVALID_HANDLE_VALUE);
+    HANDLE mapping=CreateFileMappingW(file,NULL,PAGE_READWRITE,0,0,NULL);CHECK(mapping);
+    uint8_t *view=MapViewOfFile(mapping,FILE_MAP_WRITE,0,0,sizeof(expected)-1);CHECK(view&&CloseHandle(file));
+    XrCompileResources *r=sdk_ledger(&proof_limits);XtcXirHashProofCache *cache=NULL;XtcXirFileLease *lease=NULL;
+    CHECK(xtc_xir_hash_proof_cache_new(r,8,&cache)==XR_XIR_TARGET_OK);
+    CHECK(xtc_xir_file_lease_open_with_proof(r,input_path,cache,&lease)==XR_XIR_TARGET_IO&&!lease);
+    view[0]^=1;CHECK(FlushViewOfFile(view,sizeof(expected)-1));view[0]^=1;
+    CHECK(FlushViewOfFile(view,sizeof(expected)-1)&&CloseHandle(mapping));
+    CHECK(xtc_xir_file_lease_open_with_proof(r,input_path,cache,&lease)==XR_XIR_TARGET_IO&&!lease);
+    CHECK(UnmapViewOfFile(view));
+    CHECK(xtc_xir_file_lease_open_with_proof(r,input_path,cache,&lease)==XR_XIR_TARGET_OK);
+    xtc_xir_file_lease_free(lease);xtc_xir_hash_proof_cache_free(cache);xr_compile_resources_release(r);empty();
+}
+static void proof_matrix(void) {
+    XrCompileResourceStats baseline,current;DWORD before=handles();
+    runtime_attempts=0;boundary_count=0;
+#ifndef LEASE_PRODUCTION
+    io_attempts=0;
+#endif
+    record_work=true;CHECK(proof_transaction(&proof_limits,&baseline)==XR_XIR_TARGET_OK);record_work=false;
+    size_t count=runtime_attempts,work_count=boundary_count;
+#ifndef LEASE_PRODUCTION
+    size_t io_count=io_attempts;
+#endif
+    for(size_t i=0;i<count;++i) {
+        runtime_attempts=0;runtime_fail_at=i;
+        CHECK(proof_transaction(&proof_limits,&current)==XR_XIR_TARGET_OUT_OF_MEMORY);
+        CHECK(handles()==before);empty();
+    }
+    runtime_fail_at=SIZE_MAX;
+    for(size_t i=0;i<work_count;++i) {
+        XrCompileResourceLimits limits=proof_limits;limits.work=boundaries[i]-1;
+        CHECK(proof_transaction(&limits,&current)==XR_XIR_TARGET_BUDGET);CHECK(handles()==before);empty();
+    }
+    for(unsigned axis=0;axis<3;++axis)for(unsigned below=0;below<2;++below) {
+        XrCompileResourceLimits limits=proof_limits;
+        if(axis==0)limits.allocated_bytes=baseline.allocated_bytes-below;
+        if(axis==1)limits.live_bytes=baseline.peak_bytes-below;
+        if(axis==2)limits.work=baseline.work-below;
+        CHECK(proof_transaction(&limits,&current)==(below?XR_XIR_TARGET_BUDGET:XR_XIR_TARGET_OK));
+        CHECK(handles()==before);empty();
+    }
+#ifndef LEASE_PRODUCTION
+    DWORD errors[]={ERROR_READ_FAULT,ERROR_OUTOFMEMORY,ERROR_NOT_ENOUGH_MEMORY};
+    for(size_t e=0;e<3;++e)for(size_t i=0;i<io_count;++i) {
+        io_attempts=0;io_fail_at=i;io_error=errors[e];
+        CHECK(proof_transaction(&proof_limits,&current)==(e?XR_XIR_TARGET_OUT_OF_MEMORY:XR_XIR_TARGET_IO));
+        CHECK(handles()==before);empty();
+    }
+    io_fail_at=SIZE_MAX;short_read=true;
+    CHECK(proof_transaction(&proof_limits,&current)==XR_XIR_TARGET_IO);short_read=false;
+    CHECK(handles()==before&&!proof_views);empty();
+    page_error=true;
+    CHECK(proof_transaction(&proof_limits,&current)==XR_XIR_TARGET_IO);page_error=false;
+    CHECK(handles()==before&&!proof_views);empty();
+    printf("Proof IO %zu points x 3 statuses; ",io_count);
+#endif
+    proof_guards();proof_mapping();CHECK(handles()==before);
+    printf("Proof OOM %zu allocations; work %zu cuts; three axes; old writable mapping rejected; physical/handles zero\n",count,work_count);
+}
 int main(int argc,char **argv) {
-    CHECK(argc==2);CHECK(snprintf(input_path,sizeof(input_path),"%s/input.bin",argv[1])>0);
+    CHECK(argc==2 || (argc==3&&!strcmp(argv[2],"--unmap-fatal")));
+    CHECK(snprintf(input_path,sizeof(input_path),"%s/input.bin",argv[1])>0);
     CHECK(snprintf(empty_path,sizeof(empty_path),"%s/empty.bin",argv[1])>0);
     CHECK(snprintf(child_path,sizeof(child_path),"%s/child",argv[1])>0);
     XrCompileResourceStats baseline,current;
+#ifndef LEASE_PRODUCTION
+    if(argc==3) {
+        SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+        _set_abort_behavior(0,_WRITE_ABORT_MSG|_CALL_REPORTFAULT);
+        permanent_unmap_failure=true;
+        proof_transaction(&proof_limits,&current);
+        CHECK(false);
+    }
+#endif
     CHECK(transaction(&sdk_unlimited,false,&current)==XR_XIR_TARGET_OK);ownership(argv[1]);invalid_inputs(argv[1]);
     DWORD before=handles();runtime_attempts=0;
 #ifndef LEASE_PRODUCTION
@@ -212,5 +384,5 @@ int main(int argc,char **argv) {
     short_owned_read();
     printf("IO %zu points x 3 statuses\n",io_count);
 #endif
-    CHECK(handles()==before);printf("OOM %zu allocations; work %zu boundaries; three axes exact/minus1; owned physical heap/handles zero\n",count,boundary_count);return 0;
+    CHECK(handles()==before);printf("OOM %zu allocations; work %zu boundaries; three axes exact/minus1; owned physical heap/handles zero\n",count,boundary_count);poison_alloc=true;proof_matrix();return 0;
 }

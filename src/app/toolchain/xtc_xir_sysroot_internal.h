@@ -16,6 +16,8 @@
 #define XTC_XIR_TARGET_COMMAND_LIMIT 64u
 #define XTC_XIR_TARGET_ARGUMENT_LIMIT 4096u
 #define XTC_XIR_TARGET_TEXT_LIMIT (1024u * 1024u)
+typedef struct XtcXirHashProofCache XtcXirHashProofCache;
+
 typedef struct XtcXirMemory {
     struct XtcXirMemory *next;
     uint64_t alignment;
@@ -54,6 +56,7 @@ struct XrXirImageCollector {
     XrXirImageFile *files;
     uint32_t count;
     bool sealed;
+    XtcXirHashProofCache *proof_cache;
 };
 XR_FUNC bool xtc_xir_target_fail(XrXirTargetSnapshot *snapshot, XrXirTargetStatus status);
 XR_FUNC bool xtc_xir_target_work(XrXirTargetSnapshot *snapshot, uint64_t work);
@@ -67,4 +70,17 @@ XR_FUNC bool xtc_xir_sysroot_observe(XrXirImageCollector *images, const XrProcIm
 XR_FUNC bool xtc_xir_sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirTargetFile *file);
 XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
     XtcXirLock *lock, uint64_t file_length, size_t limit, void **owned_bytes, size_t *length);
+#ifdef XR_OS_WINDOWS
+XR_FUNC XrXirTargetStatus xtc_xir_hash_proof_cache_new(XrCompileResources *resources,
+    uint32_t limit,XtcXirHashProofCache **output);
+XR_FUNC void xtc_xir_hash_proof_cache_free(XtcXirHashProofCache *cache);
+XR_FUNC XrCompileResources *xtc_xir_hash_proof_cache_resources(const XtcXirHashProofCache *cache);
+XR_FUNC bool xtc_xir_sysroot_hash_with_proof(XrXirTargetSnapshot *storage,XtcXirLock *lock,
+    XrXirTargetFile *file,XtcXirHashProofCache *cache);
+XR_FUNC XrXirTargetStatus xtc_xir_images_new_with_proof(XrCompileResources *resources,
+    XtcXirHashProofCache *cache,XrXirImageCollector **output);
+struct XtcXirFileLease;
+XR_FUNC XrXirTargetStatus xtc_xir_file_lease_open_with_proof(XrCompileResources *resources,
+    const char *path,XtcXirHashProofCache *cache,struct XtcXirFileLease **output);
+#endif
 #endif // XTC_XIR_SYSROOT_INTERNAL_H

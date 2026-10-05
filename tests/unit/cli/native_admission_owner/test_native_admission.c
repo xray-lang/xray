@@ -122,8 +122,9 @@ static int run_test(int argc,char **argv) {
 #ifdef ADMISSION_INJECTED
     if(argc==5 && !strcmp(argv[1],"unit")) return admission_unit(argv[2],argv[3],argv[4]);
 #endif
-    CHECK(argc==21 && !strcmp(argv[1],"native"));
-    XrCompileResources *r=sdk_ledger(&sdk_unlimited);
+    CHECK(argc==21 && !strcmp(argv[1],"--seal"));
+    const XrCompileResourceLimits limits={64*1024*1024,8*1024*1024,128000000};
+    XrCompileResources *r=sdk_ledger(&limits);
     XrXirNativeProjection *projection=real_projection(r,argv[2],argv[3],argv[4]);
     XrXirRuntimeSdk *sdk=real_sdk(r,argv[5]);
     XrXirInvocationLibrary libraries[5];for(unsigned i=0;i<5;++i)libraries[i]=(XrXirInvocationLibrary){argv[9+i],i==4?XR_XIR_INVOCATION_SYSTEM:XR_XIR_INVOCATION_CRT};
@@ -133,11 +134,30 @@ static int run_test(int argc,char **argv) {
     CHECK(!xtc_xir_native_operation_command(op,XR_XIR_INVOCATION_GENERATED));
     XrXirNativeArtifact *artifact=NULL;XtcXirNativeAdmissionDiagnostic d;
     CHECK(xtc_xir_native_admit(op,projection,sdk,UINT64_MAX,&artifact,&d)==XTC_XIR_ADMISSION_INVALID && !artifact);
+    XrCompileResourceStats entry;
+    CHECK(xr_compile_resources_stats(r,&entry)==XR_COMPILE_RESOURCE_OK);
+    printf("whole operation entry allocated=%llu live=%llu peak=%llu work=%llu allocations=%llu\n",
+        (unsigned long long)entry.allocated_bytes,(unsigned long long)entry.live_bytes,
+        (unsigned long long)entry.peak_bytes,(unsigned long long)entry.work,
+        (unsigned long long)entry.allocation_count);fflush(stdout);
     XtcXirNativeOperationStatus status=xtc_xir_native_operation_run(op,&request);
     const XtcXirNativeOperationDiagnostic *od=xtc_xir_native_operation_diagnostic(op);
-    printf("operation status=%u stage=%u pass=%u code=%d exit=%d\n",(unsigned)status,(unsigned)od->invocation.stage,
-        (unsigned)od->invocation.pass,od->invocation.code,od->invocation.exit_code);fflush(stdout);
-    if(status!=XTC_XIR_NATIVE_OK){close_operation(&op);xr_compile_native_projection_owner_free(projection);xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(r);return 1;}
+    printf("operation status=%u stage=%u pass=%u code=%d exit=%d inner_domain=%u\n",(unsigned)status,(unsigned)od->invocation.stage,
+        (unsigned)od->invocation.pass,od->invocation.code,od->invocation.exit_code,(unsigned)od->invocation.domain);fflush(stdout);
+    if(status!=XTC_XIR_NATIVE_OK) {
+        XrCompileResourceStats failed;
+        CHECK(xr_compile_resources_stats(r,&failed)==XR_COMPILE_RESOURCE_OK && !artifact);
+        printf("whole failed domain=%u os=%u allocated=%llu live=%llu peak=%llu work=%llu allocations=%llu limits=%llu/%llu/%llu\n",
+            (unsigned)od->domain,od->os_error,(unsigned long long)failed.allocated_bytes,
+            (unsigned long long)failed.live_bytes,(unsigned long long)failed.peak_bytes,
+            (unsigned long long)failed.work,(unsigned long long)failed.allocation_count,
+            (unsigned long long)limits.allocated_bytes,(unsigned long long)limits.live_bytes,
+            (unsigned long long)limits.work);fflush(stdout);
+        close_operation(&op);xr_compile_native_projection_owner_free(projection);
+        xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(r);
+        CHECK(!runtime_live && !runtime_bytes);
+        puts("failed seal: no artifact published; physical=0");return 1;
+    }
     XrCompileResourceStats before,after;CHECK(xr_compile_resources_stats(r,&before)==XR_COMPILE_RESOURCE_OK);
     XtcXirNativeAdmissionStatus admitted=xtc_xir_native_admit(op,projection,sdk,64*1024*1024,&artifact,&d);
     printf("admission status=%u domain=%u code=%d stage=%u\n",(unsigned)admitted,(unsigned)d.domain,d.code,(unsigned)d.stage);fflush(stdout);
@@ -147,6 +167,12 @@ static int run_test(int argc,char **argv) {
     xr_compile_native_projection_owner_free(projection);xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(r);
     close_operation(&op);
     CHECK(xr_compile_native_artifact_verify(artifact,&expected,64*1024*1024)==XR_XIR_OK);
+    CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK);
+    printf("whole seal allocated=%llu live=%llu peak=%llu work=%llu allocations=%llu limits=%llu/%llu/%llu\n",
+        (unsigned long long)after.allocated_bytes,(unsigned long long)after.live_bytes,
+        (unsigned long long)after.peak_bytes,(unsigned long long)after.work,
+        (unsigned long long)after.allocation_count,(unsigned long long)limits.allocated_bytes,
+        (unsigned long long)limits.live_bytes,(unsigned long long)limits.work);
     save_artifact(argv[19],artifact);xr_compile_native_artifact_free(artifact);CHECK(!runtime_live && !runtime_bytes);
     printf("real six calls + admission + producer death + close1 + artifact lifetime PASS; new allocations=%llu bytes=%llu work=%llu physical=0\n",
         (unsigned long long)(after.allocation_count-before.allocation_count),(unsigned long long)(after.allocated_bytes-before.allocated_bytes),

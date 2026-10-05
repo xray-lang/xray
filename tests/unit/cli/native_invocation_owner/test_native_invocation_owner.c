@@ -96,6 +96,7 @@ static int run_test(int argc, char **argv) {
 #endif
     DWORD handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &handles));
     XrCompileResourceLimits limits = sdk_unlimited;
+    if (!strcmp(mode, "late-work-budget")) limits = (XrCompileResourceLimits){64*1024*1024, 8*1024*1024, 128000000};
     if (!strncmp(mode, "constructor-work-", 17)) limits.work = strtoull(mode + 17, NULL, 10);
     if (!strncmp(mode, "constructor-bytes-", 18)) limits.allocated_bytes = strtoull(mode + 18, NULL, 10);
     if (!strncmp(mode, "constructor-live-", 17)) limits.live_bytes = strtoull(mode + 17, NULL, 10);
@@ -149,7 +150,7 @@ static int run_test(int argc, char **argv) {
     char alternate_directory[32768] = {0}, collision[32768] = {0};
     bool preallocation = false;
     void *large_launcher = NULL;
-    if (!strncmp(mode, "budget-", 7)) expected = XR_XIR_INVOCATION_BUDGET;
+    if (!strncmp(mode, "budget-", 7)) expected = strstr(mode, "-pass") ? XR_XIR_INVOCATION_OK : XR_XIR_INVOCATION_BUDGET;
     if (!strcmp(mode, "source-shape")) {
         request.limits.artifact_bytes = xr_compile_native_projection_source(project)->length - 1;
         expected = XR_XIR_INVOCATION_BUDGET;
@@ -237,6 +238,7 @@ static int run_test(int argc, char **argv) {
     }
 #ifdef INVOCATION_INJECTED
     invocation_other_source = commands[1].source;
+    if (!strcmp(mode, "late-work-budget")) { owner_late_work_cap = limits.work; expected = XR_XIR_INVOCATION_BUDGET; }
     if (!strcmp(mode, "profile-image")) profile_image_outside = true;
     if (!strncmp(mode, "process-oom-", 12)) { invocation_process_fail = (unsigned)strtoul(mode + 12, NULL, 10); expected = XR_XIR_INVOCATION_OUT_OF_MEMORY; }
     if (!strcmp(mode, "replay")) { invocation_tamper = 1; expected = XR_XIR_INVOCATION_REPLAY_MISMATCH; }
@@ -316,6 +318,8 @@ static int run_test(int argc, char **argv) {
     printf("owner direct allocations=%zu comparisons=%zu attempted-runs=%u\n", owner_allocation_count, owner_preexecution_comparisons, invocation_runs);
     printf("owner all-stage comparisons=%zu\n", owner_compare_count);
 #endif
+    if (!strncmp(mode, "budget-", 7) && expected == XR_XIR_INVOCATION_OK)
+        CHECK(after_run.allocated_bytes <= limits.allocated_bytes && after_run.peak_bytes <= limits.live_bytes && after_run.work <= limits.work);
     if (preallocation) CHECK(runtime_attempts == allocation_start && !memcmp(&before, &after_run, sizeof(before)));
     if (expected != XR_XIR_INVOCATION_OK) {
         if (!strcmp(mode, "occupied-out")) { CHECK(owner == (XrXirInvocation *)(uintptr_t)1); owner = NULL; }
@@ -331,6 +335,11 @@ static int run_test(int argc, char **argv) {
                 !strcmp(mode, "profile-local-directory"))
                 CHECK(diagnostic.stage == XR_XIR_INVOCATION_GENERATED);
             if (!strcmp(mode, "profile-link-config")) CHECK(diagnostic.stage == XR_XIR_INVOCATION_LINK);
+        }
+        if (!strcmp(mode, "late-work-budget")) {
+            CHECK(invocation_runs == 6 && owner_late_spent && after_run.work == limits.work);
+            CHECK(diagnostic.stage == XR_XIR_INVOCATION_LINK && diagnostic.pass == XR_XIR_INVOCATION_REPLAY);
+            printf("six actual successful process runs; injected remaining-work consumption; later real fee BUDGET/no publication PASS\n");
         }
         if (!strcmp(mode, "cancel")) CHECK(diagnostic.domain == XR_XIR_INVOCATION_PROCESS);
 #endif
