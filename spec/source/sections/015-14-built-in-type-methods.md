@@ -344,6 +344,8 @@ print(len(empty))           // 0
 | `toString()` | `() -> string` | 返回当前值的字符串表示 |
 
 `ord?` 参数接受 `Ordering` 枚举，默认 `Ordering.SeqCst`。详见 §10.9。
+
+整族约束与操作准入按 §9.2/§10.9：类型声明要求 `T: AtomicValue`，数字四方法分别要求方法 `where T: AtomicNumber`，toggle 要求 `where T: AtomicBoolean`，其他方法不因这些附加条件缩小 AtomicValue 域。load/store 不接受非法内存序；compareExchange 返回拥有式真 Tuple，副作用前完成全部结果资源准备；f64 位型/CAS 与软件 RMW、i64 环绕和一次快照 toString 均沿 §10.9。当前 `stdlib/types/atomic.xr` 的无约束声明及固定 i64 指令仍待完整原子迁移，不代表本冻结合同已实现。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -689,4 +691,6 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 | `toString()` | `() -> string` | Returns string representation of current value |
 
 The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. See §10.9.
+
+The complete constraints and operation admission follow §9.2/§10.9: the type requires `T: AtomicValue`; each of the four numeric methods requires method `where T: AtomicNumber`, while toggle requires `where T: AtomicBoolean`. Other methods keep the full AtomicValue domain. load/store reject invalid orders. compareExchange returns an owned real Tuple with all result resources prepared before its side effect. f64 bits/CAS and software RMW, i64 wrapping and the single-snapshot toString follow §10.9. The unconstrained declaration currently in `stdlib/types/atomic.xr` and the fixed i64 instructions still await an atomic complete-family migration; they do not establish implementation of this frozen contract.
 <!-- /xr-spec:en -->

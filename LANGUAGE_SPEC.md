@@ -1303,6 +1303,10 @@ var p2 = pair(1, "x")             // (i64, string)
 - In field access `t.N`, N **must be an integer literal**; using a variable or string is the compile error `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`.
 - Tuples are **immutable**: `t.0 = v` is a compile error. To modify, build a new tuple.
 
+**Ownership and evaluation contract (frozen 2026-10-05; complete new XIR implementation pending)**: evaluate fields once each, left to right, and preserve their ordered type vector. `()` remains Unit; `(x,)` differs from `x`. Copying, saving parameters, returning, and projecting a field obtain independently owned values according to each field's contract. Copying stops at class and Atomic synchronization identities. Physical sharing does not permit field mutation. Destructuring evaluates its RHS once and prepares every field result before publishing the complete set of bindings; preparation failure releases partial results and publishes no new binding. Arguments and returns use the same Checked type, permission, layout, and value admission; untyped multiple returns or fabricated nominal declarations do not represent tuples.
+
+Sendable is the conjunction of all fields; this family does not automatically extend Equal to Tuple. Wrapping a view or noncopyable field inherits its borrowing, copying, and escape restrictions without granting ordinary-generic or cross-execution permissions. The first owned implementation must support currently admitted storable fields, strings, arrays, Atomic handles, and nested tuples. Unsupported view/resource combinations reject explicitly and remain obligations of §2.4/§2.14. The current parser represents at most 255 type fields: 256 requires an explicit bounded rejection, never truncation or acceptance of a different type. This temporary implementation bound is not a permanent language restriction.
+
 #### Worked Examples
 
 ```xray
@@ -5107,6 +5111,10 @@ Hashable and a same-named user interface do not supply this proof. Equal grants 
 construction authority. Nominal/derive, nullable, Map/Set/JSON and other domains require
 separate admission; unimplemented operations reject explicitly. See §17.33.
 
+**Closed Atomic type predicates (frozen 2026-10-05; implementation pending)**: canonical prelude `AtomicValue` is exactly `{i64, f64, bool}`, `AtomicNumber` exactly `{i64, f64}`, and `AtomicBoolean` exactly `{bool}`. Number/Boolean entail Value, and Value entails Sendable. They grant no extra interface, member, reflection or construction permission, or implicit Equal proof. Users cannot implement these canonical predicates; visible same-named user declarations resolve normally and acquire no built-in identity.
+
+Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a Value proof at definition time. Method `where T: AtomicNumber` governs add/sub/fetchAdd/fetchSub; `where T: AtomicBoolean` governs toggle without restricting the other methods. Reuse existing `<T: C>`, `&`, and method-where syntax rather than introducing union constraints. Unused definitions with unconstrained `T` reject too. Instantiation and description queries cannot supply missing proofs. Specialize Checked content and reverify it; ordinary instances exist before Program sealing.
+
 **Built-in constraint interfaces**:
 
 | Interface | Meaning |
@@ -5753,6 +5761,30 @@ enum Ordering {
 ```
 
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
+
+**Complete family contract (frozen 2026-10-05; the current fixed i64 subset is not a complete implementation)**: `Atomic<T>` uses the closed AtomicValue/Number/Boolean proofs in §9.2. Handle copies share one synchronization identity. Each constructor creates an independent object, including separate module initializations of separate Instances. Construction and owned results may allocate. Value operations promise lock freedom, not wait freedom, and have no mutex fallback. A provider must freshly compile and run `atomic_is_lock_free` on an actual aligned cell and verify layout/ABI; unsupported providers reject explicitly rather than relying only on `ATOMIC_*_LOCK_FREE == 2`.
+
+| Operation | Legal memory orders |
+|---|---|
+| load | Relaxed / Acquire / SeqCst |
+| store | Relaxed / Release / SeqCst |
+| add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | All five Ordering variants |
+
+Omission or a valid None selects SeqCst. Admit the exact prelude Ordering declaration and variant identity, never a spelling, integer or user backing value. Reject statically known invalid load/store orders in Checked. A dynamic invalid order terminates as CALL_BAD_ARGUMENT after evaluating the receiver and all arguments once in their original order, before any atomic access: fault detail is zero, no result is published and atomic state is unchanged. This terminal state is neither ordinary Error nor panic and is not consumed by a protected panic handler; existing initializer stickiness and cleanup apply. Forged variants reject at value admission. Never weaken an order, accept an unknown tag or pass an invalid C11 order to a provider. Existing structural RUN_BAD_ARGUMENT→CALL_BAD_STATE remains unchanged; invalid Atomic ordering needs a separate reason and exact mapping.
+
+compareExchange is strong CAS and returns a real `(T, bool)` Tuple without visible spurious failure. One ordering determines the success/failure pair:
+
+| ordering | Success | Failure |
+|---|---|---|
+| Relaxed | Relaxed | Relaxed |
+| Acquire | Acquire | Acquire |
+| Release | Release | Relaxed |
+| AcquireRelease | AcquireRelease | Acquire |
+| SeqCst | SeqCst | SeqCst |
+
+Failure returns the actually observed old value without writing state; success returns the value before linearization. Before CAS, prepare every fallible Tuple carrier, domain, arena-retain and budget resource. Filling fields and publishing after CAS must not allocate or retain. Preparation failure leaves state unchanged. Later caller-frame failure or cancellation does not roll back a successful atomic operation.
+
+i64 addition/subtraction wraps modulo 2^64 as in §2.3.1; subtracting a MIN delta does not perform host signed negation. f64 construction/load/store/swap/CAS preserve all binary64 bits; CAS compares bits, distinguishing signed zeros and different NaN payloads while matching an identical NaN payload. Ordinary float equality is unchanged. Each f64 RMW computes its candidate with the existing software ADD/SUBTRACT kernel and CAS on u64 bits, recomputing from the latest observed value after failure. Preserve §2.3.2 ties-even, subnormals and canonical arithmetic NaNs; do not use host FPU/fenv, fuse operations or replace subtraction with addition of a negated operand. Charge and check cancellation/limits for each actual attempt without treating a later limit failure as rollback of success. toString takes one SeqCst snapshot and then produces an independently owned string with the existing bool/i64/software-f64 formatter.
 
 > `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
 
@@ -6594,6 +6626,8 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 | `toString()` | `() -> string` | Returns string representation of current value |
 
 The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. See §10.9.
+
+The complete constraints and operation admission follow §9.2/§10.9: the type requires `T: AtomicValue`; each of the four numeric methods requires method `where T: AtomicNumber`, while toggle requires `where T: AtomicBoolean`. Other methods keep the full AtomicValue domain. load/store reject invalid orders. compareExchange returns an owned real Tuple with all result resources prepared before its side effect. f64 bits/CAS and software RMW, i64 wrapping and the single-snapshot toString follow §10.9. The unconstrained declaration currently in `stdlib/types/atomic.xr` and the fixed i64 instructions still await an atomic complete-family migration; they do not establish implementation of this frozen contract.
 
 ---
 

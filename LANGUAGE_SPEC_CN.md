@@ -1295,6 +1295,10 @@ var p2 = pair(1, "x")             // (i64, string)
 - 字段访问 `t.N` 中 N **必须是字面量整数**；用变量或字符串访问是编译错误 `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`。
 - 元组**不可变**：`t.0 = v` 是编译错误。修改必须重新构造。
 
+**拥有与求值合同（2026-10-05 冻结，完整新 XIR 实施待完成）**：字段按源码从左到右各求值一次，类型保留有序字段向量；`()` 沿用 Unit，`(x,)` 与 `x` 不同。复制、保存参数、返回、字段投影取得符合字段合同的独立拥有式值，复制在 class/Atomic 同步身份边界停止；普通可复制元组不能因物理共享而允许修改字段。解构的 RHS 只求值一次，所有字段结果先准备，准备失败释放已取得的部分且不发布任何新绑定；准备完成后才发布整组绑定。调用参数和返回经过同一 Checked 类型/权限/布局与值准入，不能用无类型双返回或伪名义声明代替元组。
+
+Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。包含视图或不可复制字段时继承字段的借用、复制和逃逸限制，不能借 Tuple 包装扩大普通泛型或跨执行权限。首个拥有式实现须支持当前准入的可保存字段、string/Array/Atomic 和嵌套元组；尚未接通的视图/资源组合明确拒绝并继续承接 §2.4/§2.14，不删除这些语言目标。当前 parser 类型字段计数有 255 的实现边界，必须对 256 给出明确有界拒绝，不能截断、接受不同类型或把该临时边界写成永久语言限制。
+
 #### 完整可运行示例
 
 ```xray
@@ -5069,6 +5073,10 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 它只授同T的 ==、!= 与 assertEqual，不承诺自反性、排序、键等价、显示、成员或构造权限。
 名义/derive、nullable、Map/Set/JSON 等其余域待逐族准入，未实施者明确拒绝，见 §17.33。
 
+**Atomic 闭合类型谓词（2026-10-05 冻结，实施待完成）**：prelude 的 canonical `AtomicValue` 恰为 `{i64, f64, bool}`，`AtomicNumber` 恰为 `{i64, f64}`，`AtomicBoolean` 恰为 `{bool}`。Number/Boolean 蕴含 Value，Value 蕴含 Sendable；不额外授予接口、成员、反射、构造权限或隐含 Equal 证明。用户不能 implements 这些 canonical 谓词；可见的同名用户声明按普通名称解析，不获得内建身份。
+
+`Atomic<T: AtomicValue>` 的类型使用、构造及共有方法在定义处要求 Value 证明；add/sub/fetchAdd/fetchSub 的方法 `where T: AtomicNumber`、toggle 的 `where T: AtomicBoolean` 只约束该方法。复用 `<T: C>`、`&` 与方法 where 现有语法，无新增 union 约束语法。未调用的无约束 `T` 定义同样拒绝，不等实例化、不从描述查询补证明；Checked 上特化后复验，普通实例在 Program 封存前完成。
+
 **内置约束接口**：
 
 | 接口 | 含义 |
@@ -5710,6 +5718,30 @@ enum Ordering {
 ```
 
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
+
+**完整族合同（2026-10-05 冻结，当前固定 i64 子集不等于完整实现）**：`Atomic<T>` 使用 §9.2 的闭合 AtomicValue/Number/Boolean 证明；复制句柄共享同一个同步身份，构造器每次产生独立对象，各 Instance 的模块初始化不能共享静态对象。构造和拥有式结果可能分配；值原子操作承诺无锁，不承诺 wait-free，也不以互斥锁后备。provider 必须用真实对齐 cell 鲜编/运行 `atomic_is_lock_free` 并核布局/ABI；不支持者明确拒绝，不只检查 `ATOMIC_*_LOCK_FREE == 2`。
+
+| 操作 | 合法内存序 |
+|---|---|
+| load | Relaxed / Acquire / SeqCst |
+| store | Relaxed / Release / SeqCst |
+| add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | 五种 Ordering |
+
+省略 ordering 或合法 None 使用 SeqCst。必须是精确 prelude Ordering 声明/variant 身份，不按名字、整数或用户 backing value 准入。静态已知非法 load/store 序在 Checked 拒绝；动态非法序在 receiver 和所有实参按原顺序各一次求值后、任何原子读写前，结束为 CALL_BAD_ARGUMENT，fault detail 全零、不发布结果、不修改原子状态。此终态不属于普通 Error 或 panic，不被保护 panic handler 消费；初始化失败粘滞和清理沿既有合同。伪造 variant 在值准入先拒绝；不能降级为其他序、接受未知 tag 或将非法 C11 order 传给 provider。结构错误原 RUN_BAD_ARGUMENT→CALL_BAD_STATE 规则不变，Atomic 无效序使用独立 reason 精确接线。
+
+compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不可见虚假失败。单个 ordering 决定成功/失败序：
+
+| ordering | 成功 | 失败 |
+|---|---|---|
+| Relaxed | Relaxed | Relaxed |
+| Acquire | Acquire | Acquire |
+| Release | Release | Relaxed |
+| AcquireRelease | AcquireRelease | Acquire |
+| SeqCst | SeqCst | SeqCst |
+
+失败返回实际观察到的 old 且不写状态；成功返回线性化前 old。CAS 前必须准备所有可能失败的 Tuple carrier/domain/arena retain/预算资源，CAS 后填字段和发布不得再分配或 retain。准备失败状态不变；CAS 成功之后的父帧失败或取消不能回滚已发生的操作。
+
+i64 加减沿 §2.3.1 的模 2^64 环绕；MIN delta 的 sub 不执行宿主有符号取负。f64 构造/load/store/swap/CAS 保完整 binary64 位型，CAS 按 bits 比较：正负零不同，同 payload NaN 可匹配，不同 payload 不匹配；不改变普通浮点相等规则。f64 RMW 每次用当前软件浮点核的 ADD/SUBTRACT 计算候选，再对 u64 bits CAS；失败须按最新 observed 重新计算，沿 §2.3.2 的 ties-even、次正规数与 canonical 算术 NaN，不用宿主 FPU/fenv、不融合或用加负数替代减法。每次实际尝试收费并检查取消/限额；成功后不把限额失败当作原子回滚。toString 取一次 SeqCst 快照，之后按既有 bool/i64/软件 f64 格式化产生独立拥有式 string。
 
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
 
@@ -6538,6 +6570,8 @@ print(len(empty))           // 0
 | `toString()` | `() -> string` | 返回当前值的字符串表示 |
 
 `ord?` 参数接受 `Ordering` 枚举，默认 `Ordering.SeqCst`。详见 §10.9。
+
+整族约束与操作准入按 §9.2/§10.9：类型声明要求 `T: AtomicValue`，数字四方法分别要求方法 `where T: AtomicNumber`，toggle 要求 `where T: AtomicBoolean`，其他方法不因这些附加条件缩小 AtomicValue 域。load/store 不接受非法内存序；compareExchange 返回拥有式真 Tuple，副作用前完成全部结果资源准备；f64 位型/CAS 与软件 RMW、i64 环绕和一次快照 toString 均沿 §10.9。当前 `stdlib/types/atomic.xr` 的无约束声明及固定 i64 指令仍待完整原子迁移，不代表本冻结合同已实现。
 
 ---
 

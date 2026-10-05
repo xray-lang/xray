@@ -417,6 +417,30 @@ enum Ordering {
 
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
+**完整族合同（2026-10-05 冻结，当前固定 i64 子集不等于完整实现）**：`Atomic<T>` 使用 §9.2 的闭合 AtomicValue/Number/Boolean 证明；复制句柄共享同一个同步身份，构造器每次产生独立对象，各 Instance 的模块初始化不能共享静态对象。构造和拥有式结果可能分配；值原子操作承诺无锁，不承诺 wait-free，也不以互斥锁后备。provider 必须用真实对齐 cell 鲜编/运行 `atomic_is_lock_free` 并核布局/ABI；不支持者明确拒绝，不只检查 `ATOMIC_*_LOCK_FREE == 2`。
+
+| 操作 | 合法内存序 |
+|---|---|
+| load | Relaxed / Acquire / SeqCst |
+| store | Relaxed / Release / SeqCst |
+| add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | 五种 Ordering |
+
+省略 ordering 或合法 None 使用 SeqCst。必须是精确 prelude Ordering 声明/variant 身份，不按名字、整数或用户 backing value 准入。静态已知非法 load/store 序在 Checked 拒绝；动态非法序在 receiver 和所有实参按原顺序各一次求值后、任何原子读写前，结束为 CALL_BAD_ARGUMENT，fault detail 全零、不发布结果、不修改原子状态。此终态不属于普通 Error 或 panic，不被保护 panic handler 消费；初始化失败粘滞和清理沿既有合同。伪造 variant 在值准入先拒绝；不能降级为其他序、接受未知 tag 或将非法 C11 order 传给 provider。结构错误原 RUN_BAD_ARGUMENT→CALL_BAD_STATE 规则不变，Atomic 无效序使用独立 reason 精确接线。
+
+compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不可见虚假失败。单个 ordering 决定成功/失败序：
+
+| ordering | 成功 | 失败 |
+|---|---|---|
+| Relaxed | Relaxed | Relaxed |
+| Acquire | Acquire | Acquire |
+| Release | Release | Relaxed |
+| AcquireRelease | AcquireRelease | Acquire |
+| SeqCst | SeqCst | SeqCst |
+
+失败返回实际观察到的 old 且不写状态；成功返回线性化前 old。CAS 前必须准备所有可能失败的 Tuple carrier/domain/arena retain/预算资源，CAS 后填字段和发布不得再分配或 retain。准备失败状态不变；CAS 成功之后的父帧失败或取消不能回滚已发生的操作。
+
+i64 加减沿 §2.3.1 的模 2^64 环绕；MIN delta 的 sub 不执行宿主有符号取负。f64 构造/load/store/swap/CAS 保完整 binary64 位型，CAS 按 bits 比较：正负零不同，同 payload NaN 可匹配，不同 payload 不匹配；不改变普通浮点相等规则。f64 RMW 每次用当前软件浮点核的 ADD/SUBTRACT 计算候选，再对 u64 bits CAS；失败须按最新 observed 重新计算，沿 §2.3.2 的 ties-even、次正规数与 canonical 算术 NaN，不用宿主 FPU/fenv、不融合或用加负数替代减法。每次实际尝试收费并检查取消/限额；成功后不把限额失败当作原子回滚。toString 取一次 SeqCst 快照，之后按既有 bool/i64/软件 f64 格式化产生独立拥有式 string。
+
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
 
 ```xray
@@ -897,6 +921,30 @@ enum Ordering {
 ```
 
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
+
+**Complete family contract (frozen 2026-10-05; the current fixed i64 subset is not a complete implementation)**: `Atomic<T>` uses the closed AtomicValue/Number/Boolean proofs in §9.2. Handle copies share one synchronization identity. Each constructor creates an independent object, including separate module initializations of separate Instances. Construction and owned results may allocate. Value operations promise lock freedom, not wait freedom, and have no mutex fallback. A provider must freshly compile and run `atomic_is_lock_free` on an actual aligned cell and verify layout/ABI; unsupported providers reject explicitly rather than relying only on `ATOMIC_*_LOCK_FREE == 2`.
+
+| Operation | Legal memory orders |
+|---|---|
+| load | Relaxed / Acquire / SeqCst |
+| store | Relaxed / Release / SeqCst |
+| add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | All five Ordering variants |
+
+Omission or a valid None selects SeqCst. Admit the exact prelude Ordering declaration and variant identity, never a spelling, integer or user backing value. Reject statically known invalid load/store orders in Checked. A dynamic invalid order terminates as CALL_BAD_ARGUMENT after evaluating the receiver and all arguments once in their original order, before any atomic access: fault detail is zero, no result is published and atomic state is unchanged. This terminal state is neither ordinary Error nor panic and is not consumed by a protected panic handler; existing initializer stickiness and cleanup apply. Forged variants reject at value admission. Never weaken an order, accept an unknown tag or pass an invalid C11 order to a provider. Existing structural RUN_BAD_ARGUMENT→CALL_BAD_STATE remains unchanged; invalid Atomic ordering needs a separate reason and exact mapping.
+
+compareExchange is strong CAS and returns a real `(T, bool)` Tuple without visible spurious failure. One ordering determines the success/failure pair:
+
+| ordering | Success | Failure |
+|---|---|---|
+| Relaxed | Relaxed | Relaxed |
+| Acquire | Acquire | Acquire |
+| Release | Release | Relaxed |
+| AcquireRelease | AcquireRelease | Acquire |
+| SeqCst | SeqCst | SeqCst |
+
+Failure returns the actually observed old value without writing state; success returns the value before linearization. Before CAS, prepare every fallible Tuple carrier, domain, arena-retain and budget resource. Filling fields and publishing after CAS must not allocate or retain. Preparation failure leaves state unchanged. Later caller-frame failure or cancellation does not roll back a successful atomic operation.
+
+i64 addition/subtraction wraps modulo 2^64 as in §2.3.1; subtracting a MIN delta does not perform host signed negation. f64 construction/load/store/swap/CAS preserve all binary64 bits; CAS compares bits, distinguishing signed zeros and different NaN payloads while matching an identical NaN payload. Ordinary float equality is unchanged. Each f64 RMW computes its candidate with the existing software ADD/SUBTRACT kernel and CAS on u64 bits, recomputing from the latest observed value after failure. Preserve §2.3.2 ties-even, subnormals and canonical arithmetic NaNs; do not use host FPU/fenv, fuse operations or replace subtraction with addition of a negated operand. Charge and check cancellation/limits for each actual attempt without treating a later limit failure as rollback of success. toString takes one SeqCst snapshot and then produces an independently owned string with the existing bool/i64/software-f64 formatter.
 
 > `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
 

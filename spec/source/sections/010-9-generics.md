@@ -91,6 +91,10 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 它只授同T的 ==、!= 与 assertEqual，不承诺自反性、排序、键等价、显示、成员或构造权限。
 名义/derive、nullable、Map/Set/JSON 等其余域待逐族准入，未实施者明确拒绝，见 §17.33。
 
+**Atomic 闭合类型谓词（2026-10-05 冻结，实施待完成）**：prelude 的 canonical `AtomicValue` 恰为 `{i64, f64, bool}`，`AtomicNumber` 恰为 `{i64, f64}`，`AtomicBoolean` 恰为 `{bool}`。Number/Boolean 蕴含 Value，Value 蕴含 Sendable；不额外授予接口、成员、反射、构造权限或隐含 Equal 证明。用户不能 implements 这些 canonical 谓词；可见的同名用户声明按普通名称解析，不获得内建身份。
+
+`Atomic<T: AtomicValue>` 的类型使用、构造及共有方法在定义处要求 Value 证明；add/sub/fetchAdd/fetchSub 的方法 `where T: AtomicNumber`、toggle 的 `where T: AtomicBoolean` 只约束该方法。复用 `<T: C>`、`&` 与方法 where 现有语法，无新增 union 约束语法。未调用的无约束 `T` 定义同样拒绝，不等实例化、不从描述查询补证明；Checked 上特化后复验，普通实例在 Program 封存前完成。
+
 **内置约束接口**：
 
 | 接口 | 含义 |
@@ -416,6 +420,10 @@ Hashable and a same-named user interface do not supply this proof. Equal grants 
 ==, != and assertEqual, without reflexivity, ordering, key equivalence, display, member or
 construction authority. Nominal/derive, nullable, Map/Set/JSON and other domains require
 separate admission; unimplemented operations reject explicitly. See §17.33.
+
+**Closed Atomic type predicates (frozen 2026-10-05; implementation pending)**: canonical prelude `AtomicValue` is exactly `{i64, f64, bool}`, `AtomicNumber` exactly `{i64, f64}`, and `AtomicBoolean` exactly `{bool}`. Number/Boolean entail Value, and Value entails Sendable. They grant no extra interface, member, reflection or construction permission, or implicit Equal proof. Users cannot implement these canonical predicates; visible same-named user declarations resolve normally and acquire no built-in identity.
+
+Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a Value proof at definition time. Method `where T: AtomicNumber` governs add/sub/fetchAdd/fetchSub; `where T: AtomicBoolean` governs toggle without restricting the other methods. Reuse existing `<T: C>`, `&`, and method-where syntax rather than introducing union constraints. Unused definitions with unconstrained `T` reject too. Instantiation and description queries cannot supply missing proofs. Specialize Checked content and reverify it; ordinary instances exist before Program sealing.
 
 **Built-in constraint interfaces**:
 

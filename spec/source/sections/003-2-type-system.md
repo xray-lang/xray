@@ -708,6 +708,10 @@ var p2 = pair(1, "x")             // (i64, string)
 - 字段访问 `t.N` 中 N **必须是字面量整数**；用变量或字符串访问是编译错误 `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`。
 - 元组**不可变**：`t.0 = v` 是编译错误。修改必须重新构造。
 
+**拥有与求值合同（2026-10-05 冻结，完整新 XIR 实施待完成）**：字段按源码从左到右各求值一次，类型保留有序字段向量；`()` 沿用 Unit，`(x,)` 与 `x` 不同。复制、保存参数、返回、字段投影取得符合字段合同的独立拥有式值，复制在 class/Atomic 同步身份边界停止；普通可复制元组不能因物理共享而允许修改字段。解构的 RHS 只求值一次，所有字段结果先准备，准备失败释放已取得的部分且不发布任何新绑定；准备完成后才发布整组绑定。调用参数和返回经过同一 Checked 类型/权限/布局与值准入，不能用无类型双返回或伪名义声明代替元组。
+
+Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。包含视图或不可复制字段时继承字段的借用、复制和逃逸限制，不能借 Tuple 包装扩大普通泛型或跨执行权限。首个拥有式实现须支持当前准入的可保存字段、string/Array/Atomic 和嵌套元组；尚未接通的视图/资源组合明确拒绝并继续承接 §2.4/§2.14，不删除这些语言目标。当前 parser 类型字段计数有 255 的实现边界，必须对 256 给出明确有界拒绝，不能截断、接受不同类型或把该临时边界写成永久语言限制。
+
 #### 完整可运行示例
 
 ```xray
@@ -1801,6 +1805,10 @@ var p2 = pair(1, "x")             // (i64, string)
 - A **single-element tuple** must use a trailing comma `(x,)` — `(x)` without a comma is a grouping parenthesis (a plain expression).
 - In field access `t.N`, N **must be an integer literal**; using a variable or string is the compile error `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`.
 - Tuples are **immutable**: `t.0 = v` is a compile error. To modify, build a new tuple.
+
+**Ownership and evaluation contract (frozen 2026-10-05; complete new XIR implementation pending)**: evaluate fields once each, left to right, and preserve their ordered type vector. `()` remains Unit; `(x,)` differs from `x`. Copying, saving parameters, returning, and projecting a field obtain independently owned values according to each field's contract. Copying stops at class and Atomic synchronization identities. Physical sharing does not permit field mutation. Destructuring evaluates its RHS once and prepares every field result before publishing the complete set of bindings; preparation failure releases partial results and publishes no new binding. Arguments and returns use the same Checked type, permission, layout, and value admission; untyped multiple returns or fabricated nominal declarations do not represent tuples.
+
+Sendable is the conjunction of all fields; this family does not automatically extend Equal to Tuple. Wrapping a view or noncopyable field inherits its borrowing, copying, and escape restrictions without granting ordinary-generic or cross-execution permissions. The first owned implementation must support currently admitted storable fields, strings, arrays, Atomic handles, and nested tuples. Unsupported view/resource combinations reject explicitly and remain obligations of §2.4/§2.14. The current parser represents at most 255 type fields: 256 requires an explicit bounded rejection, never truncation or acceptance of a different type. This temporary implementation bound is not a permanent language restriction.
 
 #### Worked Examples
 

@@ -161,6 +161,64 @@ static void fixed_vectors(void) {
     CHECK(!memcmp(v->bytes, native_bytes, v->size));
     xr_compile_native_artifact_free(artifact); CHECK(!physical && !active);
 }
+static void original_six_byte_identity(void) {
+    static const uint8_t bytes[] = {0x7f, 'X', 'R', 'A', 'O', 'T'};
+    /* Independent SHA-256 of the six bytes; these bytes authorize no execution. */
+    static const uint8_t expected_digest[32] = {
+        0x02, 0x50, 0xc2, 0x7a, 0x69, 0xda, 0x9a, 0xef,
+        0x28, 0x60, 0x71, 0x7a, 0x7a, 0xda, 0x85, 0x40,
+        0x12, 0xba, 0x7c, 0x75, 0x64, 0xf6, 0x9f, 0xc5,
+        0xb3, 0xb6, 0x4b, 0x8a, 0x30, 0x63, 0xc9, 0xc9
+    };
+    const size_t count = sizeof(bytes);
+    const uint64_t seal_work = artifact_seal_work() - 2*(sizeof(native_bytes)-count);
+    const uint64_t verify_work = artifact_verify_work() - (sizeof(native_bytes)-count);
+    const uint64_t initial_work = 1 + binding_work() + input_seal_work() + seal_work;
+    const uint64_t allocation = sizeof(XrCompileResources) + sizeof(CompileAllocation) +
+        native_owner_header() + count;
+    const XrCompileResourceLimits limits = {allocation, allocation,
+        initial_work + 5*verify_work + validation_work()};
+    reset();
+    XrCompileResources *r = NULL;
+    CHECK(xr_compile_resources_new(&limits, &r) == XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext ctx = context(r);
+    XrToolchainInput tc = request();
+    XrToolchainBinding binding;
+    CHECK(xr_compile_toolchain_binding_build(r, &tc, &binding) == XR_TOOLCHAIN_BINDING_OK);
+    XrXirNativeInput raw = native_request(binding), expected;
+    CHECK(xr_compile_native_input_seal(&ctx, &raw, &expected) == XR_XIR_OK);
+    XrXirNativeArtifact *artifact = NULL;
+    CHECK(xr_compile_native_artifact_seal(&ctx, &expected, bytes, count, count,
+        &artifact) == XR_XIR_OK);
+    CHECK(stats(r).work == initial_work && stats(r).allocation_count == 2 && attempts == 2);
+    CHECK(stats(r).allocated_bytes == allocation && stats(r).peak_bytes == allocation);
+    const XrXirNativeArtifactView *view = xr_compile_native_artifact_view(artifact);
+    CHECK(view && view->size == count && view->bytes != bytes);
+    CHECK(!memcmp(view->bytes, bytes, count));
+    CHECK(!memcmp(view->native_digest.bytes, expected_digest, sizeof(expected_digest)));
+    CHECK(xr_compile_native_artifact_verify(artifact, &expected, count) == XR_XIR_OK);
+    CHECK(stats(r).work == initial_work + verify_work);
+    uint8_t *owned = (uint8_t *)view->bytes;
+    owned[1] ^= 1;
+    CHECK(xr_compile_native_artifact_verify(artifact, &expected, count) == XR_XIR_BAD_STRUCTURE);
+    owned[1] ^= 1;
+    CHECK(xr_compile_native_artifact_verify(artifact, &expected, count) == XR_XIR_OK);
+    XrXirNativeInput wrong = expected;
+    wrong.toolchain.sysroot_id.bytes[0] ^= 1;
+    CHECK(xr_compile_toolchain_binding_validate(r, &wrong.toolchain) ==
+        XR_TOOLCHAIN_BINDING_BAD_STRUCTURE);
+    CHECK(xr_compile_native_artifact_verify(artifact, &wrong, count) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!memcmp(&view->input, &expected, sizeof(expected)) && !memcmp(view->bytes, bytes, count));
+    /* The receiving artifact must keep the ledger alive after the producer dies. */
+    memset(&raw, 0, sizeof(raw)); memset(&ctx, 0, sizeof(ctx));
+    memset(&binding, 0, sizeof(binding)); memset(&tc, 0, sizeof(tc));
+    xr_compile_resources_release(r);
+    CHECK(xr_compile_native_artifact_verify(artifact, &expected, count) == XR_XIR_OK);
+    CHECK(!memcmp(view->bytes, bytes, count));
+    xr_compile_native_artifact_free(artifact);
+    CHECK(!physical && !active);
+    puts("original six-byte identity: positive, bit1, wrong sysroot, producer lifetime passed");
+}
 static void binding_boundaries(void) {
     XrToolchainInput in = request(); XrToolchainBinding golden;
     reset(); XrCompileResources *r = owner(UINT64_MAX);
@@ -422,6 +480,7 @@ static void guard_pages(void) {
 #endif
 int main(void) {
     fixed_vectors(); binding_boundaries(); resources_and_oom(); native_rejections();
+    original_six_byte_identity();
 #if defined(XR_OS_WINDOWS)
     guard_pages();
 #endif
