@@ -136,6 +136,7 @@ static bool target_commands(XrXirTargetSnapshot *snapshot, const XrXirTargetSnap
             input->environment_count > XTC_XIR_TARGET_ARGUMENT_LIMIT ||
             (input->environment_count && !input->environment) || !input->timeout_ms ||
             !input->output_limit || input->output_limit >= SIZE_MAX ||
+            (input->completion_policy != XR_PROC_COMPLETE_TREE && input->completion_policy != XR_PROC_COMPLETE_ROOT) ||
             (input->image_mode != XR_PROC_IMAGES_NONE && input->image_mode != XR_PROC_IMAGES_WINDOWS_TREE))
             return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
         output->executable = target_command_path(snapshot, input->executable);
@@ -143,9 +144,9 @@ static bool target_commands(XrXirTargetSnapshot *snapshot, const XrXirTargetSnap
         output->cwd = target_command_path(snapshot, input->cwd);
         if (!output->cwd) return false;
         if (!xtc_xir_target_work(snapshot, sizeof(output->timeout_ms) + sizeof(output->output_limit) +
-            sizeof(output->image_mode))) return false;
+            sizeof(output->image_mode) + sizeof(output->completion_policy))) return false;
         output->timeout_ms = input->timeout_ms; output->output_limit = input->output_limit;
-        output->image_mode = input->image_mode;
+        output->image_mode = input->image_mode; output->completion_policy = input->completion_policy;
         const char **argv = xtc_xir_target_allocate(snapshot, ((size_t)input->argc + 1) * sizeof(*argv));
         if (!output->cwd || !argv) return false;
         output->argv = argv; output->argc = input->argc;
@@ -233,7 +234,7 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
     if (!target_family_identity(snapshot, true, facts->provider_identity) ||
         !target_family_identity(snapshot, false, facts->sysroot_identity)) return false;
     XrSHA256Context hash; xr_sha256_init(&hash);
-    const char domain[] = "xray:xir-target-snapshot:v2";
+    const char domain[] = "xray:xir-target-snapshot:v3";
     if (!target_hash_bytes(snapshot, &hash, domain, sizeof(domain) - 1) ||
         !target_u32(snapshot, &hash, facts->schema) || !target_u32(snapshot, &hash, facts->provider) ||
         !target_u32(snapshot, &hash, facts->crt) || !target_u32(snapshot, &hash, facts->dialect) ||
@@ -254,7 +255,8 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
         }
         if (!target_u32(snapshot, &hash, command->timeout_ms) ||
             !target_u64(snapshot, &hash, command->output_limit) ||
-            !target_u32(snapshot, &hash, command->image_mode)) return false;
+            !target_u32(snapshot, &hash, command->image_mode) ||
+            !target_u32(snapshot, &hash, command->completion_policy)) return false;
     }
     if (!target_u32(snapshot, &hash, facts->file_count)) return false;
     for (uint32_t i = 0; i < facts->file_count; ++i)
@@ -280,7 +282,7 @@ XR_FUNC XrXirTargetStatus xtc_xir_target_snapshot_capture(const XrXirTargetSnaps
         1, sizeof(XrXirTargetSnapshot), &allocation));
     if (status != XR_XIR_TARGET_OK) return status;
     XrXirTargetSnapshot *snapshot = allocation; snapshot->resources = request->resources;
-    snapshot->facts = (XrXirTargetFacts){2, request->provider, request->crt, request->dialect,
+    snapshot->facts = (XrXirTargetFacts){3, request->provider, request->crt, request->dialect,
         request->file_count, request->command_count, NULL, {0}, {0}, {0}};
     snapshot->facts.triple = xtc_xir_target_text(snapshot, request->triple);
     int triple_order = 0;

@@ -33,6 +33,10 @@ static void fixture_row(AdmissionFixture *f,unsigned stage,XrXirInvocationFileKi
     XrXirInvocation *i=f->operation->invocation;uint32_t n=i->facts.file_count++;
     i->files[n].facts=(XrXirInvocationFile){(XrXirInvocationStage)stage,kind,path,4,{1}};
 }
+/* Constructed admission commands are never executed by this fault fixture. */
+static XrOsProcStatus fixture_unexpected_image(void *context,const XrProcImageEvent *event) {
+    (void)context;(void)event;return XR_PROC_INVALID_ARGUMENT;
+}
 static AdmissionFixture fixture_new(const char *path) {
     AdmissionFixture f={0}; f.resources=sdk_ledger(&sdk_unlimited);
     f.projection=fixture_alloc(f.resources,sizeof(*f.projection));
@@ -56,6 +60,8 @@ static AdmissionFixture fixture_new(const char *path) {
     for(unsigned stage=0;stage<3;++stage) {
         XrProcessSpec spec;xtc_process_spec_init(&spec,provider[stage],30000);spec.environment_source=XTC_PROCESS_ENV_EXPLICIT;
         spec.cwd="C:/fixture";spec.output_limit=4096;spec.env_count=3;
+        spec.completion_policy=XR_PROC_COMPLETE_ROOT;spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
+        spec.image_observer=(XrProcImageObserver){NULL,fixture_unexpected_image};
         spec.env_keys[0]="SystemRoot";spec.env_keys[1]="TEMP";spec.env_keys[2]="TMP";
         spec.env_values[0]="C:/Windows";spec.env_values[1]="C:/output";spec.env_values[2]="C:/output";
         unsigned count=stage==0?26:stage==1?27:19;
@@ -121,6 +127,12 @@ static void fixture_rejections(const char *path) {
         }
         fixture_failure(&f,expected);fixture_free(&f);
     }
+    /* Each prepared command must bind both completion and actual image observation. */
+    for(unsigned stage=0;stage<3;++stage)for(unsigned invalid=0;invalid<2;++invalid){
+        AdmissionFixture changed=fixture_new(path);XrProcessView *view=&changed.operation->invocation->commands[stage];
+        if(!invalid)view->completion_policy=XR_PROC_COMPLETE_TREE;else view->image_mode=XR_PROC_IMAGES_NONE;
+        fixture_failure(&changed,XTC_XIR_ADMISSION_INVALID);fixture_free(&changed);
+    }
     AdmissionFixture f=fixture_new(path);XrCompileResources *foreign=sdk_ledger(&sdk_unlimited);
     XrXirNativeArtifact *artifact=(XrXirNativeArtifact *)(uintptr_t)1;XtcXirNativeAdmissionDiagnostic d;
     size_t attempts=runtime_attempts;CHECK(fixture_admit(&f,&artifact,&d)==XTC_XIR_ADMISSION_INVALID && artifact==(void *)(uintptr_t)1);
@@ -165,7 +177,10 @@ static int admission_unit(const char *path,const char *exported,const char *json
     fixture_file(path,0);AdmissionFixture f=fixture_new(path);XrCompileResourceStats before,after;
     CHECK(xr_compile_resources_stats(f.resources,&before)==XR_COMPILE_RESOURCE_OK);
     XrXirNativeArtifact *artifact=NULL;XtcXirNativeAdmissionDiagnostic d;size_t attempts=runtime_attempts;
-    utf_calls=0;compare_calls=0;capture_work=true;CHECK(fixture_admit(&f,&artifact,&d)==XTC_XIR_ADMISSION_OK);capture_work=false;
+    utf_calls=0;compare_calls=0;capture_work=true;
+    XtcXirNativeAdmissionStatus initial=fixture_admit(&f,&artifact,&d);
+    if(initial!=XTC_XIR_ADMISSION_OK)fprintf(stderr,"fixture initial status=%u domain=%u code=%d stage=%u\n",initial,d.domain,d.code,d.stage);
+    CHECK(initial==XTC_XIR_ADMISSION_OK);capture_work=false;
     CHECK(xr_compile_resources_stats(f.resources,&after)==XR_COMPILE_RESOURCE_OK);
     uint64_t work=after.work-before.work,allocated=after.allocated_bytes-before.allocated_bytes,peak=after.peak_bytes;
     unsigned utf_count=utf_calls,compare_count=compare_calls;

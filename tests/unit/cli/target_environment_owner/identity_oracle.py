@@ -25,16 +25,16 @@ with tempfile.TemporaryDirectory(prefix='xray-command-v2-') as temporary:
         path.write_bytes(data)
     commands = [
         ('Z:/unopened/编译器.exe', 'Z:/unopened/work', ['display-name', '', '/std:c11'],
-         [('=C:', 'C:/frozen'), ('中文', '😄'), ('empty', '')], 3001, 4294967297, 1),
-        ('Z:/another.exe', 'Z:/', ['different-argv0'], [], 1, 1, 0),
+         [('=C:', 'C:/frozen'), ('中文', '😄'), ('empty', '')], 3001, 4294967297, 1, 1),
+        ('Z:/another.exe', 'Z:/', ['different-argv0'], [], 1, 1, 0, 0),
     ]
-    rows = ['xray-target-command-v2', '3', '3', f'7\t{source}', f'4\t{header}',
+    rows = ['xray-target-command-v3', '3', '3', f'7\t{source}', f'4\t{header}',
             f'1\t{compiler}', str(len(commands))]
-    for executable, cwd, argv, env, timeout, limit, mode in commands:
+    for executable, cwd, argv, env, timeout, limit, mode, completion in commands:
         rows += [executable, cwd, str(len(argv)), *argv, str(len(env))]
         for key, value in env:
             rows += [key, value]
-        rows += [str(timeout), str(limit), str(mode)]
+        rows += [str(timeout), str(limit), str(mode), str(completion)]
     manifest = root / 'request.txt'
     manifest.write_text('\n'.join(rows) + '\n', encoding='utf-8', newline='\n')
     p = subprocess.run([str(exe), '--diagnostic-lease', str(manifest)], input=b'\n',
@@ -63,16 +63,16 @@ with tempfile.TemporaryDirectory(prefix='xray-command-v2-') as temporary:
         selected = [f for f in files if predicate(f[0])]
         encoded = domain + u32(policy) + u32(len(selected)) + b''.join(map(file_frame, selected))
         assert hashlib.sha256(encoded).digest() == identities[index]
-    encoded = b'xray:xir-target-snapshot:v2' + struct.pack('<4I', 2, 3, 2, 11)
+    encoded = b'xray:xir-target-snapshot:v3' + struct.pack('<4I', 3, 3, 2, 11)
     encoded += string('x86_64-windows-msvc') + identities[0] + identities[1] + u32(len(commands))
-    for executable, cwd, argv, env, timeout, limit, mode in commands:
+    for executable, cwd, argv, env, timeout, limit, mode, completion in commands:
         encoded += string(executable) + string(cwd) + u32(len(argv)) + b''.join(map(string, argv))
         encoded += u32(len(env)) + b''.join(string(k) + string(v) for k, v in env)
-        encoded += u32(timeout) + u64(limit) + u32(mode)
+        encoded += u32(timeout) + u64(limit) + u32(mode) + u32(completion)
     encoded += u32(len(files)) + b''.join(map(file_frame, files))
     assert hashlib.sha256(encoded).digest() == identities[2]
-    assert hashlib.sha256(encoded.replace(b'snapshot:v2', b'snapshot:v1', 1)).digest() != identities[2]
-    for old in [rows[1:], ['xray-target-command-v1', *rows[1:]]]:
+    assert hashlib.sha256(encoded.replace(b'snapshot:v3', b'snapshot:v2', 1)).digest() != identities[2]
+    for old in [rows[1:], ['xray-target-command-v1', *rows[1:]], ['xray-target-command-v2', *rows[1:]]]:
         manifest.write_text('\n'.join(old) + '\n', encoding='utf-8', newline='\n')
         rejected = subprocess.run([str(exe), '--diagnostic-lease', str(manifest)],
                                   capture_output=True, timeout=30)

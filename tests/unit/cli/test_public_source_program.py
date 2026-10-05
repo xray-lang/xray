@@ -23,7 +23,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     golden = (fixture / 'root.out').read_bytes()
     env = dict(os.environ, XRAY_STDLIB_PATH=str(args.root / 'stdlib'), NO_COLOR='1')
-    record = dict(status='RUNNING', commands=[], scope='Public VM/check/test/C output and strict MSVC C11 consumption; ordinary native admission/publication and interactive TTY NOT_RUN')
+    record = dict(status='RUNNING', commands=[], scope='Public VM/check/test/C output, ordinary native publication and strict MSVC C11 consumption; interactive TTY NOT_RUN')
     libraries = [args.sdk / 'lib' / name for name in (
         'xray_compile_resources.lib', 'xray_xir_admission.lib', 'xray_xir_declarations.lib',
         'xray_xir_scalar.lib', 'xray_xir_runtime_host.lib')]
@@ -116,12 +116,16 @@ def main():
     run('link', [args.linker, '/nologo', '/incremental:no', '/out:' + str(executable),
                  *objects, *libraries, 'kernel32.lib', '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
     run('native-c-consumer', [executable], stdout=golden, stderr=b'')
+    published = args.output / 'published-program.exe'
+    run('public-native-build', [args.cli, 'build', fixture / 'root.xr', '-o', published], stderr=b'')
+    run('public-native-program', [published], stdout=golden, stderr=b'')
     record['generated_artifacts'] = [fact(path) for path in [generated, *objects, executable]]
+    record['generated_artifacts'].append(fact(published))
     record['inputs_after'] = [fact(path) for path in inputs]
     assert record['inputs_before'] == record['inputs_after'], 'Recorded inputs changed during qualification'
     record['status'] = 'PASS'
     save()
-    print('Public four-module VM/check/test/C product and strict native byte oracles PASS')
+    print('Public four-module VM/check/test/C/native product and independent byte oracles PASS')
 
 
 if __name__ == '__main__':

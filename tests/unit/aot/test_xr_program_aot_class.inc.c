@@ -293,7 +293,9 @@ static void test_class_ref_coroutine_frame_root(void) {
 
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    XrBackendStatus emission = xr_backend_ir_emit_c(ir, false, &generated, &diagnostic);
+    XrBackendStatus emission = xr_compile_backend_ir_emit_c(
+        ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u}, &generated,
+        &diagnostic);
     if (emission != XR_BACKEND_OK)
         fprintf(stderr, "class ref coroutine emission failed: status=%s op=%u f=%u b=%u i=%u\n",
                 xr_backend_status_name(emission), diagnostic.operation_id,
@@ -561,7 +563,9 @@ static void write_compound_owned_drop_fixture(const char *path, const XrTargetPr
     XrValidatedProgram *program = build_compound_owned_drop_program();
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, NULL) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output != NULL);
     REQUIRE(fputs("#include <stdlib.h>\n#include <stdio.h>\n"
@@ -624,7 +628,9 @@ static void require_class_field_finalization_lowering(const XrTargetProfile *pro
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     char drop[96];
     (void) snprintf(drop, sizeof(drop),
                     "xr_aot_class_drop_%u(xr_ctx, value->f0, UINT32_C(2));",
@@ -757,7 +763,10 @@ static bool write_class_native_source(const char *path, bool record) {
     XrBackendIR *ir = profile ? build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE) : NULL;
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    bool written = ir && xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK;
+    bool written =
+        ir && xr_compile_backend_ir_emit_c(
+                  ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                  &generated, &diagnostic) == XR_BACKEND_OK;
     FILE *output = written ? fopen(path, "wb") : NULL;
     if (output) {
         written = fwrite(generated.bytes, 1u, generated.size, output) == generated.size &&

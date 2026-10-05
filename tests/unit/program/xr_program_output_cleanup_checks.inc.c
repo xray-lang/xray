@@ -129,8 +129,14 @@ static void assert_output_initializer_native(const XrValidatedProgram *program,
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic), XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_binding_verify(ir, &diagnostic));
     XrGeneratedC generated = {0}, repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic), XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &diagnostic),
+                  XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     const char *path = source_fixture_output_path(fixture_id);

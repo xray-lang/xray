@@ -40,6 +40,8 @@ typedef struct XrXirTargetCommandFacts {
     uint64_t output_limit;
     /* Stable descriptive values: 0 = NONE, 1 = WINDOWS_TREE. No callback. */
     uint32_t image_mode;
+    /* 0 waits for natural tree completion; 1 revokes execution after root EXIT. */
+    uint32_t completion_policy;
 } XrXirTargetCommandFacts;
 struct XrXirImageCollector;
 typedef struct XrXirTargetSnapshotRequest {

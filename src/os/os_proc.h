@@ -70,6 +70,11 @@ XR_FUNC XrOsProcStatus xr_proc_last_error(void);
 typedef enum XrProcImageMode {
     XR_PROC_IMAGES_NONE, XR_PROC_IMAGES_WINDOWS_TREE
 } XrProcImageMode;
+/* ROOT revokes remaining group execution after root EXIT is acknowledged.
+ * Image events and job accounting still have to drain normally. */
+typedef enum XrProcCompletionPolicy {
+    XR_PROC_COMPLETE_TREE, XR_PROC_COMPLETE_ROOT
+} XrProcCompletionPolicy;
 typedef enum XrProcImageKind {
     XR_PROC_IMAGE_EXECUTABLE, XR_PROC_IMAGE_DLL
 } XrProcImageKind;
@@ -104,6 +109,7 @@ typedef struct XrProcSpawnOptions {
     bool new_process_group;
     XrProcImageMode image_mode;
     XrProcImageObserver image_observer;
+    XrProcCompletionPolicy completion_policy;
 } XrProcSpawnOptions;
 
 typedef struct XrProcImagePumpResult {

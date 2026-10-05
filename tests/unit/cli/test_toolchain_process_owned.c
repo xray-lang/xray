@@ -302,7 +302,7 @@ static void sdk_target_process(const char *root) {
     CHECK(view.env_count == 0 && xtc_process_resources(owner) == r);
     XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_PROVIDER_SUPPORT};
     XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc, NULL, 0,
-        view.timeout_ms, view.output_limit, (uint32_t)view.image_mode};
+        view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy};
     XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
     CHECK(xtc_xir_target_snapshot_capture(&request, &target) == XR_XIR_TARGET_OK);
     xtc_process_free(owner); owner = NULL; memset(&view, 0xCD, sizeof(view));
@@ -414,7 +414,7 @@ static void hidden_environment(void) {
     for (size_t i = 0; i < view.env_count; ++i)
         environment[i] = (XrXirTargetEnvironment){view.env_keys[i], view.env_values[i]};
     XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc,
-        environment, (uint32_t)view.env_count, view.timeout_ms, view.output_limit, (uint32_t)view.image_mode};
+        environment, (uint32_t)view.env_count, view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy};
     XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_COMPILER};
     XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
     XrXirTargetSnapshot *target = NULL;
@@ -619,7 +619,7 @@ static void budgets(void) {
     XrCompileResourceStats stats;
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
     CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
-    uint64_t expected = 2 + sizeof(XrToolchainProcess) + 3 * (uint64_t)(strlen(executable) + strlen(directory) + strlen(executable) + strlen("--child")) + 4 * 3;
+    uint64_t expected = 2 + sizeof(s.completion_policy) + sizeof(XrToolchainProcess) + 3 * (uint64_t)(strlen(executable) + strlen(directory) + strlen(executable) + strlen("--child")) + 4 * 3;
     CHECK(stats.work == expected);
     xtc_process_free(p); xr_compile_resources_release(r);
     for (unsigned field = 0; field < 3; ++field) for (unsigned less = 0; less < 2; ++less) {

@@ -358,8 +358,10 @@ static bool emit_type_definitions(CBuffer *buffer, const XrBackendIR *ir) {
         return false;
     uint8_t *state =
         xr_calloc(ir->program->type_count ? ir->program->type_count : 1u, sizeof(uint8_t));
-    if (!state)
+    if (!state) {
+        buffer->failed = true;
         return false;
+    }
     bool emitted = true;
     for (uint32_t index = 0; emitted && index < ir->program->type_count; ++index)
         emitted = emit_type_definition(buffer, ir, index, state);
@@ -1205,8 +1207,10 @@ static bool emit_coroutine_frames(CBuffer *buffer, const XrBackendIR *ir) {
         return false;
     uint8_t *state =
         xr_calloc(ir->program->function_count ? ir->program->function_count : 1u, sizeof(*state));
-    if (!state)
+    if (!state) {
+        buffer->failed = true;
         return false;
+    }
     bool emitted = true;
     for (uint32_t function_id = 0u; emitted && function_id < ir->program->function_count;
          ++function_id) {
@@ -1339,8 +1343,10 @@ static bool emit_coroutine_ref_frame_transfers(CBuffer *buffer, const XrBackendI
     };
     uint8_t *transferred =
         point->live_value_count ? xr_calloc(point->live_value_count, sizeof(*transferred)) : NULL;
-    if (point->live_value_count != 0u && !transferred)
+    if (point->live_value_count != 0u && !transferred) {
+        buffer->failed = true;
         return false;
+    }
     bool emitted = true;
     for (uint32_t parameter = 0u; emitted && parameter < callee->parameter_count; ++parameter) {
         if (callee->parameter_modes[parameter] != XR_PARAM_REF)
@@ -1367,8 +1373,10 @@ static bool emit_coroutine_ref_place(CBuffer *buffer, const XrValidatedFunction 
                                      uint32_t safepoint) {
     uint32_t *fields =
         slot->projection_count ? xr_calloc(slot->projection_count, sizeof(*fields)) : NULL;
-    if (slot->projection_count != 0u && !fields)
+    if (slot->projection_count != 0u && !fields) {
+        buffer->failed = true;
         return false;
+    }
     uint32_t projected = place;
     for (uint32_t depth = 0u; depth < slot->projection_count; ++depth) {
         const XrValidatedInstruction *definition = backend_value_instruction(function, projected);
@@ -4146,18 +4154,28 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
 
 #include "xr_backend_ir_emit_exports.inc.c"
 
-XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main,
-                                     XrGeneratedC *generated_out,
-                                     XrBackendDiagnostic *diagnostic_out) {
-    return xr_backend_ir_emit_c_exports(ir, standalone_main, NULL, 0u, generated_out, diagnostic_out);
+static bool generated_c_empty(const XrGeneratedC *out) {
+    if (!out || out->bytes || out->size || out->header_bytes || out->header_size)
+        return false;
+    static const XrFingerprint zero = {{0}};
+    return !memcmp(&out->execution_id, &zero, sizeof(zero)) &&
+           !memcmp(&out->backend_id, &zero, sizeof(zero)) &&
+           !memcmp(&out->optimization_policy_id, &zero, sizeof(zero)) &&
+           !memcmp(&out->target_profile_id, &zero, sizeof(zero)) &&
+           !memcmp(&out->source_digest, &zero, sizeof(zero));
 }
 
-XrBackendStatus xr_backend_ir_emit_c_exports(const XrBackendIR *ir, bool standalone_main,
-                                             const XrBackendCExport *exports, uint32_t export_count,
-                                             XrGeneratedC *generated_out,
-                                             XrBackendDiagnostic *diagnostic_out) {
-    if (generated_out)
-        memset(generated_out, 0, sizeof(*generated_out));
+XR_FUNC XrBackendStatus xr_compile_backend_ir_emit_c(const XrBackendIR *ir,
+                                                     const XrBackendEmissionRequest *request,
+                                                     XrGeneratedC *generated_out,
+                                                     XrBackendDiagnostic *diagnostic_out) {
+    if (!request || !request->resources || !generated_c_empty(generated_out)) {
+        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
+        return XR_BACKEND_INVALID_INPUT;
+    }
+    bool standalone_main = request->standalone_main;
+    const XrBackendCExport *exports = request->exports;
+    uint32_t export_count = request->export_count;
     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OK, 0u, 0u, 0u, 0u);
     if (!ir || !ir->verified || !generated_out || !xr_backend_ir_verify(ir, diagnostic_out)) {
         if (!diagnostic_out || diagnostic_out->status == XR_BACKEND_OK)
@@ -4207,15 +4225,22 @@ XrBackendStatus xr_backend_ir_emit_c_exports(const XrBackendIR *ir, bool standal
     emitted = emitted && emit_c_exports(&buffer, &header, ir, exports, export_count);
     XiCgenVerifyStatus verified = XI_CGEN_VERIFY_PASSED;
     if (emitted && !buffer.failed)
-        verified = xi_cgen_verify_output_or_ice(buffer.bytes, buffer.size, "backend");
+        verified = xr_compile_cgen_verify_output_or_ice(request->resources, buffer.bytes,
+                                                        buffer.size, "backend");
+    if (emitted && !header.failed && verified == XI_CGEN_VERIFY_PASSED && header.size)
+        verified = xr_compile_cgen_verify_output_or_ice(request->resources, header.bytes,
+                                                        header.size, "backend_header");
     if (!emitted || buffer.failed || verified != XI_CGEN_VERIFY_PASSED) {
         xr_free(buffer.bytes);
         xr_free(header.bytes);
-        buffer.failed = buffer.failed || header.failed || verified == XI_CGEN_VERIFY_OUT_OF_MEMORY;
-        xr_backend_set_diagnostic(
-            diagnostic_out, buffer.failed ? XR_BACKEND_OUT_OF_MEMORY : XR_BACKEND_EMISSION_REJECTED,
-            0u, 0u, 0u, 0u);
-        return buffer.failed ? XR_BACKEND_OUT_OF_MEMORY : XR_BACKEND_EMISSION_REJECTED;
+        XrBackendStatus failure =
+            buffer.failed || header.failed || verified == XI_CGEN_VERIFY_OUT_OF_MEMORY
+                ? XR_BACKEND_OUT_OF_MEMORY
+            : verified == XI_CGEN_VERIFY_BUDGET       ? XR_BACKEND_RESOURCE_LIMIT
+            : verified == XI_CGEN_VERIFY_BAD_ARGUMENT ? XR_BACKEND_INVALID_INPUT
+                                                      : XR_BACKEND_EMISSION_REJECTED;
+        xr_backend_set_diagnostic(diagnostic_out, failure, 0u, 0u, 0u, 0u);
+        return failure;
     }
     generated_out->bytes = buffer.bytes;
     generated_out->size = buffer.size;

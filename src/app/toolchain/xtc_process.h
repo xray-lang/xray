@@ -52,6 +52,7 @@ typedef struct XrProcessSpec {
     uint32_t timeout_ms;
     size_t output_limit;
     XrProcImageMode image_mode;
+    XrProcCompletionPolicy completion_policy;
     /* Copied by prepare; context is borrowed only throughout each run and
      * its cleanup. Callback work and retained records use this process ledger.
      * Observations are provisional until run succeeds; the callback owns its
@@ -82,6 +83,7 @@ typedef struct XrProcessView {
     uint32_t timeout_ms;
     size_t output_limit;
     XrProcImageMode image_mode;
+    XrProcCompletionPolicy completion_policy;
 } XrProcessView;
 
 XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,

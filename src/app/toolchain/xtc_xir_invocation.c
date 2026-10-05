@@ -244,7 +244,8 @@ static bool invocation_compile_recipe(XrXirInvocation *owner,
         "/D_CRT_SECURE_NO_WARNINGS"};
     const XrProcessView *view = &owner->commands[stage];
     const XrXirInvocationCompile *compile = &request->compile[stage];
-    if (view->argc != 26 + stage)
+    if (view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_WINDOWS_TREE ||
+        view->argc != 26 + stage)
         return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
     for (unsigned i = 0; i < 12; ++i)
         if (!invocation_expect(owner, view->argv[i + 1], fixed[i])) return false;
@@ -283,7 +284,8 @@ static bool invocation_link_recipe(XrXirInvocation *owner, const XrXirInvocation
     owner->diagnostic.stage = XR_XIR_INVOCATION_LINK;
     owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
     const XrProcessView *view = &owner->commands[2];
-    if (request->library_count > XTC_PROCESS_MAX_ARGS - 14 || view->argc != 14 + request->library_count)
+    if (view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_WINDOWS_TREE ||
+        request->library_count > XTC_PROCESS_MAX_ARGS - 14 || view->argc != 14 + request->library_count)
         return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
     if (!invocation_expect(owner, view->argv[1], "/nologo") ||
         !invocation_expect(owner, view->argv[2], "/incremental:no") ||

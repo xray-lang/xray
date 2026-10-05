@@ -28,6 +28,8 @@ typedef struct ProcDebug {
     bool initial[XR_PROC_MAX_LIVE];
     uint32_t live, created;
     bool root_exited, pending, dispatched, pumping;
+    XrProcCompletionPolicy completion_policy;
+    bool execution_ended;
     DEBUG_EVENT event;
     DWORD disposition;
     XrOsProcStatus status;
@@ -370,6 +372,8 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free || !o->memory.work ||
         (o->env_count && (!o->env_keys || !o->env_values)) || (o->detached && o->new_process_group) ||
+        (o->completion_policy != XR_PROC_COMPLETE_TREE && o->completion_policy != XR_PROC_COMPLETE_ROOT) ||
+        (o->completion_policy == XR_PROC_COMPLETE_ROOT && o->image_mode != XR_PROC_IMAGES_WINDOWS_TREE) ||
         (o->image_mode != XR_PROC_IMAGES_NONE && o->image_mode != XR_PROC_IMAGES_WINDOWS_TREE) ||
         ((o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE) != (o->image_observer.observe != NULL)) ||
         (o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE && (!o->new_process_group || o->detached))) return XR_PROC_INVALID_ARGUMENT;
@@ -395,9 +399,10 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
         ReleaseSRWLockExclusive(&g_live_lock);
         if (b.status != XR_PROC_OK) goto done;
         debug = proc_alloc(&b, sizeof(*debug)); if (!debug) goto done;
-        if (!proc_work(&b, sizeof(*debug) + sizeof(o->memory) + sizeof(o->image_observer))) goto done;
+        if (!proc_work(&b, sizeof(*debug) + sizeof(o->memory) + sizeof(o->image_observer) + sizeof(o->completion_policy))) goto done;
         memset(debug, 0, sizeof(*debug)); debug->memory = o->memory;
         debug->observer = o->image_observer; debug->thread = debug_thread;
+        debug->completion_policy = o->completion_policy;
     }
     command = proc_command(&b, argv); if (!command) goto done;
     program = proc_wide(&b, prog); if (!program) goto done;
@@ -516,6 +521,17 @@ XR_FUNC XrOsProcStatus xr_proc_pump_images(XrProcId pid, XrProcImagePumpResult *
     bool progressed = false;
     if (status == XR_PROC_OK && (!d->root_exited || d->live || d->pending))
         status = proc_debug_step(d, false, 1, &progressed);
+    if (status == XR_PROC_OK) status = proc_debug_charge(d, sizeof(d->completion_policy));
+    if (status == XR_PROC_OK && d->completion_policy == XR_PROC_COMPLETE_ROOT) {
+        status = proc_debug_charge(d, sizeof(d->root_exited) + sizeof(d->pending) + sizeof(d->execution_ended));
+        if (status == XR_PROC_OK && d->root_exited && !d->pending && !d->execution_ended) {
+            status = proc_debug_charge(d, 1 + sizeof(d->execution_ended));
+            if (status == XR_PROC_OK) {
+                if (!TerminateJobObject(job, XR_PROC_KILLED_EXIT_CODE)) status = xr_proc_last_error();
+                else { d->execution_ended = true; progressed = true; }
+            }
+        }
+    }
     bool complete = d->root_exited && !d->live && !d->pending;
     if (status == XR_PROC_OK && complete) {
         status = proc_debug_charge(d, 1);

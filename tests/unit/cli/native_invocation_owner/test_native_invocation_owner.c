@@ -59,6 +59,7 @@ static XrToolchainProcess *compile(XrCompileResources *resources, const char *co
     CHECK(snprintf(storage->report, sizeof(storage->report), "%s/%s.json", output_directory, stage ? "launcher" : "generated") > 0);
     CHECK(snprintf(storage->object_argument, sizeof(storage->object_argument), "/Fo%s", storage->object) > 0);
     xtc_process_spec_init(&storage->spec, compiler, 30000);
+    storage->spec.completion_policy = XR_PROC_COMPLETE_ROOT;
     storage->spec.environment_source = XTC_PROCESS_ENV_EXPLICIT;
     storage->spec.env_count = 3;
     storage->spec.env_keys[0] = "SystemRoot"; storage->spec.env_values[0] = recipe->system_root;
@@ -119,7 +120,8 @@ static int run_test(int argc, char **argv) {
     CHECK(snprintf(report, sizeof(report), "%s/actual.rsp", argv[14]) > 0);
     CHECK(snprintf(output_argument, sizeof(output_argument), "/out:%s", output) > 0);
     CHECK(snprintf(report_argument, sizeof(report_argument), "/LINKREPROFULLPATHRSP:%s", report) > 0);
-    XrProcessSpec spec; xtc_process_spec_init(&spec, argv[6], 30000); spec.cwd = argv[7]; spec.output_limit = 4 * 1024 * 1024;
+    XrProcessSpec spec; xtc_process_spec_init(&spec, argv[6], 30000);
+    spec.completion_policy = XR_PROC_COMPLETE_ROOT; spec.cwd = argv[7]; spec.output_limit = 4 * 1024 * 1024;
     spec.environment_source = XTC_PROCESS_ENV_EXPLICIT; spec.env_count = 3;
     spec.env_keys[0] = "SystemRoot"; spec.env_values[0] = recipe.system_root;
     spec.env_keys[1] = "TEMP"; spec.env_values[1] = argv[14];
@@ -158,6 +160,7 @@ static int run_test(int argc, char **argv) {
         memset(large_launcher, ' ', request.launcher_length); request.launcher = large_launcher;
         expected = XR_XIR_INVOCATION_BUDGET;
     }
+    if (!strcmp(mode, "profile-completion-legacy")) commands[0].spec.completion_policy = XR_PROC_COMPLETE_TREE;
     if (!strcmp(mode, "profile-legacy")) {
         commands[0].spec.argv[13] = commands[0].include[0]; commands[0].spec.argv[14] = commands[0].include[1];
         commands[0].spec.argv[15] = commands[0].include[2]; commands[0].spec.argv[16] = "/c";
@@ -170,7 +173,7 @@ static int run_test(int argc, char **argv) {
     else if (!strcmp(mode, "profile-system-root")) request.msvc.system_root = request.input_directory;
     else if (!strcmp(mode, "profile-include")) request.msvc.vc_include = request.input_directory;
     if (!strncmp(mode, "profile-", 8)) expected = XR_XIR_INVOCATION_UNSUPPORTED;
-    if (!strcmp(mode, "profile-legacy") || !strcmp(mode, "profile-env-extra") || !strcmp(mode, "profile-temp")) {
+    if (!strcmp(mode, "profile-completion-legacy") || !strcmp(mode, "profile-legacy") || !strcmp(mode, "profile-env-extra") || !strcmp(mode, "profile-temp")) {
         xtc_process_free(processes[0]); processes[0] = NULL;
         CHECK(xtc_process_prepare(resources, &commands[0].spec, &processes[0]) == XTC_PROCESS_OK);
         request.compile[0].process = processes[0];

@@ -1,3 +1,4 @@
+#include "../aot/xr_backend_emission_owner.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -582,8 +583,14 @@ static void assert_aot_fixture_backend_contract(const XrValidatedProgram *progra
 
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic), XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &diagnostic),
+                  XR_BACKEND_OK);
     ASSERT_NOT_NULL(generated.bytes);
     ASSERT_NOT_NULL(repeated.bytes);
     ASSERT_EQ_UINT(generated.size, repeated.size);
@@ -661,8 +668,14 @@ static void assert_aot_panic_cleanup(const XrValidatedProgram *program,
 
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic), XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &diagnostic),
+                  XR_BACKEND_OK);
     ASSERT_NOT_NULL(generated.bytes);
     ASSERT_NOT_NULL(repeated.bytes);
     ASSERT_EQ_UINT(generated.size, repeated.size);
@@ -1005,7 +1018,10 @@ static void assert_retained_root_native(const XrProgramSourceProduct *product,
     ASSERT_EQ_INT(xr_backend_ir_build(product->program, profile, &options, &ir, &diagnostic),
                   XR_BACKEND_OK);
     XrGeneratedC generated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &diagnostic),
+                  XR_BACKEND_OK);
     if (path) {
         FILE *output = fopen(path, "wb");
         ASSERT_NOT_NULL(output);
@@ -1688,7 +1704,10 @@ TEST(source_owner_module_initializer_is_a_canonical_entry) {
         XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_NOT_NULL(generated.bytes);
     ASSERT_NOT_NULL(strstr(generated.bytes, "int main(void)"));
@@ -1822,9 +1841,15 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -2049,9 +2074,15 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -2201,9 +2232,15 @@ TEST(source_owner_generic_specializations_are_exact_program_functions) {
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -3174,9 +3211,15 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -5048,9 +5091,15 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -5565,9 +5614,15 @@ TEST(source_owner_text_program_is_exact_across_private_executors) {
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -5746,9 +5801,15 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -7603,9 +7664,15 @@ TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors) {
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -7878,9 +7945,15 @@ TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspens
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -8194,8 +8267,12 @@ static bool emit_read_existential_coroutine_aot(const XrValidatedProgram *progra
     bool ok = false;
     if (xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) != XR_BACKEND_OK ||
         !xr_backend_ir_binding_verify(ir, &diagnostic) ||
-        xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) != XR_BACKEND_OK ||
-        xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) != XR_BACKEND_OK ||
+        xr_compile_backend_ir_emit_c(
+            ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+            &generated, &diagnostic) != XR_BACKEND_OK ||
+        xr_compile_backend_ir_emit_c(
+            ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+            &repeated, &diagnostic) != XR_BACKEND_OK ||
         generated.size != repeated.size ||
         memcmp(generated.bytes, repeated.bytes, generated.size) != 0 ||
         !strstr(generated.bytes, "child_active_0") || strstr(generated.bytes, "TargetPlan"))
@@ -8551,9 +8628,15 @@ TEST(source_owner_time_sleep_has_typed_suspension_request) {
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -8974,6 +9057,9 @@ TEST(source_owner_atomic_ordering_preserves_exact_controls) {
 }
 
 TEST_MAIN_BEGIN()
+if (!backend_emission_owner_open((XrCompileResourceLimits) {
+        UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))
+    return 1;
 if (argc != 1) {
     if (argc == 3 && strcmp(argv[1], "--run-case") == 0) {
 #define SELECT_SOURCE_CASE(name, fixture)                                                          \

@@ -17,6 +17,7 @@
 #define XR_BACKEND_IR_H
 
 #include "../../execution/xr_native_descriptor.h"
+#include "../../base/xcompile_resources.h"
 
 #define XR_BACKEND_IR_SCHEMA_VERSION UINT32_C(3)
 #define XR_AOT_BACKEND_NAME "xray-c11-aot"
@@ -101,12 +102,19 @@ XR_FUNC XrBackendId xr_backend_ir_backend_id(const XrBackendIR *ir);
 XR_FUNC XrOptimizationPolicyId xr_backend_ir_optimization_policy_id(const XrBackendIR *ir);
 XR_FUNC XrFingerprint xr_backend_ir_lowering_digest(const XrBackendIR *ir);
 XR_FUNC size_t xr_backend_ir_instruction_count(const XrBackendIR *ir);
-XR_FUNC XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main,
-                                             XrGeneratedC *generated_out,
-                                             XrBackendDiagnostic *diagnostic_out);
-XR_FUNC XrBackendStatus xr_backend_ir_emit_c_exports(const XrBackendIR *ir, bool standalone_main,
-                                                     const XrBackendCExport *exports,
-                                                     uint32_t export_count,
+/* Resources and exports are borrowed from the caller for this synchronous
+ * operation. Repeated emissions consume the same caller ledger. Neither the
+ * legacy IR nor the host-owned GeneratedC buffer claims whole-compiler charging. */
+typedef struct XrBackendEmissionRequest {
+    XrCompileResources *resources; /* owned: caller retains through synchronous emission */
+    bool standalone_main;
+    const XrBackendCExport *exports; /* owned: caller storage remains live for this call */
+    uint32_t export_count;
+} XrBackendEmissionRequest;
+/* Empty output is required. Every failure preserves its bytes; resource limits
+ * fail closed and malformed C still raises the mandatory W1-W4 ICE. */
+XR_FUNC XrBackendStatus xr_compile_backend_ir_emit_c(const XrBackendIR *ir,
+                                                     const XrBackendEmissionRequest *request,
                                                      XrGeneratedC *generated_out,
                                                      XrBackendDiagnostic *diagnostic_out);
 XR_FUNC void xr_generated_c_free(XrGeneratedC *generated);

@@ -124,6 +124,8 @@ static bool proc_read_i64(int fd, int64_t *out) {
 
 XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
+    if (o && o->completion_policy != XR_PROC_COMPLETE_TREE)
+        return o->completion_policy == XR_PROC_COMPLETE_ROOT ? XR_PROC_UNSUPPORTED : XR_PROC_INVALID_ARGUMENT;
     if (o && o->image_mode != XR_PROC_IMAGES_NONE)
         return o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE ? XR_PROC_UNSUPPORTED : XR_PROC_INVALID_ARGUMENT;
     if (o && o->image_observer.observe) return XR_PROC_INVALID_ARGUMENT;

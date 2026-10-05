@@ -1,3 +1,4 @@
+#include "xr_backend_emission_owner.h"
 #include "../program/xr_program_byte_compare_fixture.h"
 /*
  * Task 300: private BackendIR and generated-C AOT over canonical XrProgram.
@@ -1314,14 +1315,18 @@ static void test_direct_program_lifetime_and_emission(void) {
     REQUIRE(ir->program == program && ir->profile == profile);
     XrGeneratedC before = {0}, after = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &before, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &before, &diagnostic) == XR_BACKEND_OK);
     XrBackendIR *retained = xr_backend_ir_retain(ir);
     REQUIRE(retained == ir);
     xr_validated_program_free(program);
     xr_target_profile_free(profile);
     xr_backend_ir_free(ir);
     REQUIRE(xr_backend_ir_binding_verify(retained, &diagnostic));
-    REQUIRE(xr_backend_ir_emit_c(retained, false, &after, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                retained, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &after, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(before.size == after.size && memcmp(before.bytes, after.bytes, before.size) == 0);
     REQUIRE(xr_fingerprint_equal(before.source_digest, after.source_digest));
     xr_backend_ir_free(retained);
@@ -1338,7 +1343,9 @@ static void test_coroutine_private_state_machine_lowering(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "typedef struct XrAotCoroutineFrame0") != NULL);
     REQUIRE(strstr(generated.bytes, "switch (frame->state)") != NULL);
     REQUIRE(strstr(generated.bytes, "frame->live_0_0 = v") != NULL);
@@ -1424,8 +1431,12 @@ static void test_coroutine_self_loop_parallel_edges_lowering(void) {
     REQUIRE(self_edges == 1u);
     XrGeneratedC first = {0}, second = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &first, &diagnostic) == XR_BACKEND_OK);
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &second, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &first, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &second, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(first.size != 0u && first.size == second.size);
     REQUIRE(memcmp(first.bytes, second.bytes, first.size) == 0);
     xr_generated_c_free(&second);
@@ -1444,7 +1455,9 @@ static void test_coroutine_owner_cancel_cleanup_lowering(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    XrBackendStatus status = xr_backend_ir_emit_c(ir, true, &generated, &diagnostic);
+    XrBackendStatus status = xr_compile_backend_ir_emit_c(
+        ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u}, &generated,
+        &diagnostic);
     if (status != XR_BACKEND_OK)
         fprintf(stderr, "owner coroutine emit failed: %s op=%u f=%u b=%u i=%u\n",
                 xr_backend_status_name(status), diagnostic.operation_id, diagnostic.function_id,
@@ -1504,7 +1517,9 @@ static void test_affine_copy_lowering(void) {
     REQUIRE(found_copy);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "struct XrAotType") != NULL);
     REQUIRE(strstr(generated.bytes, " = v") != NULL);
 
@@ -1523,7 +1538,9 @@ static void test_empty_aggregate_has_portable_private_c_storage(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "    uint8_t xr_unit;\n") != NULL);
     REQUIRE(strstr(generated.bytes, ".xr_unit = UINT8_C(0)") != NULL);
     REQUIRE(strstr(generated.bytes, "{\n};") == NULL);
@@ -1549,7 +1566,9 @@ static void test_sealed_invoke_typed_error_cleanup_lowering(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "out_error") != NULL);
     REQUIRE(strstr(generated.bytes, "invoke_error_") != NULL);
     REQUIRE(strstr(generated.bytes, "if (call_") != NULL);
@@ -1597,7 +1616,9 @@ static void test_sealed_invoke_trap_continuation_lowering_and_mutation(void) {
     REQUIRE(invoke->successor_count == 3u);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, ".kind == 1 && call_") != NULL);
     REQUIRE(strstr(generated.bytes, ".trap == 7") != NULL);
 
@@ -1634,7 +1655,9 @@ static void test_typed_panic_cleanup_lowering(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "out_panic") != NULL);
     REQUIRE(strstr(generated.bytes, "invoke_panic_") != NULL);
     REQUIRE(strstr(generated.bytes, ".kind == 3") != NULL);
@@ -1655,7 +1678,9 @@ static void test_existential_pack_test_project_lowering(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "concrete_type_id") != NULL);
     REQUIRE(strstr(generated.bytes, "conformance_id") != NULL);
     REQUIRE(strstr(generated.bytes, "xr_aot_alloc(xr_ctx") != NULL);
@@ -1679,7 +1704,9 @@ static void test_callable_pack_and_indirect_call_lowering(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, ".function_id = UINT32_C(") != NULL);
     REQUIRE(strstr(generated.bytes, ".capture = (void *)callable_capture_") != NULL);
     REQUIRE(strstr(generated.bytes, ".capture = NULL") != NULL);
@@ -1725,9 +1752,12 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrTarget
     XrGeneratedC generated_none = {0};
     XrGeneratedC generated_portable = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(none, true, &generated_none, &diagnostic) == XR_BACKEND_OK);
-    REQUIRE(xr_backend_ir_emit_c(portable, true, &generated_portable, &diagnostic) ==
-            XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                none, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated_none, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                portable, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated_portable, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated_none.bytes, "int64_t v0") != NULL);
     REQUIRE(strstr(generated_none.bytes, "struct XrAotType") != NULL);
     REQUIRE(strstr(generated_none.bytes, "payload.case_1.f0") != NULL);
@@ -1784,7 +1814,9 @@ static void test_foreign_profile_and_program_binding_mutation(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "uint16_t v0") != NULL);
     REQUIRE(strstr(generated.bytes, "UINT16_C(32)") != NULL);
     REQUIRE(strstr(generated.bytes, "result.u16") != NULL);
@@ -1825,7 +1857,9 @@ static void test_foreign_profile_and_program_binding_mutation(void) {
     REQUIRE(!xr_backend_ir_binding_verify(ir, &diagnostic));
     REQUIRE(diagnostic.status == XR_BACKEND_BINDING_REJECTED);
     XrGeneratedC rejected_c = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &rejected_c, &diagnostic) != XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &rejected_c, &diagnostic) != XR_BACKEND_OK);
     REQUIRE(!rejected_c.bytes && !rejected_c.size);
     ir->program = program;
     xr_validated_program_free(other);
@@ -1869,7 +1903,9 @@ static void test_foreign_profile_and_program_binding_mutation(void) {
         REQUIRE(profile != NULL);
         ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
         generated = (XrGeneratedC) {0};
-        REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+        REQUIRE(xr_compile_backend_ir_emit_c(
+                    ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                    &generated, &diagnostic) == XR_BACKEND_OK);
         char literal[48];
         (void) snprintf(literal, sizeof(literal), "v0 = UINT16_C(%u);", cases[index].expected);
         REQUIRE(strstr(generated.bytes, literal) != NULL);
@@ -1884,7 +1920,9 @@ static void test_foreign_profile_and_program_binding_mutation(void) {
     REQUIRE(profile != NULL);
     ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     generated = (XrGeneratedC) {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "UINT16_C(4)") != NULL);
     REQUIRE(strstr(generated.bytes, " == ") != NULL);
     xr_generated_c_free(&generated);
@@ -1925,7 +1963,9 @@ static void test_provider_call_lowering_and_mutation(void) {
         REQUIRE(provider_call->immediate.provider_operation.operation_index == 0u);
         XrGeneratedC generated = {0};
         XrBackendDiagnostic diagnostic;
-        REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+        REQUIRE(xr_compile_backend_ir_emit_c(
+                    ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                    &generated, &diagnostic) == XR_BACKEND_OK);
         REQUIRE(strstr(generated.bytes,
                        "provider_call_typed") != NULL);
         REQUIRE(strstr(generated.bytes, "UINT32_C(0), UINT32_C(0)") != NULL);
@@ -1994,7 +2034,9 @@ static void test_condition_assert_panic_cleanup_lowering(void) {
     ir->lowering_digest = saved_digest;
     REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
     REQUIRE(xr_backend_ir_binding_verify(ir, &diagnostic));
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "if (!v") != NULL);
     REQUIRE(strstr(generated.bytes, "UINT32_C(1)") != NULL);
     REQUIRE(strstr(generated.bytes, "goto xr_f") != NULL);
@@ -2046,7 +2088,9 @@ static void test_provider_trap_continuation_lowering_and_mutation(void) {
     REQUIRE(provider_call->successor_count == 1u);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "provider_call_typed") != NULL);
     REQUIRE(strstr(generated.bytes, "goto xr_f0_b1") != NULL);
     REQUIRE(strstr(generated.bytes, "XR_AOT_FAIL(xr_aot_make(1, 0, 7))") != NULL);
@@ -2653,10 +2697,14 @@ static void test_coroutine_trap_continuation_lowering_and_mutation(void) {
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     require_coroutine_trap_c_edges(&generated, call, ir->program->entry_function, call_index);
     XrBackendIR *rebuilt = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
-    REQUIRE(xr_backend_ir_emit_c(rebuilt, false, &repeated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                rebuilt, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &repeated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(generated.size != 0u && generated.size == repeated.size);
     REQUIRE(memcmp(generated.bytes, repeated.bytes, generated.size) == 0);
     REQUIRE(xr_fingerprint_equal(generated.source_digest, repeated.source_digest));
@@ -2705,7 +2753,9 @@ static void test_witness_invoke_trap_continuation_lowering_and_mutation(void) {
     REQUIRE(invoke->successor_count == 3u);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, ".kind == 1 && call_") != NULL);
     REQUIRE(strstr(generated.bytes, ".trap == 7") != NULL);
 
@@ -2762,7 +2812,9 @@ static void test_callable_invoke_trap_continuation_lowering_and_mutation(void) {
     REQUIRE(invoke->successor_count == 3u);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, ".kind == 1 && call_") != NULL);
     REQUIRE(strstr(generated.bytes, ".trap == 7") != NULL);
 
@@ -2808,12 +2860,16 @@ static void test_provider_output_lowering_and_mutation(void) {
     XrGeneratedC embedded = {0};
     XrGeneratedC standalone = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &embedded, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &embedded, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(embedded.bytes, "provider_output_write") != NULL);
     REQUIRE(strstr(embedded.bytes, "xr_text_display_i64") != NULL);
     REQUIRE(strstr(embedded.bytes, "xr_text_group_render") != NULL);
     REQUIRE(strstr(embedded.bytes, "fwrite") == NULL);
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &standalone, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &standalone, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(standalone.bytes, "xr_aot_host_output_write") != NULL);
     REQUIRE(strstr(standalone.bytes, "fwrite(bytes, 1, size, stdout)") != NULL);
     REQUIRE(strstr(standalone.bytes, "xr_ctx->provider_output_write = xr_aot_host_output_write") !=
@@ -2838,9 +2894,12 @@ static void test_provider_output_lowering_and_mutation(void) {
     ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     embedded = (XrGeneratedC) {0};
     standalone = (XrGeneratedC) {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &embedded, &diagnostic) == XR_BACKEND_OK);
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &standalone, &diagnostic) ==
-            XR_BACKEND_EMISSION_REJECTED);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &embedded, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &standalone, &diagnostic) == XR_BACKEND_EMISSION_REJECTED);
     REQUIRE(standalone.bytes == NULL && standalone.size == 0u);
     xr_generated_c_free(&embedded);
     xr_backend_ir_free(ir);
@@ -2863,7 +2922,9 @@ static void test_array_values(void) {
         XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
         XrGeneratedC generated = {0};
         XrBackendDiagnostic diagnostic;
-        REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+        REQUIRE(xr_compile_backend_ir_emit_c(
+                    ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                    &generated, &diagnostic) == XR_BACKEND_OK);
         REQUIRE(strstr(generated.bytes, ".storage->length;") != NULL);
         XrValidatedInstruction *construct = &program->functions[0].blocks[0].instructions[scenario == 1u ? 0u : 2u];
         REQUIRE(construct->operation_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT);
@@ -2890,7 +2951,9 @@ static void test_sequence_length(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "->scalar_count;") != NULL);
     XrValidatedInstruction *length = &program->functions[0].blocks[0].instructions[4];
     REQUIRE(length->operation_id == XR_CORE_OP_CORE_SEQUENCE_LENGTH);
@@ -2933,7 +2996,9 @@ static void test_text_lowering_and_mutation(void) {
     XrGeneratedC embedded = {0};
     XrGeneratedC standalone = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &embedded, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &embedded, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(embedded.bytes, "XR_TEXT_KERNEL_H") != NULL);
     REQUIRE(strstr(embedded.bytes, "xr_aot_string_concat") != NULL);
     REQUIRE(strstr(embedded.bytes, "xr_aot_string_from_scalar") != NULL);
@@ -2942,7 +3007,9 @@ static void test_text_lowering_and_mutation(void) {
     REQUIRE(strstr(embedded.bytes, "xr_text_group_render") != NULL);
     REQUIRE(strstr(embedded.bytes, "xr_aot_free(xr_ctx, v") != NULL);
     REQUIRE(strstr(embedded.bytes, "fwrite") == NULL);
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &standalone, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &standalone, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(standalone.bytes, "xr_aot_host_output_write") != NULL);
     REQUIRE(strstr(standalone.bytes, "xr_aot_context_destroy(xr_ctx)") != NULL);
 
@@ -2977,7 +3044,9 @@ static void test_existential_owned_read_reborrow_lowering(void) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, ".concrete_type_id = v") != NULL);
     REQUIRE(strstr(generated.bytes, ".conformance_id = v") != NULL);
     REQUIRE(strstr(generated.bytes, ".data = v") != NULL);
@@ -3003,10 +3072,14 @@ static void test_pipe_provider_lowering(void) {
     XrGeneratedC embedded = {0};
     XrGeneratedC standalone = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &embedded, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &embedded, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(embedded.bytes, "provider_call_typed") != NULL);
     REQUIRE(strstr(embedded.bytes, "xr_aot_native_provider_") == NULL);
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &standalone, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                &standalone, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(standalone.bytes, "xr_pipe_create(&pipe, NULL)") != NULL);
     REQUIRE(strstr(standalone.bytes, "CreatePipe(") == NULL);
     REQUIRE(
@@ -3039,8 +3112,12 @@ static void test_class_reference_semantics_lowering_and_events(void) {
     REQUIRE(ir->instruction_count == 10u);
     XrGeneratedC first = {0};
     XrGeneratedC second = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &first, &diagnostic) == XR_BACKEND_OK);
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &second, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &first, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &second, &diagnostic) == XR_BACKEND_OK);
     (void) "strict-native-host-run";
     (void) "h2-class-differential";
     REQUIRE(first.size == second.size && memcmp(first.bytes, second.bytes, first.size) == 0);
@@ -3077,7 +3154,10 @@ static void write_generated_fixture(const char *path, const XrValidatedProgram *
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, standalone_main, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir,
+                &(XrBackendEmissionRequest) {backend_emission_resources, standalone_main, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output != NULL);
     REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
@@ -3136,7 +3216,9 @@ static void write_owned_allocation_fixture(const char *path, const XrValidatedPr
                                            const XrTargetProfile *profile, unsigned scenario) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, NULL) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output != NULL);
     write_allocation_probe(output);
@@ -3248,7 +3330,9 @@ static void seal_native_file(const char *path, const XrValidatedProgram *program
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     XrAotToolchainBinding toolchain = toolchain_for(generated.target_profile_id);
     XrNativeArtifact artifact = {0};
     REQUIRE(xr_native_artifact_seal(&generated, &toolchain, bytes, size, &artifact) ==
@@ -3282,7 +3366,9 @@ static void test_module_operations_have_typed_native_storage(void) {
     XrBackendOptions options = xr_backend_default_options();
     REQUIRE(xr_backend_ir_build(program, profile, &options, &ir, NULL) == XR_BACKEND_OK);
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, NULL) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "struct XrAotModules") != NULL);
     REQUIRE(strstr(generated.bytes, "publication_order") != NULL);
     xr_generated_c_free(&generated);
@@ -3515,7 +3601,9 @@ static void write_string_slice_allocation_fixture(const char *path) {
     REQUIRE(profile);
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, NULL) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output);
     write_allocation_probe(output);
@@ -3616,7 +3704,9 @@ static void write_array_append_allocation_fixture(const char *path, bool managed
     REQUIRE(profile);
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, NULL) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output);
     write_allocation_probe(output);
@@ -3650,7 +3740,9 @@ static void write_array_default_allocation_fixture(const char *path) {
     REQUIRE(profile);
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, NULL) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output);
     write_allocation_probe(output);
@@ -3799,35 +3891,45 @@ static void test_native_c_export_binding(void) {
     xr_target_profile_free(profile);
     XrBackendCExport binding = {.function_id = entry, .symbol = "public_answer", .header = 1u};
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c_exports(backend, true, &binding, 1u, &generated, &diagnostic) ==
-            XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                backend,
+                &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "int64_t public_answer(void)") != NULL);
     REQUIRE(strstr(generated.header_bytes, "int64_t public_answer(void);") != NULL);
     REQUIRE(strstr(generated.bytes, "if (result.kind != UINT32_C(0)) abort();") != NULL);
     xr_generated_c_free(&generated);
     binding.header = 0u;
     binding.hidden = 1u;
-    REQUIRE(xr_backend_ir_emit_c_exports(backend, false, &binding, 1u, &generated, &diagnostic) ==
-            XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                backend,
+                &(XrBackendEmissionRequest) {backend_emission_resources, false, &binding, 1u},
+                &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.header_bytes, "public_answer") == NULL);
     xr_generated_c_free(&generated);
     const char *invalid[] = {"", "a;void injected(void)", "return", "main", "bool", "_Atomic",
                               "xr_aot_fn_0", "XrAotOutcome", "1answer", "answer\n"};
     for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
         binding.symbol = invalid[index];
-        REQUIRE(xr_backend_ir_emit_c_exports(backend, true, &binding, 1u, &generated, &diagnostic) ==
-                XR_BACKEND_INVALID_INPUT);
+        REQUIRE(xr_compile_backend_ir_emit_c(
+                    backend,
+                    &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},
+                    &generated, &diagnostic) == XR_BACKEND_INVALID_INPUT);
         REQUIRE(!generated.bytes && !generated.header_bytes && generated.size == 0u);
         REQUIRE(diagnostic.status == XR_BACKEND_INVALID_INPUT);
     }
     binding.symbol = "public_answer";
     binding.function_id = UINT32_MAX;
-    REQUIRE(xr_backend_ir_emit_c_exports(backend, true, &binding, 1u, &generated, &diagnostic) ==
-            XR_BACKEND_INVALID_INPUT);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                backend,
+                &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},
+                &generated, &diagnostic) == XR_BACKEND_INVALID_INPUT);
     binding.function_id = entry;
     binding.reserved8[1] = 1u;
-    REQUIRE(xr_backend_ir_emit_c_exports(backend, true, &binding, 1u, &generated, &diagnostic) ==
-            XR_BACKEND_INVALID_INPUT);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                backend,
+                &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},
+                &generated, &diagnostic) == XR_BACKEND_INVALID_INPUT);
     REQUIRE(!generated.bytes && !generated.header_bytes);
     xr_backend_ir_free(backend);
 }
@@ -3900,7 +4002,9 @@ static void test_channel_storage_lowering(void) {
         REQUIRE(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK);
         REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
         XrGeneratedC generated = {0};
-        REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+        REQUIRE(xr_compile_backend_ir_emit_c(
+                    ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                    &generated, &diagnostic) == XR_BACKEND_OK);
         xr_generated_c_free(&generated);
         xr_backend_ir_free(ir);
         xr_target_profile_free(profile);
@@ -3956,7 +4060,9 @@ static void write_string_builder_fixture(const char *path, unsigned scenario) {
     REQUIRE(profile);
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    REQUIRE(xr_compile_backend_ir_emit_c(
+                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                &generated, NULL) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output);
     write_allocation_probe(output);
@@ -4018,6 +4124,9 @@ static void write_byte_compare_fixture(const char *path, unsigned scenario) {
 }
 
 int main(int argc, char **argv) {
+    if (!backend_emission_owner_open((XrCompileResourceLimits) {
+            UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))
+        return 1;
     if (argc == 3 && strncmp(argv[2], "byte-compare-", 13u) == 0) {
         unsigned scenario = (unsigned)strtoul(argv[2] + 13u, NULL, 10);
         REQUIRE(scenario < 9u); write_byte_compare_fixture(argv[1], scenario); return 0;

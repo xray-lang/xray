@@ -91,7 +91,7 @@ static void facts_dump(const char *path,const XtcXirNativeOperation *op,const Xr
         fprintf(f,"%s{\"executable\":",stage?",":"");json_text(f,c->executable);fprintf(f,",\"cwd\":");json_text(f,c->cwd);
         fprintf(f,",\"argv\":[");for(size_t i=0;i<c->argc;++i){if(i)fputc(',',f);json_text(f,c->argv[i]);}
         fprintf(f,"],\"env\":[");for(size_t i=0;i<c->env_count;++i){if(i)fputc(',',f);fputc('[',f);json_text(f,c->env_keys[i]);fputc(',',f);json_text(f,c->env_values[i]);fputc(']',f);}
-        fprintf(f,"],\"timeout\":%u,\"limit\":%zu,\"image\":%u}",c->timeout_ms,c->output_limit,(unsigned)c->image_mode);
+        fprintf(f,"],\"timeout\":%u,\"limit\":%zu,\"image\":%u,\"completion\":%u}",c->timeout_ms,c->output_limit,(unsigned)c->image_mode,(unsigned)c->completion_policy);
     }
     fprintf(f,"],\"files\":[");for(uint32_t i=0;i<facts->file_count;++i){const XrXirInvocationFile *r=xtc_xir_native_operation_file(op,i);
         fprintf(f,"%s[%u,%u,",i?",":"",(unsigned)r->stage,(unsigned)r->kind);json_text(f,r->path);fprintf(f,",%llu,",(unsigned long long)r->length);json_hash(f,r->digest);fputc(']',f);}

@@ -67,12 +67,12 @@ def main():
         checked.write_text(text[:digest.start(1)]+content+text[digest.end(1):],encoding='utf-8')
         identity=directory/'xir_source_product_identity.h';text=identity.read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',text,re.S)
-        content=','.join(f'0x{v:02x}' for v in product_layout(18,24,28))
+        content=','.join(f'0x{v:02x}' for v in product_layout(19,25,28))
         identity.write_text(text[:expected.start(1)]+content+text[expected.end(1):],encoding='utf-8')
     else:
         identity=(directory/'xir_source_product_identity.h').read_text(encoding='utf-8')
         expected=re.search(r'static const uint8_t expected\[\]=\{(.*?)\};',identity,re.S)
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(18,24,28)
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',expected[1]))==product_layout(19,25,28)
     print(json.dumps({'ordinary_vectors_reframed_with_role_zero':len(records),
         'historical59_nullable_none_sha256':hashlib.sha256(sum_vector(False)).hexdigest(),
         'current61_nullable_none_sha256':hashlib.sha256(semantic61_packet(sum_vector(False))).hexdigest(),

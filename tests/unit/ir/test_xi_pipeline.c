@@ -1,3 +1,4 @@
+#include "../aot/xr_backend_emission_owner.h"
 /*
  * test_xi_pipeline.c - End-to-end tests for Xi IR compilation pipeline
  *
@@ -2546,8 +2547,9 @@ TEST(e2e_program_cooperative_yield_closes_source_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC generated_again = {0};
-    XrBackendStatus emit_status =
-        xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic);
+    XrBackendStatus emit_status = xr_compile_backend_ir_emit_c(
+        backend_ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+        &generated, &backend_diagnostic);
     if (emit_status != XR_BACKEND_OK)
         fprintf(stderr,
                 "cooperative yield AOT emission failed: status=%u operation=%u function=%u "
@@ -2556,8 +2558,10 @@ TEST(e2e_program_cooperative_yield_closes_source_vm_and_aot) {
                 backend_diagnostic.function_id, backend_diagnostic.block_id,
                 backend_diagnostic.instruction_id);
     PIPELINE_TEST_REQUIRE(emit_status == XR_BACKEND_OK);
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated_again,
-                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_compile_backend_ir_emit_c(
+            backend_ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+            &generated_again, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u &&
                           generated_again.size == generated.size &&
                           memcmp(generated_again.bytes, generated.bytes, generated.size) == 0 &&
@@ -2743,8 +2747,9 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC generated_again = {0};
-    XrBackendStatus emit_status =
-        xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic);
+    XrBackendStatus emit_status = xr_compile_backend_ir_emit_c(
+        backend_ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+        &generated, &backend_diagnostic);
     if (emit_status != XR_BACKEND_OK)
         fprintf(stderr,
                 "sealed coroutine call AOT emission failed: status=%u operation=%u function=%u "
@@ -2753,8 +2758,10 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_vm_and_aot) {
                 backend_diagnostic.function_id, backend_diagnostic.block_id,
                 backend_diagnostic.instruction_id);
     PIPELINE_TEST_REQUIRE(emit_status == XR_BACKEND_OK);
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated_again,
-                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_compile_backend_ir_emit_c(
+            backend_ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+            &generated_again, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u &&
                           generated_again.size == generated.size &&
                           memcmp(generated_again.bytes, generated.bytes, generated.size) == 0 &&
@@ -2915,8 +2922,10 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
-                          XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_compile_backend_ir_emit_c(
+            backend_ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+            &generated, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u);
     char pointer_constant[32];
     PIPELINE_SNPRINTF(pointer_constant, sizeof(pointer_constant), "UINT16_C(%u)",
@@ -3054,8 +3063,10 @@ TEST(e2e_program_target_os_member_equality_is_executable) {
                                               &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
-                          XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_compile_backend_ir_emit_c(
+            backend_ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+            &generated, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "UINT16_C(3)") != NULL);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, " == ") != NULL);
     xr_generated_c_free(&generated);
@@ -5204,8 +5215,10 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
-                          XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_compile_backend_ir_emit_c(
+            backend_ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+            &generated, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "int main(void)") != NULL);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "out_error") != NULL);
@@ -5428,6 +5441,9 @@ TEST(e2e_print_group_without_write_is_refused) {
 }
 
 int main(int argc, char **argv) {
+    if (!backend_emission_owner_open((XrCompileResourceLimits) {
+            UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))
+        return 1;
     bool canonical_only = false;
     if (argc == 9 && strcmp(argv[1], "--source-aot-c") == 0 &&
         strcmp(argv[3], "--pointer-aot-c") == 0 && strcmp(argv[5], "--yield-aot-c") == 0 &&

@@ -74,7 +74,7 @@ if profile or preflight:
     for axis, exact in [('bytes', total_bytes), ('live', peak), ('work', work)]:
         run(f'constructor-{axis}-{exact}-pass')
         run(f'constructor-{axis}-{exact - 1}-fail')
-    for mode in ['profile-legacy', 'profile-env-extra', 'profile-temp', 'profile-system-root', 'profile-include',
+    for mode in ['profile-completion-legacy', 'profile-legacy', 'profile-env-extra', 'profile-temp', 'profile-system-root', 'profile-include',
                  'profile-config', 'profile-link-config',
                  'profile-local', 'profile-manifest', 'profile-local-directory', 'profile-header', 'profile-image']:
         if not preflight or mode not in ('profile-header', 'profile-image'):

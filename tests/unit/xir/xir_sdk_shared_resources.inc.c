@@ -9,7 +9,7 @@
 static XrXirTargetStatus sdk_target(const XrXirRuntimeSdkRequest *sdk,XrXirTargetSnapshot **output) {
     char path[32768];CHECK(snprintf(path,sizeof(path),"%s/src/base/xdefs.h",sdk->root)>0);
     const char *argv[]={"diagnostic-input-snapshot"};
-    XrXirTargetCommandFacts command={"C:/described-tool.exe",sdk->root,argv,1,NULL,0,3000,1048576,0};
+    XrXirTargetCommandFacts command={"C:/described-tool.exe",sdk->root,argv,1,NULL,0,3000,1048576,0,0};
     XrXirTargetDependency file={path,XR_XIR_TARGET_HEADER};
     XrXirTargetSnapshotRequest request={sdk->resources,"x86_64-windows-msvc",3,2,11,&file,1,&command,1,NULL};
     return xtc_xir_target_snapshot_capture(&request,output);

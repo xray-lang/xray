@@ -30,7 +30,7 @@ typedef struct NativeAdmission {
     uint32_t sdk_words[17];
 } NativeAdmission;
 static const char admission_triple[] = "x86_64-pc-windows-msvc";
-static const char admission_options[] = "xray:xir-native-commands:trusted-local:v1:sha256:";
+static const char admission_options[] = "xray:xir-native-commands:trusted-local:v2:sha256:";
 static bool admission_fail(NativeAdmission *a, XtcXirNativeAdmissionStatus status,
     XtcXirNativeAdmissionDomain domain, int code) {
     if (a->diagnostic.status == XTC_XIR_ADMISSION_OK) {
@@ -125,6 +125,7 @@ static bool admission_producers(NativeAdmission *a) {
         if (!view) return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_OPERATION, 0);
         if (!identity_copy(&a->work, &a->commands[i], view, sizeof(*view))) return false;
         if (!view->executable || !view->cwd || !view->argv || !view->env_keys || !view->env_values ||
+            view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_WINDOWS_TREE ||
             !view->argc || view->argc > XTC_PROCESS_MAX_ARGS || view->env_count != 3 ||
             (i < 2 && view->argc != 26 + i) || (i == 2 && view->argc < 15))
             return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_OPERATION, 0);
@@ -326,10 +327,10 @@ static bool admission_sysroot(NativeAdmission *a, XrFingerprint *output) {
     return identity_end(&a->work, &hash, output->bytes);
 }
 static bool admission_commands(NativeAdmission *a, XrFingerprint *output) {
-    static const char domain[] = "xray:xir-native-commands:trusted-local:v1";
+    static const char domain[] = "xray:xir-native-commands:trusted-local:v2";
     XrSHA256Context hash;
     if (!identity_begin(&a->work, &hash) || !identity_bytes(&a->work, &hash, domain, sizeof(domain) - 1) ||
-        !identity_integer(&a->work, &hash, 1, 4) || !identity_integer(&a->work, &hash, 3, 4)) return false;
+        !identity_integer(&a->work, &hash, 2, 4) || !identity_integer(&a->work, &hash, 3, 4)) return false;
     for (unsigned stage = 0; stage < 3; ++stage) {
         const XrProcessView *c = &a->commands[stage];
         if (!identity_integer(&a->work, &hash, stage, 4) || !admission_text(a, &hash, c->executable) ||
@@ -342,7 +343,8 @@ static bool admission_commands(NativeAdmission *a, XrFingerprint *output) {
                 !admission_text(a, &hash, c->env_values[i])) return false;
         if (!identity_integer(&a->work, &hash, c->timeout_ms, 4) ||
             !identity_integer(&a->work, &hash, c->output_limit, 8) ||
-            !identity_integer(&a->work, &hash, c->image_mode, 4)) return false;
+            !identity_integer(&a->work, &hash, c->image_mode, 4) ||
+            !identity_integer(&a->work, &hash, c->completion_policy, 4)) return false;
     }
     return identity_end(&a->work, &hash, output->bytes);
 }

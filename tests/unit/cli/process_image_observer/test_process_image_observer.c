@@ -37,6 +37,13 @@ static bool persistent_wait, persistent_child_exit;
 static DWORD root_pid, blocked_exit_pid, detached_exit_pid;
 static size_t event_count, first_chance_av, second_chance_av;
 static bool profile_enabled;
+static XrProcCompletionPolicy command_completion=XR_PROC_COMPLETE_TREE;
+static size_t terminate_calls, root_exit_continues, child_exit_continues;
+static bool fail_terminate, mismatch_accounting;
+static DWORD pending_exit_pid;
+static bool fail_root_continue;
+static XrCompileResources *exhaust_at_root;
+static uint64_t exhaust_work_limit;
 static uint64_t sleep_ns, debug_wait_ns, pipe_ns, poll_ns, child_cpu_100ns;
 static size_t sleeps, idle_polls;
 
@@ -66,6 +73,7 @@ static BOOL debug_wait(LPDEBUG_EVENT event,DWORD timeout) {
     SetLastError(error);
     if (ok) {
         ++event_count;
+        pending_exit_pid=event->dwDebugEventCode==EXIT_PROCESS_DEBUG_EVENT ? event->dwProcessId : 0;
         if (event->dwDebugEventCode==EXCEPTION_DEBUG_EVENT && event->u.Exception.ExceptionRecord.ExceptionCode==EXCEPTION_ACCESS_VIOLATION) {
             if (event->u.Exception.dwFirstChance) ++first_chance_av; else ++second_chance_av;
         }
@@ -83,7 +91,22 @@ static BOOL debug_wait(LPDEBUG_EVENT event,DWORD timeout) {
 }
 static BOOL debug_continue(DWORD pid,DWORD tid,DWORD status) {
     if ((persistent_child_exit && pid==blocked_exit_pid) || continue_calls++==fail_continue_at) { SetLastError(injected_error); return FALSE; }
-    return ContinueDebugEvent(pid,tid,status);
+    if (fail_root_continue && pid==pending_exit_pid && pid==root_pid) {
+        fail_root_continue=false; SetLastError(injected_error); return FALSE;
+    }
+    BOOL okay=ContinueDebugEvent(pid,tid,status);
+    if (okay && pid==pending_exit_pid) {
+        if (pid==root_pid) ++root_exit_continues; else ++child_exit_continues;
+        if (pid==root_pid && exhaust_at_root) {
+            XrCompileResourceStats used;
+            CHECK(xr_compile_resources_stats(exhaust_at_root,&used)==XR_COMPILE_RESOURCE_OK);
+            CHECK(used.work<=exhaust_work_limit);
+            CHECK(xr_compile_resources_work(exhaust_at_root,exhaust_work_limit-used.work)==XR_COMPILE_RESOURCE_OK);
+            exhaust_at_root=NULL;
+        }
+        pending_exit_pid=0;
+    }
+    return okay;
 }
 static BOOL debug_close(HANDLE handle) {
     int found=-1;
@@ -103,13 +126,22 @@ static DWORD debug_resume(HANDLE thread) {
 }
 static BOOL debug_accounting(HANDLE job,JOBOBJECTINFOCLASS kind,LPVOID data,DWORD size,LPDWORD returned) {
     if (fail_accounting) { fail_accounting=false; SetLastError(injected_error); return FALSE; }
-    return QueryInformationJobObject(job,kind,data,size,returned);
+    BOOL okay=QueryInformationJobObject(job,kind,data,size,returned);
+    if (okay && mismatch_accounting && kind==JobObjectBasicAccountingInformation)
+        ++((JOBOBJECT_BASIC_ACCOUNTING_INFORMATION *)data)->TotalProcesses;
+    return okay;
 }
 static BOOL debug_detach(DWORD pid) {
     BOOL result=DebugActiveProcessStop(pid);
     if (pid==blocked_exit_pid) detached_exit_pid=pid;
     return result;
 }
+static BOOL debug_terminate(HANDLE job,UINT code) {
+    ++terminate_calls;
+    if (fail_terminate) { fail_terminate=false; SetLastError(injected_error); return FALSE; }
+    return TerminateJobObject(job,code);
+}
+#define TerminateJobObject debug_terminate
 #define DebugActiveProcessStop debug_detach
 #define WaitForDebugEvent debug_wait
 #define ContinueDebugEvent debug_continue
@@ -237,6 +269,7 @@ static XrProcessStatus command(const char *mode, Observation *o, XrProcessResult
     xtc_process_spec_init(&spec,executable,command_timeout); spec.cwd=directory;
     spec.argv[1]=mode; spec.argv[2]=dll_path;
     spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
+    spec.completion_policy=command_completion;
     spec.image_observer=(XrProcImageObserver){o,observe_image};
     XrToolchainProcess *process=NULL;
     XrProcessStatus status=xtc_process_prepare(o->resources,&spec,&process);
@@ -260,6 +293,9 @@ static void simple(bool warmup) {
 static void reset_faults(void) {
     CHECK(!physical && !allocation_count && !image_handle_count);
     calls=wait_calls=continue_calls=0;
+    command_completion=XR_PROC_COMPLETE_TREE; fail_terminate=fail_root_continue=mismatch_accounting=false;
+    exhaust_at_root=NULL; exhaust_work_limit=0;
+    terminate_calls=root_exit_continues=child_exit_continues=0; pending_exit_pid=0;
     fail_at=fail_wait_at=fail_continue_at=SIZE_MAX;
     null_image=fail_assign=fail_resume=fail_accounting=fail_image_close=false;
     cancellation=NULL; cancellation_context=NULL; command_timeout=5000;
@@ -313,6 +349,75 @@ static void descendants_and_exceptions(unsigned count) {
     }
 }
 static bool cancel_events(void *context) { (void)context; return continue_calls>=2; }
+static void root_executable_oracle(Observation *observation) {
+    char console[32768]; DWORD length=GetSystemDirectoryA(console,sizeof(console));
+    CHECK(length && length+sizeof("\\conhost.exe")<sizeof(console));
+    memcpy(console+length,"\\conhost.exe",sizeof("\\conhost.exe"));
+    HANDLE own=CreateFileA(executable,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+        NULL,OPEN_EXISTING,0,NULL);
+    HANDLE host=CreateFileA(console,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+        NULL,OPEN_EXISTING,0,NULL);
+    CHECK(own!=INVALID_HANDLE_VALUE && host!=INVALID_HANDLE_VALUE);
+    BY_HANDLE_FILE_INFORMATION own_info,host_info;
+    CHECK(GetFileInformationByHandle(own,&own_info) && GetFileInformationByHandle(host,&host_info));
+    unsigned own_count=0,host_count=0,root_count=0;
+    for (ImageRecord *image=observation->images;image;image=image->next) {
+        if (image->dll) continue;
+        BY_HANDLE_FILE_INFORMATION info; CHECK(GetFileInformationByHandle(image->file,&info));
+        bool is_own=info.dwVolumeSerialNumber==own_info.dwVolumeSerialNumber &&
+            info.nFileIndexHigh==own_info.nFileIndexHigh && info.nFileIndexLow==own_info.nFileIndexLow;
+        bool is_host=info.dwVolumeSerialNumber==host_info.dwVolumeSerialNumber &&
+            info.nFileIndexHigh==host_info.nFileIndexHigh && info.nFileIndexLow==host_info.nFileIndexLow;
+        CHECK(is_own || is_host);
+        if (is_own) { ++own_count; if (image->pid==root_pid) ++root_count; }
+        else ++host_count;
+    }
+    CHECK(CloseHandle(own) && CloseHandle(host));
+    CHECK(own_count==2 && root_count==1 && host_count<=1);
+    CHECK(observation->executables==own_count+host_count);
+    CHECK(root_exit_continues==1 && child_exit_continues+1==observation->executables && terminate_calls>=1);
+}
+static void root_completion(void) {
+    const XrCompileResourceLimits finite={64 * 1024 * 1024,8 * 1024 * 1024,128000000};
+    const char *modes[]={"--root-long-closed","--root-long-pipes","--root-nonzero"};
+    for (unsigned i=0;i<3;++i) {
+        reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
+        XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&finite,&r)==XR_COMPILE_RESOURCE_OK);
+        Observation o={0}; o.resources=r; XrProcessResult result={0};
+        CHECK(command(modes[i],&o,&result)==XTC_PROCESS_OK && result.exit_code==(i==2 ? 77 : 0));
+        root_executable_oracle(&o);
+        /* Native invocation rejects the nonzero root before publishing reports. */
+        xtc_process_result_free(&result); release_images(&o); xr_compile_resources_release(r);
+        CHECK(!physical && !allocation_count && !image_handle_count);
+    }
+    for (unsigned fault=0;fault<8;++fault) {
+        reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
+        if (fault==0) fail_terminate=true;
+        if (fault==1) fail_accounting=true;
+        if (fault==2) fail_continue_at=0;
+        if (fault==3) cancellation=cancel_events;
+        if (fault==4) command_timeout=1;
+        if (fault==6) fail_root_continue=true;
+        if (fault==7) mismatch_accounting=true;
+        XrCompileResourceStats used;
+        XrProcessStatus expected=fault==3 ? XTC_PROCESS_CANCELLED : fault==4 ? XTC_PROCESS_TIMEOUT :
+            (fault==5 || fault==7) ? XTC_PROCESS_UNSUPPORTED : XTC_PROCESS_IO;
+        CHECK(trial("--root-long-pipes",&finite,fault==5 ? XR_PROC_UNSUPPORTED : XR_PROC_OK,&used)==expected);
+    }
+    reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
+    XrCompileResourceLimits small=finite; small.work=1000; XrCompileResourceStats used;
+    CHECK(trial("--root-long-pipes",&small,XR_PROC_OK,&used)==XTC_PROCESS_BUDGET);
+    reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
+    XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&finite,&r)==XR_COMPILE_RESOURCE_OK);
+    Observation o={0}; o.resources=r; XrProcessResult result={0},sentinel=result;
+    result.exit_code=1234; result.duration_ms=9876; sentinel=result;
+    exhaust_at_root=r; exhaust_work_limit=finite.work;
+    CHECK(command("--root-long-pipes",&o,&result)==XTC_PROCESS_BUDGET && !memcmp(&result,&sentinel,sizeof(result)));
+    CHECK(root_exit_continues==1 && xr_compile_resources_stats(r,&used)==XR_COMPILE_RESOURCE_OK && used.work==finite.work);
+    release_images(&o); xr_compile_resources_release(r); CHECK(!physical && !allocation_count && !image_handle_count);
+    reset_faults(); puts("root completion: closed/inherited pipes, exits, terminate/accounting/Continue/cancel/timeout/observer/budget PASS");
+}
+
 static void failures(void) {
     XrCompileResourceStats out;
     for (unsigned i=0;i<5;++i) {
@@ -534,6 +639,18 @@ int main(int argc,char **argv) {
     if (argc>1 && !strcmp(argv[1],"--load")) {
         return load_twice(argv[2]);
     }
+    if (argc>1 && !strcmp(argv[1],"--root-long-closed")) return child_spawn("--long-closed",argv[2]);
+    if (argc>1 && !strcmp(argv[1],"--root-long-pipes")) return child_spawn("--sleep",argv[2]);
+    if (argc>1 && !strcmp(argv[1],"--root-nonzero")) {
+        int status=child_spawn("--sleep",argv[2]); return status ? status : 77;
+    }
+    if (argc>1 && !strcmp(argv[1],"--long-closed")) {
+        HANDLE out=GetStdHandle(STD_OUTPUT_HANDLE),err=GetStdHandle(STD_ERROR_HANDLE);
+        if (out && out!=INVALID_HANDLE_VALUE) CloseHandle(out);
+        if (err && err!=INVALID_HANDLE_VALUE && err!=out) CloseHandle(err);
+        SetStdHandle(STD_OUTPUT_HANDLE,NULL); SetStdHandle(STD_ERROR_HANDLE,NULL);
+        Sleep(10000); return 0;
+    }
     if (argc>1 && !strcmp(argv[1],"--plain")) return 0;
     if (argc>1 && !strcmp(argv[1],"--sleep")) { Sleep(10000); return 0; }
     if (argc>1 && !strcmp(argv[1],"--descendant")) return child_spawn("--delayed",argv[2]);
@@ -561,5 +678,5 @@ int main(int argc,char **argv) {
     CHECK((argc==2 || descendants_only) && strlen(argv[descendants_only ? 2 : 1])<sizeof(dll_path));
     strcpy(dll_path,argv[descendants_only ? 2 : 1]);
     if (descendants_only) { profile_enabled=true; descendants_and_exceptions(2); return 0; }
-    simple(true); simple(false); descendants_and_exceptions(6); failures(); thread_and_budget(); policy_reentry(); boundaries_and_lifetime(); exact_dispatch_and_sticky_output(); persistent_cleanup(); puts("image observer passed"); return 0;
+    simple(true); simple(false); descendants_and_exceptions(6); failures(); thread_and_budget(); policy_reentry(); boundaries_and_lifetime(); exact_dispatch_and_sticky_output(); persistent_cleanup(); root_completion(); puts("image observer passed"); return 0;
 }

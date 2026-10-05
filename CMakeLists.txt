@@ -2062,6 +2062,7 @@ set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
 )
 add_library(xray_program_aot_compiler STATIC
     ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})
+target_link_libraries(xray_program_aot_compiler PUBLIC xray_compile_resources)
 add_dependencies(xray_program_aot_compiler
     gen-stdlib-metadata
     gen-core-spec gen-xr-program-schema gen-text-kernel-embed gen-float-format-embed gen-integer-kernel-embed)

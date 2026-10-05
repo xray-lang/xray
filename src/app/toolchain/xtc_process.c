@@ -408,12 +408,15 @@ XR_FUNC XrProcessStatus xtc_process_prepare(XrCompileResources *r, const XrProce
     if (!r || !spec || !output || *output || !spec->executable || !spec->argv[0] ||
         spec->env_count > XTC_PROCESS_MAX_ENV || (spec->environment_source != XTC_PROCESS_ENV_EXPLICIT && spec->environment_source != XTC_PROCESS_ENV_SNAPSHOT) ||
         !spec->output_limit || spec->output_limit == SIZE_MAX || !spec->timeout_ms ||
+        (spec->completion_policy != XR_PROC_COMPLETE_TREE && spec->completion_policy != XR_PROC_COMPLETE_ROOT) ||
         (spec->image_mode != XR_PROC_IMAGES_NONE && spec->image_mode != XR_PROC_IMAGES_WINDOWS_TREE) ||
         ((spec->image_mode == XR_PROC_IMAGES_WINDOWS_TREE) != (spec->image_observer.observe != NULL))) return XTC_PROCESS_INVALID;
     XrToolchainProcess *p = NULL;
     XrProcessStatus s = process_resource(xr_compile_resources_calloc(r, 1, sizeof(*p), (void **)&p));
     if (s != XTC_PROCESS_OK) return s;
     p->spec.image_mode = spec->image_mode; p->spec.image_observer = spec->image_observer;
+    s = process_work(r, sizeof(p->spec.completion_policy)); if (s != XTC_PROCESS_OK) goto fail;
+    p->spec.completion_policy = spec->completion_policy;
     p->resources = r; p->spec.timeout_ms = spec->timeout_ms; p->spec.output_limit = spec->output_limit;
     s = process_copy(r, spec->executable, &p->spec.executable); if (s != XTC_PROCESS_OK) goto fail;
     if (!process_absolute(p->spec.executable)) { s = XTC_PROCESS_INVALID; goto fail; }
@@ -475,12 +478,13 @@ XR_FUNC XrProcessStatus xtc_process_clone_observed(const XrToolchainProcess *sou
     if (status != XTC_PROCESS_OK) return status;
     status = process_work(resources, sizeof(copy->resources) + sizeof(copy->argc) +
         sizeof(copy->spec.env_count) + sizeof(copy->spec.timeout_ms) + sizeof(copy->spec.output_limit) +
-        sizeof(copy->spec.image_mode) + sizeof(copy->spec.image_observer));
+        sizeof(copy->spec.image_mode) + sizeof(copy->spec.image_observer) + sizeof(copy->spec.completion_policy));
     if (status != XTC_PROCESS_OK) goto fail;
     copy->resources = resources; copy->argc = source->argc;
     copy->spec.env_count = source->spec.env_count;
     copy->spec.timeout_ms = source->spec.timeout_ms; copy->spec.output_limit = source->spec.output_limit;
     copy->spec.image_mode = XR_PROC_IMAGES_WINDOWS_TREE; copy->spec.image_observer = *observer;
+    copy->spec.completion_policy = source->spec.completion_policy;
     status = process_clone_text(resources, source->spec.executable, &copy->spec.executable);
     if (status != XTC_PROCESS_OK) goto fail;
     status = process_clone_text(resources, source->spec.cwd, &copy->spec.cwd);
@@ -514,7 +518,7 @@ XR_FUNC XrProcessStatus xtc_process_view(const XrToolchainProcess *p, XrProcessV
     if (!p || !output) return XTC_PROCESS_INVALID;
     *output = (XrProcessView){p->spec.executable, p->spec.cwd, p->spec.argv, p->argc,
         p->spec.env_keys, p->spec.env_values, p->spec.env_count, p->spec.timeout_ms,
-        p->spec.output_limit, p->spec.image_mode};
+        p->spec.output_limit, p->spec.image_mode, p->spec.completion_policy};
     return XTC_PROCESS_OK;
 }
 static XrProcessStatus process_capture_init(XrCompileResources *r, XtcCapture *c, size_t limit) {
@@ -555,7 +559,8 @@ static XrProcessStatus process_capture_read(XrCompileResources *r, XrPipeHandle 
 }
 XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
     XrProcessCancelled cancelled, void *context, XrProcessResult *output) {
-    if (!p || !output || output->stdout_bytes.data || output->stderr_bytes.data) return XTC_PROCESS_INVALID;
+    if (!p || !output || output->stdout_bytes.data || output->stderr_bytes.data ||
+        (p->spec.completion_policy == XR_PROC_COMPLETE_ROOT && p->spec.image_mode != XR_PROC_IMAGES_WINDOWS_TREE)) return XTC_PROCESS_INVALID;
     XrProcessResult result = {0}; result.exit_code = -1;
     XrCompileResources *r = p->resources;
     XtcCapture captures[2] = {{0},{0}};
@@ -576,6 +581,8 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
     options.cwd = p->spec.cwd; options.env_keys = p->spec.env_keys; options.env_values = p->spec.env_values; options.env_count = p->spec.env_count;
     options.complete_environment = true; options.new_process_group = true;
     options.image_mode = p->spec.image_mode; options.image_observer = p->spec.image_observer;
+    s = process_work(r, sizeof(options.completion_policy)); if (s != XTC_PROCESS_OK) goto done;
+    options.completion_policy = p->spec.completion_policy;
     options.has_stdout = options.has_stderr = true; options.stdout_write = pipes[0].write; options.stderr_write = pipes[1].write;
     s = process_os(xr_proc_spawn(p->spec.executable, p->spec.argv, &options, &pid));
     for (unsigned i = 0; i < 2; ++i) { if (xr_pipe_close(pipes[i].write) != 0 && s == XTC_PROCESS_OK) s = XTC_PROCESS_IO; pipes[i].write = XR_PIPE_INVALID; }

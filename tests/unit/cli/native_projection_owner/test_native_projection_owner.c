@@ -105,7 +105,7 @@ static XrToolchainBinding real_binding(XrCompileResources *resources,const char 
     const XrXirNativeProjectionSource *code=xr_compile_native_projection_source(owner);
     FILE *f=fopen(cpath,"wb");CHECK(f&&fwrite(code->text,1,code->length,f)==code->length&&!fclose(f));
     const char *argv[]={compiler,"/nologo","/std:c11",alternate ? "/O1" : "/O2","/c",cpath};
-    XrXirTargetCommandFacts command={compiler,sdk_root,argv,6,NULL,0,30000,1048576,0};
+    XrXirTargetCommandFacts command={compiler,sdk_root,argv,6,NULL,0,30000,1048576,0,0};
     XrXirTargetDependency files[]={{compiler,XR_XIR_TARGET_COMPILER},{cpath,XR_XIR_TARGET_SOURCE}};
     XrXirTargetSnapshotRequest target_request={resources,"x86_64-windows-msvc",3,2,11,files,2,&command,1,NULL};
     XrXirTargetSnapshot *target=NULL;CHECK(xtc_xir_target_snapshot_capture(&target_request,&target)==XR_XIR_TARGET_OK);

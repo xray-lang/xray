@@ -145,7 +145,7 @@ static XrOsProcStatus observe(XrXirImageCollector *images,HANDLE file,XrProcImag
 static XrXirTargetSnapshotRequest request(XrCompileResources *r,const XrXirImageCollector *images,
     const XrXirTargetDependency *dependencies,uint32_t count) {
     static const char *args[]={"observed-file"};
-    static const XrXirTargetCommandFacts command={"C:/described-tool.exe","C:/",args,1,NULL,0,3000,1048576,0};
+    static const XrXirTargetCommandFacts command={"C:/described-tool.exe","C:/",args,1,NULL,0,3000,1048576,0,0};
     return (XrXirTargetSnapshotRequest){r,"x86_64-windows-msvc",3,2,11,dependencies,count,&command,1,images};
 }
 static void blocked_writer(const char *path) {
@@ -355,7 +355,7 @@ static void real_process(const ProcessTest *test) {
     XrXirTargetEnvironment environment[XTC_PROCESS_MAX_ENV];
     for(size_t i=0;i<view.env_count;++i)environment[i]=(XrXirTargetEnvironment){view.env_keys[i],view.env_values[i]};
     XrXirTargetCommandFacts command={view.executable,view.cwd,view.argv,(uint32_t)view.argc,environment,(uint32_t)view.env_count,
-        view.timeout_ms,view.output_limit,(uint32_t)view.image_mode};
+        view.timeout_ms,view.output_limit,(uint32_t)view.image_mode, (uint32_t)view.completion_policy};
     /* Evidence contains only a framed identity of the complete environment. */
     XrSHA256Context env_hash;uint8_t env_digest[32];xr_sha256_init(&env_hash);
     static const char domain[]="test:frozen-environment:v1";

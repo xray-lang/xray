@@ -1,3 +1,4 @@
+#include "xr_backend_emission_owner.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -196,6 +197,9 @@ static bool write_facts(const char *path, bool cleanup, const GraphCounts *count
 }
 
 int main(int argc, char **argv) {
+    if (!backend_emission_owner_open((XrCompileResourceLimits) {
+            UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))
+        return 1;
     if (argc != 7 || strcmp(argv[1], "--scenario") != 0 ||
         (strcmp(argv[2], "cleanup") != 0 && strcmp(argv[2], "branch") != 0) ||
         strcmp(argv[3], "--output") != 0 || strcmp(argv[5], "--facts") != 0 || argv[4][0] == '\0' ||
@@ -229,8 +233,12 @@ int main(int argc, char **argv) {
         exact_graph_counts(program, cleanup, &counts) &&
         xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK &&
         xr_backend_ir_verify(ir, &diagnostic) && xr_backend_ir_binding_verify(ir, &diagnostic) &&
-        xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK &&
-        xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) == XR_BACKEND_OK &&
+        xr_compile_backend_ir_emit_c(
+            ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+            &generated, &diagnostic) == XR_BACKEND_OK &&
+        xr_compile_backend_ir_emit_c(
+            ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+            &repeated, &diagnostic) == XR_BACKEND_OK &&
         generated.size != 0u && generated.size == repeated.size &&
         memcmp(generated.bytes, repeated.bytes, generated.size) == 0 &&
         write_stable_bytes(argv[4], generated.bytes, generated.size) &&

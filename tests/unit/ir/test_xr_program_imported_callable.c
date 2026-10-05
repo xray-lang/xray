@@ -1,3 +1,4 @@
+#include "../aot/xr_backend_emission_owner.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -847,7 +848,10 @@ TEST(test_imported_callable_multi_target_program) {
     ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_NOT_NULL(generated.bytes);
     ASSERT_GT(generated.size, 0u);
@@ -1045,6 +1049,9 @@ TEST(imported_static_method_resolves_after_dependency_emission) {
 }
 
 TEST_MAIN_BEGIN()
+if (!backend_emission_owner_open((XrCompileResourceLimits) {
+        UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))
+    return 1;
 g_generated_c_path = argc == 2 ? argv[1] : NULL;
 if (argc > 2)
     return 2;

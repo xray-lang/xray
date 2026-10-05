@@ -4187,3 +4187,5 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/xir/provenance_budget_release.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/declaration_proof_scratch.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/type_match_scratch.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/signature_shape_scratch.cmake)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/aot/backend_emission_resources.cmake)

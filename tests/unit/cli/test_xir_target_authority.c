@@ -8,6 +8,7 @@
  */
 #include "base/xmalloc.h"
 #include "app/toolchain/xtc_xir_target.h"
+#include "os/os_proc.h"
 #include <windows.h>
 #include <winioctl.h>
 #include <stdio.h>
@@ -134,7 +135,7 @@ static void setup(void) {
     files[1] = (XrXirTargetDependency){header_path, XR_XIR_TARGET_HEADER};
     files[2] = (XrXirTargetDependency){compiler_path, XR_XIR_TARGET_COMPILER};
     command = (XrXirTargetCommandFacts){compiler_path, directory, arguments, 3, environment,
-        (uint32_t)(sizeof(environment)/sizeof(environment[0])), 3000, 1048576, 0};
+        (uint32_t)(sizeof(environment)/sizeof(environment[0])), 3000, 1048576, 0, 0};
 }
 static void teardown(void) {
     CHECK(DeleteFileA(source_path)); CHECK(DeleteFileA(header_path)); CHECK(DeleteFileA(compiler_path));
@@ -157,7 +158,7 @@ static XrXirTargetSnapshot *capture(XrCompileResources *resources) {
 static void identity_and_lifetime(void) {
     XrCompileResources *resources = ledger(&unlimited); uint64_t baseline = stats(resources).live_bytes;
     XrXirTargetSnapshot *snapshot = capture(resources); const XrXirTargetFacts *facts = xtc_xir_target_facts(snapshot);
-    CHECK(facts->schema == 2 && facts->file_count == 3 && facts->command_count == 1);
+    CHECK(facts->schema == 3 && facts->file_count == 3 && facts->command_count == 1);
     uint8_t first[32], provider[32], sysroot[32]; memcpy(first, facts->identity, 32);
     memcpy(provider, facts->provider_identity, 32); memcpy(sysroot, facts->sysroot_identity, 32);
     static const uint8_t abc[32] = {0xba,0x78,0x16,0xbf,0x8f,0x01,0xcf,0xea,0x41,0x41,0x40,0xde,0x5d,0xae,0x22,0x23,
@@ -232,7 +233,7 @@ static void command_contract(void) {
     CHECK(strcmp(saved->executable, saved->argv[0]) && !strcmp(saved->executable, compiler_path));
     CHECK(saved->timeout_ms == 3000 && saved->output_limit == 1048576 && saved->image_mode == 0);
     xtc_xir_target_free(snapshot);
-    for (unsigned field = 0; field < 8; ++field) {
+    for (unsigned field = 0; field < 9; ++field) {
         command = original;
         const char *alternate_args[] = {"different argv0", argument_text, "source.c"};
         XrXirTargetEnvironment alternate_env[] = {{"EMPTY", ""}};
@@ -244,6 +245,7 @@ static void command_contract(void) {
         case 4: command.image_mode = 1; break;
         case 5: command.argv = alternate_args; break;
         case 6: command.argc--; break;
+        case 7: command.completion_policy = XR_PROC_COMPLETE_ROOT; break;
         default: command.environment = alternate_env; command.environment_count = 1; break;
         }
         snapshot = capture(resources);
@@ -266,6 +268,8 @@ static void command_contract(void) {
     command.output_limit = UINT64_MAX; expected_failure(&request, XR_XIR_TARGET_INVALID);
     command = original; command.image_mode = 2; expected_failure(&request, XR_XIR_TARGET_INVALID);
     command = original; command.image_mode = UINT32_MAX; expected_failure(&request, XR_XIR_TARGET_INVALID);
+    command = original; command.completion_policy = 2; expected_failure(&request, XR_XIR_TARGET_INVALID);
+    command = original; command.completion_policy = UINT32_MAX; expected_failure(&request, XR_XIR_TARGET_INVALID);
     char executable_text[] = "Z:/mutable-compiler.exe", cwd_text[] = "Z:/mutable-directory";
     command = original; command.executable = executable_text; command.cwd = cwd_text;
     command.timeout_ms = UINT32_MAX; command.output_limit = (uint64_t)SIZE_MAX - 1; command.image_mode = 1;
@@ -404,14 +408,14 @@ static void fixed_operation_work(void) {
     XrCompileResources *resources = ledger(&unlimited);
     XrXirTargetSnapshot snapshot = {0}; snapshot.resources = resources;
     const char *args[] = {"a"};
-    XrXirTargetCommandFacts description = {"Z:/x", "Z:/", args, 1, NULL, 0, 1, 1, 1};
+    XrXirTargetCommandFacts description = {"Z:/x", "Z:/", args, 1, NULL, 0, 1, 1, 1, 0};
     XrXirTargetSnapshotRequest request = {0}; request.commands = &description; request.command_count = 1;
     uint64_t command_before = stats(resources).work;
     CHECK(target_commands(&snapshot, &request));
     /* Five real calloc payloads; three scans, UTF8 checks and copies; six
-     * drive-prefix reads; 16 policy-copy bytes; the argv0 nonempty read. */
+     * drive-prefix reads; 20 policy-copy bytes; the argv0 nonempty read. */
     CHECK(stats(resources).work - command_before == sizeof(description) + 2 * sizeof(char *) +
-        5 * sizeof(XtcXirMemory) + 69);
+        5 * sizeof(XtcXirMemory) + 73);
     while (snapshot.memory) { XtcXirMemory *next = snapshot.memory->next;
         xr_compile_resources_free(snapshot.memory); snapshot.memory = next; }
     snapshot.commands = NULL;
@@ -491,7 +495,7 @@ static int diagnostic_lease(const char *manifest) {
         CHECK(count < 16384); lines[count++] = storage + i + 1;
     }
     uint32_t at = 0; CHECK(count > 3);
-    if (strcmp(lines[at++], "xray-target-command-v2")) { puts("STATUS 6"); return 2; }
+    if (strcmp(lines[at++], "xray-target-command-v3")) { puts("STATUS 6"); return 2; }
     uint32_t provider = (uint32_t)strtoul(lines[at++], NULL, 10);
     uint32_t file_count = (uint32_t)strtoul(lines[at++], NULL, 10); CHECK(file_count && file_count <= 4096);
     for (uint32_t i = 0; i < file_count; ++i) {
@@ -509,9 +513,10 @@ static int diagnostic_lease(const char *manifest) {
         for (uint32_t e = 0; e < commands[i].environment_count; ++e) {
             CHECK(at + 1 < count); env[i][e] = (XrXirTargetEnvironment){lines[at], lines[at + 1]}; at += 2;
         }
-        CHECK(at + 2 < count); commands[i].timeout_ms = (uint32_t)diagnostic_number(lines[at++], UINT32_MAX);
+        CHECK(at + 3 < count); commands[i].timeout_ms = (uint32_t)diagnostic_number(lines[at++], UINT32_MAX);
         commands[i].output_limit = diagnostic_number(lines[at++], UINT64_MAX);
         commands[i].image_mode = (uint32_t)diagnostic_number(lines[at++], UINT32_MAX);
+        commands[i].completion_policy = (uint32_t)diagnostic_number(lines[at++], UINT32_MAX);
     }
     XrCompileResources *resources = ledger(&unlimited);
     XrXirTargetSnapshotRequest request = {resources, "x86_64-windows-msvc", provider, 2, 11, dependencies, file_count, commands, command_count, NULL};

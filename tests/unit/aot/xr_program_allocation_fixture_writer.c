@@ -1,3 +1,4 @@
+#include "xr_backend_emission_owner.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -408,6 +409,9 @@ static bool verify_execution(XrValidatedProgram *program, XrTargetProfile *profi
 }
 
 int main(int argc, char **argv) {
+    if (!backend_emission_owner_open((XrCompileResourceLimits) {
+            UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))
+        return 1;
     if (argc != 5 || strcmp(argv[1], "--output") != 0 || strcmp(argv[3], "--facts") != 0 ||
         argv[2][0] == '\0' || argv[4][0] == '\0' || strcmp(argv[2], argv[4]) == 0) {
         fprintf(stderr, "expected --output GENERATED_C --facts JSON\n");
@@ -424,8 +428,12 @@ int main(int argc, char **argv) {
         program && profile && has_exact_producers(program) && verify_execution(program, profile) &&
         xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK &&
         xr_backend_ir_verify(ir, &diagnostic) && xr_backend_ir_binding_verify(ir, &diagnostic) &&
-        xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK &&
-        xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) == XR_BACKEND_OK &&
+        xr_compile_backend_ir_emit_c(
+            ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+            &generated, &diagnostic) == XR_BACKEND_OK &&
+        xr_compile_backend_ir_emit_c(
+            ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+            &repeated, &diagnostic) == XR_BACKEND_OK &&
         generated.size == repeated.size &&
         memcmp(generated.bytes, repeated.bytes, generated.size) == 0 &&
         write_bytes(argv[2], generated.bytes, generated.size) &&

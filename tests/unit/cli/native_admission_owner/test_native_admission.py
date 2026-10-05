@@ -22,10 +22,10 @@ def verify(facts, binary):
             found.append(struct.unpack_from('<I',b,at+36)[0])
     assert len(found)==1 and machine==0x8664 and magic==0x20b and flags&2 and not flags&0x2000 and subsystem==3 and found[0]&0x20000000
     image_frame=struct.pack('<HHHHIIII',machine,magic,flags,subsystem,entry,image,headers,found[0])
-    frame=b'xray:xir-native-commands:trusted-local:v1'+u(1)+u(3)
+    frame=b'xray:xir-native-commands:trusted-local:v2'+u(2)+u(3)
     for stage,c in enumerate(d['commands']):
         frame+=u(stage)+text(c['executable'])+text(c['cwd'])+u(len(c['argv']))+b''.join(text(x) for x in c['argv'])
-        frame+=u(len(c['env']))+b''.join(text(k)+text(v) for k,v in c['env'])+u(c['timeout'])+u(c['limit'],8)+u(c['image'])
+        frame+=u(len(c['env']))+b''.join(text(k)+text(v) for k,v in c['env'])+u(c['timeout'])+u(c['limit'],8)+u(c['image'])+u(c['completion'])
     commands=digest(frame)
     rows=sorted((r for r in d['files'] if r[1] in (3,4,7,8,9)),key=lambda r:(r[0],r[1],r[2].encode('utf-8')))
     frame=b'xray:xir-native-observed-inputs:trusted-local:v1'+u(1)+u(len(rows))
@@ -38,7 +38,7 @@ def verify(facts, binary):
     profile=digest(frame+commands+sysroot+sdk_id)
     ids=[digest(b'xray:toolchain:provider-version:v2'+text(d['compiler']['file_text'])),
          digest(b'xray:toolchain:target-triple:v2'+text(triple)),
-         digest(b'xray:toolchain:codegen-options:v2'+text('xray:xir-native-commands:trusted-local:v1:sha256:'+commands.hex())),
+         digest(b'xray:toolchain:codegen-options:v2'+text('xray:xir-native-commands:trusted-local:v2:sha256:'+commands.hex())),
          sysroot,sdk_id,profile]
     binding=digest(b'xray:aot-toolchain:v2'+u(2)+u(3)+b''.join(ids))
     h=list(map(bytes.fromhex,d['hashes']))

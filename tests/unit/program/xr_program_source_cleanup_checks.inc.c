@@ -294,8 +294,14 @@ static void write_builtin_panic_cleanup_aot(const XrValidatedProgram *program,
     ASSERT_TRUE(xr_backend_ir_binding_verify(ir, &diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic), XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &generated, &diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, true, NULL, 0u},
+                      &repeated, &diagnostic),
+                  XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "int main(void)"));
@@ -441,8 +447,14 @@ static void write_uncaught_error_aot(XrValidatedProgram *program, const XrTarget
     ASSERT_TRUE(xr_backend_ir_binding_verify(ir, &diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic), XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &diagnostic),
+                  XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NULL(strstr(generated.bytes, "int main(void)"));
@@ -503,9 +515,15 @@ static void assert_aot_provider_trap_cleanup(const XrValidatedProgram *program,
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -575,9 +593,15 @@ static void assert_aot_child_cleanup(const XrValidatedProgram *program,
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -738,9 +762,15 @@ static void assert_aot_branching_cleanup(const XrValidatedProgram *program,
     ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -820,9 +850,15 @@ static void assert_aot_nested_cleanup(const XrValidatedProgram *program,
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -911,9 +947,15 @@ static void assert_aot_pipe_cancel_cleanup(const XrValidatedProgram *program,
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -985,9 +1027,15 @@ static void assert_aot_affine_coroutine_cleanup(const XrValidatedProgram *progra
     ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+    ASSERT_EQ_INT(xr_compile_backend_ir_emit_c(
+                      backend_ir,
+                      &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+                      &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);

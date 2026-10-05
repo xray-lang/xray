@@ -183,6 +183,7 @@ static bool native_spec(XtcXirNativeOperation *owner, const XtcXirNativeOperatio
     if (!native_work(owner, sizeof(*spec))) return false;
     xtc_process_spec_init(spec, executable, owner->limits.timeout_ms);
     const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner->workspace);
+    spec->completion_policy = XR_PROC_COMPLETE_ROOT;
     spec->environment_source = XTC_PROCESS_ENV_EXPLICIT;
     spec->cwd = paths->input; spec->output_limit = owner->limits.process_output_bytes;
     spec->env_count = 3;

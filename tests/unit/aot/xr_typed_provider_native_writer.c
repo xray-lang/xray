@@ -1,3 +1,4 @@
+#include "xr_backend_emission_owner.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -11,6 +12,9 @@
 #include "aot/program/xr_backend_ir.h"
 
 int main(int argc, char **argv) {
+    if (!backend_emission_owner_open((XrCompileResourceLimits) {
+            UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))
+        return 1;
     if (argc != 3) return 2;
     bool persistent = strcmp(argv[2], "bytes_module") == 0;
     bool bytes = persistent || strcmp(argv[2], "bytes") == 0 || strcmp(argv[2], "empty") == 0;
@@ -24,7 +28,10 @@ int main(int argc, char **argv) {
     XrBackendDiagnostic diagnostic = {0};
     XrBackendOptions options = xr_backend_default_options();
     XrBackendStatus status = xr_backend_ir_build(program, profile, &options, &ir, &diagnostic);
-    if (status == XR_BACKEND_OK) status = xr_backend_ir_emit_c(ir, false, &generated, &diagnostic);
+    if (status == XR_BACKEND_OK)
+        status = xr_compile_backend_ir_emit_c(
+            ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},
+            &generated, &diagnostic);
     if (status != XR_BACKEND_OK) {
         fprintf(stderr, "typed native generation: status=%d operation=%u function=%u\n",
                 status, diagnostic.operation_id, diagnostic.function_id);
