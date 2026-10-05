@@ -5821,6 +5821,8 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、linked/scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
 
+跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
+
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
 Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
