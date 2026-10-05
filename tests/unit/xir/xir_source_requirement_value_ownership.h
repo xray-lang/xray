@@ -22,12 +22,12 @@ static void source_requirement_value_ownership(const XrXirSourceRequest *request
     XrXirArtifact *checked=witness_promise_check(&local,true,"receiver-owned escaped callable",NULL);
     witness_promise_file(&local,"witness_promises.xr","const overwritten=0\n");
     XrXirArtifact *closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_specialize(checked,NULL,&closed,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked, &closed,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    const XrXirModule *module=xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t entries[2]={UINT32_MAX,UINT32_MAX};
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *function=&module->functions[f];
@@ -36,7 +36,7 @@ static void source_requirement_value_ownership(const XrXirSourceRequest *request
     }
     CHECK(entries[0]!=UINT32_MAX && entries[1]!=UINT32_MAX);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},&program)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program)==XR_XIR_OK);
     XrXirValue retained[2]={{0},{0}};
     for (uint32_t run=0;run<2;++run) {
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance=NULL;
@@ -52,7 +52,7 @@ static void source_requirement_value_ownership(const XrXirSourceRequest *request
         }
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (uint32_t run=0;run<2;++run) {
         const char *bytes=NULL; size_t length=0;
         CHECK(retained[run].type==XR_XIR_STRING && xr_xir_string_view(&retained[run],&bytes,&length));

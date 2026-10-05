@@ -23,10 +23,9 @@ static void witness_promise_file(const XrXirSourceRequest *request,
 
 static XrXirArtifact *witness_promise_check(const XrXirSourceRequest *request,
     bool accepted, const char *label, const char *reason) {
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
-    XrXirSourceRequest local = *request; local.session = session;
+    XrXirSourceRequest local = *request;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_source_check(&local,&result,&diagnostic);
+    XrXirStatus status = effect_execution_check(&local,&result,&diagnostic);
     if (status != (accepted ? XR_XIR_OK : XR_XIR_BAD_TYPE))
         fprintf(stderr,"witness promise %s: %u %d:%d %s\n",label,status,
             diagnostic.line,diagnostic.column,diagnostic.message);
@@ -36,30 +35,31 @@ static XrXirArtifact *witness_promise_check(const XrXirSourceRequest *request,
         if (!strstr(diagnostic.message,reason))
             fprintf(stderr,"witness rejection %s: expected %s, got %s\n",label,reason,diagnostic.message);
         CHECK(strstr(diagnostic.message,reason));
-        xr_xir_source_result_free(&result); xr_compiler_session_delete(session);
+        xr_xir_compile_source_result_free(&result);
         return NULL;
     }
     CHECK(result.snapshot);
-    xr_compiler_session_delete(session);
-    CHECK(xr_xir_artifact_verify(result.checked,NULL,NULL) == XR_XIR_OK);
+    const XrXirCompileContext context=*xr_xir_compile_artifact_context(result.checked);
+
+    CHECK(xr_xir_compile_artifact_verify(result.checked,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0}; XrXirArtifact *copy = NULL;
-    CHECK(xr_xir_checked_write(result.checked,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_source_result_free(&result);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&copy,NULL) == XR_XIR_OK);
-    memset(packet.bytes,0xCC,packet.length); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_artifact_verify(copy,NULL,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(result.checked, &packet,NULL) == XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result);
+    CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &copy,NULL) == XR_XIR_OK);
+    memset(packet.bytes,0xCC,packet.length); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_artifact_verify(copy,NULL) == XR_XIR_OK);
     return copy;
 }
 
 static void witness_promise_execute(XrXirArtifact *checked,
     const char *prefix, const char *output) {
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_specialize(checked,NULL,&closed,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked, &closed,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    const XrXirModule *module = xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     uint32_t entry = UINT32_MAX;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
@@ -70,16 +70,15 @@ static void witness_promise_execute(XrXirArtifact *checked,
     CHECK(entry != UINT32_MAX);
     if (output) {
         XrXirCSource source = {0};
-        CHECK(xr_xir_emit_c(lowered,prefix,4194304,&source) == XR_XIR_OK);
+        CHECK(xr_xir_compile_emit_c(lowered,prefix,4194304,&source) == XR_XIR_OK);
         CHECK(!strstr(source.text,"({") && !strstr(source.text,"xr_xir_vm"));
         FILE *file = fopen(output,"ab"); CHECK(file);
         CHECK(fwrite(source.text,1,source.length,file) == source.length);
         CHECK(fprintf(file,"\nconst uint32_t %s_selected_entry = %uu;\n",prefix,entry) > 0);
-        CHECK(fclose(file) == 0); xr_xir_c_source_free(&source);
+        CHECK(fclose(file) == 0); xr_xir_compile_c_source_free(&source);
     }
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered,(XrXirProgramBudget){33554432,64000000},
-        &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
     for (uint32_t run = 0; run < 2; ++run) {
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
@@ -93,7 +92,7 @@ static void witness_promise_execute(XrXirArtifact *checked,
         CHECK(result.type == XR_XIR_I64 && result.payload == 41); xr_xir_value_drop(&result);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
 }
 
 static void witness_promise_direct(const XrXirSourceRequest *request, const char *output) {

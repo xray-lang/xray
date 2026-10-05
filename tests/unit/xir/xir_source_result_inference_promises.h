@@ -24,7 +24,7 @@ static void source_result_inference_promises(const XrXirSourceRequest *request) 
         "export fn answer()->i64{return forward(pure)}\n");
     source_manifest_write(&local,"witness_promises.xr",records,2);
     XrXirArtifact *checked=witness_promise_check(&local,true,"known result legal weakening",NULL);
-    const XrXirModule *module=xr_xir_artifact_module(checked); uint32_t found=0;
+    const XrXirModule *module=xr_xir_compile_artifact_module(checked); uint32_t found=0;
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *function=&module->functions[f];
         if (function->name_length!=7 || memcmp(function->name,"forward",7)) continue;

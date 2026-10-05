@@ -255,7 +255,7 @@ set_tests_properties(test_declaration_manifest PROPERTIES LABELS "unit;metadata;
 # value/ — Value system
 # ============================================================================
 
-add_xray_bootstrap_executable(test_xir_effects_source xir/test_xir_effects_source.c)
+add_executable(test_xir_effects_source xir/test_xir_effects_source.c)
 target_link_libraries(test_xir_effects_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_effects_source PRIVATE XR_EFFECT_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source")
 if(MSVC)

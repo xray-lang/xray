@@ -32,7 +32,7 @@ static void source_inference_promises(const XrXirSourceRequest *request) {
         witness_promise_file(&local,"witness_promises.xr",programs[mode]);
         source_manifest_write(&local,"witness_promises.xr",records,2);
         XrXirArtifact *checked = witness_promise_check(&local,true,"inferred callable root conversion",NULL);
-        const XrXirModule *module = xr_xir_artifact_module(checked); uint32_t found=0;
+        const XrXirModule *module = xr_xir_compile_artifact_module(checked); uint32_t found=0;
         for (uint32_t f=0;f<module->function_count;++f) {
             const XrXirFunction *function=&module->functions[f];
             if (function->name_length!=7 || memcmp(function->name,"forward",7)) continue;

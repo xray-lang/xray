@@ -16,13 +16,13 @@
 #include "base/xmalloc.h"
 #include <stddef.h>
 #include <string.h>
-static void generic_method_old_cache(const XrXirProgramSpec *native) {
+static void generic_method_old_cache(const XrXirCompileContext *context,const XrXirProgramSpec *native) {
     CHECK(native && native->proof.bytes && native->proof.length >= 64);
     CHECK(!native->code.owner && !native->code.release);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(native,(XrXirProgramBudget){33554432,64000000},&program) == XR_XIR_OK);
-    xr_xir_program_drop(program);
-    uint8_t *bytes = xr_malloc(native->proof.length); CHECK(bytes);
+    CHECK(xr_xir_compile_program_seal(context,native, &program) == XR_XIR_OK);
+    xr_xir_compile_program_drop(program);
+    uint8_t *bytes=NULL; CHECK(xr_compile_resources_alloc(context->resources,native->proof.length,(void **)&bytes)==XR_COMPILE_RESOURCE_OK);
     for (uint32_t mode = 0; mode < 2; ++mode) {
         memcpy(bytes,native->proof.bytes,native->proof.length);
         size_t offset = mode ? 12 : 8;
@@ -34,14 +34,14 @@ static void generic_method_old_cache(const XrXirProgramSpec *native) {
         xr_sha256_final(&sha,bytes+32);
         uint8_t identity[32]; xr_sha256(bytes,native->proof.length,identity);
         XrXirProgramSpec stale = *native; stale.proof.bytes = bytes; stale.proof.identity = identity;
-        program = (XrXirProgram *)(uintptr_t)1;
-        CHECK(xr_xir_program_seal(&stale,(XrXirProgramBudget){33554432,64000000},&program) == XR_XIR_BAD_STRUCTURE);
+        program = NULL;
+        CHECK(xr_xir_compile_program_seal(context,&stale, &program) == XR_XIR_BAD_STRUCTURE);
         CHECK(!program);
     }
-    xr_free(bytes);
+    xr_compile_resources_free(bytes);
 }
-_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 28,"runtime program metadata ABI");
-_Static_assert(sizeof(void *) != 8 || sizeof(XrXirNominalIdentity) == 72,"runtime nominal identity stride");
+_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 29,"runtime program metadata ABI");
+_Static_assert(sizeof(void *) != 8 || sizeof(XrXirNominalIdentity) == 112,"runtime nominal identity stride");
 _Static_assert(sizeof(void *) != 8 || offsetof(XrXirNominalIdentity,flags) == 68,"runtime nominal final fact offset");
 _Static_assert(sizeof(XrXirFunctionIdentity) == 36,"runtime test role identity stride");
 _Static_assert(sizeof(void *) != 8 || sizeof(XrXirDeclarations) == 72,"runtime declaration stride remains unchanged");

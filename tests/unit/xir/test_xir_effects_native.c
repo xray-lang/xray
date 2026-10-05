@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_effect_execution_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_generic_method_old_cache.h"
 XR_DATA const XrXirProgramSpec effect_source_program;
@@ -55,9 +56,9 @@ static void native_witness_promises(void) {
         witness_inherited_selected_entry,witness_cross_selected_entry,witness_generic_method_selected_entry,witness_generic_where_selected_entry,
         witness_value_direct_selected_entry,witness_value_callback_selected_entry};
     for (uint32_t i = 0; i < sizeof(specs)/sizeof(*specs); ++i) {
+        const XrXirCompileContext *context=effects_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(specs[i],(XrXirProgramBudget){33554432,64000000},
-            &program) == XR_XIR_OK);
+        CHECK(xr_xir_compile_program_seal(context,specs[i], &program) == XR_XIR_OK);
         size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
         for (size_t attempt = 0; attempt <= sites; ++attempt) {
             runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
@@ -65,20 +66,19 @@ static void native_witness_promises(void) {
             if (!attempt) sites = runtime_attempts;
             CHECK(runtime_live == baseline && runtime_bytes == bytes);
         }
-        runtime_fail_at = SIZE_MAX; xr_xir_program_drop(program);
+        runtime_fail_at = SIZE_MAX; xr_xir_compile_program_drop(program);
         CHECK(!runtime_live && !runtime_bytes);
         printf("Native witness promise %u released %zu allocation failure sites\n",i,sites);
     }
 }
 int main(void) {
-    generic_method_old_cache(&effect_source_program);
+    const XrXirCompileContext *context=effects_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+    generic_method_old_cache(context,&effect_source_program);
     native_witness_promises();
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&effect_source_program,
-        (XrXirProgramBudget){33554432, 64000000}, &program) == XR_XIR_OK);
+    CHECK(xr_xir_compile_program_seal(context,&effect_source_program, &program) == XR_XIR_OK);
     XrXirProgram *methods = NULL;
-    CHECK(xr_xir_program_seal(&method_source_program,
-        (XrXirProgramBudget){33554432, 64000000}, &methods) == XR_XIR_OK);
+    CHECK(xr_xir_compile_program_seal(context,&method_source_program, &methods) == XR_XIR_OK);
     size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
@@ -89,10 +89,11 @@ int main(void) {
         if (!attempt) sites = runtime_attempts;
         CHECK(runtime_live == baseline && runtime_bytes == bytes);
     }
-    runtime_fail_at = SIZE_MAX; xr_xir_program_drop(program); xr_xir_program_drop(methods);
+    runtime_fail_at = SIZE_MAX; xr_xir_compile_program_drop(program); xr_xir_compile_program_drop(methods);
     CHECK(!runtime_live && !runtime_bytes);
     printf("Native qualified callback released %zu allocation failure sites\n", sites);
     puts("Native qualified callback returned the independent expected value 7");
     puts("Native method callbacks returned independent expected values 11, 13 and 36");
+    effects_source_owners_free();
     return 0;
 }
