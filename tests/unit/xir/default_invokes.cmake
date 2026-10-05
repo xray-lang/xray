@@ -1,7 +1,7 @@
 # Suggested root-owned registration; one source graph, one packet, one emitted C.
 set(XIR_DEFAULT_INVOKE_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_default_invoke.xrc)
 set(XIR_DEFAULT_INVOKE_C ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_default_invoke.c)
-add_xray_bootstrap_executable(test_xir_default_invoke_source xir/test_xir_default_invoke_execution.c)
+add_executable(test_xir_default_invoke_source xir/test_xir_default_invoke_execution.c)
 target_link_libraries(test_xir_default_invoke_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_default_invoke_source PRIVATE XR_DEFAULT_INVOKE_MODE=0
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_default_invoke")
@@ -34,3 +34,10 @@ add_test(NAME test_xir_default_invoke_native COMMAND test_xir_default_invoke_nat
 add_test(NAME test_xir_default_invoke_mixed COMMAND test_xir_default_invoke_mixed)
 set_tests_properties(test_xir_default_invoke_source test_xir_default_invoke_packet test_xir_default_invoke_native test_xir_default_invoke_mixed
     PROPERTIES LABELS "unit;xir;execution;ownership;abi")
+
+# Measured sanitizer scheduling only; execution inputs and timeout remain unchanged.
+if(ENABLE_ASAN)
+    set_tests_properties(test_xir_default_invoke_source PROPERTIES COST 189.251 PROCESSORS 1)
+    set_tests_properties(test_xir_default_invoke_packet PROPERTIES COST 225.298 PROCESSORS 1)
+    set_tests_properties(test_xir_default_invoke_mixed PROPERTIES COST 190.106 PROCESSORS 1)
+endif()

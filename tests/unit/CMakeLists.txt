@@ -4200,6 +4200,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/aot/backend_emission_resources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/tuple_owner.cmake)
 include(xir/tuple_values.cmake)
 
+include(xir/tuple_source_compile_owner.cmake)
+
 # Fresh whole compiler/runtime fault matrices; scheduling does not extend deadlines.
 if(ENABLE_ASAN OR ENABLE_UBSAN)
     set_tests_properties(test_xir_cleanup_source PROPERTIES COST 702)

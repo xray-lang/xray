@@ -57,17 +57,10 @@ static void default_invoke_runtime_faults(XrXirProgram *program,const uint32_t i
     }
     runtime_fail_at=SIZE_MAX;printf("default invoke runtime OOM=%zu physical baseline restored\n",sites);
 }
-static void default_invoke_seal_faults(const XrXirProgramSpec *spec) {
-    size_t base=runtime_live,bytes=runtime_bytes,sites=0;
-    for(size_t pass=0;pass<=sites;++pass){
-        XrXirProgram *program=NULL;runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
-        XrXirStatus status=xr_xir_program_seal(spec,(XrXirProgramBudget){33554432,64000000},&program);
-        if(!pass){CHECK(status==XR_XIR_OK && program);sites=runtime_attempts;CHECK(sites);xr_xir_program_drop(program);}
-        else CHECK(status==XR_XIR_OUT_OF_MEMORY && !program);
-        CHECK(runtime_live==base && runtime_bytes==bytes);
-    }
-    runtime_fail_at=SIZE_MAX;printf("default invoke seal OOM=%zu physical baseline restored\n",sites);
+static void default_invoke_seal_faults(DefaultBuild build) {
+    default_compiler_faults(build,0);
 }
+
 static void default_invoke_cancel(XrXirProgram *program,uint32_t entry) {
     size_t base=runtime_live,bytes=runtime_bytes;
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;

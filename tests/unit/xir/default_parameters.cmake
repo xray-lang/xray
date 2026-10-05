@@ -1,7 +1,7 @@
 # One Source graph produces the packet shared by every execution consumer.
 set(XIR_DEFAULT_GAP_CHECKED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_default_gaps.xrc)
 set(XIR_DEFAULT_GAP_C ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_default_gaps.c)
-add_xray_bootstrap_executable(test_xir_default_gap_source xir/test_xir_default_gap_execution.c)
+add_executable(test_xir_default_gap_source xir/test_xir_default_gap_execution.c)
 target_link_libraries(test_xir_default_gap_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_default_gap_source PRIVATE XR_DEFAULT_GAP_MODE=0
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_default_gaps")

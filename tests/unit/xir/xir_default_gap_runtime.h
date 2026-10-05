@@ -57,17 +57,10 @@ static void gap_runtime_faults(XrXirProgram *program,const uint32_t ids[3]) {
     }
     runtime_fail_at=SIZE_MAX;printf("default gaps runtime OOM=%zu physical baseline restored\n",sites);
 }
-static void gap_seal_faults(const XrXirProgramSpec *spec) {
-    size_t base=runtime_live,bytes=runtime_bytes,sites=0;
-    for(size_t pass=0;pass<=sites;++pass){
-        XrXirProgram *program=NULL;runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
-        XrXirStatus status=xr_xir_program_seal(spec,(XrXirProgramBudget){33554432,64000000},&program);
-        if(!pass){CHECK(status==XR_XIR_OK && program);sites=runtime_attempts;CHECK(sites);xr_xir_program_drop(program);}
-        else CHECK(status==XR_XIR_OUT_OF_MEMORY && !program);
-        CHECK(runtime_live==base && runtime_bytes==bytes);
-    }
-    runtime_fail_at=SIZE_MAX;printf("default gaps seal OOM=%zu physical baseline restored\n",sites);
+static void gap_seal_faults(DefaultBuild build) {
+    default_compiler_faults(build,0);
 }
+
 static void gap_retained(XrXirValue held[2]) {
     runtime_attempts=0;runtime_fail_at=0;
     for(uint32_t n=0;n<2;++n){
