@@ -61,10 +61,10 @@ static void interface_access_cases(void) {
         XrXirStatus expected = attack == 0 || attack == 8 ? XR_XIR_OK :
             attack == 1 || attack == 2 ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE;
         XrXirArtifact *checked = NULL;
-        XrXirStatus status = xr_xir_check(&module,NULL,&checked,NULL);
+        XrXirStatus status = xr_xir_compile_check(interface_context_pointer_default(), &module, &checked, NULL);
         if (status != expected) fprintf(stderr,"interface access case %u: status=%u expected=%u\n",attack,status,expected);
         CHECK(status == expected && (checked != NULL) == (expected == XR_XIR_OK));
-        xr_xir_artifact_free(checked); CHECK(!live);
+        xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }
 }
 #endif // XIR_INTERFACE_ACCESS_CASES_H

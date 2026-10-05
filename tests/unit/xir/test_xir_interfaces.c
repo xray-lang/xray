@@ -12,20 +12,23 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-static size_t attempts, fail_at = SIZE_MAX, live;
+static size_t attempts, fail_at = SIZE_MAX, interface_live;
 static void *counted_calloc(size_t count, size_t size) {
     if (attempts++ == fail_at) return NULL;
-    void *p = xr_calloc(count, size); if (p) ++live; return p;
+    void *p = xr_calloc(count, size); if (p) ++interface_live; return p;
 }
 static void *counted_malloc(size_t size) {
     if (attempts++ == fail_at) return NULL;
-    void *p = xr_malloc(size); if (p) ++live; return p;
+    void *p = xr_malloc(size); if (p) ++interface_live; return p;
 }
-static void counted_free(void *p) { if (p) { CHECK(live); --live; } xr_free(p); }
+static void counted_free(void *p) { if (p) { CHECK(interface_live); --interface_live; } xr_free(p); }
 #undef xr_calloc
 #undef xr_malloc
 #undef xr_free
 #define xr_calloc(n, s) counted_calloc(n, s)
+#define xr_malloc(s) counted_malloc(s)
+#define xr_free(p) counted_free(p)
+#include "xir_interface_context_owner.h"
 #define xr_malloc(s) counted_malloc(s)
 #define xr_free(p) counted_free(p)
 #include "xir/xxir_interface.c"
@@ -73,9 +76,9 @@ static void ownership_and_oom(void) {
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
         Fixture f; fixture(&f); attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
-        XrXirBudget budget = xr_xir_default_budget(), original = budget;
+        XrXirCompileContext budget = interface_context_default();
         XrXirInterfaceTable *copy = NULL;
-        XrXirStatus status = xr_xir_interfaces_clone(&f.table, &f.types, &budget, &copy);
+        XrXirStatus status = xr_xir_compile_interfaces_clone(&budget, &f.table, &f.types, &copy);
         if (!site) {
             CHECK(status == XR_XIR_OK && copy); sites = attempts;
             memset(f.name, 0xcc, sizeof(f.name)); memset(f.method, 0xcc, sizeof(f.method));
@@ -86,12 +89,12 @@ static void ownership_and_oom(void) {
             CHECK(copy->declarations[1].parents[0].arguments[0] == XR_XIR_TYPE_PARAMETER_BASE);
             CHECK(copy->declarations[2].parents[0].arguments[0] == XR_XIR_I64);
             CHECK(!copy->declarations[0].constraints[0].markers);
-            budget = original; CHECK(xr_xir_interfaces_verify_structure(copy,&f.types,&budget)==XR_XIR_OK);
+            CHECK(xr_xir_compile_interfaces_verify_structure(&budget, copy, &f.types)==XR_XIR_OK);
         } else {
             CHECK(status == XR_XIR_OUT_OF_MEMORY && !copy);
-            CHECK(!memcmp(&budget,&original,sizeof(budget)));
+            interface_temporary_clean(&budget);
         }
-        xr_xir_interfaces_free(copy); CHECK(!live);
+        xr_xir_compile_interfaces_free(copy); CHECK(interface_live == stage_owner_count);
     }
     fail_at = SIZE_MAX; printf("Interface structure ownership: %zu allocation failure sites\n", sites);
 }
@@ -108,34 +111,34 @@ static void rejection_and_budget(void) {
         if (attack == 7) f.declarations[1].name = f.declarations[0].name;
         if (attack == 8) f.parameter = XR_XIR_UNIT;
         if (attack == 9) f.declarations[0].parents = f.parents, f.declarations[0].parent_count = 1;
-        XrXirBudget budget = xr_xir_default_budget(), original = budget;
+        XrXirCompileContext context = interface_context_default();
         XrXirInterfaceTable *copy = NULL;
-        CHECK(xr_xir_interfaces_clone(&f.table,&f.types,&budget,&copy)!=XR_XIR_OK && !copy && !live);
-        CHECK(!memcmp(&budget,&original,sizeof(budget)));
+        CHECK(xr_xir_compile_interfaces_clone(&context,&f.table,&f.types,&copy)!=XR_XIR_OK && !copy);
+        interface_temporary_clean(&context);
     }
-    Fixture f; fixture(&f); XrXirBudget original = xr_xir_default_budget(), spent = original;
-    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&spent)==XR_XIR_OK && !live);
-    CHECK(spent.scratch_bytes == original.scratch_bytes);
-    CHECK(spent.work < original.work && spent.metadata_bytes < original.metadata_bytes);
-    XrXirBudget exact = original;
-    exact.metadata_bytes -= spent.metadata_bytes;
-    exact.work -= spent.work; exact.parameters -= spent.parameters;
+    Fixture f; fixture(&f);
+    XrXirCompileContext measured = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_structure(&measured,&f.table,&f.types)==XR_XIR_OK);
+    interface_temporary_clean(&measured);
+    measured = interface_context_default();
+    XrXirInterfaceTable *copy = NULL;
+    CHECK(xr_xir_compile_interfaces_clone(&measured,&f.table,&f.types,&copy)==XR_XIR_OK && copy);
+    XrCompileResourceStats stats = stage_stats(&measured);
+    xr_xir_compile_interfaces_free(copy); copy = NULL;
+    interface_temporary_clean(&measured);
     for (unsigned boundary = 0; boundary < 5; ++boundary) {
-        XrXirBudget budget = exact;
-        if (boundary == 1) --budget.metadata_bytes;
-        if (boundary == 2) budget.scratch_bytes = 0;
-        if (boundary == 3) --budget.work;
-        if (boundary == 4) --budget.parameters;
-        XrXirInterfaceTable *copy = NULL;
-        CHECK(xr_xir_interfaces_clone(&f.table,&f.types,&budget,&copy)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        CHECK(budget.scratch_bytes == (boundary == 2 ? 0 : original.scratch_bytes));
-        CHECK((copy!=NULL)==!boundary); xr_xir_interfaces_free(copy); CHECK(!live);
+        XrXirCompileContext context = interface_exact_context(stats,boundary);
+        if (boundary == 4) context.limits.parameters = 1;
+        CHECK(xr_xir_compile_interfaces_clone(&context,&f.table,&f.types,&copy)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK((copy!=NULL)==!boundary);
+        xr_xir_compile_interfaces_free(copy); copy = NULL;
+        interface_temporary_clean(&context);
     }
-    XrXirBudget no_scratch = original; no_scratch.scratch_bytes = 0;
-    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&no_scratch)==XR_XIR_BUDGET);
-    CHECK(!no_scratch.scratch_bytes && !live);
+    XrXirCompileContext no_storage = interface_context_limited(STAGE_ALLOCATED_BYTES,0,STAGE_WORK);
+    CHECK(xr_xir_compile_interfaces_verify_structure(&no_storage,&f.table,&f.types)==XR_XIR_BUDGET);
+    interface_temporary_clean(&no_storage);
 }
-static XrXirStatus check_interface_module(const XrXirTypes *types, XrXirFunction function,
+static XrXirStatus check_interface_module(const XrXirCompileContext *context, const XrXirTypes *types, XrXirFunction function,
     XrXirArtifact **checked, XrXirDiagnostic *diagnostic) {
     XrXirInstruction ret = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock block = {0,1,0,0};
@@ -147,7 +150,7 @@ static XrXirStatus check_interface_module(const XrXirTypes *types, XrXirFunction
     XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_check(&module,NULL,checked,diagnostic);
+    return xr_xir_compile_check(context, &module, checked, diagnostic);
 }
 static void checked_owner_lifetime(void) {
     size_t sites = 0;
@@ -161,14 +164,15 @@ static void checked_owner_lifetime(void) {
         XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0};
         attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
         XrXirArtifact *checked = NULL;
-        XrXirStatus status = check_interface_module(&f.types,function,&checked,NULL);
+        XrXirCompileContext context = interface_context_default();
+        XrXirStatus status = check_interface_module(&context,&f.types,function,&checked,NULL);
         if (!site) {
             CHECK(status == XR_XIR_OK && checked); sites = attempts;
-            const XrXirModule *owned = xr_xir_artifact_module(checked);
+            const XrXirModule *owned = xr_xir_compile_artifact_module(checked);
             CHECK(owned->types != &f.types && owned->types->interfaces != &f.table);
             memset(&f,0xcc,sizeof(f)); memset(instructions,0xcc,sizeof(instructions));
             memset(&block,0xcc,sizeof(block)); memset(&function,0xcc,sizeof(function));
-            CHECK(xr_xir_artifact_verify(checked,NULL,NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
             const XrXirInterfaceDeclaration *decls = owned->types->interfaces->declarations;
             CHECK(owned->types->interfaces->count == 3);
             CHECK(!memcmp(decls[0].name.bytes,"Measure",7));
@@ -176,12 +180,12 @@ static void checked_owner_lifetime(void) {
             CHECK(decls[1].parents[0].arguments[0] == XR_XIR_TYPE_PARAMETER_BASE);
             CHECK(owned->functions[0].instructions[0].immediate == 41);
         } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !checked);
-        xr_xir_artifact_free(checked); CHECK(!live);
+        xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }
     fail_at = SIZE_MAX;
     printf("Checked interface owner: %zu allocation failure sites\n",sites);
 }
-static XrXirStatus inherited_module_verify(Fixture *f, XrXirBudget *budget) {
+static XrXirStatus inherited_module_verify(Fixture *f, XrXirCompileContext *budget) {
     XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock block = {0,1,0,0}, entry_block = {0,2,0,0};
     XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
@@ -196,30 +200,30 @@ static XrXirStatus inherited_module_verify(Fixture *f, XrXirBudget *budget) {
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirTypes types = f->types; types.interfaces = &f->table;
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_verify(&module,budget,NULL);
+    return xr_xir_compile_verify(budget, &module, NULL);
 }
 static void inherited_contexts(void) {
     Fixture f; fixture(&f);
     XrXirConstraint parent_constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     f.declarations[0].constraints = &parent_constraint;
-    XrXirBudget budget = xr_xir_default_budget();
+    XrXirCompileContext budget = interface_context_default();
     CHECK(inherited_module_verify(&f,&budget)==XR_XIR_BAD_TYPE);
     f.constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
-    budget = xr_xir_default_budget();
+    budget = interface_context_default();
     CHECK(inherited_module_verify(&f,&budget)==XR_XIR_OK);
     XrXirInterfaceApplication cycle = {1,&f.parameter,1};
     f.declarations[0].parents = &cycle; f.declarations[0].parent_count = 1;
-    budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&budget)==XR_XIR_BAD_STRUCTURE);
+    budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_structure(&budget, &f.table, &f.types)==XR_XIR_BAD_STRUCTURE);
     f.declarations[0].parents = NULL; f.declarations[0].parent_count = 0;
     XrXirInterfaceApplication repeated[] = {{0,&f.parameter,1},{0,&f.parameter,1}};
     f.declarations[1].parents = repeated; f.declarations[1].parent_count = 2;
-    budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&budget)==XR_XIR_OK);
+    budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_structure(&budget, &f.table, &f.types)==XR_XIR_OK);
     XrXirInterfaceMethod duplicate[] = {f.member,f.member};
     f.declarations[0].methods = duplicate; f.declarations[0].method_count = 2;
-    budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_structure(&f.table,&f.types,&budget)==XR_XIR_BAD_STRUCTURE && !live);
+    budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_structure(&budget, &f.table, &f.types)==XR_XIR_BAD_STRUCTURE && interface_live == stage_owner_count);
 }
 static void interface_parameters_remain_declaration_scoped(void) {
     for (unsigned attack = 0; attack < 7; ++attack) {
@@ -241,13 +245,44 @@ static void interface_parameters_remain_declaration_scoped(void) {
             instructions[1] = (XrXirInstruction){XR_XIR_LOCAL_UNINIT,leaked,{0,0},{0,0},0,{0}};
         XrXirArtifact *checked = NULL;
         XrXirDiagnostic diagnostic = {0};
-        XrXirStatus status = check_interface_module(&f.types,function,&checked,&diagnostic);
+        XrXirCompileContext context = interface_context_default();
+        XrXirStatus status = check_interface_module(&context,&f.types,function,&checked,&diagnostic);
         CHECK(status == (attack ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK((checked != NULL) == !attack);
         if (attack == 3 || attack == 6) CHECK(diagnostic.instruction == 1);
-        xr_xir_artifact_free(checked); CHECK(!live);
+        xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }
 }
+
+static void checked_owner_outlives_producer(void) {
+    size_t blocks_before = stage_physical_count, bytes_before = stage_physical_bytes;
+    XrCompileResourceLimits limits = {STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,STAGE_WORK};
+    XrXirCompileContext context = {0};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits = xr_xir_compile_default_limits();
+    Fixture f; fixture(&f); f.types.interfaces = &f.table;
+    XrXirInstruction instructions[] = {
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    XrXirBlock block = {0,2,0,0};
+    XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0};
+    XrXirArtifact *checked = NULL;
+    CHECK(check_interface_module(&context,&f.types,function,&checked,NULL)==XR_XIR_OK && checked);
+    xr_compile_resources_release(context.resources); context = (XrXirCompileContext){0};
+    memset(&f,0xcc,sizeof(f)); memset(instructions,0xcc,sizeof(instructions));
+    memset(&block,0xcc,sizeof(block)); memset(&function,0xcc,sizeof(function));
+    CHECK(stage_physical_count>blocks_before && stage_physical_bytes>bytes_before);
+    CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
+    const XrXirModule *owned = xr_xir_compile_artifact_module(checked);
+    CHECK(owned->types->interfaces->count==3);
+    CHECK(!memcmp(owned->types->interfaces->declarations[0].name.bytes,"Measure",7));
+    CHECK(owned->functions[0].instructions[0].immediate==41);
+    xr_xir_compile_artifact_free(checked);
+    CHECK(stage_physical_count==blocks_before && stage_physical_bytes==bytes_before);
+    CHECK(interface_live==stage_owner_count);
+    puts("Checked interface owner survives producer release and poisoned inputs; physical delta=0/0");
+}
+
 int main(void) {
     type_inference_cases();
     implementation_semantic_cases(); generic_method_proof_cases(); generic_method_authority_cases();
@@ -257,6 +292,7 @@ int main(void) {
     generic_method_access_cases();
     interface_member_cases();
     ownership_and_oom(); rejection_and_budget(); inherited_contexts(); checked_owner_lifetime();
-    interface_parameters_remain_declaration_scoped();
+    interface_parameters_remain_declaration_scoped(); checked_owner_outlives_producer();
+    stage_contexts_free(); CHECK(!interface_live);
     puts("Interface structure, explicit inheritance, budgets and owned cloning passed"); return 0;
 }

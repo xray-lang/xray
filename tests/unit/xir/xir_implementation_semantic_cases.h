@@ -71,10 +71,9 @@ static void implementation_semantic_fixture(ImplementationSemanticFixture *f) {
     f->module.generics = f->generics; f->module.types = &f->types; f->module.declarations = &f->declarations;
 }
 static XrXirStatus implementation_semantic_status(ImplementationSemanticFixture *f) {
-    XrXirBudget budget = xr_xir_default_budget();
-    uint64_t scratch = budget.scratch_bytes;
-    XrXirStatus status = xr_xir_implementations_verify(&f->module,&budget);
-    CHECK(budget.scratch_bytes==scratch && !live); return status;
+    XrXirCompileContext budget = interface_context_default();
+    XrXirStatus status = xr_xir_compile_implementations_verify(&budget, &f->module);
+    CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count); return status;
 }
 static void implementation_semantic_bindings(void) {
     for (unsigned attack = 0; attack < 10; ++attack) {
@@ -104,18 +103,18 @@ static void implementation_semantic_bindings(void) {
 static void implementation_semantic_concrete(void) {
     ImplementationSemanticFixture f; implementation_semantic_fixture(&f);
     XrXirProofContext context = {&f.module,{XR_XIR_CONTEXT_CLOSED,0,0}};
-    XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_interface_prove(&context,&f.module,f.box_meter,f.application,&budget)==XR_XIR_OK);
+    XrXirCompileContext budget = interface_context_default();
+    CHECK(xr_xir_compile_interface_prove(&budget, &context, &f.module, f.box_meter, f.application)==XR_XIR_OK);
     XrXirWitnessRequest request = {&f.module,f.box_meter,f.application,0}; XrXirWitness witness = {0};
-    CHECK(xr_xir_witness_resolve(&context,&request,&budget,&witness)==XR_XIR_OK);
+    CHECK(xr_xir_compile_witness_resolve(&budget, &context, &request, &witness)==XR_XIR_OK);
     CHECK(witness.function==1 && witness.argument_count==1 && witness.arguments[0]==f.meter);
     XrXirType scalar = XR_XIR_I64; f.nodes[3].nominal.arguments = &scalar;
-    budget = xr_xir_default_budget();
-    CHECK(xr_xir_interface_prove(&context,&f.module,f.box_meter,f.application,&budget)==XR_XIR_BAD_TYPE);
+    budget = interface_context_default();
+    CHECK(xr_xir_compile_interface_prove(&budget, &context, &f.module, f.box_meter, f.application)==XR_XIR_BAD_TYPE);
     f.nodes[3].nominal.arguments = &f.meter;
-    f.declarations.implementations = NULL; budget = xr_xir_default_budget();
-    CHECK(xr_xir_interface_prove(&context,&f.module,f.meter,f.application,&budget)==XR_XIR_BAD_TYPE);
-    CHECK(!live);
+    f.declarations.implementations = NULL; budget = interface_context_default();
+    CHECK(xr_xir_compile_interface_prove(&budget, &context, &f.module, f.meter, f.application)==XR_XIR_BAD_TYPE);
+    CHECK(interface_live == stage_owner_count);
 }
 static void implementation_semantic_cross_pool(void) {
     ImplementationSemanticFixture source; implementation_semantic_fixture(&source);
@@ -132,12 +131,12 @@ static void implementation_semantic_cross_pool(void) {
     XrXirModule actual = {0}; actual.types = &types;
     XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
     XrXirWitnessRequest request = {&source.module,box,source.application,0};
-    XrXirWitness witness = {0}; XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_witness_resolve(&context,&request,&budget,&witness)==XR_XIR_OK);
+    XrXirWitness witness = {0}; XrXirCompileContext budget = interface_context_default();
+    CHECK(xr_xir_compile_witness_resolve(&budget, &context, &request, &witness)==XR_XIR_OK);
     CHECK(witness.function==1 && witness.argument_count==1 && witness.arguments[0]==meter);
-    source.declarations.implementations = NULL; budget = xr_xir_default_budget();
-    CHECK(xr_xir_witness_resolve(&context,&request,&budget,&witness)==XR_XIR_BAD_TYPE);
-    CHECK(!live);
+    source.declarations.implementations = NULL; budget = interface_context_default();
+    CHECK(xr_xir_compile_witness_resolve(&budget, &context, &request, &witness)==XR_XIR_BAD_TYPE);
+    CHECK(interface_live == stage_owner_count);
 }
 static void implementation_semantic_shared_roots(void) {
     ImplementationSemanticFixture f; implementation_semantic_fixture(&f);
@@ -164,11 +163,11 @@ static void implementation_semantic_resources(void) {
     }
     fail_at = SIZE_MAX;
     ImplementationSemanticFixture f; implementation_semantic_fixture(&f);
-    XrXirBudget budget = xr_xir_default_budget(); budget.work = 0;
-    CHECK(xr_xir_implementations_verify(&f.module,&budget)==XR_XIR_BUDGET);
-    budget = xr_xir_default_budget(); budget.scratch_bytes = 0;
-    CHECK(xr_xir_implementations_verify(&f.module,&budget)==XR_XIR_BUDGET);
-    CHECK(!live);
+    XrXirCompileContext budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,0);
+    CHECK(xr_xir_compile_implementations_verify(&budget, &f.module)==XR_XIR_BUDGET);
+    budget = interface_context_default(); budget = interface_context_limited(STAGE_ALLOCATED_BYTES,0,STAGE_WORK);
+    CHECK(xr_xir_compile_implementations_verify(&budget, &f.module)==XR_XIR_BUDGET);
+    CHECK(interface_live == stage_owner_count);
     printf("Implementation semantic proofs: %zu allocation failure sites\n",sites);
 }
 static void implementation_semantic_cases(void) {

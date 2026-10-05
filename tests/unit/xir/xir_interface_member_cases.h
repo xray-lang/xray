@@ -69,55 +69,50 @@ static void interface_member_semantics(void) {
                 f.parameter_modes[1].type = XR_XIR_I64; f.parameter_modes[1].mode = 1;
                 f.methods[0].signature = member_case_type(6); f.methods[1].signature = member_case_type(7);
             }
-            XrXirBudget budget = xr_xir_default_budget(), original = budget;
-            CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==
+            XrXirCompileContext budget = interface_context_default();
+            CHECK(xr_xir_compile_interfaces_verify_members_verified(&budget, &f.table, &f.types)==
                 (attack ? XR_XIR_BAD_TYPE : XR_XIR_OK));
-            if (attack) CHECK(!memcmp(&budget,&original,sizeof(budget)));
+            if (attack) interface_temporary_clean(&budget);
             CHECK(f.declarations[0].method_count==1 && f.declarations[5].method_count==1);
-            CHECK(!live);
+            CHECK(interface_live == stage_owner_count);
         }
     }
     MemberFixture f; member_fixture(&f);
     /* The same original requirement under different substitutions is ambiguous. */
     f.parents[1].arguments = &f.parameter;
-    XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==XR_XIR_BAD_TYPE && !live);
+    XrXirCompileContext budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&budget, &f.table, &f.types)==XR_XIR_BAD_TYPE && interface_live == stage_owner_count);
     member_fixture(&f);
     /* A direct redeclaration must agree after composing both inheritance edges. */
     XrXirInterfaceMethod direct = {{"get",3},member_case_type(2),0,0,NULL};
     f.declarations[3].methods = &direct; f.declarations[3].method_count = 1;
-    budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==XR_XIR_OK && !live);
-    direct.signature = member_case_type(1); budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==XR_XIR_BAD_TYPE && !live);
+    budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&budget, &f.table, &f.types)==XR_XIR_OK && interface_live == stage_owner_count);
+    direct.signature = member_case_type(1); budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&budget, &f.table, &f.types)==XR_XIR_BAD_TYPE && interface_live == stage_owner_count);
 }
 static void interface_member_resources(void) {
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
-        MemberFixture f; member_fixture(&f); attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
-        XrXirBudget budget = xr_xir_default_budget(), original = budget;
-        CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==
+        MemberFixture f; member_fixture(&f);
+        XrXirCompileContext context = interface_context_default();
+        attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
+        CHECK(xr_xir_compile_interfaces_verify_members_verified(&context,&f.table,&f.types)==
             (site ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
-        if (site) CHECK(!memcmp(&budget,&original,sizeof(budget))); else sites = attempts;
-        CHECK(!live);
+        if (!site) sites = attempts;
+        interface_temporary_clean(&context);
     }
     fail_at = SIZE_MAX;
     MemberFixture f; member_fixture(&f);
-    XrXirBudget original = xr_xir_default_budget(), spent = original;
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&spent)==XR_XIR_OK);
-    CHECK(spent.scratch_bytes == original.scratch_bytes && spent.work < original.work);
-    XrXirBudget exact = original;
-    exact.work -= spent.work;
-    for (unsigned boundary = 0; boundary < 3; ++boundary) {
-        XrXirBudget budget = exact;
-        if (boundary == 1) --budget.work;
-        if (boundary == 2) budget.scratch_bytes = 0;
-        XrXirBudget before = budget;
-        CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==
+    XrXirCompileContext measured = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&measured,&f.table,&f.types)==XR_XIR_OK);
+    XrCompileResourceStats stats = stage_stats(&measured);
+    interface_temporary_clean(&measured);
+    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+        XrXirCompileContext context = interface_exact_context(stats,boundary);
+        CHECK(xr_xir_compile_interfaces_verify_members_verified(&context,&f.table,&f.types)==
             (boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        CHECK(budget.scratch_bytes == before.scratch_bytes);
-        if (boundary) CHECK(!memcmp(&budget,&before,sizeof(budget)));
-        CHECK(!live);
+        interface_temporary_clean(&context);
     }
     printf("Interface member composition: %zu allocation failure sites\n",sites);
 }
@@ -137,20 +132,22 @@ static void interface_member_parameter_order(void) {
     f.parents[1] = (XrXirInterfaceApplication){0,identity,2};
     f.parents[2] = (XrXirInterfaceApplication){1,identity,2};
     f.parents[3] = (XrXirInterfaceApplication){2,swapped,2};
-    XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==XR_XIR_OK && !live);
-    f.parents[3].arguments = identity; budget = xr_xir_default_budget();
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&budget)==XR_XIR_BAD_TYPE && !live);
+    XrXirCompileContext budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&budget, &f.table, &f.types)==XR_XIR_OK && interface_live == stage_owner_count);
+    f.parents[3].arguments = identity; budget = interface_context_default();
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&budget, &f.table, &f.types)==XR_XIR_BAD_TYPE && interface_live == stage_owner_count);
 }
 static void interface_member_sparse_substitution(void) {
     MemberFixture f; member_fixture(&f); f.table.count = 1;
     f.declarations[0].methods = NULL; f.declarations[0].method_count = 0;
-    XrXirBudget short_pool = xr_xir_default_budget(), long_pool = short_pool;
+    XrXirCompileContext short_pool = interface_context_default(), long_pool = interface_context_default();
     f.types.count = 2;
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&short_pool)==XR_XIR_OK);
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&short_pool,&f.table,&f.types)==XR_XIR_OK);
     f.types.count = 8;
-    CHECK(xr_xir_interfaces_verify_members_verified(&f.table,&f.types,&long_pool)==XR_XIR_OK);
-    CHECK(!memcmp(&short_pool,&long_pool,sizeof(short_pool)) && !live);
+    CHECK(xr_xir_compile_interfaces_verify_members_verified(&long_pool,&f.table,&f.types)==XR_XIR_OK);
+    XrCompileResourceStats short_stats = stage_stats(&short_pool), long_stats = stage_stats(&long_pool);
+    CHECK(!memcmp(&short_stats,&long_stats,sizeof(short_stats)));
+    interface_temporary_clean(&short_pool); interface_temporary_clean(&long_pool);
 }
 static void interface_member_cases(void) {
     interface_member_semantics(); interface_member_resources(); interface_member_parameter_order();

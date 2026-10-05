@@ -51,10 +51,9 @@ static void constraint_proof_fixture(ConstraintProofFixture *f) {
     f->use = (XrXirConstraintUse){&f->module,{XR_XIR_CONTEXT_FUNCTION,0,0},1,f->parameters,2};
 }
 static XrXirStatus constraint_proof_status(ConstraintProofFixture *f) {
-    XrXirBudget budget = xr_xir_default_budget();
-    uint64_t scratch = budget.scratch_bytes;
-    XrXirStatus status = xr_xir_constraints_prove(&f->context,&f->use,&budget);
-    CHECK(budget.scratch_bytes==scratch && !live); return status;
+    XrXirCompileContext budget = interface_context_default();
+    XrXirStatus status = xr_xir_compile_constraints_prove(&budget, &f->context, &f->use);
+    CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count); return status;
 }
 static void constraint_proof_vectors(void) {
     ConstraintProofFixture f; constraint_proof_fixture(&f);
@@ -145,11 +144,11 @@ static void constraint_proof_hidden_nominal_bounds(void) {
         ConstraintBoundFixture f; constraint_bound_fixture(&f);
         if (attack==1) f.interfaces[2].constraints = &f.empty;
         if (attack==2) f.nominals[1].constraints = &f.empty;
-        XrXirBudget budget = xr_xir_default_budget();
-        CHECK(xr_xir_types_structure_verify(&f.types,&budget)==XR_XIR_OK);
+        XrXirCompileContext budget = interface_context_default();
+        CHECK(xr_xir_compile_types_structure_verify(&budget, &f.types)==XR_XIR_OK);
         XrXirModule module = {0}; module.types = &f.types;
-        CHECK(xr_xir_module_constraints_verify(&module,&budget)==(attack ? XR_XIR_BAD_TYPE : XR_XIR_OK));
-        CHECK(!live);
+        CHECK(xr_xir_compile_module_constraints_verify(&budget, &module)==(attack ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK(interface_live == stage_owner_count);
     }
     for (unsigned valid = 0; valid < 2; ++valid) {
         ConstraintBoundFixture f; constraint_bound_fixture(&f);
@@ -159,10 +158,10 @@ static void constraint_proof_hidden_nominal_bounds(void) {
         XrXirGeneric generic = {constraints,2,NULL,0, NULL};
         XrXirFunction function = {0};
         XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&f.types,NULL, XR_XIR_PROGRAM, NULL};
-        XrXirBudget budget = xr_xir_default_budget();
-        CHECK(xr_xir_generics_structure_verify(&module,&budget)==XR_XIR_OK);
-        CHECK(xr_xir_module_constraints_verify(&module,&budget)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
-        CHECK(!live);
+        XrXirCompileContext budget = interface_context_default();
+        CHECK(xr_xir_compile_generics_structure_verify(&budget, &module)==XR_XIR_OK);
+        CHECK(xr_xir_compile_module_constraints_verify(&budget, &module)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
+        CHECK(interface_live == stage_owner_count);
     }
 }
 static void constraint_proof_conflicts_and_concrete(void) {
@@ -183,30 +182,22 @@ static void constraint_proof_resources(void) {
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
         ConstraintProofFixture f; constraint_proof_fixture(&f);
+        XrXirCompileContext context = interface_context_default();
         attempts = 0; fail_at = site ? site-1 : SIZE_MAX;
-        XrXirBudget budget = xr_xir_default_budget(), original = budget;
-        CHECK(xr_xir_constraints_prove(&f.context,&f.use,&budget)==(site ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
-        if (site) CHECK(budget.work<=original.work && budget.metadata_bytes<=original.metadata_bytes &&
-            budget.scratch_bytes<=original.scratch_bytes); else sites = attempts;
-        CHECK(budget.scratch_bytes==original.scratch_bytes && !live);
+        CHECK(xr_xir_compile_constraints_prove(&context,&f.context,&f.use)==(site ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
+        if (!site) sites = attempts;
+        interface_temporary_clean(&context);
     }
     fail_at = SIZE_MAX;
     ConstraintProofFixture f; constraint_proof_fixture(&f);
-    XrXirBudget original = xr_xir_default_budget(), spent = original;
-    CHECK(xr_xir_constraints_prove(&f.context,&f.use,&spent)==XR_XIR_OK);
-    XrXirBudget exact = original;
-    exact.work -= spent.work; exact.metadata_bytes -= spent.metadata_bytes;
-    CHECK(spent.scratch_bytes==original.scratch_bytes);
-    for (unsigned boundary = 0; boundary < 3; ++boundary) {
-        XrXirBudget budget = exact;
-        if (boundary==1) --budget.work;
-        if (boundary==2) budget.scratch_bytes = 0;
-        XrXirBudget before = budget;
-        CHECK(xr_xir_constraints_prove(&f.context,&f.use,&budget)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        if (boundary) CHECK(budget.work<=before.work && budget.metadata_bytes<=before.metadata_bytes &&
-            budget.scratch_bytes<=before.scratch_bytes);
-        CHECK(budget.scratch_bytes==before.scratch_bytes);
-        CHECK(!live);
+    XrXirCompileContext measured = interface_context_default();
+    CHECK(xr_xir_compile_constraints_prove(&measured,&f.context,&f.use)==XR_XIR_OK);
+    XrCompileResourceStats stats = stage_stats(&measured);
+    interface_temporary_clean(&measured);
+    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+        XrXirCompileContext context = interface_exact_context(stats,boundary);
+        CHECK(xr_xir_compile_constraints_prove(&context,&f.context,&f.use)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
+        interface_temporary_clean(&context);
     }
     printf("Contextual interface proofs: %zu allocation failure sites\n",sites);
 }
@@ -249,15 +240,15 @@ static void constraint_proof_shared_type_walk(void) {
     XrXirGeneric generic = {&empty,1,NULL,0, NULL}; XrXirFunction function = {0};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
-    XrXirBudget structure = xr_xir_default_budget();
-    CHECK(xr_xir_types_structure_verify(&types,&structure)==XR_XIR_OK);
-    XrXirBudget budget = xr_xir_default_budget(); budget.work = 1600;
-    CHECK(xr_xir_type_use_verify(&context,member_case_type(DEPTH-1),&budget)==XR_XIR_OK);
-    CHECK(!live);
+    XrXirCompileContext structure = interface_context_default();
+    CHECK(xr_xir_compile_types_structure_verify(&structure, &types)==XR_XIR_OK);
+    XrXirCompileContext budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,1600);
+    CHECK(xr_xir_compile_type_use_verify(&budget, &context, member_case_type(DEPTH-1))==XR_XIR_OK);
+    CHECK(interface_live == stage_owner_count);
     context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0,0};
-    budget = xr_xir_default_budget(); budget.work = 1600;
-    CHECK(xr_xir_type_use_verify(&context,member_case_type(DEPTH-1),&budget)==XR_XIR_BAD_TYPE);
-    CHECK(!live);
+    budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,1600);
+    CHECK(xr_xir_compile_type_use_verify(&budget, &context, member_case_type(DEPTH-1))==XR_XIR_BAD_TYPE);
+    CHECK(interface_live == stage_owner_count);
 }
 static void constraint_proof_interface_identity_work(void) {
     enum { COUNT = 16 };
@@ -271,22 +262,18 @@ static void constraint_proof_interface_identity_work(void) {
     XrXirGeneric generic = {constraints,COUNT,NULL,0, NULL}; XrXirFunction function = {0};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
-    XrXirBudget structure = xr_xir_default_budget();
-    CHECK(xr_xir_types_structure_verify(&types,&structure)==XR_XIR_OK);
-    CHECK(xr_xir_generics_structure_verify(&module,&structure)==XR_XIR_OK);
-    XrXirBudget budget = xr_xir_default_budget(); budget.work = COUNT-1;
-    uint64_t scratch = budget.scratch_bytes; size_t before = attempts;
-    CHECK(xr_xir_interface_prove(&context,&module,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
-        application,&budget)==XR_XIR_BUDGET);
-    CHECK(budget.work==COUNT-1 && budget.scratch_bytes==scratch && attempts==before && !live);
-    budget = xr_xir_default_budget(); uint64_t work = budget.work;
-    CHECK(xr_xir_interface_prove(&context,&module,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
-        application,&budget)==XR_XIR_OK);
-    CHECK(budget.work<=work-COUNT && budget.scratch_bytes==scratch && !live);
-    budget = xr_xir_default_budget(); attempts = 0; fail_at = 0;
-    CHECK(xr_xir_interface_prove(&context,&module,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
-        application,&budget)==XR_XIR_OUT_OF_MEMORY);
-    CHECK(budget.work==work-COUNT && budget.scratch_bytes==scratch && !live);
+    XrXirCompileContext structure = interface_context_default();
+    CHECK(xr_xir_compile_types_structure_verify(&structure, &types)==XR_XIR_OK);
+    CHECK(xr_xir_compile_generics_structure_verify(&structure, &module)==XR_XIR_OK);
+    XrXirCompileContext budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,COUNT-1); size_t before = attempts;
+    CHECK(xr_xir_compile_interface_prove(&budget, &context, &module, (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, application)==XR_XIR_BUDGET);
+    CHECK(interface_work(&budget)==0 && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && attempts==before && interface_live == stage_owner_count);
+    budget = interface_context_default();
+    CHECK(xr_xir_compile_interface_prove(&budget, &context, &module, (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, application)==XR_XIR_OK);
+    CHECK(interface_work(&budget)>=COUNT && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
+    budget = interface_context_default(); attempts = 0; fail_at = 0;
+    CHECK(xr_xir_compile_interface_prove(&budget, &context, &module, (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, application)==XR_XIR_OUT_OF_MEMORY);
+    CHECK(interface_work(&budget)>=COUNT && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
     fail_at = SIZE_MAX;
 }
 static void constraint_proof_scalar_signatures(void) {
@@ -303,9 +290,9 @@ static void constraint_proof_scalar_signatures(void) {
         }
         XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
         XrXirArtifact *checked = NULL;
-        CHECK(xr_xir_check(&module,NULL,&checked,NULL)==(i ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK(xr_xir_compile_check(interface_context_pointer_default(), &module, &checked, NULL)==(i ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK((checked!=NULL)==!i);
-        xr_xir_artifact_free(checked); CHECK(!live);
+        xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }
 }
 static void constraint_proof_scalar_generic_forwarding(void) {
@@ -325,9 +312,9 @@ static void constraint_proof_scalar_generic_forwarding(void) {
     for (uint32_t valid = 0; valid < 2; ++valid) {
         caller.markers = valid ? XR_XIR_CONSTRAINT_SENDABLE : 0;
         XrXirArtifact *checked = NULL;
-        CHECK(xr_xir_check(&module,NULL,&checked,NULL)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
+        CHECK(xr_xir_compile_check(interface_context_pointer_default(), &module, &checked, NULL)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
         CHECK((checked!=NULL)==!!valid);
-        xr_xir_artifact_free(checked); CHECK(!live);
+        xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }
 }
 static void constraint_proof_scalar_slot_sharing(void) {
@@ -350,14 +337,13 @@ static void constraint_proof_scalar_slot_sharing(void) {
     for (uint32_t type = 0; type < 3; ++type) for (uint32_t owner = 0; owner < 2; ++owner) {
         slot.type = type == 0 ? XR_XIR_ERROR : type == 1 ? XR_XIR_PANIC_INFO : XR_XIR_STRING;
         slot.module = owner;
-        XrXirBudget budget = xr_xir_default_budget();
-        CHECK(xr_xir_declarations_verify(&declarations,NULL,3,module.linkage_kind,&budget)==XR_XIR_OK);
+        XrXirCompileContext budget = interface_context_default();
+        CHECK(xr_xir_compile_declarations_verify(&budget, &declarations, NULL, 3, module.linkage_kind)==XR_XIR_OK);
         for (uint32_t f = 0; f < 3; ++f)
-            CHECK(xr_xir_type_expression_shape(NULL,functions[f].result,0,&budget)==XR_XIR_OK);
-        uint64_t scratch = budget.scratch_bytes;
-        CHECK(xr_xir_module_constraints_verify(&module,&budget)==
+            CHECK(xr_xir_compile_type_expression_shape(&budget, NULL, functions[f].result, 0)==XR_XIR_OK);
+        CHECK(xr_xir_compile_module_constraints_verify(&budget, &module)==
             (owner == 1 || type == 2 ? XR_XIR_OK : XR_XIR_BAD_TYPE));
-        CHECK(budget.scratch_bytes==scratch && !live);
+        CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
     }
 }
 static void constraint_proof_cases(void) {

@@ -16,8 +16,8 @@ static void interface_closure_multiple_roots(void) {
         XrXirType actual = XR_XIR_I64;
         XrXirInterfaceApplication roots[] = {{3,&actual,1},{5,NULL,0},{3,&actual,1}};
         if (order) { XrXirInterfaceApplication tmp = roots[0]; roots[0] = roots[1]; roots[1] = tmp; }
-        XrXirBudget budget = xr_xir_default_budget(); XrXirInterfaceClosure *closure = NULL;
-        CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,3,0},&budget,&closure)==XR_XIR_OK);
+        XrXirCompileContext budget = interface_context_default(); XrXirInterfaceClosure *closure = NULL;
+        CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,3,0}, &closure)==XR_XIR_OK);
         actual = XR_XIR_BOOL; memset(roots,0xcc,sizeof(roots));
         CHECK(xr_xir_interface_closure_application_count(closure)==5);
         CHECK(xr_xir_interface_closure_requirement_count(closure)==2);
@@ -28,9 +28,7 @@ static void interface_closure_multiple_roots(void) {
             const XrXirInterfaceApplication *app = xr_xir_interface_closure_application(closure,r->application);
             CHECK(app && app->declaration==r->origin_interface && r->member==0);
             CHECK(r->name.length==3 && !memcmp(r->name.bytes,"get",3));
-            budget = xr_xir_default_budget();
-            CHECK(xr_xir_type_substitution_matches_between(types,&f.types,NULL,0,r->signature,
-                member_case_type(5),&budget)==XR_XIR_OK);
+            CHECK(xr_xir_compile_type_substitution_matches_between(&budget, types, &f.types, NULL, 0, r->signature, member_case_type(5))==XR_XIR_OK);
             if (r->origin_interface==0) {
                 origins |= 1; CHECK(app->argument_count==1);
                 CHECK(xr_xir_array_element(types,app->arguments[0])==XR_XIR_I64);
@@ -38,29 +36,29 @@ static void interface_closure_multiple_roots(void) {
         }
         CHECK(origins==3 && !xr_xir_interface_closure_application(closure,5));
         CHECK(!xr_xir_interface_closure_requirement(closure,2));
-        xr_xir_interface_closure_free(closure); CHECK(!live);
+        xr_xir_compile_interface_closure_free(closure); closure = NULL; CHECK(interface_live == stage_owner_count);
         member_fixture(&f); actual = XR_XIR_I64;
         XrXirInterfaceApplication conflict[] = {{3,&actual,1},{5,NULL,0}};
         if (order) { XrXirInterfaceApplication tmp = conflict[0]; conflict[0] = conflict[1]; conflict[1] = tmp; }
-        f.methods[1].signature = member_case_type(3); budget = xr_xir_default_budget();
-        CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,conflict,2,0},&budget,&closure)==XR_XIR_BAD_TYPE);
-        CHECK(!closure && !live);
+        f.methods[1].signature = member_case_type(3); budget = interface_context_default();
+        CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&f.table,&f.types,conflict,2,0}, &closure)==XR_XIR_BAD_TYPE);
+        CHECK(!closure && interface_live == stage_owner_count);
     }
 }
 static void interface_closure_distinct_applications(void) {
     MemberFixture f; member_fixture(&f);
     XrXirType values[] = {XR_XIR_I64,XR_XIR_BOOL};
     XrXirInterfaceApplication roots[] = {{0,values,1},{0,values+1,1},{0,values,1}};
-    XrXirBudget budget = xr_xir_default_budget(); XrXirInterfaceClosure *closure = NULL;
-    CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,3,0},&budget,&closure)==XR_XIR_BAD_TYPE);
-    CHECK(!closure && !live);
-    f.methods[0].signature = member_case_type(3); budget = xr_xir_default_budget();
-    CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,3,0},&budget,&closure)==XR_XIR_OK);
+    XrXirCompileContext budget = interface_context_default(); XrXirInterfaceClosure *closure = NULL;
+    CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,3,0}, &closure)==XR_XIR_BAD_TYPE);
+    CHECK(!closure && interface_live == stage_owner_count);
+    f.methods[0].signature = member_case_type(3); budget = interface_context_default();
+    CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,3,0}, &closure)==XR_XIR_OK);
     CHECK(xr_xir_interface_closure_application_count(closure)==2);
     CHECK(xr_xir_interface_closure_requirement_count(closure)==2);
     CHECK(xr_xir_interface_closure_requirement(closure,0)->application !=
         xr_xir_interface_closure_requirement(closure,1)->application);
-    xr_xir_interface_closure_free(closure); CHECK(!live);
+    xr_xir_compile_interface_closure_free(closure); closure = NULL; CHECK(interface_live == stage_owner_count);
 }
 static void interface_closure_parameter_order(void) {
     MemberFixture f; member_fixture(&f);
@@ -77,49 +75,57 @@ static void interface_closure_parameter_order(void) {
     f.parents[2] = (XrXirInterfaceApplication){1,identity,2};
     f.parents[3] = (XrXirInterfaceApplication){2,swapped,2};
     XrXirInterfaceApplication root = {3,swapped,2};
-    XrXirBudget budget = xr_xir_default_budget(); XrXirInterfaceClosure *closure = NULL;
-    CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,&root,1,2},&budget,&closure)==XR_XIR_OK);
+    XrXirCompileContext budget = interface_context_default(); XrXirInterfaceClosure *closure = NULL;
+    CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&f.table,&f.types,&root,1,2}, &closure)==XR_XIR_OK);
     CHECK(xr_xir_interface_closure_requirement_count(closure)==1);
     const XrXirInterfaceRequirement *r = xr_xir_interface_closure_requirement(closure,0);
     const XrXirInterfaceApplication *app = xr_xir_interface_closure_application(closure,r->application);
     CHECK(app->arguments[0]==p0 && app->arguments[1]==p1);
     CHECK(xr_xir_callable_signature(xr_xir_interface_closure_types(closure),r->signature)->result==p1);
-    xr_xir_interface_closure_free(closure); CHECK(!live);
+    xr_xir_compile_interface_closure_free(closure); closure = NULL; CHECK(interface_live == stage_owner_count);
 }
 static void interface_closure_resources(void) {
     size_t sites = 0;
     for (size_t site = 0; site <= sites; ++site) {
         MemberFixture f; member_fixture(&f);
         XrXirInterfaceApplication roots[] = {{3,&f.concrete,1},{5,NULL,0}};
+        XrXirCompileContext context = interface_context_default();
         attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
-        XrXirBudget budget = xr_xir_default_budget(), original = budget;
-        XrXirInterfaceClosure *closure = (XrXirInterfaceClosure *)(uintptr_t)1;
-        CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,2,0},&budget,&closure)==
+        XrXirInterfaceClosure *closure = NULL;
+        CHECK(xr_xir_compile_interface_closure_build(&context,&(XrXirInterfaceClosureRoots){&f.table,&f.types,roots,2,0},&closure)==
             (site ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
-        if (site) CHECK(!closure && !memcmp(&budget,&original,sizeof(budget))); else sites = attempts;
-        xr_xir_interface_closure_free(closure); CHECK(!live);
+        if (site) CHECK(!closure); else sites = attempts;
+        xr_xir_compile_interface_closure_free(closure);
+        interface_temporary_clean(&context);
     }
     fail_at = SIZE_MAX;
     MemberFixture f; member_fixture(&f); XrXirInterfaceApplication root = {3,&f.concrete,1};
-    XrXirBudget original = xr_xir_default_budget(), spent = original;
+    XrXirCompileContext measured = interface_context_default();
     XrXirInterfaceClosure *closure = NULL;
-    CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,&root,1,0},&spent,&closure)==XR_XIR_OK);
-    xr_xir_interface_closure_free(closure);
-    XrXirBudget exact = original; exact.work -= spent.work; exact.scratch_bytes -= spent.scratch_bytes;
-    for (unsigned boundary = 0; boundary < 3; ++boundary) {
-        XrXirBudget budget = exact;
-        if (boundary==1) --budget.work;
-        if (boundary==2) --budget.scratch_bytes;
-        XrXirBudget before = budget;
-        CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&f.table,&f.types,&root,1,0},&budget,&closure)==
+    XrXirInterfaceClosureRoots request = {&f.table,&f.types,&root,1,0};
+    CHECK(xr_xir_compile_interface_closure_build(&measured,&request,&closure)==XR_XIR_OK);
+    XrCompileResourceStats stats = stage_stats(&measured);
+    xr_xir_compile_interface_closure_free(closure); closure = NULL;
+    interface_temporary_clean(&measured);
+    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+        XrXirCompileContext context = interface_exact_context(stats,boundary);
+        CHECK(xr_xir_compile_interface_closure_build(&context,&request,&closure)==
             (boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        if (boundary) CHECK(!closure && !memcmp(&budget,&before,sizeof(budget)));
-        xr_xir_interface_closure_free(closure); CHECK(!live);
+        if (boundary) CHECK(!closure);
+        xr_xir_compile_interface_closure_free(closure); closure = NULL;
+        interface_temporary_clean(&context);
     }
-    XrXirBudget budget = original;
-    CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){NULL,NULL,NULL,0,0},&budget,&closure)==XR_XIR_OK);
+    XrXirCompileContext context = interface_context_default();
+    CHECK(xr_xir_compile_interface_closure_build(&context,&(XrXirInterfaceClosureRoots){NULL,NULL,NULL,0,0},&closure)==XR_XIR_OK);
     CHECK(!xr_xir_interface_closure_application_count(closure) && !xr_xir_interface_closure_requirement_count(closure));
-    xr_xir_interface_closure_free(closure); CHECK(!live);
+    xr_xir_compile_interface_closure_free(closure); closure = NULL;
+    interface_temporary_clean(&context);
+    XrXirInterfaceClosure *occupied = (XrXirInterfaceClosure *)(uintptr_t)1;
+    XrXirInterfaceApplication invalid = {UINT32_MAX,NULL,0};
+    XrXirInterfaceClosureRoots invalid_request = {&f.table,&f.types,&invalid,1,0};
+    CHECK(xr_xir_compile_interface_closure_build(&context,&invalid_request,&occupied)==XR_XIR_BAD_STRUCTURE);
+    CHECK(occupied==(XrXirInterfaceClosure *)(uintptr_t)1);
+    interface_temporary_clean(&context);
     printf("Interface closure owned allocations: %zu failure sites\n",sites);
 }
 static void interface_closure_deep(void) {
@@ -139,14 +145,14 @@ static void interface_closure_deep(void) {
     declarations[0].methods = f.methods; declarations[0].method_count = 1;
     XrXirInterfaceTable table = {declarations,DEPTH};
     XrXirInterfaceApplication root = {DEPTH-1,NULL,0}; XrXirInterfaceClosure *closure = NULL;
-    XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&table,&f.types,&root,1,0},&budget,&closure)==XR_XIR_OK);
+    XrXirCompileContext budget = interface_context_default();
+    CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&table,&f.types,&root,1,0}, &closure)==XR_XIR_OK);
     CHECK(xr_xir_interface_closure_application_count(closure)==DEPTH);
     CHECK(xr_xir_interface_closure_requirement_count(closure)==1);
-    xr_xir_interface_closure_free(closure); CHECK(!live);
-    budget = xr_xir_default_budget(); budget.work = 128;
-    CHECK(xr_xir_interface_closure_build(&(XrXirInterfaceClosureRoots){&table,&f.types,&root,1,0},&budget,&closure)==XR_XIR_BUDGET);
-    CHECK(!closure && !live);
+    xr_xir_compile_interface_closure_free(closure); closure = NULL; CHECK(interface_live == stage_owner_count);
+    budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,128);
+    CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&table,&f.types,&root,1,0}, &closure)==XR_XIR_BUDGET);
+    CHECK(!closure && interface_live == stage_owner_count);
 }
 static void interface_closure_cases(void) {
     interface_closure_multiple_roots(); interface_closure_distinct_applications();

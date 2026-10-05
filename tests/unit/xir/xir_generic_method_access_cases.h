@@ -72,10 +72,10 @@ static void generic_method_access_cases(void) {
         }
         XrXirStatus expected = attack == 0 || attack == 5 || attack == 6 ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         XrXirArtifact *checked = NULL;
-        XrXirStatus status = xr_xir_check(&module,NULL,&checked,NULL);
+        XrXirStatus status = xr_xir_compile_check(interface_context_pointer_default(), &module, &checked, NULL);
         if (status != expected) fprintf(stderr,"generic method access %u: actual=%u expected=%u\n",attack,status,expected);
         CHECK(status == expected && (checked != NULL) == (expected == XR_XIR_OK));
-        xr_xir_artifact_free(checked); CHECK(!live);
+        xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }
 }
 #endif // XIR_GENERIC_METHOD_ACCESS_CASES_H
