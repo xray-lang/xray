@@ -161,6 +161,10 @@ n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；
 
 完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。resize现已准入，当前20/32；独立VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放均须保留。
 
+下一只读声明族冻结 `entries() -> Array<(i64, T)>`：零显式／可选／默认／variadic／方法类型参数，receiver 表达式仅一次，形成拥有式 Array 逻辑快照 A。结果是独立拥有的 Array，长度 L 与快照一致，按递增 i64 索引产生 [(0,A[0]),...,(L-1,A[L-1])]；空数组返回拥有空 Array。每个 T 字段是普通拥有式逻辑副本，保内联值及 Nullable 层，复制在 class／同步身份处停止。不消费或改写 receiver，无 PLACE_WRITE；结果元素替换不改变源 Array 或旧别名，但同身份对象的修改仍按身份语义可见。只要求 Array 已有可复制／可保存能力，不额外要求 Equal、Compare、ToString、Sendable 或授予反射／构造权限；普通泛型定义处检查，Checked 特化后复验，const/read 参数与临时 Array 按 READ 权限合法。
+
+entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。冻结不等于 entries 已实施或准入，当前仍 20/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
+
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `i64` 全局查询 |
@@ -177,7 +181,8 @@ n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；
 | `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
 | `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
 | `toString()` | 只读 receiver，容器字符串表示 |
-| `iterator()` / `entriesIterator()` / `entries()` | 只读 receiver；这些方法的结果类型与所有权须在方法准入前另冻，不与已冻结的 Array for-in 快照混同 |
+| `entries()` | 只读快照，独立拥有 Array<(i64,T)>；当前未准入 |
+| `iterator()` / `entriesIterator()` | 只读 receiver；结果类型、所有权与迭代协议在准入前另冻 |
 
 Array for-in 的集合表达式求值一次并持有拥有式逻辑值快照。源绑定的元素替换、追加或重绑不改变本次序列；获取元素形成拥有式值副本。复制在 class 身份处停止，修改被引用对象仍可被其它同身份引用观察。每轮绑定不可变，空数组执行零次 body，continue 先清理本轮再前进一次；挂起保留快照与索引，取消释放所有拥有关系。普通泛型的 `Array<T>` 可按定义处已知形状遍历，任意 `T` 不因某实例恰为 Array 获得迭代权限。iterator 方法族、其它集合和借用视图的准入分别验证，不能以快照遍历替代它们。
 
@@ -519,6 +524,10 @@ For n>=0, the first min(oldLength,n) elements are preserved and growth uses logi
 
 The complete candidate, result cell read and every fallible hold precede one PLACE_WRITE. Preparation/publication failure or precommit cancellation preserves the current root, aliases and identities and drops temporary owners. Later parent-expression/result handoff failure or cancellation does not roll back the method effect. Internal loops introduce no user callback, language suspension or suspended loan; driver quantum cancellation observes the actual commit point. Qualification is allocation:may_heap, failures:allocation,retain,limit, ownership:owned. Resize is admitted: current20/32 retains independent VM/native/both mixed outputs, all admitted element categories, actual failure ordinals, resource axes, escaped results and physical release of both domains.
 
+The next READ declaration family is frozen as `entries() -> Array<(i64, T)>`, with no explicit, optional, default, variadic or method type parameters. The receiver expression evaluates once into an owned logical Array snapshot A. The independently owned result has the same length L and contains [(0,A[0]),...,(L-1,A[L-1])] in increasing i64 index order; empty input returns an owned empty Array. Every T field is an ordinary owned logical copy, preserving inline values and Nullable layers and stopping at class/synchronization identity. The operation neither consumes nor writes the receiver and has no PLACE_WRITE. Replacing result elements does not change the source Array or old aliases, while mutations of shared identity objects remain observable. Only existing Array copy/store capabilities are required; it neither requires Equal/Compare/ToString/Sendable nor grants reflection/construction authority. Ordinary definitions are checked before Checked specialization and revalidation. Const/read parameters and temporary Arrays are valid READ receivers.
+
+Qualification is allocation=may_heap, failures=allocation,retain,limit and ownership=owned. There is no user callback, new language suspension or suspended loan; existing receiver-expression effects are unchanged. Prepare the complete result before handoff. Copy/retain/budget failure or cancellation drops unfinished Tuple/element/Array owners without publishing a partial result or modifying the source. Completed receiver effects are not rolled back. Empty input promises neither zero allocation/retention nor preserved capacity or backing addresses. Escaped results retain their ordinary owners until the final drop. Freezing does not implement or admit entries: current20/32 remains. iterator()/entriesIterator(), user iterators and generators require separate contracts and qualification; this materialized Array does not supply those protocols.
+
 | Member | Type / Description |
 |--|--|
 | `len(arr)` | global `i64` query |
@@ -535,7 +544,8 @@ The complete candidate, result cell read and every fallible hold precede one PLA
 | `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
 | `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |
 | `toString()` | read-only receiver; container representation |
-| `iterator()` / `entriesIterator()` / `entries()` | read-only receiver; result types and ownership of these methods must be frozen before method admission, separately from the frozen Array for-in snapshot |
+| `entries()` | READ snapshot, independently owned Array<(i64,T)>; not yet admitted |
+| `iterator()` / `entriesIterator()` | READ receiver; result types, ownership and iteration protocols freeze separately before admission |
 
 Array for-in evaluates its collection expression once and owns a logical value snapshot. Element replacement, append, or rebinding of the source does not change that sequence; element access produces an owned value copy. Copying stops at class identity, so changes to a referenced object remain observable through references to the same identity. Each iteration binding is immutable, an empty array runs the body zero times, and continue cleans up the iteration before advancing once. Suspension retains the snapshot and index; cancellation releases their ownership. A generic `Array<T>` can be traversed using its shape known at the definition; arbitrary `T` does not gain iteration authority because one instance happens to be an Array. Iterator methods, other collections, and borrowed views require their own admission checks.
 
