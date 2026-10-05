@@ -126,6 +126,10 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     }
     SourceValue receiver;
     if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
+    if (xr_xir_tuple_signature(&ctx->types,receiver.type)) {
+        if (type_arguments->count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field has no method type arguments");
+        return source_tuple_field(ctx,node,receiver,value);
+    }
     if ((uint32_t)receiver.type >= XR_XIR_TYPE_PARAMETER_BASE &&
         (uint32_t)receiver.type < XR_XIR_TYPE_PARAMETER_LIMIT) {
         SourceRequirementValueRequest request = {receiver,type_arguments,expected};

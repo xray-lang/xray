@@ -15,6 +15,7 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_tuple.h"
 #include "xxir_compile_memory.h"
 #include "xxir_equal.h"
 #include "xxir_nullable.h"
@@ -233,6 +234,27 @@ static XrXirRunStatus vm_class_step(ScalarRun *run, VmState *state,
     return XR_XIR_RUN_OK;
 }
 
+static XrXirRunStatus vm_tuple_step(ScalarRun *run,VmState *state,
+    const XrXirInstruction *op,uint32_t destination) {
+    XrXirValue output={0};XrXirValueStatus status;
+    if (op->op==XR_XIR_TUPLE_NEW) {
+        const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,op->type);
+        if (!tuple || tuple->parameter_count>run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
+        uint32_t payload=0;
+        for (uint32_t i=0;i<tuple->parameter_count;++i)
+            state->arguments[i]=tuple->parameters[i].type==XR_XIR_UNIT ? (XrXirValue){0} :
+                vm_value_operand(run,run->function->operands[op->args[0]+payload++]);
+        status=xr_xir_tuple_new(op->type,state->arguments,tuple->parameter_count,
+            xr_xir_call_admission(run->view),&output);
+    } else {
+        XrXirValue receiver=vm_value_operand(run,op->args[0]);
+        status=xr_xir_tuple_get(&receiver,(uint32_t)op->immediate,&output);
+    }
+    if (status!=XR_XIR_VALUE_OK) return value_run_status(status);
+    if (xr_xir_type_is_owned(run->module->types,op->type)) xr_xir_owned_slot_move(run->frame,destination,&output);
+    else if (op->type!=XR_XIR_UNIT) xr_xir_scalar_store(run->frame,destination,output.payload);
+    return XR_XIR_RUN_OK;
+}
 static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
                                       const XrXirInstruction *op, uint32_t destination) {
     XrXirValueAdmission *admission = xr_xir_call_admission(run->view);
@@ -530,6 +552,10 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
         state->instruction = next;
         return vm_class_step(run, state, op, run->layout->offsets[result_id]);
+    }
+    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
+        state->instruction=next;
+        return vm_tuple_step(run,state,op,run->layout->offsets[result_id]);
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||

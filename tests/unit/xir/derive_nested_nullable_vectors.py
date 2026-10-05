@@ -27,13 +27,13 @@ def declarations(count):
             + words(0))
 
 
-def packet(body, semantic=62):
-    header = b'XRCHK\0\0\0' + words(24 if semantic==62 else 23, semantic, 2, 0) + struct.pack('<Q', len(body))
+def packet(body, semantic=63):
+    header = b'XRCHK\0\0\0' + words(24 if semantic in (62,63) else 23, semantic, 2, 0) + struct.pack('<Q', len(body))
     assert len(header) == 32
     return header + hashlib.sha256(header + body).digest() + body
 
 
-def nested_packet(semantic=62):
+def nested_packet(semantic=63):
     functions = [
         function('$init', [], 0, [operation(25)]),
         function('root', [], 2, [operation(20, 257, immediate=3), operation(20, 256, right=1, immediate=5),
@@ -50,11 +50,11 @@ def nested_packet(semantic=62):
             + words(0, 2, 0, 0, 5, 0, 2, 5, 0, 256, 0, 0))
     data = packet(body, semantic)
     assert len(data) == 1689
-    assert hashlib.sha256(data).hexdigest() == {59: '451461dd5e255f3a331b00c8379825cc46c83b3af9daccd4e6b63435e0f1d928', 60: '53b6a6a78ad1909aecf8b1a95533b6a197c35b9fddaba16793054baeaadd15ac', 61: '9183571c8acfb240fc8dc1f3b838c0a54db26fbadd5d3cb338e81f08a2732ed2', 62: 'f02fde19fb93174b6b07090990481ab67dd340d59ef499e8ace8c7e4bd9d782b'}[semantic]
+    assert hashlib.sha256(data).hexdigest() == {59: '451461dd5e255f3a331b00c8379825cc46c83b3af9daccd4e6b63435e0f1d928', 60: '53b6a6a78ad1909aecf8b1a95533b6a197c35b9fddaba16793054baeaadd15ac', 61: '9183571c8acfb240fc8dc1f3b838c0a54db26fbadd5d3cb338e81f08a2732ed2', 62: 'f02fde19fb93174b6b07090990481ab67dd340d59ef499e8ace8c7e4bd9d782b', 63: '9d5ae10facc909175db1c5f0554d4bbe2bfe2a10bd4e427ff069060197f64d46'}[semantic]
     return data
 
 
-def single_control(semantic=62):
+def single_control(semantic=63):
     # A genuine complete Program with only Nullable<i64> must still pass an old reader.
     body = (words(0, 2, 1) + function('$init', [], 0, [operation(25)])
             + function('root', [], 2, [operation(118, 256), operation(2, 2, immediate=41), operation(25, left=1)])

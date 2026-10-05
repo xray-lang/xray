@@ -20,6 +20,7 @@
 #include "tuple_owner_observer.h"
 #include "tuple_old_23_61.inc.c"
 #include "tuple_24_62.inc.c"
+#include "tuple_24_63.inc.c"
 #include "xir/xxir_effect_terms.inc.c"
 static XrXirType constructed(uint32_t n) {return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n);}
 static XrXirType parameter(uint32_t n) {return (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+n);}
@@ -54,7 +55,7 @@ static XrXirStatus pipeline(const XrXirCompileContext *c) {
     XrXirCheckedPacket packet={0};XrXirTypes *clone=NULL;
     XrXirStatus status=xr_xir_compile_check(c,&f.module,&checked,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
-    if(status==XR_XIR_OK)CHECK(packet.length==sizeof(tuple_24_62) && !memcmp(packet.bytes,tuple_24_62,packet.length));
+    if(status==XR_XIR_OK)CHECK(packet.length==sizeof(tuple_24_63) && !memcmp(packet.bytes,tuple_24_63,packet.length));
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(c,packet.bytes,packet.length,&decoded,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_types_clone(c,xr_xir_compile_artifact_module(decoded)->types,&clone);
     if(status==XR_XIR_OK) {
@@ -67,8 +68,11 @@ static XrXirStatus pipeline(const XrXirCompileContext *c) {
         if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(decoded,NULL);
     }
     if(status==XR_XIR_OK) {
-        XrXirStatus guarded=xr_xir_compile_lower(decoded,&target,&lowered,NULL);
-        if(guarded==XR_XIR_BUDGET)status=guarded;else CHECK(guarded==XR_XIR_BAD_STAGE && !lowered);
+        status=xr_xir_compile_lower(decoded,&target,&lowered,NULL);
+        if(status==XR_XIR_OK) {
+            CHECK(xr_xir_compile_artifact_module(lowered)->stage==XR_XIR_LOWERED);
+            status=xr_xir_compile_artifact_verify(lowered,NULL);
+        }
     }
     xr_xir_compile_types_free(clone);xr_xir_compile_artifact_free(lowered);
     xr_xir_compile_artifact_free(decoded);xr_xir_compile_checked_packet_free(&packet);
@@ -118,7 +122,7 @@ static void rejection_matrix(void) {
         case 11:f.ops[2].type=XR_XIR_I64;break;
         case 12:f.ops[1].immediate=1;break;
         case 13:f.ops[1].type=XR_XIR_STRING;break;
-        case 14:f.module.stage=XR_XIR_LOWERED;break;
+        case 14:f.module.stage=(XrXirStage)99;break;
         }
         CHECK(xr_xir_compile_verify(&c,&f.module,NULL)!=XR_XIR_OK);CHECK(stats(&c).live_bytes==baseline);
     }
@@ -134,7 +138,14 @@ static void rejection_matrix(void) {
     XrXirTypeNode duplicate[2]={f.node,f.node};XrXirTypes duplicates={duplicate,2,NULL,NULL};
     CHECK(xr_xir_compile_types_structure_verify(&c,&duplicates)==XR_XIR_BAD_STRUCTURE);
     fixture(&f);XrXirTypeArena *arena=NULL;
-    CHECK(xr_xir_compile_type_arena_new(&c,&f.types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
+    CHECK(xr_xir_compile_type_arena_new(&c,&f.types,&arena)==XR_XIR_VALUE_OK && arena);
+    const XrXirTypes *owned=xr_xir_compile_type_arena_types(arena);
+    CHECK(owned && owned->nodes!=&f.node && owned->nodes[0].parameters!=f.fields);
+    memset(f.fields,0xcc,sizeof(f.fields));
+    CHECK(xr_xir_compile_types_structure_verify(&c,owned)==XR_XIR_OK);
+    CHECK(owned->nodes[0].parameters[0].type==XR_XIR_UNIT && owned->nodes[0].parameters[1].type==XR_XIR_I64 &&
+        owned->nodes[0].parameters[2].type==XR_XIR_STRING);
+    xr_xir_compile_type_arena_drop(arena);fixture(&f);
     XrXirLayout layout={0};
     for(unsigned i=XR_XIR_LAYOUT_STORAGE;i<=XR_XIR_LAYOUT_FRAME;++i) {
         CHECK(xr_xir_compile_layout(&c,&f.types,constructed(0),&target,(XrXirLayoutContext)i,&layout)==XR_XIR_OK);
@@ -147,8 +158,9 @@ static void old_rejection(void) {
     uint64_t allocations=stats(&c).allocation_count;
     XrXirArtifact *artifact=NULL;
     CHECK(xr_xir_compile_checked_read(&c,old_23_61,sizeof(old_23_61),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
+    CHECK(xr_xir_compile_checked_read(&c,tuple_24_62,sizeof(tuple_24_62),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
     CHECK(stats(&c).allocation_count==allocations);owner_free(&c,baseline);
-    puts("complete verified 223-byte 23/61 packet rejected before allocation PASS");
+    puts("complete verified 23/61 and Tuple24/62 packets rejected before allocation PASS");
 }
 static void markers(void) {
     TupleFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
@@ -169,9 +181,9 @@ static void markers(void) {
 }
 static void wire_rejection(void) {
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    uint8_t bytes[sizeof(tuple_24_62)+4];
+    uint8_t bytes[sizeof(tuple_24_63)+4];
     for(unsigned mode=0;mode<9;++mode) {
-        memcpy(bytes,tuple_24_62,sizeof(tuple_24_62));size_t length=sizeof(tuple_24_62);
+        memcpy(bytes,tuple_24_63,sizeof(tuple_24_63));size_t length=sizeof(tuple_24_63);
         size_t at=length-24;uint32_t value=0;
         switch(mode) {
         case 0:at=length-32;value=7;break;
@@ -185,17 +197,17 @@ static void wire_rejection(void) {
         case 8:at=length-24;value=4;break;
         }
         for(unsigned b=0;b<4;++b)bytes[at+b]=(uint8_t)(value>>(8*b));
-        uint8_t image[sizeof(tuple_24_62)];memcpy(image,bytes,32);memcpy(image+32,bytes+64,length-64);
+        uint8_t image[sizeof(tuple_24_63)];memcpy(image,bytes,32);memcpy(image+32,bytes+64,length-64);
         xr_sha256(image,length-32,bytes+32);XrXirArtifact *out=NULL;
         CHECK(xr_xir_compile_checked_read(&c,bytes,length,&out,NULL)!=XR_XIR_OK && !out);
         CHECK(stats(&c).live_bytes==baseline);
     }
-    for(size_t length=64;length<sizeof(tuple_24_62);++length) {
-        XrXirArtifact *out=NULL;CHECK(xr_xir_compile_checked_read(&c,tuple_24_62,length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
+    for(size_t length=64;length<sizeof(tuple_24_63);++length) {
+        XrXirArtifact *out=NULL;CHECK(xr_xir_compile_checked_read(&c,tuple_24_63,length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
     }
     owner_free(&c,baseline);puts("Tuple 9 correctly hashed hostile payloads and every packet truncation rejected PASS");
 }
-static void runtime_closed(void) {
+static void hidden_tuple_ownership(void) {
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
     for(unsigned signature=0;signature<2;++signature) {
         TupleFixture f;fixture(&f);f.param=constructed(0);
@@ -205,16 +217,27 @@ static void runtime_closed(void) {
         f.block.count=f.function.instruction_count=2;f.function.operand_count=0;f.function.operands=NULL;
         XrXirArtifact *checked=NULL,*lowered=NULL;
         CHECK(xr_xir_compile_check(&c,&f.module,&checked,NULL)==XR_XIR_OK);
-        CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_BAD_STAGE && !lowered);
+        CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK && lowered);
+        CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
+        XrXirTypeArena *arena=NULL;
+        CHECK(xr_xir_compile_type_arena_new(&c,xr_xir_compile_artifact_module(lowered)->types,&arena)==XR_XIR_VALUE_OK && arena);
+        const XrXirTypes *owned=xr_xir_compile_type_arena_types(arena);
+        CHECK(owned->nodes[0].parameters!=f.fields);
+        xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(checked);
+        memset(f.fields,0xcc,sizeof(f.fields));
+        CHECK(xr_xir_compile_types_structure_verify(&c,owned)==XR_XIR_OK);
+        CHECK(owned->nodes[0].parameters[2].type==XR_XIR_STRING);
+        xr_xir_compile_type_arena_drop(arena);fixture(&f);
         f.module.stage=XR_XIR_LOWERED;
-        CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_BAD_STAGE);
-        xr_xir_compile_artifact_free(checked);
+        CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+        checked=NULL;
+        CHECK(xr_xir_compile_check(&c,&f.module,&checked,NULL)==XR_XIR_BAD_STAGE && !checked);
     }
     TupleFixture f;fixture(&f);
     CHECK(xr_xir_compile_class_field_verify(&c,&f.types,constructed(0))==XR_XIR_OK);
     f.fields[0].mode=1;
     CHECK(xr_xir_compile_class_field_verify(&c,&f.types,constructed(0))==XR_XIR_BAD_TYPE);
-    owner_free(&c,baseline);puts("unused and signature-only Tuple Lowered rejected; concrete Unit field mode closed PASS");
+    owner_free(&c,baseline);puts("unused and signature-only Tuple Lowered and independently owned arena; forged check stage and concrete Unit mode rejected PASS");
 }
 static XrXirStatus sendable_dag(const XrXirCompileContext *c) {
     TupleFixture f;fixture(&f);
@@ -430,7 +453,7 @@ static void boundaries(const char *name,Operation op) {
     printf("%s OOM sites=%zu finite exact and 3 axes -1 physical=0/0 PASS\n",name,sites);
 }
 int main(void) {
-    old_rejection();rejection_matrix();markers();wire_rejection();runtime_closed();boundaries("Tuple check/codec/clone",pipeline);
+    old_rejection();rejection_matrix();markers();wire_rejection();hidden_tuple_ownership();boundaries("Tuple check/codec/clone/Lowered",pipeline);
     boundaries("all original five kinds + Tuple codec",all_kinds);
     boundaries("Tuple Checked specialization",specialization);boundaries("Tuple interface substitution",closure);
     boundaries("Tuple effect substitution",effects);boundaries("Tuple inference",inference);

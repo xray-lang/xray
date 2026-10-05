@@ -1,0 +1,20 @@
+import { word, pair, Box } from "./library"
+var sequence = 0
+fn first() -> i64 { sequence = sequence * 10 + 1; return 11 }
+fn text() -> string { sequence = sequence * 10 + 2; return word() }
+fn note() { sequence = sequence * 10 + 3 }
+fn stamp() -> i64 { return sequence }
+export fn parameter(value:(i64,(),string,())) -> string { return value.2 }
+export fn make() -> ((i64,(),string,()),(i64,string),i64) {
+    var value:(i64,(),string,()) = (first(),note(),text(),note())
+    var generic:(i64,string) = pair<i64>(7)
+    var items:Array<(i64,(),string,())> = [value]
+    var optional:(i64,(),string,())? = value
+    const owner=Box(items)
+    const fromClass=owner.get()!
+    const zero=((),())
+    const pure=zero.0
+    const unary=(fromClass[0].0,)
+    print("tuple",value.0,generic.0)
+    return ((unary.0,optional!.1,parameter(optional!),fromClass[0].3),generic,stamp())
+}

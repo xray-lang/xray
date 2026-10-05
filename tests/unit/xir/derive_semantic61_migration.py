@@ -22,9 +22,10 @@ def main():
         assert current[64:]==old[64:] and hashlib.sha256(current).hexdigest()==row['current61_sha256']
         match=next(m for m in expression.finditer((root/row['path']).read_text(encoding='utf8')) if m[1]==row['name'])
         from derive_tuple62_migration import tuple62_packet
-        assert bytes(int(v,16) for v in re.findall(r'0x([0-9a-fA-F]{2})\b',match[2]))==tuple62_packet(current)
+        from derive_tuple63_migration import tuple63_packet
+        assert bytes(int(v,16) for v in re.findall(r'0x([0-9a-fA-F]{2})\b',match[2]))==tuple63_packet(tuple62_packet(current))
         if args.output:
             (args.output/f'{i:02d}-old60.chk').write_bytes(old)
             (args.output/f'{i:02d}-current61.chk').write_bytes(current)
-    print('23 complete old60 packets preserved; independent historical same-body61 and current24/62 bytes verified; reader qualification separate')
+    print('23 complete old60 packets preserved; independent historical same-body61 and current24/63 bytes verified; reader qualification separate')
 if __name__=='__main__':main()

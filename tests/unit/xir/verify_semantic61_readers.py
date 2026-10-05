@@ -32,5 +32,5 @@ def main():
             records.append(row);(args.output/'reader-results.json').write_text(json.dumps(records,indent=2)+'\n',encoding='utf8')
             assert result.returncode==0,row
     assert len(records)==83
-    print('83 real reader probes PASS: historical61 23 rejected; historical positive and codec-shape roles preserved by the current62 reader gate / 23 old60 / 19 old59 / 18 old22/58')
+    print('83 real reader probes PASS: historical61 23 rejected; historical positive and codec-shape roles preserved by the current63 reader gate / 23 old60 / 19 old59 / 18 old22/58')
 if __name__=='__main__':main()

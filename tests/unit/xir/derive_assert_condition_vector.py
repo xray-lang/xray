@@ -3,6 +3,7 @@ import hashlib,json,struct,re
 from derive_test_roles_vectors import upgrade, historical_vector
 from derive_semantic61_migration import semantic61_packet
 from derive_tuple62_migration import tuple62_packet
+from derive_tuple63_migration import tuple63_packet
 
 def words(*values): return struct.pack('<'+'I'*len(values),*values)
 def op(code,result=0,left=0,right=0,immediate=0):
@@ -27,7 +28,7 @@ body+=words(0,0) # Empty literal0, implementation count0.
 body+=words(0,0,0,0) # No generics or type/nominal/interface pools.
 body+=words(1,0,1,1,2) # One default: parameter owner1 ordinal1 helper2.
 body+=words(0) # No provenance on this unspecialized library.
-current=tuple62_packet(semantic61_packet(upgrade(packet(body,58))))
+current=tuple63_packet(tuple62_packet(semantic61_packet(upgrade(packet(body,58)))))
 directory=Path(__file__).parent
 manifest=json.loads((directory/'assert_condition_packet_vectors.json').read_text(encoding='utf-8'))
 header=(directory/'xir_assert_condition_golden.h').read_text(encoding='utf-8')

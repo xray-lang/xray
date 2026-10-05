@@ -149,6 +149,11 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
             op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW ? op->args[1] : 0;
+        if (op->op==XR_XIR_TUPLE_NEW) {
+            const XrXirTypeNode *tuple=xr_xir_tuple_signature(artifact->module.types,op->type);
+            if (!tuple) return XR_XIR_BAD_TYPE;
+            count=tuple->parameter_count;
+        }
         if (count > outgoing) outgoing = count;
     }
     uint32_t paths = 0;

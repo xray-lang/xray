@@ -230,6 +230,6 @@ static void rune_leaf(int argc,char **argv) {
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);
     _Static_assert(XR_XIR_RUNE==16 && XR_XIR_CONST_RUNE==128 && XR_XIR_GE_STRING==134,"append-only Rune and text wire IDs");
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==24 && XR_XIR_CHECKED_CONTRACT==62 && XR_XIR_VALUE_ABI_VERSION==19 && XR_XIR_CALL_ABI_VERSION==25 && XR_XIR_PROGRAM_ABI_VERSION==28,"atomic admission versions");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==24 && XR_XIR_CHECKED_CONTRACT==63 && XR_XIR_VALUE_ABI_VERSION==20 && XR_XIR_CALL_ABI_VERSION==25 && XR_XIR_PROGRAM_ABI_VERSION==28,"current admission versions");
     rune_values();rune_text();rune_wire();rune_leaf(argc,argv);rune_execution();rune_resources();return 0;
 }

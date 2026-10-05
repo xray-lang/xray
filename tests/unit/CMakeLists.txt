@@ -4198,6 +4198,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/signature_shape_scratch.cmake)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/aot/backend_emission_resources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/tuple_owner.cmake)
+include(xir/tuple_values.cmake)
 
 # Fresh whole compiler/runtime fault matrices; scheduling does not extend deadlines.
 if(ENABLE_ASAN OR ENABLE_UBSAN)

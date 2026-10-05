@@ -1059,11 +1059,6 @@ XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, co
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
         status = xr_xir_compile_types_structure_verify(&context.remaining, module->types);
-        if (status==XR_XIR_OK && module->types && module->stage==XR_XIR_LOWERED) {
-            if (!xir_compile_work(&context.remaining,module->types->count)) status=XR_XIR_BUDGET;
-            for (uint32_t i=0; i<module->types->count && status==XR_XIR_OK; ++i)
-                if (module->types->nodes[i].kind==XR_XIR_TYPE_TUPLE) status=XR_XIR_BAD_STAGE;
-        }
         if (status == XR_XIR_OK && module->types && module->types->nominals) {
             bool identities = module->types->nominals->identities != NULL;
             if (identities != (module->stage == XR_XIR_LOWERED)) status = XR_XIR_BAD_STAGE;

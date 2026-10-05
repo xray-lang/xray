@@ -1,0 +1,2 @@
+fn same<T:Equal>(left:T,right:T) -> bool { return left == right }
+same((1,2),(1,2))

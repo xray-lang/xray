@@ -203,9 +203,6 @@ static XrXirStatus transition_shape(const XrXirModule *input, XrXirStage source,
         if (input->types) {
             if (input->types->count && !input->types->nodes) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
             if (!xir_compile_work(budget,input->types->count)) return transition_error(XR_XIR_BUDGET,diagnostic);
-            for (uint32_t i=0; i<input->types->count; ++i)
-                if (input->types->nodes[i].kind == XR_XIR_TYPE_TUPLE)
-                    return transition_error(XR_XIR_BAD_STAGE,diagnostic);
         }
         XrXirLayout layout;
         XrXirStatus layout_status = xr_xir_compile_layout(budget, NULL, XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout);

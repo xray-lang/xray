@@ -14,6 +14,8 @@
 #include <windows.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "../xir_sdk_resource_test.h"
+static const XrCompileResourceLimits sdk_measurement_limits={
+    UINT64_C(4294967296),UINT64_C(67108864),UINT64_C(68719476736)};
 extern const XrXirProgramSpec compile_owner_program;
 extern const XrXirProgramSpec *old_program_data(void);
 extern unsigned old_callback_count(void);
@@ -34,7 +36,7 @@ static char *input(const char *path,size_t *length) {
 static XrXirRuntimeSdk *admit(const XrXirRuntimeSdkRequest *request) {
     XrXirRuntimeSdk *sdk=NULL;CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK);
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
-    CHECK(facts->value_abi==19 && facts->call_abi==25 && facts->program_abi==28 && facts->crt==2);
+    CHECK(facts->value_abi==20 && facts->call_abi==25 && facts->program_abi==28 && facts->crt==2);
     const char *resource_library=NULL;
     CHECK(xr_xir_runtime_sdk_file(sdk,"lib/xray_compile_resources.lib",&resource_library)==XR_XIR_SDK_OK && resource_library);
     return sdk;
@@ -59,14 +61,14 @@ static void abi_refusal_stats(XrCompileResources *resources,XrCompileResourceSta
         runtime_bytes==physical.bytes && handles()==physical.handle_count);
 }
 static void old_versions(const XrXirRuntimeSdkRequest *original) {
-    XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_unlimited);
+    XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdk *sdk=admit(&request);XrXirCompileContext compile=context(request.resources);
     CHECK(old_program_data()->abi_version==26 && old_program_data()->target.abi_version==17);
     CHECK(old_program_data()->entries[0].abi_version==21);
     for (unsigned version=0;version<3;++version) {
         XrXirProgramSpec spec=*old_program_data();
         if (version>0) spec.abi_version=28;
-        if (version>1) spec.target.abi_version=19;
+        if (version>1) spec.target.abi_version=20;
         XrXirProgram *program=NULL;XrCompileResourceStats before=sdk_stats(request.resources);
         SdkAbiPhysicalSnapshot physical=abi_physical();
         CHECK(xr_xir_compile_program_seal(&compile,&spec,&program)==XR_XIR_BAD_LAYOUT && !program);
@@ -95,9 +97,9 @@ static void abi_code_release(void *owner) {
     CHECK(owner==&sdk_abi_observation);++sdk_abi_observation.leases;
 }
 static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
-    DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_unlimited);
+    DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdk *sdk=admit(&request);XrXirCompileContext compile=context(request.resources);
-    CHECK(compile_owner_program.abi_version==28 && compile_owner_program.target.abi_version==19);
+    CHECK(compile_owner_program.abi_version==28 && compile_owner_program.target.abi_version==20);
     CHECK(compile_owner_program.entry_count==3 && compile_owner_program.entries);
     CHECK(!compile_owner_program.code.owner && !compile_owner_program.code.release);
     CHECK(compile_owner_program.entries[1].result==XR_XIR_I64 && !compile_owner_program.entries[1].parameter_count);
@@ -149,10 +151,10 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     xr_compile_resources_free(entries);sdk_abi_observation=(SdkAbiObservation){0};
     xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(request.resources);
     CHECK(!runtime_live && !runtime_bytes && handles()==initial);
-    puts("SDK current Program28/Value19 independently reject entry Call24; standalone Call25 rejects Call24; real42/lease controls PASS");
+    puts("SDK current Program28/Value20 independently reject entry Call24; standalone Call25 rejects Call24; real42/lease controls PASS");
 }
 static void positive(const XrXirRuntimeSdkRequest *original) {
-    DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_unlimited);
+    DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdk *sdk=admit(&request);XrXirCompileContext compile=context(request.resources);
     XrCompileResourceStats before=sdk_stats(request.resources);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&compile,&compile_owner_program,&program)==XR_XIR_OK);
@@ -176,7 +178,7 @@ static void positive(const XrXirRuntimeSdkRequest *original) {
     CHECK(!runtime_live && !runtime_bytes && handles()==initial);
 }
 static void failure_matrix(const XrXirRuntimeSdkRequest *original) {
-    DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_unlimited);
+    DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdk *sdk=admit(&request);XrXirCompileContext compile=context(request.resources);XrXirProgram *program=NULL;
     size_t first=runtime_attempts;CHECK(xr_xir_compile_program_seal(&compile,&compile_owner_program,&program)==XR_XIR_OK);
     size_t points=runtime_attempts-first;XrCompileResourceStats exact=sdk_stats(request.resources);
@@ -190,7 +192,7 @@ static void failure_matrix(const XrXirRuntimeSdkRequest *original) {
         xr_compile_resources_release(request.resources);CHECK(!runtime_live && !runtime_bytes && handles()==initial);
     }
     for (size_t at=0;at<points;++at) {
-        request.resources=sdk_ledger(&sdk_unlimited);sdk=admit(&request);compile=context(request.resources);program=NULL;
+        request.resources=sdk_ledger(&sdk_measurement_limits);sdk=admit(&request);compile=context(request.resources);program=NULL;
         XrCompileResourceStats before=sdk_stats(request.resources);size_t physical=runtime_bytes;DWORD sdk_handles=handles();
         runtime_fail_at=runtime_attempts+at;
         CHECK(xr_xir_compile_program_seal(&compile,&compile_owner_program,&program)==XR_XIR_OUT_OF_MEMORY && !program);

@@ -556,6 +556,20 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     --ctx->depth; return source_signature(ctx, parameters, count, result, type);
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
+static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *type) {
+    if (!ref->nchildren) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"empty type syntax must use Unit");
+    if (!ref->children || ctx->depth>=128)
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"Tuple annotation requires bounded ordered fields");
+    XrXirCallableParameter *fields=source_alloc(ctx,ref->nchildren,sizeof(*fields));
+    if (!fields) return false;
+    ++ctx->depth;
+    for (uint32_t i=0;i<ref->nchildren;++i) {
+        if (!source_work(ctx,NULL) || !source_type(ctx,ref->children[i],&fields[i].type)) {--ctx->depth;return false;}
+    }
+    --ctx->depth;
+    return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,
+        .parameters=fields,.parameter_count=ref->nchildren},type);
+}
 /* A type failure raised without an owning AST node reports the annotation that caused it. */
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     bool valid = source_type_ref(ctx, ref, type);
@@ -583,6 +597,7 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
         return valid && source_nullable_type(ctx,element,type);
     }
     case XR_TREF_FUNCTION: return source_callable_type(ctx, ref, type);
+    case XR_TREF_TUPLE: return source_tuple_type_ref(ctx,ref,type);
     case XR_TREF_UNIT: *type = XR_XIR_UNIT; return true;
     case XR_TREF_BOOL: *type = XR_XIR_BOOL; return true;
     case XR_TREF_STRING: *type = XR_XIR_STRING; return true;
@@ -893,6 +908,7 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value);
 #include "xxir_source_array.inc.c"
+#include "xxir_source_tuple.inc.c"
 #include "xxir_source_string.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
@@ -1425,6 +1441,10 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))
             context.type = xr_xir_nullable_element(&ctx->types,context.type);
         return source_array_literal(ctx, node, context, value);
+    case AST_TUPLE_LITERAL:
+        if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))
+            context.type=xr_xir_nullable_element(&ctx->types,context.type);
+        return source_tuple_literal(ctx,node,context,value);
     case AST_INDEX_GET: return source_array_get(ctx, node, node->as.index_get.array,
         node->as.index_get.index, NULL, NULL, value);
     case AST_INDEX_SET: return source_array_set(ctx, node, node->as.index_set.array,

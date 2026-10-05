@@ -38,6 +38,14 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (!member || member->type!=AST_MEMBER_ACCESS) return true;
     SourceExpectedType receiver;
     if (!source_ground_type(ctx,member->as.member_access.object,depth+1,&receiver)) return false;
+    if (!call && receiver.present && xr_xir_tuple_signature(&ctx->types,receiver.type)) {
+        uint32_t field=0;
+        if (!source_tuple_index(ctx,member,member->as.member_access.name,&field)) return false;
+        const XrXirTypeNode *tuple=xr_xir_tuple_signature(&ctx->types,receiver.type);
+        if (field>=tuple->parameter_count)
+            return source_fail(ctx,member,XR_XIR_BAD_TYPE,"Tuple field index exceeds its ordered arity");
+        *output=(SourceExpectedType){true,tuple->parameters[field].type,false};return true;
+    }
     if (!receiver.present || !xr_xir_type_is_nominal(&ctx->types,receiver.type)) return true;
     const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,receiver.type);
     SourceSubstitution substitution={found->nominal.arguments,found->nominal.argument_count};

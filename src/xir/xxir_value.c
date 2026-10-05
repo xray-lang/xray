@@ -22,6 +22,7 @@
 #include "xxir_panic.h"
 #include "xxir_equal.h"
 #include "xxir_nullable.h"
+#include "xxir_tuple.h"
 #include "xxir_float.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -164,7 +165,7 @@ static bool value_header_valid(const XrXirValue *value) {
         return node && !node->parameter_span && xr_xir_type_is_class(xr_xir_compile_type_arena_types(object->arena),type);
     return node && !node->parameter_span && node->kind == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
-         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE);
+         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE);
 }
 XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (!value_header_valid(value)) return false;
@@ -175,6 +176,19 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena),object->type);
         if (!layout || !node || layout->field_count != node->nominal.field_count) return false;
         if (!class_allocation_valid(object)) return false;
+        return true;
+    }
+    if (object->kind == XR_XIR_TYPE_TUPLE) {
+        const XirTuple *tuple=(const XirTuple *)object;
+        const XrXirTypeNode *node=xr_xir_tuple_signature(xr_xir_compile_type_arena_types(object->arena),object->type);
+        if (!node || !node->parameters || tuple->count!=node->parameter_count ||
+            tuple->fields!=(const XrXirValue *)(tuple+1)) return false;
+        for (uint32_t i=0;i<tuple->count;++i) {
+            const XrXirValue *field=&tuple->fields[i];
+            if (field->type!=(uint32_t)node->parameters[i].type || !value_header_valid(field)) return false;
+            if (owned_carrier_type((XrXirType)field->type) && !arena_free_carrier((XrXirType)field->type) &&
+                object_pointer(field)->arena!=object->arena) return false;
+        }
         return true;
     }
     if (object->kind == XR_XIR_TYPE_NULLABLE) {
@@ -471,6 +485,10 @@ static void release_pending(XirObject *pending) {
             XR_CHECK(layout, "class release requires its retained body layout");
             class_release_fields(object,layout->field_count,&pending);
             xr_xir_domain_deallocate(domain,object,((XirClassObject *)object)->allocation_bytes);
+        } else if (object->kind == XR_XIR_TYPE_TUPLE) {
+            XirTuple *tuple=(XirTuple *)object;
+            for (uint32_t i=tuple->count;i;--i) queue_release(&tuple->fields[i-1],&pending);
+            xr_xir_domain_deallocate(domain,tuple,sizeof(*tuple)+(size_t)tuple->count*sizeof(XrXirValue));
         } else if (object->kind == XR_XIR_TYPE_NOMINAL || object->kind == XR_XIR_TYPE_NULLABLE) {
             XirNominalValue *record = (XirNominalValue *) object;
             for (uint32_t i = record->count; i; --i) queue_release(&record->fields[i - 1], &pending);
@@ -724,6 +742,7 @@ static bool admission_owner(const XrXirValueAdmission *admission,
 }
 #include "xxir_value_admission.inc.c"
 #include "xxir_nullable_value.inc.c"
+#include "xxir_tuple_value.inc.c"
 XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirTypeArena *arena,
     XrXirType type, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission,
     XrXirValue *output) {

@@ -590,6 +590,32 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
     append(buffer,"        }\n        return (XrXirAction){XR_XIR_ACTION_CONTINUE,0,NULL,0,{0},{0},0};\n");
 }
 
+static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
+    const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t destination) {
+    append(buffer,"        { XrXirValue value = {0}; XrXirValueStatus status;\n");
+    if (op->op==XR_XIR_TUPLE_NEW) {
+        const XrXirTypeNode *tuple=xr_xir_tuple_signature(buffer->types,op->type);
+        uint32_t payload=0;
+        for (uint32_t i=0;i<tuple->parameter_count && emit_work(buffer,1);++i) {
+            append(buffer,"        state->arguments[%u] = ",i);
+            if (tuple->parameters[i].type==XR_XIR_UNIT) append(buffer,"(XrXirValue) {0}");
+            else emit_value(buffer,function,layout,function->operands[op->args[0]+payload++]);
+            append(buffer,";\n");
+        }
+        append(buffer,"        status = xr_xir_tuple_new((XrXirType) %uu, state->arguments, %uu, xr_xir_call_admission(view), &value);\n",
+            (uint32_t)op->type,tuple->parameter_count);
+    } else {
+        append(buffer,"        XrXirValue receiver = ");emit_value(buffer,function,layout,op->args[0]);
+        append(buffer,";\n        status = xr_xir_tuple_get(&receiver, %uu, &value);\n",(uint32_t)op->immediate);
+    }
+    append(buffer,"        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
+        "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+        "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n");
+    if (xr_xir_type_is_owned(buffer->types,op->type))
+        append(buffer,"        xr_xir_owned_slot_move(state->frame, %uu, &value);\n",destination);
+    else if (op->type!=XR_XIR_UNIT) append(buffer,"        xr_xir_scalar_store(state->frame, %uu, value.payload);\n",destination);
+    append(buffer,"        }\n        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
+}
 static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     if (op->op == XR_XIR_STRUCT_SET) {
@@ -756,6 +782,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
         emit_class_step(buffer,function,op,layout,destination); return;
+    }
+    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
+        emit_tuple_step(buffer,function,op,layout,destination);return;
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
@@ -1393,7 +1422,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     append(buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
-           "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n"
+           "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

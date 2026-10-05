@@ -25,7 +25,8 @@ def main():
         source=(root/row['path']).read_text(encoding='utf-8')
         match=next(m for m in expression.finditer(source) if m[1]==row['name'])
         actual=bytes(int(v,16) for v in re.findall(r'0x([0-9a-fA-F]{2})\b',match[2]))
-        expected=tuple62_packet(previous)
+        from derive_tuple63_migration import tuple63_packet
+        expected=tuple63_packet(tuple62_packet(previous))
         assert expected[64:]==previous[64:] and actual==expected
-    print('23 complete current KATs: preserved old histories, same original body, strict schema24/semantic62 bytes PASS')
+    print('23 complete current KATs: preserved old histories, same original body, strict schema24/semantic63 bytes PASS')
 if __name__=='__main__':main()

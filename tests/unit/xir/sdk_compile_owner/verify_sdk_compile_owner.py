@@ -84,7 +84,7 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [23, 61, 19, 25, 28]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [24, 63, 20, 25, 28]
     assert len(manifest['abi_measurements']) == 233
     assert [row['path'] for row in manifest['files'] if row['kind'] == 5] == sorted('lib/' + name + '.lib' for name in ARCHIVES)
     def status(name, document, expected, sdk_root=bundle):
@@ -117,13 +117,13 @@ def main():
         assert code != 0 and ('error C2198' in text or 'error C2338' in text), (name, text)
     verify_preserved()
     result = {'preserved_head': baseline['head'], 'protected_inputs': len(protected),
-              'old_positive': 'PASS', 'current_positive': 'PASS', 'retired': 98, 'retained': 41,
+              'old_positive': 'PASS', 'current_positive': 'PASS', 'retired': len(retired), 'retained': len(RETAINED),
               'objects': outcomes, 'protected_sha256': protected,
               'new_archive_sha256': {path.name: sha(path) for path in libraries},
-              'old_identity_and_labels_rejected': True, 'new_layout_measurements': 220,
+              'old_identity_and_labels_rejected': True, 'new_layout_measurements': len(manifest['abi_measurements']),
               'scope': 'New runtime SDK exports only; absence of compiler-only APIs is not full compiler archive qualification'}
     (output / 'summary.json').write_text(json.dumps(result, indent=2) + '\n')
-    print('139 preserved old objects: 98 exact retired-symbol rejections, 41 retained references; both SDK controls and stale identities PASS')
+    print(f"139 preserved old objects: {len(retired)} exact retired-symbol rejections, {len(RETAINED)} retained references; both SDK controls and stale identities PASS")
 
 
 if __name__ == '__main__':

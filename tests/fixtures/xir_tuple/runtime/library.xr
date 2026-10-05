@@ -1,0 +1,8 @@
+const stored:string = "tuple-owner"
+export fn word() -> string { return stored }
+export fn pair<T:Sendable>(value:T) -> (T,string) { return (value,"generic-owner") }
+export final class Box {
+    private items:Array<(i64,(),string,())>?
+    constructor(items:Array<(i64,(),string,())>?) { this.items=items }
+    get() -> Array<(i64,(),string,())>? { return this.items }
+}

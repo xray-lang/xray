@@ -13,6 +13,8 @@
 #include <windows.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "xir_sdk_resource_test.h"
+static const XrCompileResourceLimits sdk_measurement_limits={
+    UINT64_C(4294967296),UINT64_C(67108864),UINT64_C(68719476736)};
 static size_t sdk_io_attempts,sdk_io_fail_at=SIZE_MAX;
 static DWORD sdk_io_error=ERROR_READ_FAULT;
 static bool sdk_short_read;
@@ -56,7 +58,7 @@ static void sdk_known_bytes(void) {
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";
     manifest.file_count=1;manifest.files[0]=(XrXirSdkFile){"lib/test.lib",5,2,{0},NULL,NULL};
     memcpy(manifest.files[0].digest,sdk_kat_file_digest,32);
-    XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
+    XrCompileResources *resources=sdk_ledger(&sdk_measurement_limits);
     XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
     CHECK(sdk_identity(&json,&manifest) && !memcmp(manifest.digest,sdk_kat_digest,32));
     uint64_t work=sdk_stats(resources).work;
@@ -67,7 +69,7 @@ static void sdk_known_bytes(void) {
     xr_compile_resources_release(resources);
     uint8_t hash[32];xr_sha256(sdk_kat_preimage,sizeof(sdk_kat_preimage),hash);
     CHECK(!memcmp(hash,sdk_kat_digest,32));
-    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,work-1};
+    XrCompileResourceLimits limits={sdk_measurement_limits.allocated_bytes,sdk_measurement_limits.live_bytes,work-1};
     resources=sdk_ledger(&limits);json.context=resources;
     memset(manifest.digest,0,32);
     CHECK(!sdk_identity(&json,&manifest) && json.status==XR_JSON_CURSOR_BUDGET);
@@ -152,7 +154,7 @@ int main(int argc,char **argv) {
     bool shared_only=argc==4 && !strcmp(argv[3],"--shared-resources");
     if (!shared_only) sdk_known_bytes();
     size_t length=0;char *manifest=sdk_input(argv[2],&length);
-    XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
+    XrCompileResources *resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdkRequest request={argv[1],manifest,length,resources};
     DWORD initial_handles=sdk_handles();
     if (shared_only) {
@@ -187,7 +189,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_runtime_sdk_file(sdk,"ignored",&existing)==XR_XIR_SDK_INVALID &&
         existing==(const char *)(uintptr_t)1 && sdk_stats(resources).work==query_work);
     xr_free(manifest);xr_free(producer_root);xr_compile_resources_release(resources);
-    CHECK(xr_xir_runtime_sdk_root(sdk) && xr_xir_runtime_sdk_facts(sdk)->value_abi==19);
+    CHECK(xr_xir_runtime_sdk_root(sdk) && xr_xir_runtime_sdk_facts(sdk)->value_abi==20);
     sdk_locked_files(sdk);xr_xir_runtime_sdk_free(sdk);CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
     puts("SDK producer destroyed, immutable same-source facts and locked actual bundle PASS");return 0;
 }

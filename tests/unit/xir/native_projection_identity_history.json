@@ -1,0 +1,53 @@
+{
+  "source": "Independent domain + seven little-endian u32 words + exact ASCII prefix",
+  "records": [
+    {
+      "role": "linked",
+      "identity": "historical",
+      "wire": 23,
+      "semantic": 61,
+      "value_abi": 19,
+      "call_abi": 25,
+      "program_abi": 28,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a763101000000170000003d00000013000000190000001c0000000d0000006c696e6b65645f736f75726365",
+      "length": 71,
+      "sha256": "93bc0b9de2044c6174e9bc27d1f746c6165e7fd8a887e8b86a4e2023acb4a3d9"
+    },
+    {
+      "role": "linked",
+      "identity": "current",
+      "wire": 24,
+      "semantic": 63,
+      "value_abi": 20,
+      "call_abi": 25,
+      "program_abi": 28,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a763101000000180000003f00000014000000190000001c0000000d0000006c696e6b65645f736f75726365",
+      "length": 71,
+      "sha256": "cf2865183e021dfc21f24ea3b0cb151ef1647f0e3e694bd67f8117baaf8afea2"
+    },
+    {
+      "role": "original",
+      "identity": "historical",
+      "wire": 23,
+      "semantic": 61,
+      "value_abi": 19,
+      "call_abi": 25,
+      "program_abi": 28,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a763101000000170000003d00000013000000190000001c0000000f0000006f726967696e616c5f736f75726365",
+      "length": 73,
+      "sha256": "202299fec76eead7f466d98391f9272a65a9fb33685b630fb2e95c78468bdcb1"
+    },
+    {
+      "role": "original",
+      "identity": "current",
+      "wire": 24,
+      "semantic": 63,
+      "value_abi": 20,
+      "call_abi": 25,
+      "program_abi": 28,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a763101000000180000003f00000014000000190000001c0000000f0000006f726967696e616c5f736f75726365",
+      "length": 73,
+      "sha256": "7e5cbf693007fca02b8ecb5af0bf64ffb29b56e12369eb4e5a4ed2d80a1d5ccf"
+    }
+  ]
+}

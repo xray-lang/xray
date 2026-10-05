@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='xray-projection-owner-') as temporary:
     sys.stdout.buffer.write(result.stdout);sys.stderr.buffer.write(result.stderr);assert result.returncode==0,result.returncode
     lines=dict(line.split(' ',1) for line in result.stdout.decode('utf-8').splitlines() if line.split(' ',1)[0] in {'WORDS','SOURCE','CLOSED','LAYOUT','POLICY','GENERATED','TOOLCHAIN','INPUT'})
     assert hashlib.sha256(code.read_bytes()).hexdigest()==lines['GENERATED']
-    words=tuple(map(int,lines['WORDS'].split()));assert words[:6]==(2,23,61,19,25,28)
+    words=tuple(map(int,lines['WORDS'].split()));assert words[:6]==(2,24,63,20,25,28)
     data=b'xray:xir-native-input:v2'+struct.pack('<10I',*words)
     data+=b''.join(bytes.fromhex(lines[k]) for k in ['SOURCE','CLOSED','LAYOUT','POLICY','GENERATED','TOOLCHAIN'])
     assert hashlib.sha256(data).hexdigest()==lines['INPUT']

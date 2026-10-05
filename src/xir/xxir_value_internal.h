@@ -31,6 +31,11 @@ typedef struct XirNominalValue {
     uint32_t count, variant;
     XrXirValue *fields;
 } XirNominalValue;
+typedef struct XirTuple {
+    XirObject object;
+    uint32_t count;
+    XrXirValue *fields;
+} XirTuple;
 XR_FUNC const XirNominalValue *xr_xir_compile_type_arena_empty_variant(
     const XrXirTypeArena *arena, XrXirType type, uint32_t variant);
 

@@ -169,7 +169,7 @@ static void renderer_channels(void) {
 }
 int main(void) {
     _Static_assert(sizeof(XrXirOutputProvider)==24 && sizeof(XrXirOutputSink)==32,"versioned output prefixes");
-    _Static_assert(XR_XIR_CALL_ABI_VERSION==25 && XR_XIR_VALUE_ABI_VERSION==19 &&
+    _Static_assert(XR_XIR_CALL_ABI_VERSION==25 && XR_XIR_VALUE_ABI_VERSION==20 &&
         XR_XIR_PROGRAM_ABI_VERSION==28,"current execution admission versions");
     _Static_assert(sizeof(XrXirCallConfig)==136 && sizeof(XrXirInstanceConfig)==120,"exact config admission sizes");
     _Static_assert(offsetof(XrXirCallConfig,entries)==8 && offsetof(XrXirInstanceConfig,metadata_limit)==8 &&
@@ -177,6 +177,6 @@ int main(void) {
     _Static_assert(sizeof(XrXirProgramSpec)==96 && sizeof(XrXirValue)==16 && sizeof(XrXirCallEntry)==64 &&
         sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 && sizeof(XrXirCallView)==216,"unchanged provider payload layout");
     config_guards();renderer_channels();call_channels();
-    printf("Call25 Provider24 Sink32 CallConfig136 InstanceConfig120; Value19/Program28; typed channels, cancel, physical PASS\n");
+    printf("Call25 Provider24 Sink32 CallConfig136 InstanceConfig120; Value20/Program28; typed channels, cancel, physical PASS\n");
     return 0;
 }

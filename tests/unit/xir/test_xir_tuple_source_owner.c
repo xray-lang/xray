@@ -46,18 +46,30 @@ static XrCompileResourceStats measured(XrCompileResourceLimits limits,XrXirStatu
     XrXirStatus status=reification(&c);if(status!=expected)fprintf(stderr,"status=%u expected=%u\n",status,expected);
     CHECK(status==expected);XrCompileResourceStats result=stats(&c);owner_free(&c,baseline);return result;
 }
-static void syntax_closed(void) {
+static void syntax_owned(void) {
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
     SourceContext ctx={0};ctx.compile=c;
     XrTypeRef unit={.kind=XR_TREF_UNIT},string={.kind=XR_TREF_STRING};
     XrTypeRef *children[2]={&unit,&string};XrTypeRef ref={.kind=XR_TREF_TUPLE,.nchildren=2,.children=children};
     XrXirType type=XR_XIR_UNIT;
-    CHECK(!source_type_ref(&ctx,&ref,&type) && ctx.diagnostic.status==XR_XIR_BAD_TYPE);
+    CHECK(source_type_ref(&ctx,&ref,&type) && type==constructed(0));
+    CHECK(ctx.types.nodes[0].parameter_count==2 && ctx.types.nodes[0].parameters[0].type==XR_XIR_UNIT &&
+        ctx.types.nodes[0].parameters[1].type==XR_XIR_STRING);
+    XrXirSourceView view={.complete=true,.types=&ctx.types};XrXirSourceSnapshot *snapshot=NULL;
+    CHECK(xr_xir_compile_source_snapshot_copy(&c,&view,&snapshot)==XR_XIR_OK);
+    const XrXirSourceView *owned=xr_xir_compile_source_snapshot_view(snapshot);
+    CHECK(owned->types->nodes!=ctx.types.nodes && owned->types->nodes[0].parameters!=ctx.types.nodes[0].parameters);
+    XrTypeRef empty={.kind=XR_TREF_TUPLE};XrXirType ignored=XR_XIR_UNIT;
+    CHECK(!source_type_ref(&ctx,&empty,&ignored) && ctx.diagnostic.status==XR_XIR_BAD_TYPE);
+    memset(children,0xcc,sizeof(children));
     while(ctx.memory){SourceMemory *next=ctx.memory->next;xr_compile_resources_free(ctx.memory);ctx.memory=next;}
-    owner_free(&c,baseline);puts("Source Tuple syntax remains closed until executable carrier admission PASS");
+    CHECK(xr_xir_compile_types_structure_verify(&c,owned->types)==XR_XIR_OK);
+    CHECK(owned->types->nodes[0].parameters[0].type==XR_XIR_UNIT && owned->types->nodes[0].parameters[1].type==XR_XIR_STRING);
+    xr_xir_compile_source_snapshot_free(snapshot);
+    owner_free(&c,baseline);puts("Source concrete Unit/String Tuple annotation owned after producer release; forged empty Tuple rejected PASS");
 }
 int main(void) {
-    syntax_closed();
+    syntax_owned();
     size_t sites=0;
     for(size_t pass=0;pass<=sites;++pass) {
         XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;

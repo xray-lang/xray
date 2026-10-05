@@ -79,7 +79,18 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
      * packet digest and full proof identity are independently verified below. */
     uint8_t old_nested[1689];uint8_t identity[32];XrSHA256Context sha;
     CHECK(spec->proof.length==sizeof(old_nested));memcpy(old_nested,spec->proof.bytes,sizeof(old_nested));
-    CHECK(old_nested[8]==24 && old_nested[12]==62 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
+    CHECK(old_nested[8]==24 && old_nested[12]==63 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
+    old_nested[12]=62;
+    xr_sha256_init(&sha);xr_sha256_update(&sha,old_nested,32);
+    xr_sha256_update(&sha,old_nested+64,sizeof(old_nested)-64);xr_sha256_final(&sha,old_nested+32);
+    xr_sha256(old_nested,sizeof(old_nested),identity);
+    static const uint8_t old62_identity[]={
+        0xf0,0x2f,0xde,0x19,0xfb,0x93,0x17,0x4b,0x6b,0x07,0x09,0x09,0x90,0x48,0x1a,0xb6,
+        0x7d,0xd3,0x40,0xd5,0x9e,0xf4,0x99,0xe8,0xac,0xe8,0xc7,0xe4,0xbd,0x9d,0x78,0x2b};
+    CHECK(!memcmp(identity,old62_identity,sizeof(identity)));
+    CHECK(xr_xir_compile_checked_read(&owner->context,old_nested,sizeof(old_nested),&read,NULL)==XR_XIR_BAD_STRUCTURE && !read);
+    malformed=*spec;malformed.proof.bytes=old_nested;malformed.proof.length=sizeof(old_nested);malformed.proof.identity=old62_identity;
+    CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
     old_nested[8]=23;old_nested[12]=59;
     xr_sha256_init(&sha);xr_sha256_update(&sha,old_nested,32);
     xr_sha256_update(&sha,old_nested+64,sizeof(old_nested)-64);xr_sha256_final(&sha,old_nested+32);
@@ -122,6 +133,8 @@ static void nested_native_program(bool direction) {
     nested_reject_old_contract(&owner,&spec);
     XrXirProgram *program=NULL;XrXirProgramSpec malformed=spec;
     malformed.target.abi_version=17;
+    CHECK(xr_xir_compile_program_seal(&owner.context,&malformed,&program)==XR_XIR_BAD_LAYOUT && !program);
+    malformed=spec;malformed.target.abi_version=19;
     CHECK(xr_xir_compile_program_seal(&owner.context,&malformed,&program)==XR_XIR_BAD_LAYOUT && !program);
     malformed=spec;malformed.abi_version=27;
     CHECK(xr_xir_compile_program_seal(&owner.context,&malformed,&program)==XR_XIR_BAD_LAYOUT && !program);
