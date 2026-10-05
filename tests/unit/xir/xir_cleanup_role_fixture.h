@@ -8,7 +8,7 @@
  */
 #ifndef XIR_CLEANUP_ROLE_FIXTURE_H
 #define XIR_CLEANUP_ROLE_FIXTURE_H
-static XrXirArtifact *cleanup_role_fixture(void) {
+static XrXirArtifact *cleanup_role_fixture(const XrXirCompileContext *context) {
     XrXirInstruction done = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     XrXirInstruction main_ops[] = {
         {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, 2, {0, 1}},
@@ -42,7 +42,7 @@ static XrXirArtifact *cleanup_role_fixture(void) {
     generics[3].arguments = &argument; generics[3].argument_count = 1;
     XrXirModule module = {XR_XIR_BUILT, functions, 5, &declarations, generics, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
     memset(identities, 0xCC, sizeof(identities));
     return checked;
 }

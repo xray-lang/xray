@@ -78,18 +78,18 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     case 7:{XrXirConstraint old=helper[1];helper[1]=helper[2];helper[2]=old;break;}
     }
     XrXirArtifact *checked=NULL;XrXirDiagnostic d={0};
-    XrXirStatus status=xr_xir_check(&module,NULL,&checked,&d);
+    XrXirStatus status=xr_xir_compile_check(suite_context, &module, &checked, &d);
     if(status!=expected)fprintf(stderr,"tuple ctor%u mode%u status%u expected%u f%u i%u\n",constructor,mode,status,expected,d.function,d.instruction);
     CHECK(status==expected);CHECK((checked!=NULL)==(expected==XR_XIR_OK));
     if(!checked)return;
-    XrXirArtifact *derived=NULL;CHECK(xr_xir_specialize(checked,NULL,&derived,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    XrXirArtifact *derived=NULL;CHECK(xr_xir_compile_specialize(checked, &derived, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
     uint32_t target=UINT32_MAX;
     const XrXirProvenance *p=derived->module.provenance;
     for(uint32_t f=0;f<p->count;++f)if(p->origins[f].function==3)target=f;
     CHECK(target!=UINT32_MAX && p->origins[target].argument_count==4);
     XrXirType *tuple=(XrXirType *)p->origins[target].arguments;
-    XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(derived,NULL,&packet,NULL)==XR_XIR_OK);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(derived, &packet, NULL)==XR_XIR_OK);
     /* Wire specification: origin records are the final module tail. Each has
        function:u32,count:u32,then count u32 types; no searching writer bytes. */
     size_t tail=0,before=0;
@@ -97,31 +97,33 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     CHECK(tail<packet.length);size_t tuple_offset=packet.length-tail+before+8;
     for(unsigned a=0;a<4;++a){
         XrXirType old=tuple[a];tuple[a]=actual[(a+1)%4];
-        CHECK(xr_xir_artifact_verify(derived,NULL,NULL)==XR_XIR_BAD_TYPE);tuple[a]=old;
+        CHECK(xr_xir_compile_artifact_verify(derived, NULL)==XR_XIR_BAD_TYPE);tuple[a]=old;
         default_tuple_u32(packet.bytes+tuple_offset+4*a,(uint32_t)actual[(a+1)%4]);
         XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);
         xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
-        XrXirArtifact *denied=(XrXirArtifact *)(uintptr_t)1;
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&denied,NULL)==XR_XIR_BAD_TYPE && !denied);
+        XrXirArtifact *denied=NULL;
+        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &denied, NULL)==XR_XIR_BAD_TYPE && !denied);
+        denied=(XrXirArtifact *)(uintptr_t)1;
+        CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&denied,NULL)==XR_XIR_BAD_TYPE && denied==(XrXirArtifact *)(uintptr_t)1);
         default_tuple_u32(packet.bytes+tuple_offset+4*a,(uint32_t)old);
     }
     XrXirType swap=tuple[0];tuple[0]=tuple[2];tuple[2]=swap;
-    CHECK(xr_xir_artifact_verify(derived,NULL,NULL)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_artifact_verify(derived, NULL)==XR_XIR_BAD_TYPE);
     tuple[2]=tuple[0];tuple[0]=swap;
-    CHECK(xr_xir_artifact_verify(derived,NULL,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(derived, NULL)==XR_XIR_OK);
     default_tuple_u32(packet.bytes+tuple_offset,(uint32_t)actual[2]);
     default_tuple_u32(packet.bytes+tuple_offset+8,(uint32_t)actual[0]);
     XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);
     xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
     XrXirArtifact *read=NULL;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_BAD_TYPE && !read);
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &read, NULL)==XR_XIR_BAD_TYPE && !read);
     default_tuple_u32(packet.bytes+tuple_offset,(uint32_t)actual[0]);
     default_tuple_u32(packet.bytes+tuple_offset+8,(uint32_t)actual[2]);
     xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);
     xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_OK && read);
-    xr_xir_artifact_free(read);
-    xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(derived);
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &read, NULL)==XR_XIR_OK && read);
+    xr_xir_compile_artifact_free(read);read=NULL;
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(derived);derived=NULL;
 }
 static void default_owner_tuple_cases(void){
     for(unsigned i=0;i<8;++i){default_tuple_case(false,i);default_tuple_case(true,i);}

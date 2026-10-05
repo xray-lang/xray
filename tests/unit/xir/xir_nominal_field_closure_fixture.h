@@ -9,10 +9,10 @@
 #ifndef XIR_NOMINAL_FIELD_CLOSURE_FIXTURE_H
 #define XIR_NOMINAL_FIELD_CLOSURE_FIXTURE_H
 #include "xir_checked_fixture.h"
-static XrXirArtifact *nominal_field_closure_fixture(unsigned mode) {
+static XrXirArtifact *nominal_field_closure_fixture(const XrXirCompileContext *context, unsigned mode) {
     CHECK(mode < 3);
-    XrXirArtifact *base = checked_fixture(), *checked = NULL;
-    XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+    XrXirArtifact *base = checked_fixture(context), *checked = NULL;
+    XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, i64 = XR_XIR_I64;
     XrXirConstraint constraint = {0};
     XrXirNominalField fields[] = {{{"value",5},t,0}, {{"inner",5},(XrXirType)256,0}};
@@ -37,7 +37,7 @@ static XrXirArtifact *nominal_field_closure_fixture(unsigned mode) {
     }
     XrXirTypes types = {nodes,mode+2,&table, NULL}; built.types = &types;
     CHECK(!built.generics);
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(base); return checked;
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(base);base=NULL; return checked;
 }
 #endif // XIR_NOMINAL_FIELD_CLOSURE_FIXTURE_H

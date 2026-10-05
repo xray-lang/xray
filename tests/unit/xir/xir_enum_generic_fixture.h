@@ -10,7 +10,7 @@
 #define XIR_ENUM_GENERIC_FIXTURE_H
 #include "xir/xxir_nominal.h"
 #include "xir/xxir_generic.h"
-static XrXirArtifact *enum_generic_checked(unsigned mode) {
+static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, unsigned mode) {
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
     XrXirConstraint nominal_constraint = {.markers = XR_XIR_CONSTRAINT_SENDABLE}, function_constraint = nominal_constraint;
     XrXirNominalVariant variants[] = {{{"None",4},0,0},{{"Some",4},0,1}};
@@ -53,23 +53,23 @@ static XrXirArtifact *enum_generic_checked(unsigned mode) {
         generics[1].arguments = NULL; generics[1].argument_count = 0;
     }
     XrXirArtifact *checked = NULL; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_check(&built,NULL,&checked,&diagnostic);
+    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
     if (mode) CHECK(status != XR_XIR_OK && !checked);
     else { if (status != XR_XIR_OK) fprintf(stderr,"enum generic status %u function %u instruction %u\n",status,diagnostic.function,diagnostic.instruction); CHECK(status == XR_XIR_OK && checked); }
     return checked;
 }
 static void enum_generic_cases(void) {
-    for (unsigned mode = 1; mode <= 5; ++mode) enum_generic_checked(mode);
-    XrXirArtifact *checked = enum_generic_checked(0), *decoded = NULL, *closed = NULL, *lowered = NULL;
+    for (unsigned mode = 1; mode <= 5; ++mode) enum_generic_checked(suite_context, mode);
+    XrXirArtifact *checked = enum_generic_checked(suite_context, 0), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK); xr_xir_artifact_free(checked);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK); xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK); xr_xir_artifact_free(closed);
-    const XrXirTypes *types = xr_xir_artifact_module(lowered)->types;
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(closed);closed=NULL;
+    const XrXirTypes *types = xr_xir_compile_artifact_module(lowered)->types;
     CHECK(types && types->count == 1 && types->nodes[0].nominal.field_count == 1);
     CHECK(types->nodes[0].nominal.fields[0] == XR_XIR_I64 && types->nodes[0].nominal.arguments[0] == XR_XIR_I64);
-    xr_xir_artifact_free(lowered);
+    xr_xir_compile_artifact_free(lowered);lowered=NULL;
 }
 #endif // XIR_ENUM_GENERIC_FIXTURE_H

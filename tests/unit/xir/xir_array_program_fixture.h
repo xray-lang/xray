@@ -15,7 +15,7 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
 #include "xir_nominal_fixture.h"
-static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
+static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, bool fail_init, bool nominal) {
     XrXirType a = (XrXirType) (nominal ? 257 : 256), cell = (XrXirType) (nominal ? 258 : 257);
     XrXirTypeNode nodes[4] = {
         {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
@@ -118,18 +118,18 @@ static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
     XrXirModule built = {XR_XIR_BUILT,functions,8,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_check(&built,NULL,&checked,&diagnostic);
+    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr,"Array check %u function %u instruction %u\n",
         (unsigned) status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK);
     if (nominal) {
         XrXirArtifact *specialized = NULL;
-        CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(checked); checked = specialized;
+        CHECK(xr_xir_compile_specialize(checked, &specialized, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(checked);checked=NULL; checked = specialized;
     }
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(checked,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
     return lowered;
 }
 #endif // XIR_ARRAY_PROGRAM_FIXTURE_H

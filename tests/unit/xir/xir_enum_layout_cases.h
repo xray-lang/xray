@@ -26,24 +26,28 @@ static void enum_storage_layout(void) {
     }
     XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    XrXirBudget budget = xr_xir_default_budget(); XrXirLayout layout = {0};
+    XrXirCompileContext budget = consumer_context_default(); XrXirLayout layout = {0};
     uint32_t offsets[3] = {99, 99, 99};
-    CHECK(xr_xir_nominal_layout(&types, (XrXirType)256, &target, &budget, &layout, offsets, 3) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, offsets, 3) == XR_XIR_OK);
     CHECK(layout.size == 16 && layout.alignment == 8 && offsets[0] == 8 && offsets[1] == 9 && offsets[2] == 8);
-    budget = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_layout(&types, (XrXirType)257, &target, &budget, &layout, offsets, 3) == XR_XIR_OK);
+    budget = consumer_context_default();
+    CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)257, &target, &layout, offsets, 3) == XR_XIR_OK);
     CHECK(layout.size == 32 && layout.alignment == 8 && offsets[0] == 0 && offsets[1] == 8 && offsets[2] == 24);
-    budget = xr_xir_default_budget(); budget.work = 1; XrXirBudget saved = budget;
-    offsets[0] = offsets[1] = offsets[2] = 99;
-    CHECK(xr_xir_nominal_layout(&types, (XrXirType)256, &target, &budget, &layout, offsets, 3) == XR_XIR_BUDGET);
+    budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,2}); XrXirCompileContext saved = budget;
+    XrXirLayout occupied=layout;
+    layout=(XrXirLayout){0};offsets[0] = offsets[1] = offsets[2] = 99;
+    CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, offsets, 3) == XR_XIR_BUDGET);
     CHECK(!layout.size && !layout.alignment && offsets[0] == 99 && offsets[1] == 99 && offsets[2] == 99);
     CHECK(!memcmp(&budget, &saved, sizeof(budget)));
+    layout=occupied;
+    CHECK(xr_xir_compile_nominal_layout(&budget,&types,(XrXirType)256,&target,&layout,offsets,3)==XR_XIR_BUDGET);
+    CHECK(!memcmp(&layout,&occupied,sizeof(layout)) && offsets[0]==99 && offsets[1]==99 && offsets[2]==99);
     XrXirNominalField declarations[3] = {{{"a", 1}, XR_XIR_I8, 0}, {{"b", 1}, XR_XIR_BOOL, 0}, {{"text", 4}, XR_XIR_STRING, 0}};
     XrXirNominalDeclaration declaration = {{"alpha", 5}, {"Choice", 6}, 1, NULL, 0,
         declarations, 3, XR_XIR_NOMINAL_ENUM, variants, 4, 0};
     table.declarations = &declaration; table.identities = NULL; table.count = 1; types.count = 1;
-    budget = xr_xir_default_budget();
-    CHECK(xr_xir_nominal_layout(&types, (XrXirType)256, &target, &budget, &layout, offsets, 3) == XR_XIR_OK);
+    budget = consumer_context_default();
+    CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, offsets, 3) == XR_XIR_OK);
     CHECK(layout.size == 16 && layout.alignment == 8 && offsets[0] == 8 && offsets[1] == 9 && offsets[2] == 8);
 }
 static void enum_tag_widths(void) {
@@ -61,8 +65,8 @@ static void enum_tag_widths(void) {
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     for (uint32_t i = 0; i < 4; ++i) {
         identity.variant_count = counts[i];
-        XrXirBudget budget = xr_xir_default_budget(); XrXirLayout layout = {0};
-        CHECK(xr_xir_nominal_layout(&types, (XrXirType)256, &target, &budget, &layout, NULL, 0) == XR_XIR_OK);
+        XrXirCompileContext budget = consumer_context_default(); XrXirLayout layout = {0};
+        CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, NULL, 0) == XR_XIR_OK);
         CHECK(layout.size == widths[i] && layout.alignment == (widths[i] ? widths[i] : 1));
     }
 }

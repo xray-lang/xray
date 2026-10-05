@@ -78,7 +78,7 @@ static void program_cases(XrXirProgram *program, uint32_t mode) {
         CHECK(suspended[i].outcome.status == (mode ? XR_XIR_CALL_SUSPENDED : XR_XIR_CALL_RETURNED));
         if (mode) CHECK(logs[i].outputs == 1);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (uint32_t i = 0; i < 2; ++i) {
         if (mode) CHECK(xr_xir_instance_resume(instances[i], suspended[i].epoch, suspended[i].outcome.wake) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);

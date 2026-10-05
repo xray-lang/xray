@@ -61,7 +61,7 @@ static void nominal_expression_cases(XrXirProgram *program) {
     config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, nominal_expression_output, &calls};
     for (unsigned i = 0; i < 2; ++i)
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     XrXirValue escaped[2] = {{0}};
     for (unsigned i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], 0, NULL, 0) == XR_XIR_CALL_READY);

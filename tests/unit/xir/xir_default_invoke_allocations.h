@@ -11,7 +11,8 @@
  */
 #ifndef XIR_DEFAULT_INVOKE_ALLOCATIONS_H
 #define XIR_DEFAULT_INVOKE_ALLOCATIONS_H
-static bool default_invoke_allocation_case(void) {
+static XrXirStatus default_invoke_allocation_case(const XrXirCompileContext *context,void *opaque) {
+    (void)opaque;
     XrXirInstruction ret={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirInstruction entry[]={
         {XR_XIR_INVOKE_DEFAULT,XR_XIR_I64,{2,0},{1,2},0,{0}},
@@ -48,23 +49,19 @@ static bool default_invoke_allocation_case(void) {
 
     XrXirArtifact *checked=NULL,*special=NULL,*read=NULL,*lowered=NULL;
     XrXirEffects *effects=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_check(&module,NULL,&checked,NULL);
+    XrXirStatus status=xr_xir_compile_check(context,&module,&checked,NULL);
     if(status!=XR_XIR_OK)CHECK(!checked);
-    if(status==XR_XIR_OK){status=xr_xir_effects_analyze(checked,NULL,&effects);if(status!=XR_XIR_OK)CHECK(!effects);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_effects_analyze(checked,&effects);if(status!=XR_XIR_OK)CHECK(!effects);}
     if(status==XR_XIR_OK){CHECK(!xr_xir_effects_error(effects,1,XR_XIR_CONSTRUCTED_TYPE_BASE,0));
-        status=xr_xir_specialize(checked,NULL,&special,NULL);if(status!=XR_XIR_OK)CHECK(!special);}
-    if(status==XR_XIR_OK){status=xr_xir_checked_write(special,NULL,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);}
-    if(status==XR_XIR_OK){status=xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
-    if(status==XR_XIR_OK){status=xr_xir_lower(read,&fixture_target,NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
-    CHECK(status==XR_XIR_OK || status==XR_XIR_OUT_OF_MEMORY);
-    xr_xir_artifact_free(lowered);xr_xir_artifact_free(read);xr_xir_checked_packet_free(&packet);
-    xr_xir_artifact_free(special);xr_xir_effects_free(effects);xr_xir_artifact_free(checked);
-    return status==XR_XIR_OK;
+        status=xr_xir_compile_specialize(checked,&special,NULL);if(status!=XR_XIR_OK)CHECK(!special);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(special,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_lower(read,&fixture_target,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
+    xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(special);xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
+    return status;
 }
 static void default_invoke_allocation_cases(void) {
-    calls=0;fail_at=SIZE_MAX;CHECK(default_invoke_allocation_case());CHECK(!live&&!class_live_bytes);
-    size_t sites=calls;
-    for(size_t i=0;i<sites;++i){calls=0;fail_at=i;CHECK(!default_invoke_allocation_case());CHECK(!live&&!class_live_bytes);}
-    fail_at=SIZE_MAX;printf("default invoke full pipeline: %zu OOM sites physical zero\n",sites);
+    allocation_compile_operation_cases("default invoke full pipeline",default_invoke_allocation_case,NULL);
 }
 #endif // XIR_DEFAULT_INVOKE_ALLOCATIONS_H

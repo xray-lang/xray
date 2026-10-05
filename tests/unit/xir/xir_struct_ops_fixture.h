@@ -11,7 +11,7 @@
 #include "xir_nominal_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
-static XrXirArtifact *struct_ops_checked(unsigned invalid) {
+static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, unsigned invalid) {
     const XrXirType pair = (XrXirType)256;
     XrXirType parameters[] = {XR_XIR_I64,XR_XIR_STRING};
     NominalFixture nominal; nominal_fixture(&nominal);
@@ -61,22 +61,22 @@ static XrXirArtifact *struct_ops_checked(unsigned invalid) {
     if (invalid == 10) make[0].immediate = 1;
     if (invalid == 11) make[1].immediate = 2;
     XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_check(&built,NULL,&checked,NULL);
+    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, NULL);
     if (invalid) CHECK(status != XR_XIR_OK && !checked);
     else CHECK(status == XR_XIR_OK && checked);
     return checked;
 }
-static inline XrXirArtifact *struct_ops_lowered(void) {
-    XrXirArtifact *checked = struct_ops_checked(0), *decoded = NULL, *closed = NULL, *lowered = NULL;
+static inline XrXirArtifact *struct_ops_lowered(const XrXirCompileContext *context) {
+    XrXirArtifact *checked = struct_ops_checked(context, 0), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed); return lowered;
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL; return lowered;
 }
 #endif // XIR_STRUCT_OPS_FIXTURE_H

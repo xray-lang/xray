@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_consumer_context_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_module_forest_fixture.h"
 #include "xir_module_forest_cases.h"
@@ -46,17 +47,17 @@ extern const XrXirProgramSpec path0_program, path1_program, path2_program;
 static void path_program_mixed(void) {
     const XrXirProgramSpec *specs[] = {&path0_program,&path1_program,&path2_program};
     for (unsigned kind = 0; kind < 3; ++kind) for (unsigned mask = 1; mask < 15; ++mask) {
-        XrXirArtifact *artifact = path_program_fixture(kind);
+        XrXirArtifact *artifact = path_program_fixture(suite_context, kind);
         XrXirProgramSpec spec = *specs[kind];
         XrXirCallEntry entries[7]; XrXirVmBinding bindings[7];
         memcpy(entries,spec.entries,sizeof(entries));
         for (unsigned f = 0; f < 4; ++f) if (mask & (1u << f))
-            CHECK(xr_xir_vm_bind(artifact,f,&bindings[f],&entries[f]) == XR_XIR_OK);
+            CHECK(xr_xir_compile_vm_bind(artifact, f, &bindings[f], &entries[f]) == XR_XIR_OK);
         spec.entries = entries;
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){2097152,16000000},&program) == XR_XIR_OK);
+        CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);
         path_program_cases(program,kind);
-        xr_xir_artifact_free(artifact);
+        xr_xir_compile_artifact_free(artifact);artifact=NULL;
         CHECK(!runtime_live && !runtime_bytes);
     }
 }
@@ -65,34 +66,44 @@ static void cleanup_program_mixed(void) {
     const XrXirProgramSpec *specs[] = {&cleanup0_program, &cleanup1_program, &cleanup2_program,
         &cleanup3_program, &cleanup4_program, &cleanup5_program};
     for (unsigned mode = 0; mode < 6; ++mode) for (unsigned mask = 1; mask < 7; ++mask) {
-        XrXirArtifact *artifact = cleanup_program_fixture(mode);
+        XrXirArtifact *artifact = cleanup_program_fixture(suite_context, mode);
         XrXirProgramSpec spec = *specs[mode];
         XrXirCallEntry entries[3]; XrXirVmBinding bindings[3];
         memcpy(entries, spec.entries, sizeof(entries));
         for (unsigned f = 0; f < 3; ++f) if (mask & (1u << f))
-            CHECK(xr_xir_vm_bind(artifact, f, &bindings[f], &entries[f]) == XR_XIR_OK);
+            CHECK(xr_xir_compile_vm_bind(artifact, f, &bindings[f], &entries[f]) == XR_XIR_OK);
         spec.entries = entries;
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget){2097152, 16000000}, &program) == XR_XIR_OK);
+        CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);
         cleanup_program_cases(program, mode);
-        xr_xir_artifact_free(artifact);
+        xr_xir_compile_artifact_free(artifact);artifact=NULL;
         CHECK(!runtime_live && !runtime_bytes);
     }
 }
 static void descriptor_correspondence(void) {
-    XrXirArtifact *a = nominal_expression_lowered(), *b = nominal_expression_lowered();
-    const XrXirModule *module = xr_xir_artifact_module(b);
+    XrXirCompileContext pair=consumer_context_default();
+    XrXirArtifact *a = nominal_expression_lowered(&pair), *b = nominal_expression_lowered(&pair);
+    const XrXirModule *module = xr_xir_compile_artifact_module(b);
     CHECK(module->function_count == 9);
     XrXirCallEntry entries[9]; XrXirVmBinding bindings[9];
     for (uint32_t i = 0; i < 9; ++i)
-        CHECK(xr_xir_vm_bind(b, i, &bindings[i], &entries[i]) == XR_XIR_OK);
-    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_artifact_target(b),
-        entries, 9, module->declarations, {0}, module->types, xr_xir_program_proof(b)};
-    uint64_t work = 16000000;
-    CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_OK);
-    uint64_t cost = 16000000 - work;
-    work = cost; CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_OK && !work);
-    work = cost - 1; CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BUDGET);
+        CHECK(xr_xir_compile_vm_bind(b, i, &bindings[i], &entries[i]) == XR_XIR_OK);
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(b),
+        entries, 9, module->declarations, {0}, module->types, xr_xir_compile_program_proof(b)};
+    XrCompileResourceStats before=consumer_context_stats(&pair);
+    CHECK(xr_xir_compile_program_match(&pair,&spec,b->layouts,a)==XR_XIR_OK);
+    XrCompileResourceStats complete=consumer_context_stats(&pair);
+    CHECK(complete.work>before.work);
+    for(unsigned minus=0;minus<2;++minus){
+        /* A new bounded ledger is fixed before either graph is Checked. */
+        XrXirCompileContext tight=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,complete.work-minus});
+        XrXirArtifact *left=nominal_expression_lowered(&tight),*right=nominal_expression_lowered(&tight);
+        XrXirCallEntry replay_entries[9];XrXirVmBinding replay_bindings[9];
+        for(uint32_t i=0;i<9;++i)CHECK(xr_xir_compile_vm_bind(right,i,&replay_bindings[i],&replay_entries[i])==XR_XIR_OK);
+        CHECK(xr_xir_compile_program_match(&tight,&spec,right->layouts,left)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(consumer_context_stats(&tight).work<=complete.work-minus);
+        xr_xir_compile_artifact_free(left);xr_xir_compile_artifact_free(right);
+    }
     for (uint32_t attack = 0; attack < 7; ++attack) {
         XrXirTypeNode *node = (XrXirTypeNode *)&module->types->nodes[0];
         XrXirType saved = node->nominal.fields[0];
@@ -108,16 +119,14 @@ static void descriptor_correspondence(void) {
         case 5: ++spec.target.abi_version; break;
         case 6: id->member_access = XR_XIR_MEMBER_PRIVATE; break;
         }
-        work = 16000000;
-        CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_program_match(&pair, &spec, b->layouts, a) == XR_XIR_BAD_STRUCTURE);
         entries[0].result = module->functions[0].result;
         ((XrXirType *)node->nominal.fields)[0] = saved; id->exported = exported;
         if (attack == 3) name[0] ^= 1;
         id->member_access = XR_XIR_MEMBER_PUBLIC;
-        spec.entry_count = 9; spec.target = *xr_xir_artifact_target(b);
+        spec.entry_count = 9; spec.target = *xr_xir_compile_artifact_target(b);
     }
-    work = 16000000;
-    CHECK(xr_xir_program_match(&spec, NULL, a, &work) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_program_match(&pair, &spec, NULL, a) == XR_XIR_BAD_STRUCTURE);
     uint32_t owned = UINT32_MAX, parameter = UINT32_MAX;
     for (uint32_t i = 0; i < 9; ++i) {
         if (b->layouts[i].owned_count) owned = i;
@@ -146,21 +155,19 @@ static void descriptor_correspondence(void) {
         case 12: layout->parameters = NULL; break;
         case 13: ++layout->path_count; break;
         }
-        work = 16000000;
-        CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_program_match(&pair, &spec, b->layouts, a) == XR_XIR_BAD_STRUCTURE);
         *layout = saved;
         ((uint32_t *)layout->offsets)[0] = offset;
         ((uint32_t *)layout->owned_offsets)[0] = owned_offset;
         if (index == parameter) ((XrXirLayout *)layout->parameters)[0] = physical;
     }
-    work = 16000000;
-    CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_OK);
-    xr_xir_artifact_free(a); xr_xir_artifact_free(b);
+    CHECK(xr_xir_compile_program_match(&pair, &spec, b->layouts, a) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(a);a=NULL; xr_xir_compile_artifact_free(b);b=NULL;
 }
 static void admission(void) {
     for (uint32_t invalid = 0; invalid < 23; ++invalid) {
-        XrXirArtifact *artifact = program_fixture(0), *saved = artifact;
-        const XrXirModule *module = xr_xir_artifact_module(artifact);
+        XrXirArtifact *artifact = program_fixture(suite_context, 0), *saved = artifact;
+        const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
         XrXirDeclarations *d = (XrXirDeclarations *) module->declarations;
         XrXirSourceModule *modules = (XrXirSourceModule *) d->modules;
         XrXirFunctionIdentity *ids = (XrXirFunctionIdentity *) d->functions;
@@ -194,10 +201,10 @@ static void admission(void) {
         case 22: ids[4].exported = 2; break;
         }
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) != XR_XIR_OK);
-        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 16000000}, &program) != XR_XIR_OK);
+        CHECK(xr_xir_compile_artifact_verify(artifact, NULL) != XR_XIR_OK);
+        CHECK(xr_xir_compile_vm_program_take(&artifact, &program) != XR_XIR_OK);
         CHECK(artifact == saved && !program);
-        xr_xir_artifact_free(artifact);
+        xr_xir_compile_artifact_free(artifact);artifact=NULL;
     }
 }
 extern const XrXirProgramSpec captures_program, captures_error_program;
@@ -209,25 +216,25 @@ typedef struct CaptureMixedOwner {
 static unsigned mixed_releases;
 static void capture_mixed_release(void *pointer) {
     CaptureMixedOwner *owner = pointer;
-    xr_xir_artifact_free(owner->artifact); xr_free(owner); ++mixed_releases;
+    xr_xir_compile_artifact_free(owner->artifact); xr_free(owner); ++mixed_releases;
 }
 static void capture_mixed(void) {
     for (unsigned throwing = 0; throwing < 2; ++throwing) for (unsigned parity = 0; parity < 2; ++parity) {
         const XrXirProgramSpec *native = throwing ? &captures_error_program : &captures_program;
         CaptureMixedOwner *owner = xr_calloc(1,sizeof(*owner)); CHECK(owner);
-        owner->artifact = capture_fixture(throwing != 0);
-        const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
+        owner->artifact = capture_fixture(suite_context, throwing != 0);
+        const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
         for (uint32_t i = 0; i < 6; ++i) {
-            CHECK(xr_xir_vm_bind(owner->artifact,i,&owner->bindings[i],&owner->entries[i]) == XR_XIR_OK);
+            CHECK(xr_xir_compile_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);
             if ((i == 3 ? 0u : 1u) == parity) owner->entries[i] = native->entries[i];
         }
         CHECK((owner->entries[3].resume == native->entries[3].resume) !=
             (owner->entries[5].resume == native->entries[5].resume));
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
-            {owner,capture_mixed_release},module->types,xr_xir_program_proof(owner->artifact)};
+            {owner,capture_mixed_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
+        CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);
         capture_cases(program,throwing != 0); CHECK(mixed_releases == throwing*2+parity+1);
     }
 }
@@ -239,7 +246,7 @@ typedef struct ArrayMixedOwner {
 static uint32_t array_mixed_releases;
 static void array_mixed_release(void *pointer) {
     ArrayMixedOwner *owner = pointer;
-    xr_xir_artifact_free(owner->artifact); xr_free(owner); ++array_mixed_releases;
+    xr_xir_compile_artifact_free(owner->artifact); xr_free(owner); ++array_mixed_releases;
 }
 extern const XrXirProgramSpec array_program0_program, array_program1_program;
 static void array_mixed(void) {
@@ -247,113 +254,125 @@ static void array_mixed(void) {
     for (uint32_t mode = 0; mode < 2; ++mode) {
         for (uint32_t parity = 0; parity < 2; ++parity) {
             ArrayMixedOwner *owner = xr_calloc(1,sizeof(*owner)); CHECK(owner);
-            owner->artifact = array_program_fixture(mode != 0, false);
-            const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
+            owner->artifact = array_program_fixture(suite_context, mode != 0, false);
+            const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
             for (uint32_t i = 0; i < 8; ++i) {
-                CHECK(xr_xir_vm_bind(owner->artifact,i,&owner->bindings[i],&owner->entries[i]) == XR_XIR_OK);
+                CHECK(xr_xir_compile_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);
                 if (i % 2 == parity) owner->entries[i] = native[mode]->entries[i];
             }
             CHECK((owner->entries[2].resume == native[mode]->entries[2].resume) !=
                 (owner->entries[3].resume == native[mode]->entries[3].resume));
             XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
                 {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,8,module->declarations,
-                {owner,array_mixed_release},module->types,xr_xir_program_proof(owner->artifact)};
+                {owner,array_mixed_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
             XrXirProgram *program = NULL;
-            CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
+            CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);
             array_program_cases(program,mode != 0);
             CHECK(array_mixed_releases == mode * 2 + parity + 1);
         }
     }
 }
 int main(void) {
-    CHECK(!module_forest_fixture(true));
-    XrXirArtifact *forest = module_forest_fixture(false); XrXirProgram *forest_program = NULL;
-    CHECK(xr_xir_vm_program_take(&forest, (XrXirProgramBudget){2097152,16000000}, &forest_program) == XR_XIR_OK);
+    consumer_context=consumer_context_default();
+    CHECK(!module_forest_fixture(suite_context, true));
+    XrXirArtifact *forest = module_forest_fixture(suite_context, false); XrXirProgram *forest_program = NULL;
+    CHECK(xr_xir_compile_vm_program_take(&forest, &forest_program) == XR_XIR_OK);
     module_forest_cases(forest_program);
     path_program_mixed();
     for (unsigned kind = 0; kind < 3; ++kind) {
-        XrXirArtifact *artifact = path_program_fixture(kind); XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&artifact,(XrXirProgramBudget){2097152,16000000},&program) == XR_XIR_OK);
+        XrXirArtifact *artifact = path_program_fixture(suite_context, kind); XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&artifact, &program) == XR_XIR_OK);
         path_program_cases(program,kind);
         CHECK(!runtime_live && !runtime_bytes);
     }
     cleanup_program_mixed();
     for (unsigned mode = 0; mode < 6; ++mode) {
-        XrXirArtifact *artifact = cleanup_program_fixture(mode);
+        XrXirArtifact *artifact = cleanup_program_fixture(suite_context, mode);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget){2097152, 16000000}, &program) == XR_XIR_OK);
+        CHECK(xr_xir_compile_vm_program_take(&artifact, &program) == XR_XIR_OK);
         cleanup_program_cases(program, mode);
         CHECK(!runtime_live && !runtime_bytes);
     }
 
-    XrXirArtifact *struct_set = struct_set_lowered(); XrXirProgram *set_program = NULL;
-    CHECK(xr_xir_vm_program_take(&struct_set,(XrXirProgramBudget) {2097152, 16000000},&set_program) == XR_XIR_OK && !struct_set);
+    XrXirArtifact *struct_set = struct_set_lowered(suite_context); XrXirProgram *set_program = NULL;
+    CHECK(xr_xir_compile_vm_program_take(&struct_set, &set_program) == XR_XIR_OK && !struct_set);
     struct_set_cases(set_program);
-    for (unsigned i = 1; i <= 13; ++i) enum_ops_checked(i, false);
+    for (unsigned i = 1; i <= 13; ++i) enum_ops_checked(suite_context, i, false);
     size_t enum_baseline = runtime_live, enum_bytes = runtime_bytes;
-    XrXirArtifact *enum_ops = enum_ops_lowered(false); XrXirProgram *enum_program = NULL;
-    CHECK(xr_xir_vm_program_take(&enum_ops,(XrXirProgramBudget) {2097152, 16000000},&enum_program) == XR_XIR_OK && !enum_ops);
+    XrXirArtifact *enum_ops = enum_ops_lowered(suite_context, false); XrXirProgram *enum_program = NULL;
+    CHECK(xr_xir_compile_vm_program_take(&enum_ops, &enum_program) == XR_XIR_OK && !enum_ops);
     enum_ops_cases(enum_program);
     CHECK(runtime_live == enum_baseline && runtime_bytes == enum_bytes);
-    enum_ops = enum_ops_lowered(true); enum_program = NULL;
-    CHECK(xr_xir_vm_program_take(&enum_ops,(XrXirProgramBudget) {2097152, 16000000},&enum_program) == XR_XIR_OK && !enum_ops);
+    enum_ops = enum_ops_lowered(suite_context, true); enum_program = NULL;
+    CHECK(xr_xir_compile_vm_program_take(&enum_ops, &enum_program) == XR_XIR_OK && !enum_ops);
     enum_wrong_variant_cases(enum_program);
     CHECK(runtime_live == enum_baseline && runtime_bytes == enum_bytes);
-    XrXirArtifact *struct_ops = struct_ops_lowered(); XrXirProgram *struct_program = NULL;
-    CHECK(xr_xir_vm_program_take(&struct_ops,(XrXirProgramBudget) {2097152, 16000000},&struct_program) == XR_XIR_OK && !struct_ops);
+    XrXirArtifact *struct_ops = struct_ops_lowered(suite_context); XrXirProgram *struct_program = NULL;
+    CHECK(xr_xir_compile_vm_program_take(&struct_ops, &struct_program) == XR_XIR_OK && !struct_ops);
     struct_ops_cases(struct_program);
     for (unsigned mode = 0; mode < 3; ++mode) for (unsigned branch = 0; branch < 2; ++branch) {
-        XrXirArtifact *transport = nominal_transport_fixture();
+        XrXirArtifact *transport = nominal_transport_fixture(suite_context);
         XrXirCallEntry entries[4]; XrXirVmBinding bindings[4];
         for (uint32_t i = 0; i < 4; ++i)
-            CHECK(xr_xir_vm_bind(transport,i,&bindings[i],&entries[i]) == XR_XIR_OK);
-        XrXirValue escaped = nominal_transport_cases(entries,xr_xir_artifact_module(transport)->types,mode,branch != 0);
-        xr_xir_artifact_free(transport);
+            CHECK(xr_xir_compile_vm_bind(transport, i, &bindings[i], &entries[i]) == XR_XIR_OK);
+        XrXirValue escaped = nominal_transport_cases(entries,xr_xir_compile_artifact_module(transport)->types,mode,branch != 0);
+        xr_xir_compile_artifact_free(transport);transport=NULL;
         nominal_transport_escaped(&escaped);
     }
-    XrXirArtifact *combined_artifact = nominal_generic_lowered();
+    XrXirArtifact *combined_artifact = nominal_generic_lowered(suite_context);
     XrXirProgram *combined = NULL;
-    CHECK(xr_xir_vm_program_take(&combined_artifact, (XrXirProgramBudget) {2097152, 16000000}, &combined) == XR_XIR_OK && !combined_artifact);
+    CHECK(xr_xir_compile_vm_program_take(&combined_artifact, &combined) == XR_XIR_OK && !combined_artifact);
     nominal_generic_cases(combined);
-    XrXirArtifact *expression_artifact = nominal_expression_lowered();
+    XrXirArtifact *expression_artifact = nominal_expression_lowered(suite_context);
     XrXirProgram *expression_program = NULL;
-    CHECK(xr_xir_vm_program_take(&expression_artifact, (XrXirProgramBudget) {2097152, 16000000}, &expression_program) == XR_XIR_OK && !expression_artifact);
+    CHECK(xr_xir_compile_vm_program_take(&expression_artifact, &expression_program) == XR_XIR_OK && !expression_artifact);
     nominal_expression_cases(expression_program);
     for (unsigned i = 0; i < 3; ++i) {
-        XrXirArtifact *nominal = i == 2 ? nominal_chain_lowered() : nominal_lowered_fixture(i ? 3 : 0);
+        XrXirArtifact *nominal = i == 2 ? nominal_chain_lowered(suite_context) : nominal_lowered_fixture(suite_context, i ? 3 : 0);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&nominal, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !nominal);
+        CHECK(xr_xir_compile_vm_program_take(&nominal, &program) == XR_XIR_OK && !nominal);
         program_cases(program, 0);
     }
 
     array_mixed();
     for (uint32_t mode = 0; mode < 3; ++mode) {
-        XrXirArtifact *array = array_program_fixture(mode == 1, mode == 2);
+        XrXirArtifact *array = array_program_fixture(suite_context, mode == 1, mode == 2);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&array,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
+        CHECK(xr_xir_compile_vm_program_take(&array, &program) == XR_XIR_OK);
         array_program_cases(program,mode == 1);
     }
     descriptor_correspondence(); admission(); capture_mixed();
-    for (uint32_t mode = 0; mode < 3; ++mode) {
-        XrXirArtifact *artifact = program_fixture(mode), *saved = artifact;
-        XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {1, 16000000}, &program) == XR_XIR_BUDGET);
-        CHECK(artifact && !program);
-        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 0}, &program) == XR_XIR_BUDGET);
-        CHECK(artifact && !program);
-        CHECK(artifact == saved && !program);
-        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
-        CHECK(!artifact && program);
-        program_cases(program, mode);
+    for(uint32_t mode=0;mode<3;++mode){
+        XrXirCompileContext measure=consumer_context_default();
+        XrXirArtifact *measured=program_fixture(&measure,mode);
+        XrXirProgram *measured_program=NULL;
+        CHECK(xr_xir_compile_vm_program_take(&measured,&measured_program)==XR_XIR_OK && !measured);
+        XrCompileResourceStats complete=consumer_context_stats(&measure);
+        xr_xir_compile_program_drop(measured_program);
+        for(unsigned axis=0;axis<2;++axis){
+            XrCompileResourceLimits caps={67108864,8388608,128000000};
+            if(!axis)caps.allocated_bytes=complete.allocated_bytes-1;else caps.work=complete.work-1;
+            XrXirCompileContext tight=consumer_context_limits(caps);
+            XrXirArtifact *artifact=program_fixture(&tight,mode),*saved=artifact;XrXirProgram *program=NULL;
+            CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_BUDGET && artifact==saved && !program);
+            CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_BUDGET && artifact==saved && !program);
+            xr_xir_compile_artifact_free(artifact);
+        }
+        /* An exhausted immutable ledger is never reset to make the retry pass. */
+        XrXirCompileContext fresh=consumer_context_default();
+        XrXirArtifact *artifact=program_fixture(&fresh,mode);XrXirProgram *program=NULL;
+        CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && !artifact && program);
+        program_cases(program,mode);
     }
     for (unsigned throwing = 0; throwing < 2; ++throwing) {
-    XrXirArtifact *artifact = capture_fixture(throwing != 0);
+    XrXirArtifact *artifact = capture_fixture(suite_context, throwing != 0);
     XrXirProgram *captures = NULL;
-    CHECK(xr_xir_vm_program_take(&artifact,(XrXirProgramBudget) {2097152, 16000000},&captures) == XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&artifact, &captures) == XR_XIR_OK);
     capture_cases(captures,throwing != 0);
     }
     puts("VM capture environments, two suspensions, cancellation and escaped ownership passed");
     puts("VM module programs match independent output, state and lifetime expectations");
     CHECK(!runtime_live && !runtime_bytes);
+    consumer_contexts_free();
     return 0;
 }

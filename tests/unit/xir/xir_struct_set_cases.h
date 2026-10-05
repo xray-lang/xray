@@ -29,7 +29,7 @@ static void struct_set_cases(XrXirProgram *program) {
     config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, struct_set_output, &outputs};
     for (unsigned i = 0; i < 2; ++i)
         CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (unsigned i = 0; i < 2; ++i) {
         for (unsigned run = 0; run < (i ? 1u : 2u); ++run) {
             CHECK(xr_xir_instance_start(instances[i],1,NULL,0) == XR_XIR_CALL_READY);

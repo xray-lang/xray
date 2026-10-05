@@ -3,15 +3,16 @@
 #define XIR_IMPLEMENTATION_PACKET_CASES_H
 #include "xir_implementation_packet_fixture.h"
 static void implementation_packet_cases(void) {
-    XrXirArtifact *source = implementation_packet_fixture(), *decoded = NULL;
+    XrXirArtifact *source=NULL,*decoded=NULL;
+    CHECK(implementation_packet_fixture(suite_context,&source)==XR_XIR_OK);
     XrXirCheckedPacket packet = {0}, second = {0};
-    CHECK(xr_xir_checked_write(source,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(source);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(source, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(source);source=NULL;
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     implementation_packet_owned(decoded);
-    CHECK(xr_xir_checked_write(decoded,NULL,&second,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(decoded, &second, NULL) == XR_XIR_OK);
     CHECK(packet.length == second.length && !memcmp(packet.bytes,second.bytes,packet.length));
-    xr_xir_checked_packet_free(&second);
+    xr_xir_compile_checked_packet_free(&second);
     /* Independent schema words: count, nominal, app, binding count, app, member/function. */
     const uint32_t words[] = {1,0,0,1,XR_XIR_I64,1,0,1,XR_XIR_I64,0,2};
     uint8_t pattern[sizeof(words)];
@@ -29,9 +30,9 @@ static void implementation_packet_cases(void) {
         rejected(packet.bytes,packet.length);
         put32(packet.bytes+offset+4*fields[i],words[fields[i]]); digest_packet(&packet);
     }
-    memset(packet.bytes,0xcc,packet.length); xr_xir_checked_packet_free(&packet);
+    memset(packet.bytes,0xcc,packet.length); xr_xir_compile_checked_packet_free(&packet);
     implementation_packet_owned(decoded);
-    CHECK(xr_xir_artifact_verify(decoded,NULL,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
 }
 #endif // XIR_IMPLEMENTATION_PACKET_CASES_H

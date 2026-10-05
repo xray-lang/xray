@@ -11,9 +11,9 @@
 #include "xir_checked_fixture.h"
 #include "xir/xxir_generic.h"
 #include "xir_nominal_fixture.h"
-static XrXirArtifact *nominal_checked_fixture(unsigned mode) {
-    XrXirArtifact *base = checked_fixture(), *checked = NULL;
-    XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+static XrXirArtifact *nominal_checked_fixture(const XrXirCompileContext *context, unsigned mode) {
+    XrXirArtifact *base = checked_fixture(context), *checked = NULL;
+    XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     NominalFixture f; nominal_fixture(&f);
     f.declarations[1].module = (XrXirLiteral) {"beta", 4};
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_STRING};
@@ -31,20 +31,20 @@ static XrXirArtifact *nominal_checked_fixture(unsigned mode) {
     if (mode == 3) { identities[4].nominal_owner = 1; identities[4].method_kind = XR_XIR_MEMBER_HELPER; }
     XrXirDeclarations declarations = *built.declarations;
     declarations.functions = identities; built.declarations = &declarations;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes)); memset(arguments, 0xCC, sizeof(arguments));
-    xr_xir_artifact_free(base);
-    CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(base);base=NULL;
+    CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     return checked;
 }
-static inline XrXirArtifact *nominal_lowered_fixture(unsigned mode) {
-    XrXirArtifact *checked = nominal_checked_fixture(mode), *closed = NULL, *lowered = NULL;
+static inline XrXirArtifact *nominal_lowered_fixture(const XrXirCompileContext *context, unsigned mode) {
+    XrXirArtifact *checked = nominal_checked_fixture(context, mode), *closed = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     return lowered;
 }
 #endif // XIR_NOMINAL_CHECKED_FIXTURE_H

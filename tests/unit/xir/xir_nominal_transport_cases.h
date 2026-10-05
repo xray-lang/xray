@@ -27,8 +27,8 @@ static XrXirValue nominal_transport_cases(const XrXirCallEntry *entries, const X
                                          unsigned mode, bool branch) {
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
-    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 1000; budget.metadata_bytes = 65536; budget.work = 100000;
-    CHECK(xr_xir_type_arena_new(domain,types,&budget,&arena) == XR_XIR_VALUE_OK);
+    XrXirCompileContext budget=consumer_context_limits((XrCompileResourceLimits){65536,1048576,100001});budget.limits.parameters=1000;
+    CHECK(xr_xir_compile_type_arena_new(&budget, types, &arena) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     XrXirValueAdmission admission = {arena,domain,NULL,NULL,100000,65536};
     XrXirValue fields[2] = {{XR_XIR_I64,0,23},{0}}, arguments[2] = {{0},{XR_XIR_BOOL,0,branch}};
@@ -60,7 +60,7 @@ static XrXirValue nominal_transport_cases(const XrXirCallEntry *entries, const X
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees && !accounting.depth);
     if (mode) CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
-    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     return escaped;
 }
 #endif // XIR_NOMINAL_TRANSPORT_CASES_H

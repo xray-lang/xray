@@ -11,7 +11,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
-static XrXirArtifact *enum_ops_checked(unsigned invalid, bool wrong_variant) {
+static XrXirArtifact *enum_ops_checked(const XrXirCompileContext *context, unsigned invalid, bool wrong_variant) {
     XrXirNominalVariant variants[] = {{{"Empty",5},0,0},{{"Some",4},0,2}};
     XrXirNominalField fields[] = {{{"value",5},XR_XIR_I64,0},{{"note",4},XR_XIR_STRING,0}};
     XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,NULL,0,fields,2,XR_XIR_NOMINAL_ENUM,variants,2, 0};
@@ -59,19 +59,19 @@ static XrXirArtifact *enum_ops_checked(unsigned invalid, bool wrong_variant) {
     if (invalid == 11) entry[5].immediate = 0;
     if (invalid == 12) entry[3].args[0] = 0;
     if (invalid == 13) entry[2].op = XR_XIR_STRUCT_NEW;
-    XrXirArtifact *checked = NULL; XrXirStatus status = xr_xir_check(&built,NULL,&checked,NULL);
+    XrXirArtifact *checked = NULL; XrXirStatus status = xr_xir_compile_check(context, &built, &checked, NULL);
     if (invalid) CHECK(status != XR_XIR_OK && !checked);
     else CHECK(status == XR_XIR_OK && checked);
     return checked;
 }
-static XrXirArtifact *enum_ops_lowered(bool wrong_variant) {
-    XrXirArtifact *checked = enum_ops_checked(0, wrong_variant), *decoded = NULL, *closed = NULL, *lowered = NULL;
+static XrXirArtifact *enum_ops_lowered(const XrXirCompileContext *context, bool wrong_variant) {
+    XrXirArtifact *checked = enum_ops_checked(context, 0, wrong_variant), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK); xr_xir_artifact_free(checked);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK); xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK); xr_xir_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(closed);closed=NULL;
     return lowered;
 }
 #endif // XIR_ENUM_OPS_FIXTURE_H

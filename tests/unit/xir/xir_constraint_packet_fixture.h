@@ -11,7 +11,7 @@
 #include "xir/xxir_constraints.h"
 #include "xir/xxir_nominal.h"
 
-static XrXirArtifact *constraint_packet_fixture(uint32_t markers) {
+static XrXirStatus constraint_packet_fixture(const XrXirCompileContext *context,uint32_t markers,XrXirArtifact **output) {
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInterfaceApplication requirement = {0,&parameter,1};
     XrXirConstraint unconstrained = {0}, constraint = {markers,&requirement,1};
@@ -38,13 +38,15 @@ static XrXirArtifact *constraint_packet_fixture(uint32_t markers) {
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_check(&module,NULL,&artifact,NULL) == XR_XIR_OK && artifact);
+    XrXirStatus status=xr_xir_compile_check(context,&module,&artifact,NULL);
+    if(status!=XR_XIR_OK){CHECK(!artifact);return status;}
     parameter = XR_XIR_UNIT; requirement.declaration = UINT32_MAX; constraint.markers = UINT32_MAX;
-    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL) == XR_XIR_OK);
-    return artifact;
+    status=xr_xir_compile_artifact_verify(artifact,NULL);
+    if(status==XR_XIR_OK)*output=artifact;else xr_xir_compile_artifact_free(artifact);artifact=NULL;
+    return status;
 }
 static void constraint_packet_owned(const XrXirArtifact *artifact, uint32_t markers) {
-    const XrXirModule *module = xr_xir_artifact_module(artifact);
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirConstraint *owners[] = {module->generics[2].constraints,
         module->types->nominals->declarations[0].constraints,
         module->types->interfaces->declarations[1].constraints};

@@ -14,7 +14,7 @@
 #include "xir/xxir.h"
 #include "xir/xxir_generic.h"
 #include "xir_error_fixture.h"
-static XrXirArtifact *program_fixture(uint32_t mode) {
+static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context,uint32_t mode) {
     XrXirInstruction alpha[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 10, {0}},
         {XR_XIR_ATOMIC_I64_NEW, XR_XIR_ATOMIC_I64, {0}, {0}, 0, {0}},
@@ -97,12 +97,16 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
     ErrorFixture error; error_fixture_init(&error,false);
     const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, mode == 2 ? &error.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    XrXirArtifact *closed=NULL; CHECK(xr_xir_specialize(checked,NULL,&closed,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    xr_xir_artifact_free(checked);
-    return lowered;
+    XrXirArtifact *checked=NULL;
+    CHECK(xr_xir_compile_check(context,&built,&checked,NULL)==XR_XIR_OK);
+    (void)target;return checked;
 }
+static XrXirArtifact *program_fixture(const XrXirCompileContext *context,uint32_t mode) {
+    XrXirArtifact *checked=program_fixture_checked(context,mode),*closed=NULL,*lowered=NULL;
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;xr_xir_compile_artifact_free(checked);checked=NULL;return lowered;
+}
+
 #endif

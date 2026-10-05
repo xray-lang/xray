@@ -12,7 +12,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_types.h"
-static XrXirArtifact *nominal_transport_fixture(void) {
+static XrXirArtifact *nominal_transport_fixture(const XrXirCompileContext *context) {
     const XrXirType pair = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirType parameters[] = {pair, XR_XIR_BOOL}, argument = XR_XIR_I64;
     NominalFixture nominal; nominal_fixture(&nominal); nominal.table.count = 1;
@@ -48,25 +48,25 @@ static XrXirArtifact *nominal_transport_fixture(void) {
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    CHECK(xr_xir_artifact_layout(lowered,2)->owned_count == 8);
-    const XrXirModule *module = xr_xir_artifact_module(lowered);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;
+    CHECK(xr_xir_compile_artifact_layout(lowered, 2)->owned_count == 8);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->functions[2].instructions[0].op == XR_XIR_OWNED_LOCAL_NEW);
     CHECK(module->functions[2].instructions[3].op == XR_XIR_OWNED_RETAIN);
     XrXirLayout layout = {0};
-    CHECK(xr_xir_layout(module->types,pair,&target,XR_XIR_LAYOUT_FRAME,&layout) == XR_XIR_OK && layout.size == 8);
-    CHECK(xr_xir_layout(module->types,pair,&target,XR_XIR_LAYOUT_PARAMETER,&layout) == XR_XIR_OK && layout.size == 16);
-    CHECK(xr_xir_layout(module->types,pair,&target,XR_XIR_LAYOUT_STORAGE,&layout) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_compile_layout(context, module->types, pair, &target, XR_XIR_LAYOUT_FRAME, &layout) == XR_XIR_OK && layout.size == 8);
+    CHECK(xr_xir_compile_layout(context, module->types, pair, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_OK && layout.size == 16);
+    CHECK(xr_xir_compile_layout(context, module->types, pair, &target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_BAD_LAYOUT);
     return lowered;
 }
 #endif // XIR_NOMINAL_TRANSPORT_FIXTURE_H

@@ -11,7 +11,7 @@
 #include "xir_nominal_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
-static XrXirArtifact *path_program_fixture(unsigned kind) {
+static XrXirArtifact *path_program_fixture(const XrXirCompileContext *context, unsigned kind) {
     const XrXirType items = (XrXirType)256, pair = (XrXirType)257;
     const XrXirType root = (XrXirType)258, cell = (XrXirType)259;
     NominalFixture nominal; nominal_fixture(&nominal); nominal.table.count = 1;
@@ -116,19 +116,19 @@ static XrXirArtifact *path_program_fixture(unsigned kind) {
     XrXirModule built = {XR_XIR_BUILT,functions,7,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_check(&built,NULL,&checked,&diagnostic);
+    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr,"Path check %u function %u instruction %u\n",
         (unsigned)status,diagnostic.function,diagnostic.instruction);
     CHECK(status == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed); return lowered;
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL; return lowered;
 }
 #endif // XIR_PATH_PROGRAM_FIXTURE_H

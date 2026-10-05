@@ -11,7 +11,7 @@
  */
 #ifndef XIR_ARRAY_GENERIC_FIXTURE_H
 #define XIR_ARRAY_GENERIC_FIXTURE_H
-static XrXirArtifact *array_generic_fixture(void) {
+static XrXirArtifact *array_generic_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, array = (XrXirType) 256;
     XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1, {0}};
     XrXirTypes types = {&node, 1, NULL, NULL};
@@ -39,7 +39,7 @@ static XrXirArtifact *array_generic_fixture(void) {
     XrXirGeneric generics[] = {{NULL, 0, arguments, 2, NULL}, {&constraints[0], 1, NULL, 0, NULL}, {&constraints[1], 1, NULL, 0, NULL}};
     XrXirModule module = {XR_XIR_BUILT, functions, 3, NULL, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 #endif // XIR_ARRAY_GENERIC_FIXTURE_H

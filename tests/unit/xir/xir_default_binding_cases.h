@@ -79,52 +79,65 @@ static void default_binding_case(unsigned mode,bool generic) {
   if(mode==21){ids[1].promises=XR_XIR_FUNCTION_NO_SUSPEND;expected=XR_XIR_BAD_TYPE;}break;
  }
  if(mode==0){
-  XrXirBudget b=xr_xir_default_budget(),initial=b;
-  CHECK(xr_xir_defaults_verify(&module,&b)==XR_XIR_OK);
-  CHECK(b.scratch_bytes==initial.scratch_bytes && b.metadata_bytes<initial.metadata_bytes && b.work<initial.work);
-  uint64_t cost=initial.work-b.work,bytes=initial.metadata_bytes-b.metadata_bytes;
-  b=initial;b.work=cost-1;CHECK(xr_xir_defaults_verify(&module,&b)==XR_XIR_BUDGET);CHECK(b.scratch_bytes==initial.scratch_bytes);
-  b=initial;b.metadata_bytes=bytes-1;CHECK(xr_xir_defaults_verify(&module,&b)==XR_XIR_BUDGET);
-  b=initial;b.work=cost;b.metadata_bytes=bytes;CHECK(xr_xir_defaults_verify(&module,&b)==XR_XIR_OK);
-  if(generic){b=initial;b.scratch_bytes=0;CHECK(xr_xir_defaults_verify(&module,&b)==XR_XIR_BUDGET && !b.scratch_bytes);}
+  XrXirCompileContext b=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
+  XrCompileResourceStats initial=consumer_context_stats(&b);
+  CHECK(xr_xir_compile_defaults_verify(&b,&module)==XR_XIR_OK);
+  XrCompileResourceStats required=consumer_context_stats(&b);
+  CHECK(required.live_bytes==initial.live_bytes && required.work>initial.work);
+  consumer_context_ephemeral_free(&b,initial);
+  for(unsigned axis=0;axis<3;++axis)for(unsigned minus=0;minus<2;++minus){
+   XrCompileResourceLimits limits={67108864,8388608,128000000};
+   if(!axis)limits.allocated_bytes=required.allocated_bytes-minus;
+   if(axis==1)limits.live_bytes=required.peak_bytes-minus;
+   if(axis==2)limits.work=required.work-minus;
+   XrXirCompileContext probe={0};probe.limits=xr_xir_compile_default_limits();
+   XrCompileResourceStatus created=xr_compile_resources_new(&limits,&probe.resources);
+   if(created==XR_COMPILE_RESOURCE_BUDGET){CHECK(minus);continue;}
+   CHECK(created==XR_COMPILE_RESOURCE_OK);
+   XrCompileResourceStats before=consumer_context_stats(&probe);
+   CHECK(xr_xir_compile_defaults_verify(&probe,&module)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+   consumer_context_ephemeral_free(&probe,before);
+  }
+  if(generic){b=consumer_context_limits((XrCompileResourceLimits){67108864,initial.live_bytes,128000000});CHECK(xr_xir_compile_defaults_verify(&b,&module)==XR_XIR_BUDGET);}
   const XrXirDefaultBinding *found=(const XrXirDefaultBinding *)(uintptr_t)1;
-  b=initial;CHECK(xr_xir_default_lookup(&module,2,1,&b,&found)==XR_XIR_OK && !found);
-  b=initial;b.work=0;found=(const XrXirDefaultBinding *)(uintptr_t)1;
-  CHECK(xr_xir_default_lookup(&module,2,0,&b,&found)==XR_XIR_BUDGET && !found);
+  b=consumer_context_default();CHECK(xr_xir_compile_default_lookup(&b,&module,2,1,&found)==XR_XIR_OK && !found);
+  b=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});found=(const XrXirDefaultBinding *)(uintptr_t)1;
+  CHECK(xr_xir_compile_default_lookup(&b,&module,2,0,&found)==XR_XIR_BUDGET && found==(const XrXirDefaultBinding *)(uintptr_t)1);
  }
+
  XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
- XrXirStatus status=xr_xir_check(&module,NULL,&checked,&diagnostic);
+ XrXirStatus status=xr_xir_compile_check(suite_context, &module, &checked, &diagnostic);
  if(status!=expected) fprintf(stderr,"mode%u generic%u status%u expected%u f%u i%u\n",mode,generic,status,expected,diagnostic.function,diagnostic.instruction);
  CHECK(status==expected);CHECK((checked!=NULL)==(expected==XR_XIR_OK));
  if(!checked)return;
- if(mode>=19){XrXirEffects *effects=NULL;CHECK(xr_xir_effects_analyze(checked,NULL,&effects)==XR_XIR_OK);
+ if(mode>=19){XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked, &effects)==XR_XIR_OK);
  CHECK(xr_xir_effects_function(effects,1)->suspend==XR_XIR_EFFECT_MAY);
  const XrXirEffectWitness *w=xr_xir_effects_suspend_witness(effects,1);
- CHECK(w && w->callee==3 && w->instruction==0);xr_xir_effects_free(effects);}
+ CHECK(w && w->callee==3 && w->instruction==0);xr_xir_compile_effects_free(effects);}
 
  XrXirArtifact *special=NULL,*again=NULL,*lowered=NULL,*read=NULL;
- CHECK(xr_xir_specialize(checked,NULL,&special,&diagnostic)==XR_XIR_OK);
+ CHECK(xr_xir_compile_specialize(checked, &special, &diagnostic)==XR_XIR_OK);
  CHECK(!special->module.defaults && special->module.provenance && special->module.provenance->source->module.defaults);
- CHECK(xr_xir_specialize(special,NULL,&again,NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_specialize(special, &again, NULL)==XR_XIR_OK);
  CHECK(again->module.provenance && !again->module.provenance->source->module.provenance);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
- CHECK(xr_xir_lower(checked,&target,NULL,&lowered,NULL)==XR_XIR_BAD_STAGE && !lowered);
- CHECK(xr_xir_lower(special,&target,NULL,&lowered,NULL)==XR_XIR_OK);
- XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(special,NULL,&packet,NULL)==XR_XIR_OK);
- CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_OK);
- xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(read);
+ CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL)==XR_XIR_BAD_STAGE && !lowered);
+ CHECK(xr_xir_compile_lower(special, &target, &lowered, NULL)==XR_XIR_OK);
+ XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(special, &packet, NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &read, NULL)==XR_XIR_OK);
+ xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(read);read=NULL;
  XrXirInstruction *mut=(XrXirInstruction *)special->module.functions[1].instructions;
  int64_t saved=mut[0].immediate;mut[0].immediate=saved==2?3:2;
- CHECK(xr_xir_artifact_verify(special,NULL,NULL)!=XR_XIR_OK);mut[0].immediate=saved;
- CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_artifact_verify(special, NULL)!=XR_XIR_OK);mut[0].immediate=saved;
+ CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_OK);
  if(generic){XrXirOrigin *origin=&special->module.provenance->origins[saved];
   XrXirType *tuple=(XrXirType *)origin->arguments;XrXirType old=tuple[0];tuple[0]=XR_XIR_STRING;
-  CHECK(xr_xir_artifact_verify(special,NULL,NULL)!=XR_XIR_OK);tuple[0]=old;
-  CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_OK);}
+  CHECK(xr_xir_compile_artifact_verify(special, NULL)!=XR_XIR_OK);tuple[0]=old;
+  CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_OK);}
  XrXirInstruction previous=mut[0];mut[0]=mut[1];mut[1]=previous;
- CHECK(xr_xir_artifact_verify(special,NULL,NULL)!=XR_XIR_OK);mut[1]=mut[0];mut[0]=previous;
- CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_OK);
- xr_xir_artifact_free(lowered);xr_xir_artifact_free(again);xr_xir_artifact_free(special);xr_xir_artifact_free(checked);
+ CHECK(xr_xir_compile_artifact_verify(special, NULL)!=XR_XIR_OK);mut[1]=mut[0];mut[0]=previous;
+ CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_OK);
+ xr_xir_compile_artifact_free(lowered);lowered=NULL;xr_xir_compile_artifact_free(again);again=NULL;xr_xir_compile_artifact_free(special);special=NULL;xr_xir_compile_artifact_free(checked);checked=NULL;
 }
 static void default_binding_cases(void) {
     for(unsigned i=0;i<24;++i) {

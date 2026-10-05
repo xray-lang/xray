@@ -8,7 +8,7 @@
  */
 #ifndef XIR_INTERFACE_PACKET_ALLOCATIONS_H
 #define XIR_INTERFACE_PACKET_ALLOCATIONS_H
-static XrXirArtifact *interface_allocation_fixture(void) {
+static XrXirArtifact *interface_allocation_fixture(const XrXirCompileContext *context) {
     XrXirConstraint constraint = {0};
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, argument = XR_XIR_I64;
     XrXirTypeNode signature = {0};
@@ -37,53 +37,54 @@ static XrXirArtifact *interface_allocation_fixture(void) {
     XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&module,NULL,&checked,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context,&module,&checked,NULL) == XR_XIR_OK);
     return checked;
 }
 static void interface_packet_allocation_failures(void) {
     CHECK(!live); fail_at = SIZE_MAX;
-    XrXirArtifact *source = interface_allocation_fixture(), *decoded = NULL;
+    AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
+    XrXirArtifact *source=interface_allocation_fixture(&owner.context),*decoded=NULL;
     size_t baseline = live;
     XrXirCheckedPacket packet = {0};
     calls = 0;
-    CHECK(xr_xir_checked_write(source,NULL,&packet,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
     size_t writes = calls;
-    xr_xir_checked_packet_free(&packet); CHECK(live == baseline);
+    xr_xir_compile_checked_packet_free(&packet); CHECK(live == baseline);
     for (size_t i = 0; i < writes; ++i) {
         calls = 0; fail_at = i;
-        CHECK(xr_xir_checked_write(source,NULL,&packet,NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!packet.bytes && !packet.length && live == baseline);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_checked_write(source,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(source); CHECK(live == 1);
+    CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(source); CHECK(live == owner.blocks+2);
     baseline = live; calls = 0;
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
     size_t reads = calls;
-    xr_xir_artifact_free(decoded); CHECK(live == baseline);
+    xr_xir_compile_artifact_free(decoded); decoded=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < reads; ++i) {
-        calls = 0; fail_at = i; decoded = (XrXirArtifact *)(uintptr_t)1;
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OUT_OF_MEMORY);
+        calls = 0; fail_at = i; decoded = NULL;
+        CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!decoded && live == baseline);
     }
     fail_at = SIZE_MAX;
     for (size_t i = 64; i < packet.length; ++i) {
         packet.bytes[i] ^= 0xff;
         checked_digest(packet.bytes,packet.length,packet.bytes + 32);
-        XrXirStatus status = xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL);
-        if (status == XR_XIR_OK) xr_xir_artifact_free(decoded);
+        XrXirStatus status = xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL);
+        if (status == XR_XIR_OK) { xr_xir_compile_artifact_free(decoded); decoded=NULL; }
         else CHECK(!decoded);
         CHECK(live == baseline); packet.bytes[i] ^= 0xff;
     }
     checked_digest(packet.bytes,packet.length,packet.bytes + 32);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-    memset(packet.bytes,0xcc,packet.length); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_artifact_verify(decoded,NULL,NULL) == XR_XIR_OK);
-    const XrXirInterfaceTable *table = xr_xir_artifact_module(decoded)->types->interfaces;
+    CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_artifact_verify(decoded,NULL) == XR_XIR_OK);
+    const XrXirInterfaceTable *table = xr_xir_compile_artifact_module(decoded)->types->interfaces;
     CHECK(table && table->count == 3);
     CHECK(table->declarations[2].parents[0].arguments[0] == XR_XIR_I64);
     CHECK(!memcmp(table->declarations[0].methods[0].name.bytes,"measure",7));
-    xr_xir_artifact_free(decoded); CHECK(!live);
+    xr_xir_compile_artifact_free(decoded); decoded=NULL; allocation_compile_owner_drop(&owner); CHECK(!live);
     printf("Interface packet physical release: %zu writer and %zu reader allocation sites\n",writes,reads);
 }
 #endif // XIR_INTERFACE_PACKET_ALLOCATIONS_H

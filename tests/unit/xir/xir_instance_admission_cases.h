@@ -30,7 +30,7 @@ static void admission_case_setup(unsigned *releases, XrXirProgram **program,
 static void admission_case_dispose(unsigned *releases, XrXirProgram *program,
                                    XrXirInstance *instance, XrXirValue *function) {
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(!*releases && xr_xir_value_valid(function));
     xr_xir_value_drop(function);
     CHECK(*releases == 1 && !live);

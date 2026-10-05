@@ -23,7 +23,7 @@ static void struct_ops_cases(XrXirProgram *program) {
     config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, struct_ops_output, &outputs};
     for (unsigned i = 0; i < 3; ++i)
         CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     XrXirDomain *domain = NULL; XrXirValue arguments[2] = {{XR_XIR_I64,0,47},{0}}, escaped = {0};
     CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain,"constructed",11,&arguments[1]) == XR_XIR_VALUE_OK);

@@ -10,10 +10,10 @@
 #define XIR_ENUM_PACKET_CASES_H
 #include "xir_enum_ops_fixture.h"
 static void enum_instruction_packet_cases(void) {
-    XrXirArtifact *lowered = enum_ops_lowered(false); xr_xir_artifact_free(lowered);
-    XrXirArtifact *checked = enum_ops_checked(0, false);
+    XrXirArtifact *lowered = enum_ops_lowered(suite_context, false); xr_xir_compile_artifact_free(lowered);lowered=NULL;
+    XrXirArtifact *checked = enum_ops_checked(suite_context, 0, false);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK); xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);checked=NULL;
     const uint32_t patterns[][8] = {
         {88,2,2,0,0,0,1,0}, {86,256,0,2,0,0,1,0}, {87,2,2,0,0,0,0,0}};
     const uint32_t offsets[] = {12,24,12}, replacements[] = {2,0,1};
@@ -27,9 +27,9 @@ static void enum_instruction_packet_cases(void) {
         rejected(packet.bytes,packet.length);
         memcpy(packet.bytes+found,expected,32); digest_packet(&packet);
         XrXirArtifact *decoded = NULL;
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(decoded);
+        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(decoded);decoded=NULL;
     }
-    xr_xir_checked_packet_free(&packet);
+    xr_xir_compile_checked_packet_free(&packet);
 }
 #endif // XIR_ENUM_PACKET_CASES_H

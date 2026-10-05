@@ -13,7 +13,7 @@
 #define XIR_TYPES_FIXTURE_H
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
-static XrXirArtifact *callable_fixture(void) {
+static XrXirArtifact *callable_fixture(const XrXirCompileContext *context) {
     XrXirType fn0 = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirType fn1 = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirType generic = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
@@ -35,11 +35,11 @@ static XrXirArtifact *callable_fixture(void) {
     XrXirGeneric generics[] = {{NULL, 0, &fn1, 1, NULL}, {&constraint, 1, NULL, 0, NULL}};
     XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     memset(signatures, 0xCC, sizeof(signatures)); memset(parameters, 0xCC, sizeof(parameters));
     return checked;
 }
-static XrXirArtifact *function_ir_fixture(void) {
+static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
     XrXirType parameter = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
     XrXirConstraint constraint = {0};
     XrXirGeneric generics[] = {{0}, {NULL,0,&concrete,1, NULL}, {&constraint,1,NULL,0, NULL}};
@@ -65,10 +65,10 @@ static XrXirArtifact *function_ir_fixture(void) {
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     return checked;
 }
-static XrXirArtifact *generic_callable_fixture(void) {
+static XrXirArtifact *generic_callable_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter components[] = {{t,0}, {XR_XIR_STRING,0}};
     XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components,1,t,0,1, {0}},
@@ -89,12 +89,12 @@ static XrXirArtifact *generic_callable_fixture(void) {
     };
     XrXirModule built = {XR_XIR_BUILT,functions,2,NULL,generics,&table, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     memset(signatures,0xCC,sizeof(signatures)); memset(components,0xCC,sizeof(components));
     return checked;
 }
 /* Two generic owners reuse the same abstract nodes with different substitutions. */
-static XrXirArtifact *constructed_fixture(void) {
+static XrXirArtifact *constructed_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter inputs[] = {{(XrXirType)257,0}, {(XrXirType)261,0}, {(XrXirType)265,0}};
     XrXirTypeNode nodes[] = {
@@ -130,7 +130,7 @@ static XrXirArtifact *constructed_fixture(void) {
     };
     XrXirModule built = {XR_XIR_BUILT,functions,3,NULL,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     memset(nodes,0xCC,sizeof(nodes)); memset(inputs,0xCC,sizeof(inputs));
     return checked;
 }

@@ -9,7 +9,7 @@
 #ifndef XIR_MODULE_FOREST_FIXTURE_H
 #define XIR_MODULE_FOREST_FIXTURE_H
 #include "xir/xxir_generic.h"
-static XrXirArtifact *module_forest_fixture(bool invalid) {
+static XrXirArtifact *module_forest_fixture(const XrXirCompileContext *context, bool invalid) {
     XrXirInstruction extra[] = {
         {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0, {0}},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 0, {0}},
@@ -63,15 +63,15 @@ static XrXirArtifact *module_forest_fixture(bool invalid) {
     const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_check(&built, NULL, &checked, &diagnostic);
+    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
     if (invalid) { CHECK(status != XR_XIR_OK && !checked); return NULL; }
     if (status != XR_XIR_OK) fprintf(stderr, "forest: status=%u function=%u block=%u instruction=%u reason=%u\n",
         status, diagnostic.function, diagnostic.block, diagnostic.instruction, diagnostic.reason);
     CHECK(status == XR_XIR_OK);
-    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed); xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(checked);checked=NULL;
     return lowered;
 }
 #endif // XIR_MODULE_FOREST_FIXTURE_H

@@ -15,27 +15,27 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     const uint32_t owners[] = {0, 4, 5, UINT32_MAX};
     for (uint32_t i = 1; i < 4; ++i) {
         ids[3].cleanup_owner = owners[i];
-        CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE);
     }
     ids[3].cleanup_owner = 3;
-    ids[3].exported = 1; CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_STRUCTURE); ids[3].exported = 0;
+    ids[3].exported = 1; CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE); ids[3].exported = 0;
     XrXirInstruction *call = (XrXirInstruction *)module->functions[1].instructions;
-    call[0].immediate = 3; CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_STRUCTURE); call[0].immediate = 2;
+    call[0].immediate = 3; CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE); call[0].immediate = 2;
     XrXirInstruction saved_call = call[0];
     XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = XR_XIR_UNIT;
     XrXirTypes types = {&signature, 1, NULL, NULL}; module->types = &types;
     call[0].op = XR_XIR_FUNCTION_REF; call[0].type = (XrXirType)256;
-    CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_OK);
-    call[0].immediate = 3; CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_OK);
+    call[0].immediate = 3; CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE);
     module->types = NULL; call[0] = saved_call;
     XrXirGeneric *generics = (XrXirGeneric *)module->generics;
     XrXirType *argument = (XrXirType *)generics[2].arguments;
     *argument = XR_XIR_I64;
-    CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_TYPE);
     *argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirConstraint *constraint = (XrXirConstraint *)generics[3].constraints;
     constraint->markers = XR_XIR_CONSTRAINT_SENDABLE;
-    CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_BAD_TYPE); constraint->markers = 0;
+    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_TYPE); constraint->markers = 0;
     XrXirFunction *body = (XrXirFunction *)&module->functions[3], saved = *body;
     XrXirInstruction suspend[] = {{XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
@@ -43,7 +43,7 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     body->instructions = suspend; body->instruction_count = 2;
     XrXirGeneric saved_generic = generics[3]; generics[3].arguments = NULL; generics[3].argument_count = 0;
     XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_verify(module, NULL, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
+    CHECK(xr_xir_compile_verify(suite_context, module, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
     CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND);
     CHECK(diagnostic.block == 0 && diagnostic.instruction == 0);
     XrXirType error = XR_XIR_ERROR;
@@ -53,20 +53,20 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     XrXirGeneric saved_owner_generic = generics[2];
     owner->blocks = &block; owner->block_count = 1; owner->instructions = &suspend[1]; owner->instruction_count = 1;
     generics[2].arguments = NULL; generics[2].argument_count = 0;
-    CHECK(xr_xir_verify(module, NULL, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
+    CHECK(xr_xir_compile_verify(suite_context, module, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
     CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW);
     *owner = saved_owner; generics[2] = saved_owner_generic;
     *body = saved;
     generics[3] = saved_generic;
-    CHECK(xr_xir_verify(module, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_OK);
 }
 static void cleanup_role_cases(void) {
-    XrXirArtifact *checked = cleanup_role_fixture(), *decoded = NULL, *closed = NULL, *lowered = NULL;
+    XrXirArtifact *checked = cleanup_role_fixture(suite_context), *decoded = NULL, *closed = NULL, *lowered = NULL;
     cleanup_role_rejections(checked);
     ((XrXirFunctionIdentity *)checked->module.declarations->functions)[2].promises = XR_XIR_FUNCTION_NO_SUSPEND;
-    CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     uint8_t identities[180] = {0}; put32(identities + 3 * 36 + 16, 3); put32(identities + 4 * 36 + 16, 4);
     put32(identities + 2 * 36 + 20, XR_XIR_FUNCTION_NO_SUSPEND);
     size_t at = 0; uint32_t matches = 0;
@@ -91,11 +91,11 @@ static void cleanup_role_cases(void) {
     put32(packet.bytes + at + 3 * 36 + 16, 3); digest_packet(&packet);
     put32(packet.bytes + at + 2 * 36 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + at + 2 * 36 + 20, XR_XIR_FUNCTION_NO_SUSPEND); digest_packet(&packet);
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked); xr_xir_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL; xr_xir_compile_checked_packet_free(&packet);
     CHECK(decoded->module.declarations->functions[4].cleanup_owner == 4);
-    CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     CHECK(closed->module.function_count == 8 && closed->module.declarations->functions[4].cleanup_owner == 3 &&
         closed->module.declarations->functions[5].cleanup_owner == 4 &&
         closed->module.declarations->functions[6].cleanup_owner == 5 &&
@@ -109,26 +109,26 @@ static void cleanup_role_cases(void) {
     XrXirFunctionIdentity *ids = (XrXirFunctionIdentity *)closed->module.declarations->functions;
     CHECK(ids[2].promises == XR_XIR_FUNCTION_NO_SUSPEND && ids[3].promises == XR_XIR_FUNCTION_NO_SUSPEND);
     ids[2].promises = 0;
-    CHECK(xr_xir_verify(&closed->module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
     ids[2].promises = XR_XIR_FUNCTION_NO_SUSPEND;
     ids[4].promises = XR_XIR_FUNCTION_NO_SUSPEND;
-    CHECK(xr_xir_verify(&closed->module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
     ids[4].promises = 0;
     ids[4].cleanup_owner = 0;
-    CHECK(xr_xir_verify(&closed->module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
     ids[4].cleanup_owner = 4;
-    CHECK(xr_xir_verify(&closed->module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
     ids[4].cleanup_owner = 3;
     XrXirProvenance *proof = (XrXirProvenance *)closed->module.provenance;
     --closed->module.function_count; --proof->count;
-    CHECK(xr_xir_verify(&closed->module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
     ++closed->module.function_count; ++proof->count;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     CHECK(lowered->module.declarations->functions[7].cleanup_owner == 6);
-    xr_xir_artifact_free(lowered);
+    xr_xir_compile_artifact_free(lowered);lowered=NULL;
     puts("Cleanup body roles, definition effects, packets and instance provenance passed");
 }
 #endif // XIR_CLEANUP_ROLE_CASES_H

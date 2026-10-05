@@ -3,7 +3,7 @@
 #define XIR_IMPLEMENTATION_PACKET_FIXTURE_H
 #include "xir/xxir_implementation.h"
 #include "xir/xxir_nominal.h"
-static XrXirArtifact *implementation_packet_fixture(void) {
+static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *context,XrXirArtifact **output) {
     XrXirType receiver = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, argument = XR_XIR_I64;
     XrXirTypeNode nodes[2] = {0};
     nodes[0].kind = XR_XIR_TYPE_NOMINAL;
@@ -34,14 +34,16 @@ static XrXirArtifact *implementation_packet_fixture(void) {
     XrXirDeclarations declarations = {&module,1,identities,NULL,0,NULL,0,0,0,&table};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
+    XrXirStatus status=xr_xir_compile_check(context,&built,&checked,NULL);
+    if(status!=XR_XIR_OK){CHECK(!checked);return status;}
     argument = XR_XIR_BOOL; binding.function = UINT32_MAX;
     memset(&implementation,0xcc,sizeof(implementation));
-    CHECK(xr_xir_artifact_verify(checked,NULL,NULL) == XR_XIR_OK);
-    return checked;
+    status=xr_xir_compile_artifact_verify(checked,NULL);
+    if(status==XR_XIR_OK)*output=checked;else xr_xir_compile_artifact_free(checked);checked=NULL;
+    return status;
 }
 static void implementation_packet_owned(const XrXirArtifact *artifact) {
-    const XrXirModule *module = xr_xir_artifact_module(artifact);
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirImplementationTable *table = module->declarations->implementations;
     CHECK(table && table->count == 1 && table->records[0].nominal_declaration == 0);
     CHECK(table->records[0].interface.argument_count == 1 && table->records[0].interface.arguments[0] == XR_XIR_I64);

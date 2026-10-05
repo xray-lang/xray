@@ -14,7 +14,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir_error_fixture.h"
-static XrXirArtifact *capture_checked(bool throwing) {
+static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool throwing) {
     XrXirType fn = (XrXirType) 256, t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter input = {XR_XIR_STRING,0};
     XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,0,0, {0}};
@@ -70,24 +70,24 @@ static XrXirArtifact *capture_checked(bool throwing) {
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     memset(make,0xcc,sizeof(make)); memset(captures,0xcc,sizeof(captures));
     return checked;
 }
-static XrXirArtifact *capture_fixture(bool throwing) {
-    XrXirArtifact *checked = capture_checked(throwing), *decoded = NULL, *closed = NULL, *lowered = NULL;
+static XrXirArtifact *capture_fixture(const XrXirCompileContext *context, bool throwing) {
+    XrXirArtifact *checked = capture_checked(context, throwing), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-    memset(packet.bytes,0xcc,packet.length); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
-    const XrXirModule *m = xr_xir_artifact_module(closed);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
+    const XrXirModule *m = xr_xir_compile_artifact_module(closed);
     CHECK(m->function_count == 6 && m->functions[2].instructions[1].immediate == 5);
     CHECK(m->functions[5].parameters[0] == XR_XIR_STRING && !m->generics);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed); return lowered;
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL; return lowered;
 }
 #endif // XIR_CAPTURE_FIXTURE_H

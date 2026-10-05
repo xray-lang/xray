@@ -74,6 +74,6 @@ static void capture_cases(XrXirProgram *program, bool throwing) {
         if (mode != 2) capture_result(&result,throwing);
         xr_xir_value_drop(&result); xr_xir_value_drop(&escaped);
     }
-    xr_xir_value_drop(&suffix); xr_xir_program_drop(program);
+    xr_xir_value_drop(&suffix); xr_xir_compile_program_drop(program);
 }
 #endif // XIR_CAPTURE_CASES_H

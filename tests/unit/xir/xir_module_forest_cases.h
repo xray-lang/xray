@@ -59,7 +59,7 @@ static void module_forest_cases(XrXirProgram *program) {
     CHECK(result.type == XR_XIR_I64 && result.payload == 41);
     xr_xir_value_drop(&result); xr_xir_value_drop(&function);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    CHECK(!log.releases); xr_xir_program_drop(program);
+    CHECK(!log.releases); xr_xir_compile_program_drop(program);
     CHECK(!runtime_live && !runtime_bytes);
 }
 #endif // XIR_MODULE_FOREST_CASES_H

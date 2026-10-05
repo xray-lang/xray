@@ -70,34 +70,34 @@ static void default_invoke_case(unsigned mode,bool generic) {
     case 15:entry[5]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{3},{0},0,{0}};expected=XR_XIR_OK;break;
     }
     XrXirArtifact *checked=NULL;XrXirDiagnostic d={0};
-    XrXirStatus status=xr_xir_check(&module,NULL,&checked,&d);
+    XrXirStatus status=xr_xir_compile_check(suite_context, &module, &checked, &d);
     if(status!=expected)fprintf(stderr,"invoke mode%u generic%u status%u expected%u f%u i%u\n",mode,generic,status,expected,d.function,d.instruction);
     CHECK(status==expected && ((checked!=NULL)==(expected==XR_XIR_OK)));
     if(!checked)return;
-    XrXirEffects *effects=NULL;CHECK(xr_xir_effects_analyze(checked,NULL,&effects)==XR_XIR_OK);
+    XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked, &effects)==XR_XIR_OK);
     CHECK(xr_xir_effects_error(effects,3,XR_XIR_CONSTRUCTED_TYPE_BASE,0));
     CHECK(xr_xir_effects_error(effects,1,XR_XIR_CONSTRUCTED_TYPE_BASE,0)==(mode==15));
-    CHECK(!xr_xir_effects_error_unknown(effects,1));xr_xir_effects_free(effects);
+    CHECK(!xr_xir_effects_error_unknown(effects,1));xr_xir_compile_effects_free(effects);
     XrXirArtifact *special=NULL,*read=NULL,*lowered=NULL;
-    CHECK(xr_xir_specialize(checked,NULL,&special,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked, &special, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
     XrXirInstruction *call=(XrXirInstruction *)special->module.functions[1].instructions;
     CHECK(call->op==XR_XIR_INVOKE && !call->args[0] && !call->args[1] && call->targets[0]==1 && call->targets[1]==2);
-    XrXirCheckedPacket packet={0};CHECK(xr_xir_checked_write(special,NULL,&packet,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&read,NULL)==XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);xr_xir_artifact_free(read);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(special, &packet, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &read, NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(read);read=NULL;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(special,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_artifact_free(lowered);
+    CHECK(xr_xir_compile_lower(special, &target, &lowered, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);lowered=NULL;
     XrXirInstruction saved=*call;
-    call->args[0]=2;CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;
-    call->op=XR_XIR_CALL;CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;
-    call->targets[0]=2;call->targets[1]=1;CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;
-    call->immediate=0;CHECK(xr_xir_artifact_verify(special,NULL,NULL)!=XR_XIR_OK);*call=saved;
+    call->args[0]=2;CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;
+    call->op=XR_XIR_CALL;CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;
+    call->targets[0]=2;call->targets[1]=1;CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;
+    call->immediate=0;CHECK(xr_xir_compile_artifact_verify(special, NULL)!=XR_XIR_OK);*call=saved;
     if(generic){XrXirType *tuple=(XrXirType *)special->module.provenance->origins[call->immediate].arguments;
         XrXirType old=tuple[0];tuple[0]=XR_XIR_STRING;
-        CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_BAD_TYPE);tuple[0]=old;}
-    CHECK(xr_xir_artifact_verify(special,NULL,NULL)==XR_XIR_OK);
-    xr_xir_artifact_free(special);
+        CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_BAD_TYPE);tuple[0]=old;}
+    CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(special);special=NULL;
 }
 static void default_invoke_cases(void){
     for(unsigned mode=0;mode<16;++mode){default_invoke_case(mode,false);default_invoke_case(mode,true);}

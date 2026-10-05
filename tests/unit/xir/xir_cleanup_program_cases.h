@@ -21,7 +21,7 @@ static void cleanup_program_cases(XrXirProgram *program, unsigned mode) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, cleanup_program_write, &log};
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance, 1, NULL, 0) == XR_XIR_CALL_READY);
     XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     if (mode == 1) {

@@ -29,27 +29,27 @@ static void invoke_generic_cases(void) {
             {&callee_constraint,1,NULL,0, NULL}};
         XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM, NULL};
         XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
-        XrXirStatus status = xr_xir_check(&module,NULL,&checked,NULL);
+        XrXirStatus status = xr_xir_compile_check(suite_context, &module, &checked, NULL);
         /* An unused caller must prove the callee's bound at its definition. */
         if (mode == 1) { CHECK(status != XR_XIR_OK && !checked); continue; }
         CHECK(status == XR_XIR_OK);
         XrXirCheckedPacket packet = {0};
-        CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
         if (!mode) {
-            CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
-            const XrXirModule *specialized = xr_xir_artifact_module(closed);
+            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+            const XrXirModule *specialized = xr_xir_compile_artifact_module(closed);
             const XrXirInstruction *call = specialized->functions[0].instructions;
             CHECK(!specialized->generics && specialized->function_count == 2);
             CHECK(call->op == XR_XIR_INVOKE && call->targets[0] == 1 && call->targets[1] == 2);
             CHECK(!call->type_arguments[0] && !call->type_arguments[1]);
             CHECK(call->immediate == 1 && specialized->functions[1].parameters[0] == XR_XIR_I64);
             XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-            CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
         }
-        xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed);
-        xr_xir_artifact_free(decoded); xr_xir_artifact_free(checked);
-        xr_xir_checked_packet_free(&packet);
+        xr_xir_compile_artifact_free(lowered);lowered=NULL; xr_xir_compile_artifact_free(closed);closed=NULL;
+        xr_xir_compile_artifact_free(decoded);decoded=NULL; xr_xir_compile_artifact_free(checked);checked=NULL;
+        xr_xir_compile_checked_packet_free(&packet);
     }
 }
 
@@ -88,20 +88,20 @@ static void invoke_checked_cases(void) {
             ops[0].type = XR_XIR_UNIT; ops[1].type = XR_XIR_UNIT;
         }
         XrXirArtifact *checked = NULL, *decoded = NULL;
-        XrXirStatus status = xr_xir_check(&module,NULL,&checked,NULL);
+        XrXirStatus status = xr_xir_compile_check(suite_context, &module, &checked, NULL);
         if (attack) { CHECK(status != XR_XIR_OK && !checked); continue; }
         CHECK(status == XR_XIR_OK);
         XrXirArtifact *lowered = NULL;
         XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-        CHECK(xr_xir_lower(checked,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-        const XrXirFunctionLayout *layout = xr_xir_artifact_layout(lowered,0);
+        CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
+        const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 0);
         CHECK(layout->offsets[1] == UINT32_MAX && layout->offsets[2] != UINT32_MAX &&
             layout->offsets[4] != UINT32_MAX && layout->outgoing_count == 1 && layout->owned_count == 1);
-        xr_xir_artifact_free(lowered);
+        xr_xir_compile_artifact_free(lowered);lowered=NULL;
         XrXirCheckedPacket packet = {0};
-        CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(decoded); decoded = NULL;
+        CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(decoded); decoded = NULL;
         /* Locate the complete call record independently of producer offsets. */
         uint8_t pattern[40] = {0};
         put32(pattern,XR_XIR_INVOKE); put32(pattern+4,XR_XIR_I64);
@@ -112,6 +112,6 @@ static void invoke_checked_cases(void) {
         CHECK(matches == 1);
         put32(packet.bytes+found+20,1); digest_packet(&packet);
         rejected(packet.bytes,packet.length);
-        xr_xir_checked_packet_free(&packet); xr_xir_artifact_free(checked);
+        xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(checked);checked=NULL;
     }
 }

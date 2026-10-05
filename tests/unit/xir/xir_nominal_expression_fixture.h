@@ -10,7 +10,7 @@
 #define XIR_NOMINAL_EXPRESSION_FIXTURE_H
 #include "xir/xxir_internal.h"
 #include "xir/xxir_checked.h"
-static XrXirArtifact *nominal_expression_fixture(void) {
+static XrXirArtifact *nominal_expression_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirType box = (XrXirType)256, outer = (XrXirType)257;
     XrXirConstraint constraint = {0};
@@ -58,11 +58,11 @@ static XrXirArtifact *nominal_expression_fixture(void) {
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, &literal, 1, 0, 0, NULL};
     XrXirModule built = {XR_XIR_BUILT, functions, 4, &declarations, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
-static inline XrXirArtifact *nominal_forwarding_checked(void) {
-    XrXirArtifact *base = nominal_expression_fixture(), *checked = NULL, *closed = NULL;
+static inline XrXirArtifact *nominal_forwarding_checked(const XrXirCompileContext *context) {
+    XrXirArtifact *base = nominal_expression_fixture(context), *checked = NULL, *closed = NULL;
     XrXirModule built = base->module; built.stage = XR_XIR_BUILT;
     XrXirFunction functions[5]; memcpy(functions, built.functions, 4 * sizeof(*functions));
     XrXirGeneric generics[5] = {0}; memcpy(generics, built.generics, 4 * sizeof(*generics));
@@ -85,32 +85,32 @@ static inline XrXirArtifact *nominal_forwarding_checked(void) {
     functions[4] = (XrXirFunction) {"identity",8,&t,1,t,&identity_block,1,identity,2,NULL,0};
     generics[4] = (XrXirGeneric) {&constraint,1,NULL,0, NULL};
     built.functions = functions; built.function_count = 5; built.generics = generics; built.declarations = &declarations;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(base);
-    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(base);base=NULL;
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     CHECK(closed->module.function_count == 9 && closed->module.types->count == 8);
     CHECK(closed->module.provenance && closed->module.provenance->count == 9);
-    xr_xir_artifact_free(checked);
-    CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     return closed;
 }
-static inline XrXirArtifact *nominal_expression_lowered(void) {
-    XrXirArtifact *closed = nominal_forwarding_checked(), *decoded = NULL, *lowered = NULL;
+static inline XrXirArtifact *nominal_expression_lowered(const XrXirCompileContext *context) {
+    XrXirArtifact *closed = nominal_forwarding_checked(context), *decoded = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(closed, NULL, &packet, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_checked_write(closed, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;
+    CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(decoded, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_lower(decoded, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     CHECK(lowered->module.types->count == 6 && lowered->module.provenance->source->module.types->count == 2);
     for (uint32_t i = 0; i < 3; ++i) {
         XrXirType expected = (XrXirType)(257 + 2 * i);
         CHECK(lowered->module.provenance->origins[6+i].arguments[0] == expected);
         CHECK(lowered->module.functions[6+i].parameters[0] == expected);
     }
-    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     return lowered;
 }
 #endif // XIR_NOMINAL_EXPRESSION_FIXTURE_H

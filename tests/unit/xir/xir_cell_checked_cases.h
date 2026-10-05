@@ -29,15 +29,15 @@ static void cell_generic_nominal_cases(void) {
         if (mode == 5) nodes[0].parameter_span = 0;
         if (mode == 6) types.nominals = &identity.table;
         if (mode == 7) nodes[2] = (XrXirTypeNode){XR_XIR_TYPE_CELL,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,1,{0}};
-        XrXirBudget budget = xr_xir_default_budget();
-        XrXirStatus status = xr_xir_types_structure_verify(&types, &budget);
+        XrXirCompileContext budget = consumer_context_default();
+        XrXirStatus status = xr_xir_compile_types_structure_verify(&budget, &types);
         CHECK(mode ? status != XR_XIR_OK : status == XR_XIR_OK);
     }
 }
 static void cell_local_checked_cases(void) {
     for (unsigned mode = 0; mode < 7; ++mode) {
-        XrXirArtifact *base = checked_fixture(), *checked = NULL, *decoded = NULL;
-        XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+        XrXirArtifact *base = checked_fixture(suite_context), *checked = NULL, *decoded = NULL;
+        XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
         XrXirFunction functions[9]; memcpy(functions, built.functions, sizeof(functions));
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
         XrXirTypeNode node = {XR_XIR_TYPE_CELL, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
@@ -60,30 +60,30 @@ static void cell_local_checked_cases(void) {
         if (mode == 4) ops[1] = (XrXirInstruction){XR_XIR_LOCAL_READ,(XrXirType)256,{2},{0},0,{0}};
         if (mode == 5) ops[0].immediate = 1;
         if (mode == 6) ops[0] = (XrXirInstruction){XR_XIR_CELL_NEW,(XrXirType)256,{1},{0},0,{0}};
-        XrXirStatus status = xr_xir_check(&built, NULL, &checked, NULL);
-        xr_xir_artifact_free(base);
+        XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, NULL);
+        xr_xir_compile_artifact_free(base);base=NULL;
         if (mode) { CHECK(status != XR_XIR_OK && !checked); continue; }
         CHECK(status == XR_XIR_OK && checked);
         XrXirCheckedPacket packet = {0};
-        CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(checked);
-        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(decoded); decoded = NULL;
+        CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(checked);checked=NULL;
+        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(decoded); decoded = NULL;
         uint8_t record[32] = {0}; put32(record, 103); put32(record + 8, 2); put32(record + 12, 1);
         size_t at = 0; unsigned matches = 0;
         for (size_t i = 64; i + sizeof(record) <= packet.length; ++i)
             if (!memcmp(packet.bytes + i, record, sizeof(record))) { at = i; ++matches; }
         CHECK(matches == 1); put32(packet.bytes + at + 12, 0); digest_packet(&packet);
         rejected(packet.bytes, packet.length);
-        xr_xir_checked_packet_free(&packet);
+        xr_xir_compile_checked_packet_free(&packet);
     }
 }
 static void cell_checked_cases(void) {
     cell_generic_nominal_cases();
     cell_local_checked_cases();
     for (unsigned mode = 0; mode < 9; ++mode) {
-        XrXirArtifact *base = checked_fixture(), *checked = NULL, *decoded = NULL;
-        XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+        XrXirArtifact *base = checked_fixture(suite_context), *checked = NULL, *decoded = NULL;
+        XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
         XrXirFunction functions[9]; memcpy(functions, built.functions, sizeof(functions));
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
         XrXirTypeNode nodes[] = {{XR_XIR_TYPE_CELL,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
@@ -110,26 +110,26 @@ static void cell_checked_cases(void) {
         if (mode == 6) functions[8].result = (XrXirType)256;
         if (mode == 7) { parameters[0] = (XrXirType)257; identities[8].exported = 1; }
         if (mode == 8) nodes[0].element = XR_XIR_UNIT;
-        XrXirStatus status = xr_xir_check(&built, NULL, &checked, NULL);
-        xr_xir_artifact_free(base);
+        XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, NULL);
+        xr_xir_compile_artifact_free(base);base=NULL;
         if (mode) {
             CHECK(!checked && status == (mode == 4 ? XR_XIR_BAD_DOMINANCE : XR_XIR_BAD_TYPE));
             continue;
         }
         CHECK(status == XR_XIR_OK && checked);
         XrXirCheckedPacket packet = {0};
-        CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(checked);
-        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-        xr_xir_artifact_free(decoded); decoded = NULL;
+        CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(checked);checked=NULL;
+        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(decoded); decoded = NULL;
         uint8_t record[32] = {0};
         put32(record, 51); put32(record + 4, 256); put32(record + 8, 1);
         size_t found = 0; unsigned matches = 0;
         for (size_t i = 64; i + sizeof(record) <= packet.length; ++i)
             if (!memcmp(packet.bytes + i, record, sizeof(record))) { found = i; ++matches; }
         CHECK(matches == 1); put32(packet.bytes + found + 4, 257); digest_packet(&packet);
-        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_TYPE && !decoded);
-        xr_xir_checked_packet_free(&packet);
+        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_TYPE && !decoded);
+        xr_xir_compile_checked_packet_free(&packet);
     }
     puts("Shared cells: eight typed capability rejections and re-signed hostile packet rejected");
 }

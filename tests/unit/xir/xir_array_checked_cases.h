@@ -15,16 +15,19 @@
 
 static void array_checked_cases(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
-    XrXirArtifact *checked = NULL, *decoded = NULL, *lowered = NULL;
+    XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_check(&f.module, NULL, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked); memset(&f, 0xCC, sizeof(f));
-    /* Schema-derived offsets: first record of entry, its operand table, slot. */
-    const size_t entry = 281, operands = 845, slot = 1112;
-    CHECK(packet.length == 1196 && packet.bytes[entry] == XR_XIR_CONST_INT &&
+    CHECK(xr_xir_compile_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL; memset(&f, 0xCC, sizeof(f));
+    /* Independent schema23 layout: module76 + function records164/625/128;
+     * declarations20 + source15 + identities3*36 + slot12 + impl-count4;
+     * generics4 + types(12+12+12+20) + defaults4 + provenance4 = 1220. */
+    const size_t entry = 281, operands = 845, slot = 1136;
+    fprintf(stderr,"array packet actual length=%zu entry=%u array=%u operand=%u\n",packet.length,packet.bytes[entry],packet.bytes[entry+2*40],packet.bytes[operands+8]);
+    CHECK(packet.length == 1220 && packet.bytes[entry] == XR_XIR_CONST_INT &&
         packet.bytes[entry + 2 * 40] == XR_XIR_ARRAY_NEW && packet.bytes[operands + 8] == 3);
-    uint8_t original[1196]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[1220]; memcpy(original, packet.bytes, sizeof(original));
     for (uint32_t attack = 0; attack < 20; ++attack) {
         if (attack == 0) put32(packet.bytes + entry + 2 * 40, XR_XIR_OP_COUNT);
         if (attack == 1) put32(packet.bytes + entry + 2 * 40 + 4, 257);
@@ -50,7 +53,7 @@ static void array_checked_cases(void) {
             put32(packet.bytes + entry + 11 * 40 + 12, 5);
         }
         if (attack == 14) put32(packet.bytes + entry + 13 * 40 + 8, 5);
-        if (attack == 15) put32(packet.bytes + 1120, 257);
+        if (attack == 15) put32(packet.bytes + slot + 8, 257);
         if (attack == 16) { put32(packet.bytes + slot + 8, 0); put32(packet.bytes + operands + 8, 6); }
         if (attack == 17) put32(packet.bytes + 12, 14);
         if (attack == 18) put32(packet.bytes + entry + 6 * 40 + 8, 1);
@@ -59,15 +62,17 @@ static void array_checked_cases(void) {
         rejected(packet.bytes, packet.length);
         memcpy(packet.bytes, original, sizeof(original));
     }
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-    memset(packet.bytes, 0xCC, packet.length); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_artifact_verify(decoded, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(decoded, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
-    const XrXirFunctionLayout *layout = xr_xir_artifact_layout(lowered, 1);
+    CHECK(xr_xir_compile_specialize(decoded,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
+    const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 1);
     CHECK(layout->offsets[5] == UINT32_MAX && layout->offsets[6] == UINT32_MAX &&
         layout->owned_count == 3 && layout->outgoing_count == 2);
-    xr_xir_artifact_free(lowered);
+    xr_xir_compile_artifact_free(lowered);lowered=NULL;
 }
 #endif // XIR_ARRAY_CHECKED_CASES_H

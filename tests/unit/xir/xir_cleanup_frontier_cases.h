@@ -8,7 +8,7 @@
  */
 #ifndef XIR_CLEANUP_FRONTIER_CASES_H
 #define XIR_CLEANUP_FRONTIER_CASES_H
-static XrXirArtifact *cleanup_frontier_fixture(unsigned attack) {
+static XrXirArtifact *cleanup_frontier_fixture(const XrXirCompileContext *context, unsigned attack) {
     XrXirInstruction done = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     XrXirInstruction ops[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 17, {0}},
@@ -46,16 +46,16 @@ static XrXirArtifact *cleanup_frontier_fixture(unsigned attack) {
     if (attack == 14) ops[2].targets[0] = 1;
     if (attack == 15) ops[1].targets[0] = 3;
     XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_check(&module, NULL, &checked, NULL);
+    XrXirStatus status = xr_xir_compile_check(context, &module, &checked, NULL);
     CHECK(attack ? status != XR_XIR_OK && !checked : status == XR_XIR_OK);
     return checked;
 }
 static void cleanup_frontier_cases(void) {
-    for (unsigned attack = 1; attack <= 15; ++attack) cleanup_frontier_fixture(attack);
-    XrXirArtifact *checked = cleanup_frontier_fixture(0), *decoded = NULL, *closed = NULL, *lowered = NULL;
+    for (unsigned attack = 1; attack <= 15; ++attack) cleanup_frontier_fixture(suite_context, attack);
+    XrXirArtifact *checked = cleanup_frontier_fixture(suite_context, 0), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
     uint8_t encoded[80] = {0};
     const uint32_t fields[] = {0, 2, 0, 0, 2, 1, 0, 2, 3, 1, 0, 3, 4, 1, 0, 2, 5, 1, 0, 0};
     for (unsigned i = 0; i < 20; ++i) put32(encoded + i * 4, fields[i]);
@@ -69,21 +69,21 @@ static void cleanup_frontier_cases(void) {
         put32(packet.bytes + at + b * 16 + 12, fields[b * 4 + 3]);
     }
     digest_packet(&packet);
-    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
-    xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;
     CHECK(lowered->module.functions[1].blocks[2].frontier == 3);
     CHECK(lowered->module.functions[1].instructions[2].immediate == 2);
-    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(lowered);
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(lowered);lowered=NULL;
     puts("Cleanup registration, lexical exits, hostile packets and lifetime passed");
 }
 static void cleanup_error_frontier(void) {
-    XrXirArtifact *base = cleanup_frontier_fixture(0), *checked = NULL;
+    XrXirArtifact *base = cleanup_frontier_fixture(suite_context, 0), *checked = NULL;
     XrXirFunction functions[4];
     memcpy(functions, base->module.functions, 3 * sizeof(*functions));
     XrXirType error = XR_XIR_ERROR;
@@ -103,10 +103,10 @@ static void cleanup_error_frontier(void) {
     XrXirDeclarations declarations = *base->module.declarations; declarations.functions = ids;
     XrXirModule module = base->module; module.stage = XR_XIR_BUILT; module.declarations = &declarations;
     module.functions = functions; module.function_count = 4;
-    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_check(suite_context, &module, &checked, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
     error = XR_XIR_I64;
-    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
-    xr_xir_artifact_free(base);
+    CHECK(xr_xir_compile_check(suite_context, &module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    xr_xir_compile_artifact_free(base);base=NULL;
 }
 #endif // XIR_CLEANUP_FRONTIER_CASES_H

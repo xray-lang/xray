@@ -11,10 +11,10 @@
 #include "xir_checked_fixture.h"
 #include "xir/xxir_nominal.h"
 #include "xir/xxir_generic.h"
-static XrXirArtifact *nominal_chain_fixture(uint32_t depth, uint32_t field_count) {
+static XrXirArtifact *nominal_chain_fixture(const XrXirCompileContext *context, uint32_t depth, uint32_t field_count) {
     CHECK(depth && depth <= 160 && field_count && field_count <= 2);
-    XrXirArtifact *base = checked_fixture(), *checked = NULL;
-    XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+    XrXirArtifact *base = checked_fixture(context), *checked = NULL;
+    XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     char names[160][16];
     XrXirNominalField fields[160][2];
     XrXirNominalDeclaration declarations[160];
@@ -32,18 +32,18 @@ static XrXirArtifact *nominal_chain_fixture(uint32_t depth, uint32_t field_count
     }
     XrXirNominalTable table = {declarations, depth, NULL};
     XrXirTypes types = {nodes, depth, &table, NULL}; built.types = &types;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(base);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(base);base=NULL;
     memset(names, 0xCC, sizeof(names)); memset(fields, 0xCC, sizeof(fields));
     return checked;
 }
-static inline XrXirArtifact *nominal_chain_lowered(void) {
-    XrXirArtifact *checked = nominal_chain_fixture(3, 2), *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+static inline XrXirArtifact *nominal_chain_lowered(const XrXirCompileContext *context) {
+    XrXirArtifact *checked = nominal_chain_fixture(context, 3, 2), *closed = NULL, *lowered = NULL;
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);closed=NULL;
     return lowered;
 }
 #endif // XIR_NOMINAL_CHAIN_FIXTURE_H

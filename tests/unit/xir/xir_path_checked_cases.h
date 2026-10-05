@@ -28,20 +28,25 @@ static void path_array_packet_attacks(XrXirCheckedPacket *packet) {
     }
 }
 static void path_layout_cases(XrXirArtifact *closed) {
-    XrXirBudget budget = xr_xir_default_budget();
     CHECK(closed->module.stage == XR_XIR_LOWERED);
     XrXirFunctionLayout *layout = &closed->layouts[0];
     CHECK(layout->path_count == 2 && layout->frame_bytes == 40 && layout->owned_count == 2);
     CHECK(layout->offsets[4] == UINT32_MAX && layout->offsets[5] == UINT32_MAX);
-    CHECK(!layout->outgoing_count && xr_xir_layout_verify(closed,&budget) == XR_XIR_OK);
-    budget.frame_bytes = 40 + 2 * sizeof(XrXirValuePathStep);
-    CHECK(xr_xir_layout_verify(closed,&budget) == XR_XIR_OK);
-    --budget.frame_bytes;
-    CHECK(xr_xir_layout_verify(closed,&budget) == XR_XIR_BUDGET);
-    ++budget.frame_bytes; ++layout->path_count;
-    CHECK(xr_xir_layout_verify(closed,&budget) == XR_XIR_BAD_LAYOUT);
+    CHECK(!layout->outgoing_count && xr_xir_compile_layout_verify(closed) == XR_XIR_OK);
+    for (unsigned minus=0;minus<2;++minus) {
+        XrXirCompileContext budget=consumer_context_default();
+        budget.limits.frame_bytes=40+2*sizeof(XrXirValuePathStep)-minus;
+        XrXirArtifact *read=NULL,*special=NULL,*lowered=NULL;
+        CHECK(xr_xir_compile_checked_read(&budget,closed->checked_packet.bytes,closed->checked_packet.length,&read,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(special,&closed->target,&lowered,NULL)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK((lowered!=NULL)==!minus);
+        xr_xir_compile_artifact_free(lowered);lowered=NULL;xr_xir_compile_artifact_free(special);special=NULL;xr_xir_compile_artifact_free(read);read=NULL;
+    }
+    ++layout->path_count;
+    CHECK(xr_xir_compile_layout_verify(closed) == XR_XIR_BAD_LAYOUT);
     --layout->path_count;
-    CHECK(xr_xir_layout_verify(closed,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_compile_layout_verify(closed) == XR_XIR_OK);
 }
 static void path_array_checked_cases(void) {
     XrXirTypeNode nodes[] = {
@@ -73,7 +78,7 @@ static void path_array_checked_cases(void) {
             ops[1] = original[5]; ops[5] = original[1]; ops[6].args[1] = 2;
         }
         XrXirArtifact *checked = NULL; XrXirDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_check(&module,NULL,&checked,&diagnostic);
+        XrXirStatus status = xr_xir_compile_check(suite_context, &module, &checked, &diagnostic);
         if (mode && mode != 7) {
             CHECK(status != XR_XIR_OK && !checked);
             if (mode == 1) CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE && diagnostic.instruction == 6);
@@ -81,46 +86,46 @@ static void path_array_checked_cases(void) {
         } else {
             CHECK(status == XR_XIR_OK && checked);
             XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
-            CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
             if (!mode) path_array_packet_attacks(&packet);
-            CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-            CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
-            CHECK(xr_xir_artifact_verify(closed,NULL,NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
             XrXirArtifact *lowered = NULL;
             XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-            CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK && lowered);
+            CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK && lowered);
             path_layout_cases(lowered);
-            xr_xir_artifact_free(lowered);
-            xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
-            xr_xir_checked_packet_free(&packet); xr_xir_artifact_free(checked);
+            xr_xir_compile_artifact_free(lowered);lowered=NULL;
+            xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(decoded);decoded=NULL;
+            xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(checked);checked=NULL;
         }
     }
 }
 static void path_field_checked_cases(void) {
-    XrXirArtifact *checked = struct_set_checked(0);
+    XrXirArtifact *checked = struct_set_checked(suite_context, 0);
     XrXirModule *module = &checked->module;
     XrXirInstruction *ops = (XrXirInstruction *)module->functions[1].instructions;
     ops[4] = (XrXirInstruction){XR_XIR_FIELD_PLACE,XR_XIR_I64,{1},{0},0,{0}};
     ops[6] = (XrXirInstruction){XR_XIR_PLACE_READ,XR_XIR_I64,{4},{0},0,{0}};
     ops[7] = (XrXirInstruction){XR_XIR_PLACE_WRITE,XR_XIR_UNIT,{4,3},{0},0,{0}};
-    CHECK(xr_xir_artifact_verify(checked,NULL,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     XrXirNominalField *fields = (XrXirNominalField *)module->types->nominals->declarations[0].fields;
     uint32_t flags = fields[0].flags; XrXirDiagnostic diagnostic = {0};
     fields[0].flags = 0;
-    CHECK(xr_xir_artifact_verify(checked,NULL,&diagnostic) != XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(checked, &diagnostic) != XR_XIR_OK);
     CHECK(diagnostic.function == 1 && diagnostic.instruction == 7);
     fields[0].flags = flags | XR_XIR_FIELD_PRIVATE;
-    CHECK(xr_xir_artifact_verify(checked,NULL,&diagnostic) != XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(checked, &diagnostic) != XR_XIR_OK);
     /* This fixture constructs the type in its module initializer, so private
      * construction must already fail before its later projection is reached. */
     CHECK(diagnostic.function == 0 && diagnostic.instruction == 2);
     fields[0].flags = flags;
     ops[4].type = XR_XIR_STRING;
-    CHECK(xr_xir_artifact_verify(checked,NULL,&diagnostic) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_artifact_verify(checked, &diagnostic) == XR_XIR_BAD_TYPE);
     CHECK(diagnostic.function == 1 && diagnostic.instruction == 4);
     ops[4].type = XR_XIR_I64;
-    CHECK(xr_xir_artifact_verify(checked,NULL,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
 }
 static void path_ancestor_checked_cases(void) {
     const XrXirType array = (XrXirType)256, pair = (XrXirType)257;
@@ -156,20 +161,20 @@ static void path_ancestor_checked_cases(void) {
         identities[2].nominal_owner = mode == 3 ? 1 : 0;
         identities[2].method_kind = mode == 3 ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
         XrXirArtifact *checked = NULL; XrXirDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_check(&built,NULL,&checked,&diagnostic);
+        XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, &diagnostic);
         if (mode == 1 || mode == 2) {
             CHECK(status != XR_XIR_OK && !checked && diagnostic.function == 2);
             CHECK(diagnostic.instruction == (mode == 1 ? 5u : 1u));
         } else {
             CHECK(status == XR_XIR_OK && checked);
             XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL;
-            CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-            CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-            CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
             const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-            CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-            xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
-            xr_xir_checked_packet_free(&packet); xr_xir_artifact_free(checked);
+            CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+            xr_xir_compile_artifact_free(lowered);lowered=NULL; xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(decoded);decoded=NULL;
+            xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(checked);checked=NULL;
         }
     }
 }

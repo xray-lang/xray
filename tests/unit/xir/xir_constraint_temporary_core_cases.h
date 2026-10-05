@@ -1,39 +1,30 @@
-/*
- * xray - Lightweight typed scripting with native concurrency
- * https://www.xray-lang.org
- * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
- * Licensed under the MIT License
- *
- * xir_constraint_temporary_cases.h - Identity-map temporary ownership
- *
- * KEY CONCEPT:
- *   Constraint record comparison releases its temporary identity substitution.
- */
+/* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #ifndef XIR_CONSTRAINT_TEMPORARY_CORE_CASES_H
 #define XIR_CONSTRAINT_TEMPORARY_CORE_CASES_H
+typedef struct ConstraintTemporaryFixture { XrXirTypes *types;XrXirConstraint from,to; } ConstraintTemporaryFixture;
+static XrXirStatus constraint_temporary_match(const XrXirCompileContext *context,void *opaque) {
+    ConstraintTemporaryFixture *f=opaque;
+    return xr_xir_compile_constraint_records_match(context,f->types,f->from,f->types,f->to,1);
+}
 static void constraint_temporary_cases(void) {
     XrXirConstraint empty={0};
-    XrXirInterfaceDeclaration declaration={.module={"m",1},.name={"Evidence",8},
-        .constraints=&empty,.parameter_count=1};
-    XrXirInterfaceTable table={&declaration,1};
-    XrXirTypes types={NULL,0,NULL,&table};
+    XrXirInterfaceDeclaration declaration={.module={"m",1},.name={"Evidence",8},.constraints=&empty,.parameter_count=1};
+    XrXirInterfaceTable table={&declaration,1};XrXirTypes types={NULL,0,NULL,&table};
     XrXirType parameter=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
-    XrXirInterfaceApplication app={0,&parameter,1};
-    XrXirConstraint constraint={0,&app,1};
-    XrXirBudget b=xr_xir_default_budget();
-    CHECK(xr_xir_types_structure_verify(&types,&b)==XR_XIR_OK);
-    b=xr_xir_default_budget();b.metadata_bytes=0;b.scratch_bytes=sizeof(parameter);
+    XrXirInterfaceApplication app={0,&parameter,1};XrXirConstraint constraint={0,&app,1};
+    ConstraintTemporaryFixture f={&types,constraint,constraint};
+    AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
+    CHECK(xr_xir_compile_types_structure_verify(&owner.context,&types)==XR_XIR_OK);
     for(uint32_t i=0;i<32;++i) {
-        CHECK(xr_xir_constraint_records_match(&types,constraint,&types,constraint,1,&b)==XR_XIR_OK);
-        CHECK(b.scratch_bytes==sizeof(parameter) && b.metadata_bytes==0);
+        XrCompileResourceStats before=allocation_compile_stats(&owner.context);
+        CHECK(constraint_temporary_match(&owner.context,&f)==XR_XIR_OK);
+        XrCompileResourceStats after=allocation_compile_stats(&owner.context);
+        CHECK(after.live_bytes==owner.baseline.live_bytes && after.work>before.work);
     }
-    fail_at=calls;
-    CHECK(xr_xir_constraint_records_match(&types,constraint,&types,constraint,1,&b)==XR_XIR_OUT_OF_MEMORY);
-    CHECK(b.scratch_bytes==sizeof(parameter) && b.metadata_bytes==0);
-    CHECK(live==0);fail_at=SIZE_MAX;
     XrXirType wrong=XR_XIR_I64;XrXirInterfaceApplication wrong_app={0,&wrong,1};
-    XrXirConstraint different={0,&wrong_app,1};
-    CHECK(xr_xir_constraint_records_match(&types,constraint,&types,different,1,&b)==XR_XIR_BAD_TYPE);
-    CHECK(b.scratch_bytes==sizeof(parameter) && b.metadata_bytes==0);
+    f.to=(XrXirConstraint){0,&wrong_app,1};
+    CHECK(constraint_temporary_match(&owner.context,&f)==XR_XIR_BAD_TYPE);
+    allocation_compile_owner_drop(&owner);f.to=constraint;
+    allocation_compile_operation_cases("constraint identity map",constraint_temporary_match,&f);
 }
 #endif // XIR_CONSTRAINT_TEMPORARY_CORE_CASES_H

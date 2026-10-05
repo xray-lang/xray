@@ -12,7 +12,7 @@
 #ifndef XIR_GENERIC_FIXTURE_H
 #define XIR_GENERIC_FIXTURE_H
 #include "xir/xxir_generic.h"
-static XrXirArtifact *generic_fixture(void) {
+static XrXirArtifact *generic_fixture(const XrXirCompileContext *context) {
     const XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     const XrXirConstraint sendable = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
@@ -34,7 +34,7 @@ static XrXirArtifact *generic_fixture(void) {
     const XrXirGeneric generics[] = {{NULL, 0, types, 3, NULL}, {&sendable, 1, NULL, 0, NULL}};
     const XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 #endif

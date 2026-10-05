@@ -64,7 +64,7 @@ static void array_program_cases(XrXirProgram *program, bool fail_init) {
         config.trace = array_program_trace; config.trace_context = &logs[i];
         CHECK(xr_xir_instance_new(program,&config,&instances[i]) == XR_XIR_CALL_READY);
     }
-    xr_xir_program_drop(program);
+    xr_xir_compile_program_drop(program);
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i],2,NULL,0) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);

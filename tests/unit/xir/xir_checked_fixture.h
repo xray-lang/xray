@@ -12,9 +12,9 @@
 #ifndef XIR_CHECKED_FIXTURE_H
 #define XIR_CHECKED_FIXTURE_H
 #include "xir_program_fixture.h"
-static XrXirArtifact *checked_fixture(void) {
-    XrXirArtifact *lowered = program_fixture(0), *checked = NULL;
-    XrXirModule built = *xr_xir_artifact_module(lowered);
+static XrXirArtifact *checked_fixture(const XrXirCompileContext *context) {
+    XrXirArtifact *lowered = program_fixture(context, 0), *checked = NULL;
+    XrXirModule built = *xr_xir_compile_artifact_module(lowered);
     built.stage = XR_XIR_BUILT;
     XrXirFunction functions[9];
     memcpy(functions, built.functions, 8 * sizeof(*functions));
@@ -33,8 +33,8 @@ static XrXirArtifact *checked_fixture(void) {
     XrXirDeclarations declarations = *built.declarations;
     declarations.functions = identities;
     built.functions = functions; built.function_count = 9; built.declarations = &declarations;
-    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(lowered);
+    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(lowered);lowered=NULL;
     return checked;
 }
 #endif

@@ -10,7 +10,7 @@
 #define XIR_INTERFACE_CHECKED_CASES_H
 #include "xir/xxir_interface.h"
 
-static XrXirArtifact *interface_checked_fixture(void) {
+static XrXirArtifact *interface_checked_fixture(const XrXirCompileContext *context) {
     XrXirConstraint constraint = {0};
     XrXirType parameter = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
     XrXirTypeNode signature = {0};
@@ -39,7 +39,7 @@ static XrXirArtifact *interface_checked_fixture(void) {
     XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_check(&module,NULL,&artifact,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(context, &module, &artifact, NULL) == XR_XIR_OK);
     return artifact;
 }
 static size_t interface_packet_name_end(const XrXirCheckedPacket *packet,
@@ -57,14 +57,14 @@ static void interface_packet_attack(XrXirCheckedPacket *packet, size_t at, uint3
     memcpy(packet->bytes + at,saved,4); digest_packet(packet);
 }
 static void interface_checked_cases(void) {
-    XrXirArtifact *source = interface_checked_fixture(), *decoded = NULL;
+    XrXirArtifact *source = interface_checked_fixture(suite_context), *decoded = NULL;
     XrXirCheckedPacket packet = {0}, second = {0};
-    CHECK(xr_xir_checked_write(source,NULL,&packet,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(source);
-    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
-    CHECK(xr_xir_checked_write(decoded,NULL,&second,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(source, &packet, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(source);source=NULL;
+    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(decoded, &second, NULL) == XR_XIR_OK);
     CHECK(packet.length == second.length && !memcmp(packet.bytes,second.bytes,packet.length));
-    xr_xir_checked_packet_free(&second);
+    xr_xir_compile_checked_packet_free(&second);
     size_t measure = interface_packet_name_end(&packet,"Measure",7);
     size_t child = interface_packet_name_end(&packet,"Child",5);
     size_t concrete = interface_packet_name_end(&packet,"Concrete",8);
@@ -85,17 +85,17 @@ static void interface_checked_cases(void) {
     }
     put32(packet.bytes + 24,(uint32_t)(packet.length - 64)); digest_packet(&packet);
     for (unsigned i = 0; i < 4; ++i) {
-        XrXirBudget budget = xr_xir_default_budget(); XrXirArtifact *failed = NULL;
-        if (i == 0) budget.parameters = 1;
-        if (i == 1) budget.metadata_bytes = packet.length;
-        if (i == 2) budget.scratch_bytes = 0;
-        if (i == 3) budget.work = packet.length * 4 - 1;
-        CHECK(xr_xir_checked_read(packet.bytes,packet.length,&budget,&failed,NULL) == XR_XIR_BUDGET);
+        XrXirCompileContext budget = consumer_context_default(); XrXirArtifact *failed = NULL;
+        if (i == 0) budget.limits.parameters = 1;
+        if (i == 1) budget = consumer_context_limits((XrCompileResourceLimits){packet.length+consumer_context_stats(&budget).live_bytes,8388608,128000000});
+        if (i == 2) budget = consumer_context_limits((XrCompileResourceLimits){67108864,consumer_context_stats(&budget).live_bytes,128000000});
+        if (i == 3) budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
+        CHECK(xr_xir_compile_checked_read(&budget, packet.bytes, packet.length, &failed, NULL) == XR_XIR_BUDGET);
         CHECK(!failed);
     }
-    memset(packet.bytes,0xcc,packet.length); xr_xir_checked_packet_free(&packet);
-    CHECK(xr_xir_artifact_verify(decoded,NULL,NULL) == XR_XIR_OK);
-    const XrXirInterfaceTable *table = xr_xir_artifact_module(decoded)->types->interfaces;
+    memset(packet.bytes,0xcc,packet.length); xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);
+    const XrXirInterfaceTable *table = xr_xir_compile_artifact_module(decoded)->types->interfaces;
     CHECK(table && table->count == 3);
     CHECK(table->declarations[0].name.length == 7 && !memcmp(table->declarations[0].name.bytes,"Measure",7));
     CHECK(table->declarations[0].methods[0].name.length == 7);
@@ -103,15 +103,15 @@ static void interface_checked_cases(void) {
     CHECK(table->declarations[1].parents[0].arguments[0] == XR_XIR_TYPE_PARAMETER_BASE);
     CHECK(table->declarations[2].parents[0].arguments[0] == XR_XIR_I64);
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
-    const XrXirModule *projected = xr_xir_artifact_module(closed);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    const XrXirModule *projected = xr_xir_compile_artifact_module(closed);
     CHECK(!projected->types || !projected->types->interfaces);
     CHECK(projected->provenance && projected->functions[0].instructions[0].immediate == 41);
-    CHECK(xr_xir_artifact_verify(closed,NULL,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
-    CHECK(xr_xir_artifact_verify(lowered,NULL,NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed);
-    xr_xir_artifact_free(decoded);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(lowered);lowered=NULL; xr_xir_compile_artifact_free(closed);closed=NULL;
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
 }
 #endif // XIR_INTERFACE_CHECKED_CASES_H

@@ -90,6 +90,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #define xr_free(pointer) counted_free(pointer)
 #define xr_realloc(pointer, size) counted_realloc(pointer, size)
 
+#include "base/xcompile_resources.c"
 #include "xir/xxir_types.c"
 #include "xir/xxir_constraints.c"
 #include "xir/xxir_constraint_proof.c"
@@ -120,6 +121,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_instance.c"
 #include "xir/xxir_output.c"
 
+#include "xir_allocation_compile_owner.h"
 #include "xir_string_fixture.h"
 #include "xir_call_fixture.h"
 #include "xir_output_fixture.h"
@@ -156,17 +158,17 @@ static void phi_snapshot_failure(void) {
     size_t baseline = live, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        XrXirStatus status = xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL);
+        XrXirStatus status = xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL);
         if (!attempt) { CHECK(status == XR_XIR_OK); sites = calls; }
         else CHECK(status == XR_XIR_OUT_OF_MEMORY && !lowered);
-        xr_xir_artifact_free(lowered); lowered = NULL;
+        xr_xir_compile_artifact_free(lowered); lowered = NULL;
         CHECK(live == baseline);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    const XrXirModule *module = xr_xir_artifact_module(lowered);
-    const XrXirFunctionLayout *layout = xr_xir_artifact_layout(lowered, 2);
+    CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
+    const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 2);
     void *frame = xr_calloc(1, layout->frame_bytes); CHECK(frame);
     XrXirDomain *domain = NULL; XrXirValue a = {0}, b = {0};
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
@@ -189,7 +191,7 @@ static void phi_snapshot_failure(void) {
     for (uint32_t i = layout->owned_count; i > 0; --i) xr_xir_owned_slot_clear(frame, layout->owned_offsets[i - 1]);
     CHECK(atomic_load(&object_pointer(&a)->references) == 1 && atomic_load(&object_pointer(&b)->references) == 1);
     xr_free(frame); xr_xir_value_drop(&a); xr_xir_value_drop(&b); xr_xir_domain_drop(domain);
-    xr_xir_artifact_free(lowered); source_fixture_owner_free(&owner); CHECK(!live);
+    xr_xir_compile_artifact_free(lowered); source_fixture_owner_free(&owner); CHECK(!live);
     printf("PHI lower physical release: %zu allocation sites; partial snapshot failure leaves destinations unchanged\n", sites);
 }
 
@@ -334,7 +336,7 @@ static void invoke_allocation_failures(void) {
             fail_at = i; calls = 0;
             CHECK(!invoke_allocation_run(artifact,modes[m],cancel) && live == baseline);
         }
-        fail_at = SIZE_MAX; xr_xir_compile_artifact_free(artifact); CHECK(!live);
+        fail_at=SIZE_MAX;xr_xir_compile_artifact_free(artifact);CHECK(live==1);
         printf("Invoke physical release: mode=%u cancel=%u allocation failure sites=%zu\n",modes[m],cancel,sites);
     }
     source_fixture_owner_free(&compiler);
@@ -406,10 +408,11 @@ static size_t program_allocation_failures(void) {
     size_t expected_calls = 0;
     for (size_t attempt = 0; attempt <= expected_calls; ++attempt) {
         fail_at = SIZE_MAX;
-        XrXirArtifact *artifact = program_fixture(0), *original = artifact;
+        AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
+        XrXirArtifact *artifact=program_fixture(&owner.context,0),*original=artifact;
         XrXirProgram *program = NULL;
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        XrXirStatus sealed = xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 16000000}, &program);
+        XrXirStatus sealed = xr_xir_compile_vm_program_take(&artifact, &program);
         if (sealed != XR_XIR_OK) {
             CHECK(attempt && sealed == XR_XIR_OUT_OF_MEMORY && !program && artifact == original);
         } else {
@@ -427,97 +430,79 @@ static size_t program_allocation_failures(void) {
                     CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_OOM);
                 CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
             }
-            xr_xir_program_drop(program);
+            xr_xir_compile_program_drop(program);
         }
         if (!attempt) expected_calls = calls;
-        xr_xir_artifact_free(artifact);
-        CHECK(live == 0);
+        xr_xir_compile_artifact_free(artifact);
+        fail_at=SIZE_MAX;allocation_compile_owner_drop(&owner);CHECK(live==0);
     }
     fail_at = SIZE_MAX;
     return expected_calls;
 }
 static size_t declaration_allocation_failures(void) {
-    XrXirArtifact *fixture = program_fixture(0);
-    size_t baseline = live, total = 0;
-    for (uint32_t phase = 0; phase < 3; ++phase) {
-        size_t expected_calls = 0;
-        for (size_t attempt = 0; attempt <= expected_calls; ++attempt) {
-            calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
-            XrXirArtifact *output = NULL;
-            XrXirCSource source = {0};
-            XrXirModule module = *xr_xir_artifact_module(fixture);
-            module.stage = XR_XIR_BUILT;
-            XrXirStatus status;
-            if (phase == 0) status = xr_xir_check(&module, NULL, &output, NULL);
-            else if (phase == 1) {
-                fixture->module.stage = XR_XIR_CHECKED;
-                status = xr_xir_lower(fixture, &fixture_target, NULL, &output, NULL);
-                fixture->module.stage = XR_XIR_LOWERED;
-            } else status = xr_xir_emit_c(fixture, "owned_program", 200000, &source);
-            CHECK(status == (attempt ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
-            if (!attempt) expected_calls = calls;
-            else CHECK(!output && !source.text);
-            xr_xir_artifact_free(output); xr_xir_c_source_free(&source);
-            CHECK(live == baseline);
+    AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
+    XrXirArtifact *checked=program_fixture_checked(&owner.context,0),*closed=NULL,*fixture=NULL;
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&fixture_target,&fixture,NULL)==XR_XIR_OK);
+    size_t baseline=live,total=0;
+    for(uint32_t phase=0;phase<3;++phase) {
+        size_t sites=0;
+        for(size_t attempt=0;attempt<=sites;++attempt) {
+            calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
+            XrXirArtifact *output=NULL;XrXirCSource source={0};
+            XrXirModule module=*xr_xir_compile_artifact_module(checked);module.stage=XR_XIR_BUILT;
+            XrXirStatus status=phase==0?xr_xir_compile_check(&owner.context,&module,&output,NULL):
+                phase==1?xr_xir_compile_lower(closed,&fixture_target,&output,NULL):
+                xr_xir_compile_emit_c(fixture,"owned_program",200000,&source);
+            CHECK(status==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
+            if(!attempt)sites=calls;else CHECK(!output && !source.text);
+            xr_xir_compile_artifact_free(output);xr_xir_compile_c_source_free(&source);CHECK(live==baseline);
         }
-        fail_at = SIZE_MAX; total += expected_calls;
+        fail_at=SIZE_MAX;total+=sites;
     }
-    xr_xir_artifact_free(fixture); CHECK(live == 0);
-    return total;
+    xr_xir_compile_artifact_free(fixture);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);
+    allocation_compile_owner_drop(&owner);CHECK(!live);return total;
 }
 
 #include "xir_nominal_fixture.h"
-static void nominal_allocation_failures(void) {
-    NominalFixture f; nominal_fixture(&f);
-    calls = 0; fail_at = SIZE_MAX;
-    XrXirBudget budget = xr_xir_default_budget();
-    XrXirNominalTable *copy = NULL;
-    CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_OK);
-    size_t count = calls;
-    CHECK(count >= 10 && live > 0);
-    xr_xir_nominal_free(copy); CHECK(live == 0);
-    for (size_t i = 0; i < count; ++i) {
-        calls = 0; fail_at = i;
-        budget = xr_xir_default_budget();
-        uint64_t bytes = budget.metadata_bytes, work = budget.work;
-        copy = (XrXirNominalTable *) (uintptr_t) 1;
-        CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_OUT_OF_MEMORY);
-        CHECK(!copy && !live && budget.metadata_bytes == bytes && budget.work == work);
-    }
-    calls = 0; fail_at = SIZE_MAX;
-    budget = xr_xir_default_budget();
-    uint64_t initial_work = budget.work;
-    CHECK(xr_xir_nominal_structure_verify(&f.table, NULL, &budget) == XR_XIR_OK);
-    uint64_t verify_work = initial_work - budget.work;
-    budget = xr_xir_default_budget(); budget.work = verify_work;
-    CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_BUDGET);
-    CHECK(!copy && calls == 0 && live == 0 && budget.work == verify_work);
-    budget = xr_xir_default_budget();
-    f.fields[0].type = XR_XIR_UNIT;
-    CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_BAD_TYPE);
-    CHECK(!copy && calls == 0 && live == 0);
+static XrXirStatus nominal_copy_operation(const XrXirCompileContext *context,void *opaque) {
+    NominalFixture *f=opaque;XrXirNominalTable *copy=NULL;
+    XrXirStatus status=xr_xir_compile_nominal_clone(context,&f->table,NULL,&copy);
+    if(status==XR_XIR_OK)CHECK(copy && copy->count==2 && copy->declarations[0].fields!=f->fields);
+    else CHECK(!copy);
+    xr_xir_compile_nominal_free(copy);return status;
 }
-
+static void nominal_allocation_failures(void) {
+    NominalFixture f;nominal_fixture(&f);
+    allocation_compile_operation_cases("nominal clone",nominal_copy_operation,&f);
+    AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
+    XrXirNominalTable *copy=NULL;f.fields[0].type=XR_XIR_UNIT;calls=0;
+    CHECK(xr_xir_compile_nominal_clone(&owner.context,&f.table,NULL,&copy)==XR_XIR_BAD_TYPE && !copy);
+    CHECK(!calls);allocation_compile_owner_drop(&owner);
+}
+static XrXirStatus nominal_pool_copy_operation(const XrXirCompileContext *context,void *opaque) {
+    XrXirTypes *types=opaque,*copy=NULL;
+    XrXirStatus status=xr_xir_compile_types_clone(context,types,&copy);
+    if(status==XR_XIR_OK)CHECK(copy && copy->nominals && copy->nodes!=types->nodes);
+    else CHECK(!copy);
+    xr_xir_compile_types_free(copy);return status;
+}
 static void nominal_pool_allocation_failures(void) {
-    NominalFixture f; nominal_fixture(&f);
-    XrXirType argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}}};
-    XrXirTypes types = {nodes, 2, &f.table, NULL};
-    XrXirBudget budget = xr_xir_default_budget();
-    CHECK(xr_xir_types_structure_verify(&types, &budget) == XR_XIR_OK);
-    calls = 0; fail_at = SIZE_MAX;
-    XrXirTypes *copy = NULL;
-    CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OK && copy->nominals);
-    size_t count = calls;
-    CHECK(count >= 10);
-    xr_xir_types_free(copy); CHECK(live == 0);
-    for (size_t i = 0; i < count; ++i) {
-        calls = 0; fail_at = i;
-        CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OUT_OF_MEMORY);
-        CHECK(!copy && !live);
-    }
-    calls = 0; fail_at = SIZE_MAX;
+    NominalFixture f;nominal_fixture(&f);
+    XrXirType argument=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode nodes[]={{XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,{0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&argument,1,NULL,0}}};
+    XrXirTypes types={nodes,2,&f.table,NULL};
+    AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
+    CHECK(xr_xir_compile_types_structure_verify(&owner.context,&types)==XR_XIR_OK);
+    allocation_compile_owner_drop(&owner);
+    allocation_compile_operation_cases("nominal type pool clone",nominal_pool_copy_operation,&types);
+}
+static XrXirStatus allocation_check_operation(const XrXirCompileContext *context,void *opaque) {
+    XrXirArtifact *artifact=NULL;
+    XrXirStatus status=xr_xir_compile_check(context,opaque,&artifact,NULL);
+    if(status!=XR_XIR_OK)CHECK(!artifact);
+    xr_xir_compile_artifact_free(artifact);return status;
 }
 
 #include "xir_class_owned_allocations.h"
@@ -551,58 +536,48 @@ int main(void) {
     };
     XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    XrXirBudget exact = xr_xir_default_budget();
-    exact.metadata_bytes = sizeof(XrXirArtifact);
-    for (size_t i = 0; i < 2; ++i)
-        exact.metadata_bytes += sizeof(XrXirFunction) + functions[i].name_length +
-            functions[i].parameter_count * sizeof(XrXirType) +
-            sizeof(XrXirBlock) + 3 * sizeof(XrXirInstruction);
-    --exact.metadata_bytes;
-    CHECK(xr_xir_check(&module, &exact, &checked, NULL) == XR_XIR_BUDGET);
-    CHECK(!checked && live == 0);
-    ++exact.metadata_bytes;
-    CHECK(xr_xir_check(&module, &exact, &checked, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
-    CHECK(live == 0);
+    allocation_compile_operation_cases("two-function Check",allocation_check_operation,&module);
+    AllocationCompileOwner compiler={0};allocation_compile_owner_new(&compiler,&allocation_compile_limits);
+    size_t compiler_live=live;
     calls = 0;
-    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(&compiler.context,&module, &checked, NULL) == XR_XIR_OK);
     size_t check_calls = calls;
     CHECK(live > 0);
-    xr_xir_artifact_free(checked);
-    CHECK(live == 0);
+    xr_xir_compile_artifact_free(checked);
+    CHECK(live == compiler_live);
     for (size_t i = 0; i < check_calls; ++i) {
         calls = 0;
         fail_at = i;
         checked = NULL;
-        CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_check(&compiler.context,&module, &checked, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(checked == NULL);
-        CHECK(live == 0);
+        CHECK(live == compiler_live);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check(&compiler.context,&module, &checked, NULL) == XR_XIR_OK);
     size_t checked_live = live;
     calls = 0;
-    CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
     size_t lower_calls = calls;
-    xr_xir_artifact_free(lowered);
+    xr_xir_compile_artifact_free(lowered);
     CHECK(live == checked_live);
     for (size_t i = 0; i < lower_calls; ++i) {
         calls = 0;
         fail_at = i;
         lowered = NULL;
-        CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(lowered == NULL);
         CHECK(live == checked_live);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_verify(xr_xir_artifact_module(checked), NULL, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_compile_verify(&compiler.context,xr_xir_compile_artifact_module(checked),NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
     size_t lowered_live = live;
     calls = 0;
     XrXirRunContext context = {3, 16, 0, 0, 0, 0};
     XrXirValue result;
-    CHECK(xr_xir_vm_run(lowered, 0, &context, NULL, 0, &result) == XR_XIR_RUN_OK);
+    CHECK(xr_xir_compile_vm_run(lowered, 0, &context, NULL, 0, &result) == XR_XIR_RUN_OK);
     CHECK(result.payload == 42 && live == lowered_live);
     size_t run_calls = calls;
     for (size_t i = 0; i < run_calls; ++i) {
@@ -610,39 +585,40 @@ int main(void) {
         fail_at = i;
         context = (XrXirRunContext) {3, 16, 0, 0, 0, 0};
         result = (XrXirValue) {99, 99, 99};
-        CHECK(xr_xir_vm_run(lowered, 0, &context, NULL, 0, &result) == XR_XIR_RUN_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_vm_run(lowered, 0, &context, NULL, 0, &result) == XR_XIR_RUN_OUT_OF_MEMORY);
         CHECK(result.type == 0 && result.reserved == 0 && result.payload == 0);
         CHECK(context.live_bytes == 0 && context.allocations == context.frees);
         CHECK(live == lowered_live);
     }
     fail_at = SIZE_MAX;
     calls = 0;
-    XrXirCSource source;
-    CHECK(xr_xir_emit_leaf_c(lowered, "allocation", 65536, &source) == XR_XIR_OK);
+    XrXirCSource source={0};
+    CHECK(xr_xir_compile_emit_leaf_c(lowered, "allocation", 65536, &source) == XR_XIR_OK);
     size_t emit_calls = calls;
-    xr_xir_c_source_free(&source);
+    xr_xir_compile_c_source_free(&source);
     CHECK(live == lowered_live);
     for (size_t i = 0; i < emit_calls; ++i) {
         calls = 0;
         fail_at = i;
-        CHECK(xr_xir_emit_leaf_c(lowered, "allocation", 65536, &source) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_emit_leaf_c(lowered, "allocation", 65536, &source) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!source.text && !source.length && live == lowered_live);
     }
     fail_at = SIZE_MAX;
     calls = 0;
-    CHECK(xr_xir_emit_c(lowered, "resumable", 65536, &source) == XR_XIR_OK);
+    CHECK(xr_xir_compile_emit_c(lowered, "resumable", 65536, &source) == XR_XIR_OK);
     size_t resume_emit_calls = calls;
-    xr_xir_c_source_free(&source);
+    xr_xir_compile_c_source_free(&source);
     CHECK(live == lowered_live);
     for (size_t i = 0; i < resume_emit_calls; ++i) {
         calls = 0;
         fail_at = i;
-        CHECK(xr_xir_emit_c(lowered, "resumable", 65536, &source) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_emit_c(lowered, "resumable", 65536, &source) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!source.text && !source.length && live == lowered_live);
     }
     fail_at = SIZE_MAX;
-    xr_xir_artifact_free(lowered);
-    CHECK(live == 0);
+    xr_xir_compile_artifact_free(lowered);
+    CHECK(live == compiler_live);
+    allocation_compile_owner_drop(&compiler);CHECK(!live);
     size_t call_sites = call_allocation_failures();
     printf("XIR physical release passed at %zu check, %zu lower, %zu VM, %zu emit allocation sites\n",
            check_calls, lower_calls, run_calls, emit_calls);
