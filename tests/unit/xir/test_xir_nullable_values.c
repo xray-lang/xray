@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
+#include "xir_library_compile_owner.h"
+static const XrXirCompileContext *nullable_context;
 #include "xir_runtime_allocations.h"
 #include "xir_nullable_golden.h"
 
@@ -25,14 +27,25 @@ static void nullable_packet_hash(XrXirCheckedPacket *packet) {
     XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,packet->bytes,32);
     xr_sha256_update(&hash,packet->bytes+64,packet->length-64);xr_sha256_final(&hash,packet->bytes+32);
 }
+typedef struct NullablePacketFixture {const uint8_t *bytes;size_t length,last_sites;} NullablePacketFixture;
+static XrXirStatus nullable_packet_operation(const XrXirCompileContext *context,void *opaque) {
+    NullablePacketFixture *fixture=opaque;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
+    size_t before=source_program_compile_attempts;
+    XrXirStatus status=xr_xir_compile_checked_read(context,fixture->bytes,fixture->length,&artifact,NULL);
+    if(status!=XR_XIR_OK){CHECK(!artifact);return status;}
+    status=xr_xir_compile_checked_write(artifact,&packet,NULL);
+    if(status==XR_XIR_OK){CHECK(packet.length==fixture->length&&!memcmp(packet.bytes,fixture->bytes,packet.length));fixture->last_sites=source_program_compile_attempts-before;}
+    else CHECK(!packet.bytes&&!packet.length);
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(artifact);return status;
+}
 static void nullable_packets(void) {
     for (uint32_t some=0;some<2;++some) {
         const uint8_t *golden=some ? nullable_some_golden : nullable_none_golden;
         size_t length=some ? sizeof(nullable_some_golden) : sizeof(nullable_none_golden);
         XrXirArtifact *checked=NULL;XrXirCheckedPacket packet={0};
-        CHECK(xr_xir_checked_read(golden,length,NULL,&checked,NULL)==XR_XIR_OK);
-        CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
-        CHECK(packet.length==length && !memcmp(packet.bytes,golden,length));xr_xir_artifact_free(checked);
+        CHECK(xr_xir_compile_checked_read(nullable_context,golden,length,&checked,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
+        CHECK(packet.length==length && !memcmp(packet.bytes,golden,length));xr_xir_compile_artifact_free(checked);
         size_t live=runtime_live,bytes=runtime_bytes;size_t op=some ? 153 : 113;
         const struct {size_t offset;uint32_t value;} attacks[]={
             {length-20,6},{length-16,1},{length-12,XR_XIR_UNIT},{length-12,256},{length-12,257},
@@ -41,23 +54,21 @@ static void nullable_packets(void) {
         };
         for (uint32_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
             memcpy(packet.bytes,golden,length);nullable_word(packet.bytes+attacks[i].offset,attacks[i].value);
-            nullable_packet_hash(&packet);checked=(XrXirArtifact *)(uintptr_t)1;
-            XrXirStatus status=xr_xir_checked_read(packet.bytes,length,NULL,&checked,NULL);
+            nullable_packet_hash(&packet);checked=NULL;
+            XrXirStatus status=xr_xir_compile_checked_read(nullable_context,packet.bytes,length,&checked,NULL);
             if (status==XR_XIR_OK) fprintf(stderr,"Nullable packet some=%u attack=%u accepted\n",some,i);
             CHECK(status!=XR_XIR_OK && !checked && runtime_live==live && runtime_bytes==bytes);
+            checked=(XrXirArtifact *)(uintptr_t)1;
+            CHECK(xr_xir_compile_checked_read(nullable_context,packet.bytes,length,&checked,NULL)==status&&checked==(XrXirArtifact *)(uintptr_t)1);checked=NULL;
         }
         memcpy(packet.bytes,golden,length);nullable_word(packet.bytes+12,57);nullable_packet_hash(&packet);
-        runtime_attempts=0;checked=(XrXirArtifact *)(uintptr_t)1;
-        CHECK(xr_xir_checked_read(packet.bytes,length,NULL,&checked,NULL)==XR_XIR_BAD_STRUCTURE);
-        CHECK(!checked && !runtime_attempts && runtime_live==live && runtime_bytes==bytes);
-        runtime_attempts=0;CHECK(xr_xir_checked_read(golden,length,NULL,&checked,NULL)==XR_XIR_OK);
-        size_t sites=runtime_attempts;xr_xir_artifact_free(checked);
-        for (size_t at=0;at<sites;++at) {
-            runtime_attempts=0;runtime_fail_at=at;checked=(XrXirArtifact *)(uintptr_t)1;
-            XrXirStatus status=xr_xir_checked_read(golden,length,NULL,&checked,NULL);runtime_fail_at=SIZE_MAX;
-            CHECK(status==XR_XIR_OUT_OF_MEMORY && !checked && runtime_live==live && runtime_bytes==bytes);
-        }
-        xr_xir_checked_packet_free(&packet);CHECK(!runtime_live && !runtime_bytes);
+        source_program_compile_attempts=0;checked=NULL;
+        CHECK(xr_xir_compile_checked_read(nullable_context,packet.bytes,length,&checked,NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(!checked && !source_program_compile_attempts && runtime_live==live && runtime_bytes==bytes);
+        NullablePacketFixture fixture={golden,length,0};
+        library_compile_operation_cases("Nullable independent packet",nullable_packet_operation,&fixture);
+        size_t sites=fixture.last_sites;
+        xr_xir_compile_checked_packet_free(&packet);CHECK(!runtime_live && !runtime_bytes);
         printf("Nullable independent packet some=%u attacks=%zu OOM=%zu old57 early refusal PASS\n",
             some,sizeof(attacks)/sizeof(attacks[0]),sites);
     }
@@ -75,9 +86,9 @@ static XrXirTypeArena *nullable_arena(XrXirDomain *domain) {
         {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)258},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)260}
     };
-    XrXirTypes types={nodes,6,NULL,NULL};XrXirBudget budget=xr_xir_default_budget();
+    XrXirTypes types={nodes,6,NULL,NULL};(void)domain;
     XrXirTypeArena *arena=NULL;
-    CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_compile_type_arena_new(nullable_context,&types,&arena)==XR_XIR_VALUE_OK);
     return arena;
 }
 static void nullable_layouts(void) {
@@ -89,11 +100,11 @@ static void nullable_layouts(void) {
     for (uint32_t i=0;i<sizeof(elements)/sizeof(elements[0]);++i) {
         XrXirTypeNode node={.kind=XR_XIR_TYPE_NULLABLE,.element=elements[i]};
         XrXirTypes types={&node,1,NULL,NULL};XrXirLayout layout={0};
-        CHECK(xr_xir_layout(&types,(XrXirType)256,&target,XR_XIR_LAYOUT_STORAGE,&layout)==XR_XIR_OK);
+        CHECK(xr_xir_compile_layout(nullable_context,&types,(XrXirType)256,&target,XR_XIR_LAYOUT_STORAGE,&layout)==XR_XIR_OK);
         CHECK(layout.size==sizes[i] && layout.alignment==alignments[i]);
-        CHECK(xr_xir_layout(&types,(XrXirType)256,&target,XR_XIR_LAYOUT_SSA,&layout)==XR_XIR_OK);
+        CHECK(xr_xir_compile_layout(nullable_context,&types,(XrXirType)256,&target,XR_XIR_LAYOUT_SSA,&layout)==XR_XIR_OK);
         CHECK(layout.size==8 && layout.alignment==8);
-        CHECK(xr_xir_layout(&types,(XrXirType)256,&target,XR_XIR_LAYOUT_PARAMETER,&layout)==XR_XIR_OK);
+        CHECK(xr_xir_compile_layout(nullable_context,&types,(XrXirType)256,&target,XR_XIR_LAYOUT_PARAMETER,&layout)==XR_XIR_OK);
         CHECK(layout.size==16 && layout.alignment==8);
     }
 }
@@ -118,7 +129,7 @@ static void nullable_variants(void) {
     XirNominalValue *raw=(XirNominalValue *)object_pointer(&some);raw->variant=2;
     CHECK(!xr_xir_value_valid(&some));raw->variant=1;
     xr_xir_value_drop(&some);xr_xir_value_drop(&none);
-    xr_xir_type_arena_drop(arena);xr_xir_type_arena_drop(foreign);
+    xr_xir_compile_type_arena_drop(arena);xr_xir_compile_type_arena_drop(foreign);
     CHECK(xr_xir_nullable_view(&held,&active,&payload) && !active && !payload);
     xr_xir_value_drop(&held);xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
 }
@@ -144,7 +155,7 @@ static void nullable_ieee_and_cow(void) {
     CHECK(xr_xir_value_equal(&read,&read,(XrXirType)257,&admission,&equal)==XR_XIR_VALUE_OK && !equal);
     xr_xir_value_drop(&read);xr_xir_value_drop(&array);xr_xir_value_drop(&alias);
     for (uint32_t i=0;i<4;++i) xr_xir_value_drop(&values[i]);
-    xr_xir_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
+    xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
 }
 static void nullable_actual_oom(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
@@ -176,12 +187,14 @@ static void nullable_actual_oom(void) {
     XrXirFaultDetail fault={0};admission=nullable_admission(domain,arena);
     CHECK(xr_xir_array_get(&array,1,&admission,&held,&fault)==XR_XIR_VALUE_OK);
     xr_xir_value_drop(&array);xr_xir_value_drop(&values[0]);xr_xir_value_drop(&values[1]);xr_xir_value_drop(&text);
-    xr_xir_type_arena_drop(arena);bool some=false;const XrXirValue *payload=NULL;const char *bytes=NULL;size_t length=0;
+    xr_xir_compile_type_arena_drop(arena);bool some=false;const XrXirValue *payload=NULL;const char *bytes=NULL;size_t length=0;
     CHECK(xr_xir_nullable_view(&held,&some,&payload) && some && xr_xir_string_view(payload,&bytes,&length));
     CHECK(length==3 && !memcmp(bytes,"a\0b",3));
     xr_xir_value_drop(&held);xr_xir_domain_drop(domain);CHECK(!runtime_live && !runtime_bytes);
 }
 int main(void) {
+    LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);nullable_context=&compiler.context;
     nullable_packets();nullable_layouts();nullable_variants();nullable_ieee_and_cow();nullable_actual_oom();
+    library_compile_owner_drop(&compiler);library_compile_observer_free();
     puts("Nullable independent layout/variants/arena/IEEE/COW/OOM/lifetime PASS");return 0;
 }

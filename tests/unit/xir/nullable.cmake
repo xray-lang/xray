@@ -1,5 +1,5 @@
 # Exact sums share the value, storage, Source, packet and execution owners.
-add_xray_bootstrap_executable(test_xir_nullable_values ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_nullable_values.c)
+add_executable(test_xir_nullable_values ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_nullable_values.c)
 target_link_libraries(test_xir_nullable_values PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 if(MSVC)
     target_compile_options(test_xir_nullable_values PRIVATE /W4 /WX)
