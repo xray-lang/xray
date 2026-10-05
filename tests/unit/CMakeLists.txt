@@ -3152,11 +3152,13 @@ add_test(NAME test_assertion_retired_names_are_ordinary
     COMMAND $<TARGET_FILE:xray> run
             ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/assertion/retired_names_are_ordinary.xr)
 set_tests_properties(test_assertion_retired_names_are_ordinary PROPERTIES
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     LABELS "frontend;vm;assertion;removed-surface")
 add_test(NAME test_assertion_same_t_contextual
     COMMAND $<TARGET_FILE:xray> run
             ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/assertion/same_t_contextual.xr)
 set_tests_properties(test_assertion_same_t_contextual PROPERTIES
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     LABELS "frontend;vm;assertion;type-system")
 add_test(NAME test_array_growth_accounting
     COMMAND $<TARGET_FILE:xray> run

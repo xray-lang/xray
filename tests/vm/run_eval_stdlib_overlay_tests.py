@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""The retired source-string entry points stay closed while `run -` remains.
+"""Retired source-string entry points stay closed; run uses a file authority.
 
 The historical filename is retained because CTest owns it as a long-lived
 regression entry. The product boundary is now explicit: neither `eval` nor its
 `-e` alias may execute source, while the ordinary source compiler/runtime path
-continues to accept stdin.
+executes a file-backed source with the same independent output oracle.
 
 Usage: run_eval_stdlib_overlay_tests.py [xray]
 """
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -50,12 +52,23 @@ def main(argv: list[str]) -> int:
             return 1
 
     source = b'print("source-run-kept")\n'
-    result = proc.run([xray, "run", "-"], cwd=PROJECT_DIR, stdin=source,
-                      timeout=timeout)
-    if not result.ok or normalize(result.stdout) != "source-run-kept":
-        sys.stderr.write("FAIL run_stdin: ordinary source execution regressed\n"
-                         f"{result.combined_text()}\n")
+    rejected = proc.run([xray, "run", "-"], cwd=PROJECT_DIR, stdin=source,
+                        timeout=timeout)
+    if (rejected.returncode != 1 or rejected.stdout or rejected.stderr !=
+            b"XR_RUN_6011: canonical run requires a file-backed source authority\n"):
+        sys.stderr.write("FAIL run_stdin: expected file-authority rejection\n"
+                         f"{rejected.combined_text()}\n")
         return 1
+
+    with tempfile.TemporaryDirectory(prefix="xray-source-authority-") as temporary:
+        entry = Path(temporary) / "main.xr"
+        entry.write_bytes(source)
+        result = proc.run([xray, "run", entry], cwd=PROJECT_DIR, timeout=timeout)
+        if (not result.ok or result.stdout != b"source-run-kept\n" or
+                result.stderr or entry.read_bytes() != source):
+            sys.stderr.write("FAIL run_file: ordinary source execution regressed\n"
+                             f"{result.combined_text()}\n")
+            return 1
 
     print("source eval cutover tests passed")
     return 0
