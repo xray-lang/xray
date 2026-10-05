@@ -11,7 +11,7 @@ OWNERS = {
     'src/xir/CMakeLists.txt': ['xray_xir_admission', 'xray_xir_declarations', 'xray_xir_scalar'],
     'src/execution/xir_runtime_host.cmake': ['xray_xir_runtime_host'],
 }
-GENERATED_RUNTIME_ROOTS = ['src/xir/xxir_equal.h', 'src/xir/xxir_panic.h',
+GENERATED_RUNTIME_ROOTS = ['src/xir/xxir_equal.h', 'src/xir/xxir_panic.h', 'src/xir/xxir_atomic.h',
                            'src/xir/xxir_output.h', 'src/xir/xxir_nullable.h', 'src/shared/xr_error_core.h',
                            'src/execution/xr_xir_native_main.inc.c']
 

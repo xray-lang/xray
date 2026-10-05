@@ -1,0 +1,444 @@
+{
+  "base_commit": "4781360199388541e44b03247a2e41fe7bb1a883",
+  "old_identity": [
+    24,
+    63,
+    20,
+    25,
+    28
+  ],
+  "metadata": "Two real projected nominal identities in actual generated C",
+  "source": {
+    "path": "old28_generated.c",
+    "sha256": "6ce6ce01cc62f513d87acfafe7a5508f164c8915675daf1a347ea7dc14743947"
+  },
+  "headers": {
+    "path": "old28_headers.zip",
+    "sha256": "401db74e51437045b863356a56a144623e503626b3554e4ad6bdacb4b997597e",
+    "members": [
+      {
+        "path": "src/base/xchecks.h",
+        "kind": 2,
+        "length": 11887,
+        "sha256": "d6df8d8aa5fd9e4441a24217ba07c3e36622538a6398ad22ac251653cb3702ad"
+      },
+      {
+        "path": "src/base/xcompile_resources.h",
+        "kind": 2,
+        "length": 4373,
+        "sha256": "1a5d4260bf38658214ce2fd19ac975db7dfe7ad9bf6be00a4e435b53b82e9515"
+      },
+      {
+        "path": "src/base/xdefs.h",
+        "kind": 2,
+        "length": 7284,
+        "sha256": "3373a78ba65d4a985692d68e715c26306f73c8cc39163aa8d3cfd5a948c3c533"
+      },
+      {
+        "path": "src/base/xmalloc.h",
+        "kind": 2,
+        "length": 10966,
+        "sha256": "d1b877cb92aceb2bc6205822b8915586eea9f54cfccb6770f644ded1e8cb5822"
+      },
+      {
+        "path": "src/base/xplatform.h",
+        "kind": 2,
+        "length": 4868,
+        "sha256": "5a820a5ad14298cbb811368faaf509d8f4b7765cc7ba38f98b5196c6bbc0005e"
+      },
+      {
+        "path": "src/base/xposix_compat.h",
+        "kind": 2,
+        "length": 5283,
+        "sha256": "661abd2d7cc81abe599723bc95331605eaf1e71553fabcdbad73bfba84bac87f"
+      },
+      {
+        "path": "src/base/xsha256.h",
+        "kind": 2,
+        "length": 1049,
+        "sha256": "0ebae8bc46501a097faaeaa03413f16a85f40b2d92915c9ee27ed0440b0df241"
+      },
+      {
+        "path": "src/base/xstable_id.h",
+        "kind": 2,
+        "length": 786,
+        "sha256": "1b39a60e3f047ff560640addb47d548a146af60a7c0c1d8c6a06ce06998bc16c"
+      },
+      {
+        "path": "src/execution/xr_xir_host_cli.h",
+        "kind": 2,
+        "length": 1759,
+        "sha256": "a9a7bfa42410c8be34664a377cfce01398a9c431eb27573b4837ddabf41de3be"
+      },
+      {
+        "path": "src/execution/xr_xir_host_execution.h",
+        "kind": 2,
+        "length": 2832,
+        "sha256": "f3f66edb2a309194a412b1a3d70a93f0b7bc483dd0cce580e094ba9bdd611728"
+      },
+      {
+        "path": "src/execution/xr_xir_host_time.h",
+        "kind": 2,
+        "length": 1838,
+        "sha256": "c758658c96f793850886a43ae8b9555269987badf693a4c6e320c25adcee7386"
+      },
+      {
+        "path": "src/os/os_time.h",
+        "kind": 2,
+        "length": 2734,
+        "sha256": "ae69fdc1f118c0fc2fb3be1584712eac09bfa402a5537022d5f7aa493c426eaf"
+      },
+      {
+        "path": "src/shared/xnative_declaration.h",
+        "kind": 2,
+        "length": 5401,
+        "sha256": "8e38a34fe8e19b22de45fa30e4572a4e1cd8e4092476fb99068ddfdb9808d0ad"
+      },
+      {
+        "path": "src/shared/xr_decimal_float.h",
+        "kind": 2,
+        "length": 13004,
+        "sha256": "e0f7c3149215b1e23e2ed805bf206f342f1424fe38d33ae2dd187fa57439dff5"
+      },
+      {
+        "path": "src/shared/xr_error_core.h",
+        "kind": 2,
+        "length": 5023,
+        "sha256": "10b1f08584f258e1de1c84aae9ab891a628ffe8d1d14cb01aef7dd5319d383fb"
+      },
+      {
+        "path": "src/shared/xr_error_messages.h",
+        "kind": 2,
+        "length": 12363,
+        "sha256": "f18e487b8404343395a28870bff0033f95b30bb170d7695c5b7e22d2eb586711"
+      },
+      {
+        "path": "src/shared/xr_string_core.h",
+        "kind": 2,
+        "length": 27469,
+        "sha256": "92c7a357946c66ebe60d4a25ad6d45db80660ad2e445edc13ded0555df10621f"
+      },
+      {
+        "path": "src/shared/xr_string_parse_core.h",
+        "kind": 2,
+        "length": 11708,
+        "sha256": "71a7506ed7ebd606b7447ce22864758c8903df01e9fc84f475d641813a7b350a"
+      },
+      {
+        "path": "src/shared/xr_time_offset.h",
+        "kind": 2,
+        "length": 2245,
+        "sha256": "737b9dadbde51124fd54ddbdbc5cbbdb8967fa8799c8aab9da7bec7c9896d456"
+      },
+      {
+        "path": "src/shared/xr_utf8_core.h",
+        "kind": 2,
+        "length": 9986,
+        "sha256": "a8a767c764b13607b9a5d1d4d0c701b469a657d7f9d12d26cc8fffb17ccc89c2"
+      },
+      {
+        "path": "src/shared/xr_value_format_core.h",
+        "kind": 2,
+        "length": 8144,
+        "sha256": "74588110334ba8b60bb14e408e56f02c32c52507a1f1f016d0244b3c62e76374"
+      },
+      {
+        "path": "src/xir/xxir.h",
+        "kind": 2,
+        "length": 9669,
+        "sha256": "79ab637ecf2c02a1ce7c83a502b64fcab4d4b5b8710916a19b2d42f4b7ce008a"
+      },
+      {
+        "path": "src/xir/xxir_array.h",
+        "kind": 2,
+        "length": 1519,
+        "sha256": "8940f1d7635f3dca9809a5ccd270533b1a077d87bfa5ead777c4a839c3155a62"
+      },
+      {
+        "path": "src/xir/xxir_call.h",
+        "kind": 2,
+        "length": 9975,
+        "sha256": "b7c999b64bb88130ddcbda07f67f670119b9908cfca3e5b6d934d588f6251e03"
+      },
+      {
+        "path": "src/xir/xxir_checked.h",
+        "kind": 2,
+        "length": 1023,
+        "sha256": "813a6d2ce8f8e7ee7e020172b2a7deaa9d3e15031203e2bababa32d0fb846ac5"
+      },
+      {
+        "path": "src/xir/xxir_class.h",
+        "kind": 2,
+        "length": 1301,
+        "sha256": "ffbcf5cba77f6356479df7d0a6427d1b87e83999ab7d56ac0ca2379e9a179b8b"
+      },
+      {
+        "path": "src/xir/xxir_compile_context.h",
+        "kind": 2,
+        "length": 1015,
+        "sha256": "acf27ce6cf7cd8874d35a6fe97646f4ecf414f850ee63d62589f10e47e715ade"
+      },
+      {
+        "path": "src/xir/xxir_compile_memory.h",
+        "kind": 2,
+        "length": 2614,
+        "sha256": "5d3a1d42fc5c8d3da66c67858da9e284a5ae560e80097dcfd627800efa73726f"
+      },
+      {
+        "path": "src/xir/xxir_constraint_proof.h",
+        "kind": 2,
+        "length": 4370,
+        "sha256": "423df117c3ab8b6ef4f0c19ca4c6919cdc497f3199884e71946fe7dd04d627a8"
+      },
+      {
+        "path": "src/xir/xxir_constraint_proof_internal.h",
+        "kind": 2,
+        "length": 1600,
+        "sha256": "6e3f0f77b83d2ff23767694105c2036b39f753f2c9b992ed4734c28c1be005b6"
+      },
+      {
+        "path": "src/xir/xxir_constraints.h",
+        "kind": 2,
+        "length": 1643,
+        "sha256": "8f66dd6af6dac7c1d32748f9f6a7f51e0a1abe979fab66fc022548056e102898"
+      },
+      {
+        "path": "src/xir/xxir_declarations.h",
+        "kind": 2,
+        "length": 2273,
+        "sha256": "3d76312d07fc66774fb2caf11c31ca5e61c8ae9d9a7f92e8836388c4aed24a0d"
+      },
+      {
+        "path": "src/xir/xxir_defaults_internal.h",
+        "kind": 2,
+        "length": 1156,
+        "sha256": "c6fb3758b024931b7862d617573142639ea98e9e7bc00b7ec6b484f26719ab83"
+      },
+      {
+        "path": "src/xir/xxir_effects.h",
+        "kind": 2,
+        "length": 2057,
+        "sha256": "7348823e5758feeec07c611a466f5cb1f9201e1744c2e90cea43018f104dd15f"
+      },
+      {
+        "path": "src/xir/xxir_enum.h",
+        "kind": 2,
+        "length": 1293,
+        "sha256": "b092d364f25a906b8373eacf0d6085c637f30524526cfa1b98ce3d3d510f859e"
+      },
+      {
+        "path": "src/xir/xxir_equal.h",
+        "kind": 2,
+        "length": 718,
+        "sha256": "439df1af4b75b3fd59b3ceee770f5662d511ecde2da3696ae226c0ed8090b237"
+      },
+      {
+        "path": "src/xir/xxir_error.h",
+        "kind": 2,
+        "length": 1238,
+        "sha256": "2ecd6ffb9f5571b3b9ea41963d1b3f25ff3cbf06892e931278fa2693b8d92c05"
+      },
+      {
+        "path": "src/xir/xxir_fault.h",
+        "kind": 2,
+        "length": 2893,
+        "sha256": "8afce8e0ef0e3dffdff81cfb9663497b217517d16008f2c9dfaaf7f425af947b"
+      },
+      {
+        "path": "src/xir/xxir_float.h",
+        "kind": 2,
+        "length": 2522,
+        "sha256": "d948816f55899b548df70fdcf2c38cf0f59d0990d1eb9dd21db5d7472839e480"
+      },
+      {
+        "path": "src/xir/xxir_format.h",
+        "kind": 2,
+        "length": 738,
+        "sha256": "7c9ce49a85d5f9e6e7e556e943642dab6ed442e016aee017399ee98d3b2fd323"
+      },
+      {
+        "path": "src/xir/xxir_generic.h",
+        "kind": 2,
+        "length": 2437,
+        "sha256": "5e5dacecb5d3115f72eef2a40d98c079ccb471eb2f06f44a4355a771e32a6670"
+      },
+      {
+        "path": "src/xir/xxir_implementation.h",
+        "kind": 2,
+        "length": 1407,
+        "sha256": "74c5f54589f934e54b302c96eedf59f037a7e8ef65853549378bbfa9fef6b6a9"
+      },
+      {
+        "path": "src/xir/xxir_implementation_verify.h",
+        "kind": 2,
+        "length": 1573,
+        "sha256": "acc9f2d7b838adc4691cec0c59e261cf5b846be1ea8661dbbb7e498916e35e6d"
+      },
+      {
+        "path": "src/xir/xxir_initialization.h",
+        "kind": 2,
+        "length": 1142,
+        "sha256": "9b3261d59f17485a519aab834b67c8ef335aa1833bf00d21ef1d1899ab3496ea"
+      },
+      {
+        "path": "src/xir/xxir_instance_value.h",
+        "kind": 2,
+        "length": 2754,
+        "sha256": "cc96014656a3de9a8be8ea6dc496bafe64c15dcb0ff21ccf3eaa250fe3b7b1a5"
+      },
+      {
+        "path": "src/xir/xxir_interface.h",
+        "kind": 2,
+        "length": 2336,
+        "sha256": "3695a3c537eff58e008033bbb2990c22355865e34d3e4c468931c4a122d6972f"
+      },
+      {
+        "path": "src/xir/xxir_interface_members.h",
+        "kind": 2,
+        "length": 3874,
+        "sha256": "479d8181ebc146e569d778ae365023d1b00a2256a63cf1ad376a4c5ceb4a8164"
+      },
+      {
+        "path": "src/xir/xxir_internal.h",
+        "kind": 2,
+        "length": 2639,
+        "sha256": "7a0f9d1e60dd3d6c4335ab69b814cbac6ff9d23f420d2f5add1d85138a820001"
+      },
+      {
+        "path": "src/xir/xxir_nominal.h",
+        "kind": 2,
+        "length": 3567,
+        "sha256": "ec42f0fd4cb6f04edb1d1131cff28acf1841fd2932f4bc93c9a5930d88dfb1ba"
+      },
+      {
+        "path": "src/xir/xxir_nullable.h",
+        "kind": 2,
+        "length": 861,
+        "sha256": "8fc74a814b27904c034ca534a795cb209ce479859a0c72b2ada6ece417381883"
+      },
+      {
+        "path": "src/xir/xxir_operand_roles.h",
+        "kind": 2,
+        "length": 4416,
+        "sha256": "cfb00cc45c4a22dc6373c88285823ae8ef18c6f85923c0e222e18a33b8c841d0"
+      },
+      {
+        "path": "src/xir/xxir_ops.def",
+        "kind": 4,
+        "length": 5372,
+        "sha256": "9d45cd1f5c6e017fbc5271dd35b48628d9d853dacd4484bff23631ffd2622cc6"
+      },
+      {
+        "path": "src/xir/xxir_output.h",
+        "kind": 2,
+        "length": 1142,
+        "sha256": "210b72b2dc2fa0929310e63bf77b37c52604aa487f23f01a1716ca267df36c4e"
+      },
+      {
+        "path": "src/xir/xxir_output_status.h",
+        "kind": 2,
+        "length": 673,
+        "sha256": "98a2f51f41f649ea9b09673ad0a235e0fc641188ffbf3e69498820f75aed330b"
+      },
+      {
+        "path": "src/xir/xxir_panic.h",
+        "kind": 2,
+        "length": 2126,
+        "sha256": "2016ad30d34814980eb68b581231ec2bb88d3b8fc9a2637509b72b2fce788e4b"
+      },
+      {
+        "path": "src/xir/xxir_program.h",
+        "kind": 2,
+        "length": 7333,
+        "sha256": "fd0fa5e7ba3f99611df7cea514b131308b03f7a662e2fc56f02be616b3345954"
+      },
+      {
+        "path": "src/xir/xxir_program_internal.h",
+        "kind": 2,
+        "length": 1710,
+        "sha256": "ffb3966e393c05ee774af7a013c94cbdaba476942f313f257eae308aaf8e1eb5"
+      },
+      {
+        "path": "src/xir/xxir_rune.h",
+        "kind": 2,
+        "length": 1147,
+        "sha256": "7466b06cd4adfa5ad97808b0f02669c8bf904a961bda13cc79beef5f19d3314e"
+      },
+      {
+        "path": "src/xir/xxir_scalar.h",
+        "kind": 2,
+        "length": 3444,
+        "sha256": "e656916b80d08c63e076e119ba91696f8ebc5505e4d097d5447fdbe031909fa0"
+      },
+      {
+        "path": "src/xir/xxir_storage.h",
+        "kind": 2,
+        "length": 1229,
+        "sha256": "45222c45d1e5542a00c4bedef636432f800014386e40450c12e5f5826bbd1d8b"
+      },
+      {
+        "path": "src/xir/xxir_struct.h",
+        "kind": 2,
+        "length": 911,
+        "sha256": "5674711a3a87bdef9ae2965bbae55e864e6f17d43320aa04002652d1d15bc3f8"
+      },
+      {
+        "path": "src/xir/xxir_tuple.h",
+        "kind": 2,
+        "length": 932,
+        "sha256": "6ed8783b965c17a612ecf72b138cb9f931502b87fc06e0189992d96e6ed4ec26"
+      },
+      {
+        "path": "src/xir/xxir_type_arena.h",
+        "kind": 2,
+        "length": 1512,
+        "sha256": "aa283b684789bc5787c16aa1b4929f42afdbc06f86249edebd4c9faad0c775d9"
+      },
+      {
+        "path": "src/xir/xxir_type_match_internal.h",
+        "kind": 2,
+        "length": 1293,
+        "sha256": "cf3d05cd0c0d4fbe661d6fb927ca6dff71fdbee0e4baac3ed675bf5b518d5591"
+      },
+      {
+        "path": "src/xir/xxir_type_scratch_internal.h",
+        "kind": 2,
+        "length": 3711,
+        "sha256": "5fe26e7188f77049e00499a7b5d5c94b0d19d356bc013dbefd9e8a91efbe9ee6"
+      },
+      {
+        "path": "src/xir/xxir_types.h",
+        "kind": 2,
+        "length": 4553,
+        "sha256": "018bb5cef6d2b6ee163bd82bdcf4912c0dfec03a05fbb0805c6c6a5b84a3e140"
+      },
+      {
+        "path": "src/xir/xxir_value.h",
+        "kind": 2,
+        "length": 8226,
+        "sha256": "a00201e2cfb626bbcfaf1637b9979a11a619d6dd610144680c6fc654611e811b"
+      },
+      {
+        "path": "src/xir/xxir_value_internal.h",
+        "kind": 2,
+        "length": 2359,
+        "sha256": "6bc85e771c22376fb761bb8f63d6675acf92e02486e63526a9482fef68c50f24"
+      },
+      {
+        "path": "src/xir/xxir_value_place.h",
+        "kind": 2,
+        "length": 1841,
+        "sha256": "3cb6407b8edcc5f81803f3b5d131951b60fde1bb7094c6e72cc8c70dc9cfc0a5"
+      }
+    ]
+  },
+  "generator_sha256": "7f7b18fdeedf3b1a66b8d1f0d78cccb4e9878985ab61a4f8daffca7fcd085a17",
+  "execution": "PASS: actual old Program28 against original old SDK; evidence old28-positive-r1-qualification.json",
+  "old_runtime_positive": {
+    "status": "PASS",
+    "exit": 0,
+    "actual_old_sdk_sha256": "7a48b9ba9d43894c2fbd9627d4be636953f11bee0adc12cb702ef0d387b6350d",
+    "old_program_headers_generatedC": "exact committed old headers and actual generated pipeline; no shim/type imitation",
+    "image_sha256": "0d402306123023b878d51ebf0fa9c46566813c631e1cc575e7809b969f061682"
+  }
+}

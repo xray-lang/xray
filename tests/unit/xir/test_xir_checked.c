@@ -22,6 +22,7 @@
 #include "xir_checked_scalar58_golden.h"
 #include "xir_checked_scalar59_golden.h"
 #include "xir_checked_scalar60_golden.h"
+#include "xir_checked_scalar64_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -139,35 +140,37 @@ static void semantic_attacks(XrXirCheckedPacket *packet) {
 }
 static void byte_order(void) {
     const XrXirOp identities[] = {XR_XIR_CONST_BOOL, XR_XIR_CONST_INT, XR_XIR_CONST_STRING,
-        XR_XIR_SLOT_LOAD, XR_XIR_SLOT_INIT, XR_XIR_SLOT_STORE, XR_XIR_ATOMIC_I64_NEW,
-        XR_XIR_ATOMIC_I64_LOAD, XR_XIR_ATOMIC_I64_FETCH_ADD, XR_XIR_COPY, XR_XIR_SCALAR_COPY,
+        XR_XIR_SLOT_LOAD, XR_XIR_SLOT_INIT, XR_XIR_SLOT_STORE, XR_XIR_ATOMIC_NEW,
+        XR_XIR_ATOMIC_LOAD, XR_XIR_ATOMIC_STORE, XR_XIR_ATOMIC_ADD, XR_XIR_ATOMIC_SUB,
+        XR_XIR_ATOMIC_FETCH_ADD, XR_XIR_ATOMIC_FETCH_SUB, XR_XIR_ATOMIC_SWAP,
+        XR_XIR_ATOMIC_COMPARE_EXCHANGE, XR_XIR_ATOMIC_TOGGLE, XR_XIR_ATOMIC_TO_STRING, XR_XIR_COPY, XR_XIR_SCALAR_COPY,
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 24 && XR_XIR_CHECKED_CONTRACT == 63 && XR_XIR_OP_COUNT == 137, "packet revision");
-    _Static_assert(XR_XIR_NULLABLE_NONE == 118 && XR_XIR_NULLABLE_SOME == 119, "typed nullable operations");
-    _Static_assert(XR_XIR_EQUAL == 117, "typed value equality operation");
-    _Static_assert(XR_XIR_INVOKE_DISCARD == 116, "typed normal result discard operation");
-    _Static_assert(XR_XIR_ASSERT_CONDITION == 115, "typed assertion wire operation");
-    _Static_assert(XR_XIR_CALL_DEFAULT == 113, "default purpose wire operation");
-    _Static_assert(XR_XIR_INVOKE_DEFAULT == 114, "default error continuation wire operation");
-    _Static_assert(XR_XIR_CLASS_NEW == 110 && XR_XIR_CLASS_GET == 111 && XR_XIR_CLASS_SET == 112, "class wire operations");
-    _Static_assert(XR_XIR_PANIC_CATCH == 97 && XR_XIR_PANIC_CODE == 98 && XR_XIR_PANIC_MESSAGE == 99 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 25 && XR_XIR_CHECKED_CONTRACT == 64 && XR_XIR_OP_COUNT == 145, "packet revision");
+    _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
+    _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
+    _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
+    _Static_assert(XR_XIR_ASSERT_CONDITION == 123, "typed assertion wire operation");
+    _Static_assert(XR_XIR_CALL_DEFAULT == 121, "default purpose wire operation");
+    _Static_assert(XR_XIR_INVOKE_DEFAULT == 122, "default error continuation wire operation");
+    _Static_assert(XR_XIR_CLASS_NEW == 118 && XR_XIR_CLASS_GET == 119 && XR_XIR_CLASS_SET == 120, "class wire operations");
+    _Static_assert(XR_XIR_PANIC_CATCH == 105 && XR_XIR_PANIC_CODE == 106 && XR_XIR_PANIC_MESSAGE == 107 &&
         XR_XIR_PANIC_INFO == 15, "panic wire identities");
-    _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
-    _Static_assert(XR_XIR_ENUM_NEW == 86 && XR_XIR_ENUM_TAG == 87 && XR_XIR_ENUM_GET == 88, "enum wire operations");
-    _Static_assert(XR_XIR_STRING_INDEX_OF == 84 && XR_XIR_STRING_LAST_INDEX_OF == 85, "search wire operations");
-    _Static_assert(XR_XIR_STRING_CONTAINS == 81 && XR_XIR_STRING_STARTS_WITH == 82 && XR_XIR_STRING_ENDS_WITH == 83, "string predicate wire operations");
-    _Static_assert(XR_XIR_STRING_LEN == 78 && XR_XIR_EQ_STRING == 79 && XR_XIR_NE_STRING == 80, "string query wire operations");
-    _Static_assert(XR_XIR_STRUCT_NEW == 74 && XR_XIR_STRUCT_GET == 75 && XR_XIR_STRUCT_SET == 76, "struct wire operations");
-    _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 54 &&
-        XR_XIR_CONST_FLOAT == 55 && XR_XIR_NEG_FLOAT == 56 && XR_XIR_EQ_FLOAT == 57 && XR_XIR_GE_FLOAT == 62, "numeric wire identities");
-    _Static_assert(XR_XIR_FUNCTION_REF == 49 && XR_XIR_CALL_INDIRECT == 50, "callable wire operations");
-    _Static_assert(XR_XIR_CELL_PLACE == 63 && XR_XIR_SLOT_PLACE == 64 && XR_XIR_ARRAY_NEW == 65 &&
-        XR_XIR_ARRAY_GET == 66 && XR_XIR_ARRAY_SET == 67 && XR_XIR_ARRAY_PUSH == 68 &&
-        XR_XIR_ARRAY_LEN == 69, "array wire operations");
-    _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_ATOMIC_I64 == 4, "wire type identities");
-    for (unsigned i = 0; i < 25; ++i) CHECK((unsigned) identities[i] == i + 1);
+    _Static_assert(XR_XIR_MATCH_FAIL == 97, "match fault wire operation");
+    _Static_assert(XR_XIR_ENUM_NEW == 94 && XR_XIR_ENUM_TAG == 95 && XR_XIR_ENUM_GET == 96, "enum wire operations");
+    _Static_assert(XR_XIR_STRING_INDEX_OF == 92 && XR_XIR_STRING_LAST_INDEX_OF == 93, "search wire operations");
+    _Static_assert(XR_XIR_STRING_CONTAINS == 89 && XR_XIR_STRING_STARTS_WITH == 90 && XR_XIR_STRING_ENDS_WITH == 91, "string predicate wire operations");
+    _Static_assert(XR_XIR_STRING_LEN == 86 && XR_XIR_EQ_STRING == 87 && XR_XIR_NE_STRING == 88, "string query wire operations");
+    _Static_assert(XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83 && XR_XIR_STRUCT_SET == 84, "struct wire operations");
+    _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 62 &&
+        XR_XIR_CONST_FLOAT == 63 && XR_XIR_NEG_FLOAT == 64 && XR_XIR_EQ_FLOAT == 65 && XR_XIR_GE_FLOAT == 70, "numeric wire identities");
+    _Static_assert(XR_XIR_FUNCTION_REF == 57 && XR_XIR_CALL_INDIRECT == 58, "callable wire operations");
+    _Static_assert(XR_XIR_CELL_PLACE == 71 && XR_XIR_SLOT_PLACE == 72 && XR_XIR_ARRAY_NEW == 73 &&
+        XR_XIR_ARRAY_GET == 74 && XR_XIR_ARRAY_SET == 75 && XR_XIR_ARRAY_PUSH == 76 &&
+        XR_XIR_ARRAY_LEN == 77, "array wire operations");
+    _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_I8 == 5, "wire type identities");
+    for (unsigned i = 0; i < sizeof(identities)/sizeof(*identities); ++i) CHECK((unsigned) identities[i] == i + 1);
     XrXirInstruction ops[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, INT64_MIN, {0}},
                              {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirBlock block = {0, 2, 0, 0};
@@ -184,13 +187,14 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0x03,0xf4,0x4a,0xd7,0xe8,0x00,0xce,0x31,0xd9,0xf4,0xb3,0x9e,0x9e,0x07,0x5e,0xd3,0x7b,0xc1,0xa4,0x0b,0x03,0xdb,0xa2,0xc7,0x8d,0x73,0xbd,0x20,0x8e,0xd6,0x17,0x58
+        0xc1,0xa4,0x47,0x9a,0x89,0xdb,0xab,0xa0,0x06,0xe1,0x63,0x65,0x4d,0x9f,0x6a,0x64,0x2a,0x5c,0x74,0xe5,0x2b,0x32,0x93,0xd6,0x94,0xf1,0x63,0x0d,0xad,0x63,0x60,0x02
     };
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar60_golden) && !memcmp(packet.bytes,checked_scalar60_golden,packet.length));
+    CHECK(packet.length==sizeof(checked_scalar64_golden) && !memcmp(packet.bytes,checked_scalar64_golden,packet.length));
     rejected(checked_scalar57_golden,sizeof(checked_scalar57_golden));
     rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
     rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));
+    rejected(checked_scalar60_golden,sizeof(checked_scalar60_golden));
     uint8_t original[221]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 145; offset <= 149; offset += 4) {
         put32(packet.bytes + offset, 1); digest_packet(&packet);
@@ -422,7 +426,7 @@ static void capture_packet_rejection(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    const uint32_t fields[] = {49,256,0,1,0,0,5,0,0,1};
+    const uint32_t fields[] = {XR_XIR_FUNCTION_REF,256,0,1,0,0,5,0,0,1};
     uint8_t record[40];
     for (unsigned i = 0; i < 10; ++i) put32(record+4*i,fields[i]);
     size_t found = 0; unsigned matches = 0;
@@ -485,14 +489,14 @@ static void nominal_packet_cases(void) {
         CHECK(xr_xir_compile_artifact_module(specialized)->types->nominals->count == 2);
         if (arrays == 2) {
             const XrXirTypes *types = xr_xir_compile_artifact_module(specialized)->types;
-            CHECK(types->count == 3 && types->nodes[0].nominal.arguments[0] == XR_XIR_I64 &&
+            CHECK(types->count == 4 && xr_xir_type_is_atomic(types, (XrXirType)259) && xr_xir_atomic_element(types, (XrXirType)259) == XR_XIR_I64 && types->nodes[0].nominal.arguments[0] == XR_XIR_I64 &&
                 types->nodes[1].nominal.arguments[0] == XR_XIR_STRING && types->nodes[2].nominal.declaration == 1);
             CHECK(types->nodes[0].nominal.arguments != xr_xir_compile_artifact_module(decoded)->types->nodes[0].nominal.arguments);
         }
         if (arrays >= 2) {
             const XrXirTypes *types = xr_xir_compile_artifact_module(specialized)->types;
             uint32_t first = arrays == 3 ? 1 : 0;
-            CHECK(types->count == (arrays == 3 ? 6u : 3u));
+            CHECK(types->count == (arrays == 3 ? 7u : 4u));
             CHECK(types->nodes[first].nominal.field_count == 2);
             CHECK(types->nodes[first].nominal.fields[1] == XR_XIR_STRING);
             CHECK(types->nodes[first].nominal.fields[0] == types->nodes[first + 2].nominal.fields[0]);
@@ -506,7 +510,7 @@ static void nominal_packet_cases(void) {
             CHECK(xr_xir_compile_checked_read(suite_context, closed_packet.bytes, closed_packet.length, &closed_read, NULL) == XR_XIR_OK);
             uint8_t field_wire[32] = {4, 0, 0, 0};
             put32(field_wire + 12, 1); put32(field_wire + 16, XR_XIR_I64); put32(field_wire + 20, 2);
-            put32(field_wire + 24, arrays == 3 ? XR_XIR_CONSTRUCTED_TYPE_BASE + 4 : XR_XIR_I64);
+            put32(field_wire + 24, arrays == 3 ? XR_XIR_CONSTRUCTED_TYPE_BASE + 5 : XR_XIR_I64);
             put32(field_wire + 28, XR_XIR_STRING);
             size_t field_offset = 0; unsigned field_matches = 0;
             for (size_t i = 64; i + sizeof(field_wire) <= closed_packet.length; ++i)
@@ -595,6 +599,7 @@ static void deep_nominal_fields(void) {
     }
     XrXirNominalTable table = {declarations, 2, NULL};
     XrXirTypes types = {nodes, DEPTH + 3, &table, NULL}; built.types = &types;
+    CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     XrXirCompileContext deep=consumer_context_default();
     CHECK(xr_xir_compile_check(&deep, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL; memset(nodes, 0xCC, sizeof(nodes)); memset(fields, 0xCC, sizeof(fields));
@@ -612,7 +617,7 @@ static void deep_nominal_fields(void) {
     xr_xir_compile_artifact_free(bounded);bounded=NULL;
     xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTypes *result = xr_xir_compile_artifact_module(closed)->types;
-    CHECK(result->count == DEPTH * 3 + 3);
+    CHECK(result->count == DEPTH * 3 + 4 && xr_xir_type_is_atomic(result, (XrXirType)(256 + DEPTH + 3)) && xr_xir_atomic_element(result, (XrXirType)(256 + DEPTH + 3)) == XR_XIR_I64);
     for (uint32_t n = 0; n < 3; ++n) {
         const XrXirNominalType *instance = &result->nodes[DEPTH + n].nominal;
         CHECK(instance->field_count == 2 && instance->fields[1] == XR_XIR_STRING);
@@ -698,7 +703,7 @@ static void nominal_field_graph(void) {
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL;
     XrXirTypes *types = (XrXirTypes *) xr_xir_compile_artifact_module(lowered)->types;
-    CHECK(types->count == 160 && types->nodes[0].nominal.fields[0] == (XrXirType)257);
+    CHECK(types->count == 161 && xr_xir_type_is_atomic(types, (XrXirType)416) && xr_xir_atomic_element(types, (XrXirType)416) == XR_XIR_I64 && types->nodes[0].nominal.fields[0] == (XrXirType)257);
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     XrXirType *end = (XrXirType *) types->nodes[159].nominal.fields;
     end[0] = (XrXirType)256;
@@ -712,11 +717,11 @@ static void nominal_projection_cases(void) {
         const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
         const XrXirTypes *types = module->types;
         CHECK(types && types->nominals && !types->nominals->declarations && types->nominals->identities);
-        CHECK(types->count == (mode == 3 ? 5u : mode == 2 ? 3u : 0u));
+        CHECK(types->count == (mode == 3 ? 6u : mode == 2 ? 4u : 1u));
         CHECK(types->nominals->identities[0].arity == 1 && types->nominals->identities[0].field_count == 2);
         if (mode >= 2) {
-            CHECK(types->nodes[0].nominal.fields[0] == (mode == 3 ? (XrXirType)259 : XR_XIR_I64));
-            CHECK(types->nodes[1].nominal.fields[0] == (mode == 3 ? (XrXirType)260 : XR_XIR_STRING));
+            CHECK(types->nodes[0].nominal.fields[0] == (mode == 3 ? (XrXirType)260 : XR_XIR_I64));
+            CHECK(types->nodes[1].nominal.fields[0] == (mode == 3 ? (XrXirType)261 : XR_XIR_STRING));
         }
         for (uint32_t i = 0; i < types->count; ++i) CHECK(!types->nodes[i].parameter_span);
         XrXirModule forged = *module; forged.stage = XR_XIR_CHECKED;
@@ -832,6 +837,7 @@ static void nominal_callable_components(void) {
     XrXirTypeNode nodes[2] = {built.types->nodes[0],
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, (XrXirType)256, 0, 0, {0}}};
     XrXirTypes types = {nodes, 2, built.types->nominals, NULL}; built.types = &types;
+    CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
@@ -845,11 +851,11 @@ static void nominal_callable_components(void) {
     CHECK(matches == 1);
     put32(packet.bytes + offset + 20, 257); digest_packet(&packet); rejected(packet.bytes, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
-    nodes[1].result = (XrXirType)257;
+    atomic_pool.nodes[1].result = (XrXirType)257;
     CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
-    nodes[1].result = (XrXirType)256; nodes[1].parameter_span = 1;
+    atomic_pool.nodes[1].result = (XrXirType)256; atomic_pool.nodes[1].parameter_span = 1;
     CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
-    nodes[1].parameter_span = 0; parameter.type = XR_XIR_UNIT;
+    atomic_pool.nodes[1].parameter_span = 0; parameter.type = XR_XIR_UNIT;
     CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     parameter.type = (XrXirType)257;
     CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);

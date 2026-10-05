@@ -13,6 +13,7 @@
 
 #include "xir_execution_fixture.h"
 #include "xir/xxir_emit_c.h"
+#include "xir_float_transport_fixture.h"
 #include <string.h>
 
 int main(int argc, char **argv) {
@@ -35,13 +36,21 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_compile_emit_leaf_c(uninitialized, "uninitialized", 65536, &extra) == XR_XIR_OK);
     CHECK(extra.text[extra.length] == '\0' && extra.length == strlen(extra.text));
     xr_xir_compile_artifact_free(uninitialized);
+    XrXirArtifact *transport = float_transport_fixture(&scalar_owner.context);
+    XrXirCSource transported = {0};
+    CHECK(xr_xir_compile_emit_leaf_c(transport, "float_transport", 65536, &transported) == XR_XIR_OK);
+    CHECK(transported.text[transported.length] == '\0' && transported.length == strlen(transported.text));
+    CHECK(!strstr(transported.text, "({"));
+    xr_xir_compile_artifact_free(transport);
     if (argc == 2) {
         FILE *file = fopen(argv[1], "wb");
         CHECK(file);
         CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         CHECK(fwrite(extra.text, 1, extra.length, file) == extra.length);
+        CHECK(fwrite(transported.text, 1, transported.length, file) == transported.length);
         CHECK(fclose(file) == 0);
     } else CHECK(argc == 1);
+    xr_xir_compile_c_source_free(&transported);
     xr_xir_compile_c_source_free(&extra);
     xr_xir_compile_c_source_free(&source);
     CHECK(!source.text && !source.length);

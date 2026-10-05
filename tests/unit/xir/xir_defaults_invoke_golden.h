@@ -88,15 +88,18 @@ static const uint8_t defaults_invoke_golden[] = {
     0x00,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
+#include "xir_defaults64_golden_bytes.h"
+#include "xir_library_prior_packet_rejection.h"
 static void defaults_invoke_rehash(uint8_t *bytes, size_t length) {
     XrSHA256Context hash;
     xr_sha256_init(&hash); xr_sha256_update(&hash,bytes,32);
     xr_sha256_update(&hash,bytes+64,length-64); xr_sha256_final(&hash,bytes+32);
 }
 static void defaults_invoke_golden_cases(void) {
+    library_prior_packet_rejection(library_context,defaults_invoke_golden,sizeof(defaults_invoke_golden));
     size_t live=runtime_live, physical=runtime_bytes;
     XrXirArtifact *producer=NULL,*owned=NULL;
-    CHECK(xr_xir_compile_checked_read(library_context,defaults_invoke_golden,sizeof(defaults_invoke_golden),&producer,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(library_context,defaults64_invoke_golden,sizeof(defaults64_invoke_golden),&producer,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(producer);
     CHECK(module->linkage_kind==XR_XIR_PROGRAM && module->function_count==4);
     CHECK(module->declarations->entry_function==3 && module->declarations->modules[0].initializer==1);
@@ -105,8 +108,8 @@ static void defaults_invoke_golden_cases(void) {
     xr_xir_compile_artifact_free(producer); producer=NULL;
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(defaults_invoke_golden));
-    CHECK(!memcmp(packet.bytes,defaults_invoke_golden,packet.length));
+    CHECK(packet.length==sizeof(defaults64_invoke_golden));
+    CHECK(!memcmp(packet.bytes,defaults64_invoke_golden,packet.length));
     xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(owned);
     CHECK(runtime_live==live && runtime_bytes==physical);
     /* Byte offsets refer to the independently encoded caller instruction0. */
@@ -118,16 +121,16 @@ static void defaults_invoke_golden_cases(void) {
         {473,1}, /* same successors */
         {493,2}, /* missing result projection */
         {517,1}, /* stale result projection origin */
-        {493,94}, /* wrong result projection opcode */
+        {493,XR_XIR_INVOKE_ERROR}, /* wrong result projection opcode */
         {497,14}, /* wrong result projection type */
         {573,2}, /* missing error projection */
         {597,1}, /* stale error projection origin */
-        {573,93}, /* wrong error projection opcode */
+        {573,XR_XIR_INVOKE_RESULT}, /* wrong error projection opcode */
         {577,2}, /* wrong error projection type */
         {461,0}, /* SSA-span masquerade owner */
     };
     for(size_t i=0;i<sizeof(changes)/sizeof(changes[0]);++i) {
-        uint8_t bad[sizeof(defaults_invoke_golden)]; memcpy(bad,defaults_invoke_golden,sizeof(bad));
+        uint8_t bad[sizeof(defaults64_invoke_golden)]; memcpy(bad,defaults64_invoke_golden,sizeof(bad));
         for(unsigned b=0;b<4;++b) bad[changes[i].offset+b]=(uint8_t)(changes[i].value>>(8*b));
         defaults_invoke_rehash(bad,sizeof(bad));
         XrXirStatus status=xr_xir_compile_checked_read(library_context,bad,sizeof(bad),&producer,NULL);
@@ -137,7 +140,7 @@ static void defaults_invoke_golden_cases(void) {
         CHECK(status==expected && !producer);
         CHECK(runtime_live==live && runtime_bytes==physical);
     }
-    uint8_t swapped[sizeof(defaults_invoke_golden)]; memcpy(swapped,defaults_invoke_golden,sizeof(swapped));
+    uint8_t swapped[sizeof(defaults64_invoke_golden)]; memcpy(swapped,defaults64_invoke_golden,sizeof(swapped));
     swapped[469]=2; swapped[473]=1;
     defaults_invoke_rehash(swapped,sizeof(swapped));
     CHECK(xr_xir_compile_checked_read(library_context,swapped,sizeof(swapped),&producer,NULL)==XR_XIR_BAD_STRUCTURE && !producer);

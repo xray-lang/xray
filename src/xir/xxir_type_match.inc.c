@@ -82,7 +82,7 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
         if (from->nominal.declaration != to->nominal.declaration ||
             from->nominal.argument_count != to->nominal.argument_count) return XR_XIR_BAD_TYPE;
     } else if (from->kind != XR_XIR_TYPE_ARRAY && from->kind != XR_XIR_TYPE_CELL &&
-               from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE && from->kind != XR_XIR_TYPE_TUPLE)
+               from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE && from->kind != XR_XIR_TYPE_TUPLE && from->kind != XR_XIR_TYPE_ATOMIC)
         return XR_XIR_BAD_TYPE;
     *frame = (TypeMatchFrame) {from, to, 0}; return XR_XIR_OK;
 }

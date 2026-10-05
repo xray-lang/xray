@@ -19,11 +19,12 @@
 #include "xir_nested_nullable_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_nested_nullable_fixture.h"
+#include "xir_nested_nullable_golden.h"
 #include "xir_nested_nullable_cases.h"
 extern const XrXirProgramSpec nested_nullable_program;
 /* Historical59 single is genuinely accepted by the archived reader.  The
  * nested59 bytes below are independently framed negative evidence: no old
- * compiler could publish them.  Value18/Call24/Program28 remain unchanged. */
+ * compiler could publish them.  Historical packet and proof identities remain unchanged; current is Value21/Call26/Program29. */
 static const uint8_t nested_old_single_packet[] = {
     0x58, 0x52, 0x43, 0x48, 0x4b, 0x00, 0x00, 0x00, 0x17, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x00, 0x00,
     0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x9b, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -75,11 +76,19 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
     malformed.proof.length=sizeof(nested_old_single_packet);
     malformed.proof.identity=nested_old_single_identity;
     CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
-    /* Restore the historical wire and semantic header over this exact current Lowered body. Both
+    /* Reconstruct old62/59 from the independently preserved old63 body. Both
      * packet digest and full proof identity are independently verified below. */
     uint8_t old_nested[1689];uint8_t identity[32];XrSHA256Context sha;
     CHECK(spec->proof.length==sizeof(old_nested));memcpy(old_nested,spec->proof.bytes,sizeof(old_nested));
-    CHECK(old_nested[8]==24 && old_nested[12]==63 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
+    CHECK(old_nested[8]==25 && old_nested[12]==64 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
+    /* Preserve the genuine complete prior body. Current opcodes moved, so
+     * relabeling the current body would not reconstruct old62/59 packets. */
+    _Static_assert(sizeof(nested_nullable_golden)==sizeof(old_nested),"complete historical packet width");
+    memcpy(old_nested,nested_nullable_golden,sizeof(old_nested));
+    CHECK(xr_xir_compile_checked_read(&owner->context,old_nested,sizeof(old_nested),&read,NULL)==XR_XIR_BAD_STRUCTURE && !read);
+    xr_sha256(old_nested,sizeof(old_nested),identity);
+    malformed=*spec;malformed.proof.bytes=old_nested;malformed.proof.length=sizeof(old_nested);malformed.proof.identity=identity;
+    CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
     old_nested[12]=62;
     xr_sha256_init(&sha);xr_sha256_update(&sha,old_nested,32);
     xr_sha256_update(&sha,old_nested+64,sizeof(old_nested)-64);xr_sha256_final(&sha,old_nested+32);

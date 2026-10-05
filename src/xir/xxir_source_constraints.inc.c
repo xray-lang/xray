@@ -74,10 +74,16 @@ static uint32_t source_predicate_marker(SourceContext *ctx, const char *name) {
     for (int p = 0; p < count; ++p)
         if (source_text_same(ctx, NULL, parameters[p]->name, name)) return 0;
 #define XR_XIR_PREDICATE_VALUE_EQUAL XR_XIR_CONSTRAINT_EQUAL
+#define XR_XIR_PREDICATE_ATOMIC_VALUE XR_XIR_CONSTRAINT_ATOMIC_VALUE
+#define XR_XIR_PREDICATE_ATOMIC_NUMBER XR_XIR_CONSTRAINT_ATOMIC_NUMBER
+#define XR_XIR_PREDICATE_ATOMIC_BOOLEAN XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN
 #define XR_BUILTIN_PREDICATE(spelling, arity, identity) \
     if (source_text_same(ctx, NULL, name, spelling)) return XR_XIR_PREDICATE_##identity;
 #include "../../stdlib/prelude/builtin_symbols.def"
 #undef XR_XIR_PREDICATE_VALUE_EQUAL
+#undef XR_XIR_PREDICATE_ATOMIC_VALUE
+#undef XR_XIR_PREDICATE_ATOMIC_NUMBER
+#undef XR_XIR_PREDICATE_ATOMIC_BOOLEAN
     return 0;
 }
 static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,

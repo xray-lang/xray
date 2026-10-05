@@ -67,10 +67,10 @@ static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool 
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==20 && sizeof(XrXirValue)==16,"public value ABI");
-    _Static_assert(XR_XIR_CALL_ABI_VERSION==25 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==21 && sizeof(XrXirValue)==16,"public value ABI");
+    _Static_assert(XR_XIR_CALL_ABI_VERSION==26 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
-    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==28 && sizeof(XrXirProgramSpec)==96,"public program ABI");
+    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==29 && sizeof(XrXirProgramSpec)==96,"public program ABI");
     for (uint32_t matrix=0;matrix<2;++matrix) {
         const XrXirProgramSpec *spec=matrix ? &panics_matrix_program : &panics_checked_program;
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(assert_compile_context,spec,&program)==XR_XIR_OK);
@@ -79,5 +79,5 @@ int main(void) {
         panics_native_mixed(spec,matrix!=0,true);CHECK(!runtime_live && !runtime_bytes);
     }
     CHECK(panics_native_releases==4);
-    puts("18 independent outcomes: native and both VM/native directions PASS; Value20 Call25 Program28; carrier layouts unchanged; physical baseline restored");assert_compile_end();return 0;
+    puts("18 independent outcomes: native and both VM/native directions PASS; Value21 Call26 Program29; carrier layouts unchanged; physical baseline restored");assert_compile_end();return 0;
 }

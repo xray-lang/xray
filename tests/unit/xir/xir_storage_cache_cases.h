@@ -13,9 +13,9 @@ static void storage_cache_cases(void) {
         {{"Empty", 5}, 0, 0}, {{"Small", 5}, 0, 2}, {{"Text", 4}, 2, 1}};
     XrXirNominalFieldIdentity fields[] = {{{"a", 1}, 0}, {{"b", 1}, 0}, {{"c", 1}, 0}};
     XrXirNominalIdentity identities[] = {
-        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 3, XR_XIR_NOMINAL_ENUM, variants, 3, 0},
-        {{"alpha", 5}, {"Outer", 5}, 1, 0, fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0},
-        {{"alpha", 5}, {"Empty", 5}, 1, 0, NULL, 0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0}};
+        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 3, XR_XIR_NOMINAL_ENUM, variants, 3, 0,{0}},
+        {{"alpha", 5}, {"Outer", 5}, 1, 0, fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}},
+        {{"alpha", 5}, {"Empty", 5}, 1, 0, NULL, 0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}}};
     XrXirNominalTable table = {NULL, 3, identities};
     XrXirType inner[] = {XR_XIR_I8, XR_XIR_BOOL, XR_XIR_STRING};
     XrXirType outer[] = {XR_XIR_BOOL, (XrXirType)256, XR_XIR_I16};
@@ -67,7 +67,7 @@ static void storage_cache_shared_graph(void) {
         int length = snprintf(names[i], sizeof(names[i]), "T%u", i);
         CHECK(length > 0 && (size_t)length < sizeof(names[i]));
         identities[i] = (XrXirNominalIdentity) {{"alpha", 5}, {names[i], (uint32_t)length},
-            1, 0, fields, i ? 1u : 2u, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0};
+            1, 0, fields, i ? 1u : 2u, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}};
         nodes[i].nominal.declaration = i;
         inner[i] = i + 1 == COUNT ? XR_XIR_STRING : (XrXirType)(257 + i);
         nodes[i].kind = XR_XIR_TYPE_NOMINAL;

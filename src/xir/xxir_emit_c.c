@@ -15,6 +15,7 @@
 
 #include "xxir_emit_c.h"
 #include "xxir_program.h"
+#include "xxir_atomic.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
@@ -429,19 +430,6 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             "        status = xr_xir_instance_scalar_text(view, &scalar, &value);\n",
             (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
         break;
-    case XR_XIR_ATOMIC_I64_NEW:
-        append(buffer, "        status = xr_xir_instance_atomic(view, xr_xir_scalar_load(state->frame, %uu), &value);\n",
-            layout->offsets[op->args[0]]);
-        break;
-    case XR_XIR_ATOMIC_I64_LOAD:
-    case XR_XIR_ATOMIC_I64_FETCH_ADD:
-        append(buffer, "        XrXirValue atomic = {XR_XIR_ATOMIC_I64, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-            "        value.type = XR_XIR_I64;\n        if (!%s(&atomic, ", layout->offsets[op->args[0]],
-            op->op == XR_XIR_ATOMIC_I64_LOAD ? "xr_xir_atomic_i64_load" : "xr_xir_atomic_i64_fetch_add");
-        if (op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
-            append(buffer, "xr_xir_scalar_load(state->frame, %uu), ", layout->offsets[op->args[1]]);
-        append(buffer, "&value.payload)) status = XR_XIR_CALL_BAD_STATE;\n");
-        break;
     default: emit_reject(buffer, XR_XIR_BAD_STAGE); break;
     }
     append(buffer, "        if (status != XR_XIR_CALL_READY) return (XrXirAction) "
@@ -581,7 +569,8 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
     }
     append(buffer,"        if(status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-        "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n");
+        "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT :\n"
+        "            status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n");
     if(op->op != XR_XIR_CLASS_SET) {
         if(xr_xir_type_is_owned(buffer->types,op->type))
             append(buffer,"        xr_xir_owned_slot_move(state->frame,%uu,&value);\n",destination);
@@ -610,7 +599,8 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     }
     append(buffer,"        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-        "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n");
+        "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT :\n"
+        "            status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n");
     if (xr_xir_type_is_owned(buffer->types,op->type))
         append(buffer,"        xr_xir_owned_slot_move(state->frame, %uu, &value);\n",destination);
     else if (op->type!=XR_XIR_UNIT) append(buffer,"        xr_xir_scalar_store(state->frame, %uu, value.payload);\n",destination);
@@ -660,13 +650,15 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     }
     append(buffer, "        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-        "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n");
+        "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT :\n"
+        "            status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n");
     if (xr_xir_type_is_owned(buffer->types, op->type))
         append(buffer, "        xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
     else append(buffer, "        xr_xir_scalar_store(state->frame, %uu, value.payload);\n", destination);
     append(buffer, "        }\n        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
 }
 
+#include "xxir_emit_atomic.inc.c"
 #include "xxir_emit_cleanup.inc.c"
 
 static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
@@ -783,6 +775,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
         emit_class_step(buffer,function,op,layout,destination); return;
     }
+    if (xr_xir_op_is_atomic(op->op)) {
+        emit_atomic_step(buffer, function, op, layout, destination, index); return;
+    }
     if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
         emit_tuple_step(buffer,function,op,layout,destination);return;
     }
@@ -795,7 +790,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         emit_array_step(buffer, function, op, layout, destination, index);
         return;
     }
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         emit_instance_step(buffer, module, function, op, layout, destination);
@@ -881,7 +876,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             "        XrXirValueStatus status = xr_xir_panic_info_message(&info, &message);\n"
             "        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
             "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-            "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT :\n"
+        "            status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             "        xr_xir_owned_slot_move(state->frame, %uu, &message); }\n", destination);
         break;
     case XR_XIR_SUSPEND:
@@ -905,7 +901,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             "            xr_xir_call_admission(view),&output);\n"
             "        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
             "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-            "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT :\n"
+        "            status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             "        xr_xir_owned_slot_move(state->frame,%uu,&output); }\n",
             (uint32_t)op->type,op->op == XR_XIR_NULLABLE_SOME ? "&payload" : "NULL",destination);
         break;
@@ -924,7 +921,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                     "        XrXirValueStatus copied = xr_xir_value_copy(payload,&owned);\n"
                     "        if (copied != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
                     "            copied == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-                    "            copied == XR_XIR_VALUE_LIMIT || copied == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+                    "            copied == XR_XIR_VALUE_LIMIT || copied == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT :\n"
+        "            copied == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
                     "        xr_xir_owned_slot_move(state->frame,%uu,&owned); } }\n", destination);
             else append(buffer,"\n        xr_xir_scalar_store(state->frame,%uu,payload->payload); }\n", destination);
         }
@@ -950,7 +948,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             "        XrXirValueStatus status = xr_xir_value_equal(&left,&right,(XrXirType)left.type,admission,&equal);\n"
             "        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
             "            status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-            "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            "            status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT :\n"
+        "            status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             "        xr_xir_scalar_store(state->frame,%uu,%sequal); }\n",destination,op->immediate ? "!" : "");
         break;
     case XR_XIR_ASSERT_CONDITION:
@@ -1106,13 +1105,14 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirFunction *function = &module->functions[index];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
     if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) +
-        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u) {
+        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress)) {
         emit_reject(buffer, XR_XIR_BUDGET);
         return;
     }
     append(buffer, "typedef struct %s_state_%u {\n"
            "    uint32_t pc, destination, expected, normal_pc, error_pc, error_destination, panic_pc, panic_destination;\n"
-           "    bool initialized, waiting, invoking, discard;\n", prefix, index);
+           "    bool initialized, waiting, invoking, discard;\n"
+           "    XrXirAtomicProgress atomic;\n", prefix, index);
     if (!emit_work(buffer, 1)) return;
     bool has_cleanup = emit_has_cleanup(buffer, function);
     if (!emit_work(buffer, 1)) return;
@@ -1205,8 +1205,9 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "}\n");
     append(buffer, "static void %s_release_%u(XrXirCallView *view, XrXirCallStatus reason) {\n"
            "    (void) reason; (void) view;\n", prefix, index);
+    append(buffer, "    %s_state_%u *state = view->state;\n"
+        "    xr_xir_atomic_progress_clear(&state->atomic);\n", prefix, index);
     if (layout->owned_count) {
-        append(buffer, "    %s_state_%u *state = view->state;\n", prefix, index);
         for (uint32_t i = layout->owned_count; i > 0 && emit_work(buffer, 1); --i)
             append(buffer, "    xr_xir_owned_slot_clear(state->frame, %uu);\n", layout->owned_offsets[i - 1]);
     }
@@ -1263,7 +1264,10 @@ static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *ta
         if (d->field_count) append(buffer, "%s_nominal_fields_%u", prefix, i); else append(buffer, "NULL");
         append(buffer, ", %uu, %uu, ", d->field_count, d->kind);
         if (d->variant_count) append(buffer, "%s_nominal_variants_%u", prefix, i); else append(buffer, "NULL");
-        append(buffer, ", %uu, %uu},\n", d->variant_count, d->flags);
+        append(buffer, ", %uu, %uu, {%uu, {", d->variant_count, d->flags, d->native.native_id);
+        for (uint32_t b = 0; b < 32 && emit_work(buffer, 1); ++b)
+            append(buffer, "%s%uu", b ? "," : "", d->native.source_fingerprint[b]);
+        append(buffer, "}}},\n");
     }
     append(buffer, "};\nstatic const XrXirNominalTable %s_nominals = {NULL, %uu, %s_nominal_identities};\n",
         prefix, table->count, prefix);
@@ -1423,6 +1427,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
+           "#include \"xir/xxir_atomic.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

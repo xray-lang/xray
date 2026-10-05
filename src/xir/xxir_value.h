@@ -14,14 +14,14 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 20u
+#define XR_XIR_VALUE_ABI_VERSION 21u
 #define XR_XIR_CONSTRUCTED_TYPE_BASE 256u
 #define XR_XIR_CONSTRUCTED_TYPE_LIMIT 65536u
 #define XR_XIR_TYPE_PARAMETER_BASE 65536u
 #define XR_XIR_TYPE_PARAMETER_LIMIT 131072u
 #define XR_XIR_ARCH_X86_64 1u
-typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64,
-    XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
+typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING,
+    XR_XIR_I8 = 5, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
     XR_XIR_ERROR, XR_XIR_PANIC_INFO, XR_XIR_RUNE } XrXirType;
 /* A Rune is one Unicode scalar, independently of every integer type. */
 static inline bool xr_xir_rune_payload_valid(int64_t payload) {
@@ -57,7 +57,7 @@ static inline uint32_t xr_xir_float_bits(XrXirType type) {
 static inline bool xr_xir_type_is_number(XrXirType type) {
     return xr_xir_type_is_integer(type) || xr_xir_float_bits(type) != 0;
 }
-static inline bool xr_xir_float_payload_valid(XrXirType type, int64_t payload) {
+static inline bool xr_xir_float_constant_payload_valid(XrXirType type, int64_t payload) {
     uint64_t bits = (uint64_t) payload;
     if (type == XR_XIR_F32) {
         if (bits > UINT32_MAX) return false;
@@ -67,6 +67,11 @@ static inline bool xr_xir_float_payload_valid(XrXirType type, int64_t payload) {
         bits == UINT64_C(0x7ff8000000000000));
 }
 
+/* Runtime binary64 transports every bit pattern; literals remain canonical. */
+static inline bool xr_xir_float_payload_valid(XrXirType type, int64_t payload) {
+    return type == XR_XIR_F64 || xr_xir_float_constant_payload_valid(type, payload);
+}
+
 typedef struct XrXirValue {
     uint32_t type, reserved;
     int64_t payload;
@@ -74,7 +79,7 @@ typedef struct XrXirValue {
 typedef enum XrXirValueStatus {
     XR_XIR_VALUE_OK, XR_XIR_VALUE_BAD_ARGUMENT, XR_XIR_VALUE_BAD_UTF8,
     XR_XIR_VALUE_OOM, XR_XIR_VALUE_LIMIT, XR_XIR_VALUE_REFCOUNT_LIMIT,
-    XR_XIR_VALUE_BOUNDS
+    XR_XIR_VALUE_BOUNDS, XR_XIR_VALUE_UNSUPPORTED
 } XrXirValueStatus;
 typedef struct XrXirDomain XrXirDomain;
 typedef struct XrXirTypeArena XrXirTypeArena;
@@ -113,9 +118,6 @@ XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, co
                                                 XrXirType type, int64_t payload);
 XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
                                                   int64_t left, int64_t right);
-XR_FUNC XrXirValueStatus xr_xir_atomic_i64_new(XrXirDomain *domain, int64_t initial, XrXirValue *output);
-XR_FUNC bool xr_xir_atomic_i64_load(const XrXirValue *value, int64_t *output);
-XR_FUNC bool xr_xir_atomic_i64_fetch_add(const XrXirValue *value, int64_t delta, int64_t *previous);
 XR_FUNC void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *owned);
 typedef struct XrXirFunctionBinding {
     void *owner;

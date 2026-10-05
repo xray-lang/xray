@@ -347,6 +347,9 @@ static XrXirStatus provenance_lowered_nominals(ProvenanceMatch *c,
         const XrXirNominalDeclaration *a = &source->declarations[d];
         const XrXirNominalIdentity *b = &output->identities[d];
         if (a->flags != b->flags) return XR_XIR_BAD_TYPE;
+        if (!xir_compile_work(c->remaining, sizeof(a->native))) return XR_XIR_BUDGET;
+        if (a->native.native_id != b->native.native_id || memcmp(a->native.source_fingerprint,
+            b->native.source_fingerprint, sizeof(a->native.source_fingerprint))) return XR_XIR_BAD_TYPE;
         XrXirStatus variants = provenance_variants(c, a->kind, a->variants, a->variant_count,
             b->kind, b->variants, b->variant_count);
         if (variants != XR_XIR_OK) return variants;
@@ -381,6 +384,9 @@ static XrXirStatus provenance_nominals(ProvenanceMatch *c) {
     for (uint32_t d = 0; d < a->count; ++d) {
         const XrXirNominalDeclaration *from = &a->declarations[d], *to = &b->declarations[d];
         if (from->flags != to->flags) return XR_XIR_BAD_TYPE;
+        if (!xir_compile_work(c->remaining, sizeof(from->native))) return XR_XIR_BUDGET;
+        if (from->native.native_id != to->native.native_id || memcmp(from->native.source_fingerprint,
+            to->native.source_fingerprint, sizeof(from->native.source_fingerprint))) return XR_XIR_BAD_TYPE;
         XrXirStatus variants = provenance_variants(c, from->kind, from->variants, from->variant_count,
             to->kind, to->variants, to->variant_count);
         if (variants != XR_XIR_OK) return variants;

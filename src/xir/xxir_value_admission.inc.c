@@ -48,7 +48,8 @@ static XrXirValueStatus array_needs_admission(const XirArray *array,
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
-            node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+            node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+            node->kind == XR_XIR_TYPE_ATOMIC) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
         if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -145,6 +146,8 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
                     status = array_needs_admission((XirArray *) object, admission, &needed);
                     if (status != XR_XIR_VALUE_OK) break;
                     if (needed) count = ((XirArray *) object)->length;
+                } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
+                    if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {
                     if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                     if (object->kind == XR_XIR_TYPE_CALLABLE) {
@@ -152,6 +155,8 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
                         status = admission->function(admission->context,
                             &((XirFunction *) object)->binding, type, &admission->work);
                         if (status != XR_XIR_VALUE_OK) break;
+                    } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
+                        /* Atomic cells have scalar payloads and no graph children. */
                     } else if (object->kind == XR_XIR_TYPE_CELL) {
                         type = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), type);
                         current = ((XirCell *) object)->value; inlined = false; continue;

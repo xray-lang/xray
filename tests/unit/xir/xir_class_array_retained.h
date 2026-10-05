@@ -24,7 +24,7 @@ static void class_array_suspend_cases(XrXirProgram *program) {
         XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         ClassArrayTrace trace={0};config.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, class_array_trace, &trace};
         C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-        C(xr_xir_instance_start(instance,5,NULL,0)==XR_XIR_CALL_READY);
+        C(xr_xir_instance_start(instance,CLASS_ARRAY_SUSPENDED,NULL,0)==XR_XIR_CALL_READY);
         XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance, UINT64_MAX);C(result.outcome.status==XR_XIR_CALL_SUSPENDED && !trace.count);
         if(!cancel){
             C(xr_xir_instance_resume(instance,result.epoch,result.outcome.wake)==XR_XIR_CALL_READY);

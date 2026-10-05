@@ -19,8 +19,9 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, arguments, 1, fields, 2}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 1, 1, fields + 2, 2}},
-        {XR_XIR_TYPE_CELL, (XrXirType)257, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
-    XrXirTypes types = {nodes, 3, &table, NULL};
+        {XR_XIR_TYPE_CELL, (XrXirType)257, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64}};
+    XrXirTypes types = {nodes, 4, &table, NULL};
     XrXirProgram *original = NULL;
     CHECK(xr_xir_compile_program_seal(suite_context, base, &original) == XR_XIR_OK);
     xr_xir_compile_program_drop(original);
@@ -29,6 +30,10 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
         XrXirDeclarations declarations = *base->declarations;
         XrXirSlot slots[6]; memcpy(slots, declarations.slots, 5 * sizeof(*slots));
         XrXirCallEntry entries[9]; memcpy(entries, base->entries, sizeof(entries));
+        XrXirType previous_atomic=base->declarations->slots[0].type;
+        for(uint32_t i=0;i<5;++i)if(slots[i].type==previous_atomic)slots[i].type=(XrXirType)259;
+        for(uint32_t i=0;i<9;++i)if(entries[i].result==previous_atomic)entries[i].result=(XrXirType)259;
+        declarations.slots=slots;
         XrXirType parameters[] = {(XrXirType)(mode == 3 ? 258 : 257), XR_XIR_STRING};
         if (!mode) {
             slots[5] = (XrXirSlot) {declarations.root_module, (XrXirType)257, 1};

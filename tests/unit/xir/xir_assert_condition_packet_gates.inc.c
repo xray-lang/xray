@@ -8,6 +8,8 @@
  */
 #include "base/xsha256.h"
 #include "xir_assert_condition_golden.h"
+#include "xir_assert_condition64_golden.h"
+#include "xir_assert_atomic64_packet_rejection.h"
 static void assert_packet_hash(XrXirCheckedPacket *packet) {
     XrSHA256Context sha;xr_sha256_init(&sha);
     xr_sha256_update(&sha,packet->bytes,32);xr_sha256_update(&sha,packet->bytes+64,packet->length-64);
@@ -50,9 +52,10 @@ static void assert_core_packet(const XrXirSourceResult *source) {
     XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_check(assert_compile_context,&built,&checked,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(assert_condition_golden) && !memcmp(packet.bytes,assert_condition_golden,packet.length));
+    CHECK(packet.length==sizeof(assert_condition64_golden) && !memcmp(packet.bytes,assert_condition64_golden,packet.length));
+    assert_previous63_packet_rejected(assert_condition_golden, sizeof(assert_condition_golden));
     assert_packet_oom(checked);
-    uint8_t instruction[40]={0};assert_word(instruction,115);assert_word(instruction+12,1);
+    uint8_t instruction[40]={0};assert_word(instruction,XR_XIR_ASSERT_CONDITION);assert_word(instruction+12,1);
     size_t op=assert_pattern(&packet,instruction,sizeof(instruction));
     uint8_t relation[16]={0};assert_word(relation+4,1);assert_word(relation+8,1);assert_word(relation+12,2);
     size_t default_binding=assert_pattern(&packet,relation,sizeof(relation));
@@ -66,18 +69,18 @@ static void assert_core_packet(const XrXirSourceResult *source) {
     };
     size_t live=runtime_live,bytes=runtime_bytes;
     for (uint32_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
-        memcpy(packet.bytes,assert_condition_golden,packet.length);assert_word(packet.bytes+attacks[i].offset,attacks[i].value);
+        memcpy(packet.bytes,assert_condition64_golden,packet.length);assert_word(packet.bytes+attacks[i].offset,attacks[i].value);
         assert_packet_hash(&packet);
         XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL);
         if (status!=attacks[i].status) fprintf(stderr,"assert rehashed packet attack=%u status=%u expected=%u\n",i,status,attacks[i].status);
         CHECK(status==attacks[i].status && !read && runtime_live==live && runtime_bytes==bytes);
     }
     for (uint32_t old=54;old<=57;++old) {
-        memcpy(packet.bytes,assert_condition_golden,packet.length);assert_word(packet.bytes+12,old);
+        memcpy(packet.bytes,assert_condition64_golden,packet.length);assert_word(packet.bytes+12,old);
         if (old==57) assert_word(packet.bytes+8,21);
         assert_packet_hash(&packet);size_t early_attempts=source_program_compile_attempts;XrXirArtifact *read=NULL;
         CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && source_program_compile_attempts==early_attempts);
     }
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
-    puts("Full 642-byte independent condition KAT and rehashed typed/default/unused/old54/55/56/wire21 rejection PASS");
+    puts("Full 666-byte independent condition KAT and rehashed typed/default/unused/old54/55/56/wire21 rejection PASS");
 }

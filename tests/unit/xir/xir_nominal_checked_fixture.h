@@ -25,6 +25,7 @@ static XrXirArtifact *nominal_checked_fixture(const XrXirCompileContext *context
     XrXirTypes types = {mode == 2 ? nodes + 1 : mode ? nodes : NULL, mode == 3 ? 4u : mode == 2 ? 3u : mode ? 1u : 0u, &f.table, NULL};
     if (mode == 1 || mode == 3) f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     built.types = &types;
+    CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     XrXirFunctionIdentity identities[9];
     CHECK(built.function_count == 9);
     memcpy(identities, built.declarations->functions, sizeof(identities));

@@ -143,6 +143,10 @@ def simple_term(term, binder):
         return 'STRING'
     if term == ('name', 'bool', ()):
         return 'BOOL'
+    if term == ('name', 'Ordering', ()):
+        return 'ORDERING'
+    if binder and term == ('tuple', (('name', binder, ()), ('name', 'bool', ()))):
+        return 'TUPLE_ELEMENT_BOOL'
     if binder and term == ('name', binder, ()):
         return 'ELEMENT'
     if binder:
@@ -366,7 +370,7 @@ def render_type(root, stem):
                   str(member.method).lower(), str(member.lowered).lower(), 'true',
                   'XR_NATIVE_OPERATION_' + member.operation,
                   'XR_NATIVE_ALLOCATION_' + member.allocation.upper(), c_string(member.failures),
-                  'XR_NATIVE_OWNERSHIP_' + member.ownership.upper(), params, str(len(member.parameters)),
+                  'XR_NATIVE_RESULT_OWNERSHIP_' + member.ownership.upper(), params, str(len(member.parameters)),
                   'XR_NATIVE_TERM_' + simple_term(member.result, binder)]
         lines.append('    {' + ', '.join(fields) + '},')
     digest = hashlib.sha256(source.encode()).digest()
@@ -377,11 +381,90 @@ def render_type(root, stem):
     return lines, header, members
 
 
+def render_atomic_identities(root):
+    source = (root / 'stdlib/types/atomic.xr').read_text(encoding='utf-8').replace('\r\n', '\n')
+    lines = [line.strip() for line in source.splitlines() if line.strip() and not line.strip().startswith('//')]
+    expected = [
+        'class Atomic<T: AtomicValue> {',
+        'load(ordering?: Ordering) -> T',
+        'store(value: T, ordering?: Ordering)',
+        'add(delta: T, ordering?: Ordering) where T: AtomicNumber',
+        'sub(delta: T, ordering?: Ordering) where T: AtomicNumber',
+        'fetchAdd(delta: T, ordering?: Ordering) -> T where T: AtomicNumber',
+        'fetchSub(delta: T, ordering?: Ordering) -> T where T: AtomicNumber',
+        'swap(value: T, ordering?: Ordering) -> T',
+        'compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool)',
+        'toggle(ordering?: Ordering) -> bool where T: AtomicBoolean',
+        'toString() -> string', '}']
+    if lines != expected:
+        raise ValueError('Atomic declaration differs from its frozen closed contract')
+    output = []
+    operations = ['LOAD','STORE','ADD','SUB','FETCH_ADD','FETCH_SUB','SWAP','COMPARE_EXCHANGE','TOGGLE','TO_STRING']
+    facts = []
+    for index, signature in enumerate(lines[1:-1]):
+        name = signature.split('(', 1)[0]
+        parser = TypeParser(signature.split(' where ', 1)[0][len(name):])
+        parameters = parser.parameters()
+        result = ('tuple', ())
+        if parser.peek() == '->':
+            parser.take('->')
+            result = parser.type()
+        if parser.peek() is not None:
+            raise ValueError('Atomic member has an unparsed type contract')
+        source_line = next((number, raw) for number, raw in enumerate(source.splitlines(), 1)
+                           if raw.strip() == signature)
+        facts.append((index, name, signature, parameters, result, source_line))
+        if parameters:
+            output.append(f'static const XrNativeParameter xr_native_atomic_parameters_{index}[] = {{')
+            for pname, term, spelling, optional, variadic in parameters:
+                output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
+                    'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower()]) + '},')
+            output.append('};')
+    output += ['static const XrNativeMemberDeclaration xr_native_atomic_members[] = {']
+    for index, name, signature, parameters, result, (number, raw) in facts:
+        params = f'xr_native_atomic_parameters_{index}' if parameters else 'NULL'
+        result_text = signature.split('->', 1)[1].split(' where ', 1)[0].strip() if '->' in signature else '()'
+        output.append('    {' + ', '.join([str(index+1), c_string(name), c_string(signature),
+            c_string(result_text), str(number), str(raw.index(name)+1),
+            'XR_NATIVE_RECEIVER_READ', 'false', 'true', 'true', 'true',
+            'XR_NATIVE_OPERATION_ATOMIC_' + operations[index], 'XR_NATIVE_ALLOCATION_MAY_HEAP',
+            c_string('allocation,retain,limit,unsupported' + ('' if index == 9 else ',atomic_argument')),
+            'XR_NATIVE_RESULT_OWNERSHIP_' + ('UNIT' if index in (1,2,3) else 'OWNED'), params, str(len(parameters)),
+            'XR_NATIVE_TERM_' + simple_term(result, 'T')]) + '},')
+    digest = hashlib.sha256(source.encode()).digest()
+    output += ['};', 'static const XrNativeTypeDeclaration xr_native_atomic = {',
+        '    3, XR_NATIVE_DECLARATION_IDENTITY, "Atomic", "T", 1,',
+        '    "stdlib/types/atomic.xr", "xray-native:prelude/Atomic", {{' + ', '.join(str(b) for b in digest) + '}},',
+        '    2, 7, xr_native_atomic_members, 10', '};']
+    prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8').replace('\r\n', '\n')
+    match = re.search(r'XR_BUILTIN_ENUM\("Ordering",\s*0,\s*ORDERING,(.*?)\n\n', prelude, re.S)
+    variants = re.findall(r'XR_BUILTIN_ENUM_VARIANT\("([^" ]+)",\s*NONE\)', match.group(1)) if match else []
+    canonical = ['Relaxed','Acquire','Release','AcquireRelease','SeqCst']
+    expected_variants = ''.join('XR_BUILTIN_ENUM_VARIANT("'+v+'",NONE)' for v in canonical) + ')'
+    if variants != canonical or ''.join(match.group(1).split()) != expected_variants:
+        raise ValueError('Ordering registry differs from canonical variant identity')
+    ordering_line, ordering_raw = next((number, raw) for number, raw in enumerate(prelude.splitlines(), 1)
+                                      if 'XR_BUILTIN_ENUM("Ordering",' in raw)
+    output += ['static const XrNativeMemberDeclaration xr_native_ordering_members[] = {']
+    for index, name in enumerate(variants):
+        variant_line, variant_raw = next((number, raw) for number, raw in enumerate(prelude.splitlines(), 1)
+                                         if 'XR_BUILTIN_ENUM_VARIANT("'+name+'",' in raw)
+        output.append('    {' + ', '.join([str(index+1),c_string(name),c_string(name),'"Ordering"',
+            str(variant_line),str(variant_raw.index(name)+1),'XR_NATIVE_RECEIVER_READ','true','false','false','true',
+            'XR_NATIVE_OPERATION_NONE','XR_NATIVE_ALLOCATION_NO_HEAP','"none"',
+            'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN','NULL','0','XR_NATIVE_TERM_UNADMITTED']) + '},')
+    digest = hashlib.sha256(prelude.encode()).digest()
+    output += ['};','static const XrNativeTypeDeclaration xr_native_ordering = {',
+        '    4, XR_NATIVE_DECLARATION_VALUE, "Ordering", "", 0,',
+        '    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{' + ', '.join(str(b) for b in digest) + '}},',
+        f'    {ordering_line}, {ordering_raw.index("Ordering")+1}, xr_native_ordering_members, 5', '};']
+    return output
+
 def render(root):
     lines = ['/* Generated by gen_native_declarations.py; do not edit. */']
     array_lines, header, members = render_type(root, "array")
     string_lines, _, _ = render_type(root, "string")
-    lines += array_lines + string_lines
+    lines += array_lines + string_lines + render_atomic_identities(root)
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

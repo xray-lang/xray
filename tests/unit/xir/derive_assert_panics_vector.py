@@ -69,25 +69,27 @@ def main():
     from derive_semantic61_migration import semantic61_packet
     from derive_tuple62_migration import tuple62_packet
     from derive_tuple63_migration import tuple63_packet
+    from derive_assert_atomic64_packet import current64_packet
     historical59, current_offsets = current_vector()
     executable = tuple63_packet(tuple62_packet(semantic61_packet(historical59)))
-    header = ('/* Complete independently framed wire24 semantic63 core declaration. */\n'
-              'static const uint8_t assert_panics_golden[] = {\n' +
+    previous_literal = bytes(int(v, 16) for v in re.findall(r'0x[0-9a-fA-F]{2}',
+                        (directory / 'xir_assert_panics_golden.h').read_text(encoding='utf-8')))
+    assert previous_literal == executable
+    executable = current64_packet(executable)
+    header = ('/* Complete independently framed wire25 semantic64 core declaration. */\n'
+              'static const uint8_t assert_panics64_golden[] = {\n' +
               '\n'.join('    ' + ','.join(f'0x{byte:02x}' for byte in executable[at:at+12]) + ','
                         for at in range(0, len(executable), 12)) + '\n};\n')
-    header += '\n'.join(f'#define XR_PANICS_VECTOR_{name.upper()} {value}u'
-                        for name,value in current_offsets.items())+'\n'
     if args.write:
-        (directory / 'xir_assert_panics_golden.h').write_text(header, encoding='utf-8')
-        (directory / 'assert_panics_packet_vectors.json').write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')
+        (directory / 'xir_assert_panics64_golden.h').write_text(header, encoding='utf-8')
     else:
         literal = bytes(int(v, 16) for v in re.findall(r'0x[0-9a-fA-F]{2}',
-                        (directory / 'xir_assert_panics_golden.h').read_text(encoding='utf-8')))
+                        (directory / 'xir_assert_panics64_golden.h').read_text(encoding='utf-8')))
         assert literal == executable
         assert json.loads((directory / 'assert_panics_packet_vectors.json').read_text(encoding='utf-8')) == data
     print(json.dumps({'historical56_bytes': len(current), 'historical56_sha256': data['core_packet_sha256'],
-                     'current63_bytes':len(executable), 'current63_sha256':hashlib.sha256(executable).hexdigest(),
-                     'historical56_offsets': offsets, 'current63_offsets':current_offsets}, indent=2))
+                     'current64_bytes':len(executable), 'current64_sha256':hashlib.sha256(executable).hexdigest(),
+                     'historical56_offsets': offsets, 'current64_offsets':current_offsets}, indent=2))
 
 
 if __name__ == '__main__':

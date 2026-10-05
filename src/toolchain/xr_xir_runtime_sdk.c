@@ -11,6 +11,8 @@
  */
 #include "xr_xir_runtime_sdk_internal.h"
 #include "../xir/xxir_program.h"
+#include "../xir/xxir_atomic.h"
+#include "../xir/xxir_nominal.h"
 #include "../xir/xxir_checked.h"
 #include "../xir/xxir_output.h"
 #include "../shared/xr_error_core.h"

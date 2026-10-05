@@ -101,10 +101,12 @@ static bool source_nominal_path(SourceContext *ctx, AstNode *path, SourceTypeArg
         if (space->module_name || space->arg_count || space->type_arg_count < 0 || !space->class_name)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid static type namespace");
         binding = owner = visible_name(ctx, space->class_name);
+        if (!owner) binding = owner = source_ordering_lookup(ctx, space->class_name);
         if (owner && owner->kind == SOURCE_IMPORT) owner = imported_declaration(ctx, owner, owner->imported);
         arguments->refs = space->type_args; arguments->count = (uint32_t)space->type_arg_count;
     } else if (path->type == AST_VARIABLE) {
         binding = owner = visible_name(ctx, path->as.variable.name);
+        if (!owner) binding = owner = source_ordering_lookup(ctx, path->as.variable.name);
         if (owner && owner->kind == SOURCE_IMPORT) owner = imported_declaration(ctx, owner, owner->imported);
     } else if (path->type == AST_MEMBER_ACCESS && path->as.member_access.object->type == AST_VARIABLE) {
         binding = visible_name(ctx, path->as.member_access.object->as.variable.name);

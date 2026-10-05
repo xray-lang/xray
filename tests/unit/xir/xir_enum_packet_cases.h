@@ -15,7 +15,7 @@ static void enum_instruction_packet_cases(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);checked=NULL;
     const uint32_t patterns[][8] = {
-        {88,2,2,0,0,0,1,0}, {86,256,0,2,0,0,1,0}, {87,2,2,0,0,0,0,0}};
+        {XR_XIR_ENUM_GET,2,2,0,0,0,1,0}, {XR_XIR_ENUM_NEW,256,0,2,0,0,1,0}, {XR_XIR_ENUM_TAG,2,2,0,0,0,0,0}};
     const uint32_t offsets[] = {12,24,12}, replacements[] = {2,0,1};
     for (uint32_t i = 0; i < 3; ++i) {
         uint8_t expected[32]; for (uint32_t w = 0; w < 8; ++w) put32(expected + 4*w,patterns[i][w]);

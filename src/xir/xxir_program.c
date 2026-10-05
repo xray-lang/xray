@@ -13,6 +13,7 @@
 
 #include "xxir_program_internal.h"
 #include "xxir_compile_memory.h"
+#include "xxir_atomic.h"
 #include "../base/xchecks.h"
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
@@ -133,6 +134,11 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     if (status != XR_XIR_OK) return status;
     status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof);
     if (status != XR_XIR_OK) return status;
+    if (spec->types) for (uint32_t i = 0; i < spec->types->count; ++i) {
+        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+        if (spec->types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
+            return XR_XIR_UNSUPPORTED;
+    }
     XrXirProgram *program = xir_compile_calloc(context, 1, sizeof(*program), &status);
     if (!program) return status;
     atomic_init(&program->references, 1);
@@ -147,7 +153,8 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
         XrXirValueStatus value_status = xr_xir_compile_type_arena_new(context, spec->types, &program->arena);
         if (value_status != XR_XIR_VALUE_OK) {
             status = value_status == XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
-                value_status == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+                value_status == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_BAD_TYPE :
+                value_status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_UNSUPPORTED : XR_XIR_BUDGET;
             goto failed;
         }
         program->types = xr_xir_compile_type_arena_types(program->arena);

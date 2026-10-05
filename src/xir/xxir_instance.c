@@ -64,6 +64,7 @@ static XrXirCallStatus value_call_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_OK) return XR_XIR_CALL_READY;
     if (status == XR_XIR_VALUE_BOUNDS) return XR_XIR_CALL_BOUNDS;
     if (status == XR_XIR_VALUE_OOM) return XR_XIR_CALL_OOM;
+    if (status == XR_XIR_VALUE_UNSUPPORTED) return XR_XIR_CALL_UNSUPPORTED;
     if (status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT) return XR_XIR_CALL_LIMIT;
     return XR_XIR_CALL_BAD_STATE;
 }
@@ -562,10 +563,6 @@ XrXirCallStatus xr_xir_instance_utc_offset(XrXirCallView *view, int64_t seconds,
     XrXirTimeStatus status = provider->utc_offset(provider->context, seconds, &offset);
     if (status == XR_XIR_TIME_OK) *minutes = offset;
     return time_call_status(status);
-}
-XrXirCallStatus xr_xir_instance_atomic(XrXirCallView *view, int64_t initial, XrXirValue *output) {
-    XrXirInstance *instance = view_instance(view);
-    return instance ? value_call_status(xr_xir_atomic_i64_new(instance->domain, initial, output)) : XR_XIR_CALL_BAD_STATE;
 }
 XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, XrXirValue *output) {
     XrXirInstance *instance = view_instance(view);

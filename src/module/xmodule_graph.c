@@ -209,7 +209,17 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             !module_equal(work,found->source_path,root->path) ||
             !module_equal(work,found->authority.namespace_id,root->authority->namespace_id) ||
             !module_equal(work,found->authority.physical_root,root->authority->physical_root)) { module_status(work,XR_MODULE_INVALID); return; }
-        if (found->status >= XR_MODSPEC_RESOLVED) return;
+        if (found->status >= XR_MODSPEC_RESOLVED) {
+            if (root->source) {
+                XrFingerprint content = {0};
+                module_status(work,module_resource_status(xr_compile_module_source_fingerprint(
+                    graph->resources,root->source,&content)));
+                if (module_work(work,sizeof(content.bytes)) &&
+                    memcmp(content.bytes,found->source_content_fingerprint.bytes,sizeof(content.bytes)))
+                    module_status(work,XR_MODULE_INVALID);
+            }
+            return;
+        }
     }
     if (work->status != XR_MODULE_OK) return;
     xr_compile_resources_free(graph->topo_order); graph->topo_order = NULL; graph->topo_count = 0;
@@ -288,9 +298,9 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_source(XrModuleGraph *graph
     if (!authority || authority->kind != XR_MODULE_IDENTITY_MEMORY) return XR_MODULE_INVALID;
     return xr_compile_module_graph_build_logical_source(graph,authority,NULL,NULL,source,error);
 }
-XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGraph *graph,
+static XrModuleStatus graph_include_logical_source(XrModuleGraph *graph,
     const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {
-    if (!graph || !graph->resources || graph->spec_count || !source || !authority) return XR_MODULE_INVALID;
+    if (!source || !authority) return XR_MODULE_INVALID;
     ModuleWork work = {graph->resources,graph->resolution_status};
     char *identity = NULL, *physical = NULL, *physical_logical = NULL;
     if (work.status == XR_MODULE_OK) module_status(&work,xr_compile_module_identity_from_logical(graph->resources,authority,logical,&identity));
@@ -306,6 +316,31 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGrap
     }
     xr_compile_resources_free(identity); xr_compile_resources_free(physical); xr_compile_resources_free(physical_logical);
     return graph_result(&work,graph,error);
+}
+XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGraph *graph,
+    const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {
+    if (!graph || !graph->resources || graph->spec_count) return XR_MODULE_INVALID;
+    return graph_include_logical_source(graph,authority,logical,path,source,error);
+}
+XR_FUNC XrModuleStatus xr_compile_module_graph_include_logical_source(XrModuleGraph *graph,
+    const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {
+    if (!graph || !graph->resources || graph->entry_index < 0) return XR_MODULE_INVALID;
+    return graph_include_logical_source(graph,authority,logical,path,source,error);
+}
+XR_FUNC XrModuleStatus xr_compile_module_graph_add_dependency(XrModuleGraph *graph, int from, int to) {
+    if (!graph || !graph->resources || from < 0 || to < 0 || from >= graph->spec_count ||
+        to >= graph->spec_count || graph->entry_index < 0) return XR_MODULE_INVALID;
+    ModuleWork work = {graph->resources,graph->resolution_status};
+    XrModuleSpec *source = &graph->specs[from];
+    int count = source->dep_count;
+    spec_add_dep(&work,source,to);
+    if (work.status == XR_MODULE_OK && count != source->dep_count) {
+        xr_compile_resources_free(graph->topo_order); graph->topo_order = NULL; graph->topo_count = 0;
+        xr_compile_resources_free(graph->cycle_desc); graph->cycle_desc = NULL; graph->has_cycle = false;
+        for (int i = 0; i < graph->spec_count && module_work(&work,1); ++i)
+            graph->specs[i].topo_index = graph->specs[i].scc_id = -1;
+    }
+    return graph_result(&work,graph,NULL);
 }
 /* All Tarjan metadata remains private until a complete order and any cycle
  * description have passed admission. A failed retry preserves the prior order. */

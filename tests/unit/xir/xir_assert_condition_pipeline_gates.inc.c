@@ -42,7 +42,7 @@ static void assert_pipeline_oom(const XrXirArtifact *checked) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     uint32_t owner=assert_find(xr_xir_compile_artifact_module(closed),"assert");
     size_t instruction=assert_packet_instruction(&packet,owner), position=instruction;
-    CHECK(assert_packet_u32(&packet,&position)==115);
+    CHECK(assert_packet_u32(&packet,&position)==XR_XIR_ASSERT_CONDITION);
     /* OUTPUT on the STRING parameter is locally typed, but is not the bound
      * assertion body recorded in the owned checked origin. */
     assert_word(packet.bytes+instruction,XR_XIR_OUTPUT);

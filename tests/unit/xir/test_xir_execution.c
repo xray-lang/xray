@@ -13,6 +13,8 @@
 
 #include "xir_execution_fixture.h"
 #include "xir_execution_cases.h"
+#include "xir_float_transport_fixture.h"
+#include "xir_float_transport_cases.h"
 #include "xir/xxir_vm.h"
 #include "xir_integer_runtime_cases.h"
 #include "xir_integer_admission_cases.h"
@@ -43,6 +45,9 @@ int main(void) {
     CHECK(result.type == XR_XIR_I64 && result.payload == -1);
     CHECK(!context.live_bytes && context.allocations == context.frees);
     xr_xir_compile_artifact_free(uninitialized); }
+    { XrXirArtifact *transport = float_transport_fixture(&scalar_owner.context);
+    float_transport_cases(run, transport);
+    xr_xir_compile_artifact_free(transport); }
     decimal_cases();
     integer_runtime_cases();
     float_runtime_cases();

@@ -25,7 +25,7 @@ static inline void enum_metadata_fixture(EnumMetadataFixture *f) {
     f->fields[0] = (XrXirNominalField) {{"value", 5}, XR_XIR_I64, 0};
     f->fields[1] = (XrXirNominalField) {{"value", 5}, XR_XIR_STRING, 0};
     f->declaration = (XrXirNominalDeclaration) {{"alpha", 5}, {"Choice", 6}, 1, NULL, 0,
-        f->fields, 2, XR_XIR_NOMINAL_ENUM, f->variants, 3, 0};
+        f->fields, 2, XR_XIR_NOMINAL_ENUM, f->variants, 3, 0,{0}};
     f->table = (XrXirNominalTable) {&f->declaration, 1, NULL};
 }
 #endif // XIR_ENUM_METADATA_FIXTURE_H

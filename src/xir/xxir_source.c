@@ -216,6 +216,8 @@ typedef struct SourceContext {
     bool returned, has_generics, query_ready;
     XrXirSourceView query;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
+    uint32_t ordering_module; /* One-based actual graph index, zero when unused. */
+    uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
@@ -501,6 +503,8 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
 }
 #include "xxir_source_intern.inc.c"
 #include "xxir_source_native.inc.c"
+#include "xxir_source_atomic.inc.c"
+#include "xxir_source_ordering.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     XrXirType type, uint32_t depth, XrXirType *output) {
@@ -639,12 +643,10 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     case XR_TREF_GENERIC:
         if (source_nominal_name(ctx, ref->name))
             return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
+        if (ref->name && source_text_same(ctx,NULL,ref->name,"Atomic"))
+            return source_native_atomic_type(ctx,ref,type);
         if (ref->name && source_native_find(ctx,ref->name))
             return source_native_array_type(ctx, ref, type);
-        if (ref->name && source_text_same(ctx, NULL, ref->name, "Atomic") && ref->nchildren == 1 &&
-            ref->children[0]->kind == XR_TREF_SCALAR && ref->children[0]->scalar_rep == XR_NATIVE_I64) {
-            *type = XR_XIR_ATOMIC_I64; return true;
-        }
         return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
     default: break;
     }
@@ -952,6 +954,7 @@ static bool source_string_literal(SourceContext *ctx, AstNode *node, const char 
 #include "xxir_source_enum_text.inc.c"
 #include "xxir_source_type_name.inc.c"
 #include "xxir_source_defaults.inc.c"
+#include "xxir_source_atomic_calls.inc.c"
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_panic.inc.c"
 static bool finish_body(SourceContext *ctx);
@@ -967,13 +970,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         call->type_arg_count > 65536 || call->default_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "call arity or type arguments are not admitted");
     SourceName *target = NULL, *binding = NULL;
-    bool print = false, atomic = false;
+    bool print = false;
     uint32_t stream = 0, host_time = 0;
     AstNode *callee = call->callee;
     SourceValue receiver = {0}, indirect = {0};
     bool indirect_ready = false;
     SourceStaticMethod selected = {0};
-    XrXirOp method = XR_XIR_INVALID;
     if (callee->type == AST_VARIABLE) {
         const char *name = callee->as.variable.name;
         target = ctx->active_expression->binding;
@@ -1017,7 +1019,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){false, XR_XIR_UNIT, false}, &input) &&
                     source_type_name(ctx, node, input, value);
             }
-            print = source_text_same(ctx, NULL, name, "print"); atomic = source_text_same(ctx, NULL, name, "Atomic"); stream = stream_primitive(ctx, name);
+            if (source_text_same(ctx,NULL,name,"Atomic"))
+                return source_atomic_inferred_construct(ctx,node,result_context,value);
+            print = source_text_same(ctx, NULL, name, "print"); stream = stream_primitive(ctx, name);
             host_time = host_time_primitive(ctx, name);
         }
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
@@ -1060,6 +1064,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (!expression(ctx, member->object, &receiver)) return false;
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
+            if (xr_xir_type_is_atomic(&ctx->types,receiver.type))
+                return source_atomic_call(ctx,node,receiver,value);
             if ((receiver.type == XR_XIR_BOOL || receiver.type == XR_XIR_RUNE || xr_xir_type_is_number(receiver.type)) &&
                 source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
@@ -1086,10 +1092,6 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                     !source_query_expression(ctx, callee, indirect.type)) return false;
                 indirect_ready = true;
             }
-            if (receiver.type == XR_XIR_ATOMIC_I64) {
-                if (source_text_same(ctx, NULL, member->name, "load") && !call->arg_count) method = XR_XIR_ATOMIC_I64_LOAD;
-                if (source_text_same(ctx, NULL, member->name, "fetchAdd") && call->arg_count == 1) method = XR_XIR_ATOMIC_I64_FETCH_ADD;
-            }
         }
     }
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
@@ -1110,7 +1112,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
     }
     XrXirTypeNode signature = {0};
-    if (!print && !atomic && !stream && !host_time && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION)) {
+    if (!print && !stream && !host_time && (!target || target->kind != SOURCE_FUNCTION)) {
         if (call->type_arg_count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call has no generic declaration parameters");
         if (!indirect_ready && !expression(ctx, callee, &indirect)) return false;
         const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types, indirect.type);
@@ -1118,7 +1120,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call requires its declared signature");
         signature = *found;
     }
-    if ((print || atomic || stream || host_time || method != XR_XIR_INVALID) && call->type_arg_count)
+    if ((print || stream || host_time) && call->type_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "primitive does not admit explicit type arguments");
     XrXirInstruction op = {0};
     uint32_t argument_count = (uint32_t)call->arg_count;
@@ -1129,7 +1131,6 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "ref and move arguments require an implemented contract");
         XrXirType expected = XR_XIR_UNIT;
         if (indirect.type) expected = signature.parameters[i].type;
-        if (atomic || method == XR_XIR_ATOMIC_I64_FETCH_ADD) expected = XR_XIR_I64;
         if (stream) expected = XR_XIR_STRING;
         if (host_time > (uint32_t) XR_XIR_CLOCK_MONOTONIC) expected = XR_XIR_I64;
         if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false}, &args[i])) return false;
@@ -1158,14 +1159,6 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_RUNE && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
         op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}};
-    } else if (atomic) {
-        if (call->arg_count != 1 || args[0].type != XR_XIR_I64)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Atomic requires one i64 initializer");
-        op = (XrXirInstruction) {XR_XIR_ATOMIC_I64_NEW, XR_XIR_ATOMIC_I64, {args[0].id, 0}, {0, 0}, 0, {0}};
-    } else if (method != XR_XIR_INVALID) {
-        if (method == XR_XIR_ATOMIC_I64_FETCH_ADD && args[0].type != XR_XIR_I64)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Atomic fetchAdd requires i64");
-        op = (XrXirInstruction) {method, XR_XIR_I64, {receiver.id, call->arg_count ? args[0].id : 0}, {0, 0}, 0, {0}};
     }
     if (op.op == XR_XIR_PRINT)
         return source_recipe_group(ctx, op, args, argument_count, value);
@@ -1452,7 +1445,10 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING: case AST_LITERAL_RUNE:
         return source_literal(ctx, node, value);
     case AST_TEMPLATE_STRING: return source_template(ctx, node, value);
-    case AST_NEW_EXPR: return source_array_construct(ctx, node, value);
+    case AST_NEW_EXPR:
+        if (node->as.new_expr.class_name && source_text_same(ctx,NULL,node->as.new_expr.class_name,"Atomic"))
+            return source_atomic_explicit_construct(ctx,node,value);
+        return source_array_construct(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, context, value);
     case AST_MATCH_EXPR: {
@@ -2795,7 +2791,7 @@ XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
     if (module_status != XR_MODULE_OK) {
         source_module_fail(&ctx, NULL, module_status, error ? error : "module graph build failed"); goto done;
     }
-    if (!source_manifests_load(&ctx)) goto done;
+    if (!source_manifests_load(&ctx) || !source_ordering_discover(&ctx)) goto done;
     module_status = xr_compile_module_graph_topological_sort(ctx.graph);
     if (module_status != XR_MODULE_OK) {
         source_module_fail(&ctx, NULL, module_status, "module graph ordering failed"); goto done;

@@ -99,7 +99,7 @@ static void ownership_and_oom(void) {
     fail_at = SIZE_MAX; printf("Interface structure ownership: %zu allocation failure sites\n", sites);
 }
 static void rejection_and_budget(void) {
-    for (unsigned attack = 0; attack < 10; ++attack) {
+    for (unsigned attack = 0; attack < 11; ++attack) {
         Fixture f; fixture(&f);
         if (attack == 0) f.parents[0].declaration = 1;
         if (attack == 1) f.parents[0].declaration = UINT32_MAX;
@@ -111,9 +111,15 @@ static void rejection_and_budget(void) {
         if (attack == 7) f.declarations[1].name = f.declarations[0].name;
         if (attack == 8) f.parameter = XR_XIR_UNIT;
         if (attack == 9) f.declarations[0].parents = f.parents, f.declarations[0].parent_count = 1;
+        if (attack == 10) f.constraint.markers = 64;
         XrXirCompileContext context = interface_context_default();
         XrXirInterfaceTable *copy = NULL;
-        CHECK(xr_xir_compile_interfaces_clone(&context,&f.table,&f.types,&copy)!=XR_XIR_OK && !copy);
+        XrXirStatus status = xr_xir_compile_interfaces_clone(&context,&f.table,&f.types,&copy);
+        if (attack == 5) {
+            CHECK(status == XR_XIR_OK && copy);
+            CHECK(copy->declarations[0].constraints[0].markers == XR_XIR_CONSTRAINT_ATOMIC_VALUE);
+            xr_xir_compile_interfaces_free(copy); copy = NULL;
+        } else CHECK(status != XR_XIR_OK && !copy);
         interface_temporary_clean(&context);
     }
     Fixture f; fixture(&f);

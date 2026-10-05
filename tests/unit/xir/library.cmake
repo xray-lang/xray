@@ -46,3 +46,7 @@ foreach(library_test IN ITEMS test_xir_library_source test_xir_library_packet te
     add_test(NAME ${library_test} COMMAND ${library_test})
     set_tests_properties(${library_test} PROPERTIES LABELS "unit;xir;execution;ownership;abi")
 endforeach()
+
+add_test(NAME test_xir_library_atomic64_vectors COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_library_atomic64_vectors.py)
+set_tests_properties(test_xir_library_atomic64_vectors PROPERTIES LABELS "unit;xir;abi")

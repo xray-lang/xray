@@ -1,17 +1,14 @@
 """Reproduce one static SDK preimage from fixed bytes and natural C layout facts."""
 from pathlib import Path
-import argparse, hashlib, json, struct, sys, tempfile
+import argparse, hashlib, json, struct
 
-root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
-from derive_xir_sdk_abi import prepare
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--write',action='store_true')
-    args=parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix='xir-sdk-kat-') as temporary:
-        facts=Path(temporary)/'facts';prepare(facts)
-        rows=json.loads((facts/'EXPECTED.json').read_text())['rows'];assert len(rows)==233
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    facts=json.loads(Path(__file__).with_name('sdk_historical_abi233.json').read_text())
+    assert facts['status']=='FROZEN_HISTORICAL_23_61_19_25_28'
+    rows=facts['rows'];assert len(rows)==233 and len({row['id'] for row in rows})==233
     word=lambda value:struct.pack('<I',value)
     def text(value):
         value=value.encode();return word(len(value))+value
@@ -29,8 +26,7 @@ def main():
         for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
         output+='};\n'
     target=Path(__file__).with_name('sdk_identity_golden.h')
-    if args.write:target.write_text(output,encoding='utf-8',newline='\n')
-    else:assert target.read_text(encoding='utf-8')==output,'static SDK known bytes differ from independent facts'
+    assert target.read_text(encoding='utf-8')==output,'historical SDK known bytes differ from frozen independent facts'
     print('SDK independent '+str(len(image))+' byte preimage PASS: '+digest.hex())
 
 

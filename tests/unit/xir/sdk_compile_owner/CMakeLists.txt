@@ -57,5 +57,6 @@ add_test(NAME test_sdk_old_objects COMMAND "${Python3_EXECUTABLE}"
     --old "${XIR_OLD_ABI_DIR}" --root "${SDK_OWNER_ROOT}" --output "${CMAKE_CURRENT_BINARY_DIR}/old-objects"
     --owner $<TARGET_FILE:test_xir_sdk_resources>)
 add_test(NAME test_sdk_identity_known_bytes COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../derive_sdk_identity.py")
-set_tests_properties(test_sdk_compile_owner test_sdk_old_data test_sdk_old_objects test_sdk_identity_known_bytes
+add_test(NAME test_sdk_current_identity_known_bytes COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../derive_sdk_current_identity.py")
+set_tests_properties(test_sdk_compile_owner test_sdk_old_data test_sdk_old_objects test_sdk_identity_known_bytes test_sdk_current_identity_known_bytes
     PROPERTIES LABELS "unit;xir;sdk;abi;ownership" RUN_SERIAL TRUE TIMEOUT 180)

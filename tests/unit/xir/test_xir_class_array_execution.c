@@ -29,10 +29,10 @@ static void class_runtime_faults(XrXirProgram *program) {
  for(size_t pass=0;pass<=sites;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
  XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirValue value={0};
  XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
- if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,3,NULL,0);
+ if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,CLASS_ARRAY_ANSWER,NULL,0);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
  if(status==XR_XIR_CALL_RETURNED){C(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);C(value.type==XR_XIR_I64&&value.payload==41);xr_xir_value_drop(&value);
- status=xr_xir_instance_start(instance,4,NULL,0);if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+ status=xr_xir_instance_start(instance,CLASS_ARRAY_RETAINED,NULL,0);if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
  if(status==XR_XIR_CALL_RETURNED)C(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);}
  if(!pass){C(status==XR_XIR_CALL_RETURNED);sites=runtime_attempts;C(sites>0);}else C(status==XR_XIR_CALL_OOM);
  if(instance)C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&value);
@@ -68,7 +68,11 @@ static XrXirStatus class_execution_build(const XrXirCompileContext *context,unsi
     if(status==XR_XIR_OK) {
         C(!lowered && owner->program->context.resources==context->resources);unsigned native=0,vm=0;
         for(uint32_t f=0;f<module->function_count;++f) {
-            if((f%2)==1){owner->entries[f]=source_class_array_program.entries[f];++native;}
+            /* Preserve the original named-function split after the new prelude
+             * initializer: answer/suspended native, retained/advance VM. The
+             * additional governed initializer is VM; the old three keep theirs. */
+            bool use_native=f<CLASS_ARRAY_ANSWER ? f==1 : ((f-CLASS_ARRAY_ANSWER)%2)==0;
+            if(use_native){owner->entries[f]=source_class_array_program.entries[f];++native;}
             else {owner->entries[f]=owner->program->entries[f];C(owner->entries[f].resume!=source_class_array_program.entries[f].resume);++vm;}
         }
         C(native && vm);XrXirProgramSpec spec=source_class_array_program;spec.entries=owner->entries;
@@ -93,11 +97,15 @@ static void class_program_attacks(const XrXirCompileContext *context) {
     C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
     old=spec;old.abi_version=24;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
     C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
+    old=spec;old.abi_version=28;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
+    C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
     old=spec;old.target.abi_version=14;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
     C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
     old=spec;old.target.abi_version=13;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
     C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
     old=spec;old.target.abi_version=19;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
+    C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
+    old=spec;old.target.abi_version=20;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
     C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
     uint8_t *packet=malloc(spec.proof.length);C(packet);
     for(unsigned mode=0;mode<2;++mode){memcpy(packet,spec.proof.bytes,spec.proof.length);packet[mode?12:8]=mode?46:18;
@@ -120,9 +128,9 @@ int main(void) {
  XrXirValue saved[2]={{0},{0}};
  for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
- C(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+ C(xr_xir_instance_start(instance,CLASS_ARRAY_ANSWER,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
  XrXirValue number={0};C(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);C(number.type==XR_XIR_I64 && number.payload==41);xr_xir_value_drop(&number);
- C(xr_xir_instance_start(instance,4,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+ C(xr_xir_instance_start(instance,CLASS_ARRAY_RETAINED,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
  C(xr_xir_instance_take_result(instance,&saved[i])==XR_XIR_CALL_RETURNED);C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
  class_array_suspend_cases(program);xr_xir_compile_program_drop(program);
  for(unsigned i=0;i<2;++i)class_array_retained(&saved[i]);

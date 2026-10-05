@@ -536,6 +536,7 @@ add_custom_command(
     DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
             ${CMAKE_SOURCE_DIR}/stdlib/types/array.xr
             ${CMAKE_SOURCE_DIR}/stdlib/types/string.xr
+            ${CMAKE_SOURCE_DIR}/stdlib/types/atomic.xr
             ${CMAKE_SOURCE_DIR}/stdlib/prelude/builtin_symbols.def
     COMMENT "projecting governed native value declarations"
 )

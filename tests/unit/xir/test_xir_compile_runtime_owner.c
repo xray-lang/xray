@@ -72,8 +72,8 @@ static XrXirValueStatus arena_fixture(const XrXirCompileContext *context, XrXirT
     XrXirNominalFieldIdentity inner_fields[] = {{{"text",4},0}};
     XrXirNominalFieldIdentity outer_fields[] = {{{"choice",6},0}};
     XrXirNominalIdentity identities[] = {
-        {{"alpha",5},{"Choice",6},1,0,inner_fields,1,XR_XIR_NOMINAL_ENUM,variants,2,0},
-        {{"alpha",5},{"Outer",5},1,0,outer_fields,1,XR_XIR_NOMINAL_STRUCT,NULL,0,0}};
+        {{"alpha",5},{"Choice",6},1,0,inner_fields,1,XR_XIR_NOMINAL_ENUM,variants,2,0,{0}},
+        {{"alpha",5},{"Outer",5},1,0,outer_fields,1,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}}};
     XrXirNominalTable table = {NULL,2,identities};
     XrXirType inner_types[] = {XR_XIR_STRING}, outer_types[] = {(XrXirType)256};
     XrXirTypeNode nodes[2] = {{0}};

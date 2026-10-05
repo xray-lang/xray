@@ -15,6 +15,7 @@ static XrXirArtifact *enum_checked_fixture(const XrXirCompileContext *context) {
     XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     EnumMetadataFixture f; enum_metadata_fixture(&f);
     XrXirTypes types = {NULL, 0, &f.table, NULL}; built.types = &types;
+    CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f)); xr_xir_compile_artifact_free(base);base=NULL;
     return checked;

@@ -14,6 +14,7 @@ add_custom_command(OUTPUT ${XIR_LIBRARY_STRING_CHECKED}
     COMMAND $<TARGET_FILE:test_xir_library_string_source> ${XIR_LIBRARY_STRING_CHECKED}
     DEPENDS test_xir_library_string_source
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_string_goldens.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_string64_goldens.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_string_source_cases.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_string_runtime.h
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_library_strings/root.xr

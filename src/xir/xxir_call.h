@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 25u
+#define XR_XIR_CALL_ABI_VERSION 26u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -30,7 +30,7 @@ typedef enum XrXirCallStatus {
     /* A host service failed. It is never a language panic and no handler observes it. */
     XR_XIR_CALL_HOST_ERROR,
     /* A language panic whose detail code alone names it, such as unwrapping null. */
-    XR_XIR_CALL_RUNTIME_PANIC
+    XR_XIR_CALL_RUNTIME_PANIC, XR_XIR_CALL_UNSUPPORTED
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
@@ -97,6 +97,8 @@ typedef struct XrXirCallView {
 } XrXirCallView;
 /* Borrowed only by the driver's current resume view, until that callback returns. */
 XR_FUNC XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view);
+/* Only an active callback view can inspect its existing driver permission. */
+XR_FUNC XrXirCallStatus xr_xir_call_execution_status(const XrXirCallView *view);
 /* Consume the driver's admitted returned owner, never the borrowed view copy. */
 XR_FUNC XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirType expected);
 /* Internal authority exists only within an active cleanup callback or value admission. */

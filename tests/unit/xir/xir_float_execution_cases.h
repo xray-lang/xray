@@ -38,8 +38,8 @@ static XrXirValue floating_argument(XrXirType type, uint64_t bits) {
     memcpy(&payload, &bits, sizeof(bits));
     return (XrXirValue) {(uint32_t) type, 0, payload};
 }
-static bool floating_canonical(XrXirType type, uint64_t bits) {
-    if (type != XR_XIR_F32 && type != XR_XIR_F64) return true;
+static bool floating_runtime_admitted(XrXirType type, uint64_t bits) {
+    if (type != XR_XIR_F32) return true;
     uint64_t magnitude = bits & (type == XR_XIR_F32 ? UINT64_C(0x7fffffff) : UINT64_C(0x7fffffffffffffff));
     uint64_t infinity = type == XR_XIR_F32 ? UINT64_C(0x7f800000) : UINT64_C(0x7ff0000000000000);
     uint64_t nan = type == XR_XIR_F32 ? UINT64_C(0x7fc00000) : UINT64_C(0x7ff8000000000000);
@@ -58,7 +58,7 @@ static void floating_conversions(FixtureRun run, void *owner) {
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrXirValue input = floating_argument(cases[i].source, cases[i].input), output = {99, 99, 99};
         XrXirRunContext context = {2, 16, 0, 0, 0, 0};
-        XrXirRunStatus expected = floating_canonical(cases[i].source, cases[i].input) ? cases[i].status : XR_XIR_RUN_BAD_ARGUMENT;
+        XrXirRunStatus expected = floating_runtime_admitted(cases[i].source, cases[i].input) ? cases[i].status : XR_XIR_RUN_BAD_ARGUMENT;
         uint32_t id = floating_function(cases[i].source, cases[i].target, XR_XIR_CONVERT_NUMBER);
         CHECK(run(owner, id, &context, &input, 1, &output) == expected);
         CHECK(output.type == (uint32_t) (expected == XR_XIR_RUN_OK ? cases[i].target : XR_XIR_UNIT));
@@ -111,7 +111,7 @@ static void floating_arithmetic_execution(FixtureRun run, void *owner) {
         XrXirValue inputs[] = {floating_argument(type, cases[i].a), floating_argument(type, cases[i].b)};
         XrXirValue output = {99, 99, 99};
         XrXirRunContext context = {2, 24, 0, 0, 0, 0};
-        XrXirRunStatus expected = floating_canonical(type, cases[i].a) && floating_canonical(type, cases[i].b) ?
+        XrXirRunStatus expected = floating_runtime_admitted(type, cases[i].a) && floating_runtime_admitted(type, cases[i].b) ?
             XR_XIR_RUN_OK : XR_XIR_RUN_BAD_ARGUMENT;
         XrXirOp op = (XrXirOp) (XR_XIR_ADD_FLOAT + cases[i].operation);
         CHECK(run(owner, floating_function(type, type, op), &context, inputs, 2, &output) == expected);

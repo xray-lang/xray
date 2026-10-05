@@ -20,6 +20,7 @@ XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
 #include "xxir_constraints.h"
 #include "xxir_constraint_proof.h"
 #include "../base/xmalloc.h"
+#include "../shared/xnative_declaration.h"
 
 XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
     XrXirType source, XrXirType target, void *work_owner, bool (*charge)(void *, uint64_t)) {
@@ -60,6 +61,30 @@ const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type) {
     return types && types->nodes && id >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
         id < XR_XIR_CONSTRUCTED_TYPE_LIMIT && id - XR_XIR_CONSTRUCTED_TYPE_BASE < types->count ?
         &types->nodes[id - XR_XIR_CONSTRUCTED_TYPE_BASE] : NULL;
+}
+XR_FUNC bool xr_xir_type_is_atomic(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && node->kind == XR_XIR_TYPE_ATOMIC;
+}
+XR_FUNC XrXirType xr_xir_atomic_element(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && node->kind == XR_XIR_TYPE_ATOMIC ? node->element : XR_XIR_UNIT;
+}
+XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    if (!node || node->kind != XR_XIR_TYPE_NOMINAL || !types->nominals ||
+        node->nominal.declaration >= types->nominals->count) return NULL;
+    const XrXirNominalTable *table = types->nominals;
+    if (table->declarations && !table->identities) return &table->declarations[node->nominal.declaration].native;
+    return table->identities && !table->declarations ? &table->identities[node->nominal.declaration].native : NULL;
+}
+XR_FUNC bool xr_xir_nominal_native_ordering(const XrXirTypes *types, XrXirType type) {
+    if (!xr_xir_type_is_enum(types, type)) return false;
+    const XrXirNominalNativeRecord *record = xr_xir_nominal_native_record(types, type);
+    const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ORDERING);
+    return record && record->native_id == XR_NATIVE_DECLARATION_ORDERING && native &&
+        native->kind == XR_NATIVE_DECLARATION_VALUE &&
+        !memcmp(record->source_fingerprint, native->source_fingerprint.bytes, sizeof(record->source_fingerprint));
 }
 static bool type_has_kind(const XrXirTypes *types, XrXirType type, uint32_t kind) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -102,10 +127,10 @@ XR_FUNC bool xr_xir_type_is_class(const XrXirTypes *types, XrXirType type) {
 }
 bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
+    return type == XR_XIR_STRING || type == XR_XIR_ERROR ||
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
-                  node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE));
+                  node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC));
 }
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -138,12 +163,12 @@ uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type) {
 static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     uint32_t id = (uint32_t) type;
     if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
+        type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
-         node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE);
+         node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC);
 }
 static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -187,7 +212,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             if (component > span) span = component;
         }
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
-               node->kind == XR_XIR_TYPE_NULLABLE) {
+               node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC) {
         if (node->parameters || node->parameter_count || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *element = xr_xir_type_node(types, node->element);
@@ -195,6 +220,12 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             element->kind == XR_XIR_TYPE_NOMINAL &&
             (uint32_t) node->element - XR_XIR_CONSTRUCTED_TYPE_BASE < index;
         if (!nominal_element && !type_component(types, node->element, index)) return XR_XIR_BAD_TYPE;
+        if (node->kind == XR_XIR_TYPE_ATOMIC) {
+            uint32_t element_id=(uint32_t)node->element;
+            bool parameter=element_id>=XR_XIR_TYPE_PARAMETER_BASE && element_id<XR_XIR_TYPE_PARAMETER_LIMIT;
+            if (!parameter && node->element!=XR_XIR_I64 && node->element!=XR_XIR_F64 && node->element!=XR_XIR_BOOL)
+                return XR_XIR_BAD_TYPE;
+        }
         span = xr_xir_type_span(types, node->element);
     } else if (node->kind == XR_XIR_TYPE_NOMINAL) {
         if (!types->nominals || (!types->nominals->declarations && !types->nominals->identities) ||
@@ -383,6 +414,7 @@ XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value) {
 
 #include "xxir_type_match.inc.c"
 #include "xxir_type_context.inc.c"
+#include "xxir_nominal_native.inc.c"
 #include "xxir_nominal.inc.c"
 #include "xxir_nominal_identity.inc.c"
 #include "xxir_nominal_layout.inc.c"

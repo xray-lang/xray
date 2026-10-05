@@ -26,6 +26,8 @@
 #include "xir/xxir_library_catalog.h"
 #include "base/xsha256.h"
 #include "xir_library_string_goldens.h"
+#include "xir_library_string64_goldens.h"
+#include "xir_library_prior_packet_rejection.h"
 #include "xir_library_source_owner.h"
 #include "xir_library_string_source_cases.h"
 
@@ -56,6 +58,13 @@ static void string_snapshot_owned(XrXirSourceSnapshot *snapshot) {
 }
 static void string_source_case(unsigned reverse,const char *output_path) {
     LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
+    library_prior_packet_rejection(&compiler.context,library_string_alpha,sizeof(library_string_alpha));
+    library_prior_packet_rejection(&compiler.context,library_string_beta,sizeof(library_string_beta));
+    library_prior_packet_rejection(&compiler.context,library_string_nul,sizeof(library_string_nul));
+    library_prior_packet_rejection(&compiler.context,library_string_empty,sizeof(library_string_empty));
+    library_prior_packet_rejection(&compiler.context,library_string_long,sizeof(library_string_long));
+    library_prior_packet_rejection(&compiler.context,library_string_equal,sizeof(library_string_equal));
+    library_prior_packet_rejection(&compiler.context,library_string_unused,sizeof(library_string_unused));
     XrXirCheckedPacket packets[2]={{0}};
     string_library_packet(&compiler.context,"alpha.xr","甲-owned",&packets[0]);
     string_library_packet(&compiler.context,"beta.xr","乙-owned",&packets[1]);
@@ -63,8 +72,8 @@ static void string_source_case(unsigned reverse,const char *output_path) {
     char names[5][16]={"alpha.xr","beta.xr","nul.xr","empty.xr","long.xr"};
     char catalog_root[1024];CHECK(strlen(XR_SOURCE_FIXTURES)<sizeof(catalog_root));strcpy(catalog_root,XR_SOURCE_FIXTURES);
     XrModuleIdentityAuthority owned_authority={XR_MODULE_IDENTITY_SCRIPT,NULL,catalog_root};
-    const unsigned char *manual[3]={library_string_nul,library_string_empty,library_string_long};
-    size_t lengths[3]={sizeof(library_string_nul),sizeof(library_string_empty),sizeof(library_string_long)};
+    const unsigned char *manual[3]={library_string64_nul,library_string64_empty,library_string64_long};
+    size_t lengths[3]={sizeof(library_string64_nul),sizeof(library_string64_empty),sizeof(library_string64_long)};
     void *buffers[3]={0};XrXirLibraryInput inputs[5]={0};
     for(unsigned i=0;i<5;++i){inputs[i].authority=owned_authority;inputs[i].logical_path=names[i];
         if(i<2){inputs[i].packet=packets[i].bytes;inputs[i].length=packets[i].length;}

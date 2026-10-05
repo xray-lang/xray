@@ -1,0 +1,43 @@
+# One whole Source Program retains all twenty original Atomic native expectations.
+set(XIR_ATOMIC_NATIVE20 ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_atomic_native20.c)
+set(XIR_ATOMIC_FIXTURE ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_atomic_native20)
+add_executable(test_xir_atomic_native20_source xir/test_xir_atomic_native20_source.c)
+target_link_libraries(test_xir_atomic_native20_source PRIVATE xray_xir_source_product)
+target_compile_definitions(test_xir_atomic_native20_source PRIVATE XR_ATOMIC_FIXTURES="${XIR_ATOMIC_FIXTURE}" XR_ATOMIC_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
+add_custom_command(OUTPUT ${XIR_ATOMIC_NATIVE20}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_atomic_native20_source> ${XIR_ATOMIC_NATIVE20}
+    DEPENDS test_xir_atomic_native20_source ${XIR_ATOMIC_FIXTURE}/root.xr VERBATIM)
+add_library(xir_atomic_native20_objects OBJECT xir/test_xir_atomic_native20_native.c ${XIR_ATOMIC_NATIVE20})
+target_link_libraries(xir_atomic_native20_objects PRIVATE xray_xir_scalar)
+set(atomic_native_names atomic_i64 atomic_bool atomic_i64_cas_1 atomic_i64_cas_2 atomic_i64_cas_3 atomic_i64_cas_4
+    atomic_bool_cas_1 atomic_bool_cas_2 atomic_bool_cas_3 atomic_bool_cas_4 atomic_i64_update_5 atomic_i64_update_6
+    atomic_i64_update_7 atomic_i64_update_8 atomic_i64_update_9 atomic_i64_update_10 atomic_bool_update_7 atomic_bool_update_10
+    atomic_i64_allocations atomic_bool_allocations)
+set(atomic_native_exits 42 1 42 40 40 40 1 0 0 0 42 38 42 40 40 40 1 0 0 0)
+set(atomic_case_index 0)
+set(atomic_all_targets test_xir_atomic_native20_source xir_atomic_native20_objects)
+foreach(atomic_name IN LISTS atomic_native_names)
+    set(atomic_target test_xr_program_aot_${atomic_name})
+    add_executable(${atomic_target} xir/test_xir_atomic_native20_main.c $<TARGET_OBJECTS:xir_atomic_native20_objects>)
+    target_link_libraries(${atomic_target} PRIVATE xray_xir_scalar)
+    target_compile_definitions(${atomic_target} PRIVATE XR_ATOMIC_CASE=${atomic_case_index})
+    xr_enable_pure_aot_symbol_map(${atomic_target})
+    list(GET atomic_native_exits ${atomic_case_index} atomic_exit)
+    add_test(NAME ${atomic_target} COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py --executable $<TARGET_FILE:${atomic_target}> --expected-exit ${atomic_exit})
+    set_tests_properties(${atomic_target} PROPERTIES LABELS "unit;aot;canonical-program;generated-c;native;arithmetic;task-300")
+    list(APPEND atomic_all_targets ${atomic_target})
+    math(EXPR atomic_case_index "${atomic_case_index}+1")
+endforeach()
+foreach(atomic_target IN LISTS atomic_all_targets)
+    target_include_directories(${atomic_target} PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/xir)
+    if(MSVC)
+        target_compile_options(${atomic_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${atomic_target} PRIVATE -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+    endif()
+endforeach()
+add_test(NAME test_xir_atomic_native20_source COMMAND test_xir_atomic_native20_source)
+add_test(NAME test_xir_atomic_native20_compiler COMMAND test_xir_atomic_native20_source --compiler)
+add_test(NAME test_xir_atomic_native20_native_compiler COMMAND test_xr_program_aot_atomic_i64 --compiler)
+set_tests_properties(test_xir_atomic_native20_source test_xir_atomic_native20_compiler test_xir_atomic_native20_native_compiler PROPERTIES TIMEOUT 300)

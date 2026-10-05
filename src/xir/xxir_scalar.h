@@ -29,7 +29,7 @@ typedef enum XrXirRunStatus {
     XR_XIR_RUN_FRAME_LIMIT,
     XR_XIR_RUN_OUT_OF_MEMORY, XR_XIR_RUN_NUMERIC_RANGE,
     XR_XIR_RUN_HOST_ERROR,
-    XR_XIR_RUN_NULL_UNWRAP
+    XR_XIR_RUN_NULL_UNWRAP, XR_XIR_RUN_ATOMIC_ARGUMENT, XR_XIR_RUN_UNSUPPORTED
 } XrXirRunStatus;
 
 /* Host clocks readable by the time primitives; the values are fixed operand encodings. */

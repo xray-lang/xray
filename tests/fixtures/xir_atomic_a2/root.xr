@@ -1,0 +1,29 @@
+import "./state" as state
+import "./text" as text
+fn selectedOrder() -> Ordering? { return Ordering.SeqCst }
+export fn main() -> i64 {
+    const alias = state.counter()
+    const before = alias.fetchAdd(2, selectedOrder())
+    alias.add(3, Ordering.AcquireRelease)
+    alias.sub(1, Ordering.SeqCst)
+    const swapped = alias.swap(50, Ordering.Acquire)
+    const pair = alias.compareExchange(50, 60, Ordering.Release)
+    const failed = alias.compareExchange(50, 70, Ordering.Relaxed)
+    const numeric = Atomic<f64>(1.5)
+    const prior = numeric.fetchAdd(0.25)
+    numeric.add(0.5)
+    numeric.sub(0.25)
+    const previous = numeric.fetchSub(0.5)
+    numeric.store(3.5, Ordering.Release)
+    const floatpair = numeric.compareExchange(3.5, 4.5)
+    const logic = Atomic(false)
+    const old = logic.toggle(null)
+    const boolpair = logic.compareExchange(true, false)
+    logic.store(true)
+    const boolold = logic.swap(false)
+    print(text.label(), before, swapped, pair.0, pair.1, failed.0, failed.1,
+        alias.load(), alias.toString(), prior, previous, numeric.load(Ordering.Acquire),
+        floatpair.0, floatpair.1, numeric.toString(), old, boolpair.0,
+        boolpair.1, boolold, logic.load(), logic.toString())
+    return before
+}

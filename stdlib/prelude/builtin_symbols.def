@@ -238,6 +238,9 @@ XR_BUILTIN_IFACE("Callable",   1)
 XR_BUILTIN_IFACE("Closeable",  0)
 XR_BUILTIN_IFACE("Comparable", 0)
 XR_BUILTIN_PREDICATE("Equal", 0, VALUE_EQUAL)
+XR_BUILTIN_PREDICATE("AtomicValue", 0, ATOMIC_VALUE)
+XR_BUILTIN_PREDICATE("AtomicNumber", 0, ATOMIC_NUMBER)
+XR_BUILTIN_PREDICATE("AtomicBoolean", 0, ATOMIC_BOOLEAN)
 XR_BUILTIN_IFACE("Equatable",  0)
 /* Every enum value satisfies Error, and nothing else does: `throw` already
  * requires an enum error value (E0370), so this is the type of "the error a

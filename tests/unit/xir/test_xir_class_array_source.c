@@ -23,6 +23,7 @@
 #include "xir_instance_compile_observer.h"
 #include "xir_runtime_allocations.h"
 #include "xir_class_array_compile_owner.h"
+#include "xir_class_array_graph_cases.h"
 #include "xir_class_array_retained.h"
 static const char *class_packet_path;
 static XrXirStatus class_source_build(const XrXirCompileContext *context,unsigned variant,XrXirProgram **output) {
@@ -46,9 +47,7 @@ static XrXirStatus class_source_build(const XrXirCompileContext *context,unsigne
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target,&lowered,NULL);
-    if(status==XR_XIR_OK){const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t answer=UINT32_MAX,retained=UINT32_MAX;
-        for(uint32_t f=0;f<module->function_count;++f){if(module->functions[f].name_length==6&&!memcmp(module->functions[f].name,"answer",6))answer=f;
-            if(module->functions[f].name_length==8&&!memcmp(module->functions[f].name,"retained",8))retained=f;}C(answer==3 && retained==4);}
+    if(status==XR_XIR_OK)class_array_graph_verify(xr_xir_compile_artifact_module(lowered));
     if(status==XR_XIR_OK)status=xr_xir_compile_vm_program_take(&lowered,output);
     if(status!=XR_XIR_OK)C(!*output);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
@@ -58,7 +57,7 @@ int main(int argc,char **argv){
     C(argc==1 || argc==2);class_packet_path=argc==2?argv[1]:NULL;
     XrXirCompileContext context=class_array_context(class_array_limits());XrCompileResourceStats baseline=class_array_stats(&context);
     XrXirProgram *program=NULL;C(class_source_build(&context,0,&program)==XR_XIR_OK);
-    class_array_pipeline_report(&context,"Source");const uint32_t answer=3,retained=4;
+    class_array_pipeline_report(&context,"Source");const uint32_t answer=CLASS_ARRAY_ANSWER,retained=CLASS_ARRAY_RETAINED;
 XrXirValue saved[2]={{0},{0}};
  for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);C(xr_xir_instance_start(instance,answer,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);XrXirValue number={0};C(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);C(number.type==XR_XIR_I64&&number.payload==41);xr_xir_value_drop(&number);C(xr_xir_instance_start(instance,retained,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);C(xr_xir_instance_take_result(instance,&saved[i])==XR_XIR_CALL_RETURNED);C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
  class_array_suspend_cases(program);xr_xir_compile_program_drop(program);for(unsigned i=0;i<2;++i)class_array_retained(&saved[i]);puts("source class Array VM41 retained PASS");class_array_owner_free(&context,baseline);class_packet_path=NULL;

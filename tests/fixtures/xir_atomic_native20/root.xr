@@ -1,0 +1,36 @@
+fn prepare0()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const old=alias.swap(42); return (alias,old,true) }
+export fn case0()->(i64,bool) { const retained=prepare0(); return (retained.0.load(),retained.2) }
+fn prepare1()->(Atomic<bool>,bool,bool) { const source=Atomic<bool>(false); const alias=source; const old=alias.swap(true); return (alias,old,true) }
+export fn case1()->(bool,bool) { const retained=prepare1(); return (retained.0.load(),retained.2) }
+fn prepare2()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const pair=alias.compareExchange(40,42); const old=pair.0; return (alias,old,pair.1) }
+export fn case2()->(i64,bool) { const retained=prepare2(); return (retained.0.load(),retained.2) }
+fn prepare3()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const pair=alias.compareExchange(42,42); const old=pair.0; return (alias,old,pair.1) }
+export fn case3()->(i64,bool) { const retained=prepare3(); return (retained.0.load(),retained.2) }
+fn prepare4()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const pair=alias.compareExchange(40,42); const old=pair.0; return (alias,old,pair.1) }
+export fn case4()->(i64,bool) { const retained=prepare4(); return (retained.1,retained.2) }
+fn prepare5()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const pair=alias.compareExchange(42,42); const old=pair.0; return (alias,old,pair.1) }
+export fn case5()->(i64,bool) { const retained=prepare5(); return (retained.1,retained.2) }
+fn prepare6()->(Atomic<bool>,bool,bool) { const source=Atomic<bool>(false); const alias=source; const pair=alias.compareExchange(false,true); const old=pair.0; return (alias,old,pair.1) }
+export fn case6()->(bool,bool) { const retained=prepare6(); return (retained.0.load(),retained.2) }
+fn prepare7()->(Atomic<bool>,bool,bool) { const source=Atomic<bool>(false); const alias=source; const pair=alias.compareExchange(true,true); const old=pair.0; return (alias,old,pair.1) }
+export fn case7()->(bool,bool) { const retained=prepare7(); return (retained.0.load(),retained.2) }
+fn prepare8()->(Atomic<bool>,bool,bool) { const source=Atomic<bool>(false); const alias=source; const pair=alias.compareExchange(false,true); const old=pair.0; return (alias,old,pair.1) }
+export fn case8()->(bool,bool) { const retained=prepare8(); return (retained.1,retained.2) }
+fn prepare9()->(Atomic<bool>,bool,bool) { const source=Atomic<bool>(false); const alias=source; const pair=alias.compareExchange(true,true); const old=pair.0; return (alias,old,pair.1) }
+export fn case9()->(bool,bool) { const retained=prepare9(); return (retained.1,retained.2) }
+fn prepare10()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const old=alias.fetchAdd(2); return (alias,old,true) }
+export fn case10()->(i64,bool) { const retained=prepare10(); return (retained.0.load(),retained.2) }
+fn prepare11()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const old=alias.fetchSub(2); return (alias,old,true) }
+export fn case11()->(i64,bool) { const retained=prepare11(); return (retained.0.load(),retained.2) }
+fn prepare12()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const pair=alias.compareExchange(40,40 ^ 2); const old=pair.0; return (alias,old,pair.1) }
+export fn case12()->(i64,bool) { const retained=prepare12(); return (retained.0.load(),retained.2) }
+fn prepare13()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const old=alias.fetchAdd(2); return (alias,old,true) }
+export fn case13()->(i64,bool) { const retained=prepare13(); return (retained.1,retained.2) }
+fn prepare14()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const old=alias.fetchSub(2); return (alias,old,true) }
+export fn case14()->(i64,bool) { const retained=prepare14(); return (retained.1,retained.2) }
+fn prepare15()->(Atomic<i64>,i64,bool) { const source=Atomic<i64>(40); const alias=source; const pair=alias.compareExchange(40,40 ^ 2); const old=pair.0; return (alias,old,pair.1) }
+export fn case15()->(i64,bool) { const retained=prepare15(); return (retained.1,retained.2) }
+fn prepare16()->(Atomic<bool>,bool,bool) { const source=Atomic<bool>(false); const alias=source; const old=alias.toggle(); return (alias,old,true) }
+export fn case16()->(bool,bool) { const retained=prepare16(); return (retained.0.load(),retained.2) }
+fn prepare17()->(Atomic<bool>,bool,bool) { const source=Atomic<bool>(false); const alias=source; const old=alias.toggle(); return (alias,old,true) }
+export fn case17()->(bool,bool) { const retained=prepare17(); return (retained.1,retained.2) }

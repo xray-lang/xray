@@ -42,7 +42,7 @@ def main():
     lease=subprocess.Popen([args.lease,str(bundle),str(bundle/'sdk_manifest.json')],
                            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
     try:
-        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['20','2'],ready
+        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['21','2'],ready
         sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(5)]
         assert sdk.is_dir() and all(Path(name).is_file() for name in libraries)
         with tempfile.TemporaryDirectory(prefix='xir-sdk-native-') as temporary:
@@ -54,8 +54,8 @@ def main():
             link(args,probe_exe,[str(probe_object)],libraries)
             expected=json.loads((proof/'EXPECTED.json').read_text())['rows']
             actual=json.loads(checked([str(probe_exe)]))
-            assert actual==[dict(id=row['id'],value=row['value']) for row in expected] and len(actual)==233
-            print(args.provider+': fresh admitted-header 233-field independent ABI PASS',flush=True)
+            assert actual==[dict(id=row['id'],value=row['value']) for row in expected]
+            print(args.provider+': fresh admitted-header '+str(len(expected))+'-field independent ABI PASS',flush=True)
             cases=[('multi',root/'tests/fixtures/xir_compile_owner/root.xr',b'owner\xe4\xb8\xad-ok 42 true\n',
                     args.generator,'multi','linked_source_program')]
             if args.original_generator:

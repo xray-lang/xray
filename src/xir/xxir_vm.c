@@ -16,6 +16,7 @@
 
 #include "xxir_vm.h"
 #include "xxir_tuple.h"
+#include "xxir_atomic.h"
 #include "xxir_compile_memory.h"
 #include "xxir_equal.h"
 #include "xxir_nullable.h"
@@ -45,6 +46,7 @@ typedef struct VmState {
     bool initialized, waiting, cleanup_waiting, leaving;
     XrXirValue *arguments;
     XrXirValuePathStep *path_steps;
+    XrXirAtomicProgress atomic;
 } VmState;
 
 static int arithmetic_operation(XrXirOp op) {
@@ -66,6 +68,7 @@ static int arithmetic_operation(XrXirOp op) {
 static XrXirRunStatus value_run_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_OK) return XR_XIR_RUN_OK;
     if (status == XR_XIR_VALUE_OOM) return XR_XIR_RUN_OUT_OF_MEMORY;
+    if (status == XR_XIR_VALUE_UNSUPPORTED) return XR_XIR_RUN_UNSUPPORTED;
     if (status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT)
         return XR_XIR_RUN_FRAME_LIMIT;
     return XR_XIR_RUN_BAD_ARTIFACT;
@@ -129,20 +132,6 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         status = xr_xir_instance_slot_write(run->view, (uint32_t) op->immediate, &value, op->op == XR_XIR_SLOT_INIT);
         break;
-    case XR_XIR_ATOMIC_I64_NEW:
-        status = xr_xir_instance_atomic(run->view,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &value); break;
-    case XR_XIR_ATOMIC_I64_LOAD:
-    case XR_XIR_ATOMIC_I64_FETCH_ADD: {
-        XrXirValue atomic = {XR_XIR_ATOMIC_I64, 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
-        value.type = XR_XIR_I64;
-        bool valid = op->op == XR_XIR_ATOMIC_I64_LOAD ? xr_xir_atomic_i64_load(&atomic, &value.payload) :
-            xr_xir_atomic_i64_fetch_add(&atomic,
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), &value.payload);
-        if (!valid) status = XR_XIR_CALL_BAD_STATE;
-        break;
-    }
     default: return XR_XIR_RUN_BAD_ARTIFACT;
     }
     if (status != XR_XIR_CALL_READY) return status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :
@@ -179,6 +168,7 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
     }
     return receiver;
 }
+#include "xxir_vm_atomic.inc.c"
 #include "xxir_vm_path.inc.c"
 static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
@@ -553,6 +543,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return vm_class_step(run, state, op, run->layout->offsets[result_id]);
     }
+    if (xr_xir_op_is_atomic(op->op))
+        return vm_atomic_step(run, state, op, run->layout->offsets[result_id], action);
     if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
         state->instruction=next;
         return vm_tuple_step(run,state,op,run->layout->offsets[result_id]);
@@ -567,7 +559,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return vm_array_step(run, state, op, run->layout->offsets[result_id], action);
     }
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         state->instruction = next;
@@ -829,6 +821,7 @@ static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
     const XrXirVmBinding *binding = view->environment;
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(binding->artifact, binding->function);
     VmState *state = view->state;
+    xr_xir_atomic_progress_clear(&state->atomic);
     for (uint32_t i = layout->owned_count; i > 0; --i)
         xr_xir_owned_slot_clear(state + 1, layout->owned_offsets[i - 1]);
 }
@@ -942,8 +935,9 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
             body->instructions[i].op == XR_XIR_WRITE_STREAM)
             return XR_XIR_RUN_BAD_ARTIFACT;
     for (uint32_t i = 0; i < body->instruction_count; ++i)
-        if (body->instructions[i].op >= XR_XIR_CONST_STRING &&
-            body->instructions[i].op <= XR_XIR_ATOMIC_I64_FETCH_ADD) return XR_XIR_RUN_BAD_ARTIFACT;
+        if ((body->instructions[i].op >= XR_XIR_CONST_STRING &&
+            body->instructions[i].op <= XR_XIR_SLOT_STORE) ||
+            xr_xir_op_is_atomic(body->instructions[i].op)) return XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, function);
     void *frame = NULL;
     XrXirRunStatus status = xr_xir_scalar_frame_begin(context, layout->frame_bytes, &frame);

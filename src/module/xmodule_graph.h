@@ -163,6 +163,19 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGrap
     const XrModuleIdentityAuthority *authority, const char *logical_path,
     const char *source_path, const char *source, char **out_err);
 
+/* Include exact caller-owned logical source under the same typed authority
+ * rules as build_logical_source. The original entry is preserved. Reusing a
+ * canonical identity requires the same authority, locator and content digest.
+ * Failure leaves all partial discovery owned; discard the failed graph. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_include_logical_source(XrModuleGraph *g,
+    const XrModuleIdentityAuthority *authority, const char *logical_path,
+    const char *source_path, const char *source, char **out_err);
+
+/* Add an ordinary dependency edge between admitted graph indices. Duplicate
+ * edges are idempotent; a fresh edge invalidates the prior topological order.
+ * Cycles remain subject to the existing topological-sort rejection. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_add_dependency(XrModuleGraph *g, int from, int to);
+
 /* Run topological sort (Tarjan SCC).
  * After success, g->topo_order is filled and g->has_cycle indicates cycles.
  * Returns XR_MODULE_OK without cycles, XR_MODULE_INVALID for a cycle, or

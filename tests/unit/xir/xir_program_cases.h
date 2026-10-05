@@ -12,6 +12,7 @@
 #ifndef XIR_PROGRAM_CASES_H
 #define XIR_PROGRAM_CASES_H
 #include "xir/xxir_program.h"
+#include "xir/xxir_atomic.h"
 #include "xir_error_fixture.h"
 typedef struct ProgramLog {
     XrXirValue values[32];
@@ -105,9 +106,16 @@ static void program_cases(XrXirProgram *program, uint32_t mode) {
     }
     if (mode != 2) {
         for (uint32_t i = 0; i < 2; ++i) program_bytes(&strings[i], "updated", 7);
-        int64_t previous = 0, other = 0;
-        CHECK(xr_xir_atomic_i64_fetch_add(&cells[0], 100, &previous) && previous == 12);
-        CHECK(xr_xir_atomic_i64_load(&cells[1], &other) && other == 12);
+        XrXirValue operand={XR_XIR_I64,0,100},previous={0},other={0};
+        XrXirValueAdmission admission={xr_xir_value_arena(&cells[0]),reader,NULL,NULL,1000000,65536};
+        XrXirAtomicProgress progress={0};
+        XrXirAtomicRequest add={&cells[0],&operand,NULL,1,XR_XIR_ATOMIC_OPERATION_FETCH_ADD,XR_XIR_I64};
+        CHECK(xr_xir_atomic_start(&add,&admission,NULL,&progress,&previous).status==XR_XIR_RUN_OK && previous.payload==12);
+        xr_xir_atomic_progress_clear(&progress);
+        admission=(XrXirValueAdmission){xr_xir_value_arena(&cells[1]),reader,NULL,NULL,1000000,65536};
+        XrXirAtomicRequest load={&cells[1],NULL,NULL,0,XR_XIR_ATOMIC_OPERATION_LOAD,XR_XIR_I64};
+        CHECK(xr_xir_atomic_start(&load,&admission,NULL,&progress,&other).status==XR_XIR_RUN_OK && other.payload==12);
+        xr_xir_atomic_progress_clear(&progress);xr_xir_value_drop(&previous);xr_xir_value_drop(&other);
     }
     for (uint32_t i = 0; i < 2; ++i) {
         if (mode==2) CHECK(error_fixture_is_code(&errors[i],reader,91));

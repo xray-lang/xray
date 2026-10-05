@@ -1,0 +1,2 @@
+const prefix = "owned中"
+export fn label() -> string { return prefix }

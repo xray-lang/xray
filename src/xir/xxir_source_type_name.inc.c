@@ -33,7 +33,6 @@ static const char *source_scalar_type_name(XrXirType type) {
     case XR_XIR_F32: return TYPE_NAME_F32;
     case XR_XIR_F64: return TYPE_NAME_F64;
     case XR_XIR_STRING: return TYPE_NAME_STRING;
-    case XR_XIR_ATOMIC_I64: return TYPE_NAME_ATOMIC;
     case XR_XIR_PANIC_INFO: return TYPE_NAME_PANIC_INFO;
     default: return NULL;
     }
@@ -52,6 +51,14 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
     const XrXirTypeNode *shape = xr_xir_type_node(&ctx->types, type);
     if (!shape) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "typeName operand has no proved type");
     switch (shape->kind) {
+    case XR_XIR_TYPE_ATOMIC:
+        source_type_name_append(name, TYPE_NAME_ATOMIC, strlen(TYPE_NAME_ATOMIC));
+        if (!top) {
+            source_type_name_append(name, "<", 1);
+            if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
+            source_type_name_append(name, ">", 1);
+        }
+        return true;
     case XR_XIR_TYPE_ARRAY:
         source_type_name_append(name, TYPE_NAME_ARRAY, strlen(TYPE_NAME_ARRAY));
         if (!top) {

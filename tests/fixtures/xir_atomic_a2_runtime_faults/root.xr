@@ -1,0 +1,16 @@
+const value = Atomic<f64>(1.5)
+const label = "owned\0中"
+fn alias() -> Atomic<f64> {
+    const original = Atomic<f64>(7.0)
+    const copy = original
+    copy.add(1.0)
+    return copy
+}
+export fn main() -> string {
+    const retained = alias()
+    if (retained.load() != 8.0) { return "bad alias" }
+    const receipt = value.compareExchange(1.5, 2.0)
+    if (!receipt.1) { return "bad CAS" }
+    return value.toString()
+}
+export fn snapshot() -> f64 { return value.load() }

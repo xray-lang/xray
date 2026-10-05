@@ -219,7 +219,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         XrXirModule scope = {XR_XIR_BUILT, NULL, functions, d, NULL, types, NULL, kind, NULL};
         status = xr_xir_compile_type_access(budget, &scope, d->modules[slot->module].initializer, slot->type);
         if (status != XR_XIR_OK) return status;
-        if (slot->mutable && slot->type == XR_XIR_ATOMIC_I64) return XR_XIR_BAD_STRUCTURE;
+        if (slot->mutable && xr_xir_type_is_atomic(types, slot->type)) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t i = 0; i < d->literal_count; ++i) {
         const XrXirLiteral *literal = &d->literals[i];

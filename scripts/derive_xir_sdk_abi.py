@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 PRIMITIVES = {'u32': (4, 4), 'i32': (4, 4), 'u64': (8, 8), 'ptr': (8, 8),
-              'bool': (1, 1), 'enum': (4, 4)}
+              'bool': (1, 1), 'enum': (4, 4), 'bytes32': (32, 1), 'u64array2': (16, 8)}
 STRUCTURES = [
  (100, 'XrXirValue', [('type','u32'),('reserved','u32'),('payload','u64')]),
  (200, 'XrXirFaultDetail', [('code','u32'),('reserved','u32'),('index','u64'),('length','u64')]),
@@ -71,6 +71,43 @@ SCALARS = [
  (33,'DBL_MAX_EXP',1024,'DBL_MAX_EXP'),(34,'frame_alignment',16,'XR_XIR_CALL_STATE_ALIGNMENT'),
 ]
 
+# Public metadata and resumable atomic state use the same natural layout rules.
+PUBLIC_STRUCTURES = [
+ (3300, 'XrXirLiteral', [('bytes','ptr'),('length','u32')]),
+ (2900, 'XrXirNominalNativeRecord', [('native_id','u32'),('source_fingerprint','bytes32')]),
+ (3000, 'XrXirNominalDeclaration', [('module','XrXirLiteral'),('name','XrXirLiteral'),('exported','u32'),
+     ('constraints','ptr'),('parameter_count','u32'),('fields','ptr'),('field_count','u32'),('kind','u32'),
+     ('variants','ptr'),('variant_count','u32'),('flags','u32'),('native','XrXirNominalNativeRecord')]),
+ (3100, 'XrXirNominalIdentity', [('module','XrXirLiteral'),('name','XrXirLiteral'),('exported','u32'),
+     ('arity','u32'),('fields','ptr'),('field_count','u32'),('kind','u32'),('variants','ptr'),
+     ('variant_count','u32'),('flags','u32'),('native','XrXirNominalNativeRecord')]),
+ (3400, 'XrXirNominalTable', [('declarations','ptr'),('count','u32'),('identities','ptr')]),
+ (3500, 'XrXirTypes', [('nodes','ptr'),('count','u32'),('nominals','ptr'),('interfaces','ptr')]),
+ (3600, 'XrXirNominalType', [('declaration','u32'),('arguments','ptr'),('argument_count','u32'),
+     ('fields','ptr'),('field_count','u32')]),
+ (3700, 'XrXirTypeNode', [('kind','u32'),('element','enum'),('parameters','ptr'),('parameter_count','u32'),
+     ('result','enum'),('flags','u32'),('parameter_span','u32'),('nominal','XrXirNominalType')]),
+ (3800, 'XrXirCallableParameter', [('type','enum'),('mode','u32')]),
+ (3900, 'XrXirNominalField', [('name','XrXirLiteral'),('type','enum'),('flags','u32')]),
+ (4000, 'XrXirNominalFieldIdentity', [('name','XrXirLiteral'),('flags','u32')]),
+ (4100, 'XrXirNominalVariant', [('name','XrXirLiteral'),('field_begin','u32'),('field_count','u32')]),
+ (4200, 'XrXirAtomicRequest', [('receiver','ptr'),('operands','ptr'),('ordering','ptr'),
+     ('operand_count','u32'),('operation','enum'),('result_type','enum')]),
+ (4300, 'XrXirAtomicProgress', [('receiver','XrXirValue'),('operands','u64array2'),('observed','u64'),
+     ('result_type','enum'),('operation','enum'),('ordering','u32'),('phase','u32'),('observed_ready','bool')]),
+ (4400, 'XrXirAtomicOutcome', [('status','enum'),('permission','enum'),('continuing','bool')]),
+]
+
+PUBLIC_SCALARS = [
+ (45,'AtomicOperation.size',4,'sizeof(XrXirAtomicOperation)'),
+ (46,'AtomicOperation.align',4,'_Alignof(XrXirAtomicOperation)'),
+ (47,'RunStatus.size',4,'sizeof(XrXirRunStatus)'),
+ (48,'RunStatus.align',4,'_Alignof(XrXirRunStatus)'),
+ (2904,'XrXirNominalNativeRecord.source_fingerprint.bytes',32,
+  'sizeof(((XrXirNominalNativeRecord *)0)->source_fingerprint)'),
+ (4310,'XrXirAtomicProgress.operands.bytes',16,'sizeof(((XrXirAtomicProgress *)0)->operands)'),
+]
+
 def align(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
 
@@ -78,7 +115,7 @@ def prepare(output: Path) -> None:
     output.mkdir(parents=True, exist_ok=False)
     layout = dict(PRIMITIVES)
     rows = [{'id':i,'name':name,'value':value,'expression':expression} for i,name,value,expression in SCALARS]
-    for base, name, fields in STRUCTURES:
+    for base, name, fields in STRUCTURES + PUBLIC_STRUCTURES:
         offsets = []; size = 0; alignment = 1
         for field, kind in fields:
             width, boundary = layout[kind]
@@ -89,12 +126,18 @@ def prepare(output: Path) -> None:
                  {'id':base+1,'name':f'{name}.align','value':alignment,'expression':f'_Alignof({name})'}]
         rows += [{'id':base+2+i,'name':f'{name}.{field}.offset','value':offset,
                   'expression':f'offsetof({name},{field})'} for i,(field,offset) in enumerate(offsets)]
+    rows += [{'id':i,'name':name,'value':value,'expression':expression}
+             for i,name,value,expression in PUBLIC_SCALARS]
+    rows += [{'id':base,'name':f'{name}.array2.bytes','value':2*layout[name][0],
+              'expression':f'sizeof({name}[2])'} for base,name in
+             [(3200,'XrXirNominalDeclaration'),(3201,'XrXirNominalIdentity')]]
+    assert len({row['id'] for row in rows}) == len(rows), 'ABI field IDs must be unique'
     document = {'recipe':'xray:xir-runtime-abi-measurements:v1','rows':rows,
                 'basis':'Independent natural Windows x86_64 C layout: pointer/size_t/u64 align8, '
                         'u32/int/enum align4, bool align1; declaration field sequence copied '
                         'from actual versioned runtime headers. Never from a compiler probe output.'}
     (output/'EXPECTED.json').write_text(json.dumps(document,indent=2)+'\n',encoding='utf-8',newline='\n')
-    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\nint main(void) { const uint32_t endian=1; puts("[");\n'
+    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\nint main(void) { const uint32_t endian=1; puts("[");\n'
     for index, row in enumerate(rows):
         tail = ',' if index+1 < len(rows) else ''
         source += f'printf("  {{\\"id\\":{row["id"]},\\"value\\":%u}}{tail}\\n",(unsigned)({row["expression"]}));\n'

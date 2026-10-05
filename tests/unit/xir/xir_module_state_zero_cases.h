@@ -16,28 +16,38 @@
 #include "xir/xxir_panic.h"
 
 typedef struct StateZeroShape {
-    uint32_t advance, root, base, left, right, slot;
+    uint32_t advance, root, base, left, right, slot, ordering;
 } StateZeroShape;
 typedef struct StateZeroTrace {
     XrXirInstance *instance;
-    uint32_t begins[4], ready[4], order[4], begin_count, ready_count;
+    uint32_t begins[5], ready[5], order[5], begin_count, ready_count;
     uint32_t published, released, busy;
 } StateZeroTrace;
-static StateZeroShape state_zero_shape(const XrXirDeclarations *d, uint32_t advance) {
-    CHECK(d && d->module_count==4 && d->slot_count==1 && d->root_module<4);
+static StateZeroShape state_zero_shape(const XrXirDeclarations *d,const XrXirTypes *types,uint32_t advance) {
+    CHECK(d && d->module_count==5 && d->slot_count==1 && d->root_module<5);
     uint32_t root=d->root_module;
     CHECK(d->modules[root].dependency_count==2 && d->modules[root].dependencies);
     uint32_t left=d->modules[root].dependencies[0],right=d->modules[root].dependencies[1];
-    CHECK(left<4 && right<4 && left!=right && left!=root && right!=root);
+    CHECK(left<5 && right<5 && left!=right && left!=root && right!=root);
     CHECK(d->modules[left].dependency_count==1 && d->modules[left].dependencies);
     CHECK(d->modules[right].dependency_count==1 && d->modules[right].dependencies);
     uint32_t base=d->modules[left].dependencies[0];
-    CHECK(base<4 && base!=root && base!=left && base!=right);
-    CHECK(d->modules[right].dependencies[0]==base && !d->modules[base].dependency_count);
-    CHECK(d->slots[0].module==base && d->slots[0].type==XR_XIR_ATOMIC_I64 && !d->slots[0].mutable);
+    CHECK(base<5 && base!=root && base!=left && base!=right);
+    CHECK(d->modules[right].dependencies[0]==base && d->modules[base].dependency_count==1);
+    uint32_t ordering=d->modules[base].dependencies[0];
+    CHECK(ordering<5 && ordering!=base && ordering!=left && ordering!=right && ordering!=root);
+    CHECK(!d->modules[ordering].dependency_count);
+    static const char identity[]="stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def";
+    CHECK(d->modules[ordering].name_length==sizeof(identity)-1 &&
+        !memcmp(d->modules[ordering].name,identity,sizeof(identity)-1));
+    bool governed=false;
+    for(uint32_t t=0;types && t<types->count;++t)
+        governed|=xr_xir_nominal_native_ordering(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t));
+    CHECK(governed);
+    CHECK(d->slots[0].module==base && xr_xir_type_is_atomic(types,d->slots[0].type) && xr_xir_atomic_element(types,d->slots[0].type)==XR_XIR_I64 && !d->slots[0].mutable);
     CHECK(d->functions[advance].module==root && d->functions[advance].exported &&
         !d->functions[advance].nominal_owner && !d->functions[advance].cleanup_owner);
-    return (StateZeroShape){advance,root,base,left,right,0};
+    return (StateZeroShape){advance,root,base,left,right,0,ordering};
 }
 static void state_zero_trace(void *context,XrXirLifecycleEvent event,uint32_t index) {
     StateZeroTrace *trace=context;
@@ -49,13 +59,13 @@ static void state_zero_trace(void *context,XrXirLifecycleEvent event,uint32_t in
     CHECK(xr_xir_instance_stop(trace->instance)==XR_XIR_CALL_BUSY);
     ++trace->busy;
     if(event==XR_XIR_MODULE_BEGIN) {
-        CHECK(index<4 && trace->begin_count<4 && index==trace->order[trace->begin_count]);
+        CHECK(index<5 && trace->begin_count<5 && index==trace->order[trace->begin_count]);
         CHECK(!trace->begins[index]); ++trace->begins[index]; ++trace->begin_count;
     } else if(event==XR_XIR_MODULE_READY) {
-        CHECK(index<4 && trace->ready_count<4 && index==trace->order[trace->ready_count]);
+        CHECK(index<5 && trace->ready_count<5 && index==trace->order[trace->ready_count]);
         CHECK(trace->begins[index] && !trace->ready[index]); ++trace->ready[index]; ++trace->ready_count;
     } else if(event==XR_XIR_SLOT_PUBLISHED) {
-        CHECK(index==0 && !trace->published && trace->begins[trace->order[0]] && !trace->ready[trace->order[0]]);
+        CHECK(index==0 && !trace->published && trace->ready[trace->order[0]] && trace->begins[trace->order[1]] && !trace->ready[trace->order[1]]);
         ++trace->published;
     }
     else { CHECK(event==XR_XIR_SLOT_RELEASED && index==0 && trace->published && !trace->released); ++trace->released; }
@@ -68,8 +78,8 @@ static void state_zero_pair(XrXirProgram *program,StateZeroShape shape) {
     XrXirInstance *instances[2]={0};
     XrXirValue retained[2]={{0},{0}};
     for(uint32_t i=0;i<2;++i) {
-        traces[i].order[0]=shape.base; traces[i].order[1]=shape.left;
-        traces[i].order[2]=shape.right; traces[i].order[3]=shape.root;
+        traces[i].order[0]=shape.ordering; traces[i].order[1]=shape.base;traces[i].order[2]=shape.left;
+        traces[i].order[3]=shape.right; traces[i].order[4]=shape.root;
         XrXirInstanceConfig config;
         CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         config.metadata_limit=UINT64_C(1)*1024*1024;
@@ -100,9 +110,9 @@ static void state_zero_pair(XrXirProgram *program,StateZeroShape shape) {
         XrXirValue result={0};
         CHECK(xr_xir_instance_take_result(instances[i],&result)==XR_XIR_CALL_RETURNED);
         CHECK(result.type==XR_XIR_I64 && !result.reserved && (int64_t)result.payload==(int64_t)(41+repeat));
-        for(uint32_t m=0;m<4;++m) CHECK(traces[i].begins[m]==1 && traces[i].ready[m]==1);
-        CHECK(traces[i].begin_count==4 && traces[i].ready_count==4);
-        CHECK(traces[i].published==1 && !traces[i].released && traces[i].busy==9);
+        for(uint32_t m=0;m<5;++m) CHECK(traces[i].begins[m]==1 && traces[i].ready[m]==1);
+        CHECK(traces[i].begin_count==5 && traces[i].ready_count==5);
+        CHECK(traces[i].published==1 && !traces[i].released && traces[i].busy==11);
         if(repeat==23) retained[i]=result; else xr_xir_value_drop(&result);
     }
     for(uint32_t i=0;i<2;++i) {
@@ -118,7 +128,7 @@ static void state_zero_pair(XrXirProgram *program,StateZeroShape shape) {
         CHECK(source_program_compile_live==compiler_blocks && source_program_compile_bytes==compiler_bytes);
         CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
         instances[i]=NULL; traces[i].instance=NULL;
-        CHECK(traces[i].released==1 && traces[i].busy==10);
+        CHECK(traces[i].released==1 && traces[i].busy==12);
         if(!i) CHECK(runtime_live && runtime_bytes && source_program_compile_live==compiler_blocks &&
             source_program_compile_bytes==compiler_bytes);
     }

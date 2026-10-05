@@ -88,17 +88,31 @@ static void nominal_field_closure(void) {
         xr_xir_compile_artifact_free(checked); checked=NULL;
         if (mode) { CHECK(!closed); continue; }
         const XrXirModule *module = xr_xir_compile_artifact_module(closed);
-        CHECK(!module->generics && module->types->count == 3);
-        CHECK(module->types->nodes[1].nominal.fields[0] == (XrXirType)258);
-        CHECK(module->types->nodes[2].nominal.declaration == 0 &&
-            module->types->nodes[2].nominal.arguments[0] == XR_XIR_I64 &&
-            module->types->nodes[2].nominal.fields[0] == XR_XIR_I64);
+        CHECK(!module->generics && module->types->count == 4);
+        CHECK(module->types->nodes[0].nominal.declaration == 0 &&
+            module->types->nodes[0].nominal.arguments[0] == (XrXirType)XR_XIR_TYPE_PARAMETER_BASE &&
+            !module->types->nodes[0].nominal.field_count);
+        CHECK(module->types->nodes[1].nominal.declaration == 1 &&
+            module->types->nodes[1].nominal.arguments[0] == XR_XIR_I64 &&
+            module->types->nodes[1].nominal.fields[0] == (XrXirType)259);
+        CHECK(xr_xir_type_is_atomic(module->types, (XrXirType)258) &&
+            xr_xir_atomic_element(module->types, (XrXirType)258) == XR_XIR_I64);
+        CHECK(module->types->nodes[3].nominal.declaration == 0 &&
+            module->types->nodes[3].nominal.arguments[0] == XR_XIR_I64 &&
+            module->types->nodes[3].nominal.fields[0] == XR_XIR_I64);
         XrXirArtifact *lowered = NULL;
         const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(closed); closed=NULL;
         module = xr_xir_compile_artifact_module(lowered);
-        CHECK(module->types->count == 2 && module->types->nodes[0].nominal.fields[0] == (XrXirType)257);
+        CHECK(module->types->count == 3 && module->types->nodes[0].nominal.declaration == 1 &&
+            module->types->nodes[0].nominal.arguments[0] == XR_XIR_I64 &&
+            module->types->nodes[0].nominal.fields[0] == (XrXirType)258);
+        CHECK(xr_xir_type_is_atomic(module->types, (XrXirType)257) &&
+            xr_xir_atomic_element(module->types, (XrXirType)257) == XR_XIR_I64);
+        CHECK(module->types->nodes[2].nominal.declaration == 0 &&
+            module->types->nodes[2].nominal.arguments[0] == XR_XIR_I64 &&
+            module->types->nodes[2].nominal.fields[0] == XR_XIR_I64);
         xr_xir_compile_artifact_free(lowered); lowered=NULL;
     }
 }
@@ -135,20 +149,21 @@ static void cross_pool_substitution(void) {
 static void nominal_argument_visibility(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 2);
     XrXirModule module = *xr_xir_compile_artifact_module(checked);
-    XrXirTypeNode nodes[4]; memcpy(nodes, module.types->nodes, 3 * sizeof(*nodes));
+    CHECK(module.types->count == 4 && xr_xir_type_is_atomic(module.types, (XrXirType)259));
+    XrXirTypeNode nodes[5]; memcpy(nodes, module.types->nodes, 4 * sizeof(*nodes));
     XrXirType argument = (XrXirType)258;
-    nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
+    nodes[4] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
         {0, &argument, 1, NULL, 0}};
     ((XrXirConstraint *) module.types->nominals->declarations[0].constraints)[0].markers = 0;
-    XrXirTypes types = {nodes, 4, module.types->nominals, NULL}; module.types = &types;
+    XrXirTypes types = {nodes, 5, module.types->nominals, NULL}; module.types = &types;
     CHECK(xr_xir_compile_verify(suite_context, &module, NULL) == XR_XIR_OK);
     XrXirCompileContext budget = consumer_context_default();
-    CHECK(xr_xir_compile_type_access(&budget, &module, 4, (XrXirType)259) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_type_access(&budget, &module, 4, (XrXirType)260) == XR_XIR_BAD_TYPE);
     budget = consumer_context_default();
-    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)259) == XR_XIR_OK);
+    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)260) == XR_XIR_OK);
     ((XrXirNominalDeclaration *) types.nominals->declarations)[1].exported = 0;
     budget = consumer_context_default();
-    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)259) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)260) == XR_XIR_BAD_TYPE);
     xr_xir_compile_artifact_free(checked); checked=NULL;
 }
 static void nominal_expression_closure(void) {
@@ -220,7 +235,7 @@ static void rehash_generic(XrXirCheckedPacket *packet) {
     xr_sha256_final(&sha, packet->bytes + 32);
 }
 static void error_erasure_packet(void) {
-    _Static_assert(XR_XIR_ERROR_ERASE == 90 && XR_XIR_ERROR == 14, "error wire identities");
+    _Static_assert(XR_XIR_ERROR_ERASE == 98 && XR_XIR_ERROR == 14, "error wire identities");
     XrXirType parameter = XR_XIR_ERROR;
     XrXirInstruction ops[] = {{XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
@@ -234,7 +249,7 @@ static void error_erasure_packet(void) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded = NULL;
-    const uint8_t instruction[32] = {90, 0, 0, 0, 14};
+    const uint8_t instruction[32] = {98, 0, 0, 0, 14};
     size_t offset = 0; unsigned found = 0;
     for (size_t i = 64; i + sizeof(instruction) <= packet.length; ++i)
         if (!memcmp(packet.bytes + i, instruction, sizeof(instruction))) { offset = i; ++found; }

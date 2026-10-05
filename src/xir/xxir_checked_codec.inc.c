@@ -322,6 +322,9 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.exported = checked_u32(c, d.exported);
         d.kind = checked_u32(c, d.kind);
         d.flags = checked_u32(c, d.flags);
+        d.native.native_id = checked_u32(c, d.native.native_id);
+        for (unsigned n = 0; n < sizeof(d.native.source_fingerprint); ++n)
+            d.native.source_fingerprint[n] = (uint8_t)checked_integer(c, d.native.source_fingerprint[n], 1);
         uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
@@ -421,7 +424,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
                 XrXirType field = (XrXirType)checked_u32(c,(uint32_t)fields[p].type);
                 if (c->reading) fields[p] = (XrXirCallableParameter){field,0};
             }
-        } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL || s.kind == XR_XIR_TYPE_NULLABLE) {
+        } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL || (s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC)) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);

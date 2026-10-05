@@ -85,7 +85,10 @@ def main() -> int:
         malformed = run([str(binary), "run", str(malformed_source)])
         require(malformed.returncode != 0, "malformed .xr source is rejected", malformed.stdout)
         require(
-            "XR_RUN_6001: canonical source build failed" in malformed.stdout,
+            malformed.stdout.startswith(
+                "XR_RUN_6001: source build failed "
+                "(stage=4 status=source-rejected): module graph build failed\n"
+            ),
             "malformed .xr source fails in the shared source owner",
             malformed.stdout,
         )

@@ -61,11 +61,20 @@ static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal)
 static inline bool xr_xir_op_references_function(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_FUNCTION_REF || op == XR_XIR_CLEANUP_REGISTER;
 }
+/* The shared cell is reached through an ordinary owned value, never a place. */
+static inline bool xr_xir_op_is_atomic(XrXirOp op) {
+    return op >= XR_XIR_ATOMIC_NEW && op <= XR_XIR_ATOMIC_TO_STRING;
+}
+static inline uint32_t xr_xir_atomic_required_operands(XrXirOp op) {
+    if (op == XR_XIR_ATOMIC_COMPARE_EXCHANGE) return 3;
+    if (op == XR_XIR_ATOMIC_STORE || (op >= XR_XIR_ATOMIC_ADD && op <= XR_XIR_ATOMIC_SWAP)) return 2;
+    return 1;
+}
 static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT ||
         op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
         op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF ||
-        op == XR_XIR_TUPLE_NEW;
+        op == XR_XIR_TUPLE_NEW || (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
 }
 static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_INVOKE_DEFAULT;

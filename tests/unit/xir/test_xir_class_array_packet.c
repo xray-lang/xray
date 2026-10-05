@@ -28,10 +28,10 @@ static void class_runtime_faults(XrXirProgram *program) {
  for(size_t pass=0;pass<=sites;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
  XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirValue value={0};
  XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
- if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,3,NULL,0);
+ if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,CLASS_ARRAY_ANSWER,NULL,0);
  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
  if(status==XR_XIR_CALL_RETURNED){C(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);C(value.type==XR_XIR_I64&&value.payload==41);xr_xir_value_drop(&value);
- status=xr_xir_instance_start(instance,4,NULL,0);if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+ status=xr_xir_instance_start(instance,CLASS_ARRAY_RETAINED,NULL,0);if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
  if(status==XR_XIR_CALL_RETURNED)C(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);}
  if(!pass){C(status==XR_XIR_CALL_RETURNED);sites=runtime_attempts;C(sites>0);}else C(status==XR_XIR_CALL_OOM);
  if(instance)C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&value);
@@ -48,9 +48,7 @@ static XrXirStatus class_packet_build(const XrXirCompileContext *context,unsigne
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target,&lowered,NULL);
-    if(status==XR_XIR_OK){const XrXirModule *module=xr_xir_compile_artifact_module(lowered);C(module->function_count>5 && module->function_count<=32);
-        C(module->functions[3].name_length==6 && !memcmp(module->functions[3].name,"answer",6));
-        C(module->functions[4].name_length==8 && !memcmp(module->functions[4].name,"retained",8));}
+    if(status==XR_XIR_OK)class_array_graph_verify(xr_xir_compile_artifact_module(lowered));
     if(status==XR_XIR_OK)status=xr_xir_compile_emit_c(lowered,"source_class_array",1048576,&source);
     if(status==XR_XIR_OK){C(source.text[source.length]==0 && !strstr(source.text,"({"));
         if(class_c_path){FILE *file=fopen(class_c_path,"wb");C(file);C(fwrite(source.text,1,source.length,file)==source.length);C(!fclose(file));}}
@@ -71,9 +69,9 @@ int main(int argc,char **argv) {
  XrXirValue saved[2]={{0},{0}};
  for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
- C(xr_xir_instance_start(instance,3,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+ C(xr_xir_instance_start(instance,CLASS_ARRAY_ANSWER,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
  XrXirValue number={0};C(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);C(number.type==XR_XIR_I64 && number.payload==41);xr_xir_value_drop(&number);
- C(xr_xir_instance_start(instance,4,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+ C(xr_xir_instance_start(instance,CLASS_ARRAY_RETAINED,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
  C(xr_xir_instance_take_result(instance,&saved[i])==XR_XIR_CALL_RETURNED);C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
  class_array_suspend_cases(program);xr_xir_compile_program_drop(program);
  for(unsigned i=0;i<2;++i)class_array_retained(&saved[i]);

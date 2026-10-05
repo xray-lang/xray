@@ -48,6 +48,30 @@
       "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a763101000000180000003f00000014000000190000001c0000000f0000006f726967696e616c5f736f75726365",
       "length": 73,
       "sha256": "7e5cbf693007fca02b8ecb5af0bf64ffb29b56e12369eb4e5a4ed2d80a1d5ccf"
+    },
+    {
+      "role": "linked",
+      "identity": "atomic-current",
+      "wire": 25,
+      "semantic": 64,
+      "value_abi": 21,
+      "call_abi": 26,
+      "program_abi": 29,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a7631010000001900000040000000150000001a0000001d0000000d0000006c696e6b65645f736f75726365",
+      "length": 71,
+      "sha256": "8ef44f7444c7b12680828d6b260e9fbb533b4529507a86eab20be1391ccb56c2"
+    },
+    {
+      "role": "original",
+      "identity": "atomic-current",
+      "wire": 25,
+      "semantic": 64,
+      "value_abi": 21,
+      "call_abi": 26,
+      "program_abi": 29,
+      "preimage": "787261793a7869722d6331312d636f646567656e2d706f6c6963793a7631010000001900000040000000150000001a0000001d0000000f0000006f726967696e616c5f736f75726365",
+      "length": 73,
+      "sha256": "95fe03bd4107fb881698f42908f655115904779ecda1ca8bc3e658ab60116679"
     }
   ]
 }

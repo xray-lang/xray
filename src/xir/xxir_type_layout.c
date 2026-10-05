@@ -18,7 +18,7 @@ static XrXirStatus nullable_storage_layout(const XrXirCompileContext *compile_co
 
 XrXirStatus xr_xir_builtin_layout(XrXirType type, const XrXirTarget *target,
     XrXirLayoutContext context, XrXirLayout *layout) {
-    bool carrier = type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||
+    bool carrier = type == XR_XIR_STRING ||
         type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
     if (!layout || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||

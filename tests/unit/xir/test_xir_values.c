@@ -13,6 +13,7 @@
 
 
 #include "xir/xxir_call.h"
+#include "xir/xxir_atomic.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_types.h"
 #include <stdio.h>
@@ -77,13 +78,40 @@ static void cow_cases(void) {
     bytes_equal(&left, "abc!abc!abc!abc!", 16);
     xr_xir_value_drop(&left);
 }
-static void copy_worker(XrXirValue *source) {
+static XrXirTypeArena *value_atomic_arena(void) {
+    XrXirTypeNode node = {.kind = XR_XIR_TYPE_ATOMIC, .element = XR_XIR_I64};
+    XrXirTypes types = {&node, 1, NULL, NULL}; XrXirTypeArena *arena = NULL;
+    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 100);
+    CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
+    return arena;
+}
+static void value_atomic_create(XrXirDomain *domain, XrXirTypeArena *arena,
+    int64_t number, XrXirValue *output) {
+    XrXirValue initial = {XR_XIR_I64, 0, number};
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, 16, 0};
+    CHECK(xr_xir_atomic_new((XrXirType)256, &initial, &admission, output) == XR_XIR_VALUE_OK);
+}
+static int64_t value_atomic_execute(XrXirValue *receiver, XrXirValueAdmission *admission,
+    XrXirAtomicOperation operation, int64_t number) {
+    XrXirValue operand = {XR_XIR_I64, 0, number}, result = {0};
+    XrXirAtomicRequest request = {receiver, &operand, NULL,
+        operation == XR_XIR_ATOMIC_OPERATION_LOAD ? 0u : 1u, operation, XR_XIR_I64};
+    XrXirAtomicProgress progress = {0};
+    XrXirAtomicOutcome outcome = xr_xir_atomic_start(&request, admission, NULL, &progress, &result);
+    CHECK(outcome.status == XR_XIR_RUN_OK && outcome.permission == XR_XIR_CALL_READY && !outcome.continuing);
+    xr_xir_atomic_progress_clear(&progress);
+    CHECK(result.type == XR_XIR_I64 && !result.reserved);
+    return result.payload;
+}
+typedef struct CopyTask { XrXirValue value; XrXirDomain *domain; } CopyTask;
+static void copy_worker(CopyTask *task) {
+    XrXirValue *source = &task->value;
+    XrXirValueAdmission admission = {xr_xir_value_arena(source), task->domain, NULL, NULL, 16384, 0};
     for (uint32_t i = 0; i < 2000; ++i) {
         XrXirValue copy = {0};
         CHECK(xr_xir_value_copy(source, &copy) == XR_XIR_VALUE_OK);
-        if (source->type == XR_XIR_ATOMIC_I64) {
-            int64_t previous = 0;
-            CHECK(xr_xir_atomic_i64_fetch_add(&copy, 1, &previous));
+        if (xr_xir_type_is_atomic(xr_xir_compile_type_arena_types(admission.arena), (XrXirType)source->type)) {
+            int64_t previous = value_atomic_execute(&copy, &admission, XR_XIR_ATOMIC_OPERATION_FETCH_ADD, 1);
             CHECK(previous >= 0 && previous < 8000);
         } else if (source->type == XR_XIR_STRING) {
             CHECK(xr_xir_string_append(&copy, source) == XR_XIR_VALUE_OK);
@@ -110,10 +138,10 @@ static XrXirTypeArena *string_cell_arena(XrXirDomain *domain) {
 static void concurrent_copies(unsigned kind) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
-    XrXirValue value = {0}, copies[4] = {{0}, {0}, {0}, {0}};
-    CHECK((kind == 1 ? xr_xir_atomic_i64_new(domain, 0, &value) :
-        xr_xir_string_new(domain, "thread", 6, &value)) == XR_XIR_VALUE_OK);
-    XrXirTypeArena *arena = kind == 2 ? string_cell_arena(domain) : NULL;
+    XrXirValue value = {0}; CopyTask copies[4] = {0};
+    XrXirTypeArena *arena = kind == 1 ? value_atomic_arena() : kind == 2 ? string_cell_arena(domain) : NULL;
+    if (kind == 1) value_atomic_create(domain, arena, 0, &value);
+    else CHECK(xr_xir_string_new(domain, "thread", 6, &value) == XR_XIR_VALUE_OK);
     if (kind == 2) {
         XrXirValueAdmission admission = {arena, domain, NULL, NULL, 10, 0};
         XrXirValue cell = {0};
@@ -126,7 +154,8 @@ static void concurrent_copies(unsigned kind) {
     pthread_t threads[4];
 #endif
     for (uint32_t i = 0; i < 4; ++i) {
-        CHECK(xr_xir_value_copy(&value, &copies[i]) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_value_copy(&value, &copies[i].value) == XR_XIR_VALUE_OK);
+        copies[i].domain = domain;
 #if defined(XR_OS_WINDOWS)
         threads[i] = CreateThread(NULL, 0, thread_entry, &copies[i], 0, NULL);
         CHECK(threads[i] != NULL);
@@ -143,8 +172,8 @@ static void concurrent_copies(unsigned kind) {
 #endif
     }
     if (kind == 1) {
-        int64_t count = 0;
-        CHECK(xr_xir_atomic_i64_load(&value, &count) && count == 8000);
+        XrXirValueAdmission admission = {arena, domain, NULL, NULL, 16, 0};
+        CHECK(value_atomic_execute(&value, &admission, XR_XIR_ATOMIC_OPERATION_LOAD, 0) == 8000);
     } else if (kind == 2) {
         XrXirValue content = {0}; CHECK(xr_xir_cell_read(&value, &content) == XR_XIR_VALUE_OK);
         bytes_equal(&content, "thread", 6); xr_xir_value_drop(&content);
@@ -202,26 +231,28 @@ static void atomic_boundaries(void) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirValue cell = {0}, copy = {0};
-    CHECK(xr_xir_atomic_i64_new(domain, INT64_MAX, &cell) == XR_XIR_VALUE_OK);
+    XrXirTypeArena *arena = value_atomic_arena();
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, 32, 0};
+    value_atomic_create(domain, arena, INT64_MAX, &cell);
     CHECK(xr_xir_value_copy(&cell, &copy) == XR_XIR_VALUE_OK);
     CHECK(cell.payload == copy.payload);
-    int64_t old = 0, value = 0;
-    CHECK(xr_xir_atomic_i64_fetch_add(&copy, 1, &old) && old == INT64_MAX);
-    CHECK(xr_xir_atomic_i64_load(&cell, &value) && value == INT64_MIN);
+    CHECK(value_atomic_execute(&copy, &admission, XR_XIR_ATOMIC_OPERATION_FETCH_ADD, 1) == INT64_MAX);
+    CHECK(value_atomic_execute(&cell, &admission, XR_XIR_ATOMIC_OPERATION_LOAD, 0) == INT64_MIN);
     CHECK(!xr_xir_value_argument(&cell, NULL, XR_XIR_STRING));
     int64_t frame = 0;
     CHECK(xr_xir_owned_slot_copy(&frame, 0, NULL, XR_XIR_I64, 42) == XR_XIR_VALUE_BAD_ARGUMENT && !frame);
-    const XrXirType type = XR_XIR_ATOMIC_I64;
+    const XrXirType type = (XrXirType)256;
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_UNIT, 0, atomic_output_resume, NULL, NULL, 0, 0};
     XrXirCallAccounting accounting = {0};
     TypedOutput output = {0};
-    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = (XrXirValueAdmission) {0};
+    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = admission;
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, 0, &cell, 1, &call) == XR_XIR_CALL_READY);
     CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_BAD_STATE && !output.seen);
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     xr_xir_domain_drop(domain); xr_xir_value_drop(&cell);
-    CHECK(xr_xir_atomic_i64_load(&copy, &value) && value == INT64_MIN);
+    CHECK(value_atomic_execute(&copy, &admission, XR_XIR_ATOMIC_OPERATION_LOAD, 0) == INT64_MIN);
+    xr_xir_compile_type_arena_drop(arena);
     xr_xir_value_drop(&copy);
 }
 typedef struct ValueGate { bool active; uint32_t admissions, releases; } ValueGate;

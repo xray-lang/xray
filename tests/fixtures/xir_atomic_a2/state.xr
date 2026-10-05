@@ -1,0 +1,2 @@
+const state = Atomic(40)
+export fn counter() -> Atomic<i64> { return state }

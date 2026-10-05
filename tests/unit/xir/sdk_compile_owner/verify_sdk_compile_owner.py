@@ -1,6 +1,6 @@
 """Link preserved old objects independently against the actual current SDK."""
 from pathlib import Path
-import argparse, hashlib, json, re, subprocess
+import argparse, hashlib, json, re, subprocess, sys, tempfile
 
 # These interfaces keep their original signatures and semantics. The remaining
 # objects in the fixed old input set refer to retired compiler ownership APIs.
@@ -14,9 +14,10 @@ xr_xir_instance_config_init xr_xir_instance_weaken_function xr_xir_instance_new
 xr_xir_instance_state xr_xir_instance_start xr_xir_instance_resume
 xr_xir_instance_take_result xr_xir_instance_copy_failure xr_xir_instance_stop xr_xir_instance_free
 xr_xir_instance_start_function xr_xir_instance_function xr_xir_instance_resolve_function
-xr_xir_instance_literal xr_xir_instance_atomic xr_xir_instance_cell xr_xir_instance_cell_read
+xr_xir_instance_literal xr_xir_instance_cell xr_xir_instance_cell_read
 xr_xir_instance_cell_write xr_xir_instance_slot_read xr_xir_instance_slot_write xr_xir_instance_panic_land
 '''.split())
+REMOVED_A2 = {'xr_xir_instance_atomic'}
 ARCHIVES = ['xray_compile_resources', 'xray_xir_admission', 'xray_xir_declarations',
             'xray_xir_scalar', 'xray_xir_runtime_host']
 
@@ -44,8 +45,8 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     baseline = json.loads((old / 'baseline.json').read_text())
     assert baseline['head'] == '3c0bce6c7480126e4bcd55a5727a4224132c2b2b'
-    assert len(baseline['objects']) == 139 and len(RETAINED) == 40
-    assert RETAINED <= baseline['objects'].keys()
+    assert len(baseline['objects']) == 139 and len(RETAINED) == 39
+    assert RETAINED | REMOVED_A2 <= baseline['objects'].keys()
     protected = dict(baseline['files'])
     protected.update({row['object']: row['sha256'] for row in baseline['objects'].values()})
     protected[baseline['data_object']['path']] = baseline['data_object']['sha256']
@@ -63,8 +64,10 @@ def main():
         code, text = execute(['dumpbin', '/nologo', '/linkermember:1', library], output / (library.stem + '-exports.log'))
         assert code == 0, text
         exports.update(re.findall(r'\b(xr_\w+)\b', text))
-    retired = set(baseline['objects']) - RETAINED
-    assert len(retired) == 99 and not retired.intersection(exports), sorted(retired.intersection(exports))
+    historical_retired = set(baseline['objects']) - RETAINED - REMOVED_A2
+    assert len(historical_retired)==99 and len(REMOVED_A2)==1
+    retired=historical_retired | REMOVED_A2
+    assert len(retired)==100 and not retired.intersection(exports), sorted(retired.intersection(exports))
     assert RETAINED <= exports, sorted(RETAINED - exports)
     assert {'xr_compile_resources_new', 'xr_compile_resources_free', 'xr_xir_compile_program_seal',
             'xr_xir_compile_program_drop', 'xr_xir_compile_default_limits'} <= exports
@@ -84,8 +87,13 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [24, 63, 20, 25, 28]
-    assert len(manifest['abi_measurements']) == 233
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [25, 64, 21, 26, 29]
+    sys.path.insert(0,str(root/'scripts'))
+    from derive_xir_sdk_abi import prepare
+    with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
+        facts=Path(temporary)/'facts';prepare(facts)
+        expected=json.loads((facts/'EXPECTED.json').read_text())['rows']
+    assert manifest['abi_measurements']==[dict(id=row['id'],value=row['value']) for row in expected]
     assert [row['path'] for row in manifest['files'] if row['kind'] == 5] == sorted('lib/' + name + '.lib' for name in ARCHIVES)
     def status(name, document, expected, sdk_root=bundle):
         path = output / (name + '.json')
@@ -95,11 +103,14 @@ def main():
     status('current-sdk-positive', manifest, 0)
     old_manifest = json.loads((old / 'sdk/sdk_manifest.json').read_text())
     status('old-sdk-identity', old_manifest, 1, old / 'sdk')
-    for name, value in [('value_abi', 17), ('call_abi', 21), ('program_abi', 26)]:
+    for name,value in [('value_abi',17),('call_abi',21),('program_abi',26),
+                       ('value_abi',20),('call_abi',25),('program_abi',28)]:
         changed = json.loads(json.dumps(manifest)); changed[name] = value
-        status('old-' + name, changed, 1)
+        status('old-' + name+'-'+str(value), changed, 1)
     changed = json.loads(json.dumps(manifest)); changed['abi_measurements'] = changed['abi_measurements'][:197]
     status('old-layout-recipe', changed, 1)
+    changed=json.loads(json.dumps(manifest));changed['abi_measurements']=changed['abi_measurements'][:233]
+    status('prior-233-layout-recipe',changed,1)
     # Keeping current ABI labels cannot make an old archive the same source bundle.
     changed = json.loads(json.dumps(manifest))
     old_scalar = next(row for row in old_manifest['files'] if row['path'] == 'lib/xray_xir_scalar.lib')
@@ -117,13 +128,13 @@ def main():
         assert code != 0 and ('error C2198' in text or 'error C2338' in text), (name, text)
     verify_preserved()
     result = {'preserved_head': baseline['head'], 'protected_inputs': len(protected),
-              'old_positive': 'PASS', 'current_positive': 'PASS', 'retired': len(retired), 'retained': len(RETAINED),
+              'old_positive': 'PASS', 'current_positive': 'PASS', 'retired': len(retired), 'historical_retired':len(historical_retired), 'newly_removed_helper':len(REMOVED_A2), 'retained': len(RETAINED),
               'objects': outcomes, 'protected_sha256': protected,
               'new_archive_sha256': {path.name: sha(path) for path in libraries},
               'old_identity_and_labels_rejected': True, 'new_layout_measurements': len(manifest['abi_measurements']),
               'scope': 'New runtime SDK exports only; absence of compiler-only APIs is not full compiler archive qualification'}
     (output / 'summary.json').write_text(json.dumps(result, indent=2) + '\n')
-    print(f"139 preserved old objects: {len(retired)} exact retired-symbol rejections, {len(RETAINED)} retained references; both SDK controls and stale identities PASS")
+    print(f"139 preserved old objects: {len(historical_retired)} historical + {len(REMOVED_A2)} newly removed exact unresolved; {len(RETAINED)} retained references; original old SDK positive and stale identities PASS")
 
 
 if __name__ == '__main__':

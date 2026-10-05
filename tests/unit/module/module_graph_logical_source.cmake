@@ -1,0 +1,11 @@
+# Governed logical-source graph inclusion and ordinary edge ownership.
+add_executable(test_module_graph_logical_source module/test_module_graph_logical_source.c)
+target_link_libraries(test_module_graph_logical_source PRIVATE xray_xir_source)
+target_include_directories(test_module_graph_logical_source PRIVATE ${PROJECT_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test_module_graph_logical_source PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_module_graph_logical_source PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_module_graph_logical_source COMMAND test_module_graph_logical_source)
+set_tests_properties(test_module_graph_logical_source PROPERTIES TIMEOUT 60)

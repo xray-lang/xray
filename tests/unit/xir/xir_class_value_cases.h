@@ -16,7 +16,7 @@
 static XrXirTypeArena *class_value_arena(XrXirDomain *domain) {
     (void)domain;
     XrXirNominalFieldIdentity fields[]={{{"count",5},XR_XIR_FIELD_MUTABLE},{{"label",5},0},{{"text",4},XR_XIR_FIELD_MUTABLE}};
-    XrXirNominalIdentity identity={{"module",6},{"Counter",7},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL};
+    XrXirNominalIdentity identity={{"module",6},{"Counter",7},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}};
     XrXirNominalTable table={NULL,1,&identity};XrXirType types_[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_STRING};
     XrXirTypeNode nodes[]={
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,types_,3}},
@@ -29,6 +29,32 @@ static XrXirTypeArena *class_value_arena(XrXirDomain *domain) {
 static void class_value_count(const XrXirValue *value,int64_t expected) {
     XrXirValue result={0};CHECK(xr_xir_class_get(value,0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(value),.work=10000},&result)==XR_XIR_VALUE_OK);
     CHECK(result.type==XR_XIR_I64 && result.payload==expected);xr_xir_value_drop(&result);
+}
+static void class_value_replace_faults(XrXirValue *first, XrXirValue *alias,
+    XrXirValue *label, XrXirValue *text, XrXirValueAdmission *admission) {
+    XrXirDomain *domain = admission->domain;
+    size_t baseline = live, begin = calls;
+    uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
+    CHECK(xr_xir_class_set(first, 2, label, admission) == XR_XIR_VALUE_OK);
+    size_t sites = calls - begin;
+    CHECK(live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
+    XrXirValue observed = {0};
+    CHECK(xr_xir_class_get(alias, 2, admission, &observed) == XR_XIR_VALUE_OK && observed.payload == label->payload);
+    xr_xir_value_drop(&observed);
+    for (size_t ordinal = 0; ordinal < sites; ++ordinal) {
+        CHECK(xr_xir_class_set(first, 2, text, admission) == XR_XIR_VALUE_OK);
+        baseline = live; bytes = xr_xir_domain_stats(domain).live_bytes;
+        fail_at = calls + ordinal;
+        CHECK(xr_xir_class_set(first, 2, label, admission) == XR_XIR_VALUE_OOM);
+        CHECK(calls > fail_at); fail_at = SIZE_MAX;
+        CHECK(live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
+        CHECK(xr_xir_class_get(first, 2, admission, &observed) == XR_XIR_VALUE_OK && observed.payload == text->payload);
+        xr_xir_value_drop(&observed);
+        CHECK(xr_xir_class_get(alias, 2, admission, &observed) == XR_XIR_VALUE_OK && observed.payload == text->payload);
+        xr_xir_value_drop(&observed);
+    }
+    CHECK(xr_xir_class_set(first, 2, label, admission) == XR_XIR_VALUE_OK);
+    printf("Class String replace: actual OOM=%zu, alias preserved, physical baseline restored\n", sites);
 }
 static void class_value_cases(void) {
     size_t initial=live;XrXirDomain *domain=NULL,*foreign=NULL;
@@ -78,8 +104,7 @@ static void class_value_cases(void) {
     CHECK(!invalid.type && !invalid.payload && live==rollback_live && xr_xir_domain_stats(domain).live_bytes==rollback_bytes);
     XrXirValue observed={0};CHECK(xr_xir_class_get(&first,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK);
     CHECK(observed.payload==text.payload);xr_xir_value_drop(&observed);
-    size_t setter_calls=calls;
-    CHECK(xr_xir_class_set(&first,2,&label,&admission)==XR_XIR_VALUE_OK && calls==setter_calls);
+    class_value_replace_faults(&first,&alias,&label,&text,&admission);
     CHECK(xr_xir_class_get(&first,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK && observed.payload==label.payload);
     xr_xir_value_drop(&observed);
     xr_xir_value_drop(&label);xr_xir_value_drop(&text);xr_xir_value_drop(&alias);xr_xir_value_drop(&separate);

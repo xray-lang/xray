@@ -550,7 +550,7 @@ static void enum_value_ownership(void) {
     const XrXirNominalVariant variants[] = {{{"Empty", 5}, 0, 0}, {{"Pair", 4}, 0, 2}};
     const XrXirNominalFieldIdentity fields[] = {{{"left", 4}, 0}, {{"right", 5}, 0}};
     const XrXirNominalIdentity identity = {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 2,
-        XR_XIR_NOMINAL_ENUM, variants, 2, 0};
+        XR_XIR_NOMINAL_ENUM, variants, 2, 0,{0}};
     const XrXirNominalTable table = {NULL, 1, &identity};
     XrXirType field_types[] = {XR_XIR_STRING, XR_XIR_STRING};
     const XrXirType type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;

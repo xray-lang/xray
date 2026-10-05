@@ -63,6 +63,9 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
         TRY(match_literal(u->name, v->name, context));
         MATCH(u->exported, v->exported); MATCH(u->arity, v->arity);
         MATCH(u->kind, v->kind); MATCH(u->flags, v->flags); MATCH(u->variant_count, v->variant_count);
+        MATCH(u->native.native_id, v->native.native_id);
+        TRY(match_bytes(u->native.source_fingerprint, v->native.source_fingerprint,
+            sizeof(u->native.source_fingerprint), context));
         for (uint32_t j = 0; j < u->variant_count; ++j) {
             TRY(match_literal(u->variants[j].name, v->variants[j].name, context));
             MATCH(u->variants[j].field_begin, v->variants[j].field_begin);

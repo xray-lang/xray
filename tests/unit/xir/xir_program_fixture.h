@@ -15,9 +15,11 @@
 #include "xir/xxir_generic.h"
 #include "xir_error_fixture.h"
 static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context,uint32_t mode) {
+    const XrXirType atomic=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+(mode==2));
+    const uint32_t atomic_operands[]={0,1};
     XrXirInstruction alpha[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 10, {0}},
-        {XR_XIR_ATOMIC_I64_NEW, XR_XIR_ATOMIC_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_ATOMIC_NEW, atomic, {0}, {0}, 0, {0}},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {1}, {0}, 0, {0}},
         {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0, {0}},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {3}, {0}, 2, {0}},
@@ -42,9 +44,9 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     XrXirInstruction get_alpha[] = {
-        {XR_XIR_SLOT_LOAD, XR_XIR_ATOMIC_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_SLOT_LOAD, atomic, {0}, {0}, 0, {0}},
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1, {0}},
-        {XR_XIR_ATOMIC_I64_FETCH_ADD, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_ATOMIC_FETCH_ADD, XR_XIR_I64, {0, 2}, {0}, 0, {0}},
         {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 2, {0}},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 1, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}
@@ -69,8 +71,8 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     XrXirInstruction get_atomic[] = {
-        {XR_XIR_SLOT_LOAD, XR_XIR_ATOMIC_I64, {0}, {0}, 0, {0}},
-        {XR_XIR_ATOMIC_I64_LOAD, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_SLOT_LOAD, atomic, {0}, {0}, 0, {0}},
+        {XR_XIR_ATOMIC_LOAD, XR_XIR_I64, {0,1}, {0}, 0, {0}},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {1}, {0}, 1, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
@@ -80,22 +82,25 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
         {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 10, NULL, 0},
         {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, alpha, 10, mode == 2 ? &error_operand : NULL, mode == 2 ? 1u : 0u},
         {"main", 4, NULL, 0, XR_XIR_I64, &blocks[2], 1, root, 11, NULL, 0},
-        {"alpha_next", 10, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_alpha, 6, NULL, 0},
-        {"beta_next", 9, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_beta, 6, NULL, 0},
+        {"alpha_next", 10, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_alpha, 6, atomic_operands, 2},
+        {"beta_next", 9, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_beta, 6, atomic_operands, 2},
         {"root_string", 11, NULL, 0, XR_XIR_STRING, &blocks[4], 1, get_string, 2, NULL, 0},
-        {"alpha_cell", 10, NULL, 0, XR_XIR_ATOMIC_I64, &blocks[0], 1, get_atomic, 4, NULL, 0}
+        {"alpha_cell", 10, NULL, 0, atomic, &blocks[0], 1, get_atomic, 4, atomic_operands, 1}
     };
     const uint32_t imports[] = {1, 2};
     const XrXirSourceModule modules[] = {
         {"root", 4, imports, 2, 0}, {"beta", 4, NULL, 0, 1}, {"alpha", 5, NULL, 0, 2}
     };
     const XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
-    const XrXirSlot slots[] = {{2, XR_XIR_ATOMIC_I64, 0}, {1, XR_XIR_ATOMIC_I64, 0},
+    const XrXirSlot slots[] = {{2, atomic, 0}, {1, atomic, 0},
         {2, XR_XIR_STRING, 0}, {1, XR_XIR_STRING, 0}, {0, XR_XIR_STRING, 1}};
     const XrXirLiteral literals[] = {{"A\0\xe4\xb8\xad", 5}, {"B\xf0\x9f\x98\x80", 5}, {"root", 4}, {"updated", 7}, {NULL, 0}};
     const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3, NULL};
     ErrorFixture error; error_fixture_init(&error,false);
-    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, mode == 2 ? &error.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64}};
+    XrXirTypes types={nodes,1,NULL,NULL};
+    if(mode==2){nodes[1]=nodes[0];nodes[0]=error.node;types.count=2;types.nominals=&error.table;}
+    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_check(context,&built,&checked,NULL)==XR_XIR_OK);

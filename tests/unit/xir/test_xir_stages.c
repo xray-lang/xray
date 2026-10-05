@@ -399,9 +399,15 @@ static void constructed_metadata(void) {
         if (attack == 16) { nodes[3].kind = XR_XIR_TYPE_CELL; nodes[3].element = (XrXirType)257; }
         if (attack == 17) input.type = (XrXirType)257;
         budget = stage_context_default();
-        CHECK(xr_xir_compile_types_structure_verify(&budget, &types) != XR_XIR_OK);
+        XrXirStatus status = xr_xir_compile_types_structure_verify(&budget, &types);
+        if (attack == 4) CHECK(status == XR_XIR_OK); /* The original ID16 is now Rune. */
+        else CHECK(status != XR_XIR_OK);
         memcpy(nodes,saved,sizeof(nodes)); input.type = (XrXirType)256;
     }
+    nodes[0].element = (XrXirType) 17; /* The first unassigned scalar ID remains invalid. */
+    budget = stage_context_default();
+    CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_BAD_TYPE);
+    nodes[0].element = XR_XIR_STRING;
     XrXirGeneric generic = {NULL,65536,NULL,0, NULL};
     XrXirModule context = {XR_XIR_BUILT,NULL,1,NULL,&generic,&types, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xr_xir_type_in_context(&context,0,(XrXirType)260));
@@ -442,6 +448,9 @@ static void nominal_metadata_cases(void) {
     b = stage_context_default();
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.constraint.markers = 8;
+    b = stage_context_default();
+    CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_OK);
+    nominal_fixture(&f); f.constraint.markers = 64;
     b = stage_context_default();
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.fields[0].flags = XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED;
@@ -728,12 +737,12 @@ static void error_filter_packets(const XrXirArtifact *checked) {
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&stage_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded = NULL;
-    _Static_assert(XR_XIR_ERROR_IS == 95 && XR_XIR_ERROR_NARROW == 96, "error filter wire identity");
-    const uint8_t needle[40] = {[0]=95, [4]=1, [25]=1};
+    _Static_assert(XR_XIR_ERROR_IS == 103 && XR_XIR_ERROR_NARROW == 104, "error filter wire identity");
+    const uint8_t needle[40] = {[0]=103, [4]=1, [25]=1};
     size_t offset = 0; uint32_t found = 0;
     for (size_t i = 64; i + 120 <= packet.length; ++i)
         if (!memcmp(packet.bytes+i,needle,sizeof(needle))) {offset=i; ++found;}
-    CHECK(found == 1 && packet.bytes[offset+40] == XR_XIR_BRANCH && packet.bytes[offset+80] == 96);
+    CHECK(found == 1 && packet.bytes[offset+40] == XR_XIR_BRANCH && packet.bytes[offset+80] == 104);
     for (unsigned mode = 0; mode < 6; ++mode) {
         size_t position = mode == 0 ? offset+88 : mode == 1 ? offset+24 : mode == 2 ? offset+56 :
             mode == 3 ? offset+60 : mode == 4 ? offset+80 : 12;

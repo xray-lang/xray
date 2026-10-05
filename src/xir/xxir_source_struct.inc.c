@@ -50,6 +50,7 @@ static SourceName *source_nominal_name(SourceContext *ctx, const char *name) {
         else return NULL;
     } else {
         symbol = visible_name(ctx, name);
+        if (!symbol) symbol = source_ordering_lookup(ctx, name);
         if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     }
     return symbol && symbol->kind == SOURCE_NOMINAL ? symbol : NULL;
@@ -95,7 +96,8 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     XrXirNominalDeclaration *record = (XrXirNominalDeclaration *) &ctx->nominals.declarations[symbol->index];
     const char *module = ctx->graph->specs[ctx->module].canonical;
     *record = (XrXirNominalDeclaration) {{module, (uint32_t) source_text_size(ctx, module)},
-        {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0};
+        {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0, {0}};
+    if (!source_ordering_bind(ctx, symbol, record)) return false;
     XrXirTypeNode type = {0}; type.kind = XR_XIR_TYPE_NOMINAL; type.nominal.declaration = symbol->index;
     XrXirConstraint *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;
     XrXirType *arguments = count ? source_alloc(ctx, count, sizeof(*arguments)) : NULL;
@@ -116,6 +118,8 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     type.nominal.arguments = arguments; type.nominal.argument_count = count;
     if (!source_intern_type(ctx, type, &symbol->type) ||
         !source_query_declare(ctx, symbol, XR_XIR_SOURCE_TYPE, 0, source_query_range(ctx, node, name))) return false;
+    if (record->native.native_id)
+        ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].native_identity = record->native.native_id;
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_parameter_count = count;
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_constraints = constraints;
     SourceTypeScope saved = ctx->type_scope;

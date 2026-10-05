@@ -69,6 +69,8 @@ XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
         case XR_XIR_RUN_OUT_OF_MEMORY: reason = XR_XIR_CALL_OOM; break;
         case XR_XIR_RUN_HOST_ERROR: reason = XR_XIR_CALL_HOST_ERROR; break;
         case XR_XIR_RUN_NULL_UNWRAP: reason = XR_XIR_CALL_RUNTIME_PANIC; break;
+        case XR_XIR_RUN_ATOMIC_ARGUMENT: reason = XR_XIR_CALL_BAD_ARGUMENT; break;
+        case XR_XIR_RUN_UNSUPPORTED: reason = XR_XIR_CALL_UNSUPPORTED; break;
         case XR_XIR_RUN_STEP_LIMIT:
         case XR_XIR_RUN_FRAME_LIMIT: reason = XR_XIR_CALL_LIMIT; break;
         default: reason = XR_XIR_CALL_BAD_STATE; break;
@@ -131,6 +133,13 @@ XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view) {
     return &call->config.admission;
 }
 
+XR_FUNC XrXirCallStatus xr_xir_call_execution_status(const XrXirCallView *view) {
+    if (!xr_xir_call_admission(view)) return XR_XIR_CALL_BAD_STATE;
+    XrXirCall *call = view->activation;
+    return call->cancel_requested && !cleanup_active(call) ?
+        XR_XIR_CALL_CANCELLED : XR_XIR_CALL_READY;
+}
+
 static XrXirCallResult call_result(XrXirCallStatus status) {
     return (XrXirCallResult) {status, {XR_XIR_UNIT, 0, 0}, 0, {0}};
 }
@@ -168,6 +177,7 @@ static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
     XrXirValueStatus status = xr_xir_value_admit(value, type, admission);
     if (status == XR_XIR_VALUE_OK) return XR_XIR_CALL_READY;
     if (status == XR_XIR_VALUE_OOM) return XR_XIR_CALL_OOM;
+    if (status == XR_XIR_VALUE_UNSUPPORTED) return XR_XIR_CALL_UNSUPPORTED;
     if (status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT) return XR_XIR_CALL_LIMIT;
     return XR_XIR_CALL_BAD_ARGUMENT;
 }
@@ -566,6 +576,11 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         if (boundary_value(action.value, XR_XIR_I64) &&
             (action.value.payload == XR_XIR_CALL_OOM || action.value.payload == XR_XIR_CALL_LIMIT ||
              action.value.payload == XR_XIR_CALL_HOST_ERROR))
+            reason = (XrXirCallStatus) action.value.payload;
+        if (boundary_value(action.value, XR_XIR_I64) &&
+            (action.value.payload == XR_XIR_CALL_BAD_ARGUMENT || action.value.payload == XR_XIR_CALL_UNSUPPORTED) &&
+            !action.callee && !action.arguments && !action.argument_count && !action.flags &&
+            xr_xir_panic_empty(&action.panic))
             reason = (XrXirCallStatus) action.value.payload;
         abort_frames(call, reason);
         return;

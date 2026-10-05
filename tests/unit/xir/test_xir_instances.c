@@ -11,6 +11,7 @@
  *   Host callbacks exercise the runtime contract without a compiler oracle.
  */
 #include "xir/xxir_program.h"
+#include "xir/xxir_atomic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
@@ -45,8 +46,13 @@ static XrXirAction initializer(XrXirCallView *view) {
         CHECK(xr_xir_instance_start(view->instance, 3, NULL, 0) == XR_XIR_CALL_BUSY);
         CHECK(xr_xir_instance_free(view->instance) == XR_XIR_CALL_BUSY);
         if (env->witness->mode == 3 && module == 2) return done();
-        XrXirCallStatus status = module ? xr_xir_instance_atomic(view, module == 2 ? 10 : 20, &frame->value) :
-            xr_xir_instance_literal(view, 0, &frame->value);
+        XrXirCallStatus status=XR_XIR_CALL_READY;
+        if(module){
+            XrXirValue initial={XR_XIR_I64,0,module==2?10:20};
+            XrXirValueStatus created=xr_xir_atomic_new((XrXirType)257,&initial,xr_xir_call_admission(view),&frame->value);
+            if(created!=XR_XIR_VALUE_OK)status=created==XR_XIR_VALUE_OOM?XR_XIR_CALL_OOM:
+                created==XR_XIR_VALUE_LIMIT?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_ARGUMENT;
+        }else status=xr_xir_instance_literal(view,0,&frame->value);
         if (status != XR_XIR_CALL_READY) return fault(status);
         CHECK(xr_xir_instance_slot_write(view, slot, &frame->value, true) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_slot_write(view, slot, &frame->value, true) == XR_XIR_CALL_BAD_STATE);
@@ -71,9 +77,13 @@ static XrXirAction increment(XrXirCallView *view) {
     XrXirValue absent = {0};
     CHECK(xr_xir_instance_slot_read(view, 2, &absent) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_slot_write(view, slot, &frame->value, false) == XR_XIR_CALL_BAD_STATE);
-    int64_t previous = 0;
-    CHECK(xr_xir_atomic_i64_fetch_add(&frame->value, 1, &previous));
-    return action(XR_XIR_ACTION_RETURN, (XrXirValue) {XR_XIR_I64, 0, previous});
+    XrXirValue operand={XR_XIR_I64,0,1},previous={0};
+    XrXirAtomicProgress progress={0};
+    XrXirAtomicRequest request={&frame->value,&operand,NULL,1,XR_XIR_ATOMIC_OPERATION_FETCH_ADD,XR_XIR_I64};
+    XrXirAtomicOutcome result=xr_xir_atomic_start(&request,xr_xir_call_admission(view),view,&progress,&previous);
+    xr_xir_atomic_progress_clear(&progress);
+    if(result.status!=XR_XIR_RUN_OK)return fault(result.status==XR_XIR_RUN_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_LIMIT);
+    return action(XR_XIR_ACTION_RETURN,previous);
 }
 static XrXirAction root(XrXirCallView *view) {
     Frame *frame = view->state;
@@ -104,7 +114,7 @@ static XrXirAction suspended_string(XrXirCallView *view) {
     CHECK(xr_xir_instance_literal(view, 1, &frame->value) == XR_XIR_CALL_READY);
     return action(XR_XIR_ACTION_RETURN, frame->value);
 }
-static XrXirAction atomic_result(XrXirCallView *view) {
+static XrXirAction instance_atomic_result(XrXirCallView *view) {
     Frame *frame = view->state;
     CHECK(xr_xir_instance_slot_read(view, 0, &frame->value) == XR_XIR_CALL_READY);
     return action(XR_XIR_ACTION_RETURN, frame->value);
@@ -130,6 +140,8 @@ typedef struct Fixture {
     XrXirProgramSpec spec;
     XrXirArtifact *proof;
     ErrorFixture error;
+    XrXirTypeNode types_nodes[2];
+    XrXirTypes types;
     NativeFixtureOwner compiler;
 } Fixture;
 static const XrXirType string_parameter = XR_XIR_STRING;
@@ -155,16 +167,19 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
     f->entries[7].resume = echo; f->entries[7].result = XR_XIR_STRING;
     f->entries[7].parameters = &string_parameter; f->entries[7].parameter_count = 1;
     f->entries[8].resume = suspended_string; f->entries[8].result = XR_XIR_STRING;
-    f->entries[9].resume = atomic_result; f->entries[9].result = XR_XIR_ATOMIC_I64;
-    f->slots[0] = (XrXirSlot) {2, XR_XIR_ATOMIC_I64, 0};
-    f->slots[1] = (XrXirSlot) {1, XR_XIR_ATOMIC_I64, 0};
+    f->entries[9].resume = instance_atomic_result; f->entries[9].result = (XrXirType)257;
+    f->slots[0] = (XrXirSlot) {2, (XrXirType)257, 0};
+    f->slots[1] = (XrXirSlot) {1, (XrXirType)257, 0};
     f->slots[2] = (XrXirSlot) {0, XR_XIR_STRING, 1};
     f->literals[0] = (XrXirLiteral) {"A\0\xe4\xb8\xad", 5};
     f->literals[1] = (XrXirLiteral) {"independent", 11};
     f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3, NULL};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL, {0}};
-    if (mode==2) { error_fixture_init(&f->error,false); f->spec.types=&f->error.types; }
+    error_fixture_init(&f->error,false);
+    f->types_nodes[0]=f->error.node;
+    f->types_nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64};
+    f->types=(XrXirTypes){f->types_nodes,2,&f->error.table,NULL};f->spec.types=&f->types;
 }
 static void fixture(Fixture *f, uint32_t mode) {
     fixture_spec(f, mode);
@@ -235,8 +250,12 @@ static void isolation(void) {
     CHECK(f.witness.releases == 1);
     CHECK(a.count == 12 && a.events[9] == 32 && a.events[10] == 31 && a.events[11] == 30);
     strings_equal(&string, "A\0\xe4\xb8\xad", 5);
-    int64_t old = 0;
-    CHECK(xr_xir_atomic_i64_fetch_add(&atomic, 3, &old) && old == 12);
+    XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+    XrXirValueAdmission admission={xr_xir_value_arena(&atomic),domain,NULL,NULL,1000000,65536};
+    XrXirValue operand={XR_XIR_I64,0,3},old={0};XrXirAtomicProgress progress={0};
+    XrXirAtomicRequest request={&atomic,&operand,NULL,1,XR_XIR_ATOMIC_OPERATION_FETCH_ADD,XR_XIR_I64};
+    CHECK(xr_xir_atomic_start(&request,&admission,NULL,&progress,&old).status==XR_XIR_RUN_OK && old.payload==12);
+    xr_xir_atomic_progress_clear(&progress);xr_xir_value_drop(&old);xr_xir_domain_drop(domain);
     xr_xir_value_drop(&string); xr_xir_value_drop(&atomic);
 }
 static void borrowed_restart(void) {

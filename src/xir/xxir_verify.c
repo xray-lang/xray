@@ -98,7 +98,6 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     if (op->op == XR_XIR_CONST_STRING)
         return d && op->immediate >= 0 && (uint64_t) op->immediate < d->literal_count ?
             XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
-    if (op->op == XR_XIR_ATOMIC_I64_NEW) return d ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
     if (op->op != XR_XIR_SLOT_LOAD && op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
         op->op != XR_XIR_SLOT_PLACE)
         return XR_XIR_OK;
@@ -121,6 +120,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirModule *module, XrXirCompileContext *remaining) {
     if (op->op <= XR_XIR_INVALID || op->op >= XR_XIR_OP_COUNT)
         return XR_XIR_BAD_STRUCTURE;
+
     const OpRule *rule = &op_rules[op->op];
     if (!(rule->stages & stage))
         return XR_XIR_BAD_STAGE;
@@ -130,6 +130,11 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
+    if (xr_xir_op_is_atomic(op->op) && op->op != XR_XIR_ATOMIC_NEW) {
+        uint32_t required = xr_xir_atomic_required_operands(op->op);
+        uint32_t maximum = required + (op->op != XR_XIR_ATOMIC_TO_STRING);
+        if (op->args[1] < required || op->args[1] > maximum) return XR_XIR_BAD_STRUCTURE;
+    }
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
     if ((op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
@@ -224,7 +229,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
         (rule->result == RULE_RUNE && op->type != XR_XIR_RUNE) ||
         (rule->result == RULE_PANIC && op->type != XR_XIR_UNIT && op->type != XR_XIR_PANIC_INFO) ||
-        (rule->result == RULE_ATOMIC && op->type != XR_XIR_ATOMIC_I64) ||
+        (rule->result == RULE_ATOMIC && !xr_xir_type_is_atomic(module->types, op->type)) ||
         (rule->result == RULE_ARRAY && (!xr_xir_type_is_array(module->types, op->type) ||
             !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
@@ -254,7 +259,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CONST_INT) {
         if (!xr_xir_integer_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_CONST_FLOAT) {
-        if (!xr_xir_float_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
+        if (!xr_xir_float_constant_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM) {
         if (op->immediate != 1 && op->immediate != 2) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CLOCK_NANOS) {
@@ -742,6 +747,7 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
 #include "xxir_error_verify.inc.c"
 #include "xxir_panic_verify.inc.c"
 #include "xxir_tuple_verify.inc.c"
+#include "xxir_atomic_verify.inc.c"
 
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
@@ -751,6 +757,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!xir_compile_work(&context->remaining, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if (xr_xir_op_is_atomic(op->op)) {
+            XrXirStatus status = atomic_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
         if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD) {
             XrXirStatus status=tuple_uses(graph,function,context,i);
             if (status!=XR_XIR_OK) return status;
@@ -833,7 +844,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         }
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
-        if (op->op == XR_XIR_ATOMIC_I64_NEW || op->op == XR_XIR_TIMER_AFTER_MS) expected = XR_XIR_I64;
+        if (op->op == XR_XIR_TIMER_AFTER_MS) expected = XR_XIR_I64;
         if (op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP) {
             expected = xr_xir_operand_type(function, op->args[0]);
             if (!xr_xir_type_is_nullable(context->module->types, expected) ||
@@ -865,8 +876,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             op->op == XR_XIR_STRING_CONTAINS || op->op == XR_XIR_STRING_STARTS_WITH ||
             op->op == XR_XIR_STRING_ENDS_WITH || op->op == XR_XIR_STRING_INDEX_OF ||
             op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
-        if (op->op == XR_XIR_ATOMIC_I64_LOAD || op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
-            expected = XR_XIR_ATOMIC_I64;
+
         if (op->op == XR_XIR_PANIC_CODE || op->op == XR_XIR_PANIC_MESSAGE) expected = XR_XIR_PANIC_INFO;
         if (local_write(op->op)) {
             if (op->args[0] < function->parameter_count ||
@@ -901,7 +911,6 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             }
             if (op->op == XR_XIR_STRING_INDEX_OF && a == 2) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_ASSERT_CONDITION) operand_type = a ? XR_XIR_STRING : XR_XIR_BOOL;
-            if (op->op == XR_XIR_ATOMIC_I64_FETCH_ADD && a == 1) operand_type = XR_XIR_I64;
             if ((op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {
                 uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + a] : op->args[a];
@@ -963,6 +972,13 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirCompil
             uint64_t cost = owner->name_length == name.length ? (uint64_t) name.length + 1 : 1;
             if (!xir_compile_work(remaining, cost)) return XR_XIR_BUDGET;
             if (owner->name_length == name.length && !memcmp(owner->name, name.bytes, name.length)) {
+                const XrXirNominalNativeRecord *native = table->declarations ?
+                    &table->declarations[i].native : &table->identities[i].native;
+                if (native->native_id) {
+                    if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+                    const XrXirFunction *initializer = &module->functions[owner->initializer];
+                    if (initializer->parameter_count || initializer->result != XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
+                }
                 if (table->declarations) {
                     const XrXirNominalDeclaration *d = &table->declarations[i];
                     for (uint32_t f = 0; f < d->field_count; ++f) {

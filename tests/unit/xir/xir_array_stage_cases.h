@@ -133,9 +133,17 @@ static void array_phi_place_rejection(void) {
 static void array_compact_layout(void) {
     const XrXirType types[] = {XR_XIR_BOOL, XR_XIR_I8, XR_XIR_U8, XR_XIR_I16, XR_XIR_U16,
         XR_XIR_I32, XR_XIR_U32, XR_XIR_I64, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
-        XR_XIR_STRING, XR_XIR_ATOMIC_I64, (XrXirType) 256, (XrXirType) 258};
+        XR_XIR_STRING, (XrXirType) 259, (XrXirType) 256, (XrXirType) 258};
     const uint32_t widths[] = {1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 8, 8, 8, 8};
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
+    XrXirTypeNode nodes[4]; memcpy(nodes, f.nodes, sizeof(f.nodes));
+    nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_ATOMIC, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+    f.types.nodes = nodes; f.types.count = 4;
+    CHECK(xr_xir_compile_types_structure_verify(&stage_context, &f.types) == XR_XIR_OK);
+    XrXirLayout retired = {77, 88};
+    CHECK(xr_xir_compile_layout(&stage_context, &f.types, (XrXirType) 4,
+        &fixture_target, XR_XIR_LAYOUT_STORAGE, &retired) == XR_XIR_BAD_LAYOUT);
+    CHECK(retired.size == 77 && retired.alignment == 88);
     for (uint32_t i = 0; i < sizeof(types) / sizeof(types[0]); ++i) {
         XrXirLayout layout = {0};
         CHECK(xr_xir_compile_layout(&stage_context, &f.types, types[i], &fixture_target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);

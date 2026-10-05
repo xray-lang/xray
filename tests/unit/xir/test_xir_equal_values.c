@@ -9,6 +9,7 @@
 #include "xir/xxir_equal.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_array.h"
+#include "xir/xxir_atomic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,11 +170,12 @@ static void equal_arena_authority(void) {
 }
 static void equal_excluded_carriers(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
-    const XrXirTypeNode node={.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
-    XrXirTypeArena *arena=equal_arena(&node,1);
+    const XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64}};
+    XrXirTypeArena *arena=equal_arena(nodes,2);
     XrXirValueAdmission admission=equal_admission(domain,arena);
     XrXirValue values[3]={{0}},integer={XR_XIR_I64,0,7};
-    CHECK(xr_xir_atomic_i64_new(domain,7,&values[0])==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_atomic_new((XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),&integer,&admission,&values[0])==XR_XIR_VALUE_OK);
     XrXirPanicPayload panic={{445,0,0,0},{0}};
     CHECK(xr_xir_string_new(domain,NULL,0,&panic.message)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_panic_info_new(domain,&panic,&values[1])==XR_XIR_VALUE_OK);xr_xir_panic_drop(&panic);

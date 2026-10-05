@@ -51,11 +51,35 @@ static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environmen
         type = node->element;
     }
 }
+/* Canonical closed predicates do not acquire user interface conformances. */
+static uint32_t constraint_marker_closure(uint32_t markers) {
+    if (markers & (XR_XIR_CONSTRAINT_ATOMIC_NUMBER | XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN))
+        markers |= XR_XIR_CONSTRAINT_ATOMIC_VALUE;
+    if (markers & XR_XIR_CONSTRAINT_ATOMIC_VALUE) markers |= XR_XIR_CONSTRAINT_SENDABLE;
+    return markers;
+}
+static XrXirStatus constraint_atomic(const XrXirConstraintEnvironment *environment,
+    XrXirType type,uint32_t required,const XrXirCompileContext *work) {
+    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+    uint32_t id=(uint32_t)type,actual=0;
+    if (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
+        const XrXirConstraint *fact=constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
+        actual=fact ? constraint_marker_closure(fact->markers) : 0;
+    } else if (type==XR_XIR_I64 || type==XR_XIR_F64)
+        actual=constraint_marker_closure(XR_XIR_CONSTRAINT_ATOMIC_NUMBER);
+    else if (type==XR_XIR_BOOL) actual=constraint_marker_closure(XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN);
+    return (actual & required)==required ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+}
 #include "xxir_tuple_sendable.inc.c"
 static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environment,
     XrXirType type, uint32_t required, const XrXirCompileContext *work) {
     const XrXirTypes *types = environment->types;
     if (required & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+    uint32_t atomic=required & (XR_XIR_CONSTRAINT_ATOMIC_VALUE | XR_XIR_CONSTRAINT_ATOMIC_NUMBER | XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN);
+    if (atomic) {
+        XrXirStatus status=constraint_atomic(environment,type,atomic,work);
+        if (status!=XR_XIR_OK) return status;
+    }
     if (required & XR_XIR_CONSTRAINT_ERROR) {
         if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
 
@@ -74,13 +98,14 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
 
         uint32_t id = (uint32_t) type;
-        if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-            type == XR_XIR_ATOMIC_I64) return XR_XIR_OK;
+        if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
         if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
             const XrXirConstraint *fact = constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
-            return fact && (fact->markers & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+            return fact && (constraint_marker_closure(fact->markers) & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         }
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
+        if (node && node->kind == XR_XIR_TYPE_ATOMIC)
+            return constraint_atomic(environment,node->element,XR_XIR_CONSTRAINT_ATOMIC_VALUE,work);
         if (node && node->kind == XR_XIR_TYPE_TUPLE) return tuple_sendable(environment,type,work);
         if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return XR_XIR_BAD_TYPE;
         if ((uint32_t) node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
@@ -100,7 +125,7 @@ static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, u
         return id - XR_XIR_TYPE_PARAMETER_BASE < count;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node ? node->parameter_span <= count : type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) ||
-        type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
+        type == XR_XIR_STRING || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
 }
 XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirConstraint constraint, uint32_t count) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
@@ -319,6 +344,9 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
         status = proof_nominal(proof,proof->context->module,node);
         for (uint32_t a = 0; status == XR_XIR_OK && a < node->nominal.argument_count; ++a)
             status = proof_type_edge(proof,index,node->nominal.arguments[a]);
+    } else if (node->kind == XR_XIR_TYPE_ATOMIC) {
+        status=constraint_atomic(&proof->environment,node->element,XR_XIR_CONSTRAINT_ATOMIC_VALUE,proof->budget);
+        if (status==XR_XIR_OK) status=proof_type_edge(proof,index,node->element);
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE)
         status = proof_type_edge(proof,index,node->element);
     else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {

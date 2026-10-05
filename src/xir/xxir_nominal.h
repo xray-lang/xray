@@ -31,6 +31,12 @@ typedef struct XrXirNominalVariant {
     uint32_t field_begin, field_count;
 } XrXirNominalVariant;
 
+/* Native facts are owned values, never borrowed registry pointers. */
+typedef struct XrXirNominalNativeRecord {
+    uint32_t native_id;
+    uint8_t source_fingerprint[32];
+} XrXirNominalNativeRecord;
+
 typedef struct XrXirNominalDeclaration {
     XrXirLiteral module, name;
     uint32_t exported;
@@ -42,6 +48,7 @@ typedef struct XrXirNominalDeclaration {
     const XrXirNominalVariant *variants;
     uint32_t variant_count;
     uint32_t flags;
+    XrXirNominalNativeRecord native;
 } XrXirNominalDeclaration;
 typedef struct XrXirNominalFieldIdentity {
     XrXirLiteral name;
@@ -56,12 +63,17 @@ typedef struct XrXirNominalIdentity {
     const XrXirNominalVariant *variants;
     uint32_t variant_count;
     uint32_t flags;
+    XrXirNominalNativeRecord native;
 } XrXirNominalIdentity;
 typedef struct XrXirNominalTable {
     const XrXirNominalDeclaration *declarations;
     uint32_t count;
     const XrXirNominalIdentity *identities;
 } XrXirNominalTable;
+/* A borrowed record is a pool fact, not construction or access authority. */
+XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type);
+/* A verified pool record must match the actual governed value declaration. */
+XR_FUNC bool xr_xir_nominal_native_ordering(const XrXirTypes *types, XrXirType type);
 /* Metadata helpers grant no executable type or source admission.
  * Outputs publish only after complete successful validation; work is never refunded. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types);

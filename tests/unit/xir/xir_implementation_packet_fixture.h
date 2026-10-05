@@ -9,7 +9,7 @@ static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *cont
     nodes[0].kind = XR_XIR_TYPE_NOMINAL;
     nodes[1].kind = XR_XIR_TYPE_CALLABLE;
     nodes[1].result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[1].parameter_span = 1;
-    XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0};
+    XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0, {0}};
     XrXirNominalTable nominals = {&nominal,1,NULL};
     XrXirConstraint constraint = {0};
     XrXirInterfaceMethod method = {{"measure",7},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0,0,NULL};

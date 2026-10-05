@@ -30,7 +30,7 @@ static XrXirValue struct_deep_value(void) {
     char names[DEPTH][16]; XrXirType fields[DEPTH]; XrXirTypeNode nodes[DEPTH];
     for (uint32_t i = 0; i < DEPTH; ++i) {
         int length = snprintf(names[i], sizeof(names[i]), "Nested%u", i); CHECK(length > 0);
-        identities[i] = (XrXirNominalIdentity) {{"module", 6}, {names[i], (uint32_t) length}, 1, 0, &field, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0};
+        identities[i] = (XrXirNominalIdentity) {{"module", 6}, {names[i], (uint32_t) length}, 1, 0, &field, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}};
         fields[i] = i + 1 == DEPTH ? XR_XIR_I64 : (XrXirType) (257 + i);
         nodes[i] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
             {i, NULL, 0, &fields[i], 1}};

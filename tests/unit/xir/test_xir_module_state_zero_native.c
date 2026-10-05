@@ -21,7 +21,7 @@ XR_DATA const XrXirProgramSpec module_state_zero_program;
 XR_DATA const uint32_t module_state_zero_advance;
 int main(void) {
     CHECK(module_state_zero_advance<module_state_zero_program.entry_count);
-    StateZeroShape shape=state_zero_shape(module_state_zero_program.declarations,module_state_zero_advance);
+    StateZeroShape shape=state_zero_shape(module_state_zero_program.declarations,module_state_zero_program.types,module_state_zero_advance);
     CHECK(module_state_zero_program.entries[shape.advance].result==XR_XIR_I64 &&
         !module_state_zero_program.entries[shape.advance].parameter_count);
     const XrXirCompileContext *context=source_program_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));

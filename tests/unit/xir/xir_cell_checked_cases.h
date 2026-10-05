@@ -60,6 +60,7 @@ static void cell_local_checked_cases(void) {
         if (mode == 4) ops[1] = (XrXirInstruction){XR_XIR_LOCAL_READ,(XrXirType)256,{2},{0},0,{0}};
         if (mode == 5) ops[0].immediate = 1;
         if (mode == 6) ops[0] = (XrXirInstruction){XR_XIR_CELL_NEW,(XrXirType)256,{1},{0},0,{0}};
+        CheckedAtomicPool atomic_pool; checked_atomic_pool(&built, &atomic_pool);
         XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, NULL);
         xr_xir_compile_artifact_free(base);base=NULL;
         if (mode) { CHECK(status != XR_XIR_OK && !checked); continue; }
@@ -69,7 +70,7 @@ static void cell_local_checked_cases(void) {
         xr_xir_compile_artifact_free(checked);checked=NULL;
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(decoded); decoded = NULL;
-        uint8_t record[32] = {0}; put32(record, 103); put32(record + 8, 2); put32(record + 12, 1);
+        uint8_t record[32] = {0}; put32(record, XR_XIR_CELL_LOCAL_WRITE); put32(record + 8, 2); put32(record + 12, 1);
         size_t at = 0; unsigned matches = 0;
         for (size_t i = 64; i + sizeof(record) <= packet.length; ++i)
             if (!memcmp(packet.bytes + i, record, sizeof(record))) { at = i; ++matches; }
@@ -110,6 +111,7 @@ static void cell_checked_cases(void) {
         if (mode == 6) functions[8].result = (XrXirType)256;
         if (mode == 7) { parameters[0] = (XrXirType)257; identities[8].exported = 1; }
         if (mode == 8) nodes[0].element = XR_XIR_UNIT;
+        CheckedAtomicPool atomic_pool; checked_atomic_pool(&built, &atomic_pool);
         XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, NULL);
         xr_xir_compile_artifact_free(base);base=NULL;
         if (mode) {
@@ -123,7 +125,7 @@ static void cell_checked_cases(void) {
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(decoded); decoded = NULL;
         uint8_t record[32] = {0};
-        put32(record, 51); put32(record + 4, 256); put32(record + 8, 1);
+        put32(record, XR_XIR_CELL_NEW); put32(record + 4, 256); put32(record + 8, 1);
         size_t found = 0; unsigned matches = 0;
         for (size_t i = 64; i + sizeof(record) <= packet.length; ++i)
             if (!memcmp(packet.bytes + i, record, sizeof(record))) { found = i; ++matches; }

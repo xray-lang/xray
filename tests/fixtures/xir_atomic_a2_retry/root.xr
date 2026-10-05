@@ -1,0 +1,11 @@
+const value = Atomic<f64>(1.5)
+const evaluations = Atomic(0)
+fn receiver() -> Atomic<f64> { evaluations.add(100); return value }
+fn operand() -> f64 { evaluations.add(10); return 0.25 }
+fn order() -> Ordering? { evaluations.add(1); return Ordering.Relaxed }
+export fn main() -> f64 {
+    const first = receiver().fetchAdd(operand(), order())
+    const second = value.fetchAdd(1.0)
+    print(first, second, value.load(), evaluations.load())
+    return value.load()
+}

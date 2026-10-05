@@ -11,13 +11,16 @@ static XrXirStatus tuple_sendable_edge(const XrXirConstraintEnvironment *environ
     XrXirType type, uint32_t earlier, unsigned char *pending, const XrXirCompileContext *work) {
     if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
     if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) ||
-        type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64) return XR_XIR_OK;
+        type == XR_XIR_STRING) return XR_XIR_OK;
     uint32_t id=(uint32_t)type;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
         const XrXirConstraint *fact=constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
-        return fact && (fact->markers & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        return fact && (constraint_marker_closure(fact->markers) & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     }
     const XrXirTypeNode *node=xr_xir_type_node(environment->types,type);
+    if (node && node->kind==XR_XIR_TYPE_ATOMIC)
+        return id-XR_XIR_CONSTRUCTED_TYPE_BASE < earlier ?
+            constraint_atomic(environment,node->element,XR_XIR_CONSTRAINT_ATOMIC_VALUE,work) : XR_XIR_BAD_TYPE;
     if (!node || id-XR_XIR_CONSTRUCTED_TYPE_BASE >= earlier ||
         (node->kind != XR_XIR_TYPE_TUPLE && node->kind != XR_XIR_TYPE_ARRAY &&
          node->kind != XR_XIR_TYPE_NULLABLE)) return XR_XIR_BAD_TYPE;

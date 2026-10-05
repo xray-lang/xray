@@ -1,13 +1,13 @@
 // Built-in Atomic<T> type; implemented by the runtime.
-class Atomic<T> {
+class Atomic<T: AtomicValue> {
     load(ordering?: Ordering) -> T
     store(value: T, ordering?: Ordering)
-    add(delta: T, ordering?: Ordering)
-    sub(delta: T, ordering?: Ordering)
-    fetchAdd(delta: T, ordering?: Ordering) -> T
-    fetchSub(delta: T, ordering?: Ordering) -> T
+    add(delta: T, ordering?: Ordering) where T: AtomicNumber
+    sub(delta: T, ordering?: Ordering) where T: AtomicNumber
+    fetchAdd(delta: T, ordering?: Ordering) -> T where T: AtomicNumber
+    fetchSub(delta: T, ordering?: Ordering) -> T where T: AtomicNumber
     swap(value: T, ordering?: Ordering) -> T
     compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool)
-    toggle(ordering?: Ordering) -> bool
+    toggle(ordering?: Ordering) -> bool where T: AtomicBoolean
     toString() -> string
 }

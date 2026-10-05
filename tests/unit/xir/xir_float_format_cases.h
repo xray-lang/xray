@@ -34,11 +34,11 @@ static void float_output_group(void) {
     --sink.byte_limit;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT && probe.calls == 1);
     ++sink.byte_limit; values[4].payload = INT64_C(0x7ff0000000000001);
-    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT && probe.calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && probe.calls == 2);
     values[4].payload = INT64_C(0x7ff8000000000000); values[4].reserved = 1;
-    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT && probe.calls == 1);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT && probe.calls == 2);
     values[4].reserved = 0; probe.accept = false;
-    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_ERROR && probe.calls == 2);
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_ERROR && probe.calls == 3);
 }
 static void float_format_cases(void) {
     static const struct { uint32_t width; uint64_t bits; const char *expected; } cases[] = {

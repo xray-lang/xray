@@ -19,10 +19,10 @@ static XrXirTypeArena *class_inline_arena(XrXirDomain *domain) {
         {{"empty",5},0},{{"text",4},0}};
     XrXirNominalVariant variants[]={{{"None",4},0,0},{{"Full",4},0,1}};
     XrXirNominalIdentity ids[]={
-        {{"m",1},{"Record",6},1,0,rf,3,XR_XIR_NOMINAL_STRUCT,NULL,0,0},
-        {{"m",1},{"Choice",6},1,0,ef,1,XR_XIR_NOMINAL_ENUM,variants,2,0},
-        {{"m",1},{"Empty",5},1,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0},
-        {{"m",1},{"Owner",5},1,0,cf,4,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL}};
+        {{"m",1},{"Record",6},1,0,rf,3,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
+        {{"m",1},{"Choice",6},1,0,ef,1,XR_XIR_NOMINAL_ENUM,variants,2,0,{0}},
+        {{"m",1},{"Empty",5},1,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
+        {{"m",1},{"Owner",5},1,0,cf,4,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}}};
     XrXirNominalTable table={NULL,4,ids};
     XrXirType rfields[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_I64};
     XrXirType efields[]={XR_XIR_CONSTRUCTED_TYPE_BASE};
@@ -61,7 +61,7 @@ static void class_inline_faults(XrXirValue *object, const XrXirValue *fields,
 }
 static void class_inline_capabilities(void) {
     XrXirNominalFieldIdentity fields[]={{{"f",1},0}};
-    XrXirNominalIdentity id={{"m",1},{"R",1},1,0,fields,1,XR_XIR_NOMINAL_STRUCT,NULL,0,0};
+    XrXirNominalIdentity id={{"m",1},{"R",1},1,0,fields,1,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
     XrXirNominalTable table={NULL,1,&id};XrXirType field=XR_XIR_I64;
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&field,1}},{0}};
     XrXirTypes types={nodes,2,&table,NULL};

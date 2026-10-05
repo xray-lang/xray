@@ -24,6 +24,7 @@
 #include "xxir_nullable.h"
 #include "xxir_tuple.h"
 #include "xxir_float.h"
+#include "xxir_atomic.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -39,10 +40,11 @@ struct XrXirDomain {
     uint64_t limit;
     XrXirDomainStats stats;
 };
-typedef struct XirAtomicI64 {
+typedef struct XirAtomic {
     XirObject object;
-    _Atomic(int64_t) value;
-} XirAtomicI64;
+    _Atomic(uint64_t) bits;
+    XrXirType element;
+} XirAtomic;
 typedef struct XirFunction {
     XirObject object;
     XrXirFunctionBinding binding;
@@ -97,7 +99,7 @@ static XrXirValue string_value(XirString *string) {
 }
 /* Built-in carriers own no type arena. PanicInfo retains its STRING message. */
 static bool arena_free_carrier(XrXirType type) {
-    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_PANIC_INFO;
+    return type == XR_XIR_STRING || type == XR_XIR_PANIC_INFO;
 }
 static bool owned_carrier_type(XrXirType type) {
     return arena_free_carrier(type) || type == XR_XIR_ERROR ||
@@ -165,7 +167,9 @@ static bool value_header_valid(const XrXirValue *value) {
         return node && !node->parameter_span && xr_xir_type_is_class(xr_xir_compile_type_arena_types(object->arena),type);
     return node && !node->parameter_span && node->kind == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
-         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE);
+         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+         (node->kind == XR_XIR_TYPE_ATOMIC && ((XirAtomic *)object)->element ==
+          xr_xir_atomic_element(xr_xir_compile_type_arena_types(object->arena), type)));
 }
 XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (!value_header_valid(value)) return false;
@@ -468,6 +472,8 @@ static void release_pending(XirObject *pending) {
             XirString *string = (XirString *) object;
             xr_xir_domain_deallocate(domain, string->bytes, string->capacity);
             xr_xir_domain_deallocate(domain, string, sizeof(*string));
+        } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
+            xr_xir_domain_deallocate(domain, object, sizeof(XirAtomic));
         } else if (object->kind == XR_XIR_TYPE_CELL) {
             XirCell *cell = (XirCell *) object;
             queue_release(&cell->value, &pending);
@@ -510,8 +516,7 @@ static void release_pending(XirObject *pending) {
             queue_release(&((XirPanicInfo *)object)->panic.message, &pending);
             xr_xir_domain_deallocate(domain, object, sizeof(XirPanicInfo));
         } else {
-            XR_CHECK(object->type == XR_XIR_ATOMIC_I64, "unknown owned value kind");
-            xr_xir_domain_deallocate(domain, object, sizeof(XirAtomicI64));
+            XR_CHECK(false, "unknown owned value kind");
         }
         xr_xir_compile_type_arena_drop(arena);
         xr_xir_domain_drop(domain);
@@ -677,33 +682,6 @@ XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
     return XR_XIR_VALUE_OK;
 }
 
-XR_FUNC XrXirValueStatus xr_xir_atomic_i64_new(XrXirDomain *domain, int64_t initial, XrXirValue *output) {
-    if (!domain || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_reference_retain(&domain->references)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
-    XrXirValueStatus status = XR_XIR_VALUE_OK;
-    XirAtomicI64 *cell = xr_xir_domain_allocate(domain, sizeof(*cell), &status);
-    if (!cell) { xr_xir_domain_drop(domain); return status; }
-    atomic_init(&cell->object.references, 1);
-    cell->object.domain = domain;
-    cell->object.type = XR_XIR_ATOMIC_I64;
-    cell->object.arena = NULL; cell->object.kind = 0;
-    atomic_init(&cell->value, initial);
-    output->type = XR_XIR_ATOMIC_I64;
-    memcpy(&output->payload, &cell, sizeof(cell));
-    return XR_XIR_VALUE_OK;
-}
-XR_FUNC bool xr_xir_atomic_i64_load(const XrXirValue *value, int64_t *output) {
-    if (!output || !xr_xir_value_argument(value, NULL, XR_XIR_ATOMIC_I64)) return false;
-    XirAtomicI64 *cell = (XirAtomicI64 *) object_pointer(value);
-    *output = atomic_load_explicit(&cell->value, memory_order_seq_cst);
-    return true;
-}
-XR_FUNC bool xr_xir_atomic_i64_fetch_add(const XrXirValue *value, int64_t delta, int64_t *previous) {
-    if (!previous || !xr_xir_value_argument(value, NULL, XR_XIR_ATOMIC_I64)) return false;
-    XirAtomicI64 *cell = (XirAtomicI64 *) object_pointer(value);
-    *previous = atomic_fetch_add_explicit(&cell->value, delta, memory_order_seq_cst);
-    return true;
-}
 XR_FUNC void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *owned) {
     XR_CHECK(owned && owned_carrier_type((XrXirType) owned->type) &&
              xr_xir_value_valid(owned), "moving non-owned frame value");
@@ -743,6 +721,7 @@ static bool admission_owner(const XrXirValueAdmission *admission,
 #include "xxir_value_admission.inc.c"
 #include "xxir_nullable_value.inc.c"
 #include "xxir_tuple_value.inc.c"
+#include "xxir_atomic_value.inc.c"
 XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirTypeArena *arena,
     XrXirType type, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission,
     XrXirValue *output) {

@@ -31,7 +31,7 @@ static void sdk_target_faults(const XrXirRuntimeSdkRequest *request) {
         sdk_io_fail_at=SIZE_MAX;
         CHECK(sdk_stats(request->resources).live_bytes==baseline && runtime_bytes==physical && sdk_handles()==handles);
     }
-    sdk_io_error=ERROR_READ_FAULT;CHECK(xr_xir_runtime_sdk_facts(sdk)->value_abi==20);
+    sdk_io_error=ERROR_READ_FAULT;CHECK(xr_xir_runtime_sdk_facts(sdk)->value_abi==21);
     xr_xir_runtime_sdk_free(sdk);
     printf("Target with SDK alive: %zu allocator and %zu IO/OOM points PASS\n",allocations,ios);
 }

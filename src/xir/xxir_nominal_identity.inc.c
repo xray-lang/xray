@@ -12,7 +12,7 @@
 static XrXirNominalIdentity nominal_identity_header(const XrXirNominalTable *table, uint32_t i) {
     if (table->identities) return table->identities[i];
     const XrXirNominalDeclaration *d = &table->declarations[i];
-    return (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count, d->flags};
+    return (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count, d->flags, d->native};
 }
 static XrXirNominalFieldIdentity nominal_identity_field(const XrXirNominalTable *table, uint32_t i, uint32_t f) {
     if (table->identities) return table->identities[i].fields[f];
@@ -33,6 +33,8 @@ static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrX
         if (status == XR_XIR_OK) status = nominal_name(d->name, &b);
         if (status != XR_XIR_OK) return status;
         if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
+        status = nominal_native_verify(&b, d);
+        if (status != XR_XIR_OK) return status;
         status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, &b);
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < d->field_count; ++f) {
@@ -87,6 +89,8 @@ static XrXirStatus nominal_copy_identities(const XrXirCompileContext *compile_co
         XrXirNominalIdentity from = nominal_identity_header(table, i), *to = &identities[i];
         to->exported = from.exported; to->arity = from.arity; to->kind = from.kind;
         to->variant_count = from.variant_count; to->flags = from.flags;
+        if (!xir_compile_work(compile_context, sizeof(to->native))) { allocation_status = XR_XIR_BUDGET; goto fail; }
+        to->native = from.native;
         if (!nominal_variants_copy(compile_context, from.variants, from.variant_count, &to->variants, &allocation_status)) goto fail;
         if (!nominal_copy_name(compile_context, from.module, &to->module, &allocation_status) || !nominal_copy_name(compile_context, from.name, &to->name, &allocation_status)) goto fail;
         XrXirNominalFieldIdentity *fields = from.field_count ? xir_compile_calloc(compile_context, from.field_count, sizeof(*fields), &allocation_status) : NULL;
@@ -115,6 +119,9 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *co
     for (uint32_t i = 0; i < table->count; ++i) {
         const XrXirNominalDeclaration *d = &table->declarations[i];
         if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
+        XrXirNominalIdentity native_identity = nominal_identity_header(table, i);
+        XrXirStatus native_status = nominal_native_verify(&b, &native_identity);
+        if (native_status != XR_XIR_OK) return native_status;
         XrXirStatus variant_status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, &b);
         if (variant_status != XR_XIR_OK) return variant_status;
         if (!nominal_charge(&b, (uint64_t) d->field_count * sizeof(XrXirNominalFieldIdentity), d->field_count))

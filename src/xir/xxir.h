@@ -44,7 +44,8 @@ typedef enum XrXirStatus {
     XR_XIR_OUT_OF_MEMORY,
     XR_XIR_BAD_LAYOUT,
     XR_XIR_IO,
-    XR_XIR_UNRESOLVED
+    XR_XIR_UNRESOLVED,
+    XR_XIR_UNSUPPORTED
 } XrXirStatus;
 
 typedef struct XrXirTarget {
@@ -118,7 +119,11 @@ typedef struct XrXirFunction {
 #define XR_XIR_CONSTRAINT_SENDABLE 1u
 #define XR_XIR_CONSTRAINT_ERROR 2u
 #define XR_XIR_CONSTRAINT_EQUAL 4u
-#define XR_XIR_CONSTRAINT_MASK (XR_XIR_CONSTRAINT_SENDABLE | XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_EQUAL)
+#define XR_XIR_CONSTRAINT_ATOMIC_VALUE 8u
+#define XR_XIR_CONSTRAINT_ATOMIC_NUMBER 16u
+#define XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN 32u
+#define XR_XIR_CONSTRAINT_MASK (XR_XIR_CONSTRAINT_SENDABLE | XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_EQUAL | \
+    XR_XIR_CONSTRAINT_ATOMIC_VALUE | XR_XIR_CONSTRAINT_ATOMIC_NUMBER | XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN)
 typedef struct XrXirInterfaceApplication XrXirInterfaceApplication;
 typedef struct XrXirConstraint {
     uint32_t markers;
@@ -151,7 +156,8 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CELL = 3,
     XR_XIR_TYPE_NOMINAL = 4,
     XR_XIR_TYPE_NULLABLE = 5,
-    XR_XIR_TYPE_TUPLE = 6
+    XR_XIR_TYPE_TUPLE = 6,
+    XR_XIR_TYPE_ATOMIC = 7
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;

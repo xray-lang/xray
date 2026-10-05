@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_float_admission_cases.h - Canonical floating type and value admission
+ * xir_float_admission_cases.h - Canonical floating literals and exact runtime transport
  *
  * KEY CONCEPT:
- *   Forged metadata and noncanonical values cannot acquire numeric capabilities.
+ *   Forged metadata and binary32 payloads cannot acquire numeric capabilities.
  */
 #ifndef XIR_FLOAT_ADMISSION_CASES_H
 #define XIR_FLOAT_ADMISSION_CASES_H
@@ -32,7 +32,7 @@ static void floating_ir_rejections(void) {
         case 7: ops[0].op = XR_XIR_CONVERT_NUMBER; ops[0].args[1] = 0; ops[0].type = XR_XIR_STRING; break;
         case 8: ops[0].op = XR_XIR_CONVERT_NUMBER; ops[0].args[1] = 0; ops[0].type = XR_XIR_F32; types[0] = XR_XIR_BOOL; break;
         case 9: ops[0].op = XR_XIR_OUTPUT; ops[0].type = XR_XIR_UNIT; ops[0].args[1] = 0;
-            ops[0].immediate = 1; ops[1].args[0] = 0; types[0] = XR_XIR_ATOMIC_I64; break;
+            ops[0].immediate = 1; ops[1].args[0] = 0; types[0] = (XrXirType)4; break;
         case 10: ops[0].op = XR_XIR_EQ_FLOAT; types[0] = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; module.generics = &generic; break;
         case 11: types[0] = (XrXirType) 15; break;
         case 12: ops[0].op = XR_XIR_ADD_FLOAT; ops[0].type = XR_XIR_F32; types[1] = XR_XIR_F64; break;
@@ -55,8 +55,8 @@ static void floating_value_admission(void) {
         {XR_XIR_F32, UINT64_C(0x100000000), false}, {XR_XIR_F32, UINT64_C(0xffc00000), false},
         {XR_XIR_F32, UINT64_C(0x7f800001), false}, {XR_XIR_F64, UINT64_C(0x8000000000000000), true},
         {XR_XIR_F64, 1, true}, {XR_XIR_F64, UINT64_C(0xfff0000000000000), true},
-        {XR_XIR_F64, UINT64_C(0x7ff8000000000000), true}, {XR_XIR_F64, UINT64_C(0xfff8000000000000), false},
-        {XR_XIR_F64, UINT64_C(0x7ff0000000000001), false}
+        {XR_XIR_F64, UINT64_C(0x7ff8000000000000), true}, {XR_XIR_F64, UINT64_C(0xfff8000000000000), true},
+        {XR_XIR_F64, UINT64_C(0x7ff0000000000001), true}
     };
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(4096, &domain) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;

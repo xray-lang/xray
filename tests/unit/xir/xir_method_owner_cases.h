@@ -16,8 +16,8 @@ static void method_owner_cases(void) {
     XrXirConstraint constraints[2] = {{0},{0}};
     XrXirNominalVariant variant = {{"Only",4},0,0};
     XrXirNominalDeclaration nominal[2] = {
-        {{"alpha",5},{"Box",3},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0},
-        {{"alpha",5},{"Twin",4},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0}};
+        {{"alpha",5},{"Box",3},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
+        {{"alpha",5},{"Twin",4},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}}};
     XrXirNominalTable table = {nominal,2,NULL};
     XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&argument,1,NULL,0}};

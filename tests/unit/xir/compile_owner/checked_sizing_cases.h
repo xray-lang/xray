@@ -70,6 +70,23 @@ static const uint8_t sizing_empty_golden[220] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,
 };
+#include "checked_sizing64_golden.h"
+static void sizing_historical_rejections(void) {
+    const uint8_t *const vectors[] = {sizing_golden,sizing_embedded_golden,sizing_empty_golden};
+    const size_t lengths[] = {sizeof(sizing_golden),sizeof(sizing_embedded_golden),sizeof(sizing_empty_golden)};
+    for (unsigned i = 0; i < 3; ++i) for (unsigned occupied = 0; occupied < 2; ++occupied) {
+        reset(SIZE_MAX); XrCompileResources *owner = NULL;
+        CHECK(xr_compile_resources_new(&sizing_caps,&owner) == XR_COMPILE_RESOURCE_OK);
+        XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
+        XrXirArtifact *const sentinel = occupied ? (XrXirArtifact *)(uintptr_t)1 : NULL;
+        XrXirArtifact *output = sentinel;
+        const size_t initial_attempts = attempts;
+        CHECK(xr_xir_compile_checked_read(&context,vectors[i],lengths[i],&output,NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(output == sentinel && attempts == initial_attempts && live_count == 1);
+        CHECK(stats(owner).work == 33);
+        xr_compile_resources_release(owner); CHECK(!live && !live_count);
+    }
+}
 static CheckedCursor sizing_cursor(XrCompileResources *owner, size_t position, size_t capacity) {
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
     return (CheckedCursor){NULL,NULL,position,capacity,context.limits,context,XR_XIR_OK,false};
@@ -168,9 +185,9 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {
         CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 220 : 224));
-        if (!variant) CHECK(!memcmp(packet.bytes,sizing_golden,sizeof(sizing_golden)));
-        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing_embedded_golden,sizeof(sizing_embedded_golden)));
-        else CHECK(!memcmp(packet.bytes,sizing_empty_golden,sizeof(sizing_empty_golden)));
+        if (!variant) CHECK(!memcmp(packet.bytes,sizing64_golden,sizeof(sizing64_golden)));
+        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing64_embedded_golden,sizeof(sizing64_embedded_golden)));
+        else CHECK(!memcmp(packet.bytes,sizing64_empty_golden,sizeof(sizing64_empty_golden)));
         xr_xir_compile_checked_packet_free(&packet);
     }
     CHECK(live_count == 1); return status;
@@ -234,8 +251,8 @@ static void sizing_public_golden(void) {
     XrXirArtifact *checked = NULL, *decoded = NULL; XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_check(&context,&module,&checked,NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(sizing_golden) && !memcmp(packet.bytes,sizing_golden,sizeof(sizing_golden)));
-    CHECK(xr_xir_compile_checked_read(&context,sizing_golden,sizeof(sizing_golden),&decoded,NULL) == XR_XIR_OK);
+    CHECK(packet.length == sizeof(sizing64_golden) && !memcmp(packet.bytes,sizing64_golden,sizeof(sizing64_golden)));
+    CHECK(xr_xir_compile_checked_read(&context,sizing64_golden,sizeof(sizing64_golden),&decoded,NULL) == XR_XIR_OK);
     CHECK(decoded->module.functions[0].instructions[0].immediate == 42);
     xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_checked_packet_free(&packet); CHECK(live_count == 1);
@@ -244,6 +261,6 @@ static void sizing_public_golden(void) {
 static void checked_sizing_cases(void) {
     sizing_fields(); sizing_room_and_sticky(); sizing_byte_fields();
     for (unsigned variant = 0; variant < 3; ++variant) sizing_packet_boundaries(variant);
-    sizing_public_golden();
+    sizing_historical_rejections(); sizing_public_golden();
     puts("Checked sizing: constant fields, fixed byte KAT, all work prefixes, axes/OOM and physical zero");
 }

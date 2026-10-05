@@ -16,7 +16,7 @@ static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, u
     XrXirNominalVariant variants[] = {{{"None",4},0,0},{{"Some",4},0,1}};
     XrXirNominalField field = {{"value",5},t,0};
     XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,&nominal_constraint,1,&field,1,
-        XR_XIR_NOMINAL_ENUM,variants,2, 0};
+        XR_XIR_NOMINAL_ENUM,variants,2, 0, {0}};
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&t,1,NULL,0}},

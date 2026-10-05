@@ -67,13 +67,13 @@ static void nominal_variants_free(const XrXirNominalVariant *variants, uint32_t 
 }
 static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t parameters) {
     if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
+        type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
     uint32_t id = (uint32_t) type;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
         return id - XR_XIR_TYPE_PARAMETER_BASE < parameters;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CALLABLE ||
-        node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE) &&
+        node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC) &&
         node->parameter_span <= parameters;
 }
 static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
@@ -89,6 +89,10 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     if (status == XR_XIR_OK) status = nominal_name(d->name, b);
     if (status != XR_XIR_OK) return status;
     if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
+    XrXirNominalIdentity native_identity = {d->module,d->name,d->exported,d->parameter_count,
+        NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native};
+    status = nominal_native_verify(b, &native_identity);
+    if (status != XR_XIR_OK) return status;
     status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, b);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p) {
@@ -202,6 +206,8 @@ static bool nominal_copy_declaration(const XrXirCompileContext *compile_context,
                                      XrXirNominalDeclaration *d, XrXirStatus *allocation_status) {
     d->exported = source->exported; d->kind = source->kind;
     d->variant_count = source->variant_count; d->flags = source->flags;
+    if (!xir_compile_work(compile_context, sizeof(d->native))) { *allocation_status = XR_XIR_BUDGET; return false; }
+    d->native = source->native;
     if (!nominal_variants_copy(compile_context, source->variants, source->variant_count, &d->variants, allocation_status)) return false;
     if (!nominal_copy_name(compile_context, source->module, &d->module, allocation_status) ||
         !nominal_copy_name(compile_context, source->name, &d->name, allocation_status)) return false;

@@ -17,8 +17,8 @@ static XrXirArtifact *nominal_field_closure_fixture(const XrXirCompileContext *c
     XrXirConstraint constraint = {0};
     XrXirNominalField fields[] = {{{"value",5},t,0}, {{"inner",5},(XrXirType)256,0}};
     XrXirNominalDeclaration definitions[] = {
-        {{"alpha",5},{"Box",3},1,&constraint,1,fields,1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0},
-        {{"alpha",5},{"Outer",5},1,&constraint,1,fields+1,1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0}};
+        {{"alpha",5},{"Box",3},1,&constraint,1,fields,1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}},
+        {{"alpha",5},{"Outer",5},1,&constraint,1,fields+1,1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}}};
     XrXirNominalTable table = {definitions,2,NULL};
     XrXirType arguments[] = {(XrXirType)256,(XrXirType)257};
     XrXirTypeNode nodes[4] = {0};
@@ -36,6 +36,7 @@ static XrXirArtifact *nominal_field_closure_fixture(const XrXirCompileContext *c
         fields[1].type = (XrXirType)(257+at);
     }
     XrXirTypes types = {nodes,mode+2,&table, NULL}; built.types = &types;
+    CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     CHECK(!built.generics);
     CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL; return checked;

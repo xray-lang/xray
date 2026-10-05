@@ -20,6 +20,23 @@ def nullable_frame(previous):
     head=bytearray(previous[:32]);struct.pack_into('<I',head,12,58)
     return bytes(head)+hashlib.sha256(head+previous[64:]).digest()+previous[64:]
 
+def atomic64_scalar(previous):
+    # This is the complete independent scalar body, not a general wire rewrite.
+    from derive_panic_carrier_vector import packet
+    assert previous[:8] == b'XRCHK\0\0\0' and len(previous) == 221
+    assert struct.unpack_from('<4I', previous, 8) == (24, 63, 2, 0)
+    assert struct.unpack_from('<Q', previous, 24)[0] == 157
+    assert hashlib.sha256(previous[:32] + previous[64:]).digest() == previous[32:64]
+    assert previous[64:] == packet(58, 22)[64:]
+    assert struct.unpack_from('<I', previous, 113)[0] == 2  # CONST_INT.
+    assert struct.unpack_from('<I', previous, 153)[0] == 25  # Historical RETURN.
+    result = bytearray(previous)
+    struct.pack_into('<II', result, 8, 25, 64)
+    struct.pack_into('<I', result, 153, 33)  # Current RETURN; all other body bytes stay fixed.
+    assert result[64:153] == previous[64:153] and result[157:] == previous[157:]
+    result[32:64] = hashlib.sha256(result[:32] + result[64:]).digest()
+    return bytes(result)
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--write',action='store_true');args=parser.parse_args()
     directory=Path(__file__).parent;manifest=directory/'equal57_ordinary_vectors.json'
@@ -39,10 +56,17 @@ def main():
         assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==current_scalar
         checked=(directory/'test_xir_checked.c').read_text(encoding='utf-8')
         digest=re.search(r'const uint8_t expected_digest\[32\] = \{(.*?)\};',checked,re.S)
-        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',digest[1]))==tuple63_packet(tuple62_packet(semantic61_packet(upgrade(current_scalar))))[32:64]
+        historical63=tuple63_packet(tuple62_packet(semantic61_packet(upgrade(current_scalar))))
+        scalar=(directory/'xir_checked_scalar60_golden.h').read_text(encoding='utf-8')
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==historical63
+        current64=atomic64_scalar(historical63)
+        scalar=(directory/'xir_checked_scalar64_golden.h').read_text(encoding='utf-8')
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',scalar))==current64
+        assert bytes(int(v,16) for v in re.findall(r'0x[0-9a-fA-F]{2}',digest[1]))==current64[32:64]
         print(json.dumps({'old56_whole_packets_reproduced':len(records)+1,
                           'historical57_whole_packets_reproduced':len(records)+1,
-                          'current63_whole_packets_verified':len(records)+1}));return
+                          'historical63_whole_packets_verified':len(records)+1,
+                          'current64_scalar_whole_packet_verified':1}));return
     assert not manifest.exists();records=[]
     for path in sorted(directory.iterdir()):
         if path.suffix not in ('.c','.h') or path.name=='xir_assert_panics_golden.h':continue

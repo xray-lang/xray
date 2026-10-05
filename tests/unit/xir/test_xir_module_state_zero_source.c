@@ -50,7 +50,8 @@ int main(int argc,char **argv) {
     memset(&request,0xcc,sizeof(request)); memset(&authority,0xcc,sizeof(authority));
     CHECK(xr_xir_compile_source_product_context(product)->resources==context->resources);
     const XrXirSourceView *view=xr_xir_compile_source_product_view(product);
-    CHECK(view && view->complete && view->module_count==4);
+    if(!view || !view->complete || view->module_count!=6)fprintf(stderr,"Source view %p complete=%u modules=%u\n",(void*)view,view?view->complete:0,view?view->module_count:0);
+    CHECK(view && view->complete && view->module_count==6);
     /* Function selection reads a real, checked closed packet. It grants no
      * authority beyond the immutable declaration's exported root identity. */
     XrXirSourceProductPacketView packet={0};
@@ -59,7 +60,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(checked);
     uint32_t advance=state_zero_select(module);
-    StateZeroShape shape=state_zero_shape(module->declarations,advance);
+    StateZeroShape shape=state_zero_shape(module->declarations,module->types,advance);
     xr_xir_compile_artifact_free(checked); checked=NULL;
     XrXirCSource source={0};
     CHECK(xr_xir_compile_source_product_emit(product,"module_state_zero",UINT64_C(8)*1024*1024,&source)==XR_XIR_OK);

@@ -509,7 +509,7 @@ static void load_native_value_declaration(uint32_t id, XrTypeId type, XaBuiltinM
             /* Bounds and resource failures use the panic channel, not typed errors. */
             member->effect_contract.kind = XA_EFFECT_CONTRACT_NOTHROW;
             /* Scalar ownership carries no fresh-object provenance. */
-            member->return_ownership = source->ownership == XR_NATIVE_OWNERSHIP_OWNED &&
+            member->return_ownership = source->ownership == XR_NATIVE_RESULT_OWNERSHIP_OWNED &&
                 source->result != XR_NATIVE_TERM_BOOL && source->result != XR_NATIVE_TERM_I64 &&
                 source->result != XR_NATIVE_TERM_UNIT ?
                 XA_BUILTIN_RETURN_FRESH : XA_BUILTIN_RETURN_UNKNOWN;

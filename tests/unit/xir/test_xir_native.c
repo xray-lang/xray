@@ -12,6 +12,7 @@
  */
 
 #include "xir_execution_cases.h"
+#include "xir_float_transport_cases.h"
 #include "xir_integer_runtime_cases.h"
 #include "xir_float_runtime_cases.h"
 #include "xir_decimal_cases.h"
@@ -43,12 +44,22 @@ static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *conte
     return entries[function](context, arguments, count, result);
 }
 XR_FUNC XrXirRunStatus uninitialized_f0(XrXirRunContext *, const XrXirValue *, uint32_t, XrXirValue *);
+XR_FUNC XrXirRunStatus float_transport_f0(XrXirRunContext *, const XrXirValue *, uint32_t, XrXirValue *);
+XR_FUNC XrXirRunStatus float_transport_f1(XrXirRunContext *, const XrXirValue *, uint32_t, XrXirValue *);
+static XrXirRunStatus run_transport(void *owner, uint32_t function, XrXirRunContext *context,
+    const XrXirValue *arguments, uint32_t count, XrXirValue *result) {
+    const XrXirLeafEntry entries[] = {float_transport_f0, float_transport_f1};
+    (void) owner;
+    CHECK(function < sizeof(entries) / sizeof(entries[0]));
+    return entries[function](context, arguments, count, result);
+}
 int main(void) {
     XrXirRunContext context = {4, 65536, 0, 0, 0, 0};
     XrXirValue argument = {XR_XIR_I64, 0, -1}, result = {0};
     CHECK(uninitialized_f0(&context, &argument, 1, &result) == XR_XIR_RUN_OK);
     CHECK(result.type == XR_XIR_I64 && result.payload == -1);
     CHECK(!context.live_bytes && context.allocations == context.frees);
+    float_transport_cases(run_transport, NULL);
     decimal_cases();
     integer_runtime_cases();
     float_runtime_cases();

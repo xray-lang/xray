@@ -4,6 +4,7 @@ from derive_test_roles_vectors import upgrade, historical_vector
 from derive_semantic61_migration import semantic61_packet
 from derive_tuple62_migration import tuple62_packet
 from derive_tuple63_migration import tuple63_packet
+from derive_assert_atomic64_packet import current64_packet
 
 def words(*values): return struct.pack('<'+'I'*len(values),*values)
 def op(code,result=0,left=0,right=0,immediate=0):
@@ -34,6 +35,9 @@ manifest=json.loads((directory/'assert_condition_packet_vectors.json').read_text
 header=(directory/'xir_assert_condition_golden.h').read_text(encoding='utf-8')
 golden=bytes(int(value,16) for value in re.findall(r'0x[0-9a-fA-F]{2}',header))
 assert current==golden and packet(body,57).hex()==manifest['core_packet_hex']
+current64=current64_packet(current)
+header64=(directory/'xir_assert_condition64_golden.h').read_text(encoding='utf-8')
+assert bytes(int(value,16) for value in re.findall(r'0x[0-9a-fA-F]{2}',header64))==current64
 assert hashlib.sha256(body).hexdigest()==manifest['core_body_sha256']
 assert packet(body,55,21).hex()==manifest['previous55_core_packet_hex']
 for record in manifest['same_body_vectors']:
@@ -45,6 +49,7 @@ for record in manifest['same_body_vectors']:
     assert packet(literal[64:],54,21)[32:64].hex()==record['old_digest']
     assert packet(literal[64:],55,21)[32:64].hex()==record['previous55_digest']
     assert packet(literal[64:],57)[32:64].hex()==record['current_digest']
-print(json.dumps({'core_bytes':len(current),'core_digest':current[32:64].hex(),
+print(json.dumps({'core_bytes':len(current64),'core_digest':current64[32:64].hex(),
+    'complete_previous24_63_sha256':hashlib.sha256(current).hexdigest(),
     'previous54_whole_bodies_reproduced':len(manifest['same_body_vectors']),
     'historical_wire22_semantic58_whole_bodies_verified':len(manifest['same_body_vectors'])},indent=2))

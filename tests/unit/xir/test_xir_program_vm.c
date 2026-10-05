@@ -186,7 +186,7 @@ static void admission(void) {
         case 7: ids[2].exported = 1; break;
         case 8: d->entry_function = 2; break;
         case 9: slots[0].mutable = 1; break;
-        case 10: slots[4].type = XR_XIR_ATOMIC_I64; break;
+        case 10: slots[4].type = slots[0].type; break;
         case 11: ((unsigned char *) literals[0].bytes)[0] = 0xff; break;
         case 12: alpha[3].immediate = 5; break;
         case 13: alpha[2].immediate = 1; break;

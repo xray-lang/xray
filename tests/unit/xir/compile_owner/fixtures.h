@@ -36,8 +36,8 @@ static XrXirStatus nominal_built(const XrXirCompileContext *context, XrXirArtifa
     XrXirConstraint constraint = {0};
     XrXirNominalField fields[] = {{{"value", 5}, t, 0}, {{"inner", 5}, box, 0}};
     XrXirNominalDeclaration definitions[] = {
-        {{"alpha", 5}, {"Box", 3}, 1, &constraint, 1, fields, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0},
-        {{"alpha", 5}, {"Outer", 5}, 1, &constraint, 1, fields + 1, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0}};
+        {{"alpha", 5}, {"Box", 3}, 1, &constraint, 1, fields, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}},
+        {{"alpha", 5}, {"Outer", 5}, 1, &constraint, 1, fields + 1, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}}};
     XrXirNominalTable table = {definitions, 2, NULL};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {0, &t, 1, NULL, 0}},
@@ -87,7 +87,7 @@ static XrXirStatus implementation_built(const XrXirCompileContext *context, XrXi
     nodes[0].kind = XR_XIR_TYPE_NOMINAL;
     nodes[1].kind = XR_XIR_TYPE_CALLABLE;
     nodes[1].result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[1].parameter_span = 1;
-    XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0};
+    XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0,{0}};
     XrXirNominalTable nominals = {&nominal,1,NULL};
     XrXirConstraint constraint = {0};
     XrXirInterfaceMethod method = {{"measure",7},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0,0,NULL};
@@ -120,7 +120,7 @@ static XrXirStatus generic_error_built(const XrXirCompileContext *context, XrXir
     XrXirNominalVariant variants[] = {{{"None",4},0,0},{{"Some",4},0,1}};
     XrXirNominalField field = {{"value",5},t,0};
     XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,&nominal_constraint,1,&field,1,
-        XR_XIR_NOMINAL_ENUM,variants,2, 0};
+        XR_XIR_NOMINAL_ENUM,variants,2, 0,{0}};
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&t,1,NULL,0}},
