@@ -1,0 +1,4 @@
+const counter=Atomic(40)
+const original:string="module-owned-世"
+export fn next()->i64 { return counter.fetchAdd(1)+1 }
+export fn text()->string { return original }

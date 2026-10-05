@@ -1,0 +1,3 @@
+import { left } from "./left"
+@test
+fn expectedFailure() { assertEqual(left(),"wrong") }

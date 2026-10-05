@@ -1,0 +1,12 @@
+import { left } from "./left"
+import { right } from "./right"
+var state:string=left()
+@test
+fn exactState() {
+    assertEqual(state,"module-owned-世")
+    state="tested"
+    assertEqual(right(),41)
+    assertEqual(right(),42)
+    assertEqual(left(),"module-owned-世")
+    assertEqual(state,"tested")
+}

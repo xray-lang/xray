@@ -18,6 +18,7 @@
 #include "../../os/os_fd.h"
 #include "../../os/os_time.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 /* ========== Color State ========== */
 
@@ -34,8 +35,12 @@ bool xr_cli_color_enabled(void) {
         case XR_COLOR_OFF:
             return false;
         case XR_COLOR_AUTO:
-        default:
+        default: {
+            const char *no_color = getenv("NO_COLOR");
+            if (no_color && no_color[0])
+                return false;
             return xr_isatty(xr_stdout_fd());
+        }
     }
 }
 

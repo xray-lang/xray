@@ -656,7 +656,8 @@ static void print_file_result(XrTestFileResult *r, int align_width, bool verbose
     get_display_name(r->filepath, name, sizeof(name));
 
     if (r->has_error) {
-        printf("   " XR_CLR_RED "x" XR_CLR_RESET " %s: %s\n", name, r->error_msg);
+        printf("   %sx%s %s: %s\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_RESET), name,
+               r->error_msg);
         return;
     }
 
@@ -665,27 +666,33 @@ static void print_file_result(XrTestFileResult *r, int align_width, bool verbose
 
     if (verbose) {
         const char *plural = (r->test_count == 1) ? "" : "s";
-        printf("   " XR_CLR_CYAN "%s" XR_CLR_RESET " " XR_CLR_DIM "(%d test%s)" XR_CLR_RESET "\n",
-               name, r->test_count, plural);
+        printf("   %s%s%s %s(%d test%s)%s\n", xr_cli_clr(XR_CLR_CYAN), name,
+               xr_cli_clr(XR_CLR_RESET), xr_cli_clr(XR_CLR_DIM), r->test_count, plural,
+               xr_cli_clr(XR_CLR_RESET));
 
         // Print individual failures
         for (int i = 0; i < r->failure_count; i++) {
             XrTestFailureRecord *f = &r->failures[i];
-            const char *color = (f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED;
-            printf("     %sx" XR_CLR_RESET " %s: %s\n", color, f->test_name, f->message);
+            const char *color =
+                xr_cli_clr((f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED);
+            printf("     %sx%s %s: %s\n", color, xr_cli_clr(XR_CLR_RESET), f->test_name,
+                   f->message);
         }
 
         // Summary line
         if (problems > 0) {
-            printf("     " XR_CLR_DIM "%d passed," XR_CLR_RESET " " XR_CLR_RED
-                   "%d failed" XR_CLR_RESET,
-                   r->passed, problems);
+            printf("     %s%d passed,%s %s%d failed%s", xr_cli_clr(XR_CLR_DIM), r->passed,
+                   xr_cli_clr(XR_CLR_RESET), xr_cli_clr(XR_CLR_RED), problems,
+                   xr_cli_clr(XR_CLR_RESET));
         } else {
-            printf("     " XR_CLR_GREEN "%d passed" XR_CLR_RESET, r->passed);
+            printf("     %s%d passed%s", xr_cli_clr(XR_CLR_GREEN), r->passed,
+                   xr_cli_clr(XR_CLR_RESET));
         }
         if (r->skipped > 0)
-            printf(XR_CLR_DIM ", %d skipped" XR_CLR_RESET, r->skipped);
-        printf("  " XR_CLR_DIM "(%.0fms)" XR_CLR_RESET "\n", r->duration_ms);
+            printf("%s, %d skipped%s", xr_cli_clr(XR_CLR_DIM), r->skipped,
+                   xr_cli_clr(XR_CLR_RESET));
+        printf("  %s(%.0fms)%s\n", xr_cli_clr(XR_CLR_DIM), r->duration_ms,
+               xr_cli_clr(XR_CLR_RESET));
     } else {
         if (problems == 0) {
             int name_len = (int) strlen(name);
@@ -701,26 +708,32 @@ static void print_file_result(XrTestFileResult *r, int align_width, bool verbose
                 dot_buf[d] = '.';
             dot_buf[dots] = '\0';
 
-            printf("   " XR_CLR_GREEN "+" XR_CLR_RESET " %s" XR_CLR_DIM "%s" XR_CLR_RESET " %d/%d",
-                   name, dot_buf, r->passed, ran + r->skipped);
+            printf("   %s+%s %s%s%s%s %d/%d", xr_cli_clr(XR_CLR_GREEN), xr_cli_clr(XR_CLR_RESET),
+                   name, xr_cli_clr(XR_CLR_DIM), dot_buf, xr_cli_clr(XR_CLR_RESET), r->passed,
+                   ran + r->skipped);
             if (r->skipped > 0)
-                printf("  " XR_CLR_DIM "%d skipped" XR_CLR_RESET, r->skipped);
-            printf("  " XR_CLR_DIM "(%.0fms)" XR_CLR_RESET "\n", r->duration_ms);
+                printf("  %s%d skipped%s", xr_cli_clr(XR_CLR_DIM), r->skipped,
+                       xr_cli_clr(XR_CLR_RESET));
+            printf("  %s(%.0fms)%s\n", xr_cli_clr(XR_CLR_DIM), r->duration_ms,
+                   xr_cli_clr(XR_CLR_RESET));
         } else {
-            printf("   " XR_CLR_RED "x" XR_CLR_RESET " %s " XR_CLR_DIM "(%d test%s)" XR_CLR_RESET
-                   "\n",
-                   name, r->test_count, r->test_count == 1 ? "" : "s");
+            printf("   %sx%s %s %s(%d test%s)%s\n", xr_cli_clr(XR_CLR_RED),
+                   xr_cli_clr(XR_CLR_RESET), name, xr_cli_clr(XR_CLR_DIM), r->test_count,
+                   r->test_count == 1 ? "" : "s", xr_cli_clr(XR_CLR_RESET));
             for (int i = 0; i < r->failure_count; i++) {
                 XrTestFailureRecord *f = &r->failures[i];
-                const char *color = (f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED;
-                printf("       %sx" XR_CLR_RESET " %s: %s\n", color, f->test_name, f->message);
+                const char *color =
+                    xr_cli_clr((f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED);
+                printf("       %sx%s %s: %s\n", color, xr_cli_clr(XR_CLR_RESET), f->test_name,
+                       f->message);
             }
-            printf("     " XR_CLR_DIM "%d passed," XR_CLR_RESET " " XR_CLR_RED
-                   "%d failed" XR_CLR_RESET,
-                   r->passed, problems);
+            printf("     %s%d passed,%s %s%d failed%s", xr_cli_clr(XR_CLR_DIM), r->passed,
+                   xr_cli_clr(XR_CLR_RESET), xr_cli_clr(XR_CLR_RED), problems,
+                   xr_cli_clr(XR_CLR_RESET));
             if (r->skipped > 0)
                 printf(", %d skipped", r->skipped);
-            printf("  " XR_CLR_DIM "(%.0fms)" XR_CLR_RESET "\n", r->duration_ms);
+            printf("  %s(%.0fms)%s\n", xr_cli_clr(XR_CLR_DIM), r->duration_ms,
+                   xr_cli_clr(XR_CLR_RESET));
         }
     }
 }
@@ -751,7 +764,7 @@ static void print_all_results(XrTestFileResult *results, char **files, int count
         if (!have_dir || strcmp(last_dir, dir_buf) != 0) {
             snprintf(last_dir, sizeof(last_dir), "%s", dir_buf);
             have_dir = true;
-            printf(" " XR_CLR_BOLD "%s" XR_CLR_RESET "\n", dir_name);
+            printf(" %s%s%s\n", xr_cli_clr(XR_CLR_BOLD), dir_name, xr_cli_clr(XR_CLR_RESET));
         }
 
         print_file_result(&results[i], align_width, verbose);
@@ -770,63 +783,61 @@ static void print_summary(int file_count, int total_passed, int total_failed, in
         total_failure_records += results[i].failure_count;
 
     if (total_failure_records > 0) {
-        printf("\n " XR_CLR_RED XR_CLR_BOLD "Failed Tests" XR_CLR_RESET "\n\n");
+        printf("\n %s%sFailed Tests%s\n\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_BOLD),
+               xr_cli_clr(XR_CLR_RESET));
         for (int i = 0; i < result_count; i++) {
             for (int j = 0; j < results[i].failure_count; j++) {
                 XrTestFailureRecord *rec = &results[i].failures[j];
                 char fname[256];
                 get_display_name(rec->file, fname, sizeof(fname));
-                printf("  " XR_CLR_RED "✗" XR_CLR_RESET " %s " XR_CLR_DIM ">" XR_CLR_RESET
-                       " %s\n",
-                       fname, rec->test_name);
+                printf("  %s✗%s %s %s>%s %s\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_RESET),
+                       fname, xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET), rec->test_name);
                 if (rec->message[0] != '\0')
-                    printf("    " XR_CLR_DIM "%s" XR_CLR_RESET "\n", rec->message);
+                    printf("    %s%s%s\n", xr_cli_clr(XR_CLR_DIM), rec->message,
+                           xr_cli_clr(XR_CLR_RESET));
             }
         }
     }
 
     // Summary
-    printf("\n " XR_CLR_DIM "──────────"
-           "─────────────"
-           "─────────────"
-           "────────────" XR_CLR_RESET
-           "\n");
+    printf("\n %s────────────────────────────────────────────────%s\n", xr_cli_clr(XR_CLR_DIM),
+           xr_cli_clr(XR_CLR_RESET));
 
-    printf(" " XR_CLR_BOLD " Tests" XR_CLR_RESET "  ");
+    printf(" %s Tests%s  ", xr_cli_clr(XR_CLR_BOLD), xr_cli_clr(XR_CLR_RESET));
     printf("%d file%s", file_count, file_count == 1 ? "" : "s");
-    printf(XR_CLR_DIM " | " XR_CLR_RESET);
+    printf("%s | %s", xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET));
     if (total_problems == 0) {
-        printf(XR_CLR_GREEN XR_CLR_BOLD "%d passed" XR_CLR_RESET, total_passed);
+        printf("%s%s%d passed%s", xr_cli_clr(XR_CLR_GREEN), xr_cli_clr(XR_CLR_BOLD), total_passed,
+               xr_cli_clr(XR_CLR_RESET));
     } else {
-        printf(XR_CLR_GREEN "%d passed" XR_CLR_RESET, total_passed);
-        printf(XR_CLR_DIM " | " XR_CLR_RESET);
-        printf(XR_CLR_RED XR_CLR_BOLD "%d failed" XR_CLR_RESET, total_problems);
+        printf("%s%d passed%s", xr_cli_clr(XR_CLR_GREEN), total_passed, xr_cli_clr(XR_CLR_RESET));
+        printf("%s | %s", xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET));
+        printf("%s%s%d failed%s", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_BOLD), total_problems,
+               xr_cli_clr(XR_CLR_RESET));
     }
     if (total_skipped > 0) {
-        printf(XR_CLR_DIM " | " XR_CLR_RESET);
-        printf(XR_CLR_DIM "%d skipped" XR_CLR_RESET, total_skipped);
+        printf("%s | %s", xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET));
+        printf("%s%d skipped%s", xr_cli_clr(XR_CLR_DIM), total_skipped, xr_cli_clr(XR_CLR_RESET));
     }
     if (filter)
-        printf("  " XR_CLR_DIM "(filter: \"%s\")" XR_CLR_RESET, filter);
+        printf("  %s(filter: \"%s\")%s", xr_cli_clr(XR_CLR_DIM), filter, xr_cli_clr(XR_CLR_RESET));
     printf("\n");
 
-    printf(" " XR_CLR_BOLD "  Time" XR_CLR_RESET "  ");
+    printf(" %s  Time%s  ", xr_cli_clr(XR_CLR_BOLD), xr_cli_clr(XR_CLR_RESET));
     if (total_time_ms >= 1000.0)
         printf("%.2fs\n", total_time_ms / 1000.0);
     else
         printf("%.0fms\n", total_time_ms);
 
-    printf(" " XR_CLR_DIM "──────────"
-           "─────────────"
-           "─────────────"
-           "────────────" XR_CLR_RESET
-           "\n");
+    printf(" %s────────────────────────────────────────────────%s\n", xr_cli_clr(XR_CLR_DIM),
+           xr_cli_clr(XR_CLR_RESET));
 
     if (total_problems == 0)
-        printf("\n " XR_CLR_GREEN XR_CLR_BOLD "✓ All tests passed" XR_CLR_RESET "\n\n");
+        printf("\n %s%s✓ All tests passed%s\n\n", xr_cli_clr(XR_CLR_GREEN), xr_cli_clr(XR_CLR_BOLD),
+               xr_cli_clr(XR_CLR_RESET));
     else
-        printf("\n " XR_CLR_RED XR_CLR_BOLD "✗ %d test%s failed" XR_CLR_RESET "\n\n",
-               total_problems, total_problems == 1 ? "" : "s");
+        printf("\n %s%s✗ %d test%s failed%s\n\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_BOLD),
+               total_problems, total_problems == 1 ? "" : "s", xr_cli_clr(XR_CLR_RESET));
 }
 
 /* ========== Machine-Readable Report ========== */
@@ -1006,7 +1017,8 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
                     snprintf(last_dir, sizeof(last_dir), "%s", dir_buf);
                     have_dir = true;
                     if (results[i].test_count > 0 || results[i].has_error)
-                        printf(" " XR_CLR_BOLD "%s" XR_CLR_RESET "\n", dn);
+                        printf(" %s%s%s\n", xr_cli_clr(XR_CLR_BOLD), dn,
+                               xr_cli_clr(XR_CLR_RESET));
                 }
                 print_file_result(&results[i], aw, verbose);
             }
@@ -1029,8 +1041,8 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
             nworkers = fl.count;
 
         if (!quiet)
-            printf(" " XR_CLR_DIM "Running %d files on %d threads..." XR_CLR_RESET "\n\n", fl.count,
-                   nworkers);
+            printf(" %sRunning %d files on %d threads...%s\n\n", xr_cli_clr(XR_CLR_DIM),
+                   fl.count, nworkers, xr_cli_clr(XR_CLR_RESET));
 
         xr_thread_t *threads = xr_calloc(nworkers, sizeof(xr_thread_t));
         int started = 0;

@@ -1,0 +1,9 @@
+import { left } from "./left"
+import { right } from "./right"
+var state:string=left()
+print(state)
+state="changed"
+print(state)
+print(right())
+print(right())
+print(true)
