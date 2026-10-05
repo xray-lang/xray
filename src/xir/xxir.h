@@ -150,7 +150,8 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_ARRAY = 2,
     XR_XIR_TYPE_CELL = 3,
     XR_XIR_TYPE_NOMINAL = 4,
-    XR_XIR_TYPE_NULLABLE = 5
+    XR_XIR_TYPE_NULLABLE = 5,
+    XR_XIR_TYPE_TUPLE = 6
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;

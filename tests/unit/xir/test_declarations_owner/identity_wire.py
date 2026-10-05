@@ -34,7 +34,7 @@ def packet(role, timeout):
     body += words(0, 0, 0)*3
     body += words(1, 0, 0, 0, 0)  # One ordinary unconstrained binder, no arguments.
     body += words(0, 0, 0, 0, 0)  # Types, nominal/interface pools, defaults, provenance.
-    header = b'XRCHK\0\0\0'+words(23, 61, 2, 0)+struct.pack('<Q', len(body))
+    header = b'XRCHK\0\0\0'+words(24, 62, 2, 0)+struct.pack('<Q', len(body))
     return header+hashlib.sha256(header+body).digest()+body
 
 
@@ -45,4 +45,4 @@ for role, timeout in ((1, 0), (3, 0), (1, 7), (1, 8)):
     actual = (output/f'{role}-{timeout}.chk').read_bytes()
     expected = packet(role, timeout)
     assert actual == expected, (role, timeout, len(actual), len(expected))
-print('four independent complete Checked23/61 identity packets PASS')
+print('four independent complete Checked24/62 identity packets PASS')

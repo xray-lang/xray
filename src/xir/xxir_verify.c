@@ -230,7 +230,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
             !xr_xir_type_is_nominal(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
-        (rule->result == RULE_VALUE && !(op->op == XR_XIR_SLOT_LOAD && op->type == XR_XIR_UNIT) &&
+        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD) && op->type == XR_XIR_UNIT) &&
             !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
@@ -268,7 +268,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
-               op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET &&
+               op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET && op->op != XR_XIR_TUPLE_FIELD &&
                op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
@@ -741,6 +741,7 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
 #include "xxir_invoke_verify.inc.c"
 #include "xxir_error_verify.inc.c"
 #include "xxir_panic_verify.inc.c"
+#include "xxir_tuple_verify.inc.c"
 
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
@@ -750,6 +751,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!xir_compile_work(&context->remaining, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD) {
+            XrXirStatus status=tuple_uses(graph,function,context,i);
+            if (status!=XR_XIR_OK) return status;
+            continue;
+        }
         if (op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) {
             XrXirStatus status = path_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;
@@ -1053,6 +1059,11 @@ XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, co
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
         status = xr_xir_compile_types_structure_verify(&context.remaining, module->types);
+        if (status==XR_XIR_OK && module->types && module->stage==XR_XIR_LOWERED) {
+            if (!xir_compile_work(&context.remaining,module->types->count)) status=XR_XIR_BUDGET;
+            for (uint32_t i=0; i<module->types->count && status==XR_XIR_OK; ++i)
+                if (module->types->nodes[i].kind==XR_XIR_TYPE_TUPLE) status=XR_XIR_BAD_STAGE;
+        }
         if (status == XR_XIR_OK && module->types && module->types->nominals) {
             bool identities = module->types->nominals->identities != NULL;
             if (identities != (module->stage == XR_XIR_LOWERED)) status = XR_XIR_BAD_STAGE;

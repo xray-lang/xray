@@ -51,6 +51,7 @@ static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environmen
         type = node->element;
     }
 }
+#include "xxir_tuple_sendable.inc.c"
 static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environment,
     XrXirType type, uint32_t required, const XrXirCompileContext *work) {
     const XrXirTypes *types = environment->types;
@@ -80,6 +81,7 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
             return fact && (fact->markers & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         }
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
+        if (node && node->kind == XR_XIR_TYPE_TUPLE) return tuple_sendable(environment,type,work);
         if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return XR_XIR_BAD_TYPE;
         if ((uint32_t) node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
             (uint32_t) node->element < XR_XIR_CONSTRUCTED_TYPE_LIMIT && (uint32_t) node->element >= id)
@@ -319,9 +321,9 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
             status = proof_type_edge(proof,index,node->nominal.arguments[a]);
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE)
         status = proof_type_edge(proof,index,node->element);
-    else if (node->kind == XR_XIR_TYPE_CALLABLE) {
+    else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
-        status = proof_type_edge(proof,index,node->result);
+        if (node->kind == XR_XIR_TYPE_CALLABLE) status = proof_type_edge(proof,index,node->result);
         for (uint32_t a = 0; status == XR_XIR_OK && a < node->parameter_count; ++a)
             status = proof_type_edge(proof,index,node->parameters[a].type);
     } else return XR_XIR_BAD_TYPE;

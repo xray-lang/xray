@@ -39,7 +39,7 @@ SIGNATURE(xr_xir_compile_vm_program_take,Take);
 SIGNATURE(xr_xir_compile_emit_c,Emit);
 SIGNATURE(xr_xir_compile_source_product_tests,Tests);
 SIGNATURE(xr_xir_instance_start_test,StartTest);
-_Static_assert(XR_XIR_CHECKED_SCHEMA==23 && XR_XIR_CHECKED_CONTRACT==61,"test declaration wire semantics");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==24 && XR_XIR_CHECKED_CONTRACT==62,"test declaration wire semantics");
 _Static_assert(sizeof(XrXirFunctionIdentity)==36 && offsetof(XrXirFunctionIdentity,test_role)==28 &&
     offsetof(XrXirFunctionIdentity,test_timeout_seconds)==32,"test identity field layout");
 _Static_assert(XR_XIR_TEST_ROLE_NONE==0 && XR_XIR_TEST_ROLE_TEST==1 && XR_XIR_TEST_ROLE_SKIP==2 &&

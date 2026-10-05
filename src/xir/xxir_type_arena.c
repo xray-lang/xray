@@ -85,6 +85,11 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, types);
     if (status != XR_XIR_OK) return arena_status(status);
+    if (types) {
+        if (!xir_compile_work(context,types->count)) return XR_XIR_VALUE_LIMIT;
+        for (uint32_t i=0; i<types->count; ++i)
+            if (types->nodes[i].kind == XR_XIR_TYPE_TUPLE) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     size_t bytes = 0;
     XrXirValueStatus value_status = arena_pool_walk(context, types, NULL, SIZE_MAX, &bytes);
     if (value_status != XR_XIR_VALUE_OK) return value_status;

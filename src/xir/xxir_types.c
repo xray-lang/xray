@@ -105,7 +105,11 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
-                  node->kind == XR_XIR_TYPE_NULLABLE));
+                  node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE));
+}
+XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && node->kind == XR_XIR_TYPE_TUPLE ? node : NULL;
 }
 const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -139,7 +143,7 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
-         node->kind == XR_XIR_TYPE_NULLABLE);
+         node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE);
 }
 static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -166,6 +170,20 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         for (uint32_t p = 0; p < node->parameter_count; ++p) {
             if (node->parameters[p].mode || !callable_component(types, node->parameters[p].type, index)) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, node->parameters[p].type);
+            if (component > span) span = component;
+        }
+    } else if (node->kind == XR_XIR_TYPE_TUPLE) {
+        if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)
+            return XR_XIR_BAD_STRUCTURE;
+        if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
+        if (node->parameter_count > 65536 || node->parameter_count > remaining->limits.parameters ||
+            !xir_compile_work(remaining, node->parameter_count)) return XR_XIR_BUDGET;
+        remaining->limits.parameters -= node->parameter_count;
+        for (uint32_t p = 0; p < node->parameter_count; ++p) {
+            XrXirType field = node->parameters[p].type;
+            if (node->parameters[p].mode ||
+                (field != XR_XIR_UNIT && !callable_component(types, field, index))) return XR_XIR_BAD_TYPE;
+            uint32_t component = xr_xir_type_span(types, field);
             if (component > span) span = component;
         }
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||

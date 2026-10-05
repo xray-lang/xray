@@ -88,9 +88,10 @@ def main():
             from derive_equal57_migration import migrate as equal_frame, nullable_frame
             from derive_test_roles_vectors import upgrade
             from derive_semantic61_migration import semantic61_packet
-            assert literal==semantic61_packet(upgrade(nullable_frame(equal_frame(new))))
+            from derive_tuple62_migration import tuple62_packet
+            assert literal==tuple62_packet(semantic61_packet(upgrade(nullable_frame(equal_frame(new)))))
         print(json.dumps({'old55_digest_reproductions':len(records),'old56_independent_framing':len(records),
-                          'historical58_independent_framing':len(records),'current61_independent_literals':len(records)}));return
+                          'historical58_independent_framing':len(records),'current62_independent_literals':len(records)}));return
     assert not manifest_path.exists();records=[]
     for path in sorted(directory.glob('*')):
         if path.suffix not in ('.c','.h'):continue

@@ -524,7 +524,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
         node.nominal.fields = NULL; node.nominal.field_count = 0;
         return source_intern_type(ctx, node, output);
     }
-    if (node.kind != XR_XIR_TYPE_CALLABLE) {
+    if (node.kind != XR_XIR_TYPE_CALLABLE && node.kind != XR_XIR_TYPE_TUPLE) {
         if (!source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
         return source_intern_type(ctx, node, output);
     }
@@ -535,7 +535,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
         if (!source_substitute(ctx, sub, node.parameters[p].type, depth + 1, &parameters[p].type)) return false;
     }
     node.parameters = parameters;
-    if (!source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
+    if (node.kind == XR_XIR_TYPE_CALLABLE && !source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
     return source_intern_type(ctx, node, output);
 }
 static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {

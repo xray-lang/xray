@@ -75,12 +75,12 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
     malformed.proof.length=sizeof(nested_old_single_packet);
     malformed.proof.identity=nested_old_single_identity;
     CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
-    /* Change only the semantic header of this exact current Lowered body. Both
+    /* Restore the historical wire and semantic header over this exact current Lowered body. Both
      * packet digest and full proof identity are independently verified below. */
     uint8_t old_nested[1689];uint8_t identity[32];XrSHA256Context sha;
     CHECK(spec->proof.length==sizeof(old_nested));memcpy(old_nested,spec->proof.bytes,sizeof(old_nested));
-    CHECK(old_nested[8]==23 && old_nested[12]==61 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
-    old_nested[12]=59;
+    CHECK(old_nested[8]==24 && old_nested[12]==62 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
+    old_nested[8]=23;old_nested[12]=59;
     xr_sha256_init(&sha);xr_sha256_update(&sha,old_nested,32);
     xr_sha256_update(&sha,old_nested+64,sizeof(old_nested)-64);xr_sha256_final(&sha,old_nested+32);
     xr_sha256(old_nested,sizeof(old_nested),identity);

@@ -20,7 +20,7 @@ static bool source_reify_type(SourceContext *ctx, AstNode *site,
     ++ctx->depth;
     XrXirTypeNode node = *found;
     bool ok = true;
-    if (node.kind == XR_XIR_TYPE_CALLABLE) {
+    if (node.kind == XR_XIR_TYPE_CALLABLE || node.kind == XR_XIR_TYPE_TUPLE) {
         XrXirCallableParameter *parameters = node.parameter_count ? source_alloc(ctx,node.parameter_count,sizeof(*parameters)) : NULL;
         ok = !node.parameter_count || parameters;
         for (uint32_t p = 0; p < node.parameter_count && ok; ++p) {
@@ -28,7 +28,7 @@ static bool source_reify_type(SourceContext *ctx, AstNode *site,
             ok = source_reify_type(ctx,site,pool,node.parameters[p].type,&parameters[p].type);
         }
         node.parameters = parameters;
-        if (ok) ok = source_reify_type(ctx,site,pool,node.result,&node.result);
+        if (ok && node.kind == XR_XIR_TYPE_CALLABLE) ok = source_reify_type(ctx,site,pool,node.result,&node.result);
     } else if (node.kind == XR_XIR_TYPE_NOMINAL) {
         XrXirType *arguments = node.nominal.argument_count ? source_alloc(ctx,node.nominal.argument_count,sizeof(*arguments)) : NULL;
         ok = !node.nominal.argument_count || arguments;

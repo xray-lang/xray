@@ -6,6 +6,7 @@ import json
 import re
 import struct
 from derive_semantic61_migration import semantic61_packet
+from derive_tuple62_migration import tuple62_packet
 
 DIRECTORY = Path(__file__).parent
 ARRAY = re.compile(r'(?:static\s+)?const\s+uint8_t\s+(\w+)\s*\[[^\]]*\]\s*=\s*\{(.*?)\};', re.S)
@@ -71,7 +72,7 @@ def historical_vector(path, name):
     current = literal((DIRECTORY/path).read_text(encoding='utf-8'), name)
     historical59 = upgrade(old)
     assert hashlib.sha256(historical59).hexdigest() == row['current59_sha256']
-    assert current == semantic61_packet(historical59)
+    assert current == tuple62_packet(semantic61_packet(historical59))
     return old
 
 
@@ -105,8 +106,8 @@ def main():
         previous = historical_vector(row['path'], row['name'])
         if args.output:
             (args.output/f'{index:02d}-old.chk').write_bytes(previous)
-            (args.output/f'{index:02d}-current.chk').write_bytes(semantic61_packet(upgrade(previous)))
-    print(f'{len(rows)} independent role-zero packets: complete old22/58 and historical23/59 preserved; current23/61 verified')
+            (args.output/f'{index:02d}-current.chk').write_bytes(tuple62_packet(semantic61_packet(upgrade(previous))))
+    print(f'{len(rows)} independent role-zero packets: complete old22/58 and historical23/59 preserved; current24/62 verified')
 
 
 if __name__ == '__main__':

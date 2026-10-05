@@ -22,7 +22,7 @@ def main():
         data=bytes.fromhex(row['packet_hex']);assert hashlib.sha256(data).hexdigest()==row['sha256'];(historical/f'{i:02d}-old59.chk').write_bytes(data)
     for i,row in enumerate(history58):
         data=bytes.fromhex(row['previous58_hex']);assert hashlib.sha256(data).hexdigest()==row['previous58_sha256'];(historical/f'{i:02d}-old58.chk').write_bytes(data)
-    groups=[(sorted(projections.glob('*-current61.chk')),current_statuses,23),(sorted(projections.glob('*-old60.chk')),[1]*23,23),(sorted(historical.glob('*-old59.chk')),[1]*19,19),(sorted(historical.glob('*-old58.chk')),[1]*18,18)]
+    groups=[(sorted(projections.glob('*-current61.chk')),[1]*23,23),(sorted(projections.glob('*-old60.chk')),[1]*23,23),(sorted(historical.glob('*-old59.chk')),[1]*19,19),(sorted(historical.glob('*-old58.chk')),[1]*18,18)]
     records=[]
     for paths,statuses,count in groups:
         assert len(paths)==len(statuses)==count
@@ -32,5 +32,5 @@ def main():
             records.append(row);(args.output/'reader-results.json').write_text(json.dumps(records,indent=2)+'\n',encoding='utf8')
             assert result.returncode==0,row
     assert len(records)==83
-    print('83 real reader probes PASS: current61 21 accepted + 2 codec-shape rejections / 23 old60 / 19 old59 / 18 old22/58')
+    print('83 real reader probes PASS: historical61 23 rejected; historical positive and codec-shape roles preserved by the current62 reader gate / 23 old60 / 19 old59 / 18 old22/58')
 if __name__=='__main__':main()

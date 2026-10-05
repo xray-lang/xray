@@ -64,7 +64,8 @@ static inline bool xr_xir_op_references_function(XrXirOp op) {
 static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT ||
         op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
-        op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF;
+        op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF ||
+        op == XR_XIR_TUPLE_NEW;
 }
 static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_INVOKE_DEFAULT;

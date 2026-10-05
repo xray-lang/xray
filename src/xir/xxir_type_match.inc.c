@@ -82,7 +82,7 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
         if (from->nominal.declaration != to->nominal.declaration ||
             from->nominal.argument_count != to->nominal.argument_count) return XR_XIR_BAD_TYPE;
     } else if (from->kind != XR_XIR_TYPE_ARRAY && from->kind != XR_XIR_TYPE_CELL &&
-               from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE)
+               from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE && from->kind != XR_XIR_TYPE_TUPLE)
         return XR_XIR_BAD_TYPE;
     *frame = (TypeMatchFrame) {from, to, 0}; return XR_XIR_OK;
 }
@@ -105,11 +105,16 @@ XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(con
         TypeMatchFrame *frame = &stack[depth - 1];
         const XrXirTypeNode *from = frame->from, *to = frame->to;
         uint32_t components = from->kind == XR_XIR_TYPE_NOMINAL ? from->nominal.argument_count :
-            from->kind == XR_XIR_TYPE_CALLABLE ? from->parameter_count + 1 : 1;
+            from->kind == XR_XIR_TYPE_CALLABLE ? from->parameter_count + 1 :
+            from->kind == XR_XIR_TYPE_TUPLE ? from->parameter_count : 1;
         if (frame->next == components) { --depth; continue; }
         XrXirType left = from->element, right = to->element;
         if (from->kind == XR_XIR_TYPE_NOMINAL) {
             left = from->nominal.arguments[frame->next]; right = to->nominal.arguments[frame->next];
+        } else if (from->kind == XR_XIR_TYPE_TUPLE) {
+            uint32_t p=frame->next;
+            if (from->parameters[p].mode || to->parameters[p].mode) {status=XR_XIR_BAD_TYPE;break;}
+            left=from->parameters[p].type;right=to->parameters[p].type;
         } else if (from->kind == XR_XIR_TYPE_CALLABLE) {
             if (!frame->next) { left = from->result; right = to->result; }
             else {

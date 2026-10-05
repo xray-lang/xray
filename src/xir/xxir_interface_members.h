@@ -31,7 +31,8 @@ typedef struct XrXirInterfaceRequirement {
  * must not enter persistent XIR; consumers must reify into their own type arena.
  * Method own parameters are alpha-lifted to ambient_parameter_count + j.
  * Ambient count is the authentic caller count, never the largest used span.
- * Failure preserves the budget and leaves output NULL. */
+ * Output slots must be empty. Failures publish no closure and never refund
+ * charged work or cumulative allocation. */
 typedef struct XrXirInterfaceClosureRequest {
     const XrXirTypes *source_types, *actual_types;
     const XrXirInterfaceApplication *roots;
@@ -62,6 +63,7 @@ XR_FUNC void xr_xir_compile_interface_closure_free(XrXirInterfaceClosure *closur
 /* Requires structurally verified descriptors and acyclic interface declarations.
  * Checks every declaration, including unused ones. Original declarations retain
  * all distinct obligations; temporary application deduplication loses no identity.
- * Failure preserves the caller budget and publishes no partial result. */
+ * Failures publish no partial result and retain completed work and cumulative
+ * allocation charges. */
 XR_FUNC XrXirStatus xr_xir_compile_interfaces_verify_members_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, const XrXirTypes *types);
 #endif // XXIR_INTERFACE_MEMBERS_H

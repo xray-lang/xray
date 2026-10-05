@@ -118,6 +118,7 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
     case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
     case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
         return true;
     default: return false;
     }

@@ -15,6 +15,8 @@
 #include "xxir_nominal.h"
 XR_FUNC const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type);
 XR_FUNC const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type);
+/* Ordered tuple fields use mode-zero parameter storage; arity zero is Unit. */
+XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type);
 /* The shared walker borrows an explicit work policy in either allocation domain. */
 XR_FUNC XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,

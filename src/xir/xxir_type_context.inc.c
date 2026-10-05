@@ -71,8 +71,8 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type, 
         else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
                  node->kind == XR_XIR_TYPE_NULLABLE)
             status = type_context_edge(&c, node->element, i);
-        else if (node->kind == XR_XIR_TYPE_CALLABLE) {
-            status = type_context_edge(&c, node->result, i);
+        else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+            if (node->kind == XR_XIR_TYPE_CALLABLE) status = type_context_edge(&c, node->result, i);
             if (node->parameter_count && !node->parameters) status = XR_XIR_BAD_STRUCTURE;
             for (uint32_t p = 0; p < node->parameter_count && status == XR_XIR_OK; ++p)
                 status = type_context_edge(&c, node->parameters[p].type, i);
