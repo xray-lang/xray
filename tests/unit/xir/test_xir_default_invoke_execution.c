@@ -171,9 +171,17 @@ static XrXirStatus default_build(const XrXirCompileContext *context,unsigned var
 }
 #include "xir_default_invoke_runtime.h"
 int main(int argc,char **argv) {
+    /* Only explicit artifact-producer invocations omit repeated fault sweeps. */
+    bool generate_only=false;
+#if DEFAULT_MODE<=1
+    if(argc==4){
+        CHECK(!strcmp(argv[1],"--generate-only"));generate_only=true;++argv;
+    }else CHECK(argc==3 && strcmp(argv[1],"--generate-only"));
+#else
+    CHECK(argc==1);(void)argv;
+#endif
     XrXirCompileContext context=default_context(default_limits());XrCompileResourceStats baseline=default_stats(&context);uint8_t *bytes=NULL;
 #if DEFAULT_MODE<=1
-    CHECK(argc==3);
 #if DEFAULT_MODE==0
     default_packet_path=argv[1];
 #else
@@ -182,21 +190,21 @@ int main(int argc,char **argv) {
     default_packet_bytes=bytes;default_packet_length=(size_t)length;default_c_path=argv[2];
 #endif
 #else
-    CHECK(argc==1);(void)argv;memcpy(default_ids,default_invoke_export_indices,sizeof(default_ids));
+    memcpy(default_ids,default_invoke_export_indices,sizeof(default_ids));
 #endif
 #if DEFAULT_MODE<=1
-    default_run_effect_cuts=true;
+    default_run_effect_cuts=!generate_only;
 #endif
     XrXirProgram *program=NULL;CHECK(default_build(&context,0,&program)==XR_XIR_OK);default_pipeline_report(&context,DEFAULT_SYMBOL);
     default_invoke_cancel(program,default_ids[13]);
-    default_invoke_runtime_faults(program,default_ids);XrXirValue held[2][3]={0};CHECK(default_invoke_pair(program,default_ids,held));
+    if(!generate_only)default_invoke_runtime_faults(program,default_ids);XrXirValue held[2][3]={0};CHECK(default_invoke_pair(program,default_ids,held));
     unsigned releases=default_mixed_releases;
-    xr_xir_compile_program_drop(program);default_invoke_retained(held);default_owner_free(&context,baseline);
+    xr_xir_compile_program_drop(program);default_invoke_retained(held,!generate_only);default_owner_free(&context,baseline);
     CHECK(default_mixed_releases==releases+(DEFAULT_MODE==3 ? 1u : 0u));
     default_packet_path=default_c_path=NULL;
 #if DEFAULT_MODE<=1
     default_run_effect_cuts=false;
 #endif
-    default_invoke_seal_faults(default_build);free(bytes);
-    printf("default invoke mode=%u all original outputs retained physicalzero\n",DEFAULT_MODE);return 0;
+    if(!generate_only)default_invoke_seal_faults(default_build);free(bytes);
+    printf("default invoke mode=%u %s outputs retained physicalzero\n",DEFAULT_MODE,generate_only?"artifact producer normal":"all original");return 0;
 }

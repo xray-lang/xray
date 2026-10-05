@@ -7,7 +7,7 @@ target_compile_definitions(test_xir_default_gap_source PRIVATE XR_DEFAULT_GAP_MO
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_default_gaps")
 add_custom_command(OUTPUT ${XIR_DEFAULT_GAP_CHECKED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_default_gap_source> ${XIR_DEFAULT_GAP_CHECKED} unused
+    COMMAND $<TARGET_FILE:test_xir_default_gap_source> --generate-only ${XIR_DEFAULT_GAP_CHECKED} unused
     DEPENDS test_xir_default_gap_source
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_default_gaps/root.xr
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_default_gap_runtime.h VERBATIM)
@@ -15,7 +15,7 @@ add_executable(test_xir_default_gap_packet xir/test_xir_default_gap_execution.c 
 target_link_libraries(test_xir_default_gap_packet PRIVATE xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_default_gap_packet PRIVATE XR_DEFAULT_GAP_MODE=1)
 add_custom_command(OUTPUT ${XIR_DEFAULT_GAP_C}
-    COMMAND $<TARGET_FILE:test_xir_default_gap_packet> ${XIR_DEFAULT_GAP_CHECKED} ${XIR_DEFAULT_GAP_C}
+    COMMAND $<TARGET_FILE:test_xir_default_gap_packet> --generate-only ${XIR_DEFAULT_GAP_CHECKED} ${XIR_DEFAULT_GAP_C}
     DEPENDS test_xir_default_gap_packet ${XIR_DEFAULT_GAP_CHECKED} VERBATIM)
 add_executable(test_xir_default_gap_native xir/test_xir_default_gap_execution.c ${XIR_DEFAULT_GAP_C})
 target_link_libraries(test_xir_default_gap_native PRIVATE xray_xir_scalar)

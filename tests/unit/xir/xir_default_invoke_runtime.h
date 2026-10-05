@@ -92,8 +92,8 @@ static void default_invoke_read_faults(const XrXirValue *error) {
     }
     runtime_fail_at=SIZE_MAX;printf("default invoke retained-reader OOM=%zu physical baseline restored\n",sites);
 }
-static void default_invoke_retained(XrXirValue held[2][3]) {
-    default_invoke_read_faults(&held[0][1]);
+static void default_invoke_retained(XrXirValue held[2][3],bool exercise_faults) {
+    if(exercise_faults)default_invoke_read_faults(&held[0][1]);
     runtime_attempts=0;runtime_fail_at=SIZE_MAX;
     XrXirDomain *read_domain=NULL;CHECK(xr_xir_domain_new(65536,&read_domain)==XR_XIR_VALUE_OK);
     uint64_t read_baseline=xr_xir_domain_stats(read_domain).live_bytes;

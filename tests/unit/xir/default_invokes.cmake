@@ -7,13 +7,13 @@ target_compile_definitions(test_xir_default_invoke_source PRIVATE XR_DEFAULT_INV
     XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_default_invoke")
 add_custom_command(OUTPUT ${XIR_DEFAULT_INVOKE_CHECKED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_default_invoke_source> ${XIR_DEFAULT_INVOKE_CHECKED} unused
+    COMMAND $<TARGET_FILE:test_xir_default_invoke_source> --generate-only ${XIR_DEFAULT_INVOKE_CHECKED} unused
     DEPENDS test_xir_default_invoke_source ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_default_invoke/root.xr VERBATIM)
 add_executable(test_xir_default_invoke_packet xir/test_xir_default_invoke_execution.c ${XIR_DEFAULT_INVOKE_CHECKED})
 target_link_libraries(test_xir_default_invoke_packet PRIVATE xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_default_invoke_packet PRIVATE XR_DEFAULT_INVOKE_MODE=1)
 add_custom_command(OUTPUT ${XIR_DEFAULT_INVOKE_C}
-    COMMAND $<TARGET_FILE:test_xir_default_invoke_packet> ${XIR_DEFAULT_INVOKE_CHECKED} ${XIR_DEFAULT_INVOKE_C}
+    COMMAND $<TARGET_FILE:test_xir_default_invoke_packet> --generate-only ${XIR_DEFAULT_INVOKE_CHECKED} ${XIR_DEFAULT_INVOKE_C}
     DEPENDS test_xir_default_invoke_packet ${XIR_DEFAULT_INVOKE_CHECKED} VERBATIM)
 add_executable(test_xir_default_invoke_native xir/test_xir_default_invoke_execution.c ${XIR_DEFAULT_INVOKE_C})
 target_link_libraries(test_xir_default_invoke_native PRIVATE xray_xir_scalar)
