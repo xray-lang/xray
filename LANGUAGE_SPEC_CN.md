@@ -6389,6 +6389,12 @@ receiver须为已有权限的可写逻辑place；root/path选择器只求值一�
 
 pop/shift资格为allocation=may_heap、failures=allocation,retain,limit、ownership=owned，无callback效应。候选可重选backing容量，不保证旧capacity；capacity/withCapacity/reserve的公开增长／分离保证仍属其声明族另冻，与reverse/unshift一致。合同冻结不等于新操作已经通过实施验收。
 
+冻结下一声明族 `ref resize(length: i64, fill: T) -> Array<T>`，两个必需READ实参按length、fill各一次，无默认／可选／variadic／方法类型参数，length精确i64、fill精确T。只要求原可复制／可保存能力，不加Equal/Compare/ToString/NotNullable；普通泛型定义处检查并在Checked特化后复验。receiver为有权限的可写逻辑place，选择器仅一次，全部实参成功后读binding当前Array，已完成副作用不回滚；const/read Array值参数、临时值及无权字段拒绝，read class handle可变字段沿既有权限。
+
+n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；返回拥有式Array与发布receiver为独立逻辑副本，旧alias保旧值，复制在class／同步身份处停止且保Nullable层。n=0返回拥有空Array，同长度不承诺零分配或backing不变。n<0在两个实参后经现有NUMERIC_RANGE/E0422 panic拒绝且无发布；不可表示尺寸及有限额度沿现有LIMIT／预算拒绝。候选允许重选容量，capacity/withCapacity/reserve观察保证另冻。
+
+完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。合同冻结尚未开放resize，当前19/32不变；VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放完成后才报告20/32。
+
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `i64` 全局查询 |
