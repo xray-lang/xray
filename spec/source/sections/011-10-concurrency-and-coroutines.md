@@ -52,16 +52,16 @@ var t3 = go fn() -> i64 {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**move 在源表达式位置**：跨协程转移推断为唯一的局部根通过 `move` 实现，**不是** `go` 的选项；`const` 能力不能作为可变 owner 的 `move` 源：
+**按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，不要求 `copy(...)` 或 backing 唯一。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
 
 ```xray @id=coro-move-argument
-var data = { value: 10 }
-var task = go fn(d: JSON.Object) -> i64 {
-    return d.value + 1
-}(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
+var data = [10]
+var task = go fn(d: Array<i64>) -> i64 {
+    return d[0] + 1
+}(data)            // 保存逻辑副本，调用方 data 仍可使用
 ```
 
-`go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，并在参数位置显式写出 `copy(...)` / `move`：
+`go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，参数按声明的 READ 或消费模式处理：
 
 ```xray
 var n = 10
@@ -75,7 +75,7 @@ var task = go fn(x: i64) -> i64 {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `JSON.Object` / `JSON.Value` 的复合 arm / `Array<u8>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
+- 参数、拥有式捕获和结果均按真实类型检查 Sendable；普通泛型在定义处按约束检查，Checked 特化后复验。可复制值按声明保留逻辑副本，复制在 class 与同步身份边界停止；Array 的资格由全部元素决定，const、COW、引用计数或单 worker 不额外授予 Sendable。借用 ref、Slice/MutSlice、Cell 与非 Sendable 值不能跨此边界。不可复制且 Sendable 的资源仅可按消费参数转移，不进入普通可复制捕获或 Task 结果。
 - `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
 - `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
@@ -112,7 +112,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 **语义**：
 
 - `await` 仅作用于 `Task<T>` 类型；其他类型为编译错误。
-- 用户统一写 `await task`，不写 `await (move task)`。若 `T` 是 unique mutable result，编译器把该 await 证明为 Task 的单次 terminal take；第二次 await 或随后再次使用该 single-owner task 是编译错误。若 `T` 是 const、同步共享或 inline-copy 结果，则按对应能力观察，不要求用户记另一套 await 语法。
+- 用户统一写 `await task`，不写 `await (move task)`。Task 结果必须可复制且 Sendable；任务保留完整拥有式终态，重复 await 得到各自的逻辑副本，复制在 class 与同步身份边界停止。复制或持有失败只失败该等待者，不消费或修改 Task 的粘滞结果；不能由 backing 唯一性或引用计数选择单次 take 语义。
 - 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
 - 异常传播：
   - `await t` 按 t 抛出时所属的通道重抛它的失败。协程内的 `throw <enum>` 以值错误重抛，因此 await 所在栈帧的 `catch (e)` 能抓住它；没有 catch 时按值向上传播，与普通 throw 一致。协程内的 panic 仍以 panic 重抛并继续展开。
@@ -509,6 +509,10 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
 
+普通非 root 父任务的正文完成不隐式等待普通 go 子任务；linked/scope 的结构化等待另按其合同。丢弃最后一个公开 Task 句柄不取消、不执行也不阻塞任务；执行器持运行 lease 到真实终态。逻辑 root 正文完成先保存其拥有式结果，host 在有限累计预算内驱动同一执行器已接管的任务到终态，再交付外部完成；普通子任务失败不隐式改写 root 结果。额度耗尽或显式停止时，先停止接收、撤销等待、执行有限清理及释放，再报告准确 LIMIT/取消/清理失败；无 ready 且无真实外部唤醒来源的闭合依赖必须有界拒绝，不自旋或 detach。
+
+首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、linked/scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
+
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
 Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
@@ -563,16 +567,16 @@ var t3 = go fn() -> i64 {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**`move` marks the source expression**: ownership transfer of an inferred-unique local root uses `move`, **not** a `go` option; a `const` capability is not a mutable-owner move source:
+**Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without requiring `copy(...)` or unique backing. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
 
 ```xray @id=coro-move-argument
-var data = { value: 10 }
-var task = go fn(d: JSON.Object) -> i64 {
-    return d.value + 1
-}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
+var data = [10]
+var task = go fn(d: Array<i64>) -> i64 {
+    return d[0] + 1
+}(data)            // retain a logical copy; the caller can still use data
 ```
 
-`go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and spell `copy(...)` / `move` explicitly in argument positions:
+`go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and handle arguments through their declared READ or consuming mode:
 
 ```xray
 var n = 10
@@ -586,7 +590,7 @@ var task = go fn(x: i64) -> i64 {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Execution-local heap values (`Array` / `Map` / `Set` / `JSON.Object` / composite `JSON.Value` arms / `Array<u8>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
+- Arguments, owned captures and results must satisfy Sendable by their actual types. Ordinary generics are checked by constraints at the definition and reverified after Checked specialization. Copyable values retain declared logical copies, stopping at class and synchronization identities. Array qualification depends on every element; const, COW, reference counts and a single worker grant no additional Sendable authority. Ref, Slice/MutSlice, Cell and non-Sendable values cannot cross this boundary. Noncopyable Sendable resources transfer only through consuming parameters and do not enter ordinary copyable captures or Task results.
 - `name` inside `go(name: ...)` is diagnostic/debug metadata only. The semantic modifier is the `linked go` prefix and is not a `GoOptions` entry.
 - An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
 - `linked go call()` still accepts only a call expression and returns an ordinary `Task<T>`. Outside a scope it attaches the child Task to the current parent Task: parent cancellation recursively cancels the child, child failure cancels the parent and its linked subtree, and a parent that has finished its own body still waits for linked children to terminate. Inside a scope, membership and failure propagation are owned solely by that scope's policy; no second parent-child relation is layered on top.
@@ -623,7 +627,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 **Semantics**:
 
 - `await` only applies to `Task<T>`; other types are a compile error.
-- Users always write `await task`, never `await (move task)`. If `T` is a unique mutable result, the compiler proves this await as the Task's one terminal take; a second await or later use of that single-owner task is a compile error. Const, synchronized-shared, and inline-copy results are observed according to their capability without a second await syntax.
+- Users always write `await task`, never `await (move task)`. Task results must be copyable and Sendable. A task keeps its complete owned terminal outcome; repeated awaits receive separate logical copies, stopping at class and synchronization identities. Copy or retain failure affects that waiter alone without consuming or modifying the sticky outcome. Backing uniqueness or reference counts cannot select single-take semantics.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
 - PanicInfo propagation:
   - `await t` re-raises `t`'s failure on the channel `t` raised it on. A `throw <enum>` inside the coroutine is re-raised as a value error, so the awaiting frame's `catch (e)` catches it and, with no catch, it propagates by value like any other throw. A panic inside the coroutine is re-raised as a panic and keeps unwinding.
@@ -1019,6 +1023,10 @@ These three are the model's **boundary**, not holes in it: each has to be writte
 ### 10.12 Logical root task and reachable runtime capabilities
 
 Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
+
+An ordinary non-root parent does not implicitly join ordinary go children when its body completes; linked/scope waits follow their separate structured contracts. Dropping the last public Task handle neither cancels, drives nor blocks the task; the executor retains a running lease until the actual terminal state. The logical root first stores its owned body outcome. Within finite cumulative limits, the host drives all work already accepted by that executor to terminal states before reporting external completion. An ordinary child failure does not implicitly replace the root outcome. Exhaustion or explicit stop closes admission, revokes waits, performs bounded cleanup and release, then reports the actual LIMIT/cancellation/cleanup failure. A closed dependency with no ready work and no real external wake source is rejected by a bounded check, without spinning or detaching.
+
+The first new XIR go/Task/await contract admits direct go calls, Task<i64>/Task<string> and plain await. One FIFO performs at most one canonical Call transition per dispatch; waits leave the C stack. All arguments and result ownership are prepared before queue publication; failure publishes neither queue entry nor handle. A worker and its reachable direct calls cannot read ordinary mutable module slots or write/initialize any module slot. Const slots still require Sendable, existing read permission and initialization state. Unknown indirect calls, loans, Cell captures and unconnected types fail as unimplemented; these implementation boundaries do not restrict the future complete language. This freeze does not claim Source/VM/native implementation: formal identities remain 25/65/21/26/29. Full M:N, Channel, generators, linked/scope, Task<null>/Unit and public status methods require separate qualification.
 
 Runtime capabilities propagate only from final artifact roots such as the executable entry and manifest-selected C exports. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
 

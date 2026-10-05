@@ -5403,16 +5403,16 @@ var t3 = go fn() -> i64 {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**`move` marks the source expression**: ownership transfer of an inferred-unique local root uses `move`, **not** a `go` option; a `const` capability is not a mutable-owner move source:
+**Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without requiring `copy(...)` or unique backing. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
 
 ```xray
-var data = { value: 10 }
-var task = go fn(d: JSON.Object) -> i64 {
-    return d.value + 1
-}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
+var data = [10]
+var task = go fn(d: Array<i64>) -> i64 {
+    return d[0] + 1
+}(data)            // retain a logical copy; the caller can still use data
 ```
 
-`go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and spell `copy(...)` / `move` explicitly in argument positions:
+`go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and handle arguments through their declared READ or consuming mode:
 
 ```xray
 var n = 10
@@ -5426,7 +5426,7 @@ var task = go fn(x: i64) -> i64 {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Execution-local heap values (`Array` / `Map` / `Set` / `JSON.Object` / composite `JSON.Value` arms / `Array<u8>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
+- Arguments, owned captures and results must satisfy Sendable by their actual types. Ordinary generics are checked by constraints at the definition and reverified after Checked specialization. Copyable values retain declared logical copies, stopping at class and synchronization identities. Array qualification depends on every element; const, COW, reference counts and a single worker grant no additional Sendable authority. Ref, Slice/MutSlice, Cell and non-Sendable values cannot cross this boundary. Noncopyable Sendable resources transfer only through consuming parameters and do not enter ordinary copyable captures or Task results.
 - `name` inside `go(name: ...)` is diagnostic/debug metadata only. The semantic modifier is the `linked go` prefix and is not a `GoOptions` entry.
 - An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
 - `linked go call()` still accepts only a call expression and returns an ordinary `Task<T>`. Outside a scope it attaches the child Task to the current parent Task: parent cancellation recursively cancels the child, child failure cancels the parent and its linked subtree, and a parent that has finished its own body still waits for linked children to terminate. Inside a scope, membership and failure propagation are owned solely by that scope's policy; no second parent-child relation is layered on top.
@@ -5463,7 +5463,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 **Semantics**:
 
 - `await` only applies to `Task<T>`; other types are a compile error.
-- Users always write `await task`, never `await (move task)`. If `T` is a unique mutable result, the compiler proves this await as the Task's one terminal take; a second await or later use of that single-owner task is a compile error. Const, synchronized-shared, and inline-copy results are observed according to their capability without a second await syntax.
+- Users always write `await task`, never `await (move task)`. Task results must be copyable and Sendable. A task keeps its complete owned terminal outcome; repeated awaits receive separate logical copies, stopping at class and synchronization identities. Copy or retain failure affects that waiter alone without consuming or modifying the sticky outcome. Backing uniqueness or reference counts cannot select single-take semantics.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
 - PanicInfo propagation:
   - `await t` re-raises `t`'s failure on the channel `t` raised it on. A `throw <enum>` inside the coroutine is re-raised as a value error, so the awaiting frame's `catch (e)` catches it and, with no catch, it propagates by value like any other throw. A panic inside the coroutine is re-raised as a panic and keeps unwinding.
@@ -5859,6 +5859,10 @@ These three are the model's **boundary**, not holes in it: each has to be writte
 ### 10.12 Logical root task and reachable runtime capabilities
 
 Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
+
+An ordinary non-root parent does not implicitly join ordinary go children when its body completes; linked/scope waits follow their separate structured contracts. Dropping the last public Task handle neither cancels, drives nor blocks the task; the executor retains a running lease until the actual terminal state. The logical root first stores its owned body outcome. Within finite cumulative limits, the host drives all work already accepted by that executor to terminal states before reporting external completion. An ordinary child failure does not implicitly replace the root outcome. Exhaustion or explicit stop closes admission, revokes waits, performs bounded cleanup and release, then reports the actual LIMIT/cancellation/cleanup failure. A closed dependency with no ready work and no real external wake source is rejected by a bounded check, without spinning or detaching.
+
+The first new XIR go/Task/await contract admits direct go calls, Task<i64>/Task<string> and plain await. One FIFO performs at most one canonical Call transition per dispatch; waits leave the C stack. All arguments and result ownership are prepared before queue publication; failure publishes neither queue entry nor handle. A worker and its reachable direct calls cannot read ordinary mutable module slots or write/initialize any module slot. Const slots still require Sendable, existing read permission and initialization state. Unknown indirect calls, loans, Cell captures and unconnected types fail as unimplemented; these implementation boundaries do not restrict the future complete language. This freeze does not claim Source/VM/native implementation: formal identities remain 25/65/21/26/29. Full M:N, Channel, generators, linked/scope, Task<null>/Unit and public status methods require separate qualification.
 
 Runtime capabilities propagate only from final artifact roots such as the executable entry and manifest-selected C exports. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
 
@@ -6627,7 +6631,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation; a unique mutable result is taken once automatically, with no `await (move task)` form. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation; results must be copyable and Sendable; the Task keeps its complete owned sticky outcome and repeated awaits obtain logical copies, stopping at class and synchronization identities, without an `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
 ### 14.18 Thread and Synchronization Handles
 
