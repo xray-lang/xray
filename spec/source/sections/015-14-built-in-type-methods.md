@@ -165,6 +165,12 @@ n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；
 
 entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前21/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
 
+冻结声明族 `ref fill(value: T, start?: i64, end?: i64) -> Array<T>`，value 是一个必需普通READ实参，start/end 是按声明顺序省略的两个尾部可选i64实参；没有方法类型参数、variadic或额外隐式约束。显式实参按value、start、end各一次，receiver的可写place选择器先求值且仅一次；全部显式实参成功后读取该binding当前Array及长度L。省略start取0，省略end取此时L，不能在实参之前抓取长度。const/read Array值、临时Array或无权/const字段拒绝，read class handle的可变字段沿既有身份与字段权限。只要求Array原有可复制/可保存能力；普通泛型在定义处检查，Checked特化后复验，描述查询不授予额外调用、可见性或构造权限。
+
+fill使用严格半开区间 `[start,end)`，必须 `0≤start≤end≤L`；不使用负索引归一化或clamp，不能继承Array切片的范围政策。合法空区间含 `[0,0)` 和 `[L,L)`，保全部元素；L=0时默认区间合法。非法负值、反序或越界在全部显式实参之后、任何填充候选或root发布之前，经真实NUMERIC_RANGE/E0422 panic拒绝。沿现有E0422 detail `{code=422,reserved=0,index=0,length=0}` 与消息，不伪造bounds、ASSERT或故意坏GET；更早已实际发生的选择器、求值、读取、持有或预算失败保持其原优先级，既有副作用不回滚。
+
+合法时保持长度L，区间内各元素为value的普通拥有式逻辑副本，其余元素原序保留。返回拥有式Array<T>与发布receiver为独立逻辑值，旧alias保旧值；复制在class/同步身份边界停止，保所有Nullable层、String NUL和其它已准入元素类别。不承诺底层地址、capacity、零分配、零retain或线性复杂度；容量观察与reserve合同另冻。完整私有候选、拥有返回和可失败持有先于唯一PLACE_WRITE，准备/发布失败及提交前取消保全发布前root/alias/identity并清临时owner；发布后父表达式或结果交接失败/取消不回滚已提交方法副作用。内部无用户callback、语言yield/await或跨挂起loan，原真实量子取消与费用仍生效。qualification为allocation=may_heap、failures=allocation,retain,limit、ownership=owned。冻结不等于已准入；当前正式Array仍21/32。
+
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `i64` 全局查询 |

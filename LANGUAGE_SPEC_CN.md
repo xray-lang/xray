@@ -6409,6 +6409,12 @@ n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；
 
 entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前21/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
 
+冻结声明族 `ref fill(value: T, start?: i64, end?: i64) -> Array<T>`，value 是一个必需普通READ实参，start/end 是按声明顺序省略的两个尾部可选i64实参；没有方法类型参数、variadic或额外隐式约束。显式实参按value、start、end各一次，receiver的可写place选择器先求值且仅一次；全部显式实参成功后读取该binding当前Array及长度L。省略start取0，省略end取此时L，不能在实参之前抓取长度。const/read Array值、临时Array或无权/const字段拒绝，read class handle的可变字段沿既有身份与字段权限。只要求Array原有可复制/可保存能力；普通泛型在定义处检查，Checked特化后复验，描述查询不授予额外调用、可见性或构造权限。
+
+fill使用严格半开区间 `[start,end)`，必须 `0≤start≤end≤L`；不使用负索引归一化或clamp，不能继承Array切片的范围政策。合法空区间含 `[0,0)` 和 `[L,L)`，保全部元素；L=0时默认区间合法。非法负值、反序或越界在全部显式实参之后、任何填充候选或root发布之前，经真实NUMERIC_RANGE/E0422 panic拒绝。沿现有E0422 detail `{code=422,reserved=0,index=0,length=0}` 与消息，不伪造bounds、ASSERT或故意坏GET；更早已实际发生的选择器、求值、读取、持有或预算失败保持其原优先级，既有副作用不回滚。
+
+合法时保持长度L，区间内各元素为value的普通拥有式逻辑副本，其余元素原序保留。返回拥有式Array<T>与发布receiver为独立逻辑值，旧alias保旧值；复制在class/同步身份边界停止，保所有Nullable层、String NUL和其它已准入元素类别。不承诺底层地址、capacity、零分配、零retain或线性复杂度；容量观察与reserve合同另冻。完整私有候选、拥有返回和可失败持有先于唯一PLACE_WRITE，准备/发布失败及提交前取消保全发布前root/alias/identity并清临时owner；发布后父表达式或结果交接失败/取消不回滚已提交方法副作用。内部无用户callback、语言yield/await或跨挂起loan，原真实量子取消与费用仍生效。qualification为allocation=may_heap、failures=allocation,retain,limit、ownership=owned。冻结不等于已准入；当前正式Array仍21/32。
+
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `i64` 全局查询 |
@@ -7448,7 +7454,7 @@ Built/Checked的CALL_DEFAULT和INVOKE_DEFAULT先检查caller对owner的完整约
 
 ### 17.32 多输入 Checked Catalog 与库字符串
 
-有限库导入沿§17.30的同一Catalog、reader和Source remapper扩展，不能建立第二链接或运行路径。唯一构造接口为xr_xir_library_catalog_new(inputs,size_t count,budget,output)，替换旧单输入签名；唯一资源视图为xr_xir_library_catalog_resources(catalog,size_t *count)，删除旧单资源接口。构造要求output、非NULL inputs及count>0，失败output=NULL；没有库由SourceRequest的NULL catalog表示，不分配空拥有对象。视图要求非NULL count，先写0；NULL catalog返回NULL，成功借用真实连续只读数组至catalog_free。count=NULL返回NULL。Catalog独立拥有每个Checked artifact和全部身份字符串，不借输入包、输入结构或调用方文本；资源数组和artifact owner数组分别零初始化并按真实存储收费，任何部分前缀失败均完整销毁，全部成功后只发布一次。
+有限库导入沿§17.30的同一Catalog、reader和Source remapper扩展，不能建立第二链接或运行路径。唯一构造接口为xr_xir_compile_library_catalog_new(context,inputs,size_t count,output)，替换旧单输入签名；唯一资源视图为xr_xir_compile_library_catalog_resources(catalog,size_t *count)，删除旧单资源接口。构造要求output、非NULL inputs及count>0，失败保持output；没有库由SourceRequest的NULL catalog表示，不分配空拥有对象。视图要求非NULL count，先写0；NULL catalog返回NULL，成功借用真实连续只读数组至catalog_free。count=NULL返回NULL。Catalog独立拥有每个Checked artifact和全部身份字符串，不借输入包、输入结构或调用方文本；资源数组和artifact owner数组分别零初始化并按真实存储收费，任何部分前缀失败均完整销毁，全部成功后只发布一次。
 
 每个input仍是独立无依赖的单模块SCRIPT Library和单leaf逻辑路径。真实authority、完整包SHA、既有canonical身份算法及声明身份必须一致；相同canonical无论内容相同或不同、authority或physical root相同或不同均BAD_STRUCTURE，不去重、不选择首尾、不另造(canonical,root)键。不同canonical可共享authority，实际resolver仍逐次验证精确authority，匹配坏库不回退AST。多个input不表示已实现Library间依赖、包认证、泛型或完整声明链接。
 
@@ -7503,6 +7509,24 @@ Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移�
 真实 Call allocation domain、scratch、值上限和有界work承担整组准备：私有owned表先取得全部准入/复制/持有与清理资源，再核 execution_status。任一失败或提交前取消释放全部准备且不产生 published slot或trace。不可失败的commit先写完整slots、flags/count/order，再开始trace；trace重入可见整组，首trace取消不回滚已提交绑定。清理不临时分配，按真实backing owner返还物理存储；初始化失败继续粘滞。
 
 此操作的 Checked semantic 为65，wire25与 Value21/Call26/Program29结构未变；现行版本仍只由 §17.6 实现常量定义。旧完整25/64包必须header早拒且零分配，当前包由各族独立固定角色构造，旧64完整前像保留为历史拒例，不能以writer输出刷新oracle。新SDK helper须在同源165项（160源+5archive）recipe及真实五archive消费者复验，原345 ABI表达式和139对象职责不减少。完整资格保留 Checked forged-shape、独立VM/native/mixed预期、全部真实OOM/三轴、retain饱和、取消、producer/Program/Instance先drop与最终physical0；平坦子片不代替完整产品默认门、完整安全或最后旧链删除。
+
+### 17.36 Checked Library 普通泛型导入
+
+本节冻结下一导入族，实施与资格尚未完成。沿§17.30–17.32的唯一Catalog、reader和Source remapper接入普通自由泛型函数及私有函数闭包。库自身为单模块、无依赖，TYPE binder只使用现有内建marker约束（无接口见证）；形参/结果为已准入i64/string/bool、Unit结果或该函数binder，操作仍为Catalog已准入集合。无约束参数、显式/推断/转发、所有未使用定义均由普通定义处检查；Sendable不授算术、成员或构造能力。调用方的合法新用户类型可经其接收Checked类型池实例化，不能因库自身没有nominal表而仅允许标量实参。RESULT binder、库自身constructed/nominal、slots、implementation、provenance和依赖仍待实际映射，不开放未接线表或新操作。
+
+真实initializer、普通/私有function先保留目标ID，再用同一SourceLibraryMap重定位CALL、CALL_DEFAULT和literal。每函数Generic的constraints、arguments、parameter_kinds及计数在接收账本深拥有；binder BASE+p保持声明局部序数，指令type_arguments范围归其接收function。块/SSA属于函数局部。SourceContext.has_generics、SourceFunction.generic_owner和query声明的generic count/constraints/kinds对应接收身份；自由函数没有generic_parent，查询不免检查或授访问权限。全部生产者销毁后仍须使用原owned Checked完成特化/复验→Lowered→Program封存，不补AST或运行时实例化。复制计实际metadata/work，所有scratch出口退款、整库成功才发布。实际wire/Checked结构语义或runtime ABI未变不机械涨版本；若暴露真实变更须先冻结并补独立拒例。
+
+准入验收须含private generic helper、两个库binder0/function0、反转输入顺序及改变接收ordinal、显式/推断/转发、新用户类型、未使用坏定义和private外部调用拒绝，销毁producer后的VM/独立packet/真native及双Instance与owned结果。保留原library/string/output门及全部新真实OOM、三轴exact/minus1、取消、物理释放和适用安全。此有限族不宣称完整库状态/依赖、native缓存配对、安装分发或全产品完成。
+
+### 17.37 同源 Checked/native 缓存首族
+
+本节冻结Task317缓存首族，实施与资格PENDING。真实stdlib io/output的writeStdout/writeStderr仍由唯一Checked→特化复验→Lowered及完整可恢复C emitter生成；Library不能伪造entry来Lower。首个可信代码来源为同源构建认证的静态image registry，constructor只取其登记回调，不接受任意callback＋自报摘要/verified位。Program descriptor对应不证明机器码行为；可信构建/链接边界必须真实记录。Checked组件/native目标组件/生成C各有独立长度与摘要，不能把C文本当目标文件；配对semantic_build_id域分隔、长度框定并包含canonical target-neutral Checked集合、语义版本和完整依赖，与用户Program proof.identity分离。
+
+条目键包含认证module/declaration、有序完整类型实参/约束/implementation/witness/callback/效果与私有闭包、参数mode/结果/visibility/cleanup、body和layout。首两叶无泛型/见证/捕获时明确count0，不是通配。代码变体另含实际target/OS/object format/endianness/pointer/calling convention/CRT/provider/profile/优化、各ABI/完整runtime布局及同源SDK身份；现XrXirTarget两字段不足。命中从完整复验的接收Lowered及原Checked重建不依赖库旧ordinal的leaf投影，扫描所有索引来源；首族禁止CALL/INVOKE/GO、闭包/cleanup及module/slot/literal/constructed pool绝对依赖，stream1/2不作callee。不存在条目可MISS；宣称匹配却有任何组件/合同/registry损坏须前执行拒绝，不能静默降级。
+
+同一VM封存worker先准备原Lowered全表，再仅替换实际MATCH，MISS继续该Lowered；保强制Checked来源、canonical layout、GO权限及原Program seal。opaque cache深拥有清单/Checked/entry并真实retain代码owner；aggregate VmProgramOwner持artifact/bindings/cache引用，seal仅成功转移，失败保原输入并释放临时引用。producer/cache原引用先死后仍可运行，最后Program/Instance/escaped Function租约恰好释放一次；静态代码明确进程存储且没有伪造unload。动态DLL须另行真实认证/符号/unload闭包。AOT只Checked，VM miss无C工具链要求；封存后不追加普通实例。
+
+固定独立输出为stdout out\0中七字节、stderr err!四字节及空，覆盖双Instance/四provider模式/三向量、no-cache/both-hit/one-miss、身份重排/同名拒错配、各字段独立破坏前拒、真实code lease与producer死亡、所有新增OOM/三轴exact-minus1/取消/双物理释放。W1–W4、strict C11、MSVC与Clang ASan/UBSan和原库/output责任不减少。一般非叶重定位、泛型cache完整键、默认构建/安装双产物、公开source-free run/build及最后旧链删除仍OPEN；本首族不替代这些完成条件。
 
 ---
 
