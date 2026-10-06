@@ -5824,6 +5824,107 @@
           "bytes": 62,
           "sha256": "639055c196ca2c31d6759655da59d155c48e5607a20157a338a75b4ac0c4e63b"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/time_sleep/root.xr",
+        "sha256": "3091ad3db264c762b322b5961cb33023f112e713a667820d91ec26a06523ec0e",
+        "original_prefix_sha256": "639055c196ca2c31d6759655da59d155c48e5607a20157a338a75b4ac0c4e63b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 239,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_file": {
+          "path": "tests/unit/xir/product_consumers/fixtures/time_sleep/original.xr",
+          "bytes": 62,
+          "sha256": "639055c196ca2c31d6759655da59d155c48e5607a20157a338a75b4ac0c4e63b"
+        },
+        "stdlib_provider": {
+          "path": "stdlib/time/time.xr",
+          "identity": "stdlib-module-v1:module=4:time:path=12:time/time.xr",
+          "scope": "Actual producer-owned stdlib directory, file source path and owning query identity; no synthetic module or embedded fallback proof."
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "real_timer_and_host_readiness": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Every answer observes exactly one TIMER_MS duration10 with all six current fields. The true host monotonic wait must report DUE and independently elapsed>=10ms before exact resume. Wrong epoch/wake preserves every byte of wait/value sentinels without allocation; all active cancellation prefixes include the pending timer, revoke its request/host wait, retain READY state and permit an independent repeated239 result."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_time_sleep_vm",
+        "test_source_product_time_sleep_native",
+        "test_source_product_time_sleep_mixed_even",
+        "test_source_product_time_sleep_mixed_odd",
+        "test_source_product_time_sleep_axes_0",
+        "test_source_product_time_sleep_axes_1",
+        "test_source_product_time_sleep_axes_2",
+        "test_source_product_time_sleep_axes_3",
+        "test_source_product_time_sleep_compiler_0",
+        "test_source_product_time_sleep_compiler_1",
+        "test_source_product_time_sleep_compiler_2",
+        "test_source_product_time_sleep_compiler_3",
+        "test_source_product_time_sleep_runtime_0",
+        "test_source_product_time_sleep_runtime_1",
+        "test_source_product_time_sleep_runtime_2",
+        "test_source_product_time_sleep_runtime_3",
+        "test_source_product_time_sleep_cancel_0",
+        "test_source_product_time_sleep_cancel_1",
+        "test_source_product_time_sleep_cancel_2",
+        "test_source_product_time_sleep_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "original_effect_capability_and_coroutine_representation": {
+          "status": "OPEN",
+          "note": "Original effect/capability masks, exact state/safepoint IDs, one timer operand and two normal/cancel successors need an individually reviewed Checked/Lowered mapping; fixed239 and physical zero alone do not close them."
+        },
+        "original_native_host_wait_representation": {
+          "status": "OPEN",
+          "note": "The three original generated-C substrings must be mapped to the real emitted TIMER action, common host readiness and cancellation; no old BackendIR spelling or helper is restored."
+        }
       }
     },
     {

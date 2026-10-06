@@ -5,7 +5,8 @@ get_filename_component(product_consumer_fixture_root "${product_consumer_fixture
 set(product_consumer_fault_runner "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_faults.py")
 set(product_consumer_main_template "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_consumer_main.c.in")
 add_library(source_product_consumer_driver OBJECT "${product_consumer_source}")
-target_link_libraries(source_product_consumer_driver PUBLIC xray_xir_source_product)
+target_link_libraries(source_product_consumer_driver PUBLIC xray_xir_source_product xray_xir_runtime_host)
+target_compile_definitions(source_product_consumer_driver PRIVATE XR_CONSUMER_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 target_include_directories(source_product_consumer_driver PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers")
 set_target_properties(source_product_consumer_driver PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
@@ -34,6 +35,9 @@ foreach(case IN LISTS product_consumer_cases)
     add_executable(${producer} "${main}")
     target_link_libraries(${producer} PRIVATE source_product_consumer_driver)
     file(GLOB product_consumer_case_sources "${product_consumer_fixture_root}/${case}/*.xr")
+    if(case STREQUAL "time_sleep")
+        list(APPEND product_consumer_case_sources "${CMAKE_SOURCE_DIR}/stdlib/time/time.xr")
+    endif()
     add_custom_command(OUTPUT "${generated}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
         COMMAND $<TARGET_FILE:${producer}> 0 "${generated}"

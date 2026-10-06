@@ -191,6 +191,8 @@ static void cancel_prefixes(unsigned mode) {
         if (cursor.pending)
             ++pending_yields;
         CHECK(xr_xir_instance_cancel_current(instance) == XR_XIR_CALL_CANCEL_REQUESTED);
+        if (cursor.pending && consumer_timer_case())
+            consumer_timer_cancel_wait(instance, cursor.epoch, cursor.wake, &cursor.host_timer);
         XrXirCallStatus status;
         size_t drain = 0;
         do {
@@ -198,6 +200,7 @@ static void cancel_prefixes(unsigned mode) {
             status = xr_xir_instance_poll_bounded(instance, 1).outcome.status;
         } while (status == XR_XIR_CALL_READY);
         CHECK(status == XR_XIR_CALL_CANCELLED);
+        consumer_timer_cancel_result(instance);
         if (cursor.pending)
             CHECK(xr_xir_instance_resume(instance, cursor.epoch, cursor.wake) == XR_XIR_CALL_BAD_STATE);
         XrXirValue untouched = {0};
@@ -206,20 +209,23 @@ static void cancel_prefixes(unsigned mode) {
         /* Cancellation preserves initialized module state and future calls. */
         if (!consumer_initializer_case())
             consumer_output_reset(&output);
-        XrXirValue result = execute(instance, run.answer, consumer_yield_count());
+        XrXirValue result = execute(instance, run.answer, consumer_wait_count());
         CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
         xr_xir_value_drop(&result);
         consumer_output_complete(&output);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
         printf("cancel prefix=%zu physical=0/0\n", prefix);
     }
-    CHECK(pending_yields == consumer_yield_count());
+    CHECK(pending_yields == consumer_wait_count());
     if (consumer_initializer_case())
         initializer_cancel_prefixes(&run);
     release(&run);
     printf("cancel-summary case=%s mode=%u prefixes=%zu covered=%zu physical=0/0\n",
         XR_CONSUMER_NAME, mode, ticks, ticks);
-    if (pending_yields)
+    if (consumer_timer_case())
+        printf("cancel-timer-summary case=%s mode=%u pending-timers=%zu stale-wakes-rejected=%zu physical=0/0\n",
+            XR_CONSUMER_NAME, mode, pending_yields, pending_yields);
+    else if (pending_yields)
         printf("cancel-yield-summary case=%s mode=%u pending-yields=%zu stale-wakes-rejected=%zu physical=0/0\n",
             XR_CONSUMER_NAME, mode, pending_yields, pending_yields);
 }
@@ -299,7 +305,7 @@ static void output_statuses(unsigned mode) {
             CHECK(xr_xir_instance_take_result(instance, &untouched) == XR_XIR_CALL_BAD_STATE);
             CHECK(!untouched.type && !untouched.payload);
             consumer_output_reset(&output);
-            XrXirValue result = execute(instance, run.answer, consumer_yield_count());
+            XrXirValue result = execute(instance, run.answer, consumer_wait_count());
             CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
             xr_xir_value_drop(&result);
             consumer_output_complete(&output);

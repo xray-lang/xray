@@ -18,6 +18,7 @@ typedef struct ConsumerCursor {
     uint64_t epoch, wake;
     size_t resumes;
     bool pending;
+    XrXirHostWait host_timer;
 } ConsumerCursor;
 
 static unsigned consumer_yield_count(void) {
@@ -28,9 +29,14 @@ static unsigned consumer_yield_count(void) {
            !strcmp(XR_CONSUMER_NAME, "multi_safepoint") ? 2u : 0u;
 }
 
+static unsigned consumer_wait_count(void) {
+    return consumer_timer_case() ? 1u : consumer_yield_count();
+}
+
 static XrXirCallStatus consumer_advance(XrXirInstance *instance, ConsumerCursor *cursor,
                                       uint64_t quantum) {
     if (cursor->pending) {
+        if (consumer_timer_case()) consumer_timer_due(&cursor->host_timer);
         CHECK(xr_xir_instance_resume(instance, cursor->epoch, cursor->wake) == XR_XIR_CALL_READY);
         cursor->pending = false;
         ++cursor->resumes;
@@ -42,6 +48,9 @@ static XrXirCallStatus consumer_advance(XrXirInstance *instance, ConsumerCursor 
     CHECK(result.epoch && result.epoch != UINT64_MAX && result.outcome.wake);
     XrXirWaitRequest wait = {0};
     CHECK(xr_xir_instance_wait_request(instance, result.epoch, result.outcome.wake, &wait) == XR_XIR_CALL_READY);
+    if (consumer_timer_case())
+        consumer_timer_arm(&cursor->host_timer, &wait, cursor->resumes);
+    else
     CHECK(wait.kind == XR_XIR_WAIT_YIELD && !wait.reserved && !wait.after_ms &&
         !wait.subject && !wait.generation && !wait.ticket);
     const size_t attempts = runtime_attempts;

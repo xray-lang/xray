@@ -74,8 +74,10 @@ static XrCompileResourceStats stats(const Consumer *run) {
 
 #include "source_product_consumer_nominal.inc.c"
 #include "source_product_consumer_initializers.inc.c"
+#include "source_product_consumer_timers.inc.c"
 
 static void closed_shape(const XrXirModule *module, uint32_t answer) {
+    consumer_timer_shape(module, answer);
     if (consumer_initializer_case())
         consumer_initializer_shape(module);
     if (!strcmp(XR_CONSUMER_NAME, "constructor_folding"))
@@ -191,7 +193,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     }
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CONSUMER_ROOT};
     const XrXirSourceProductRequest request = {
-        {session, consumer_fixture->file, &authority, &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL},
+        {session, consumer_fixture->file, &authority, &run.context, consumer_stdlib_path(), NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     run.status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
     if (run.status != XR_XIR_OK) {
@@ -202,6 +204,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
         goto release;
     }
     CHECK(xr_xir_compile_source_product_context(product)->resources == run.context.resources);
+    consumer_timer_source(product);
     run.entry = xr_xir_compile_source_product_facts(product)->entry;
     XrXirSourceProductPacketView packet = {0};
     run.status = xr_xir_compile_source_product_packet(product, XR_XIR_SOURCE_PRODUCT_CLOSED, &packet);
@@ -336,7 +339,7 @@ static void normal(Consumer *run) {
         for (unsigned repeat = 0; repeat < consumer_repeat_count(); ++repeat) {
             if (!consumer_initializer_case())
                 consumer_output_reset(&outputs[i]);
-            XrXirValue result = execute(instances[i], run->answer, consumer_yield_count());
+            XrXirValue result = execute(instances[i], run->answer, consumer_wait_count());
             CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
             xr_xir_value_drop(&result);
             consumer_output_complete(&outputs[i]);

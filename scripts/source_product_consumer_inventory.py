@@ -46,6 +46,7 @@ SELECTED = {
     "source_owner_runs_each_dense_coroutine_state_across_private_executors": "multi_safepoint",
     "source_owner_folds_constructor_literal_and_reordered_stores": "constructor_folding",
     "source_owner_module_initializer_is_a_canonical_entry": "canonical_initializer",
+    "source_owner_time_sleep_has_typed_suspension_request": "time_sleep",
     **NUMERIC.MATRICES,
 }
 PROBES = {
@@ -341,6 +342,15 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             if selected == "constructor_folding":
                 current["initial_projection"]["expected_i64"] = constructor_oracle(body, literals)
                 current["initial_projection"]["scope"] = "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
+            if selected == "time_sleep":
+                if data != b"import time\nfn answer() -> i64 { time.sleep(10); return 239 }\n":
+                    raise ValueError("original timer source differs")
+                files[fixture.parent / "original.xr"] = data
+                current["initial_projection"]["original_file"] = {"path": (fixture.parent / "original.xr").relative_to(ROOT).as_posix(),
+                    "bytes": len(data), "sha256": digest(data)}
+                current["initial_projection"]["stdlib_provider"] = {"path": "stdlib/time/time.xr",
+                    "identity": "stdlib-module-v1:module=4:time:path=12:time/time.xr",
+                    "scope": "Actual producer-owned stdlib directory, file source path and owning query identity; no synthetic module or embedded fallback proof."}
             if selected == "canonical_initializer":
                 if data != b"struct Box<T> { value: T }\nprint(Box<i64>{value: 41}.value + 1)\n":
                     raise ValueError("original root initializer source differs")
@@ -412,6 +422,15 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     "sticky_provider_failure_and_isolation": {"status": "IMPLEMENTED_NOT_QUALIFIED", "verification": "Six output-provider statuses fail initialization, stick without re-execution/allocation, preserve an owned failure copy and leave an independent Instance successful."},
                     "cold_and_warm_cancellation": {"status": "IMPLEMENTED_NOT_QUALIFIED", "verification": "Every measured quantum-one prefix of first initialization and repeated entry is cancelled. Public module publication events independently require sticky FAILED before publication and READY after publication, with at most one original output and release of both physical domains."},
                     "old_entry_and_native_representation": {"status": "OPEN", "note": "Original one-function/entry-zero/provider-requirement-one and int-main emission assertions need a reviewed mapping to explicit Unit module initializer plus canonical i64 entry and sealed native ProgramSpec. No legacy main or selective-program format is restored."}}
+            if selected == "time_sleep":
+                current["projected_obligations"]["real_timer_and_host_readiness"] = {
+                    "status": "IMPLEMENTED_NOT_QUALIFIED",
+                    "verification": "Every answer observes exactly one TIMER_MS duration10 with all six current fields. The true host monotonic wait must report DUE and independently elapsed>=10ms before exact resume. Wrong epoch/wake preserves every byte of wait/value sentinels without allocation; all active cancellation prefixes include the pending timer, revoke its request/host wait, retain READY state and permit an independent repeated239 result."}
+                current["additional_legacy_obligations"] = {
+                    "original_effect_capability_and_coroutine_representation": {"status": "OPEN",
+                        "note": "Original effect/capability masks, exact state/safepoint IDs, one timer operand and two normal/cancel successors need an individually reviewed Checked/Lowered mapping; fixed239 and physical zero alone do not close them."},
+                    "original_native_host_wait_representation": {"status": "OPEN",
+                        "note": "The three original generated-C substrings must be mapped to the real emitted TIMER action, common host readiness and cancellation; no old BackendIR spelling or helper is restored."}}
             if selected == "narrow_array":
                 current["candidate_replacement_gates"] = [gate for gate in current["candidate_replacement_gates"]
                     if not re.fullmatch(rf"{prefix}_cancel_[0-3]", gate)]
