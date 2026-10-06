@@ -131,13 +131,14 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
     return true;
 }
 #include "xxir_source_match_alternatives.inc.c"
-static bool source_match_body(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
-    if (node->type != AST_BLOCK) return source_plan_expression(ctx, node, expected, value);
+static bool source_match_body(SourceContext *ctx, AstNode *node, SourceExpectedType expected,
+    SourceExpectedType task_context, SourceValue *value) {
+    if (node->type != AST_BLOCK) return source_task_expression(ctx, node, expected, task_context, value);
     *value=(SourceValue){0,XR_XIR_UNIT};
     for (int i=0;i<node->as.block.count;++i) {
         AstNode *part=node->as.block.statements[i];
         if (i+1==node->as.block.count && part->type==AST_EXPR_STMT)
-            return source_plan_expression(ctx, part->as.expr_stmt, expected, value);
+            return source_task_expression(ctx, part->as.expr_stmt, expected, task_context, value);
         if (!statement(ctx,part,false)) return false;
         if (ctx->returned) {
             if (i+1!=node->as.block.count) return source_fail(ctx,part,XR_XIR_BAD_STRUCTURE,"unreachable match statements are not admitted");
@@ -173,8 +174,9 @@ static bool source_match(SourceContext *ctx, AstNode *node, SourceExpectedType e
         SourceValue output;
         if (prepared->values[i]) {
             prepared->values[i]->expected=expected;
-            if (!source_plan_complete(ctx,prepared->values[i],&output)) return false;
-        } else if (!source_match_body(ctx,arm->body,expected,&output)) return false;
+            if (!source_task_result_hint(ctx,prepared->values[i],plan->task_element_context,0) ||
+                !source_plan_complete(ctx,prepared->values[i],&output)) return false;
+        } else if (!source_match_body(ctx,arm->body,expected,plan->task_element_context,&output)) return false;
         if (!ctx->returned) {
             if (!continuing) result=output.type;
             else if (result!=output.type) return source_fail(ctx,arm->body,XR_XIR_BAD_TYPE,"match arms need the same admitted type");

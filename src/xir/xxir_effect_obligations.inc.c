@@ -18,6 +18,11 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
         if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
         uint32_t owner = module->declarations->functions[f].cleanup_owner;
         if (module->declarations->functions[f].promises) present = true;
+        for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
+            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+            XrXirOp op = module->functions[f].instructions[i].op;
+            if (op == XR_XIR_GO || op == XR_XIR_TASK_AWAIT) present = true;
+        }
         if (!owner) continue;
         present = true;
         *diagnostic = (XrXirDiagnostic){XR_XIR_OK, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
@@ -36,9 +41,24 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
     XrXirEffects *effects = NULL;
     XrXirStatus status = xr_xir_compile_effects_infer_verified(remaining, module, &effects);
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        for (uint32_t i = 0; status == XR_XIR_OK && i < function->instruction_count; ++i) {
+            if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
+            const XrXirInstruction *op = &function->instructions[i];
+            if (op->op != XR_XIR_GO) continue;
+            status = xr_xir_effects_go_safe(effects, (uint32_t)op->immediate);
+            if (status == XR_XIR_OK) status = xr_xir_effects_task_errors(effects, (uint32_t)op->immediate);
+            if (status != XR_XIR_OK) *diagnostic = (XrXirDiagnostic){status, f, UINT32_MAX, i, XR_XIR_DIAGNOSTIC_NONE};
+        }
+    }
+    for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
         if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
         bool cleanup = module->declarations->functions[f].cleanup_owner != 0;
         if (!cleanup && !module->declarations->functions[f].promises) continue;
+        if (cleanup && xr_xir_effects_task_creation(effects, f) != XR_XIR_EFFECT_NONE) {
+            *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
+            status = XR_XIR_BAD_TYPE; break;
+        }
         const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
         if ((cleanup && fact->throws == XR_XIR_EFFECT_MAY) || fact->suspend != XR_XIR_EFFECT_NONE) {
             *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};

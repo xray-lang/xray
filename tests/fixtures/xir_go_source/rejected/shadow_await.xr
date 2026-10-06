@@ -1,0 +1,2 @@
+class Task<T> { value: T constructor(value: T) { this.value = value } }
+fn main() -> i64 { const value = Task<i64>(42); return await value }

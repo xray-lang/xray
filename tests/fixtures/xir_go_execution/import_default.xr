@@ -1,0 +1,2 @@
+import "./producer" as producer
+export fn main() -> i64 { return await go producer.worker() }

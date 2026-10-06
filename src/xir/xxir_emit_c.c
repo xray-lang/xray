@@ -490,6 +490,52 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
         op->args[1] ? "state->arguments" : "NULL", op->args[1], protected_call ? "XR_XIR_ACTION_PROTECTED" : "0u");
 }
 
+static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
+    const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
+    append(buffer, "        { XrXirValue output = {0};\n");
+    for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
+        uint32_t id = function->operands[op->args[0] + p];
+        append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+    }
+    append(buffer, "        XrXirCallStatus status = xr_xir_task_go(view, (XrXirType) %uu, %uu, %s, %uu, &output);\n"
+        "        if (status != XR_XIR_CALL_READY) return (XrXirAction) "
+        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n"
+        "        xr_xir_owned_slot_move(state->frame, %uu, &output); }\n"
+        "        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n",
+        (uint32_t) op->type, (uint32_t) op->immediate,
+        op->args[1] ? "state->arguments" : "NULL", op->args[1], destination);
+}
+
+static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
+    const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index) {
+    if (!emit_work(buffer, 1)) return;
+    XrXirType expected = xr_xir_task_element(buffer->types, xr_xir_operand_type(function, op->args[0]));
+    uint32_t normal = function->blocks[op->targets[0]].first;
+    uint32_t error = function->blocks[op->targets[1]].first;
+    bool discard = function->instructions[normal].op == XR_XIR_INVOKE_DISCARD;
+    uint32_t destination = discard || expected == XR_XIR_UNIT ? UINT32_MAX :
+        layout->offsets[function->parameter_count + normal];
+    append(buffer, "        state->discard = %s; state->invoking = true;\n"
+        "        state->normal_pc = %uu; state->error_pc = %uu; state->error_destination = %uu;\n",
+        discard ? "true" : "false", normal + (discard || expected != XR_XIR_UNIT), error + 1,
+        layout->offsets[function->parameter_count + error]);
+    uint32_t panic_destination = 0, handler_pc = 0;
+    bool protected_wait = emit_protection(buffer, function, layout, index, &panic_destination, &handler_pc);
+    if (protected_wait) {
+        uint32_t block = emit_block(buffer, function, index);
+        append(buffer, "        state->panic_pc = %uu; state->panic_destination = %uu;\n",
+            handler_pc, panic_destination);
+        if (emit_has_cleanup(buffer, function)) append(buffer, "        state->panic_frontier = %uu;\n",
+            function->blocks[function->blocks[block].panic].frontier);
+    }
+    append(buffer, "        state->waiting = true; state->destination = %uu; state->expected = %uu;\n"
+        "        return (XrXirAction) {XR_XIR_ACTION_AWAIT_TASK, 0, NULL, 0,\n"
+        "            {%uu, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, %s};\n",
+        destination, (uint32_t) expected, (uint32_t) xr_xir_operand_type(function, op->args[0]),
+        layout->offsets[op->args[0]], protected_wait ? "XR_XIR_ACTION_PROTECTED" : "0u");
+}
+
 static void emit_value(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, uint32_t id) {
     append(buffer, "(XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)}",
@@ -870,6 +916,12 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_BRANCH:
         emit_branch(buffer, function, layout, index, true);
         break;
+    case XR_XIR_GO:
+        emit_resume_go(buffer, function, op, layout, destination);
+        return;
+    case XR_XIR_TASK_AWAIT:
+        emit_resume_await(buffer, function, op, layout, index);
+        return;
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         emit_resume_call(buffer, function, op, layout, destination);
         return;
@@ -1438,6 +1490,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
+           "#include \"xir/xxir_task.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

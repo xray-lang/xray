@@ -1,0 +1,6 @@
+fn worker(value: string) -> string { return value }
+export fn main() -> string {
+    const task: Task<string> = go worker("A\0B")
+    const first = await task
+    return first + await task
+}

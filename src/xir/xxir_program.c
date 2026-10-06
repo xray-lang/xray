@@ -88,6 +88,7 @@ static void program_dispose(XrXirProgram *program) {
     xr_compile_resources_free(program->order);
     xr_compile_resources_free(program->active_modules);
     xr_compile_resources_free(program->module_slots);
+    xr_compile_resources_free(program->go_authority);
     xr_compile_resources_free(program);
 }
 static XrXirStatus program_execution_order(XrXirProgram *program) {
@@ -132,15 +133,17 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     if (!output || *output || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
-    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof);
+    XrXirStatus *go_authority = NULL;
+    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &go_authority);
     if (status != XR_XIR_OK) return status;
     if (spec->types) for (uint32_t i = 0; i < spec->types->count; ++i) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(context, 1)) { xr_compile_resources_free(go_authority); return XR_XIR_BUDGET; }
         if (spec->types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
-            return XR_XIR_UNSUPPORTED;
+            { xr_compile_resources_free(go_authority); return XR_XIR_UNSUPPORTED; }
     }
     XrXirProgram *program = xir_compile_calloc(context, 1, sizeof(*program), &status);
-    if (!program) return status;
+    if (!program) { xr_compile_resources_free(go_authority); return status; }
+    program->go_authority = go_authority;
     atomic_init(&program->references, 1);
     program->context = *context;
     program->entry_count = spec->entry_count;

@@ -17,6 +17,8 @@
 #include "xxir_internal.h"
 #include "xxir_types.h"
 #include "xxir_interface.h"
+#include "xxir_constraint_proof.h"
+#include "xxir_operand_roles.h"
 #include "../base/xmalloc.h"
 
 typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectErrorAtom;
@@ -26,8 +28,11 @@ struct XrXirEffects {
     XrXirEffectWitness *witnesses;
     EffectErrorAtom *atoms;
     uint64_t *errors;
+    XrXirStatus *task_errors;
+    XrXirStatus *go_safe;
+    XrXirEffect *task_creation;
 };
-typedef struct EffectEdge { uint32_t caller, next, instruction; } EffectEdge;
+typedef struct EffectEdge { uint32_t caller, next, instruction; bool cleanup; } EffectEdge;
 typedef struct EffectGraph {
     uint32_t *heads, *queue;
     uint8_t *queued;
@@ -40,11 +45,22 @@ static void effect_graph_free(EffectGraph *graph) {
 void xr_xir_compile_effects_free(XrXirEffects *effects) {
     if (effects) {
         xr_compile_resources_free(effects->errors); xr_compile_resources_free(effects->atoms); xr_compile_resources_free(effects->functions);
-        xr_compile_resources_free(effects->witnesses); xr_compile_resources_free(effects);
+        xr_compile_resources_free(effects->witnesses); xr_compile_resources_free(effects->task_errors);
+        xr_compile_resources_free(effects->go_safe); xr_compile_resources_free(effects->task_creation);
+        xr_compile_resources_free(effects);
     }
 }
 const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function) {
     return effects && function < effects->count ? &effects->functions[function] : NULL;
+}
+XR_FUNC XrXirStatus xr_xir_effects_task_errors(const XrXirEffects *effects, uint32_t function) {
+    return effects && function < effects->count ? effects->task_errors[function] : XR_XIR_BAD_STRUCTURE;
+}
+XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t function) {
+    return effects && function < effects->count ? effects->go_safe[function] : XR_XIR_BAD_STRUCTURE;
+}
+XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function) {
+    return effects && function < effects->count ? effects->task_creation[function] : XR_XIR_EFFECT_UNKNOWN;
 }
 const XrXirEffectWitness *xr_xir_effects_suspend_witness(const XrXirEffects *effects, uint32_t function) {
     return effects && function < effects->count && effects->witnesses[function].cause ?
@@ -55,7 +71,9 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
     const XrXirInstruction *instruction, XrXirFunctionEffects *effect) {
     XrXirOp op = instruction->op;
     switch (op) {
-    case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: effect->suspend = XR_XIR_EFFECT_MAY; return true;
+    case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT:
+        effect->suspend = XR_XIR_EFFECT_MAY; return true;
+    case XR_XIR_GO: return true;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return true;
     case XR_XIR_CALL_REQUIREMENT: {
@@ -137,7 +155,9 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
             XrXirOp op = function->instructions[i].op;
             if (!effect_seed(module, function, &function->instructions[i], &effects->functions[f]))
                 return XR_XIR_BAD_STRUCTURE;
-            if (op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_CALL || op == XR_XIR_INVOKE) {
+            if (op == XR_XIR_GO) effects->task_creation[f] = XR_XIR_EFFECT_MAY;
+            if (op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_CALL ||
+                op == XR_XIR_INVOKE || op == XR_XIR_CLEANUP_REGISTER) {
                 if (edges == UINT32_MAX) return XR_XIR_BUDGET;
                 ++edges;
             }
@@ -159,7 +179,8 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
         if (!xir_compile_work(remaining, function->instruction_count)) return XR_XIR_BUDGET;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op != XR_XIR_INVOKE_DEFAULT && op->op != XR_XIR_CALL_DEFAULT && op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE) continue;
+            if (op->op != XR_XIR_INVOKE_DEFAULT && op->op != XR_XIR_CALL_DEFAULT && op->op != XR_XIR_CALL &&
+                op->op != XR_XIR_INVOKE && op->op != XR_XIR_CLEANUP_REGISTER) continue;
             uint32_t callee = (uint32_t) op->immediate;
             if(op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
                 const XrXirDefaultBinding *binding=NULL;
@@ -169,7 +190,7 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
                 if(!binding) return XR_XIR_BAD_STRUCTURE;
                 callee=binding->function;
             }
-            graph->edges[at] = (EffectEdge) {f, graph->heads[callee], i};
+            graph->edges[at] = (EffectEdge) {f, graph->heads[callee], i, op->op == XR_XIR_CLEANUP_REGISTER};
             graph->heads[callee] = at++;
         }
     }
@@ -187,9 +208,15 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
         for (uint32_t edge = graph->heads[callee]; edge != UINT32_MAX; edge = graph->edges[edge].next) {
             if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
             EffectEdge link = graph->edges[edge];
+            /* Registered cleanup executes with worker authority, but its
+             * separate no-throw/no-suspend obligations govern control effects. */
+            if (link.cleanup) continue;
             XrXirFunctionEffects *to = &effects->functions[link.caller];
             bool changed = false;
             if (from.suspend > to->suspend) { to->suspend = from.suspend; changed = true; }
+            if (effects->task_creation[callee] > effects->task_creation[link.caller]) {
+                effects->task_creation[link.caller] = effects->task_creation[callee]; changed = true;
+            }
             if (changed && !graph->queued[link.caller]) {
                 graph->queue[back] = link.caller;
                 back = back + 1 == effects->count ? 0 : back + 1;
@@ -201,6 +228,7 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 }
 #include "xxir_effect_terms.inc.c"
 #include "xxir_effect_errors.inc.c"
+#include "xxir_go_safe.inc.c"
 
 /* A breadth-first forest over final facts cannot inherit a cyclic cause chain
  * from recursive fixed-point updates. Each function enters the queue once. */
@@ -217,7 +245,8 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
             XrXirFunctionEffects local = {0};
             if (!effect_seed(module, function, &function->instructions[i], &local)) return XR_XIR_BAD_STRUCTURE;
             XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
-            if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS)) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
+            if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS ||
+                op == XR_XIR_TASK_AWAIT)) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
             else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)
                 cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             if (!cause) continue;
@@ -231,6 +260,7 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
         for (uint32_t e = graph->heads[callee]; e != UINT32_MAX; e = graph->edges[e].next) {
             if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
             EffectEdge edge = graph->edges[e];
+            if (edge.cleanup) continue;
             if (effects->witnesses[edge.caller].cause ||
                 effects->functions[edge.caller].suspend != effects->functions[callee].suspend) continue;
             effects->witnesses[edge.caller] = (XrXirEffectWitness){XR_XIR_EFFECT_CAUSE_CALL,
@@ -255,10 +285,15 @@ XrXirStatus xr_xir_compile_effects_infer_verified(const XrXirCompileContext *com
     effects->count = module->function_count;
     effects->functions = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->functions), &allocation_status);
     effects->witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->witnesses), &allocation_status);
-    if (!effects->functions || !effects->witnesses) { xr_xir_compile_effects_free(effects); return allocation_status; }
+    effects->task_errors = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->task_errors), &allocation_status);
+    effects->go_safe = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->go_safe), &allocation_status);
+    effects->task_creation = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->task_creation), &allocation_status);
+    if (!effects->functions || !effects->witnesses || !effects->task_errors || !effects->go_safe ||
+        !effects->task_creation) { xr_xir_compile_effects_free(effects); return allocation_status; }
     EffectGraph graph = {0};
     XrXirStatus status = effect_graph_build(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, remaining);
+    if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);
     effect_graph_free(&graph);
     if (status != XR_XIR_OK) { xr_xir_compile_effects_free(effects); return status; }

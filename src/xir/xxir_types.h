@@ -24,6 +24,9 @@ XR_FUNC XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
 XR_FUNC XrXirStatus xr_xir_compile_callable_weakening(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType source, XrXirType target);
 /* Classification requires a verified pool and grants no operation authority. */
 XR_FUNC bool xr_xir_type_is_atomic(const XrXirTypes *types, XrXirType type);
+XR_FUNC XrXirType xr_xir_task_element(const XrXirTypes *types, XrXirType type);
+/* Executable parameter families still require definition-site Sendable proof. */
+XR_FUNC bool xr_xir_task_parameter_supported(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_atomic_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_nullable(const XrXirTypes *types, XrXirType type);

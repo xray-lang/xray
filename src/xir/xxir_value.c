@@ -25,6 +25,7 @@
 #include "xxir_tuple.h"
 #include "xxir_float.h"
 #include "xxir_atomic.h"
+#include "xxir_task_internal.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -39,6 +40,7 @@ struct XrXirDomain {
     atomic_bool locked;
     uint64_t limit;
     XrXirDomainStats stats;
+    XrXirDomainBudgetStats budget;
 };
 typedef struct XirAtomic {
     XirObject object;
@@ -168,6 +170,8 @@ static bool value_header_valid(const XrXirValue *value) {
     return node && !node->parameter_span && node->kind == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+         node->kind == XR_XIR_TYPE_TASK ||
+         node->kind == XR_XIR_TYPE_TASK ||
          (node->kind == XR_XIR_TYPE_ATOMIC && ((XirAtomic *)object)->element ==
           xr_xir_atomic_element(xr_xir_compile_type_arena_types(object->arena), type)));
 }
@@ -182,6 +186,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         if (!class_allocation_valid(object)) return false;
         return true;
     }
+    if (object->kind == XR_XIR_TYPE_TASK) return xr_xir_task_storage_valid((const XirTask *)object);
     if (object->kind == XR_XIR_TYPE_TUPLE) {
         const XirTuple *tuple=(const XirTuple *)object;
         const XrXirTypeNode *node=xr_xir_tuple_signature(xr_xir_compile_type_arena_types(object->arena),object->type);
@@ -257,6 +262,7 @@ XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output)
     atomic_init(&domain->references, 1);
     atomic_init(&domain->locked, false);
     domain->limit = limit;
+    domain->budget = (XrXirDomainBudgetStats){0};
     domain->stats = (XrXirDomainStats) {sizeof(*domain), sizeof(*domain), 1, 0, 0};
     *output = domain;
     return XR_XIR_VALUE_OK;
@@ -269,6 +275,10 @@ XR_FUNC void xr_xir_domain_drop(XrXirDomain *domain) {
         XR_CHECK(domain->stats.live_bytes == sizeof(*domain) &&
                  domain->stats.allocations == domain->stats.frees + 1,
                  "domain still owns storage");
+        XR_CHECK(!domain->budget.metadata_live && !domain->budget.call_live &&
+                 domain->budget.metadata_allocations == domain->budget.metadata_frees &&
+                 domain->budget.call_allocations == domain->budget.call_frees,
+                 "domain still owns execution metadata");
         xr_free(domain);
     }
 }
@@ -279,13 +289,125 @@ XR_FUNC XrXirDomainStats xr_xir_domain_stats(XrXirDomain *domain) {
     domain_unlock(domain);
     return stats;
 }
-XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirValueStatus *status) {
+static bool domain_controls_valid(const XrXirDomainBudgetControls *controls) {
+    return controls && controls->requested_value_limit && controls->requested_call_limit &&
+        controls->work_limit;
+}
+static XrXirDomainBudgetStats domain_bootstrap(const XrXirDomainBudgetControls *controls, uint64_t work) {
+    return (XrXirDomainBudgetStats){.requested_bytes = sizeof(XrXirDomain),
+        .requested_limit = controls->requested_value_limit, .work = work,
+        .work_limit = controls->work_limit, .bound = true,
+        .requested_call_limit = controls->requested_call_limit,
+        .metadata_limit = controls->metadata_limit, .call_limit = controls->call_limit};
+}
+XR_FUNC XrXirValueStatus xr_xir_domain_new_budgeted(uint64_t value_limit,
+    const XrXirDomainBudgetControls *controls, XrXirDomain **output) {
+    if (!output || *output || !domain_controls_valid(controls)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (value_limit < sizeof(XrXirDomain) || controls->requested_value_limit < sizeof(XrXirDomain))
+        return XR_XIR_VALUE_LIMIT;
+    XrXirDomainBudgetStats bootstrap = domain_bootstrap(controls, 1);
+    XrXirDomain *domain = xr_malloc(sizeof(*domain));
+    if (!domain) return XR_XIR_VALUE_OOM;
+    atomic_init(&domain->references, 1);
+    atomic_init(&domain->locked, false);
+    domain->limit = value_limit;
+    domain->budget = bootstrap;
+    domain->stats = (XrXirDomainStats){sizeof(*domain), sizeof(*domain), 1, 0, 0};
+    *output = domain;
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_domain_budget_bind(XrXirDomain *domain, const XrXirDomainBudgetControls *controls) {
+    if (!domain || !domain_controls_valid(controls)) return XR_XIR_VALUE_BAD_ARGUMENT;
     domain_lock(domain);
-    if (bytes > domain->limit - domain->stats.live_bytes || domain->stats.allocations == UINT64_MAX) {
+    XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!domain->budget.bound && domain->stats.allocations == 1 && !domain->stats.frees &&
+        domain->stats.live_bytes == sizeof(*domain) && controls->requested_value_limit >= sizeof(*domain)) {
+        domain->budget = domain_bootstrap(controls, 0);
+        status = XR_XIR_VALUE_OK;
+    }
+    domain_unlock(domain);
+    return status;
+}
+static void *domain_execution_allocate(XrXirDomain *domain, uint64_t bytes, bool metadata,
+    XrXirValueStatus *status) {
+    if (!domain || !status || !bytes || bytes > SIZE_MAX) {
+        if (status) *status = XR_XIR_VALUE_BAD_ARGUMENT;
+        return NULL;
+    }
+    domain_lock(domain);
+    XrXirDomainBudgetStats *budget = &domain->budget;
+    uint64_t *category_live = metadata ? &budget->metadata_live : &budget->call_live;
+    uint64_t *peak = metadata ? &budget->metadata_peak : &budget->call_peak;
+    uint64_t *allocations = metadata ? &budget->metadata_allocations : &budget->call_allocations;
+    uint64_t limit = metadata ? budget->metadata_limit : budget->call_limit;
+    if (!budget->bound || *category_live > limit || bytes > limit - *category_live || *allocations == UINT64_MAX ||
+        budget->requested_call_bytes > budget->requested_call_limit ||
+        bytes > budget->requested_call_limit - budget->requested_call_bytes || budget->work == budget->work_limit) {
         domain_unlock(domain);
         *status = XR_XIR_VALUE_LIMIT;
         return NULL;
     }
+    budget->requested_call_bytes += bytes;
+    ++budget->work;
+    void *memory = xr_calloc(1, (size_t)bytes);
+    if (memory) {
+        *category_live += bytes;
+        if (*category_live > *peak) *peak = *category_live;
+        ++*allocations;
+    } else *status = XR_XIR_VALUE_OOM;
+    domain_unlock(domain);
+    return memory;
+}
+static void domain_execution_deallocate(XrXirDomain *domain, void *memory, uint64_t bytes, bool metadata) {
+    XR_CHECK(domain && memory && bytes, "execution storage needs its live domain owner");
+    domain_lock(domain);
+    XrXirDomainBudgetStats *budget = &domain->budget;
+    uint64_t *category_live = metadata ? &budget->metadata_live : &budget->call_live;
+    uint64_t *frees = metadata ? &budget->metadata_frees : &budget->call_frees;
+    uint64_t allocations = metadata ? budget->metadata_allocations : budget->call_allocations;
+    XR_CHECK(*category_live >= bytes && allocations > *frees, "execution metadata release requires its original charge");
+    xr_free(memory);
+    *category_live -= bytes;
+    ++*frees;
+    domain_unlock(domain);
+}
+XR_FUNC void *xr_xir_domain_metadata_allocate(XrXirDomain *domain, uint64_t bytes, XrXirValueStatus *status) {
+    return domain_execution_allocate(domain, bytes, true, status);
+}
+XR_FUNC void xr_xir_domain_metadata_deallocate(XrXirDomain *domain, void *memory, uint64_t bytes) {
+    domain_execution_deallocate(domain, memory, bytes, true);
+}
+XR_FUNC void *xr_xir_domain_call_allocate(XrXirDomain *domain, uint64_t bytes, XrXirValueStatus *status) {
+    return domain_execution_allocate(domain, bytes, false, status);
+}
+XR_FUNC void xr_xir_domain_call_deallocate(XrXirDomain *domain, void *memory, uint64_t bytes) {
+    domain_execution_deallocate(domain, memory, bytes, false);
+}
+XR_FUNC bool xr_xir_domain_work(XrXirDomain *domain, uint64_t work) {
+    if (!domain) return false;
+    domain_lock(domain);
+    bool allowed = !domain->budget.bound || work <= domain->budget.work_limit - domain->budget.work;
+    if (allowed && domain->budget.bound) domain->budget.work += work;
+    domain_unlock(domain);
+    return allowed;
+}
+XR_FUNC XrXirDomainBudgetStats xr_xir_domain_budget_stats(XrXirDomain *domain) {
+    if (!domain) return (XrXirDomainBudgetStats){0};
+    domain_lock(domain);
+    XrXirDomainBudgetStats budget = domain->budget;
+    domain_unlock(domain);
+    return budget;
+}
+XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirValueStatus *status) {
+    domain_lock(domain);
+    if (bytes > domain->limit - domain->stats.live_bytes || domain->stats.allocations == UINT64_MAX ||
+        (domain->budget.bound && (bytes > domain->budget.requested_limit - domain->budget.requested_bytes ||
+            domain->budget.work == domain->budget.work_limit))) {
+        domain_unlock(domain);
+        *status = XR_XIR_VALUE_LIMIT;
+        return NULL;
+    }
+    if (domain->budget.bound) { domain->budget.requested_bytes += bytes; ++domain->budget.work; }
     void *memory = xr_malloc(bytes);
     if (memory) {
         domain->stats.live_bytes += bytes;
@@ -309,10 +431,13 @@ static XrXirValueStatus string_resize(XirString *string, size_t capacity) {
     XrXirDomain *domain = string->object.domain;
     domain_lock(domain);
     size_t extra = capacity - string->capacity;
-    if (extra > domain->limit - domain->stats.live_bytes || domain->stats.reallocations == UINT64_MAX) {
+    if (extra > domain->limit - domain->stats.live_bytes || domain->stats.reallocations == UINT64_MAX ||
+        (domain->budget.bound && (capacity > domain->budget.requested_limit - domain->budget.requested_bytes ||
+            domain->budget.work == domain->budget.work_limit))) {
         domain_unlock(domain);
         return XR_XIR_VALUE_LIMIT;
     }
+    if (domain->budget.bound) { domain->budget.requested_bytes += capacity; ++domain->budget.work; }
     char *replacement = xr_realloc(string->bytes, capacity);
     if (!replacement) {
         domain_unlock(domain);
@@ -361,6 +486,7 @@ XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *byte
                                   size_t length, XrXirValue *output) {
     if (!domain || !unit_value(output) || (length && !bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (length == SIZE_MAX) return XR_XIR_VALUE_LIMIT;
+    if (!xr_xir_domain_work(domain, (uint64_t)length + 1)) return XR_XIR_VALUE_LIMIT;
     XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *) bytes, length);
     if (scan.error != XR_UTF8_OK) return XR_XIR_VALUE_BAD_UTF8;
     XirString *string = NULL;
@@ -382,6 +508,9 @@ XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue 
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (owned_carrier_type((XrXirType) source->type)) {
         XirObject *object = object_pointer(source);
+        /* Empty enum storage belongs to its arena, with no value domain.
+         * Execution owners charge their copy/admission work before retaining. */
+        if (!empty_enum_object(object) && !xr_xir_domain_work(object->domain, 1)) return XR_XIR_VALUE_LIMIT;
         if (!(empty_enum_object(object) ? xr_xir_compile_type_arena_retain(object->arena) :
             xr_xir_reference_retain(&object->references))) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     }
@@ -474,6 +603,11 @@ static void release_pending(XirObject *pending) {
             xr_xir_domain_deallocate(domain, string, sizeof(*string));
         } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
             xr_xir_domain_deallocate(domain, object, sizeof(XirAtomic));
+        } else if (object->kind == XR_XIR_TYPE_TASK) {
+            XirTask *task = (XirTask *)object;
+            XR_CHECK(!task->executor && !task->call, "task release has no execution authority");
+            xr_xir_call_result_drop(&task->outcome);
+            xr_xir_domain_deallocate(domain, task, sizeof(*task));
         } else if (object->kind == XR_XIR_TYPE_CELL) {
             XirCell *cell = (XirCell *) object;
             queue_release(&cell->value, &pending);

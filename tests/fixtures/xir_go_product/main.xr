@@ -1,0 +1,7 @@
+import "./worker" as Helpers
+const label = "A\0B"
+const task = go Helpers.worker(21)
+const answer = await task
+print(label)
+print(answer)
+export fn handle() -> Task<i64> { return task }

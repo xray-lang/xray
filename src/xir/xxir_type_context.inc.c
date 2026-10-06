@@ -69,7 +69,7 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type, 
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL) status = type_context_nominal(&c, node, i);
         else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
-                 (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC))
+                 (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK))
             status = type_context_edge(&c, node->element, i);
         else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) status = type_context_edge(&c, node->result, i);

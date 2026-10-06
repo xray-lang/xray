@@ -15,6 +15,8 @@
 #include "xxir_program_internal.h"
 #include "xxir_instance_value.h"
 #include "xxir_value_internal.h"
+#include "xxir_call_internal.h"
+#include "xxir_task_internal.h"
 #include "xxir_struct.h"
 #include "xxir_output.h"
 #include "xxir_panic.h"
@@ -25,12 +27,18 @@ typedef struct FunctionGate {
     _Atomic(uint32_t) references;
     XrXirProgram *program;
     XrXirInstance *instance;
+    XrXirDomain *domain;
 } FunctionGate;
 static void function_gate_drop(void *owner) {
     FunctionGate *gate = owner;
     uint32_t before = atomic_fetch_sub_explicit(&gate->references, 1, memory_order_acq_rel);
     XR_CHECK(before, "function gate reference underflow");
-    if (before == 1) { xr_xir_compile_program_drop(gate->program); xr_free(gate); }
+    if (before == 1) {
+        XrXirDomain *domain = gate->domain;
+        xr_xir_compile_program_drop(gate->program);
+        xr_xir_domain_metadata_deallocate(domain, gate, sizeof(*gate));
+        xr_xir_domain_drop(domain);
+    }
 }
 static bool function_gate_retain(FunctionGate *gate) {
     uint32_t count = atomic_load_explicit(&gate->references, memory_order_relaxed);
@@ -53,7 +61,9 @@ struct XrXirInstance {
     uint32_t *published_counts;
     XrXirCallEntry *entries;
     XrXirCall *call;
+    XrXirTaskExecutor *executor;
     XrXirCallAccounting accounting[2];
+    XrXirCallBudget budget;
     XrXirCallResult failure;
     uint64_t epoch, metadata_bytes;
     bool driving, stopping, observing;
@@ -70,7 +80,7 @@ static XrXirCallStatus value_call_status(XrXirValueStatus status) {
     return XR_XIR_CALL_BAD_STATE;
 }
 static bool instance_cleanup_grant(const XrXirInstance *instance) {
-    return instance->driving && !instance->observing && xr_xir_call_cleanup_active(instance->call);
+    return instance->driving && !instance->observing && xr_xir_task_executor_cleanup_active(instance->executor);
 }
 static XrXirValueStatus admit_function_binding(void *context, const XrXirFunctionBinding *binding,
     XrXirType type, uint64_t *work) {
@@ -173,20 +183,39 @@ XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t 
     if (size != sizeof(*config)) return XR_XIR_CALL_BAD_ABI;
     *config = (XrXirInstanceConfig) {XR_XIR_CALL_ABI_VERSION, sizeof(*config),
         UINT64_C(16) << 20, UINT64_C(16) << 20, UINT64_C(16) << 20,
-        UINT64_C(1000000), 4096, {0}, NULL, NULL, {0}};
+        UINT64_C(1000000), 4096, {0}, NULL, NULL, {0},
+        UINT64_C(67108864), UINT64_C(67108864), UINT64_C(128000000)};
     return XR_XIR_CALL_READY;
 }
 static void instance_dispose(XrXirInstance *instance) {
-    xr_free(instance->entries); xr_free(instance->slots); xr_free(instance->published);
-    xr_free(instance->ready); xr_free(instance->publication_order);
-    xr_free(instance->published_counts);
+    XrXirDomain *domain = instance->domain;
+    XrXirProgram *program = instance->program;
+    const XrXirDeclarations *d = program->declarations;
+    XR_CHECK(xr_xir_task_executor_free(instance->executor, NULL) == XR_XIR_CALL_READY,
+        "unpublished or already drained instance executor has no incomplete cleanup");
+    if (instance->entries) xr_xir_domain_metadata_deallocate(domain, instance->entries,
+        ((uint64_t)program->entry_count + 1) * sizeof(*instance->entries));
+    if (instance->slots) xr_xir_domain_metadata_deallocate(domain, instance->slots,
+        (uint64_t)d->slot_count * sizeof(*instance->slots));
+    if (instance->published) xr_xir_domain_metadata_deallocate(domain, instance->published, d->slot_count);
+    if (instance->ready) xr_xir_domain_metadata_deallocate(domain, instance->ready, d->module_count);
+    if (instance->publication_order) xr_xir_domain_metadata_deallocate(domain, instance->publication_order,
+        (uint64_t)d->slot_count * sizeof(*instance->publication_order));
+    if (instance->published_counts) xr_xir_domain_metadata_deallocate(domain, instance->published_counts,
+        (uint64_t)d->module_count * sizeof(*instance->published_counts));
     if (instance->function_gate) {
         instance->function_gate->instance = NULL;
         function_gate_drop(instance->function_gate);
     }
-    xr_xir_domain_drop(instance->domain);
-    xr_xir_compile_program_drop(instance->program);
-    xr_free(instance);
+    xr_xir_domain_metadata_deallocate(domain, instance, sizeof(*instance));
+    xr_xir_compile_program_drop(program);
+    xr_xir_domain_drop(domain);
+}
+static void *instance_metadata_allocate(XrXirDomain *domain, uint64_t bytes, XrXirCallStatus *status) {
+    XrXirValueStatus value_status = XR_XIR_VALUE_OK;
+    void *memory = xr_xir_domain_metadata_allocate(domain, bytes, &value_status);
+    if (!memory) *status = value_call_status(value_status);
+    return memory;
 }
 XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceConfig *config,
                                     XrXirInstance **output) {
@@ -197,42 +226,64 @@ XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceCo
         return XR_XIR_CALL_BAD_ABI;
     if (!xr_xir_output_provider_valid(&config->output) || !xr_xir_time_provider_valid(&config->time))
         return XR_XIR_CALL_BAD_ABI;
+    if (!config->requested_value_limit || !config->requested_call_limit || !config->work_limit)
+        return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirDeclarations *d = program->declarations;
     uint64_t bytes = sizeof(XrXirInstance) + (uint64_t) d->slot_count * (sizeof(XrXirValue) + 5) +
         (uint64_t) d->module_count * 5 + ((uint64_t) program->entry_count + 1) * sizeof(XrXirCallEntry);
     if (bytes > config->metadata_limit || bytes > SIZE_MAX) return XR_XIR_CALL_LIMIT;
     if (!xr_xir_compile_program_retain(program)) return XR_XIR_CALL_LIMIT;
-    XrXirInstance *instance = xr_calloc(1, sizeof(*instance));
-    if (!instance) { xr_xir_compile_program_drop(program); return XR_XIR_CALL_OOM; }
+    XrXirDomain *domain = NULL;
+    XrXirDomainBudgetControls controls = {config->requested_value_limit, config->requested_call_limit,
+        config->work_limit, config->metadata_limit, config->call_limit};
+    XrXirCallStatus status = value_call_status(xr_xir_domain_new_budgeted(config->value_limit, &controls, &domain));
+    if (status != XR_XIR_CALL_READY) { xr_xir_compile_program_drop(program); return status; }
+    if (!xr_xir_domain_work(domain, (uint64_t)program->entry_count + d->module_count + d->slot_count)) {
+        xr_xir_domain_drop(domain); xr_xir_compile_program_drop(program); return XR_XIR_CALL_LIMIT;
+    }
+    XrXirInstance *instance = instance_metadata_allocate(domain, sizeof(*instance), &status);
+    if (!instance) { xr_xir_domain_drop(domain); xr_xir_compile_program_drop(program); return status; }
     instance->program = program;
+    instance->domain = domain;
     instance->config = *config;
     instance->metadata_bytes = bytes;
     instance->current_module = UINT32_MAX;
-    instance->entries = xr_calloc((size_t) program->entry_count + 1, sizeof(*instance->entries));
-    instance->ready = xr_calloc(d->module_count, 1);
-    instance->published_counts = xr_calloc(d->module_count, sizeof(*instance->published_counts));
-    if (d->slot_count) {
-        instance->slots = xr_calloc(d->slot_count, sizeof(*instance->slots));
-        instance->published = xr_calloc(d->slot_count, 1);
-        instance->publication_order = xr_calloc(d->slot_count, sizeof(*instance->publication_order));
+    instance->budget = (XrXirCallBudget){.byte_limit = config->call_limit,
+        .requested_limit = config->requested_call_limit, .resume_limit = config->poll_limit, .work_domain = domain};
+    instance->entries = instance_metadata_allocate(domain,
+        ((uint64_t)program->entry_count + 1) * sizeof(*instance->entries), &status);
+    if (status == XR_XIR_CALL_READY) instance->ready = instance_metadata_allocate(domain, d->module_count, &status);
+    if (status == XR_XIR_CALL_READY) instance->published_counts = instance_metadata_allocate(domain,
+        (uint64_t)d->module_count * sizeof(*instance->published_counts), &status);
+    if (d->slot_count && status == XR_XIR_CALL_READY) {
+        instance->slots = instance_metadata_allocate(domain, (uint64_t)d->slot_count * sizeof(*instance->slots), &status);
+        if (status == XR_XIR_CALL_READY) instance->published = instance_metadata_allocate(domain, d->slot_count, &status);
+        if (status == XR_XIR_CALL_READY) instance->publication_order = instance_metadata_allocate(domain,
+            (uint64_t)d->slot_count * sizeof(*instance->publication_order), &status);
     }
     if (!instance->entries || !instance->ready || !instance->published_counts ||
         (d->slot_count && (!instance->slots || !instance->published || !instance->publication_order))) {
         instance_dispose(instance);
-        return XR_XIR_CALL_OOM;
+        return status;
     }
-    XrXirCallStatus status = value_call_status(xr_xir_domain_new(config->value_limit, &instance->domain));
-    if (status != XR_XIR_CALL_READY) { instance_dispose(instance); return status; }
     memcpy(instance->entries, program->entries, (size_t) program->entry_count * sizeof(*program->entries));
+    XrXirTaskExecutorConfig execution = {program, domain, program->arena,
+        config->call_limit, config->poll_limit, config->requested_value_limit,
+        config->requested_call_limit, config->work_limit, config->depth_limit,
+        &instance->budget, instance, instance->entries, program->entry_count + 1,
+        instance_candidate_admission(instance), config->output};
+    status = xr_xir_task_executor_new(&execution, &instance->executor);
+    if (status != XR_XIR_CALL_READY) { instance_dispose(instance); return status; }
+    instance->metadata_bytes = xr_xir_domain_budget_stats(domain).metadata_live;
     *output = instance;
     return XR_XIR_CALL_READY;
 }
 XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance) {
     return !instance || instance->stopping ? XR_XIR_INSTANCE_DRAINING : instance->state;
 }
-static void drop_arguments(XrXirValue *arguments, uint32_t count) {
+static void drop_arguments(XrXirDomain *domain, XrXirValue *arguments, uint32_t count) {
     if (arguments) for (uint32_t p = 0; p < count; ++p) xr_xir_value_drop(&arguments[p]);
-    xr_free(arguments);
+    if (arguments) xr_xir_domain_metadata_deallocate(domain, arguments, (uint64_t)count * sizeof(*arguments));
 }
 static XrXirCallStatus capture_arguments(XrXirInstance *instance, const XrXirValue *arguments,
                                         uint32_t count, const XrXirFunctionBinding *binding, XrXirValue **output) {
@@ -243,11 +294,13 @@ static XrXirCallStatus capture_arguments(XrXirInstance *instance, const XrXirVal
     uint64_t bytes = (uint64_t) count * sizeof(XrXirValue);
     if (bytes > SIZE_MAX || bytes > instance->config.metadata_limit - instance->metadata_bytes)
         return XR_XIR_CALL_LIMIT;
-    XrXirValue *owned = xr_calloc(count, sizeof(*owned));
-    if (!owned) return XR_XIR_CALL_OOM;
+    if (!xr_xir_domain_work(instance->domain, count)) return XR_XIR_CALL_LIMIT;
+    XrXirCallStatus allocation_status = XR_XIR_CALL_READY;
+    XrXirValue *owned = instance_metadata_allocate(instance->domain, bytes, &allocation_status);
+    if (!owned) return allocation_status;
     for (uint32_t p = 0; p < count; ++p) {
         XrXirCallStatus status = value_call_status(xr_xir_value_copy(p < captures ? &binding->captures[p] : &arguments[p - captures], &owned[p]));
-        if (status != XR_XIR_CALL_READY) { drop_arguments(owned, count); return status; }
+        if (status != XR_XIR_CALL_READY) { drop_arguments(instance->domain, owned, count); return status; }
     }
     *output = owned;
     return XR_XIR_CALL_READY;
@@ -259,6 +312,7 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->state == XR_XIR_INSTANCE_FAILED) return instance->failure.status;
     if (instance->stopping) return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_task_executor_root_idle(instance->executor)) return XR_XIR_CALL_BUSY;
     if (instance->call) {
         XrXirCallStatus state = xr_xir_call_state(instance->call);
         if (state == XR_XIR_CALL_READY || state == XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BUSY;
@@ -295,16 +349,19 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
         count, requested->result, sizeof(uint32_t), initialization_resume, NULL, NULL, 0, 0};
     XrXirCallConfig config;
     status = xr_xir_call_config_init(&config, sizeof(config));
-    if (status != XR_XIR_CALL_READY) { drop_arguments(owned, count); return status; }
+    if (status != XR_XIR_CALL_READY) { drop_arguments(instance->domain, owned, count); return status; }
     config.entries = instance->entries; config.entry_count = root + 1; config.instance = instance;
     config.byte_limit = instance->config.call_limit; config.poll_limit = instance->config.poll_limit;
     config.depth_limit = instance->config.depth_limit;
     config.accounting = &instance->accounting[(instance->epoch + 1) % 2];
     config.output = instance->config.output; config.admission = *admission;
     XrXirCall *replacement = NULL;
-    status = xr_xir_call_new(&config, root, owned, count, &replacement);
-    drop_arguments(owned, count);
+    XrXirCallRequest request = {root, owned, count};
+    status = xr_xir_call_new_budgeted(&config, &request, &instance->budget, &replacement);
+    drop_arguments(instance->domain, owned, count);
     if (status != XR_XIR_CALL_READY) return status;
+    status = xr_xir_task_executor_attach_root(instance->executor, replacement, instance->epoch + 1);
+    if (status != XR_XIR_CALL_READY) { xr_xir_call_free(replacement); return status; }
     xr_xir_call_free(instance->call);
     instance->call = replacement;
     ++instance->epoch;
@@ -320,7 +377,7 @@ XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64
         return (XrXirInstanceResult) {instance->failure, instance->epoch};
     if (!instance->call) return (XrXirInstanceResult) {instance_result(XR_XIR_CALL_BAD_STATE), instance->epoch};
     instance->driving = true;
-    XrXirCallResult result = xr_xir_call_poll_bounded(instance->call, quantum);
+    XrXirCallResult result = xr_xir_task_executor_poll_root(instance->executor, quantum);
     if (instance->state == XR_XIR_INSTANCE_INITIALIZING &&
         result.status != XR_XIR_CALL_READY && result.status != XR_XIR_CALL_SUSPENDED) {
         fail_initialization(instance, result);
@@ -333,20 +390,23 @@ XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, 
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->stopping || !instance->call || epoch != instance->epoch) return XR_XIR_CALL_BAD_STATE;
-    return xr_xir_call_resume(instance->call, wake);
+    return xr_xir_task_executor_resume_root(instance->executor, epoch, wake);
 }
 XrXirCallStatus xr_xir_instance_wait_request(const XrXirInstance *instance, uint64_t epoch,
     uint64_t wake, XrXirWaitRequest *output) {
     if (!instance || !output) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->stopping || !instance->call || epoch != instance->epoch) return XR_XIR_CALL_BAD_STATE;
-    return xr_xir_call_wait_request(instance->call, wake, output);
+    return xr_xir_task_executor_root_wait(instance->executor, epoch, wake, output);
 }
 XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output) {
     if (!instance || !output) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->state == XR_XIR_INSTANCE_FAILED) return XR_XIR_CALL_BAD_STATE;
     if (!instance->call) return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_task_executor_root_idle(instance->executor)) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus completed = xr_xir_task_executor_completion_status(instance->executor);
+    if (completed != XR_XIR_CALL_READY) return completed;
     return xr_xir_call_take_result(instance->call, output);
 }
 XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output) {
@@ -364,21 +424,20 @@ XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance) {
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->stopping || !instance->call) return XR_XIR_CALL_BAD_STATE;
-    return xr_xir_call_request_cancel(instance->call);
+    return xr_xir_task_executor_cancel_root(instance->executor);
 }
 XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->observing) return XR_XIR_CALL_BUSY;
     instance->stopping = true;
     if (instance->function_gate) instance->function_gate->instance = NULL;
-    XrXirCallStatus before = instance->call ? xr_xir_call_state(instance->call) : XR_XIR_CALL_READY;
-    if (before != XR_XIR_CALL_READY && before != XR_XIR_CALL_SUSPENDED && before != XR_XIR_CALL_BUSY)
-        return XR_XIR_CALL_READY;
     bool driving = instance->driving;
     instance->driving = true;
-    XrXirCallStatus status = instance->call ? xr_xir_call_request_cancel(instance->call) : XR_XIR_CALL_READY;
-    if (instance->call && !driving) {
-        do { status = xr_xir_call_poll_bounded(instance->call, 256).status; }
+    XrXirCallStatus status = xr_xir_task_executor_stop(instance->executor);
+    if (!driving && xr_xir_task_executor_root_idle(instance->executor))
+        status = xr_xir_task_executor_completion_status(instance->executor);
+    else if (instance->call && !driving) {
+        do { status = xr_xir_task_executor_poll_root(instance->executor, 256).status; }
         while (status == XR_XIR_CALL_READY);
     }
     instance->driving = driving;
@@ -390,7 +449,11 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     instance->driving = true;
     instance->stopping = true;
     if (instance->function_gate) instance->function_gate->instance = NULL;
+    XrXirCallStatus tasks = xr_xir_task_executor_free(instance->executor, NULL);
+    instance->executor = NULL;
     XrXirCallStatus status = xr_xir_call_free(instance->call);
+    instance->call = NULL;
+    if (status == XR_XIR_CALL_READY) status = tasks;
     clear_slots(instance);
     xr_xir_call_result_drop(&instance->failure);
     instance_dispose(instance);
@@ -399,12 +462,26 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
 static XrXirInstance *view_instance(XrXirCallView *view) {
     if (!xr_xir_call_admission(view) || !view->instance) return NULL;
     XrXirInstance *instance = view->instance;
+    bool child = false;
     if (!instance->driving || instance->observing || (instance->stopping && !instance_cleanup_grant(instance)) ||
-        view->activation != instance->call ||
+        !xr_xir_task_executor_view_member(instance->executor, view, &child) ||
+        (!child && view->activation != instance->call) ||
         xr_xir_call_current_entry(view->activation) >= instance->program->entry_count) return NULL;
     return instance;
 }
 
+static bool view_is_child(const XrXirInstance *instance, const XrXirCallView *view) {
+    bool child = false;
+    XR_CHECK(xr_xir_task_executor_view_member(instance->executor, view, &child),
+        "an admitted instance view keeps its exact activation membership");
+    return child;
+}
+static bool worker_slot_read(const XrXirInstance *instance, uint32_t slot) {
+    const XrXirProgram *program = instance->program;
+    const XrXirSlot *entry = &program->declarations->slots[slot];
+    return !entry->mutable && instance->ready[entry->module] && program->go_authority &&
+        program->go_authority[(uint64_t)program->entry_count + slot] == XR_XIR_OK;
+}
 static bool value_unit(XrXirValue value) {
     return value.type == XR_XIR_UNIT && !value.reserved && !value.payload;
 }
@@ -441,6 +518,8 @@ static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
     if (receiver->kind != XR_XIR_ROOT_SLOT || receiver->local_payload || receiver->slot >= d->slot_count)
         return XR_XIR_CALL_BAD_STATE;
     uint32_t slot = receiver->slot, module = d->slots[slot].module;
+    if (view_is_child(instance, view) && (writable || !worker_slot_read(instance, slot)))
+        return XR_XIR_CALL_BAD_STATE;
     uint32_t function = xr_xir_call_current_entry(view->activation);
     if (d->slots[slot].type != receiver->type || !instance->published[slot] ||
         d->functions[function].module != module ||
@@ -570,6 +649,7 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
     if (!instance || slot >= instance->program->declarations->slot_count) return XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t function = xr_xir_call_current_entry(view->activation), module = d->slots[slot].module;
+    if (view_is_child(instance, view) && !worker_slot_read(instance, slot)) return XR_XIR_CALL_BAD_STATE;
     if (!instance->published[slot] || d->functions[function].module != module ||
         (!instance->ready[module] && instance->current_module != module)) return XR_XIR_CALL_BAD_STATE;
     return value_call_status(xr_xir_value_copy(&instance->slots[slot], output));
@@ -577,7 +657,8 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
 XrXirCallStatus xr_xir_instance_slot_write(XrXirCallView *view, uint32_t slot,
                                           const XrXirValue *value, bool publish) {
     XrXirInstance *instance = view_instance(view);
-    if (!instance || slot >= instance->program->declarations->slot_count) return XR_XIR_CALL_BAD_STATE;
+    if (!instance || slot >= instance->program->declarations->slot_count || view_is_child(instance, view))
+        return XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t function = xr_xir_call_current_entry(view->activation), module = d->slots[slot].module;
     if (d->functions[function].module != module || !(d->slots[slot].type == XR_XIR_UNIT ?
@@ -650,7 +731,8 @@ XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const Xr
 }
 XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXirValue *function, uint32_t *entry) {
     XrXirInstance *instance = view_instance(view);
-    return instance ? resolve_function(instance, function, entry, xr_xir_call_admission(view)) : XR_XIR_CALL_BAD_STATE;
+    return instance && !view_is_child(instance, view) ?
+        resolve_function(instance, function, entry, xr_xir_call_admission(view)) : XR_XIR_CALL_BAD_STATE;
 }
 static bool instance_admission_work(void *owner, uint64_t units) {
     uint64_t *remaining = owner;
@@ -679,11 +761,17 @@ static XrXirCallStatus prepare_function_gate(XrXirInstance *instance) {
     if (instance->function_gate) return XR_XIR_CALL_READY;
     if (sizeof(FunctionGate) > instance->config.metadata_limit - instance->metadata_bytes)
         return XR_XIR_CALL_LIMIT;
-    FunctionGate *gate = xr_malloc(sizeof(*gate));
-    if (!gate) return XR_XIR_CALL_OOM;
-    if (!xr_xir_compile_program_retain(instance->program)) { xr_free(gate); return XR_XIR_CALL_LIMIT; }
+    if (!xr_xir_domain_retain(instance->domain)) return XR_XIR_CALL_LIMIT;
+    XrXirCallStatus status = XR_XIR_CALL_READY;
+    FunctionGate *gate = instance_metadata_allocate(instance->domain, sizeof(*gate), &status);
+    if (!gate) { xr_xir_domain_drop(instance->domain); return status; }
+    if (!xr_xir_compile_program_retain(instance->program)) {
+        xr_xir_domain_metadata_deallocate(instance->domain, gate, sizeof(*gate));
+        xr_xir_domain_drop(instance->domain); return XR_XIR_CALL_LIMIT;
+    }
     atomic_init(&gate->references, 1);
     gate->program = instance->program; gate->instance = instance->stopping ? NULL : instance;
+    gate->domain = instance->domain;
     instance->function_gate = gate; instance->metadata_bytes += sizeof(*gate);
     return XR_XIR_CALL_READY;
 }
@@ -719,6 +807,39 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, ui
         type, &binding, admission, output));
     if (status != XR_XIR_CALL_READY) function_gate_drop(instance->function_gate);
     return status;
+}
+XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type, uint32_t direct_entry,
+    const XrXirValue *arguments, uint32_t count, XrXirValue *output) {
+    if (!output || !value_unit(*output) || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance = view_instance(view);
+    if (!instance) return XR_XIR_CALL_BAD_STATE;
+    if (xr_xir_call_cleanup_active(view->activation)) return XR_XIR_CALL_DEFER_ASYNC;
+    XrXirCallStatus status = xr_xir_call_execution_status(view);
+    if (status != XR_XIR_CALL_READY) return status;
+    const XrXirProgram *program = instance->program;
+    const XrXirDeclarations *declarations = program->declarations;
+    if (direct_entry >= program->entry_count || !program->go_authority || view->arena != program->arena)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirCallEntry *target = &instance->entries[direct_entry];
+    uint32_t caller = xr_xir_call_current_entry(view->activation);
+    uint32_t from = declarations->functions[caller].module, to = declarations->functions[direct_entry].module;
+    if (!program->active_modules[from] || !program->active_modules[to] ||
+        !xr_xir_module_imports(declarations, from, to) ||
+        (from != to && !declarations->functions[direct_entry].exported) ||
+        target->cleanup_owner || direct_entry == declarations->modules[to].initializer ||
+        count != target->parameter_count || program->go_authority[direct_entry] != XR_XIR_OK)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirType result = xr_xir_task_element(program->types, task_type);
+    if (!result || result != target->result) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (result != XR_XIR_I64 && result != XR_XIR_STRING) return XR_XIR_CALL_UNSUPPORTED;
+    for (uint32_t p = 0; p < count; ++p) {
+        if (!xr_xir_task_parameter_supported(program->types, target->parameters[p]))
+            return XR_XIR_CALL_UNSUPPORTED;
+        if (!xr_xir_value_argument(&arguments[p], program->arena, target->parameters[p]))
+            return XR_XIR_CALL_BAD_ARGUMENT;
+    }
+    const XrXirCallRequest request = {direct_entry, arguments, count};
+    return xr_xir_task_executor_spawn_from_view(instance->executor, view, task_type, &request, output);
 }
 XrXirCallStatus xr_xir_instance_cell(XrXirCallView *view, XrXirType type,
     const XrXirValue *initial, XrXirValue *output) {

@@ -104,6 +104,7 @@ typedef struct SourceExpressionPlan {
     SourceName *binding;
     uint32_t owner, identity;
     SourceExpectedType expected;
+    SourceExpectedType task_element_context;
     SourceBlockReference entry, exit;
     SourceTermState state;
     bool type_ready, conversion_ready, statement_match;
@@ -218,6 +219,7 @@ typedef struct SourceContext {
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
     uint32_t ordering_module; /* One-based actual graph index, zero when unused. */
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
+    uint32_t task_module, task_declaration;
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
@@ -504,6 +506,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
 #include "xxir_source_intern.inc.c"
 #include "xxir_source_native.inc.c"
 #include "xxir_source_atomic.inc.c"
+#include "xxir_source_task_type.inc.c"
 #include "xxir_source_ordering.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
@@ -645,6 +648,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
             return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Atomic"))
             return source_native_atomic_type(ctx,ref,type);
+        if (ref->name && source_text_same(ctx,NULL,ref->name,"Task"))
+            return source_native_task_type(ctx,ref,type);
         if (ref->name && source_native_find(ctx,ref->name))
             return source_native_array_type(ctx, ref, type);
         return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
@@ -969,6 +974,10 @@ static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValu
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value) {
+    if (!result_context.present && ctx->active_expression->task_element_context.present) {
+        if (!source_task_type(ctx,ctx->active_expression->task_element_context.type,&result_context.type)) return false;
+        result_context.present=true;
+    }
     SourceDirectRequest direct={target->index,{0},NULL,result_context};
     SourceDirectArguments prepared={0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
@@ -978,6 +987,7 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
         source_query_reference(ctx,reference,binding,target,XR_XIR_SOURCE_CALL) &&
         source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
 }
+#include "xxir_source_task_call.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -1485,6 +1495,8 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         return true;
     }
     case AST_CALL_EXPR: return source_call(ctx, node, context, value);
+    case AST_GO_EXPR: return source_go_call(ctx, node, context, value);
+    case AST_AWAIT_EXPR: return source_task_await(ctx, node, context, value);
     case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, context, value);
     case AST_FUNCTION_EXPR:
         if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))

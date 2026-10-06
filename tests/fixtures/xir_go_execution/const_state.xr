@@ -1,0 +1,3 @@
+const value: i64 = 42
+fn worker() -> i64 { return value }
+export fn main() -> i64 { return await go worker() }

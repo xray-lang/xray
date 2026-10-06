@@ -1,0 +1,5 @@
+fn worker(value: i64) -> i64 { return value + 1 }
+export fn main() -> i64 {
+    const task = go worker(41)
+    return await task
+}

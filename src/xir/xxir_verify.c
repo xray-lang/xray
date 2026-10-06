@@ -115,6 +115,7 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
 
 #include "xxir_requirement_verify.inc.c"
 #include "xxir_slot_group_verify.inc.c"
+#include "xxir_task_verify.inc.c"
 
 static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirInstruction *op, XrXirStage stage,
@@ -186,6 +187,11 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             }
         }
         XrXirType result = op->type;
+        if (op->op == XR_XIR_GO) {
+            generic_status = task_go_shape(module, op, remaining);
+            if (generic_status != XR_XIR_OK) return generic_status;
+            result = xr_xir_task_element(module->types, op->type);
+        }
         const XrXirTypeNode *signature = NULL;
         if (op->op == XR_XIR_FUNCTION_REF) {
             signature = xr_xir_callable_signature(module->types, op->type);
@@ -273,7 +279,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL &&
-               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
+               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
@@ -829,6 +835,13 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             continue;
         }
         XrXirType expected = op->type;
+        if (op->op == XR_XIR_TASK_AWAIT) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            XrXirType result = xr_xir_task_element(context->module->types, expected);
+            if (!result) return XR_XIR_BAD_TYPE;
+            if (context->module->stage == XR_XIR_LOWERED && result != XR_XIR_I64 && result != XR_XIR_STRING)
+                return XR_XIR_UNSUPPORTED;
+        }
         if (op->op == XR_XIR_NULLABLE_SOME)
             expected = xr_xir_nullable_element(context->module->types, op->type);
         if (op->op == XR_XIR_EQUAL) {

@@ -1,0 +1,1 @@
+fn main() -> Task<i64> { return Task<i64>() }

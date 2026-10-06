@@ -1,0 +1,1 @@
+export fn worker(value: i64) -> i64 { return value }

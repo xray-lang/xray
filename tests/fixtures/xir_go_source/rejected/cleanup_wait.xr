@@ -1,0 +1,2 @@
+fn worker() -> i64 { return 42 }
+fn main() -> i64 { const task = go worker(); defer { const value = await task }; return 1 }

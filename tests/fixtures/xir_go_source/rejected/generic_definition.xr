@@ -1,0 +1,3 @@
+fn worker<T>(value: T) -> T { return value }
+fn spawn<T>(value: T) -> Task<T> { return go worker(value) }
+fn main() -> i64 { return await spawn(42) }

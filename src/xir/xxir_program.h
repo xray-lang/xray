@@ -56,6 +56,7 @@ typedef struct XrXirInstanceConfig {
     XrXirLifecycleEntry trace;
     void *trace_context;
     XrXirTimeProvider time;
+    uint64_t requested_value_limit, requested_call_limit, work_limit;
 } XrXirInstanceConfig;
 typedef struct XrXirInstanceResult {
     XrXirCallResult outcome;

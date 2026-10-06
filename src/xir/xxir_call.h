@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 26u
+#define XR_XIR_CALL_ABI_VERSION 28u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -44,7 +44,9 @@ typedef enum XrXirActionKind {
     XR_XIR_ACTION_OUTPUT, XR_XIR_ACTION_WRITE_STREAM, XR_XIR_ACTION_LEAVE,
     XR_XIR_ACTION_EXIT_DONE,
     /* value is the nonzero I64 millisecond duration the activation waits for. */
-    XR_XIR_ACTION_TIMER
+    XR_XIR_ACTION_TIMER,
+    /* value borrows the true Task handle until the driver retains its wait lease. */
+    XR_XIR_ACTION_AWAIT_TASK
 } XrXirActionKind;
 /* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
 #define XR_XIR_ACTION_PROTECTED 1u
@@ -101,6 +103,11 @@ XR_FUNC XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view);
 XR_FUNC XrXirCallStatus xr_xir_call_execution_status(const XrXirCallView *view);
 /* Consume the driver's admitted returned owner, never the borrowed view copy. */
 XR_FUNC XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirType expected);
+/* Records the current entry's actually registered, unretired cleanup frontier.
+ * Only its authenticated active EXIT-capable callback view may update it.
+ * The backend records registration after preparation and retirement only
+ * after the cleanup returned; this records an obligation, not its execution. */
+XR_FUNC XrXirCallStatus xr_xir_call_cleanup_frontier(XrXirCallView *view, uint32_t frontier);
 /* Internal authority exists only within an active cleanup callback or value admission. */
 XR_FUNC bool xr_xir_call_cleanup_active(const XrXirCall *activation);
 typedef XrXirAction (*XrXirResumeEntry)(XrXirCallView *view);
@@ -160,11 +167,13 @@ static inline bool xr_xir_time_provider_valid(const XrXirTimeProvider *provider)
 }
 /* A suspension asks its host for nothing (YIELD) or for a duration (TIMER). The
  * request is published only for the exact pending wake token. */
-typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS } XrXirWaitKind;
+typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK } XrXirWaitKind;
 #define XR_XIR_TIMER_MAX_MS UINT64_C(86400000)
 typedef struct XrXirWaitRequest {
     uint32_t kind, reserved;
     uint64_t after_ms;
+    const void *subject;
+    uint64_t generation, ticket;
 } XrXirWaitRequest;
 
 typedef struct XrXirCallConfig {

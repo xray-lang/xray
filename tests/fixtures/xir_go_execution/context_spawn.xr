@@ -1,0 +1,3 @@
+fn force<T: Sendable>(value: T?) -> T { return value! }
+fn spawn<T: Sendable>(value: T?) -> Task<T> { return go force(value) }
+export fn main() -> i64 { return await spawn(null) }

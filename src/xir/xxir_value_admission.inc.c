@@ -108,7 +108,9 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
     StorageSpan span = {0}; bool inlined = false, tuple_field=false;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     for (;;) {
-        if (!admission->work) { status = XR_XIR_VALUE_LIMIT; break; }
+        if (!admission->work || (admission->domain && !xr_xir_domain_work(admission->domain, 1))) {
+            status = XR_XIR_VALUE_LIMIT; break;
+        }
         --admission->work;
         if (inlined && inline_nominal_type(xr_xir_compile_type_arena_types(admission->arena), type)) {
             status = admission_inline(&stack, span, admission);
@@ -146,7 +148,7 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
                     status = array_needs_admission((XirArray *) object, admission, &needed);
                     if (status != XR_XIR_VALUE_OK) break;
                     if (needed) count = ((XirArray *) object)->length;
-                } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
+                } else if (object->kind == XR_XIR_TYPE_TASK || object->kind == XR_XIR_TYPE_ATOMIC) {
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {
                     if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }

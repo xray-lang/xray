@@ -47,6 +47,12 @@ struct XrXirArtifact {
 
 /* Requires completed structural and type verification; never re-enters verification. */
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirEffects **output);
+/* A derived complete-outcome fact grants no call or source permissions.
+ * Checked import and specialization rebuild it from authentic declarations. */
+XR_FUNC XrXirStatus xr_xir_effects_task_errors(const XrXirEffects *effects, uint32_t function);
+/* Derived from the verified direct graph; neither fact is wire authority. */
+XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t function);
+XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_compile_recheck(const XrXirCompileContext *compile_context, const XrXirModule *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic);

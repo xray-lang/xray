@@ -1,0 +1,2 @@
+export fn worker(value: i64 = 42) -> i64 { return value }
+fn secret() -> i64 { return 7 }

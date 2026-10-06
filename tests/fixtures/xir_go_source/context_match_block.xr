@@ -1,0 +1,7 @@
+fn force<T: Sendable>(value: T?) -> T { return value! }
+fn main() -> i64 {
+    return await match(true) {
+        true -> { const input: i64? = null; go force(input) },
+        false -> { go force(null) }
+    }
+}

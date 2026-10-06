@@ -13,7 +13,10 @@ static XrXirAction vm_cleanup_exit(ScalarRun *run, VmState *state) {
     if (state->cleanup_waiting) {
         if (run->view->inbox.status != XR_XIR_CALL_RETURNED || !state->frontier)
             return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
-        state->frontier = run->function->blocks[vm_block(run->function, state->frontier - 1)].frontier;
+        uint32_t parent = run->function->blocks[vm_block(run->function, state->frontier - 1)].frontier;
+        if (xr_xir_call_cleanup_frontier(run->view, parent) != XR_XIR_CALL_READY)
+            return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+        state->frontier = parent;
         state->cleanup_waiting = false;
     }
     uint32_t target = run->view->scope_exit ? state->exit_target : 0;
@@ -48,7 +51,12 @@ static XrXirRunStatus vm_cleanup_step(ScalarRun *run, VmState *state,
     if (op->op == XR_XIR_CLEANUP_REGISTER || state->frontier == (uint32_t)op->immediate) {
         XrXirRunStatus status = scalar_edge(run, state->instruction, target);
         if (status != XR_XIR_RUN_OK) return status;
-        if (op->op == XR_XIR_CLEANUP_REGISTER) state->frontier = state->instruction + 1;
+        if (op->op == XR_XIR_CLEANUP_REGISTER) {
+            uint32_t frontier = state->instruction + 1;
+            if (xr_xir_call_cleanup_frontier(run->view, frontier) != XR_XIR_CALL_READY)
+                return XR_XIR_RUN_BAD_ARTIFACT;
+            state->frontier = frontier;
+        }
         state->instruction = run->function->blocks[target].first;
         return XR_XIR_RUN_OK;
     }

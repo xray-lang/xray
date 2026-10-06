@@ -1,0 +1,2 @@
+fn force<T: Sendable>(value: T?) -> T { return value! }
+export fn main() -> i64 { return force(null) }

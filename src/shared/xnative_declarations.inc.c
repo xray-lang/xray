@@ -249,3 +249,19 @@ static const XrNativeTypeDeclaration xr_native_ordering = {
     "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140}},
     180, 18, xr_native_ordering_members, 5
 };
+static const XrNativeParameter xr_native_task_parameters_5[] = {
+    {"timeout", "i64", XR_NATIVE_TERM_UNADMITTED, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_task_members[] = {
+    {1, "done", ": bool", "bool", 19, 5, XR_NATIVE_RECEIVER_READ, false, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {2, "status", ": TaskStatus", "TaskStatus", 20, 5, XR_NATIVE_RECEIVER_READ, false, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {3, "cancel", "()", "()", 22, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {4, "poll", "() -> TaskResult<T>", "TaskResult<T>", 23, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {5, "awaitResult", "() -> TaskResult<T>", "TaskResult<T>", 24, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {6, "awaitTimeout", "(timeout: i64) -> TaskResult<T>", "TaskResult<T>", 25, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_task_parameters_5, 1, XR_NATIVE_TERM_UNADMITTED},
+};
+static const XrNativeTypeDeclaration xr_native_task = {
+    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", "T", 1,
+    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{248, 92, 134, 139, 241, 43, 43, 144, 152, 142, 173, 92, 247, 70, 253, 142, 82, 45, 92, 45, 99, 152, 166, 72, 130, 180, 118, 55, 199, 45, 199, 166}},
+    18, 7, xr_native_task_members, 6
+};

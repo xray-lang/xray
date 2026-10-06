@@ -1,0 +1,3 @@
+enum Problem { Failed { value: string } }
+fn worker() -> i64 { throw Problem.Failed{value: "owned"} }
+export fn main() -> i64 { return await go worker() }

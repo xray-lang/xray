@@ -1,0 +1,12 @@
+add_executable(test_xir_task_fault_cleanup xir/test_xir_task_fault_cleanup.c)
+target_link_libraries(test_xir_task_fault_cleanup PRIVATE xray_xir_vm xray_xir_scalar)
+if(MSVC)
+    target_compile_options(test_xir_task_fault_cleanup PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_task_fault_cleanup PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(case body call await)
+    add_test(NAME test_xir_task_fault_cleanup_${case} COMMAND test_xir_task_fault_cleanup ${case})
+    set_tests_properties(test_xir_task_fault_cleanup_${case}
+        PROPERTIES LABELS "unit;xir;task;ownership;runtime" TIMEOUT 60)
+endforeach()

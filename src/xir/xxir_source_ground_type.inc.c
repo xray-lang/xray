@@ -11,6 +11,22 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (!node || !source_work(ctx,node)) return node==NULL;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
+    if (node->type==AST_AWAIT_EXPR) {
+        SourceExpectedType task;
+        if (!source_ground_type(ctx,node->as.await_expr.expr,depth+1,&task)) return false;
+        XrXirType element=task.present ? xr_xir_task_element(&ctx->types,task.type) : XR_XIR_UNIT;
+        if (element!=XR_XIR_UNIT) *output=(SourceExpectedType){true,element,false};
+        return true;
+    }
+    if (node->type==AST_GO_EXPR) {
+        SourceName *binding,*target;
+        if (!source_go_target(ctx,node,&binding,&target)) return false;
+        if (!ctx->generics[target->index].parameter_count) {
+            if (!source_task_type(ctx,ctx->functions[target->index].result,&output->type)) return false;
+            output->present=true;
+        }
+        return true;
+    }
     if (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR) {
         SourceName *binding=visible_name(ctx,node->type==AST_VARIABLE ? node->as.variable.name : "this");
         if (binding && (binding->kind==SOURCE_LOCAL || binding->kind==SOURCE_SLOT))

@@ -1,0 +1,4 @@
+var value: i64 = 42
+fn helper() -> i64 { return value }
+fn worker() -> i64 { return helper() }
+fn main() -> i64 { return await go worker() }

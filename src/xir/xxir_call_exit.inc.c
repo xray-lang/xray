@@ -7,10 +7,15 @@
  * xxir_call_exit.inc.c - Owned pending exits on the single call trampoline
  *
  * KEY CONCEPT:
- *   Exit values outlive their producer slots and cleanup never replaces them.
+ *   Owned exit values outlive producer slots. The first execution failure
+ *   survives cleanup failures and later cancellation.
  */
 static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
     CallFrame *frame = call->top;
+    if (result->status == XR_XIR_CALL_CANCELLED && call->abort_reason != XR_XIR_CALL_READY) {
+        xr_xir_call_result_drop(result);
+        *result = call_result(call->abort_reason);
+    }
     xr_xir_call_result_drop(&frame->pending);
     xr_xir_call_result_move(result, &frame->pending);
     frame->exiting = true;
@@ -20,6 +25,12 @@ static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
 static void request_exit_status(XrXirCall *call, XrXirCallStatus status) {
     XrXirCallResult result = call_result(status);
     request_exit(call, &result, false);
+}
+/* Only a validated execution failure may use intact frames for language EXIT.
+ * Protocol rejection keeps the separate physical-abort path. */
+static void request_execution_failure(XrXirCall *call, XrXirCallStatus reason) {
+    if (call->abort_reason == XR_XIR_CALL_READY) call->abort_reason = reason;
+    request_exit_status(call, call->abort_reason);
 }
 static XrErrorCoreMessageView exit_message(const XrXirCallResult *result, char *buffer, size_t capacity) {
     XrErrorCoreMessageView message = {0};
@@ -51,21 +62,28 @@ static void finish_exit(XrXirCall *call) {
         frame->exiting = frame->scope_exit = frame->exit_done = false;
         xr_xir_call_result_drop(&frame->inbox);
         xr_xir_call_result_move(&result, &frame->inbox);
-        if (call->cancel_requested && !frame->in_cleanup)
+        if (call->cancel_requested && !frame->in_cleanup && call->abort_reason == XR_XIR_CALL_READY)
             request_exit_status(call, XR_XIR_CALL_CANCELLED);
         return;
     }
-    if (call->cancel_requested && !frame->in_cleanup) {
+    if (call->cancel_requested && !frame->in_cleanup && call->abort_reason == XR_XIR_CALL_READY) {
         xr_xir_call_result_drop(&result);
         result = call_result(XR_XIR_CALL_CANCELLED);
     }
+    bool execution_failure = call->abort_reason != XR_XIR_CALL_READY && result.status == call->abort_reason;
+    bool failed_cleanup = frame->cleanup_call && execution_failure;
     pop_frame(call, result.status);
     if (!call->top) {
         xr_xir_call_result_drop(&call->result);
         xr_xir_call_result_move(&result, &call->result);
         return;
     }
-    if (result.status == XR_XIR_CALL_CANCELLED ||
+    if (failed_cleanup) {
+        xr_xir_call_result_drop(&result);
+        abort_frames(call, call->abort_reason);
+        return;
+    }
+    if (execution_failure || result.status == XR_XIR_CALL_CANCELLED ||
         (xr_xir_call_panic_status(result.status) && !call->top->protected_call)) {
         request_exit(call, &result, false);
         return;
@@ -83,7 +101,7 @@ static void accept_scope_exit(XrXirCall *call, XrXirAction action, bool panic) {
     if (action.flags == XR_XIR_ACTION_LEAVE_PANIC && panic) {
         result.status = (XrXirCallStatus)action.value.payload;
         if (xr_xir_panic_copy(&action.panic, &result.panic) != XR_XIR_VALUE_OK) {
-            abort_frames(call, XR_XIR_CALL_LIMIT); return;
+            request_execution_failure(call, XR_XIR_CALL_LIMIT); return;
         }
     } else if (action.flags == XR_XIR_ACTION_LEAVE_ERROR) {
         XrXirType type = (XrXirType)action.value.type;
@@ -94,11 +112,14 @@ static void accept_scope_exit(XrXirCall *call, XrXirAction action, bool panic) {
         XrXirCallStatus status = admit_value(&action.value, type, &call->config.admission);
         call->admitting = false;
         if (status != XR_XIR_CALL_READY) {
-            abort_frames(call, status == XR_XIR_CALL_BAD_ARGUMENT ? XR_XIR_CALL_BAD_STATE : status); return;
+            if (status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT)
+                request_execution_failure(call, status);
+            else abort_frames(call, status == XR_XIR_CALL_BAD_ARGUMENT ? XR_XIR_CALL_BAD_STATE : status);
+            return;
         }
         result.status = XR_XIR_CALL_THROWN;
         if (xr_xir_value_copy(&action.value, &result.value) != XR_XIR_VALUE_OK) {
-            abort_frames(call, XR_XIR_CALL_LIMIT); return;
+            request_execution_failure(call, XR_XIR_CALL_LIMIT); return;
         }
     } else if (action.flags || !boundary_value(action.value, XR_XIR_UNIT)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE); return;

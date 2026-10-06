@@ -17,6 +17,7 @@
 #include "xxir_vm.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
+#include "xxir_task.h"
 #include "xxir_compile_memory.h"
 #include "xxir_equal.h"
 #include "xxir_nullable.h"
@@ -364,6 +365,43 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
     return XR_XIR_RUN_OK;
 }
 
+static XrXirRunStatus vm_go_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
+    XrXirAction *action, uint32_t destination) {
+    if (!run->view || !xr_xir_task_element(run->module->types, op->type) ||
+        op->args[1] > run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
+    for (uint32_t i = 0; i < op->args[1]; ++i)
+        state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0] + i]);
+    XrXirValue task = {0};
+    XrXirCallStatus status = xr_xir_task_go(run->view, op->type, (uint32_t)op->immediate,
+        op->args[1] ? state->arguments : NULL, op->args[1], &task);
+    if (status != XR_XIR_CALL_READY) {
+        *action = (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,
+            {XR_XIR_I64, 0, status}, {0}, 0};
+        return XR_XIR_RUN_OK;
+    }
+    xr_xir_owned_slot_move(run->frame, destination, &task);
+    ++state->instruction;
+    return XR_XIR_RUN_OK;
+}
+
+static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
+    XrXirAction *action) {
+    if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+    XrXirValue task = vm_value_operand(run, op->args[0]);
+    XrXirType element = xr_xir_task_element(run->module->types, (XrXirType)task.type);
+    if (!element) return XR_XIR_RUN_BAD_ARTIFACT;
+    uint32_t at = (uint32_t)(op - run->function->instructions);
+    state->invoke = at + 1;
+    state->panic = run->function->blocks[vm_block(run->function, at)].panic;
+    state->waiting = true;
+    state->expected = element;
+    ++state->instruction;
+    /* The frame owns this handle until the driver prepares its wait lease. */
+    *action = (XrXirAction){XR_XIR_ACTION_AWAIT_TASK, 0, NULL, 0, task, {0},
+        state->panic ? XR_XIR_ACTION_PROTECTED : 0};
+    return XR_XIR_RUN_OK;
+}
+
 static XrXirRunStatus floating_step(ScalarRun *run, const XrXirInstruction *op, int64_t *value) {
     XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
     int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
@@ -631,6 +669,10 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         state->instruction = next;
         return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);
+    case XR_XIR_GO:
+        return vm_go_step(run, state, op, action, run->layout->offsets[result_id]);
+    case XR_XIR_TASK_AWAIT:
+        return vm_await_step(run, state, op, action);
     case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
         XrXirValue info = vm_value_operand(run, op->args[0]);
@@ -789,7 +831,8 @@ static XrXirAction vm_resume(XrXirCallView *view) {
             bool error = view->inbox.status == XR_XIR_CALL_THROWN;
             if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
             uint32_t first = function->blocks[op->targets[error ? 1 : 0]].first;
-            state->expected = error ? XR_XIR_ERROR : op->type;
+            state->expected = error ? XR_XIR_ERROR : op->op == XR_XIR_TASK_AWAIT ?
+                xr_xir_task_element(module->types, xr_xir_operand_type(function, op->args[0])) : op->type;
             discarded = !error && function->instructions[first].op == XR_XIR_INVOKE_DISCARD;
             if (discarded && xr_xir_call_discard_inbox(view,state->expected) != XR_XIR_CALL_READY)
                 return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);

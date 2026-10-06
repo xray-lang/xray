@@ -1,0 +1,3 @@
+class Task<T> { value: T constructor(value: T) { this.value = value } }
+fn worker() -> i64 { const ordinary = Task<i64>(42); return ordinary.value }
+export fn main() -> i64 { return await go worker() }

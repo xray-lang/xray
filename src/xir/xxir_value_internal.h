@@ -58,4 +58,27 @@ static inline bool xr_xir_reference_release(_Atomic(uint32_t) *references) {
 XR_FUNC bool xr_xir_domain_retain(XrXirDomain *domain);
 XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirValueStatus *status);
 XR_FUNC void xr_xir_domain_deallocate(XrXirDomain *domain, void *memory, size_t bytes);
+typedef struct XrXirDomainBudgetStats {
+    uint64_t requested_bytes, requested_limit, work, work_limit;
+    bool bound;
+    uint64_t requested_call_bytes, requested_call_limit;
+    uint64_t metadata_live, metadata_peak, metadata_limit, metadata_allocations, metadata_frees;
+    uint64_t call_live, call_peak, call_limit, call_allocations, call_frees;
+} XrXirDomainBudgetStats;
+typedef struct XrXirDomainBudgetControls {
+    uint64_t requested_value_limit, requested_call_limit, work_limit;
+    uint64_t metadata_limit, call_limit;
+} XrXirDomainBudgetControls;
+/* Binding is a single lifetime epoch; terminal storage still spends this budget. */
+XR_FUNC XrXirValueStatus xr_xir_domain_budget_bind(XrXirDomain *domain, const XrXirDomainBudgetControls *controls);
+/* The body request is charged before the first allocator; metadata and calls
+ * share cumulative requests but retain independent live allocation limits. */
+XR_FUNC XrXirValueStatus xr_xir_domain_new_budgeted(uint64_t value_limit,
+    const XrXirDomainBudgetControls *controls, XrXirDomain **output);
+XR_FUNC void *xr_xir_domain_metadata_allocate(XrXirDomain *domain, uint64_t bytes, XrXirValueStatus *status);
+XR_FUNC void xr_xir_domain_metadata_deallocate(XrXirDomain *domain, void *memory, uint64_t bytes);
+XR_FUNC void *xr_xir_domain_call_allocate(XrXirDomain *domain, uint64_t bytes, XrXirValueStatus *status);
+XR_FUNC void xr_xir_domain_call_deallocate(XrXirDomain *domain, void *memory, uint64_t bytes);
+XR_FUNC bool xr_xir_domain_work(XrXirDomain *domain, uint64_t work);
+XR_FUNC XrXirDomainBudgetStats xr_xir_domain_budget_stats(XrXirDomain *domain);
 #endif // XXIR_VALUE_INTERNAL_H

@@ -29,6 +29,7 @@ struct XrXirProgram {
     XrXirCodeLease code;
     XrXirTypeArena *arena;
     const XrXirTypes *types;
+    XrXirStatus *go_authority;
 };
 /* Both inputs require prior shape verification; this grants no execution authority.
  * Backend-specific callback state storage is not a canonical frame layout. */
@@ -37,6 +38,6 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
 /* Decode, lowering and comparison consume the same owner. Successful
  * verification retains neither the packet nor temporary artifacts. */
 XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, const XrXirProgramProof *proof);
+    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirStatus **go_authority);
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program);
 #endif // XXIR_PROGRAM_INTERNAL_H

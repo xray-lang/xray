@@ -1,0 +1,2084 @@
+{
+  "source_commit": "cbf17565d0a06360f48458fac57d6e35a046384d",
+  "formula_sha256": "bd0d74614f1a29f08abd2fde39eec89328a418ee1b459cc277f1d3c9ed5b301a",
+  "wire": 25,
+  "value_abi": 21,
+  "call_abi": 26,
+  "program_abi": 29,
+  "semantics": [
+    64,
+    65
+  ],
+  "rows": [
+    {
+      "id": 1,
+      "name": "pointer.size",
+      "value": 8,
+      "expression": "sizeof(void *)"
+    },
+    {
+      "id": 2,
+      "name": "pointer.align",
+      "value": 8,
+      "expression": "_Alignof(void *)"
+    },
+    {
+      "id": 3,
+      "name": "size_t.size",
+      "value": 8,
+      "expression": "sizeof(size_t)"
+    },
+    {
+      "id": 4,
+      "name": "size_t.align",
+      "value": 8,
+      "expression": "_Alignof(size_t)"
+    },
+    {
+      "id": 5,
+      "name": "bool.size",
+      "value": 1,
+      "expression": "sizeof(bool)"
+    },
+    {
+      "id": 6,
+      "name": "bool.align",
+      "value": 1,
+      "expression": "_Alignof(bool)"
+    },
+    {
+      "id": 7,
+      "name": "u32.size",
+      "value": 4,
+      "expression": "sizeof(uint32_t)"
+    },
+    {
+      "id": 8,
+      "name": "u32.align",
+      "value": 4,
+      "expression": "_Alignof(uint32_t)"
+    },
+    {
+      "id": 9,
+      "name": "i64.size",
+      "value": 8,
+      "expression": "sizeof(int64_t)"
+    },
+    {
+      "id": 10,
+      "name": "i64.align",
+      "value": 8,
+      "expression": "_Alignof(int64_t)"
+    },
+    {
+      "id": 11,
+      "name": "f32.size",
+      "value": 4,
+      "expression": "sizeof(float)"
+    },
+    {
+      "id": 12,
+      "name": "f32.align",
+      "value": 4,
+      "expression": "_Alignof(float)"
+    },
+    {
+      "id": 13,
+      "name": "f64.size",
+      "value": 8,
+      "expression": "sizeof(double)"
+    },
+    {
+      "id": 14,
+      "name": "f64.align",
+      "value": 8,
+      "expression": "_Alignof(double)"
+    },
+    {
+      "id": 15,
+      "name": "CHAR_BIT",
+      "value": 8,
+      "expression": "CHAR_BIT"
+    },
+    {
+      "id": 16,
+      "name": "little_endian",
+      "value": 1,
+      "expression": "*(const unsigned char *)&endian"
+    },
+    {
+      "id": 17,
+      "name": "resume_pointer.size",
+      "value": 8,
+      "expression": "sizeof(XrXirResumeEntry)"
+    },
+    {
+      "id": 18,
+      "name": "resume_pointer.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirResumeEntry)"
+    },
+    {
+      "id": 19,
+      "name": "CallStatus.size",
+      "value": 4,
+      "expression": "sizeof(XrXirCallStatus)"
+    },
+    {
+      "id": 20,
+      "name": "CallStatus.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirCallStatus)"
+    },
+    {
+      "id": 21,
+      "name": "Type.size",
+      "value": 4,
+      "expression": "sizeof(XrXirType)"
+    },
+    {
+      "id": 22,
+      "name": "Type.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirType)"
+    },
+    {
+      "id": 23,
+      "name": "OutputStatus.size",
+      "value": 4,
+      "expression": "sizeof(XrXirOutputStatus)"
+    },
+    {
+      "id": 24,
+      "name": "OutputStatus.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirOutputStatus)"
+    },
+    {
+      "id": 25,
+      "name": "ActionKind.size",
+      "value": 4,
+      "expression": "sizeof(XrXirActionKind)"
+    },
+    {
+      "id": 26,
+      "name": "ActionKind.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirActionKind)"
+    },
+    {
+      "id": 27,
+      "name": "CallPhase.size",
+      "value": 4,
+      "expression": "sizeof(XrXirCallPhase)"
+    },
+    {
+      "id": 28,
+      "name": "CallPhase.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirCallPhase)"
+    },
+    {
+      "id": 29,
+      "name": "FLT_RADIX",
+      "value": 2,
+      "expression": "FLT_RADIX"
+    },
+    {
+      "id": 30,
+      "name": "FLT_MANT_DIG",
+      "value": 24,
+      "expression": "FLT_MANT_DIG"
+    },
+    {
+      "id": 31,
+      "name": "FLT_MAX_EXP",
+      "value": 128,
+      "expression": "FLT_MAX_EXP"
+    },
+    {
+      "id": 32,
+      "name": "DBL_MANT_DIG",
+      "value": 53,
+      "expression": "DBL_MANT_DIG"
+    },
+    {
+      "id": 33,
+      "name": "DBL_MAX_EXP",
+      "value": 1024,
+      "expression": "DBL_MAX_EXP"
+    },
+    {
+      "id": 34,
+      "name": "frame_alignment",
+      "value": 16,
+      "expression": "XR_XIR_CALL_STATE_ALIGNMENT"
+    },
+    {
+      "id": 100,
+      "name": "XrXirValue.size",
+      "value": 16,
+      "expression": "sizeof(XrXirValue)"
+    },
+    {
+      "id": 101,
+      "name": "XrXirValue.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirValue)"
+    },
+    {
+      "id": 102,
+      "name": "XrXirValue.type.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirValue,type)"
+    },
+    {
+      "id": 103,
+      "name": "XrXirValue.reserved.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirValue,reserved)"
+    },
+    {
+      "id": 104,
+      "name": "XrXirValue.payload.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirValue,payload)"
+    },
+    {
+      "id": 200,
+      "name": "XrXirFaultDetail.size",
+      "value": 24,
+      "expression": "sizeof(XrXirFaultDetail)"
+    },
+    {
+      "id": 201,
+      "name": "XrXirFaultDetail.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirFaultDetail)"
+    },
+    {
+      "id": 202,
+      "name": "XrXirFaultDetail.code.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirFaultDetail,code)"
+    },
+    {
+      "id": 203,
+      "name": "XrXirFaultDetail.reserved.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirFaultDetail,reserved)"
+    },
+    {
+      "id": 204,
+      "name": "XrXirFaultDetail.index.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirFaultDetail,index)"
+    },
+    {
+      "id": 205,
+      "name": "XrXirFaultDetail.length.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirFaultDetail,length)"
+    },
+    {
+      "id": 300,
+      "name": "XrXirPanicPayload.size",
+      "value": 40,
+      "expression": "sizeof(XrXirPanicPayload)"
+    },
+    {
+      "id": 301,
+      "name": "XrXirPanicPayload.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirPanicPayload)"
+    },
+    {
+      "id": 302,
+      "name": "XrXirPanicPayload.detail.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirPanicPayload,detail)"
+    },
+    {
+      "id": 303,
+      "name": "XrXirPanicPayload.message.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirPanicPayload,message)"
+    },
+    {
+      "id": 400,
+      "name": "XrXirCallResult.size",
+      "value": 72,
+      "expression": "sizeof(XrXirCallResult)"
+    },
+    {
+      "id": 401,
+      "name": "XrXirCallResult.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirCallResult)"
+    },
+    {
+      "id": 402,
+      "name": "XrXirCallResult.status.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCallResult,status)"
+    },
+    {
+      "id": 403,
+      "name": "XrXirCallResult.value.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirCallResult,value)"
+    },
+    {
+      "id": 404,
+      "name": "XrXirCallResult.wake.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirCallResult,wake)"
+    },
+    {
+      "id": 405,
+      "name": "XrXirCallResult.panic.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirCallResult,panic)"
+    },
+    {
+      "id": 500,
+      "name": "XrXirAction.size",
+      "value": 88,
+      "expression": "sizeof(XrXirAction)"
+    },
+    {
+      "id": 501,
+      "name": "XrXirAction.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirAction)"
+    },
+    {
+      "id": 502,
+      "name": "XrXirAction.kind.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirAction,kind)"
+    },
+    {
+      "id": 503,
+      "name": "XrXirAction.callee.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirAction,callee)"
+    },
+    {
+      "id": 504,
+      "name": "XrXirAction.arguments.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirAction,arguments)"
+    },
+    {
+      "id": 505,
+      "name": "XrXirAction.argument_count.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirAction,argument_count)"
+    },
+    {
+      "id": 506,
+      "name": "XrXirAction.value.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirAction,value)"
+    },
+    {
+      "id": 507,
+      "name": "XrXirAction.panic.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirAction,panic)"
+    },
+    {
+      "id": 508,
+      "name": "XrXirAction.flags.offset",
+      "value": 80,
+      "expression": "offsetof(XrXirAction,flags)"
+    },
+    {
+      "id": 600,
+      "name": "XrXirCallView.size",
+      "value": 216,
+      "expression": "sizeof(XrXirCallView)"
+    },
+    {
+      "id": 601,
+      "name": "XrXirCallView.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirCallView)"
+    },
+    {
+      "id": 602,
+      "name": "XrXirCallView.activation.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCallView,activation)"
+    },
+    {
+      "id": 603,
+      "name": "XrXirCallView.instance.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirCallView,instance)"
+    },
+    {
+      "id": 604,
+      "name": "XrXirCallView.environment.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirCallView,environment)"
+    },
+    {
+      "id": 605,
+      "name": "XrXirCallView.state.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirCallView,state)"
+    },
+    {
+      "id": 606,
+      "name": "XrXirCallView.arguments.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirCallView,arguments)"
+    },
+    {
+      "id": 607,
+      "name": "XrXirCallView.argument_count.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirCallView,argument_count)"
+    },
+    {
+      "id": 608,
+      "name": "XrXirCallView.inbox.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirCallView,inbox)"
+    },
+    {
+      "id": 609,
+      "name": "XrXirCallView.arena.offset",
+      "value": 120,
+      "expression": "offsetof(XrXirCallView,arena)"
+    },
+    {
+      "id": 610,
+      "name": "XrXirCallView.phase.offset",
+      "value": 128,
+      "expression": "offsetof(XrXirCallView,phase)"
+    },
+    {
+      "id": 611,
+      "name": "XrXirCallView.exit.offset",
+      "value": 136,
+      "expression": "offsetof(XrXirCallView,exit)"
+    },
+    {
+      "id": 612,
+      "name": "XrXirCallView.scope_exit.offset",
+      "value": 208,
+      "expression": "offsetof(XrXirCallView,scope_exit)"
+    },
+    {
+      "id": 700,
+      "name": "XrXirCallEntry.size",
+      "value": 64,
+      "expression": "sizeof(XrXirCallEntry)"
+    },
+    {
+      "id": 701,
+      "name": "XrXirCallEntry.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirCallEntry)"
+    },
+    {
+      "id": 702,
+      "name": "XrXirCallEntry.abi_version.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCallEntry,abi_version)"
+    },
+    {
+      "id": 703,
+      "name": "XrXirCallEntry.parameters.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirCallEntry,parameters)"
+    },
+    {
+      "id": 704,
+      "name": "XrXirCallEntry.parameter_count.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirCallEntry,parameter_count)"
+    },
+    {
+      "id": 705,
+      "name": "XrXirCallEntry.result.offset",
+      "value": 20,
+      "expression": "offsetof(XrXirCallEntry,result)"
+    },
+    {
+      "id": 706,
+      "name": "XrXirCallEntry.state_bytes.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirCallEntry,state_bytes)"
+    },
+    {
+      "id": 707,
+      "name": "XrXirCallEntry.resume.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirCallEntry,resume)"
+    },
+    {
+      "id": 708,
+      "name": "XrXirCallEntry.release.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirCallEntry,release)"
+    },
+    {
+      "id": 709,
+      "name": "XrXirCallEntry.environment.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirCallEntry,environment)"
+    },
+    {
+      "id": 710,
+      "name": "XrXirCallEntry.flags.offset",
+      "value": 56,
+      "expression": "offsetof(XrXirCallEntry,flags)"
+    },
+    {
+      "id": 711,
+      "name": "XrXirCallEntry.cleanup_owner.offset",
+      "value": 60,
+      "expression": "offsetof(XrXirCallEntry,cleanup_owner)"
+    },
+    {
+      "id": 800,
+      "name": "XrXirOutputProvider.size",
+      "value": 24,
+      "expression": "sizeof(XrXirOutputProvider)"
+    },
+    {
+      "id": 801,
+      "name": "XrXirOutputProvider.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirOutputProvider)"
+    },
+    {
+      "id": 802,
+      "name": "XrXirOutputProvider.abi_version.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirOutputProvider,abi_version)"
+    },
+    {
+      "id": 803,
+      "name": "XrXirOutputProvider.reserved.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirOutputProvider,reserved)"
+    },
+    {
+      "id": 804,
+      "name": "XrXirOutputProvider.write.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirOutputProvider,write)"
+    },
+    {
+      "id": 805,
+      "name": "XrXirOutputProvider.context.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirOutputProvider,context)"
+    },
+    {
+      "id": 900,
+      "name": "XrXirValueAdmission.size",
+      "value": 48,
+      "expression": "sizeof(XrXirValueAdmission)"
+    },
+    {
+      "id": 901,
+      "name": "XrXirValueAdmission.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirValueAdmission)"
+    },
+    {
+      "id": 902,
+      "name": "XrXirValueAdmission.arena.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirValueAdmission,arena)"
+    },
+    {
+      "id": 903,
+      "name": "XrXirValueAdmission.domain.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirValueAdmission,domain)"
+    },
+    {
+      "id": 904,
+      "name": "XrXirValueAdmission.function.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirValueAdmission,function)"
+    },
+    {
+      "id": 905,
+      "name": "XrXirValueAdmission.context.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirValueAdmission,context)"
+    },
+    {
+      "id": 906,
+      "name": "XrXirValueAdmission.work.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirValueAdmission,work)"
+    },
+    {
+      "id": 907,
+      "name": "XrXirValueAdmission.scratch_bytes.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirValueAdmission,scratch_bytes)"
+    },
+    {
+      "id": 1000,
+      "name": "XrXirCallConfig.size",
+      "value": 136,
+      "expression": "sizeof(XrXirCallConfig)"
+    },
+    {
+      "id": 1001,
+      "name": "XrXirCallConfig.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirCallConfig)"
+    },
+    {
+      "id": 1002,
+      "name": "XrXirCallConfig.abi_version.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCallConfig,abi_version)"
+    },
+    {
+      "id": 1003,
+      "name": "XrXirCallConfig.struct_size.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirCallConfig,struct_size)"
+    },
+    {
+      "id": 1004,
+      "name": "XrXirCallConfig.entries.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirCallConfig,entries)"
+    },
+    {
+      "id": 1005,
+      "name": "XrXirCallConfig.entry_count.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirCallConfig,entry_count)"
+    },
+    {
+      "id": 1006,
+      "name": "XrXirCallConfig.instance.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirCallConfig,instance)"
+    },
+    {
+      "id": 1007,
+      "name": "XrXirCallConfig.byte_limit.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirCallConfig,byte_limit)"
+    },
+    {
+      "id": 1008,
+      "name": "XrXirCallConfig.poll_limit.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirCallConfig,poll_limit)"
+    },
+    {
+      "id": 1009,
+      "name": "XrXirCallConfig.depth_limit.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirCallConfig,depth_limit)"
+    },
+    {
+      "id": 1010,
+      "name": "XrXirCallConfig.accounting.offset",
+      "value": 56,
+      "expression": "offsetof(XrXirCallConfig,accounting)"
+    },
+    {
+      "id": 1011,
+      "name": "XrXirCallConfig.output.offset",
+      "value": 64,
+      "expression": "offsetof(XrXirCallConfig,output)"
+    },
+    {
+      "id": 1012,
+      "name": "XrXirCallConfig.admission.offset",
+      "value": 88,
+      "expression": "offsetof(XrXirCallConfig,admission)"
+    },
+    {
+      "id": 1100,
+      "name": "XrXirOutputSink.size",
+      "value": 32,
+      "expression": "sizeof(XrXirOutputSink)"
+    },
+    {
+      "id": 1101,
+      "name": "XrXirOutputSink.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirOutputSink)"
+    },
+    {
+      "id": 1102,
+      "name": "XrXirOutputSink.abi_version.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirOutputSink,abi_version)"
+    },
+    {
+      "id": 1103,
+      "name": "XrXirOutputSink.reserved.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirOutputSink,reserved)"
+    },
+    {
+      "id": 1104,
+      "name": "XrXirOutputSink.write.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirOutputSink,write)"
+    },
+    {
+      "id": 1105,
+      "name": "XrXirOutputSink.context.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirOutputSink,context)"
+    },
+    {
+      "id": 1106,
+      "name": "XrXirOutputSink.byte_limit.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirOutputSink,byte_limit)"
+    },
+    {
+      "id": 2700,
+      "name": "XrXirTimeProvider.size",
+      "value": 32,
+      "expression": "sizeof(XrXirTimeProvider)"
+    },
+    {
+      "id": 2701,
+      "name": "XrXirTimeProvider.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirTimeProvider)"
+    },
+    {
+      "id": 2702,
+      "name": "XrXirTimeProvider.abi_version.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirTimeProvider,abi_version)"
+    },
+    {
+      "id": 2703,
+      "name": "XrXirTimeProvider.reserved.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirTimeProvider,reserved)"
+    },
+    {
+      "id": 2704,
+      "name": "XrXirTimeProvider.clock.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirTimeProvider,clock)"
+    },
+    {
+      "id": 2705,
+      "name": "XrXirTimeProvider.utc_offset.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirTimeProvider,utc_offset)"
+    },
+    {
+      "id": 2706,
+      "name": "XrXirTimeProvider.context.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirTimeProvider,context)"
+    },
+    {
+      "id": 2800,
+      "name": "XrXirWaitRequest.size",
+      "value": 16,
+      "expression": "sizeof(XrXirWaitRequest)"
+    },
+    {
+      "id": 2801,
+      "name": "XrXirWaitRequest.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirWaitRequest)"
+    },
+    {
+      "id": 2802,
+      "name": "XrXirWaitRequest.kind.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirWaitRequest,kind)"
+    },
+    {
+      "id": 2803,
+      "name": "XrXirWaitRequest.reserved.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirWaitRequest,reserved)"
+    },
+    {
+      "id": 2804,
+      "name": "XrXirWaitRequest.after_ms.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirWaitRequest,after_ms)"
+    },
+    {
+      "id": 1200,
+      "name": "XrXirInstanceConfig.size",
+      "value": 120,
+      "expression": "sizeof(XrXirInstanceConfig)"
+    },
+    {
+      "id": 1201,
+      "name": "XrXirInstanceConfig.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirInstanceConfig)"
+    },
+    {
+      "id": 1202,
+      "name": "XrXirInstanceConfig.abi_version.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirInstanceConfig,abi_version)"
+    },
+    {
+      "id": 1203,
+      "name": "XrXirInstanceConfig.struct_size.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirInstanceConfig,struct_size)"
+    },
+    {
+      "id": 1204,
+      "name": "XrXirInstanceConfig.metadata_limit.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirInstanceConfig,metadata_limit)"
+    },
+    {
+      "id": 1205,
+      "name": "XrXirInstanceConfig.value_limit.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirInstanceConfig,value_limit)"
+    },
+    {
+      "id": 1206,
+      "name": "XrXirInstanceConfig.call_limit.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirInstanceConfig,call_limit)"
+    },
+    {
+      "id": 1207,
+      "name": "XrXirInstanceConfig.poll_limit.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirInstanceConfig,poll_limit)"
+    },
+    {
+      "id": 1208,
+      "name": "XrXirInstanceConfig.depth_limit.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirInstanceConfig,depth_limit)"
+    },
+    {
+      "id": 1209,
+      "name": "XrXirInstanceConfig.output.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirInstanceConfig,output)"
+    },
+    {
+      "id": 1210,
+      "name": "XrXirInstanceConfig.trace.offset",
+      "value": 72,
+      "expression": "offsetof(XrXirInstanceConfig,trace)"
+    },
+    {
+      "id": 1211,
+      "name": "XrXirInstanceConfig.trace_context.offset",
+      "value": 80,
+      "expression": "offsetof(XrXirInstanceConfig,trace_context)"
+    },
+    {
+      "id": 1212,
+      "name": "XrXirInstanceConfig.time.offset",
+      "value": 88,
+      "expression": "offsetof(XrXirInstanceConfig,time)"
+    },
+    {
+      "id": 1300,
+      "name": "XrXirInstanceResult.size",
+      "value": 80,
+      "expression": "sizeof(XrXirInstanceResult)"
+    },
+    {
+      "id": 1301,
+      "name": "XrXirInstanceResult.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirInstanceResult)"
+    },
+    {
+      "id": 1302,
+      "name": "XrXirInstanceResult.outcome.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirInstanceResult,outcome)"
+    },
+    {
+      "id": 1303,
+      "name": "XrXirInstanceResult.epoch.offset",
+      "value": 72,
+      "expression": "offsetof(XrXirInstanceResult,epoch)"
+    },
+    {
+      "id": 1400,
+      "name": "XrXirCodeLease.size",
+      "value": 16,
+      "expression": "sizeof(XrXirCodeLease)"
+    },
+    {
+      "id": 1401,
+      "name": "XrXirCodeLease.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirCodeLease)"
+    },
+    {
+      "id": 1402,
+      "name": "XrXirCodeLease.owner.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCodeLease,owner)"
+    },
+    {
+      "id": 1403,
+      "name": "XrXirCodeLease.release.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirCodeLease,release)"
+    },
+    {
+      "id": 1500,
+      "name": "XrXirProgramProof.size",
+      "value": 32,
+      "expression": "sizeof(XrXirProgramProof)"
+    },
+    {
+      "id": 1501,
+      "name": "XrXirProgramProof.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirProgramProof)"
+    },
+    {
+      "id": 1502,
+      "name": "XrXirProgramProof.bytes.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirProgramProof,bytes)"
+    },
+    {
+      "id": 1503,
+      "name": "XrXirProgramProof.length.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirProgramProof,length)"
+    },
+    {
+      "id": 1504,
+      "name": "XrXirProgramProof.identity.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirProgramProof,identity)"
+    },
+    {
+      "id": 1505,
+      "name": "XrXirProgramProof.layouts.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirProgramProof,layouts)"
+    },
+    {
+      "id": 1600,
+      "name": "XrXirTarget.size",
+      "value": 8,
+      "expression": "sizeof(XrXirTarget)"
+    },
+    {
+      "id": 1601,
+      "name": "XrXirTarget.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirTarget)"
+    },
+    {
+      "id": 1602,
+      "name": "XrXirTarget.architecture.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirTarget,architecture)"
+    },
+    {
+      "id": 1603,
+      "name": "XrXirTarget.abi_version.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirTarget,abi_version)"
+    },
+    {
+      "id": 1700,
+      "name": "XrXirProgramSpec.size",
+      "value": 96,
+      "expression": "sizeof(XrXirProgramSpec)"
+    },
+    {
+      "id": 1701,
+      "name": "XrXirProgramSpec.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirProgramSpec)"
+    },
+    {
+      "id": 1702,
+      "name": "XrXirProgramSpec.abi_version.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirProgramSpec,abi_version)"
+    },
+    {
+      "id": 1703,
+      "name": "XrXirProgramSpec.target.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirProgramSpec,target)"
+    },
+    {
+      "id": 1704,
+      "name": "XrXirProgramSpec.entries.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirProgramSpec,entries)"
+    },
+    {
+      "id": 1705,
+      "name": "XrXirProgramSpec.entry_count.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirProgramSpec,entry_count)"
+    },
+    {
+      "id": 1706,
+      "name": "XrXirProgramSpec.declarations.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirProgramSpec,declarations)"
+    },
+    {
+      "id": 1707,
+      "name": "XrXirProgramSpec.code.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirProgramSpec,code)"
+    },
+    {
+      "id": 1708,
+      "name": "XrXirProgramSpec.types.offset",
+      "value": 56,
+      "expression": "offsetof(XrXirProgramSpec,types)"
+    },
+    {
+      "id": 1709,
+      "name": "XrXirProgramSpec.proof.offset",
+      "value": 64,
+      "expression": "offsetof(XrXirProgramSpec,proof)"
+    },
+    {
+      "id": 1800,
+      "name": "XrXirLayout.size",
+      "value": 8,
+      "expression": "sizeof(XrXirLayout)"
+    },
+    {
+      "id": 1801,
+      "name": "XrXirLayout.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirLayout)"
+    },
+    {
+      "id": 1802,
+      "name": "XrXirLayout.size.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirLayout,size)"
+    },
+    {
+      "id": 1803,
+      "name": "XrXirLayout.alignment.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirLayout,alignment)"
+    },
+    {
+      "id": 1900,
+      "name": "XrXirFunctionLayout.size",
+      "value": 56,
+      "expression": "sizeof(XrXirFunctionLayout)"
+    },
+    {
+      "id": 1901,
+      "name": "XrXirFunctionLayout.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirFunctionLayout)"
+    },
+    {
+      "id": 1902,
+      "name": "XrXirFunctionLayout.slot_count.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirFunctionLayout,slot_count)"
+    },
+    {
+      "id": 1903,
+      "name": "XrXirFunctionLayout.frame_bytes.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirFunctionLayout,frame_bytes)"
+    },
+    {
+      "id": 1904,
+      "name": "XrXirFunctionLayout.offsets.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirFunctionLayout,offsets)"
+    },
+    {
+      "id": 1905,
+      "name": "XrXirFunctionLayout.parameters.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirFunctionLayout,parameters)"
+    },
+    {
+      "id": 1906,
+      "name": "XrXirFunctionLayout.result.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirFunctionLayout,result)"
+    },
+    {
+      "id": 1907,
+      "name": "XrXirFunctionLayout.owned_count.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirFunctionLayout,owned_count)"
+    },
+    {
+      "id": 1908,
+      "name": "XrXirFunctionLayout.owned_offsets.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirFunctionLayout,owned_offsets)"
+    },
+    {
+      "id": 1909,
+      "name": "XrXirFunctionLayout.outgoing_count.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirFunctionLayout,outgoing_count)"
+    },
+    {
+      "id": 1910,
+      "name": "XrXirFunctionLayout.path_count.offset",
+      "value": 52,
+      "expression": "offsetof(XrXirFunctionLayout,path_count)"
+    },
+    {
+      "id": 2000,
+      "name": "XrXirOutputGroup.size",
+      "value": 24,
+      "expression": "sizeof(XrXirOutputGroup)"
+    },
+    {
+      "id": 2001,
+      "name": "XrXirOutputGroup.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirOutputGroup)"
+    },
+    {
+      "id": 2002,
+      "name": "XrXirOutputGroup.stream.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirOutputGroup,stream)"
+    },
+    {
+      "id": 2003,
+      "name": "XrXirOutputGroup.values.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirOutputGroup,values)"
+    },
+    {
+      "id": 2004,
+      "name": "XrXirOutputGroup.count.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirOutputGroup,count)"
+    },
+    {
+      "id": 2005,
+      "name": "XrXirOutputGroup.line.offset",
+      "value": 20,
+      "expression": "offsetof(XrXirOutputGroup,line)"
+    },
+    {
+      "id": 2100,
+      "name": "XrXirHostExecutionRequest.size",
+      "value": 40,
+      "expression": "sizeof(XrXirHostExecutionRequest)"
+    },
+    {
+      "id": 2101,
+      "name": "XrXirHostExecutionRequest.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirHostExecutionRequest)"
+    },
+    {
+      "id": 2102,
+      "name": "XrXirHostExecutionRequest.program.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirHostExecutionRequest,program)"
+    },
+    {
+      "id": 2103,
+      "name": "XrXirHostExecutionRequest.config.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirHostExecutionRequest,config)"
+    },
+    {
+      "id": 2104,
+      "name": "XrXirHostExecutionRequest.entry.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirHostExecutionRequest,entry)"
+    },
+    {
+      "id": 2105,
+      "name": "XrXirHostExecutionRequest.arguments.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirHostExecutionRequest,arguments)"
+    },
+    {
+      "id": 2106,
+      "name": "XrXirHostExecutionRequest.argument_count.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirHostExecutionRequest,argument_count)"
+    },
+    {
+      "id": 2200,
+      "name": "XrErrorCoreMessageView.size",
+      "value": 32,
+      "expression": "sizeof(XrErrorCoreMessageView)"
+    },
+    {
+      "id": 2201,
+      "name": "XrErrorCoreMessageView.align",
+      "value": 8,
+      "expression": "_Alignof(XrErrorCoreMessageView)"
+    },
+    {
+      "id": 2202,
+      "name": "XrErrorCoreMessageView.code.offset",
+      "value": 0,
+      "expression": "offsetof(XrErrorCoreMessageView,code)"
+    },
+    {
+      "id": 2203,
+      "name": "XrErrorCoreMessageView.message.offset",
+      "value": 8,
+      "expression": "offsetof(XrErrorCoreMessageView,message)"
+    },
+    {
+      "id": 2204,
+      "name": "XrErrorCoreMessageView.message_len.offset",
+      "value": 16,
+      "expression": "offsetof(XrErrorCoreMessageView,message_len)"
+    },
+    {
+      "id": 2205,
+      "name": "XrErrorCoreMessageView.has_code.offset",
+      "value": 24,
+      "expression": "offsetof(XrErrorCoreMessageView,has_code)"
+    },
+    {
+      "id": 2300,
+      "name": "XrXirCompileLimits.size",
+      "value": 24,
+      "expression": "sizeof(XrXirCompileLimits)"
+    },
+    {
+      "id": 2301,
+      "name": "XrXirCompileLimits.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirCompileLimits)"
+    },
+    {
+      "id": 2302,
+      "name": "XrXirCompileLimits.functions.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCompileLimits,functions)"
+    },
+    {
+      "id": 2303,
+      "name": "XrXirCompileLimits.parameters.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirCompileLimits,parameters)"
+    },
+    {
+      "id": 2304,
+      "name": "XrXirCompileLimits.blocks.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirCompileLimits,blocks)"
+    },
+    {
+      "id": 2305,
+      "name": "XrXirCompileLimits.instructions.offset",
+      "value": 12,
+      "expression": "offsetof(XrXirCompileLimits,instructions)"
+    },
+    {
+      "id": 2306,
+      "name": "XrXirCompileLimits.frame_bytes.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirCompileLimits,frame_bytes)"
+    },
+    {
+      "id": 2400,
+      "name": "XrXirCompileContext.size",
+      "value": 32,
+      "expression": "sizeof(XrXirCompileContext)"
+    },
+    {
+      "id": 2401,
+      "name": "XrXirCompileContext.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirCompileContext)"
+    },
+    {
+      "id": 2402,
+      "name": "XrXirCompileContext.resources.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCompileContext,resources)"
+    },
+    {
+      "id": 2403,
+      "name": "XrXirCompileContext.limits.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirCompileContext,limits)"
+    },
+    {
+      "id": 2500,
+      "name": "XrCompileResourceLimits.size",
+      "value": 24,
+      "expression": "sizeof(XrCompileResourceLimits)"
+    },
+    {
+      "id": 2501,
+      "name": "XrCompileResourceLimits.align",
+      "value": 8,
+      "expression": "_Alignof(XrCompileResourceLimits)"
+    },
+    {
+      "id": 2502,
+      "name": "XrCompileResourceLimits.allocated_bytes.offset",
+      "value": 0,
+      "expression": "offsetof(XrCompileResourceLimits,allocated_bytes)"
+    },
+    {
+      "id": 2503,
+      "name": "XrCompileResourceLimits.live_bytes.offset",
+      "value": 8,
+      "expression": "offsetof(XrCompileResourceLimits,live_bytes)"
+    },
+    {
+      "id": 2504,
+      "name": "XrCompileResourceLimits.work.offset",
+      "value": 16,
+      "expression": "offsetof(XrCompileResourceLimits,work)"
+    },
+    {
+      "id": 2600,
+      "name": "XrCompileResourceStats.size",
+      "value": 40,
+      "expression": "sizeof(XrCompileResourceStats)"
+    },
+    {
+      "id": 2601,
+      "name": "XrCompileResourceStats.align",
+      "value": 8,
+      "expression": "_Alignof(XrCompileResourceStats)"
+    },
+    {
+      "id": 2602,
+      "name": "XrCompileResourceStats.allocation_count.offset",
+      "value": 0,
+      "expression": "offsetof(XrCompileResourceStats,allocation_count)"
+    },
+    {
+      "id": 2603,
+      "name": "XrCompileResourceStats.allocated_bytes.offset",
+      "value": 8,
+      "expression": "offsetof(XrCompileResourceStats,allocated_bytes)"
+    },
+    {
+      "id": 2604,
+      "name": "XrCompileResourceStats.live_bytes.offset",
+      "value": 16,
+      "expression": "offsetof(XrCompileResourceStats,live_bytes)"
+    },
+    {
+      "id": 2605,
+      "name": "XrCompileResourceStats.peak_bytes.offset",
+      "value": 24,
+      "expression": "offsetof(XrCompileResourceStats,peak_bytes)"
+    },
+    {
+      "id": 2606,
+      "name": "XrCompileResourceStats.work.offset",
+      "value": 32,
+      "expression": "offsetof(XrCompileResourceStats,work)"
+    },
+    {
+      "id": 3300,
+      "name": "XrXirLiteral.size",
+      "value": 16,
+      "expression": "sizeof(XrXirLiteral)"
+    },
+    {
+      "id": 3301,
+      "name": "XrXirLiteral.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirLiteral)"
+    },
+    {
+      "id": 3302,
+      "name": "XrXirLiteral.bytes.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirLiteral,bytes)"
+    },
+    {
+      "id": 3303,
+      "name": "XrXirLiteral.length.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirLiteral,length)"
+    },
+    {
+      "id": 2900,
+      "name": "XrXirNominalNativeRecord.size",
+      "value": 36,
+      "expression": "sizeof(XrXirNominalNativeRecord)"
+    },
+    {
+      "id": 2901,
+      "name": "XrXirNominalNativeRecord.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirNominalNativeRecord)"
+    },
+    {
+      "id": 2902,
+      "name": "XrXirNominalNativeRecord.native_id.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalNativeRecord,native_id)"
+    },
+    {
+      "id": 2903,
+      "name": "XrXirNominalNativeRecord.source_fingerprint.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirNominalNativeRecord,source_fingerprint)"
+    },
+    {
+      "id": 3000,
+      "name": "XrXirNominalDeclaration.size",
+      "value": 128,
+      "expression": "sizeof(XrXirNominalDeclaration)"
+    },
+    {
+      "id": 3001,
+      "name": "XrXirNominalDeclaration.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirNominalDeclaration)"
+    },
+    {
+      "id": 3002,
+      "name": "XrXirNominalDeclaration.module.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalDeclaration,module)"
+    },
+    {
+      "id": 3003,
+      "name": "XrXirNominalDeclaration.name.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirNominalDeclaration,name)"
+    },
+    {
+      "id": 3004,
+      "name": "XrXirNominalDeclaration.exported.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirNominalDeclaration,exported)"
+    },
+    {
+      "id": 3005,
+      "name": "XrXirNominalDeclaration.constraints.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirNominalDeclaration,constraints)"
+    },
+    {
+      "id": 3006,
+      "name": "XrXirNominalDeclaration.parameter_count.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirNominalDeclaration,parameter_count)"
+    },
+    {
+      "id": 3007,
+      "name": "XrXirNominalDeclaration.fields.offset",
+      "value": 56,
+      "expression": "offsetof(XrXirNominalDeclaration,fields)"
+    },
+    {
+      "id": 3008,
+      "name": "XrXirNominalDeclaration.field_count.offset",
+      "value": 64,
+      "expression": "offsetof(XrXirNominalDeclaration,field_count)"
+    },
+    {
+      "id": 3009,
+      "name": "XrXirNominalDeclaration.kind.offset",
+      "value": 68,
+      "expression": "offsetof(XrXirNominalDeclaration,kind)"
+    },
+    {
+      "id": 3010,
+      "name": "XrXirNominalDeclaration.variants.offset",
+      "value": 72,
+      "expression": "offsetof(XrXirNominalDeclaration,variants)"
+    },
+    {
+      "id": 3011,
+      "name": "XrXirNominalDeclaration.variant_count.offset",
+      "value": 80,
+      "expression": "offsetof(XrXirNominalDeclaration,variant_count)"
+    },
+    {
+      "id": 3012,
+      "name": "XrXirNominalDeclaration.flags.offset",
+      "value": 84,
+      "expression": "offsetof(XrXirNominalDeclaration,flags)"
+    },
+    {
+      "id": 3013,
+      "name": "XrXirNominalDeclaration.native.offset",
+      "value": 88,
+      "expression": "offsetof(XrXirNominalDeclaration,native)"
+    },
+    {
+      "id": 3100,
+      "name": "XrXirNominalIdentity.size",
+      "value": 112,
+      "expression": "sizeof(XrXirNominalIdentity)"
+    },
+    {
+      "id": 3101,
+      "name": "XrXirNominalIdentity.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirNominalIdentity)"
+    },
+    {
+      "id": 3102,
+      "name": "XrXirNominalIdentity.module.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalIdentity,module)"
+    },
+    {
+      "id": 3103,
+      "name": "XrXirNominalIdentity.name.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirNominalIdentity,name)"
+    },
+    {
+      "id": 3104,
+      "name": "XrXirNominalIdentity.exported.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirNominalIdentity,exported)"
+    },
+    {
+      "id": 3105,
+      "name": "XrXirNominalIdentity.arity.offset",
+      "value": 36,
+      "expression": "offsetof(XrXirNominalIdentity,arity)"
+    },
+    {
+      "id": 3106,
+      "name": "XrXirNominalIdentity.fields.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirNominalIdentity,fields)"
+    },
+    {
+      "id": 3107,
+      "name": "XrXirNominalIdentity.field_count.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirNominalIdentity,field_count)"
+    },
+    {
+      "id": 3108,
+      "name": "XrXirNominalIdentity.kind.offset",
+      "value": 52,
+      "expression": "offsetof(XrXirNominalIdentity,kind)"
+    },
+    {
+      "id": 3109,
+      "name": "XrXirNominalIdentity.variants.offset",
+      "value": 56,
+      "expression": "offsetof(XrXirNominalIdentity,variants)"
+    },
+    {
+      "id": 3110,
+      "name": "XrXirNominalIdentity.variant_count.offset",
+      "value": 64,
+      "expression": "offsetof(XrXirNominalIdentity,variant_count)"
+    },
+    {
+      "id": 3111,
+      "name": "XrXirNominalIdentity.flags.offset",
+      "value": 68,
+      "expression": "offsetof(XrXirNominalIdentity,flags)"
+    },
+    {
+      "id": 3112,
+      "name": "XrXirNominalIdentity.native.offset",
+      "value": 72,
+      "expression": "offsetof(XrXirNominalIdentity,native)"
+    },
+    {
+      "id": 3400,
+      "name": "XrXirNominalTable.size",
+      "value": 24,
+      "expression": "sizeof(XrXirNominalTable)"
+    },
+    {
+      "id": 3401,
+      "name": "XrXirNominalTable.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirNominalTable)"
+    },
+    {
+      "id": 3402,
+      "name": "XrXirNominalTable.declarations.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalTable,declarations)"
+    },
+    {
+      "id": 3403,
+      "name": "XrXirNominalTable.count.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirNominalTable,count)"
+    },
+    {
+      "id": 3404,
+      "name": "XrXirNominalTable.identities.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirNominalTable,identities)"
+    },
+    {
+      "id": 3500,
+      "name": "XrXirTypes.size",
+      "value": 32,
+      "expression": "sizeof(XrXirTypes)"
+    },
+    {
+      "id": 3501,
+      "name": "XrXirTypes.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirTypes)"
+    },
+    {
+      "id": 3502,
+      "name": "XrXirTypes.nodes.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirTypes,nodes)"
+    },
+    {
+      "id": 3503,
+      "name": "XrXirTypes.count.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirTypes,count)"
+    },
+    {
+      "id": 3504,
+      "name": "XrXirTypes.nominals.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirTypes,nominals)"
+    },
+    {
+      "id": 3505,
+      "name": "XrXirTypes.interfaces.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirTypes,interfaces)"
+    },
+    {
+      "id": 3600,
+      "name": "XrXirNominalType.size",
+      "value": 40,
+      "expression": "sizeof(XrXirNominalType)"
+    },
+    {
+      "id": 3601,
+      "name": "XrXirNominalType.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirNominalType)"
+    },
+    {
+      "id": 3602,
+      "name": "XrXirNominalType.declaration.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalType,declaration)"
+    },
+    {
+      "id": 3603,
+      "name": "XrXirNominalType.arguments.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirNominalType,arguments)"
+    },
+    {
+      "id": 3604,
+      "name": "XrXirNominalType.argument_count.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirNominalType,argument_count)"
+    },
+    {
+      "id": 3605,
+      "name": "XrXirNominalType.fields.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirNominalType,fields)"
+    },
+    {
+      "id": 3606,
+      "name": "XrXirNominalType.field_count.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirNominalType,field_count)"
+    },
+    {
+      "id": 3700,
+      "name": "XrXirTypeNode.size",
+      "value": 72,
+      "expression": "sizeof(XrXirTypeNode)"
+    },
+    {
+      "id": 3701,
+      "name": "XrXirTypeNode.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirTypeNode)"
+    },
+    {
+      "id": 3702,
+      "name": "XrXirTypeNode.kind.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirTypeNode,kind)"
+    },
+    {
+      "id": 3703,
+      "name": "XrXirTypeNode.element.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirTypeNode,element)"
+    },
+    {
+      "id": 3704,
+      "name": "XrXirTypeNode.parameters.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirTypeNode,parameters)"
+    },
+    {
+      "id": 3705,
+      "name": "XrXirTypeNode.parameter_count.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirTypeNode,parameter_count)"
+    },
+    {
+      "id": 3706,
+      "name": "XrXirTypeNode.result.offset",
+      "value": 20,
+      "expression": "offsetof(XrXirTypeNode,result)"
+    },
+    {
+      "id": 3707,
+      "name": "XrXirTypeNode.flags.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirTypeNode,flags)"
+    },
+    {
+      "id": 3708,
+      "name": "XrXirTypeNode.parameter_span.offset",
+      "value": 28,
+      "expression": "offsetof(XrXirTypeNode,parameter_span)"
+    },
+    {
+      "id": 3709,
+      "name": "XrXirTypeNode.nominal.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirTypeNode,nominal)"
+    },
+    {
+      "id": 3800,
+      "name": "XrXirCallableParameter.size",
+      "value": 8,
+      "expression": "sizeof(XrXirCallableParameter)"
+    },
+    {
+      "id": 3801,
+      "name": "XrXirCallableParameter.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirCallableParameter)"
+    },
+    {
+      "id": 3802,
+      "name": "XrXirCallableParameter.type.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirCallableParameter,type)"
+    },
+    {
+      "id": 3803,
+      "name": "XrXirCallableParameter.mode.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirCallableParameter,mode)"
+    },
+    {
+      "id": 3900,
+      "name": "XrXirNominalField.size",
+      "value": 24,
+      "expression": "sizeof(XrXirNominalField)"
+    },
+    {
+      "id": 3901,
+      "name": "XrXirNominalField.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirNominalField)"
+    },
+    {
+      "id": 3902,
+      "name": "XrXirNominalField.name.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalField,name)"
+    },
+    {
+      "id": 3903,
+      "name": "XrXirNominalField.type.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirNominalField,type)"
+    },
+    {
+      "id": 3904,
+      "name": "XrXirNominalField.flags.offset",
+      "value": 20,
+      "expression": "offsetof(XrXirNominalField,flags)"
+    },
+    {
+      "id": 4000,
+      "name": "XrXirNominalFieldIdentity.size",
+      "value": 24,
+      "expression": "sizeof(XrXirNominalFieldIdentity)"
+    },
+    {
+      "id": 4001,
+      "name": "XrXirNominalFieldIdentity.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirNominalFieldIdentity)"
+    },
+    {
+      "id": 4002,
+      "name": "XrXirNominalFieldIdentity.name.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalFieldIdentity,name)"
+    },
+    {
+      "id": 4003,
+      "name": "XrXirNominalFieldIdentity.flags.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirNominalFieldIdentity,flags)"
+    },
+    {
+      "id": 4100,
+      "name": "XrXirNominalVariant.size",
+      "value": 24,
+      "expression": "sizeof(XrXirNominalVariant)"
+    },
+    {
+      "id": 4101,
+      "name": "XrXirNominalVariant.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirNominalVariant)"
+    },
+    {
+      "id": 4102,
+      "name": "XrXirNominalVariant.name.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirNominalVariant,name)"
+    },
+    {
+      "id": 4103,
+      "name": "XrXirNominalVariant.field_begin.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirNominalVariant,field_begin)"
+    },
+    {
+      "id": 4104,
+      "name": "XrXirNominalVariant.field_count.offset",
+      "value": 20,
+      "expression": "offsetof(XrXirNominalVariant,field_count)"
+    },
+    {
+      "id": 4200,
+      "name": "XrXirAtomicRequest.size",
+      "value": 40,
+      "expression": "sizeof(XrXirAtomicRequest)"
+    },
+    {
+      "id": 4201,
+      "name": "XrXirAtomicRequest.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirAtomicRequest)"
+    },
+    {
+      "id": 4202,
+      "name": "XrXirAtomicRequest.receiver.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirAtomicRequest,receiver)"
+    },
+    {
+      "id": 4203,
+      "name": "XrXirAtomicRequest.operands.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirAtomicRequest,operands)"
+    },
+    {
+      "id": 4204,
+      "name": "XrXirAtomicRequest.ordering.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirAtomicRequest,ordering)"
+    },
+    {
+      "id": 4205,
+      "name": "XrXirAtomicRequest.operand_count.offset",
+      "value": 24,
+      "expression": "offsetof(XrXirAtomicRequest,operand_count)"
+    },
+    {
+      "id": 4206,
+      "name": "XrXirAtomicRequest.operation.offset",
+      "value": 28,
+      "expression": "offsetof(XrXirAtomicRequest,operation)"
+    },
+    {
+      "id": 4207,
+      "name": "XrXirAtomicRequest.result_type.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirAtomicRequest,result_type)"
+    },
+    {
+      "id": 4300,
+      "name": "XrXirAtomicProgress.size",
+      "value": 64,
+      "expression": "sizeof(XrXirAtomicProgress)"
+    },
+    {
+      "id": 4301,
+      "name": "XrXirAtomicProgress.align",
+      "value": 8,
+      "expression": "_Alignof(XrXirAtomicProgress)"
+    },
+    {
+      "id": 4302,
+      "name": "XrXirAtomicProgress.receiver.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirAtomicProgress,receiver)"
+    },
+    {
+      "id": 4303,
+      "name": "XrXirAtomicProgress.operands.offset",
+      "value": 16,
+      "expression": "offsetof(XrXirAtomicProgress,operands)"
+    },
+    {
+      "id": 4304,
+      "name": "XrXirAtomicProgress.observed.offset",
+      "value": 32,
+      "expression": "offsetof(XrXirAtomicProgress,observed)"
+    },
+    {
+      "id": 4305,
+      "name": "XrXirAtomicProgress.result_type.offset",
+      "value": 40,
+      "expression": "offsetof(XrXirAtomicProgress,result_type)"
+    },
+    {
+      "id": 4306,
+      "name": "XrXirAtomicProgress.operation.offset",
+      "value": 44,
+      "expression": "offsetof(XrXirAtomicProgress,operation)"
+    },
+    {
+      "id": 4307,
+      "name": "XrXirAtomicProgress.ordering.offset",
+      "value": 48,
+      "expression": "offsetof(XrXirAtomicProgress,ordering)"
+    },
+    {
+      "id": 4308,
+      "name": "XrXirAtomicProgress.phase.offset",
+      "value": 52,
+      "expression": "offsetof(XrXirAtomicProgress,phase)"
+    },
+    {
+      "id": 4309,
+      "name": "XrXirAtomicProgress.observed_ready.offset",
+      "value": 56,
+      "expression": "offsetof(XrXirAtomicProgress,observed_ready)"
+    },
+    {
+      "id": 4400,
+      "name": "XrXirAtomicOutcome.size",
+      "value": 12,
+      "expression": "sizeof(XrXirAtomicOutcome)"
+    },
+    {
+      "id": 4401,
+      "name": "XrXirAtomicOutcome.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirAtomicOutcome)"
+    },
+    {
+      "id": 4402,
+      "name": "XrXirAtomicOutcome.status.offset",
+      "value": 0,
+      "expression": "offsetof(XrXirAtomicOutcome,status)"
+    },
+    {
+      "id": 4403,
+      "name": "XrXirAtomicOutcome.permission.offset",
+      "value": 4,
+      "expression": "offsetof(XrXirAtomicOutcome,permission)"
+    },
+    {
+      "id": 4404,
+      "name": "XrXirAtomicOutcome.continuing.offset",
+      "value": 8,
+      "expression": "offsetof(XrXirAtomicOutcome,continuing)"
+    },
+    {
+      "id": 45,
+      "name": "AtomicOperation.size",
+      "value": 4,
+      "expression": "sizeof(XrXirAtomicOperation)"
+    },
+    {
+      "id": 46,
+      "name": "AtomicOperation.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirAtomicOperation)"
+    },
+    {
+      "id": 47,
+      "name": "RunStatus.size",
+      "value": 4,
+      "expression": "sizeof(XrXirRunStatus)"
+    },
+    {
+      "id": 48,
+      "name": "RunStatus.align",
+      "value": 4,
+      "expression": "_Alignof(XrXirRunStatus)"
+    },
+    {
+      "id": 2904,
+      "name": "XrXirNominalNativeRecord.source_fingerprint.bytes",
+      "value": 32,
+      "expression": "sizeof(((XrXirNominalNativeRecord *)0)->source_fingerprint)"
+    },
+    {
+      "id": 4310,
+      "name": "XrXirAtomicProgress.operands.bytes",
+      "value": 16,
+      "expression": "sizeof(((XrXirAtomicProgress *)0)->operands)"
+    },
+    {
+      "id": 3200,
+      "name": "XrXirNominalDeclaration.array2.bytes",
+      "value": 256,
+      "expression": "sizeof(XrXirNominalDeclaration[2])"
+    },
+    {
+      "id": 3201,
+      "name": "XrXirNominalIdentity.array2.bytes",
+      "value": 224,
+      "expression": "sizeof(XrXirNominalIdentity[2])"
+    }
+  ]
+}

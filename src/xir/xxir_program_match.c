@@ -13,6 +13,8 @@
 #include "xxir_checked.h"
 #include "xxir_internal.h"
 #include "xxir_compile_memory.h"
+#include "xxir_operand_roles.h"
+#include "xxir_constraint_proof.h"
 #include "../base/xsha256.h"
 
 #define MATCH(a, b) do { \
@@ -172,10 +174,45 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
 #undef MATCH
 #undef TRY
 
+static XrXirStatus program_go_authority(const XrXirCompileContext *context,
+    const XrXirArtifact *lowered, XrXirStatus **output) {
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
+    XrXirEffects *effects = NULL;
+    XrXirStatus status = xr_xir_compile_effects_infer_verified(context, module, &effects);
+    XrXirStatus *authority = NULL;
+    if (status == XR_XIR_OK) authority = xir_compile_calloc(context, (uint64_t)module->function_count + module->declarations->slot_count, sizeof(*authority), &status);
+    for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
+        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
+        XrXirStatus permission = xr_xir_function_has_go_role(module, f) ? xr_xir_effects_go_safe(effects, f) : XR_XIR_BAD_TYPE;
+        if (permission == XR_XIR_OK) permission = xr_xir_effects_task_errors(effects, f);
+        XrXirProofContext proof = {module, {XR_XIR_CONTEXT_FUNCTION, f, 0}};
+        const XrXirFunction *function = &module->functions[f];
+        if (permission == XR_XIR_OK)
+            permission = xr_xir_compile_type_markers_prove(context, &proof, function->result, XR_XIR_CONSTRAINT_SENDABLE);
+        for (uint32_t p = 0; p < function->parameter_count && permission == XR_XIR_OK; ++p)
+            permission = xr_xir_compile_type_markers_prove(context, &proof, function->parameters[p], XR_XIR_CONSTRAINT_SENDABLE);
+        if (permission == XR_XIR_BUDGET || permission == XR_XIR_OUT_OF_MEMORY) status = permission;
+        else authority[f] = permission;
+    }
+    for (uint32_t slot = 0; slot < module->declarations->slot_count && status == XR_XIR_OK; ++slot) {
+        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
+        const XrXirSlot *entry = &module->declarations->slots[slot];
+        XrXirProofContext proof = {module, {XR_XIR_CONTEXT_CLOSED, 0, 0}};
+        XrXirStatus permission = entry->mutable ? XR_XIR_BAD_TYPE :
+            xr_xir_compile_type_markers_prove(context, &proof, entry->type, XR_XIR_CONSTRAINT_SENDABLE);
+        if (permission == XR_XIR_BUDGET || permission == XR_XIR_OUT_OF_MEMORY) status = permission;
+        else authority[(uint64_t)module->function_count + slot] = permission;
+    }
+    xr_xir_compile_effects_free(effects);
+    if (status != XR_XIR_OK) { xr_compile_resources_free(authority); return status; }
+    *output = authority;
+    return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, const XrXirProgramProof *proof) {
+    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirStatus **go_authority) {
     if (!xir_compile_context_valid(context) || !spec || !proof || !proof->bytes ||
-        proof->length < 64 || !proof->identity || !proof->layouts) return XR_XIR_BAD_STRUCTURE;
+        proof->length < 64 || !proof->identity || !proof->layouts || !go_authority || *go_authority)
+        return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context, proof->length)) return XR_XIR_BUDGET;
     uint8_t digest[32];
     xr_sha256(proof->bytes, proof->length, digest);
@@ -186,6 +223,7 @@ XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContex
         &spec->target, &lowered, NULL);
     if (status == XR_XIR_OK)
         status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered);
+    if (status == XR_XIR_OK) status = program_go_authority(context, lowered, go_authority);
     xr_xir_compile_artifact_free(lowered);
     return status;
 }

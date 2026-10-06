@@ -4256,3 +4256,19 @@ include(xir/source_shadow_function.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/array_entries.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/program/source_product_consumers.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/go_source.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/task_executor.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/task_product.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/task_cancel_prefix.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/go_pending_normal.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/go_source_native_resources.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/vm19_fault_runtime.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/executor_first_failure.cmake")

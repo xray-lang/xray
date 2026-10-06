@@ -1,0 +1,3 @@
+class Box { value: i64 constructor(value: i64) { this.value = value } }
+fn worker() -> i64 { var box = Box(42); box.value = box.value + 1; return box.value }
+fn main() -> i64 { return await go worker() }

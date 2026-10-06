@@ -1,0 +1,3 @@
+fn worker() -> i64 { return 42 }
+fn receive(task: Task<i64>) -> i64 { return await task }
+export fn main() -> i64 { const task = go worker(); return receive(task) + await task }

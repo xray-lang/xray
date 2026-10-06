@@ -11,7 +11,8 @@ static void emit_cleanup_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op = &function->instructions[index];
     if (op->op == XR_XIR_CLEANUP_REGISTER) {
         emit_edge(buffer, function, layout, index, op->targets[0], true);
-        append(buffer, "        state->frontier = %uu;\n", index + 1);
+        append(buffer, "        if (xr_xir_call_cleanup_frontier(view, %uu) != XR_XIR_CALL_READY) goto invalid;\n"
+            "        state->frontier = %uu;\n", index + 1, index + 1);
     } else if (function->blocks[emit_block(buffer, function, index)].frontier == (uint32_t)op->immediate) {
         emit_edge(buffer, function, layout, index, op->targets[0], true);
     } else {
@@ -39,6 +40,7 @@ static void emit_cleanup_entry(CBuffer *buffer, const XrXirFunction *function,
     append(buffer, "    if (view->phase == XR_XIR_CALL_EXIT) {\n"
         "        if (state->cleanup_waiting) {\n"
         "            if (view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
+        "            if (xr_xir_call_cleanup_frontier(view, state->cleanup_parent) != XR_XIR_CALL_READY) goto invalid;\n"
         "            state->frontier = state->cleanup_parent; state->cleanup_waiting = false;\n        }\n"
         "        if (state->frontier == (view->scope_exit ? state->exit_target : 0u))\n"
         "            return (XrXirAction){XR_XIR_ACTION_EXIT_DONE, 0, NULL, 0, {0}, {0}, 0};\n"

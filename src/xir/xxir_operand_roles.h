@@ -59,7 +59,16 @@ static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal)
 }
 
 static inline bool xr_xir_op_references_function(XrXirOp op) {
-    return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_FUNCTION_REF || op == XR_XIR_CLEANUP_REGISTER;
+    return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_FUNCTION_REF ||
+        op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_GO;
+}
+/* Prior module/declaration verification is required; roles do not grant access. */
+static inline bool xr_xir_function_has_go_role(const XrXirModule *module, uint32_t function) {
+    const XrXirDeclarations *d = module->declarations;
+    if (!d || function >= module->function_count) return false;
+    const XrXirFunctionIdentity *identity = &d->functions[function];
+    return !identity->cleanup_owner && !identity->test_role &&
+        function != d->modules[identity->module].initializer;
 }
 /* The shared cell is reached through an ordinary owned value, never a place. */
 static inline bool xr_xir_op_is_atomic(XrXirOp op) {

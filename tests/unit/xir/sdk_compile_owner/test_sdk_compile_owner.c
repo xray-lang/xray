@@ -36,7 +36,7 @@ static char *input(const char *path,size_t *length) {
 static XrXirRuntimeSdk *admit(const XrXirRuntimeSdkRequest *request) {
     XrXirRuntimeSdk *sdk=NULL;CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK);
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
-    CHECK(facts->value_abi==21 && facts->call_abi==26 && facts->program_abi==29 && facts->crt==2);
+    CHECK(facts->value_abi==22 && facts->call_abi==28 && facts->program_abi==29 && facts->crt==2);
     const char *resource_library=NULL;
     CHECK(xr_xir_runtime_sdk_file(sdk,"lib/xray_compile_resources.lib",&resource_library)==XR_XIR_SDK_OK && resource_library);
     return sdk;
@@ -68,7 +68,7 @@ static void old_versions(const XrXirRuntimeSdkRequest *original) {
     for (unsigned version=0;version<3;++version) {
         XrXirProgramSpec spec=*old_program_data();
         if (version>0) spec.abi_version=29;
-        if (version>1) spec.target.abi_version=21;
+        if (version>1) spec.target.abi_version=22;
         XrXirProgram *program=NULL;XrCompileResourceStats before=sdk_stats(request.resources);
         SdkAbiPhysicalSnapshot physical=abi_physical();
         CHECK(xr_xir_compile_program_seal(&compile,&spec,&program)==XR_XIR_BAD_LAYOUT && !program);
@@ -99,7 +99,7 @@ static void abi_code_release(void *owner) {
 static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdk *sdk=admit(&request);XrXirCompileContext compile=context(request.resources);
-    CHECK(compile_owner_program.abi_version==29 && compile_owner_program.target.abi_version==21);
+    CHECK(compile_owner_program.abi_version==29 && compile_owner_program.target.abi_version==22);
     CHECK(compile_owner_program.entry_count==3 && compile_owner_program.entries);
     CHECK(!compile_owner_program.code.owner && !compile_owner_program.code.release);
     CHECK(compile_owner_program.entries[1].result==XR_XIR_I64 && !compile_owner_program.entries[1].parameter_count);
@@ -108,7 +108,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     CHECK(xr_compile_resources_alloc(request.resources,(size_t)copy_bytes,&memory)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_work(request.resources,copy_bytes)==XR_COMPILE_RESOURCE_OK);
     memcpy(memory,compile_owner_program.entries,(size_t)copy_bytes);XrXirCallEntry *entries=memory;
-    for(uint32_t i=0;i<compile_owner_program.entry_count;++i)CHECK(entries[i].abi_version==26);
+    for(uint32_t i=0;i<compile_owner_program.entry_count;++i)CHECK(entries[i].abi_version==28);
     sdk_abi_observation=(SdkAbiObservation){compile_owner_program.entries+1,0,0,0};
     entries[1].resume=abi_resume;entries[1].release=abi_release;
     XrXirProgramSpec spec=compile_owner_program;spec.entries=entries;
@@ -121,7 +121,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     abi_refusal_stats(request.resources,before,0,physical);
     CHECK(!sdk_abi_observation.resumes && !sdk_abi_observation.releases && !sdk_abi_observation.leases);
     CHECK(!old_callback_count() && !old_release_count());
-    for (uint32_t bad_abi=24;bad_abi<=25;++bad_abi) {
+    for (uint32_t bad_abi=24;bad_abi<=27;++bad_abi) {
     /* Only entry zero's Call ABI differs from the complete current positive control. */
     entries[0].abi_version=bad_abi;
     before=sdk_stats(request.resources);
@@ -131,7 +131,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     CHECK(!sdk_abi_observation.resumes && !sdk_abi_observation.releases && !sdk_abi_observation.leases);
     CHECK(!old_callback_count() && !old_release_count());
     XrXirCallConfig standalone;CHECK(xr_xir_call_config_init(&standalone,sizeof(standalone))==XR_XIR_CALL_READY);
-    CHECK(standalone.abi_version==26 && standalone.struct_size==sizeof(standalone));
+    CHECK(standalone.abi_version==28 && standalone.struct_size==sizeof(standalone));
     XrXirCallAccounting accounting={0};standalone.accounting=&accounting;standalone.entries=entries;
     standalone.entry_count=spec.entry_count;standalone.byte_limit=1048576;standalone.poll_limit=1000000;standalone.depth_limit=64;
     XrXirCall *call=(XrXirCall *)(uintptr_t)1;before=sdk_stats(request.resources);
@@ -143,7 +143,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     CHECK(!sdk_abi_observation.resumes && !sdk_abi_observation.releases && !sdk_abi_observation.leases);
 
     }
-    entries[0].abi_version=26;
+    entries[0].abi_version=28;
     CHECK(xr_xir_compile_program_seal(&compile,&spec,&program)==XR_XIR_OK && program);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirHostExecutionRequest execution={program,&config,1,NULL,0};XrXirCallResult result={0};
@@ -162,7 +162,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     xr_compile_resources_free(entries);sdk_abi_observation=(SdkAbiObservation){0};
     xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(request.resources);
     CHECK(!runtime_live && !runtime_bytes && handles()==initial);
-    puts("SDK current Program29 rejects Value20, entries Call24/25; standalone Call26 rejects Call24/25; real42/lease controls PASS");
+    puts("SDK current Program29 rejects Value20, entries Call24/25/26/27; standalone Call28 rejects Call24/25/26/27; real42/lease controls PASS");
 }
 static void positive(const XrXirRuntimeSdkRequest *original) {
     DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);

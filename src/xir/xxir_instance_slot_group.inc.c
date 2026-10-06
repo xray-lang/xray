@@ -9,7 +9,7 @@
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_group_init(XrXirCallView *view,uint32_t first,uint32_t count,
     const XrXirValue *compact,uint32_t payload_count) {
     XrXirInstance *instance=view_instance(view);XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    if(!instance || !admission || !admission->domain || !count || (payload_count && !compact))return XR_XIR_CALL_BAD_STATE;
+    if(!instance || view_is_child(instance,view) || !admission || !admission->domain || !count || (payload_count && !compact))return XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d=instance->program->declarations;
     if(first>d->slot_count || count>d->slot_count-first || instance->publication_count>d->slot_count ||
        count>d->slot_count-instance->publication_count)
