@@ -42,7 +42,7 @@ static const uint8_t writer_budget_golden[] = {
 _Static_assert(sizeof(writer_budget_golden) == 224, "Complete independently framed Checked packet");
 
 typedef enum WriterMode { WRITER_EMPTY_NORMAL, WRITER_OCCUPIED_NORMAL,
-    WRITER_AXIS_EXACT, WRITER_AXIS_MINUS1 } WriterMode;
+    WRITER_AXIS_EXACT, WRITER_AXIS_MINUS1, WRITER_OCCUPIED_OOM } WriterMode;
 typedef enum WriterPhase { WRITER_OWNER, WRITER_CHECK, WRITER_WRITE1, WRITER_WRITE2 } WriterPhase;
 typedef struct WriterSample {
     XrCompileResourceStats ledger;
@@ -63,6 +63,8 @@ typedef struct WriterRun {
     WriterMode mode;
     WriterPhase phase;
     unsigned packet_frees;
+    size_t fault_normal_sites;
+    bool owner_called, check_called, write1_called, write2_called, fault_armed, fault_hit;
     bool owner_baseline, accounting_ok, output_preserved, prefix_ready;
     bool bytes_before, bytes_after, distinct, cleanup_ok;
 } WriterRun;
@@ -168,6 +170,7 @@ static void writer_cleanup(WriterRun *run) {
 static bool writer_create_checked(WriterRun *run) {
     WriterSample before = writer_sample(run);
     run->phase = WRITER_OWNER;
+    run->owner_called = true;
     run->owner_status = xr_compile_resources_new(&run->caps, &run->context.resources);
     run->constructor = writer_sample(run);
     run->operation = run->constructor;
@@ -179,6 +182,7 @@ static bool writer_create_checked(WriterRun *run) {
     run->context.limits = xr_xir_compile_default_limits();
     before = run->constructor;
     run->phase = WRITER_CHECK;
+    run->check_called = true;
     run->check_status = writer_checked(&run->context, &run->checked, &run->diagnostic);
     WriterSample after = writer_sample(run);
     run->operation = after;
@@ -189,6 +193,7 @@ static bool writer_create_checked(WriterRun *run) {
 static void writer_write(WriterRun *run) {
     WriterSample before = writer_sample(run);
     run->phase = WRITER_WRITE1;
+    run->write1_called = true;
     run->write1_status = xr_xir_compile_checked_write(run->checked, &run->output, &run->diagnostic);
     run->operation = writer_sample(run);
     writer_print_sample("write1", &before, &run->operation);
@@ -197,14 +202,27 @@ static void writer_write(WriterRun *run) {
         return;
     }
     run->bytes_before = writer_packet_matches(&run->output);
-    if (!run->bytes_before || run->mode != WRITER_OCCUPIED_NORMAL) return;
+    if (!run->bytes_before || (run->mode != WRITER_OCCUPIED_NORMAL && run->mode != WRITER_OCCUPIED_OOM)) return;
     memcpy(&run->prefix, &run->output, sizeof(run->prefix));
     memcpy(run->occupied, &run->output, sizeof(run->occupied));
     run->prefix_ready = true;
     run->before_second = run->operation;
+    if (run->mode == WRITER_OCCUPIED_OOM &&
+        (!run->fault_normal_sites || run->fault_normal_sites == SIZE_MAX ||
+         run->fault_normal_sites - 1 < run->before_second.sites)) return;
     run->phase = WRITER_WRITE2;
+    if (run->mode == WRITER_OCCUPIED_OOM) {
+        run->diagnostic = (XrXirDiagnostic) {XR_XIR_BAD_STRUCTURE, 17, 18, 19, XR_XIR_DIAGNOSTIC_NONE};
+        source_program_compile_fail_at = run->fault_normal_sites - 1;
+        run->fault_armed = true;
+    }
+    run->write2_called = true;
     run->write2_status = xr_xir_compile_checked_write(run->checked, &run->output, &run->diagnostic);
     run->operation = writer_sample(run);
+    if (run->mode == WRITER_OCCUPIED_OOM) {
+        run->fault_hit = source_program_compile_injected;
+        source_program_compile_fail_at = SIZE_MAX;
+    }
     writer_print_sample("write2", &run->before_second, &run->operation);
     if (run->write2_status != XR_XIR_OK) {
         run->output_preserved = !memcmp(run->occupied, &run->output, sizeof(run->occupied)) &&
@@ -216,7 +234,24 @@ static void writer_write(WriterRun *run) {
 }
 
 static bool writer_expected(const WriterRun *run) {
-    if (!run->cleanup_ok || !run->accounting_ok || source_program_compile_injected) return false;
+    if (!run->cleanup_ok || !run->accounting_ok ||
+        (source_program_compile_injected && run->mode != WRITER_OCCUPIED_OOM)) return false;
+    if (run->mode == WRITER_OCCUPIED_OOM) {
+        return run->owner_called && run->owner_status == XR_COMPILE_RESOURCE_OK && run->check_called &&
+            run->check_status == XR_XIR_OK && run->write1_called && run->write1_status == XR_XIR_OK &&
+            run->write2_called && run->phase == WRITER_WRITE2 && run->write2_status == XR_XIR_OUT_OF_MEMORY &&
+            run->fault_armed && run->fault_hit && source_program_compile_injected && run->prefix_ready &&
+            run->operation.sites == run->fault_normal_sites &&
+            run->before_second.sites <= run->fault_normal_sites - 1 &&
+            run->fault_normal_sites - 1 < run->operation.sites &&
+            run->before_second.valid && run->operation.valid &&
+            run->operation.ledger.live_bytes == run->before_second.ledger.live_bytes &&
+            run->operation.blocks == run->before_second.blocks && run->operation.bytes == run->before_second.bytes &&
+            run->output_preserved && run->bytes_before && run->bytes_after && run->packet_frees == 1 &&
+            run->diagnostic.status == XR_XIR_OUT_OF_MEMORY && run->diagnostic.function == UINT32_MAX &&
+            run->diagnostic.block == UINT32_MAX && run->diagnostic.instruction == UINT32_MAX &&
+            run->diagnostic.reason == XR_XIR_DIAGNOSTIC_NONE;
+    }
     if (run->mode == WRITER_AXIS_MINUS1) {
         bool budget = run->phase == WRITER_OWNER ? run->owner_status == XR_COMPILE_RESOURCE_BUDGET :
             run->phase == WRITER_CHECK ? run->check_status == XR_XIR_BUDGET : run->write1_status == XR_XIR_BUDGET;
@@ -284,13 +319,80 @@ static bool writer_axis_caps(const char *axis, const char *cut, WriterMode *mode
     return true;
 }
 
+
+static bool writer_fault_N(const char *text, size_t *output) {
+    size_t value = 0;
+    if (!text || !*text) return false;
+    for (const char *p = text; *p; ++p) {
+        if (*p < '0' || *p > '9') return false;
+        size_t digit = (size_t)(*p - '0');
+        if (value > (SIZE_MAX - digit) / 10) return false;
+        value = value * 10 + digit;
+    }
+    if (!value || value == SIZE_MAX) return false;
+    *output = value;
+    return true;
+}
+
+static void writer_fault_stage(const char *phase, bool called, int status) {
+    if (called) printf("writer-occupied-oom-stage phase=%s called=1 status=%d\n", phase, status);
+    else printf("writer-occupied-oom-stage phase=%s called=0 status=NOT_ENTERED\n", phase);
+}
+
+static void writer_fault_report(const WriterRun *run) {
+    writer_fault_stage("owner_new", run->owner_called, (int)run->owner_status);
+    writer_fault_stage("check", run->check_called, (int)run->check_status);
+    writer_fault_stage("write1", run->write1_called, (int)run->write1_status);
+    writer_fault_stage("write2", run->write2_called, (int)run->write2_status);
+    printf("writer-occupied-oom N=%zu site=%zu armed=%u hit=%u write2_begin=%zu write2_end=%zu unchanged=%u live_before=%llu live_after=%llu blocks_before=%zu blocks_after=%zu bytes_before=%zu bytes_after=%zu\n",
+        run->fault_normal_sites, run->fault_normal_sites - 1, (unsigned)run->fault_armed,
+        (unsigned)run->fault_hit, run->before_second.sites, run->operation.sites, (unsigned)run->output_preserved,
+        (unsigned long long)run->before_second.ledger.live_bytes, (unsigned long long)run->operation.ledger.live_bytes,
+        run->before_second.blocks, run->operation.blocks, run->before_second.bytes, run->operation.bytes);
+    if (run->check_called || run->write1_called || run->write2_called)
+        printf("writer-occupied-oom-diagnostic phase=%s status=%d function=%u block=%u instruction=%u reason=%d\n",
+            writer_phase_name(run->phase), (int)run->diagnostic.status, run->diagnostic.function,
+            run->diagnostic.block, run->diagnostic.instruction, (int)run->diagnostic.reason);
+    else puts("writer-occupied-oom-diagnostic status=NOT_ENTERED");
+}
+
+static int writer_occupied_packet_oom(size_t normal_sites, const XrCompileResourceLimits *caps) {
+    WriterRun run = {0};
+    run.mode = WRITER_OCCUPIED_OOM;
+    run.caps = *caps;
+    run.fault_normal_sites = normal_sites;
+    run.accounting_ok = true;
+    run.owner_status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    run.check_status = run.write1_status = run.write2_status = XR_XIR_BAD_STRUCTURE;
+    memset(&run.output, 0xa5, sizeof(run.output));
+    run.output.bytes = NULL;
+    run.output.length = 0;
+    memcpy(run.original, &run.output, sizeof(run.original));
+    if (source_program_compile_attempts || source_program_compile_live || source_program_compile_bytes ||
+        source_program_compile_allocations || source_program_owner_count || source_program_compile_injected ||
+        source_program_compile_fail_at != SIZE_MAX) run.accounting_ok = false;
+    else if (writer_create_checked(&run)) writer_write(&run);
+    source_program_compile_fail_at = SIZE_MAX;
+    writer_fault_report(&run);
+    writer_cleanup(&run);
+    bool passed = writer_expected(&run);
+    printf("writer-occupied-oom-final result=%s hit=%u full224_before=%u full224_after=%u packet_frees=%u cleanup=%u physical=%zu/%zu\n",
+        passed ? "PASS" : "FAIL", (unsigned)run.fault_hit, (unsigned)run.bytes_before, (unsigned)run.bytes_after,
+        run.packet_frees, (unsigned)run.cleanup_ok, source_program_compile_live, source_program_compile_bytes);
+    puts("One public occupied packet allocation only; original1932/12axes/FI6 and all other resource/fault replay remain OPEN");
+    return passed ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
     XrCompileResourceLimits caps = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
     WriterMode mode = WRITER_EMPTY_NORMAL;
+    size_t normal_sites = 0;
     if (argc == 1) return writer_run(WRITER_OCCUPIED_NORMAL, &caps);
     if (argc == 2 && !strcmp(argv[1], "--normal-empty")) return writer_run(mode, &caps);
     if (argc == 4 && !strcmp(argv[1], "--axis") && writer_axis_caps(argv[2], argv[3], &mode, &caps))
         return writer_run(mode, &caps);
-    fputs("Usage: writer-budget-occupied [--normal-empty | --axis allocated|live|work exact|minus1]\n", stderr);
+    if (argc == 3 && !strcmp(argv[1], "--occupied-packet-oom-last") && writer_fault_N(argv[2], &normal_sites))
+        return writer_occupied_packet_oom(normal_sites, &caps);
+    fputs("Usage: writer-budget-occupied [--normal-empty | --axis allocated|live|work exact|minus1 | --occupied-packet-oom-last frozen-normal-N]\n", stderr);
     return 2;
 }

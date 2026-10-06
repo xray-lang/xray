@@ -1,0 +1,66 @@
+{
+  "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "worker_commit_at_prepare": "3dc410282b035f7f146fc71322e9ee46954f3227",
+  "prior_r2_manifest_sha256": "800e65399f2e4d63a7dd05449a190da2ef60654b5d2593782cae4f671bd2491a",
+  "CLI": [
+    "--occupied-packet-oom-last",
+    "PER_CONFIGURATION_FROZEN_NORMAL_N"
+  ],
+  "N": "UNMEASURED_NOT_BOUND; must use real r2 occupied normal evidence for this exact source/model/libs/flags/CRT configuration; never N10 or a guessed occupied count",
+  "budgets": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000
+  },
+  "domain": "One new process, one newly allocated public finite ledger; unchanged same-context Built Check and write1 real owned224B prefix, then write2 into that occupied slot",
+  "oracle": {
+    "called": {
+      "owner_new": true,
+      "check": true,
+      "write1": true,
+      "write2": true
+    },
+    "successful_prefix": "Public resources_new+Check+write1 OK; exact independent224B; owned copied name; same context.resources; saved original packet handle",
+    "injection": "Only after before_second sample and prefix saved: N positive/nonMAX and N-1>=write2_begin, then arm; actual write2 call; postincrement unique index gives at most1 hit; injected flag and observed sitesN and in-range ordinalN-1 prove hit1",
+    "write2": "XR_XIR_OUT_OF_MEMORY",
+    "diagnostic": {
+      "status": "XR_XIR_OUT_OF_MEMORY",
+      "function": "UINT32_MAX",
+      "block": "UINT32_MAX",
+      "instruction": "UINT32_MAX",
+      "reason": "XR_XIR_DIAGNOSTIC_NONE",
+      "precall_poison_indices": [
+        17,
+        18,
+        19
+      ],
+      "scope": "Assert these only when actual write2 call returnsOOM; never assignMAX to prior stage diagnostics or label uncalled status as returned"
+    },
+    "output": "Entire original occupied packet object memcpy snapshot unchanged, pointer/length kept by full object equality; every224B compares independent golden immediately on failure and afterChecked drop",
+    "at_failed_return": "Actual live_bytes, compiler physical blocks and bytes exactly equal before_second; cumulative allocated/work and cumulative peaks may legitimately increase, never refunded",
+    "cleanup": "Common deduplicating cleanup: failed write2 same pointer means one actual packet free; Checked+packetdrop restores constructor ledger baseline; release owner and actual observer table free; physicalblocks0/bytes0; decide pass only after cleanup"
+  },
+  "not_entered": "Four explicit called flags set immediately before each public operation. Boundary mismatch/earlier failure makes write2 statusNOT_ENTERED; constructor/check failures do not fabricate writerOOM or diagnosticMAX.",
+  "normal_path": "Original r2 public operation order/full224B unchanged. Added booleans and OOM-only branches do not reset/refill/contextoverride. Normal transcript labels/cost constants remain, but successor fresh build must rerun normal and rebind actual measurements before fault execution.",
+  "CTest": {
+    "default_new": 0,
+    "original_default_normal": 1,
+    "fault_register_function": "source_product_register_writer_occupied_packet_oom(normal_sites)",
+    "function_called": false,
+    "new_fault_CTest_only_after_owner_binds": 1,
+    "TIMEOUT": 120,
+    "axes_registration": "Preserved6 interfaces/functions uncalled"
+  },
+  "scope": "Modify this one new occupied consumer C and its ownCMake; addone new occupiedOOM obligations JSON. Never modify emptyOOM code/CMake/JSON or parentinclude, r2 frozen candidates, producer/shared helper.",
+  "OPEN": {
+    "original_work_prefixes": 1932,
+    "original_resource_axes": 12,
+    "original_FI_positions": 6,
+    "all_occupied_fi_sites": "OPEN; this is one candidate point only",
+    "occupied_axes": "OPEN_UNREGISTERED_UNRUN",
+    "normal_N_binding": "OPEN_PENDING_REAL_NORMAL_TWO_CONFIGS",
+    "default_safety_VM_native_ABI": "OPEN_UNCHANGED"
+  },
+  "build_normal_fault_axes": "NOT_RUN"
+}

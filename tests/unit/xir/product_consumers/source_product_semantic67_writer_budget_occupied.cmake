@@ -26,3 +26,16 @@ function(source_product_register_writer_budget_axes)
         endforeach()
     endforeach()
 endfunction()
+
+# Bind only after this configuration's occupied cold graph N has been independently frozen.
+function(source_product_register_writer_occupied_packet_oom normal_sites)
+    if(NOT "${normal_sites}" MATCHES "^[1-9][0-9]*$")
+        message(FATAL_ERROR "Occupied writer OOM requires its exact qualified cold normal allocation count")
+    endif()
+    add_test(NAME test_source_product_semantic67_writer_occupied_packet_oom
+        COMMAND test_source_product_semantic67_writer_budget_occupied --occupied-packet-oom-last "${normal_sites}")
+    set_tests_properties(test_source_product_semantic67_writer_occupied_packet_oom PROPERTIES TIMEOUT 120
+        LABELS "unit;xir;program-consumer;ownership;checked;public-writer;fault-injection")
+endfunction()
+
+source_product_register_writer_occupied_packet_oom(12)
