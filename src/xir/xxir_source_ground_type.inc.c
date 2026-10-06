@@ -14,8 +14,8 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (node->type==AST_AWAIT_EXPR) {
         SourceExpectedType task;
         if (!source_ground_type(ctx,node->as.await_expr.expr,depth+1,&task)) return false;
-        XrXirType element=task.present ? xr_xir_task_element(&ctx->types,task.type) : XR_XIR_UNIT;
-        if (element!=XR_XIR_UNIT) *output=(SourceExpectedType){true,element,false};
+        const XrXirTypeNode *type=task.present ? xr_xir_type_node(&ctx->types,task.type) : NULL;
+        if (type && type->kind==XR_XIR_TYPE_TASK) *output=(SourceExpectedType){true,type->element,false};
         return true;
     }
     if (node->type==AST_GO_EXPR) {

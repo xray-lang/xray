@@ -626,9 +626,10 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     }
     if (action.kind == XR_XIR_ACTION_AWAIT_TASK) {
         const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
+        const XrXirTypeNode *type = xr_xir_type_node(types, (XrXirType)action.value.type);
         if (action.callee || action.arguments || action.argument_count || !call->executor_owner ||
             !call->executor_generation || !call->executor_ticket ||
-            !xr_xir_task_element(types, (XrXirType)action.value.type) ||
+            !type || type->kind != XR_XIR_TYPE_TASK ||
             !xr_xir_value_argument(&action.value, call->config.admission.arena, (XrXirType)action.value.type) ||
             call->next_wake == UINT64_MAX) { abort_frames(call, XR_XIR_CALL_BAD_STATE); return; }
         if (cleanup_active(call)) {

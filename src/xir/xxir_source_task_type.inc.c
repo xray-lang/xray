@@ -37,7 +37,7 @@ static bool source_native_task_declaration(SourceContext *ctx) {
     return true;
 }
 static bool source_task_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
-    if (element == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types, element))
+    if (xr_xir_type_is_cell(&ctx->types, element))
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "Task element is not admitted in this source slice");
     return source_native_task_declaration(ctx) && source_intern_type(ctx,
         (XrXirTypeNode) {.kind = XR_XIR_TYPE_TASK, .element = element}, type);
@@ -49,7 +49,10 @@ static bool source_native_task_type(SourceContext *ctx, XrTypeRef *ref, XrXirTyp
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type name does not bind the governed Task declaration");
     if (ctx->depth >= 128) return source_fail(ctx, NULL, XR_XIR_BUDGET, "source type depth exhausted");
     ++ctx->depth; XrXirType element;
-    bool ok = source_type(ctx, ref->children[0], &element); --ctx->depth;
+    bool ok = true;
+    if (ref->children[0] && ref->children[0]->kind == XR_TREF_NULL) element = XR_XIR_UNIT;
+    else ok = source_type(ctx, ref->children[0], &element);
+    --ctx->depth;
     if (!ok || !source_task_type(ctx, element, type)) return false;
     XrXirSourceRange range = {ctx->module, ref->line, ref->column, ref->line, ref->column};
     return source_query_target_reference(ctx, range, ctx->task_declaration, XR_XIR_SOURCE_TYPE_USE);

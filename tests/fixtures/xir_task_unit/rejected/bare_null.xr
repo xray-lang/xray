@@ -1,0 +1,2 @@
+fn worker() -> null { }
+export fn main() -> i64 { const task = go worker(); return 7 }

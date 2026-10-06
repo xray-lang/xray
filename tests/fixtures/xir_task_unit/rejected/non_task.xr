@@ -1,0 +1,5 @@
+export fn main() -> i64 {
+    const done: () = ()
+    await done
+    return 7
+}

@@ -829,9 +829,12 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
         target->cleanup_owner || direct_entry == declarations->modules[to].initializer ||
         count != target->parameter_count || program->go_authority[direct_entry] != XR_XIR_OK)
         return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirType result = xr_xir_task_element(program->types, task_type);
-    if (!result || result != target->result) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) return XR_XIR_CALL_UNSUPPORTED;
+    const XrXirTypeNode *task = xr_xir_type_node(program->types, task_type);
+    if (!task || task->kind != XR_XIR_TYPE_TASK || task->element != target->result)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirType result = task->element;
+    if (result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
+        return XR_XIR_CALL_UNSUPPORTED;
     for (uint32_t p = 0; p < count; ++p) {
         if (!xr_xir_task_parameter_supported(program->types, target->parameters[p]))
             return XR_XIR_CALL_UNSUPPORTED;

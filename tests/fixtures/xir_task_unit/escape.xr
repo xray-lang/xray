@@ -1,0 +1,3 @@
+fn worker() { print(41) }
+export fn handle() -> Task<null> { return go worker() }
+export fn main() -> i64 { return 7 }

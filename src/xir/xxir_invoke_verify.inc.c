@@ -15,7 +15,11 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
             op->op == XR_XIR_TASK_AWAIT) {
             XrXirType result = op->op == XR_XIR_TASK_AWAIT ?
                 task_await_result(context->module, function, op) : op->type;
-            if (op->op == XR_XIR_TASK_AWAIT && !result) return XR_XIR_BAD_TYPE;
+            if (op->op == XR_XIR_TASK_AWAIT) {
+                const XrXirTypeNode *task = xr_xir_type_node(context->module->types,
+                    xr_xir_operand_type(function, op->args[0]));
+                if (!task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+            }
             if (op->targets[0] == op->targets[1]) return XR_XIR_BAD_STRUCTURE;
             for (uint32_t edge = 0; edge < 2; ++edge) {
                 uint32_t block = op->targets[edge], incoming = graph->head[block];

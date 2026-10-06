@@ -1,0 +1,8 @@
+fn worker<T: Sendable>(value: T) -> () { print(41) }
+fn spawn<T: Sendable>(value: T) -> Task<null> { return go worker(value) }
+export fn main() -> i64 {
+    const task: Task<()> = spawn(true)
+    await task
+    await task
+    return 7
+}

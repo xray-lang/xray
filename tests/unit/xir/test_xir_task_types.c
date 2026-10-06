@@ -18,6 +18,9 @@
 #include "tuple_owner_observer.h"
 #include "xir_task_types66_golden.h"
 #include "xir_task_go66_golden.h"
+#include "xir_task_types67_golden.h"
+#include "xir_task_go67_golden.h"
+#include "xir_task_unit67_golden.h"
 #include "xir_atomic_types65_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 #include "task_outcome_sendable_cases.h"
@@ -46,14 +49,14 @@ static XrXirStatus task_types_pipeline(const XrXirCompileContext *c) {
     XrXirStatus status = xr_xir_compile_check(c, &f.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, NULL);
     if (status == XR_XIR_OK) {
-        if (packet.length != sizeof(task_types66_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types66_golden));
-        for (size_t i = 64; i < packet.length && i < sizeof(task_types66_golden); ++i)
-            if (packet.bytes[i] != task_types66_golden[i]) {
-                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types66_golden[i]); break;
+        if (packet.length != sizeof(task_types67_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types67_golden));
+        for (size_t i = 64; i < packet.length && i < sizeof(task_types67_golden); ++i)
+            if (packet.bytes[i] != task_types67_golden[i]) {
+                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types67_golden[i]); break;
             }
-        CHECK(packet.length == sizeof(task_types66_golden) && !memcmp(packet.bytes, task_types66_golden, packet.length));
+        CHECK(packet.length == sizeof(task_types67_golden) && !memcmp(packet.bytes, task_types67_golden, packet.length));
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types66_golden, sizeof(task_types66_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types67_golden, sizeof(task_types67_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, xr_xir_compile_artifact_module(decoded)->types, &clone);
     if (status == XR_XIR_OK) {
         CHECK(clone->nodes != f.nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK &&
@@ -81,6 +84,16 @@ static void task_types_reject(void) {
     out = (XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&c, atomic_types65_golden, sizeof(atomic_types65_golden), &out, NULL) == XR_XIR_BAD_STRUCTURE &&
         out == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
+    const uint8_t *previous[] = {task_types66_golden, task_go66_golden};
+    const size_t lengths[] = {sizeof(task_types66_golden), sizeof(task_go66_golden)};
+    for (uint32_t i = 0; i < 2; ++i) {
+        out = NULL; before = attempts;
+        CHECK(xr_xir_compile_checked_read(&c, previous[i], lengths[i], &out, NULL) == XR_XIR_BAD_STRUCTURE &&
+            !out && attempts == before);
+        out = (XrXirArtifact *)(uintptr_t)1;
+        CHECK(xr_xir_compile_checked_read(&c, previous[i], lengths[i], &out, NULL) == XR_XIR_BAD_STRUCTURE &&
+            out == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
+    }
     for (uint32_t mutation = 0; mutation < 12; ++mutation) {
         TaskTypesFixture f; task_types_fixture(&f); XrXirCallableParameter parameter = {XR_XIR_I64, 0};
         switch (mutation) {
@@ -98,7 +111,14 @@ static void task_types_reject(void) {
         default: f.nodes[0].kind = 9; break;
         }
         out = NULL;
-        CHECK(xr_xir_compile_check(&c, &f.module, &out, NULL) ==
+        if (!mutation) {
+            XrXirCheckedPacket packet = {0};
+            CHECK(xr_xir_compile_check(&c, &f.module, &out, NULL) == XR_XIR_OK && out);
+            CHECK(xr_xir_compile_checked_write(out, &packet, NULL) == XR_XIR_OK);
+            CHECK(packet.length == sizeof(task_unit67_golden) &&
+                !memcmp(packet.bytes, task_unit67_golden, packet.length));
+            xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(out);
+        } else CHECK(xr_xir_compile_check(&c, &f.module, &out, NULL) ==
             (mutation >= 5 && mutation <= 10 ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !out);
         CHECK(stats(&c).live_bytes == baseline);
     }
@@ -235,7 +255,7 @@ static void task_types_faults(void) {
         CHECK(!live && !live_bytes);
     }
     fail_at = SIZE_MAX;
-    printf("Task Checked66 independent current KAT, old65 zeroalloc reject, actual compiler OOM ordinals=%zu physical0\n", sites);
+    printf("Task Checked67 independent current KAT, old65/66 zeroalloc reject, original Unit0 mutation now positive and other11 rejected, actual compiler OOM ordinals=%zu physical0\n", sites);
 }
 int main(void) {
     task_types_reject(); task_definition(); task_dag_constraints(); task_error_reject();

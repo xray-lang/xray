@@ -1,0 +1,6 @@
+fn worker() -> () { print(41) }
+export fn main() -> i64 {
+    const task: Task<null> = go worker()
+    await task
+    return 7
+}

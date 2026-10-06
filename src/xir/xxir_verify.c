@@ -837,9 +837,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         XrXirType expected = op->type;
         if (op->op == XR_XIR_TASK_AWAIT) {
             expected = xr_xir_operand_type(function, op->args[0]);
-            XrXirType result = xr_xir_task_element(context->module->types, expected);
-            if (!result) return XR_XIR_BAD_TYPE;
-            if (context->module->stage == XR_XIR_LOWERED && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
+            const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
+            if (!task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+            XrXirType result = task->element;
+            if (context->module->stage == XR_XIR_LOWERED && result != XR_XIR_UNIT &&
+                result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
                 return XR_XIR_UNSUPPORTED;
         }
         if (op->op == XR_XIR_NULLABLE_SOME)

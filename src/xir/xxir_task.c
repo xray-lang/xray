@@ -40,8 +40,11 @@ static XrXirValue task_core_task_value(XirTask *task) {
 }
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(task->object.arena);
-    XrXirType result = xr_xir_task_element(types, task->object.type);
-    if (result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) return false;
+    const XrXirTypeNode *node = xr_xir_type_node(types, task->object.type);
+    if (!node || node->kind != XR_XIR_TYPE_TASK) return false;
+    XrXirType result = node->element;
+    if (result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
+        return false;
     XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
     if (state == XIR_TASK_PREPARING)
         return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
@@ -57,8 +60,8 @@ XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
 XR_FUNC XrXirCallStatus xr_xir_task_copy_outcome(const XrXirValue *value, XrXirCallResult *output) {
     if (!value || !xr_xir_value_valid(value) || !xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirTypeArena *arena = xr_xir_value_arena(value);
-    if (!xr_xir_task_element(xr_xir_compile_type_arena_types(arena), (XrXirType)value->type))
-        return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), (XrXirType)value->type);
+    if (!node || node->kind != XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
     const XirTask *task = (const XirTask *)(uintptr_t)value->payload;
     if (atomic_load_explicit(&task->state, memory_order_acquire) != XIR_TASK_TERMINAL) return XR_XIR_CALL_BAD_STATE;
     if (!xr_xir_domain_work(task->object.domain, 1)) return XR_XIR_CALL_LIMIT;
@@ -221,8 +224,11 @@ static XrXirCallStatus task_core_spawn(XrXirTaskExecutor *executor, XrXirCallVie
     if (executor->stopping || executor->budget->exhausted || executor->next_identity == UINT64_MAX)
         return XR_XIR_CALL_BAD_STATE;
     const XrXirProgram *program = executor->config.program;
-    XrXirType result = xr_xir_task_element(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
-    if ((result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) || request->entry >= program->entry_count ||
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
+    if (!node || node->kind != XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirType result = node->element;
+    if ((result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) ||
+        request->entry >= program->entry_count ||
         program->entries[request->entry].result != result || program->entries[request->entry].cleanup_owner)
         return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t p = 0; p < program->entries[request->entry].parameter_count; ++p) {

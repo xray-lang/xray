@@ -1,0 +1,2 @@
+fn identity<T: Sendable>(value: T) -> T { return value }
+export fn main() -> i64 { identity<()>(()); return 7 }

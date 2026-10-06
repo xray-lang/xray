@@ -1,0 +1,1 @@
+export fn main() -> i64 { const items: Array<()> = []; return 7 }

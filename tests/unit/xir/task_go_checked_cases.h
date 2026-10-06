@@ -90,15 +90,15 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
             xr_xir_effects_task_creation(effects, 4) == XR_XIR_EFFECT_NONE);
         status = xr_xir_compile_checked_write(checked, &packet, NULL);
         if (status == XR_XIR_OK) {
-            CHECK(packet.length == sizeof(task_go66_golden));
-            for (size_t i = 64; i < packet.length; ++i) if (packet.bytes[i] != task_go66_golden[i]) {
+            CHECK(packet.length == sizeof(task_go67_golden));
+            for (size_t i = 64; i < packet.length; ++i) if (packet.bytes[i] != task_go67_golden[i]) {
                 fprintf(stderr, "GO named packet mismatch offset%zu actual%u expected%u\n",
-                    i, packet.bytes[i], task_go66_golden[i]); break;
+                    i, packet.bytes[i], task_go67_golden[i]); break;
             }
-            CHECK(!memcmp(packet.bytes, task_go66_golden, packet.length));
+            CHECK(!memcmp(packet.bytes, task_go67_golden, packet.length));
         }
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_go66_golden, sizeof(task_go66_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_go67_golden, sizeof(task_go67_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &specialized, NULL);
     if (status == XR_XIR_OK) {
         memset(f.worker, 0xcc, sizeof(f.worker)); memset(f.root, 0xcc, sizeof(f.root));
@@ -345,14 +345,23 @@ static void task_go_axes(void) {
 }
 static void task_go_packets(void) {
     XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
-    const uint8_t *bad[] = {task_go66_scalar_go, task_go66_initializer_target,
+    const uint8_t *bad[] = {task_go67_scalar_go, task_go67_initializer_target,
+        task_go67_await_place, task_go67_go_target, task_go67_await_binding,
+        task_go67_mutable_worker, task_go67_cleanup_helper};
+    const size_t lengths[] = {sizeof(task_go67_scalar_go), sizeof(task_go67_initializer_target),
+        sizeof(task_go67_await_place), sizeof(task_go67_go_target), sizeof(task_go67_await_binding),
+        sizeof(task_go67_mutable_worker), sizeof(task_go67_cleanup_helper)};
+    const uint8_t *historical[] = {task_go66_scalar_go, task_go66_initializer_target,
         task_go66_await_place, task_go66_go_target, task_go66_await_binding,
         task_go66_mutable_worker, task_go66_cleanup_helper};
-    const size_t lengths[] = {sizeof(task_go66_scalar_go), sizeof(task_go66_initializer_target),
-        sizeof(task_go66_await_place), sizeof(task_go66_go_target), sizeof(task_go66_await_binding),
-        sizeof(task_go66_mutable_worker), sizeof(task_go66_cleanup_helper)};
     for (uint32_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
-        XrXirArtifact *out = NULL;
+        XrXirArtifact *out = NULL; size_t before = attempts;
+        CHECK(xr_xir_compile_checked_read(&c, historical[i], lengths[i], &out, NULL) ==
+            XR_XIR_BAD_STRUCTURE && !out && attempts == before);
+        out = (XrXirArtifact *)(uintptr_t)1;
+        CHECK(xr_xir_compile_checked_read(&c, historical[i], lengths[i], &out, NULL) ==
+            XR_XIR_BAD_STRUCTURE && out == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
+        out = NULL;
         XrXirStatus status = xr_xir_compile_checked_read(&c, bad[i], lengths[i], &out, NULL);
         CHECK((status == XR_XIR_BAD_STRUCTURE || status == XR_XIR_BAD_TYPE || status == XR_XIR_BAD_VALUE) && !out);
         out = (XrXirArtifact *)(uintptr_t)1;

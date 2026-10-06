@@ -53,8 +53,9 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
         if (!source_work(ctx, node)) return false;
         expected = xr_xir_nullable_element(&ctx->types, expected);
     }
-    XrXirType element = context.present ? xr_xir_task_element(&ctx->types, expected) : XR_XIR_UNIT;
-    if (element != XR_XIR_UNIT) child = (SourceExpectedType) {true, element, context.infer_result};
+    const XrXirTypeNode *task_context = context.present ? xr_xir_type_node(&ctx->types, expected) : NULL;
+    if (task_context && task_context->kind == XR_XIR_TYPE_TASK)
+        child = (SourceExpectedType) {true, task_context->element, context.infer_result};
     SourceDirectRequest direct = {target->index, {0}, NULL, child};
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx, call, &direct, &prepared)) return false;
@@ -95,9 +96,10 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     /* Context is evidence for an ordinary generic call, never a conversion
      * of an existing invariant Task handle to a different element type. */
     if (!source_task_expression(ctx, await->expr, (SourceExpectedType){0}, context, &task)) return false;
-    XrXirType element = xr_xir_task_element(&ctx->types, task.type);
-    if (element == XR_XIR_UNIT)
+    const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, task.type);
+    if (!type || type->kind != XR_XIR_TYPE_TASK)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires an admitted Task value");
+    XrXirType element = type->element;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t origin = body->count, error = body->block_count;
@@ -111,6 +113,8 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
         if (!source_error_edge(ctx, caught)) return false;
     } else if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {caught.id, 0}, {0}, 0, {0}}, NULL))
         return false;
-    return begin_block(ctx) && source_recipe_append(ctx,
+    if (!begin_block(ctx)) return false;
+    if (element == XR_XIR_UNIT) { *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true; }
+    return source_recipe_append(ctx,
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
 }

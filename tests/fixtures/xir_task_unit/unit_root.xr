@@ -1,0 +1,7 @@
+fn worker() { print(41) }
+export fn main() -> () {
+    const task = go worker()
+    await task
+    await task
+    return ()
+}

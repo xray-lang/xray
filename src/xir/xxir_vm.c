@@ -367,7 +367,8 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
 
 static XrXirRunStatus vm_go_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
     XrXirAction *action, uint32_t destination) {
-    if (!run->view || !xr_xir_task_element(run->module->types, op->type) ||
+    const XrXirTypeNode *task_type = xr_xir_type_node(run->module->types, op->type);
+    if (!run->view || !task_type || task_type->kind != XR_XIR_TYPE_TASK ||
         op->args[1] > run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
     for (uint32_t i = 0; i < op->args[1]; ++i)
         state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0] + i]);
@@ -388,8 +389,9 @@ static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirI
     XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
     XrXirValue task = vm_value_operand(run, op->args[0]);
-    XrXirType element = xr_xir_task_element(run->module->types, (XrXirType)task.type);
-    if (!element) return XR_XIR_RUN_BAD_ARTIFACT;
+    const XrXirTypeNode *task_type = xr_xir_type_node(run->module->types, (XrXirType)task.type);
+    if (!task_type || task_type->kind != XR_XIR_TYPE_TASK) return XR_XIR_RUN_BAD_ARTIFACT;
+    XrXirType element = task_type->element;
     uint32_t at = (uint32_t)(op - run->function->instructions);
     state->invoke = at + 1;
     state->panic = run->function->blocks[vm_block(run->function, at)].panic;

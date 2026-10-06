@@ -61,7 +61,8 @@ static bool error_join(uint64_t *to, const uint64_t *from, size_t words) {
 }
 static void error_type(ErrorFlow *flow, XrXirType type, uint64_t *set) {
     if (xr_xir_type_is_cell(flow->module->types, type)) type = xr_xir_cell_element(flow->module->types, type);
-    if (type == XR_XIR_ERROR || xr_xir_task_element(flow->module->types, type)) error_add(set, 1);
+    const XrXirTypeNode *node = xr_xir_type_node(flow->module->types, type);
+    if (type == XR_XIR_ERROR || (node && node->kind == XR_XIR_TYPE_TASK)) error_add(set, 1);
     else for (uint32_t a = 0; a < flow->effects->atom_count; ++a)
         if (flow->effects->atoms[a].type == type) error_add(set, a + 2);
 }
