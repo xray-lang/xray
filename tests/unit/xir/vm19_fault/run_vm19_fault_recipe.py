@@ -45,9 +45,13 @@ def command(index,args):
  for provider,accepted,phase,step,cancel,cleanup,prior,epoch in hosts:
   assert provider in [1,2,3] and accepted=={1:6,2:5,3:13}[provider]
   assert phase in [4,6] and (not cancel or cleanup) and prior in [0,4] and epoch>0
+ protocols=[list(map(int,m.groups())) for m in re.finditer(r'PROTOCOL_AFTER_CANCEL provider(\d+) accepted(\d+) phase(\d+) step(\d+) drivercancel(\d+) cleanup(\d+) prior(\d+) epoch(\d+) ASSERT',text)]
+ for provider,accepted,phase,step,cancel,cleanup,prior,epoch in protocols:
+  assert provider in [5,99] and accepted=={5:8,99:7}[provider]
+  assert phase in [4,6] and (not cancel or cleanup) and prior==0 and epoch>0
  allocations=[list(map(int,m.groups())) for m in re.finditer(r'ALLOC ordinal(\d+) bytes(\d+) kind(\d+) phase(\d+) step(\d+) epoch(\d+)',text)]
  assert len(allocations)==r['runtime_malloc_sites'] and [v[0] for v in allocations]==list(range(len(allocations)))
- return {'record':record,'row':r,'event':event,'denial':list(map(int,denial.groups())),'control':list(map(int,ctl.groups())),'allocations':allocations,'host_after_cancel':hosts}
+ return {'record':record,'row':r,'event':event,'denial':list(map(int,denial.groups())),'control':list(map(int,ctl.groups())),'allocations':allocations,'host_after_cancel':hosts,'protocol_after_cancel':protocols}
 def plan(base):
  rows=[]
  for b in base:
@@ -93,7 +97,7 @@ try:
    else:
     assert not hit and not reject and seen==1 and cancelstatus in [0,9,18] and accepted==(cancelstatus==18)
     assert r['created']==0 and r['started']==0
-    hosts=x['host_after_cancel'];assert len(hosts)<=1
+    hosts=x['host_after_cancel']+x['protocol_after_cancel'];assert len(hosts)<=1
     if hosts and hosts[0][2]==4:assert r['first_status']==hosts[0][1]
     else:assert r['first_status'] in [b['first_status'],4]
     if hosts and (hosts[0][2]==6 or (hosts[0][2]==4 and restart!=0)):assert r['final_status']==hosts[0][1]

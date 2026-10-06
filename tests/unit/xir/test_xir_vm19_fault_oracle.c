@@ -51,13 +51,22 @@ static XrXirOutputStatus oracle_output(void *context,const XrXirOutputGroup *gro
     XrXirInstance *instance=out->pending->instance;
     XrXirCall *driver=instance && instance->executor && instance->executor->current ?
         instance->executor->current->call : instance ? instance->call : NULL;
-    bool host_after_cancel=group->values[0].type!=XR_XIR_STRING &&
+    /* These fixture modes emit their owned String only through WRITE_STREAM;
+     * their cleanup scalar OUTPUT follows the ordinary failure channel. */
+    bool write_false=out->pending->mode==PENDING_WRITE_STREAM &&
+        group->values[0].type==XR_XIR_STRING && status==XR_XIR_OUTPUT_ERROR;
+    bool host_after_cancel=!write_false &&
         oracle_reason==XR_XIR_CALL_CANCELLED && oracle_executing_poll &&
         (oracle_phase==ORACLE_POLL || oracle_phase==ORACLE_REPOLL) &&
         (status==XR_XIR_OUTPUT_ERROR || status==XR_XIR_OUTPUT_OOM || status==XR_XIR_OUTPUT_LIMIT) &&
         driver && driver->driving && (!driver->cancel_requested || cleanup_active(driver)) &&
         (driver->abort_reason==XR_XIR_CALL_READY || driver->abort_reason==XR_XIR_CALL_CANCELLED);
-    if(group->values[0].type!=XR_XIR_STRING && status!=XR_XIR_OUTPUT_OK && (!oracle_reason || host_after_cancel)) {
+    bool protocol_after_cancel=oracle_reason==XR_XIR_CALL_CANCELLED && oracle_executing_poll &&
+        (oracle_phase==ORACLE_POLL || oracle_phase==ORACLE_REPOLL) &&
+        (status==XR_XIR_OUTPUT_BAD_ABI || status==(XrXirOutputStatus)99) &&
+        driver && driver->driving && (!driver->cancel_requested || cleanup_active(driver)) &&
+        driver->abort_reason==XR_XIR_CALL_READY;
+    if(!write_false && status!=XR_XIR_OUTPUT_OK && (!oracle_reason || host_after_cancel || protocol_after_cancel)) {
         bool cancel_arbitrates=driver && driver->cancel_requested && !cleanup_active(driver) &&
             driver->abort_reason==XR_XIR_CALL_READY;
         oracle_reason=cancel_arbitrates?XR_XIR_CALL_CANCELLED:
@@ -66,6 +75,11 @@ static XrXirOutputStatus oracle_output(void *context,const XrXirOutputGroup *gro
     }
     if(host_after_cancel) {
         fprintf(stderr,"HOST_AFTER_CANCEL provider%u accepted%u phase%u step%u drivercancel%u cleanup%u prior%u epoch%llu ASSERT\n",
+            (unsigned)status,oracle_reason,oracle_phase,oracle_poll_step,driver->cancel_requested,
+            cleanup_active(driver),(unsigned)driver->abort_reason,(unsigned long long)oracle_epoch);
+    }
+    if(protocol_after_cancel) {
+        fprintf(stderr,"PROTOCOL_AFTER_CANCEL provider%u accepted%u phase%u step%u drivercancel%u cleanup%u prior%u epoch%llu ASSERT\n",
             (unsigned)status,oracle_reason,oracle_phase,oracle_poll_step,driver->cancel_requested,
             cleanup_active(driver),(unsigned)driver->abort_reason,(unsigned long long)oracle_epoch);
     }
@@ -122,7 +136,7 @@ static XrXirInstanceResult measured_poll(XrXirInstance *instance,uint32_t id,
     }
     return result;
 }
-static void measure_operation(uint32_t id,size_t fail_at,unsigned axis,uint64_t cap,unsigned cancel_prefix) {
+static void measure_operation(uint32_t id,size_t fail_at,unsigned axis,uint64_t cap,unsigned cancel_prefix,unsigned provider_status) {
     CHECK(id<19 && !runtime_live && !runtime_bytes);
     oracle_phase=ORACLE_PREP;oracle_hits=0;oracle_hit_phase=0;oracle_hit_step=0;oracle_reason=0;
     oracle_cancel_seen=false;oracle_cancel_accepted=false;oracle_cancel_status=UINT32_MAX;
@@ -139,6 +153,11 @@ static void measure_operation(uint32_t id,size_t fail_at,unsigned axis,uint64_t 
     static const XrXirOutputStatus statuses[]={XR_XIR_OUTPUT_ERROR,XR_XIR_OUTPUT_OOM,XR_XIR_OUTPUT_LIMIT,XR_XIR_OUTPUT_BAD_ABI,(XrXirOutputStatus)99};
     if(id>=9 && id<14)role.initial=statuses[id-9];
     if(id>=14 && id<17)role.initial=statuses[id-14];
+    if(provider_status!=UINT32_MAX) {
+        CHECK(id==17 && (provider_status==XR_XIR_OUTPUT_ERROR || provider_status==XR_XIR_OUTPUT_OOM ||
+            provider_status==XR_XIR_OUTPUT_LIMIT || provider_status==XR_XIR_OUTPUT_BAD_ABI || provider_status==99));
+        role.initial=(XrXirOutputStatus)provider_status;
+    }
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     OracleOutput callback={&pending,&role,id,0};
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,oracle_output,&callback};
@@ -149,7 +168,7 @@ static void measure_operation(uint32_t id,size_t fail_at,unsigned axis,uint64_t 
     XrXirInstance *instance=NULL;XrXirDomain *lease=NULL;XrXirValue argument={0};
     oracle_phase=ORACLE_NEW;
     XrXirCallStatus created=xr_xir_instance_new(program,&config,&instance),started=XR_XIR_CALL_BAD_STATE,restarted=XR_XIR_CALL_BAD_STATE;
-    XrXirInstanceResult first={0},last={0};bool normal=fail_at==SIZE_MAX && axis==UINT32_MAX && cancel_prefix==UINT32_MAX;
+    XrXirInstanceResult first={0},last={0};bool normal=fail_at==SIZE_MAX && axis==UINT32_MAX && cancel_prefix==UINT32_MAX && provider_status==UINT32_MAX;
     if(created==XR_XIR_CALL_READY) {
         lease=instance->domain;CHECK(xr_xir_domain_retain(lease));pending.instance=instance;
         oracle_phase=ORACLE_INPUT;XrXirValueStatus input=XR_XIR_VALUE_OK;
@@ -231,12 +250,12 @@ static void measure_operation(uint32_t id,size_t fail_at,unsigned axis,uint64_t 
     fflush(stdout);
 }
 int main(int argc,char **argv) {
-    if(argc==1)for(uint32_t id=0;id<19;++id)measure_operation(id,SIZE_MAX,UINT32_MAX,0,UINT32_MAX);
+    if(argc==1)for(uint32_t id=0;id<19;++id)measure_operation(id,SIZE_MAX,UINT32_MAX,0,UINT32_MAX,UINT32_MAX);
     else {
-        CHECK(argc==6);uint32_t id=(uint32_t)strtoul(argv[1],NULL,10);
+        CHECK(argc==6 || argc==7);uint32_t id=(uint32_t)strtoul(argv[1],NULL,10);
         size_t fail=(size_t)strtoull(argv[2],NULL,10);unsigned axis=(unsigned)strtoul(argv[3],NULL,10);
         uint64_t cap=strtoull(argv[4],NULL,10);unsigned cancel=(unsigned)strtoul(argv[5],NULL,10);
-        measure_operation(id,fail,axis,cap,cancel);
+        measure_operation(id,fail,axis,cap,cancel,argc==7?(unsigned)strtoul(argv[6],NULL,10):UINT32_MAX);
     }
     library_compile_observer_free();return 0;
 }
