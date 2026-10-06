@@ -202,3 +202,19 @@ add_test(NAME source_product_integer_source_constructors
         --scratch "${CMAKE_BINARY_DIR}/consumer-integer-constructor-evidence")
 set_tests_properties(source_product_integer_source_constructors PROPERTIES TIMEOUT 120
     LABELS "unit;xir;source-product;program-consumer;inventory;integer")
+add_executable(test_source_product_nominal_constructors
+    "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_nominal_constructors.c")
+target_link_libraries(test_source_product_nominal_constructors PRIVATE xray_xir_source_product)
+set_target_properties(test_source_product_nominal_constructors PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_product_nominal_constructors PRIVATE /utf-8 /W4 /WX)
+    target_compile_definitions(test_source_product_nominal_constructors PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_source_product_nominal_constructors PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME source_product_nominal_source_constructors
+    COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_nominal_sources.py"
+        --binary $<TARGET_FILE:test_source_product_nominal_constructors>
+        --scratch "${CMAKE_BINARY_DIR}/consumer-nominal-constructor-evidence")
+set_tests_properties(source_product_nominal_source_constructors PROPERTIES TIMEOUT 120
+    LABELS "unit;xir;source-product;program-consumer;inventory;nominal-graph")

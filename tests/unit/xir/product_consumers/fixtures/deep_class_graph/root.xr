@@ -1,0 +1,323 @@
+class C79 {
+  value: i64
+  constructor(value: i64) { this.value = value }
+}
+class C78 {
+  next: C79?
+  constructor(next: C79?) { this.next = next }
+}
+class C77 {
+  next: C78?
+  constructor(next: C78?) { this.next = next }
+}
+class C76 {
+  next: C77?
+  constructor(next: C77?) { this.next = next }
+}
+class C75 {
+  next: C76?
+  constructor(next: C76?) { this.next = next }
+}
+class C74 {
+  next: C75?
+  constructor(next: C75?) { this.next = next }
+}
+class C73 {
+  next: C74?
+  constructor(next: C74?) { this.next = next }
+}
+class C72 {
+  next: C73?
+  constructor(next: C73?) { this.next = next }
+}
+class C71 {
+  next: C72?
+  constructor(next: C72?) { this.next = next }
+}
+class C70 {
+  next: C71?
+  constructor(next: C71?) { this.next = next }
+}
+class C69 {
+  next: C70?
+  constructor(next: C70?) { this.next = next }
+}
+class C68 {
+  next: C69?
+  constructor(next: C69?) { this.next = next }
+}
+class C67 {
+  next: C68?
+  constructor(next: C68?) { this.next = next }
+}
+class C66 {
+  next: C67?
+  constructor(next: C67?) { this.next = next }
+}
+class C65 {
+  next: C66?
+  constructor(next: C66?) { this.next = next }
+}
+class C64 {
+  next: C65?
+  constructor(next: C65?) { this.next = next }
+}
+class C63 {
+  next: C64?
+  constructor(next: C64?) { this.next = next }
+}
+class C62 {
+  next: C63?
+  constructor(next: C63?) { this.next = next }
+}
+class C61 {
+  next: C62?
+  constructor(next: C62?) { this.next = next }
+}
+class C60 {
+  next: C61?
+  constructor(next: C61?) { this.next = next }
+}
+class C59 {
+  next: C60?
+  constructor(next: C60?) { this.next = next }
+}
+class C58 {
+  next: C59?
+  constructor(next: C59?) { this.next = next }
+}
+class C57 {
+  next: C58?
+  constructor(next: C58?) { this.next = next }
+}
+class C56 {
+  next: C57?
+  constructor(next: C57?) { this.next = next }
+}
+class C55 {
+  next: C56?
+  constructor(next: C56?) { this.next = next }
+}
+class C54 {
+  next: C55?
+  constructor(next: C55?) { this.next = next }
+}
+class C53 {
+  next: C54?
+  constructor(next: C54?) { this.next = next }
+}
+class C52 {
+  next: C53?
+  constructor(next: C53?) { this.next = next }
+}
+class C51 {
+  next: C52?
+  constructor(next: C52?) { this.next = next }
+}
+class C50 {
+  next: C51?
+  constructor(next: C51?) { this.next = next }
+}
+class C49 {
+  next: C50?
+  constructor(next: C50?) { this.next = next }
+}
+class C48 {
+  next: C49?
+  constructor(next: C49?) { this.next = next }
+}
+class C47 {
+  next: C48?
+  constructor(next: C48?) { this.next = next }
+}
+class C46 {
+  next: C47?
+  constructor(next: C47?) { this.next = next }
+}
+class C45 {
+  next: C46?
+  constructor(next: C46?) { this.next = next }
+}
+class C44 {
+  next: C45?
+  constructor(next: C45?) { this.next = next }
+}
+class C43 {
+  next: C44?
+  constructor(next: C44?) { this.next = next }
+}
+class C42 {
+  next: C43?
+  constructor(next: C43?) { this.next = next }
+}
+class C41 {
+  next: C42?
+  constructor(next: C42?) { this.next = next }
+}
+class C40 {
+  next: C41?
+  constructor(next: C41?) { this.next = next }
+}
+class C39 {
+  next: C40?
+  constructor(next: C40?) { this.next = next }
+}
+class C38 {
+  next: C39?
+  constructor(next: C39?) { this.next = next }
+}
+class C37 {
+  next: C38?
+  constructor(next: C38?) { this.next = next }
+}
+class C36 {
+  next: C37?
+  constructor(next: C37?) { this.next = next }
+}
+class C35 {
+  next: C36?
+  constructor(next: C36?) { this.next = next }
+}
+class C34 {
+  next: C35?
+  constructor(next: C35?) { this.next = next }
+}
+class C33 {
+  next: C34?
+  constructor(next: C34?) { this.next = next }
+}
+class C32 {
+  next: C33?
+  constructor(next: C33?) { this.next = next }
+}
+class C31 {
+  next: C32?
+  constructor(next: C32?) { this.next = next }
+}
+class C30 {
+  next: C31?
+  constructor(next: C31?) { this.next = next }
+}
+class C29 {
+  next: C30?
+  constructor(next: C30?) { this.next = next }
+}
+class C28 {
+  next: C29?
+  constructor(next: C29?) { this.next = next }
+}
+class C27 {
+  next: C28?
+  constructor(next: C28?) { this.next = next }
+}
+class C26 {
+  next: C27?
+  constructor(next: C27?) { this.next = next }
+}
+class C25 {
+  next: C26?
+  constructor(next: C26?) { this.next = next }
+}
+class C24 {
+  next: C25?
+  constructor(next: C25?) { this.next = next }
+}
+class C23 {
+  next: C24?
+  constructor(next: C24?) { this.next = next }
+}
+class C22 {
+  next: C23?
+  constructor(next: C23?) { this.next = next }
+}
+class C21 {
+  next: C22?
+  constructor(next: C22?) { this.next = next }
+}
+class C20 {
+  next: C21?
+  constructor(next: C21?) { this.next = next }
+}
+class C19 {
+  next: C20?
+  constructor(next: C20?) { this.next = next }
+}
+class C18 {
+  next: C19?
+  constructor(next: C19?) { this.next = next }
+}
+class C17 {
+  next: C18?
+  constructor(next: C18?) { this.next = next }
+}
+class C16 {
+  next: C17?
+  constructor(next: C17?) { this.next = next }
+}
+class C15 {
+  next: C16?
+  constructor(next: C16?) { this.next = next }
+}
+class C14 {
+  next: C15?
+  constructor(next: C15?) { this.next = next }
+}
+class C13 {
+  next: C14?
+  constructor(next: C14?) { this.next = next }
+}
+class C12 {
+  next: C13?
+  constructor(next: C13?) { this.next = next }
+}
+class C11 {
+  next: C12?
+  constructor(next: C12?) { this.next = next }
+}
+class C10 {
+  next: C11?
+  constructor(next: C11?) { this.next = next }
+}
+class C9 {
+  next: C10?
+  constructor(next: C10?) { this.next = next }
+}
+class C8 {
+  next: C9?
+  constructor(next: C9?) { this.next = next }
+}
+class C7 {
+  next: C8?
+  constructor(next: C8?) { this.next = next }
+}
+class C6 {
+  next: C7?
+  constructor(next: C7?) { this.next = next }
+}
+class C5 {
+  next: C6?
+  constructor(next: C6?) { this.next = next }
+}
+class C4 {
+  next: C5?
+  constructor(next: C5?) { this.next = next }
+}
+class C3 {
+  next: C4?
+  constructor(next: C4?) { this.next = next }
+}
+class C2 {
+  next: C3?
+  constructor(next: C3?) { this.next = next }
+}
+class C1 {
+  next: C2?
+  constructor(next: C2?) { this.next = next }
+}
+class C0 {
+  next: C1?
+  constructor(next: C1?) { this.next = next }
+}
+fn answer(root: C0) -> i64 {
+  return 42
+}

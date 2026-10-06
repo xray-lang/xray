@@ -19,6 +19,9 @@ MANIFEST_SHA = "c298392053c1557d8402a8da25078749d99ad095c9671b514526b1b89d643205
 NUMERIC_SPEC = importlib.util.spec_from_file_location("numeric_sources", ROOT / "scripts/source_product_consumer_numeric_sources.py")
 NUMERIC = importlib.util.module_from_spec(NUMERIC_SPEC)
 NUMERIC_SPEC.loader.exec_module(NUMERIC)
+NOMINAL_SPEC = importlib.util.spec_from_file_location("nominal_sources", ROOT / "scripts/source_product_consumer_nominal_sources.py")
+NOMINAL = importlib.util.module_from_spec(NOMINAL_SPEC)
+NOMINAL_SPEC.loader.exec_module(NOMINAL)
 SELECTED = {
     "source_owner_static_method_declarations": "static_methods",
     "source_owner_array_index_reads_and_replaces_elements": "array_places",
@@ -59,6 +62,7 @@ PROBES = {
 DESCRIPTORS = {
     "source_owner_recursive_class_type_reservation_is_cycle_safe": ("recursive_class_graph", 1),
     "source_owner_mutual_class_type_reservation_is_cycle_safe": ("mutual_class_graph", 2),
+    NOMINAL.DEEP_TEST: ("deep_class_graph", 80),
 }
 REJECTIONS = {
     "source_owner_bare_nullable_condition_has_no_product": {
@@ -277,7 +281,11 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
         if case["name"] in DESCRIPTORS:
             selected, count = DESCRIPTORS[case["name"]]
             fixture = DEST / "fixtures" / selected / "root.xr"
-            data = literals["source"]
+            if case["name"] == NOMINAL.DEEP_TEST:
+                data, nominal_metadata, constructor = NOMINAL.construct_deep_source(body, c_literal, STRING)
+                files[DEST / "source_product_nominal_constructors.c"] = NOMINAL.constructor_oracle(constructor)
+            else:
+                data = literals["source"]
             files[fixture] = data
             current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
                 "sha256": digest(data), "original_prefix_sha256": digest(data), "expected_classes": count,
@@ -295,6 +303,13 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     "verification": "Full applicable safety and integration-head revalidation remain required."}}
             current["additional_legacy_obligations"] = {"explicit_copy_contract_mapping": {
                 "status": "OPEN", "note": "Original AFFINE/COPY_EXPLICIT enum assertions need a reviewed mapping to the current owned descriptor and source copy-permission rules. Owned classification alone does not prove source copy authority."}}
+            if case["name"] == NOMINAL.DEEP_TEST:
+                current["initial_projection"]["original_source_constructor"] = nominal_metadata
+                current["initial_projection"]["scope"] = "Exact original descending C79-to-C0 structural-only input, without an adapter or invented runtime result. All eighty owned class identities, seventy-nine Nullable edges and one terminal i64 field are inspected after producers die; eighty classes do not prove unbounded depth."
+                current["candidate_replacement_gates"].append("source_product_nominal_source_constructors")
+                current["projected_obligations"]["exact_nominal_graph"]["verification"] = "Exactly C0 through C79 retain one field each: next: Nullable<C(i+1)> for C0 through C78 and value: i64 for C79. Declaration order and source bytes come from the complete original C constructor; Checked and Lowered independently preserve all identities, edges and owned classification."
+                current["additional_legacy_obligations"]["complete_original_source_constructor"] = {
+                    "status": "IMPLEMENTED_NOT_QUALIFIED", "verification": "An independently compiled exact copy of the original C loop, including CLASS_COUNT=80, SOURCE_CAPACITY=32768 and every snprintf, emits byte-identical fixture source."}
             sources.append(current)
             continue
         if case["name"] in SELECTED or case["name"] in PROBES:

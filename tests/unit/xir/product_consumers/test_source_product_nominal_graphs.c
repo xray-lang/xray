@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_source_product_nominal_graphs.c - Detached exact recursive class descriptors
+ * test_source_product_nominal_graphs.c - Detached exact recursive and deep class descriptors
  *
  * KEY CONCEPT:
  *   Original nominal cycles survive producer destruction and verified lowering.
@@ -29,8 +29,55 @@ static XrCompileResourceLimits graph_limits(void) {
     return (XrCompileResourceLimits){UINT64_C(67108864), UINT64_C(16777216), UINT64_C(128000000)};
 }
 
+static void graph_deep_shape(const XrXirModule *module) {
+    const XrXirTypes *types = module->types;
+    const XrXirNominalTable *table = types->nominals;
+    XrXirType ids[80] = {0};
+    unsigned count = 0;
+    for (uint32_t i = 0; i < types->count; ++i) {
+        XrXirType type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + i);
+        if (!xr_xir_type_is_class(types, type)) continue;
+        const XrXirTypeNode *node = xr_xir_type_node(types, type);
+        CHECK(node && node->kind == XR_XIR_TYPE_NOMINAL && node->nominal.field_count == 1);
+        XrXirLiteral name = table->declarations ? table->declarations[node->nominal.declaration].name :
+            table->identities[node->nominal.declaration].name;
+        unsigned identity = 0;
+        for (; identity < 80; ++identity) {
+            char expected[16];
+            int length = snprintf(expected, sizeof(expected), "C%u", identity);
+            CHECK(length > 0 && (size_t)length < sizeof(expected));
+            if (name.length == (uint32_t)length && !memcmp(name.bytes, expected, (size_t)length)) break;
+        }
+        CHECK(identity < 80 && !ids[identity] && count < 80);
+        CHECK(xr_xir_type_is_owned(types, type));
+        ids[identity] = type;
+        ++count;
+    }
+    CHECK(count == 80);
+    for (unsigned i = 0; i < 80; ++i) {
+        CHECK(ids[i]);
+        const XrXirTypeNode *node = xr_xir_type_node(types, ids[i]);
+        XrXirLiteral field = table->declarations ? table->declarations[node->nominal.declaration].fields[0].name :
+            table->identities[node->nominal.declaration].fields[0].name;
+        XrXirType value = node->nominal.fields[0];
+        if (i == 79) {
+            CHECK(field.length == 5 && !memcmp(field.bytes, "value", 5));
+            CHECK(value == XR_XIR_I64);
+        } else {
+            CHECK(field.length == 4 && !memcmp(field.bytes, "next", 4));
+            CHECK(xr_xir_type_is_nullable(types, value) && xr_xir_type_is_owned(types, value));
+            CHECK(xr_xir_nullable_element(types, value) == ids[i + 1]);
+        }
+    }
+}
+
 static void graph_shape(const XrXirModule *module, unsigned expected) {
     CHECK(module && module->types && module->types->nominals);
+    if (expected == 80) {
+        graph_deep_shape(module);
+        return;
+    }
+    CHECK(expected == 1 || expected == 2);
     const XrXirTypes *types = module->types;
     XrXirType ids[2] = {0};
     unsigned count = 0;
@@ -167,6 +214,8 @@ static void graph_axes(const SourceProductNominalFixture *fixture) {
             else limits.work = value;
             NominalRun run = graph_build(fixture, NULL, SIZE_MAX, limits);
             CHECK(run.status == (below ? XR_XIR_BUDGET : XR_XIR_OK));
+            printf("nominal-axis case=%s axis=%u limit=%llu below=%u status=%u physical=0/0\n",
+                fixture->name, axis, (unsigned long long)value, below, run.status);
         }
     }
     printf("nominal-axes case=%s boundaries=6 physical=0/0\n", fixture->name);
@@ -209,9 +258,14 @@ int xr_source_product_nominal_main(const SourceProductNominalFixture *fixture, i
     printf("consumer %s mode=0 status=%u compiler-sites=%zu allocated=%llu peak=%llu work=%llu\n",
         fixture->name, run.status, run.attempts, (unsigned long long)run.stats.allocated_bytes,
         (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
-    if (run.status == XR_XIR_OK)
-        printf("nominal-graph case=%s classes=%u nullable-cycles=%u Checked/Lowered readers survive producers; C identical\n",
-            fixture->name, fixture->classes, fixture->classes);
+    if (run.status == XR_XIR_OK) {
+        if (fixture->classes == 80)
+            printf("nominal-graph case=%s classes=80 nullable-links=79 terminal-i64=1 Checked/Lowered readers survive producers; C identical\n",
+                fixture->name);
+        else
+            printf("nominal-graph case=%s classes=%u nullable-cycles=%u Checked/Lowered readers survive producers; C identical\n",
+                fixture->name, fixture->classes, fixture->classes);
+    }
     instance_compile_report();
     return 0;
 }
