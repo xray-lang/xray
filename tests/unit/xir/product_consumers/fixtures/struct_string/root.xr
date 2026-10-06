@@ -1,0 +1,22 @@
+struct Report { label: string; footer: string; code: i64 }
+struct Envelope { prefix: string; report: Report; suffix: string }
+fn answer() -> i64 {
+  var first = Report{label: "ready", footer: "end", code: 40}
+  var second = first
+  second.label = "go"
+  second.code = 42
+  var wrapped = Envelope{prefix: "start", report: first, suffix: "stop"}
+  var rewritten = wrapped
+  rewritten.suffix = "done"
+  if (first.label == "ready" && second.label == "go" &&
+      first.footer == "end" && second.footer == "end" && first.code == 40 &&
+      wrapped.prefix == "start" && rewritten.prefix == "start" &&
+      wrapped.report.label == "ready" && rewritten.report.label == "ready" &&
+      wrapped.report.footer == "end" && rewritten.report.footer == "end" &&
+      wrapped.report.code == 40 && rewritten.report.code == 40 &&
+      wrapped.suffix == "stop" && rewritten.suffix == "done") {
+    return second.code
+  }
+  return 0
+}
+export fn consumerAnswer() -> i64 { return answer() }

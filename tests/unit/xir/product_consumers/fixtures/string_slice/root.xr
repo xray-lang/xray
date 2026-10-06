@@ -1,0 +1,8 @@
+fn answer() -> i64 {
+  const s = "Aé中🙂"
+  assert(s.slice(1, 4) == "é中🙂")
+  assert(s.slice(2) == "中🙂")
+  assert(s.slice(4, 4) == "")
+  return 42
+}
+export fn consumerAnswer() -> i64 { return answer() }

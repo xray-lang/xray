@@ -21,6 +21,14 @@ SELECTED = {
     "source_owner_generic_specializations_are_exact_program_functions": "generics",
     "source_owner_function_parameter_callable_has_one_program_and_private_executors": "callables",
     "source_owner_array_append_preserves_class_identity": "class_identity",
+    "source_owner_value_struct_string_copy_preserves_original": "struct_string",
+    "source_owner_explicit_bool_conditions_execute": "bool_conditions",
+}
+PROBES = {
+    "source_owner_tuple_array_elements": "tuple_array",
+    "source_owner_repeated_tuple_elements": "tuple_repeated",
+    "source_owner_string_slice_scalar_range": "string_slice",
+    "source_owner_integer_bitwise_exact_width": "integer_width",
 }
 COMMON_OBLIGATIONS = {
     "original_source_and_fixed_result": "The original source prefix and 42/48 oracle are retained byte for byte.",
@@ -88,6 +96,38 @@ def static_strings(body: str) -> dict[str, bytes]:
     return result
 
 
+def allocation_scenarios() -> dict:
+    path = ROOT / "tests/unit/program/test_xr_program_source_allocations.c"
+    code = path.read_text(encoding="utf-8")
+    match = re.search(r'static const char \*const sources\[\]\s*=\s*\{', code)
+    if not match:
+        raise ValueError("legacy allocation source array is missing")
+    start = code.index("{", match.start())
+    end = function_end(code, start)
+    values = []
+    value = bytearray()
+    for token in re.finditer(STRING + r'|,', code[start + 1:end - 1]):
+        if token.group() == ",":
+            values.append(bytes(value))
+            value.clear()
+        else:
+            value.extend(c_literal(token.group()))
+    if value:
+        values.append(bytes(value))
+    if len(values) != 8 or any(not item for item in values):
+        raise ValueError("legacy allocation scenario denominator changed")
+    manifest = static_strings(code)["manifest"]
+    return {"count": len(values), "status": "OPEN",
+        "shared_native_manifest_bytes": len(manifest), "shared_native_manifest_sha256": digest(manifest),
+        "original_obligations": ["all actual source-build allocation ordinals", "exact diagnostic status and nonempty failure message",
+            "failure leaves program/artifact/export/test/retained-root outputs empty", "two exports and one test on success",
+            "exact external symbol and valid export function id", "parse fixture destroyed before product destruction",
+            "physical allocation zero after each injected failure and final teardown", "baseline allocation count repeats exactly"],
+        "scenarios": [{"ordinal": index, "input_bytes": len(data), "input_sha256": digest(data),
+            "source": data.decode("utf-8"), "status": "OPEN", "original_allocation_count": "NOT_MEASURED",
+            "replacement_allocation_count": "NOT_MEASURED", "replacement_gates": []} for index, data in enumerate(values)]}
+
+
 def function_end(text: str, start: int) -> int:
     """Count C braces while ignoring comments and both literal forms."""
     tokens = re.compile(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[{}]', re.S)
@@ -133,8 +173,8 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
         literals = static_strings(body)
         current["static_input_literals"] = {name: {"bytes": len(value),
             "sha256": digest(value)} for name, value in literals.items()}
-        if case["name"] in SELECTED:
-            selected = SELECTED[case["name"]]
+        if case["name"] in SELECTED or case["name"] in PROBES:
+            selected = (SELECTED | PROBES)[case["name"]]
             fixture = DEST / "fixtures" / selected / "root.xr"
             data = literals["source"]
             adapter = b"export fn consumerAnswer() -> i64 { return answer() }\n"
@@ -143,6 +183,11 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 "sha256": digest(data + adapter), "original_prefix_sha256": digest(data),
                 "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": case["fixture"]["expected_exit"],
                 "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."}
+            if case["name"] in PROBES:
+                current["initial_projection"]["scope"] = "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet."
+                current["initial_projection"]["probe_target"] = "test_source_product_probe"
+                sources.append(current)
+                continue
             current["projected_obligations"] = {name: {"status": "PENDING_FULL_QUALIFICATION", "verification": note}
                                                 for name, note in COMMON_OBLIGATIONS.items()}
             prefix = f"test_source_product_{selected}"
@@ -191,7 +236,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
         "source_responsibilities": len(sources), "source_native_fixtures": sum(bool(x["original_fixture"]) for x in sources),
         "source_non_fixture_responsibilities": sum(x["original_fixture"] is None for x in sources),
         "source": sources, "other_consumer_files": families,
-        "source_allocation_scenarios": {"count": 8, "status": "OPEN", "ordinal_counts": "Must be measured on actual rebuilt old or migrated binaries."},
+        "source_allocation_scenarios": allocation_scenarios(),
         "shared_emission_owner_consumers": includes,
         "shared_emission_owner_policy": "Read only: shared with active IR/provider consumers outside this lane.",
         "completion": "OPEN; generated census and partial projections are not replacement qualification."}

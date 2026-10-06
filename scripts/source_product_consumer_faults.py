@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -53,6 +54,8 @@ def main() -> None:
     def shard(index: int) -> dict:
         command = [str(binary), str(args.mode), "--compiler-shard", str(index), str(args.jobs)]
         log = run / f"shard-{index}.log"
+        shard_started = datetime.now(timezone.utc).isoformat()
+        shard_clock = time.monotonic()
         with log.open("wb") as stream:
             process = subprocess.Popen(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
             try:
@@ -66,6 +69,7 @@ def main() -> None:
         summaries = SUMMARY.findall(output)
         ordinals = [int(value) for value in ORDINAL.findall(output)]
         result = {"shard": index, "argv": command, "returncode": code, "timed_out": timed_out,
+                  "pid": process.pid, "started_at": shard_started, "elapsed_seconds": time.monotonic() - shard_clock,
                   "log_sha256": digest(log), "ordinals": ordinals, "summaries": summaries}
         write(run / f"shard-{index}.json", result)
         return result
@@ -99,6 +103,8 @@ def main() -> None:
               "jobs": args.jobs, "sites": total, "covered": len(covered), "issues": issues,
               "inputs": len(before), "changed": changed, "elapsed_seconds": time.monotonic() - started,
               "binary": str(binary), "binary_sha256": before[str(binary)], "evidence": str(run)}
+    report["parent_pid"] = os.getpid()
+    report["finished_at"] = datetime.now(timezone.utc).isoformat()
     write(run / "result.json", report)
     print(json.dumps(report, ensure_ascii=False))
     if issues:

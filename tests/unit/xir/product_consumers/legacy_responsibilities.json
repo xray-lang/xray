@@ -141,6 +141,16 @@
           "bytes": 245,
           "sha256": "61e2df9e1f5e3a45869756c373c8978a102a8072fb41455495aea6f05defe8b0"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/tuple_array/root.xr",
+        "sha256": "c5b270510a924c1df8bd40c32c928bb8fdf92ada0293fab4582ec848a366853b",
+        "original_prefix_sha256": "61e2df9e1f5e3a45869756c373c8978a102a8072fb41455495aea6f05defe8b0",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
       }
     },
     {
@@ -277,6 +287,16 @@
           "bytes": 256,
           "sha256": "be09016b2eb69fd4f42c674d7033b00e2135ac3eb90d329781307638e6ddb93b"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/tuple_repeated/root.xr",
+        "sha256": "65e40cc5680d1142362190583756c4a7a6163587702ea954a3439d3b5a668f26",
+        "original_prefix_sha256": "be09016b2eb69fd4f42c674d7033b00e2135ac3eb90d329781307638e6ddb93b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
       }
     },
     {
@@ -490,7 +510,84 @@
           "bytes": 612,
           "sha256": "506c7ded5d09cb0597eef032f8f2d0dfe401c8c015d61e85145d368ceda2cee4"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/bool_conditions/root.xr",
+        "sha256": "bdc9cb53993fc822e72661dc04beb3c0d274294328e157f8b3d6e6b91755a265",
+        "original_prefix_sha256": "506c7ded5d09cb0597eef032f8f2d0dfe401c8c015d61e85145d368ceda2cee4",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_bool_conditions_vm",
+        "test_source_product_bool_conditions_native",
+        "test_source_product_bool_conditions_mixed_even",
+        "test_source_product_bool_conditions_mixed_odd",
+        "test_source_product_bool_conditions_axes_0",
+        "test_source_product_bool_conditions_axes_1",
+        "test_source_product_bool_conditions_axes_2",
+        "test_source_product_bool_conditions_axes_3",
+        "test_source_product_bool_conditions_compiler_0",
+        "test_source_product_bool_conditions_compiler_1",
+        "test_source_product_bool_conditions_compiler_2",
+        "test_source_product_bool_conditions_compiler_3",
+        "test_source_product_bool_conditions_runtime_0",
+        "test_source_product_bool_conditions_runtime_1",
+        "test_source_product_bool_conditions_runtime_2",
+        "test_source_product_bool_conditions_runtime_3",
+        "test_source_product_bool_conditions_cancel_0",
+        "test_source_product_bool_conditions_cancel_1",
+        "test_source_product_bool_conditions_cancel_2",
+        "test_source_product_bool_conditions_cancel_3"
+      ]
     },
     {
       "name": "source_owner_bare_nullable_condition_has_no_product",
@@ -741,7 +838,84 @@
           "bytes": 921,
           "sha256": "95e9fecbbd07c03c8a1199c3ec7d8ead25dd832f7b8618b9fb869a8fd298b7e7"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/struct_string/root.xr",
+        "sha256": "0010dd4a64c28880f52bb252d20c0ccbc6bda7fc6d98d203a9b9e273e4277a3a",
+        "original_prefix_sha256": "95e9fecbbd07c03c8a1199c3ec7d8ead25dd832f7b8618b9fb869a8fd298b7e7",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_struct_string_vm",
+        "test_source_product_struct_string_native",
+        "test_source_product_struct_string_mixed_even",
+        "test_source_product_struct_string_mixed_odd",
+        "test_source_product_struct_string_axes_0",
+        "test_source_product_struct_string_axes_1",
+        "test_source_product_struct_string_axes_2",
+        "test_source_product_struct_string_axes_3",
+        "test_source_product_struct_string_compiler_0",
+        "test_source_product_struct_string_compiler_1",
+        "test_source_product_struct_string_compiler_2",
+        "test_source_product_struct_string_compiler_3",
+        "test_source_product_struct_string_runtime_0",
+        "test_source_product_struct_string_runtime_1",
+        "test_source_product_struct_string_runtime_2",
+        "test_source_product_struct_string_runtime_3",
+        "test_source_product_struct_string_cancel_0",
+        "test_source_product_struct_string_cancel_1",
+        "test_source_product_struct_string_cancel_2",
+        "test_source_product_struct_string_cancel_3"
+      ]
     },
     {
       "name": "source_owner_sealed_coroutine_invoke_runs_defer_after_suspension",
@@ -1556,6 +1730,16 @@
           "bytes": 163,
           "sha256": "a8c61d6d10d62369c3bae023a6d6586056b6576ff3cf4f2db478a02d131b37d9"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/string_slice/root.xr",
+        "sha256": "a5359a83e3b1dcce7612addaba5ec0f95ac52ccdc67daccff146284be4b92b66",
+        "original_prefix_sha256": "a8c61d6d10d62369c3bae023a6d6586056b6576ff3cf4f2db478a02d131b37d9",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
       }
     },
     {
@@ -1586,6 +1770,16 @@
           "bytes": 514,
           "sha256": "4c638414f024aac9ee61f7687656837d276c294a5ec2b7e1f037c4c8cbb19e14"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_width/root.xr",
+        "sha256": "95096bcb6b01a457fa0d84c104b025df582e089cf88cf83ef26aca9542c39883",
+        "original_prefix_sha256": "4c638414f024aac9ee61f7687656837d276c294a5ec2b7e1f037c4c8cbb19e14",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
       }
     },
     {
@@ -5424,7 +5618,100 @@
   "source_allocation_scenarios": {
     "count": 8,
     "status": "OPEN",
-    "ordinal_counts": "Must be measured on actual rebuilt old or migrated binaries."
+    "shared_native_manifest_bytes": 164,
+    "shared_native_manifest_sha256": "cf1a1e14d20fafca09a649f47ddcba036ea57a27e5febfeb5184518c05c45ac7",
+    "original_obligations": [
+      "all actual source-build allocation ordinals",
+      "exact diagnostic status and nonempty failure message",
+      "failure leaves program/artifact/export/test/retained-root outputs empty",
+      "two exports and one test on success",
+      "exact external symbol and valid export function id",
+      "parse fixture destroyed before product destruction",
+      "physical allocation zero after each injected failure and final teardown",
+      "baseline allocation count repeats exactly"
+    ],
+    "scenarios": [
+      {
+        "ordinal": 0,
+        "input_bytes": 119,
+        "input_sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+        "source": "fn answer() -> i64 { return 0 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      },
+      {
+        "ordinal": 1,
+        "input_bytes": 305,
+        "input_sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+        "source": "fn answer() -> i64 {\n const counter = Atomic(40)\n const alias = counter\n var (old, matched) = alias.compareExchange(40, 42)\n counter.store(42, Ordering.Release)\n counter.add(1)\n counter.sub(1)\n return counter.load()\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      },
+      {
+        "ordinal": 2,
+        "input_bytes": 352,
+        "input_sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd",
+        "source": "fn answer() -> i64 {\n const flag = Atomic(false)\n const alias = flag\n var (old, matched) = alias.compareExchange(false, true)\n flag.store(true, Ordering.AcquireRelease)\n const before = flag.toggle(Ordering.Relaxed)\n if (matched && before) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      },
+      {
+        "ordinal": 3,
+        "input_bytes": 483,
+        "input_sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+        "source": "fn identity(value: f64) -> f64 { return value }\nfn answer() -> i64 {\n const value = identity(1.5)\n const other = identity(2.25)\n const counter = Atomic(value)\n const old = counter.fetchAdd(other)\n var (before, matched) = counter.compareExchange(3.75, 1.5)\n counter.store(1.5, Ordering.Release)\n const text = counter.load().toString()\n if (old < other && len(text) == 3) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      },
+      {
+        "ordinal": 4,
+        "input_bytes": 208,
+        "input_sha256": "14b80d72fa93d3c58fe6c4af421044fe81529b726a6d3c067f4bb6a85618f848",
+        "source": "type State = { token:i64, enabled:bool, nested:{ text:string }? }\nvar state:State?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      },
+      {
+        "ordinal": 5,
+        "input_bytes": 377,
+        "input_sha256": "ba1de6818baaf15e872bfe1be06bd6f95793d053c39320c946c21dc95a867810",
+        "source": "type Child = { text:string }\ntype State = { token:i64, child:Child }\nfn answer() -> i64 {\n var child:Child={text:\"before\"}\n var state:State={child:child,token:7}\n var alias=state\n alias.token=42\n alias.child.text=\"after\"\n if (state.child.text == \"after\") { return state.token }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      },
+      {
+        "ordinal": 6,
+        "input_bytes": 177,
+        "input_sha256": "2e8a3680cd3d51d65977a7ace39b2f27a479bf547946944630dc290c1e282fa4",
+        "source": "import { NetConn } from net\nvar connection:NetConn?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      },
+      {
+        "ordinal": 7,
+        "input_bytes": 278,
+        "input_sha256": "2a9bfcbf2a340eb9dc70e30331753a2326263355154bafd2005eb5c0b3eca1df",
+        "source": "fn answer() -> i64 {\n var text = StringBuilder()\n text.append(\"first\").append(42)\n const snapshot = text.toString()\n text.clear().append(\"second\")\n assert(snapshot == \"first42\")\n return 42\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "status": "OPEN",
+        "original_allocation_count": "NOT_MEASURED",
+        "replacement_allocation_count": "NOT_MEASURED",
+        "replacement_gates": []
+      }
+    ]
   },
   "shared_emission_owner_consumers": {
     "tests/unit/aot/test_xr_program_aot.c": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
