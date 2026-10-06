@@ -68,6 +68,28 @@ static char *catalog_text(const XrXirCompileContext *context, const char *text, 
     if (length == SIZE_MAX) { *status = XR_XIR_BUDGET; return NULL; }
     return xir_compile_copy(context,text,length+1,status);
 }
+static bool library_catalog_type(const XrXirGeneric *generic, XrXirType type) {
+    if (type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_BOOL) return true;
+    uint32_t ordinal = (uint32_t)type - XR_XIR_TYPE_PARAMETER_BASE;
+    return generic && (uint32_t)type >= XR_XIR_TYPE_PARAMETER_BASE &&
+        (uint32_t)type < XR_XIR_TYPE_PARAMETER_LIMIT && ordinal < generic->parameter_count;
+}
+static XrXirStatus library_catalog_generic(const XrXirGeneric *generic,
+    const XrXirCompileContext *context) {
+    if (!generic) return XR_XIR_OK;
+    for (uint32_t p = 0; p < generic->parameter_count; ++p) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        const XrXirConstraint *constraint = &generic->constraints[p];
+        if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE ||
+            constraint->interface_count || constraint->interfaces ||
+            (constraint->markers & ~XR_XIR_CONSTRAINT_MASK)) return XR_XIR_BAD_STAGE;
+    }
+    for (uint32_t a = 0; a < generic->argument_count; ++a) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        if (!library_catalog_type(generic,generic->arguments[a])) return XR_XIR_BAD_STAGE;
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus library_catalog_shape(const XrXirModule *m, const char *identity, size_t identity_length, const XrXirCompileContext *context) {
     const XrXirDeclarations *d=m->declarations;
     if(m->linkage_kind!=XR_XIR_LIBRARY || m->stage!=XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
@@ -80,14 +102,16 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m, const char *ident
     for(uint32_t f=0;f<m->function_count;++f){
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         const XrXirFunction *fn=&m->functions[f];
-        if((fn->result!=XR_XIR_UNIT&&fn->result!=XR_XIR_I64&&fn->result!=XR_XIR_STRING&&fn->result!=XR_XIR_BOOL) ||
-            (m->generics&&m->generics[f].parameter_count) || d->functions[f].nominal_owner ||
+        const XrXirGeneric *generic = m->generics ? &m->generics[f] : NULL;
+        XrXirStatus status = library_catalog_generic(generic,context);
+        if (status != XR_XIR_OK) return status;
+        if((fn->result!=XR_XIR_UNIT&&!library_catalog_type(generic,fn->result)) ||
+            d->functions[f].nominal_owner ||
             d->functions[f].cleanup_owner || d->functions[f].method_kind!=XR_XIR_NON_MEMBER)
             return XR_XIR_BAD_STAGE;
         for (uint32_t p = 0; p < fn->parameter_count; ++p) {
             if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-            if (fn->parameters[p] != XR_XIR_I64 && fn->parameters[p] != XR_XIR_STRING &&
-                fn->parameters[p] != XR_XIR_BOOL)
+            if (!library_catalog_type(generic,fn->parameters[p]))
                 return XR_XIR_BAD_STAGE;
         }
         for(uint32_t i=0;i<fn->instruction_count;++i){

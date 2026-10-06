@@ -122,6 +122,28 @@ static void *source_library_bytes(SourceContext *ctx, const void *input,
     return output;
 }
 
+/* All metadata remains declaration-local. The catalog has already rejected
+ * interface applications and constructed library-owned type identities. */
+static bool source_library_generic(SourceContext *ctx, const XrXirModule *library,
+    uint32_t source, uint32_t target) {
+    if (!library->generics) return true;
+    const XrXirGeneric *original = &library->generics[source];
+    XrXirGeneric *generic = &ctx->generics[target];
+    generic->parameter_count = original->parameter_count;
+    generic->argument_count = original->argument_count;
+    generic->constraints = source_library_bytes(ctx,original->constraints,
+        original->parameter_count,sizeof(*original->constraints));
+    generic->arguments = source_library_bytes(ctx,original->arguments,
+        original->argument_count,sizeof(*original->arguments));
+    generic->parameter_kinds = original->parameter_kinds ? source_library_bytes(ctx,
+        original->parameter_kinds,original->parameter_count,sizeof(*original->parameter_kinds)) : NULL;
+    if ((original->parameter_count && !generic->constraints) ||
+        (original->argument_count && !generic->arguments) ||
+        (original->parameter_kinds && !generic->parameter_kinds)) return false;
+    ctx->has_generics |= original->parameter_count != 0;
+    ctx->bodies[target].type_parameter_count = original->parameter_count;
+    return true;
+}
 static bool source_library_function(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map, uint32_t index) {
     uint32_t target = map->functions[index];
@@ -150,6 +172,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     ctx->bodies[target].module = map->module;
     ctx->bodies[target].checked_library = true;
     ctx->bodies[target].parameters = (XrXirType *)function->parameters;
+    if (!source_library_generic(ctx,library,index,target)) return false;
     bool helper;
     if (!source_library_bound_helper(ctx, library, index, &helper)) return false;
     if (helper || index == library->declarations->modules[0].initializer) return true;
@@ -159,6 +182,8 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, 0,
         (XrXirSourceRange){map->module,0,0,0,0})) return false;
     ctx->bodies[target].declaration = symbol->declaration;
+    ctx->bodies[target].generic_owner = ctx->generics[target].parameter_count ? symbol->declaration : 0;
+    if (!source_query_parameters(ctx,symbol->declaration)) return false;
     XrXirSourceDeclaration *query = (XrXirSourceDeclaration *)ctx->query.declarations;
     query[symbol->declaration - 1].exported = ctx->identities[target].exported;
     return true;
