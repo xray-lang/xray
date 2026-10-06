@@ -34,6 +34,7 @@ def main() -> int:
     parser.add_argument('--binary', type=Path, required=True)
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--fixtures', type=Path, required=True)
+    parser.add_argument('--stdlib', type=Path)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
     binary = args.binary.resolve()
@@ -51,7 +52,8 @@ def main() -> int:
         ('plain_go', root / 'tests/fixtures/xir_go_product/main.xr', b'A\0B\n21\n', b''),
         ('cached_state_go', fixtures / 'main.xr', b'A\0B41 42 42 true true 1.5\n', b'E\0R'),
     )
-    environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / 'stdlib'), NO_COLOR='1')
+    stdlib = args.stdlib.resolve() if args.stdlib else root / 'stdlib'
+    environment = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR='1')
     initial_binary = digest(binary)
 
     def save() -> None:
@@ -135,7 +137,7 @@ def main() -> int:
                    'binary_sha256': initial_binary, 'version_json': identity, 'commands': len(records),
                    'expected': [{'name': name, 'stdout_hex': stdout.hex(), 'stderr_hex': stderr.hex()}
                                 for name, _, stdout, stderr in expected],
-                   'source_root': str(root), 'fixture_root': str(fixtures),
+                   'source_root': str(root), 'fixture_root': str(fixtures), 'stdlib_root': str(stdlib),
                    'production_release': False, 'physical_release_instrumentation': 'NOT_RUN'}
         (evidence / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
         print('Public CLI: plain GO and cached multi-module state; VM/native independently match literal NUL/typed outputs')

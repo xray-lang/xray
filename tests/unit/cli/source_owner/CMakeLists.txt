@@ -12,6 +12,7 @@ if(NOT IS_ABSOLUTE "${CLI_SOURCE_PRODUCTION_BUILD}")
 endif()
 set(CLI_SOURCE_LIBRARIES)
 foreach(item xir/xray_xir_source_product xir/xray_xir_source xir/xray_xir_vm
+             xir/xray_xir_native_cache
              xir/xray_xir_scalar xir/xray_xir_cgen xir/xray_xir xir/xray_xir_admission
              xir/xray_xir_declarations xir/xray_compiler_parser base/xray_compile_resources)
     get_filename_component(name "${item}" NAME)

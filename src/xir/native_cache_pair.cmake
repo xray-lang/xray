@@ -55,7 +55,7 @@ add_custom_command(OUTPUT ${XIR_NATIVE_CACHE_REGISTRY}
     VERBATIM)
 add_library(xray_xir_native_cache STATIC xxir_native_cache.c ${XIR_NATIVE_CACHE_REGISTRY}
     $<TARGET_OBJECTS:xir_native_cache_image>)
-target_link_libraries(xray_xir_native_cache PUBLIC xray_xir xray_xir_scalar)
+target_link_libraries(xray_xir_native_cache PUBLIC xray_xir_source xray_xir_scalar)
 target_include_directories(xray_xir_native_cache PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_vm PUBLIC xray_xir_native_cache)
 foreach(cache_target xir_native_cache_pairgen xir_native_cache_image xray_xir_native_cache)

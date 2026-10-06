@@ -42,7 +42,8 @@ typedef enum XrCliCompileSourceStage {
     XR_CLI_COMPILE_SOURCE_PATH,
     XR_CLI_COMPILE_SOURCE_AUTHORITY,
     XR_CLI_COMPILE_SOURCE_SESSION,
-    XR_CLI_COMPILE_SOURCE_PRODUCT
+    XR_CLI_COMPILE_SOURCE_PRODUCT,
+    XR_CLI_COMPILE_SOURCE_LIBRARY
 } XrCliCompileSourceStage;
 
 typedef struct XrCliCompileSourceDiagnostic {
@@ -59,7 +60,8 @@ typedef struct XrCliCompileSourceDiagnostic {
 XR_FUNC XrCompileResourceLimits xr_cli_compile_default_resource_limits(void);
 XR_FUNC XrTomlParseLimits xr_cli_compile_default_manifest_limits(void);
 
-/* Inputs are borrowed synchronously. NULL libraries means no published input.
+/* Inputs are borrowed synchronously. NULL libraries selects the trusted
+ * same-build stdlib Catalog; an explicit Catalog remains a borrowed input.
  * Output must be empty and is preserved on failure. Initialize diagnostics to
  * zero; free their owned partial snapshot before reusing them. Neither products
  * nor diagnostics borrow this request, its Catalog, or the temporary Session.

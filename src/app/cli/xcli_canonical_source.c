@@ -16,6 +16,7 @@
 #include "../../base/xio_policy.inc.h"
 #include "../../os/os_fs.h"
 #include "../../xir/xxir_library_catalog.h"
+#include "../../xir/xxir_native_cache_internal.h"
 
 XR_FUNC XrCompileResourceLimits xr_cli_compile_default_resource_limits(void) {
     return (XrCompileResourceLimits){UINT64_C(1) << 30, UINT64_C(256) << 20, UINT64_C(8) << 30};
@@ -128,6 +129,8 @@ XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
     XrCliGraphAuthority *authority = NULL;
     XrCompilerSession *session = NULL;
     XrXirSourceProduct *product = NULL;
+    XrXirLibraryCatalog *owned_catalog = NULL;
+    const XrXirLibraryCatalog *libraries = request->libraries;
     io_status(&io, xr_realpath_owned(&policy, request->absolute_entry_path, &entry));
     if (io.status == XR_OS_IO_OK)
         io_status(&io, xr_realpath_owned(&policy, request->absolute_stdlib_path, &stdlib));
@@ -137,10 +140,15 @@ XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
         if (io.status == XR_OS_IO_OK && info.kind != XR_FS_DIR) io_status(&io, XR_OS_IO_BAD_ARGUMENT);
     }
     status = source_io_status(io.status);
+    if (status == XR_CLI_COMPILE_SOURCE_OK && !libraries) {
+        detail.stage = XR_CLI_COMPILE_SOURCE_LIBRARY;
+        status = source_xir_status(xir_native_cache_library_catalog_new(request->context,stdlib,&owned_catalog));
+        libraries = owned_catalog;
+    }
     if (status == XR_CLI_COMPILE_SOURCE_OK) {
         detail.stage = XR_CLI_COMPILE_SOURCE_AUTHORITY;
         detail.authority_status = xr_cli_compile_graph_authority_open(request->context, entry,
-            request->libraries, &request->manifest_limits, &authority, &detail.authority);
+            libraries, &request->manifest_limits, &authority, &detail.authority);
         status = source_manifest_status(detail.authority_status);
     }
     if (status == XR_CLI_COMPILE_SOURCE_OK) {
@@ -152,12 +160,13 @@ XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
         detail.stage = XR_CLI_COMPILE_SOURCE_PRODUCT;
         XrXirSourceProductRequest source = {
             {session, entry, xr_cli_compile_graph_authority_entry(authority), request->context,
-             stdlib, xr_cli_compile_graph_authority_lockfile(authority), XR_XIR_PROGRAM, request->libraries},
+             stdlib, xr_cli_compile_graph_authority_lockfile(authority), XR_XIR_PROGRAM, libraries},
             request->target};
         status = source_xir_status(xr_xir_compile_source_product_build(&source, &product, &detail.source));
     }
     xr_compile_session_free(session);
     xr_cli_compile_graph_authority_close(authority);
+    xr_xir_compile_library_catalog_free(owned_catalog);
     xr_compile_resources_free(stdlib);
     xr_compile_resources_free(entry);
     if (status == XR_CLI_COMPILE_SOURCE_OK) *output = product;

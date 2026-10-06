@@ -11,6 +11,7 @@
 #ifndef XXIR_NATIVE_CACHE_INTERNAL_H
 #define XXIR_NATIVE_CACHE_INTERNAL_H
 #include "xxir_program.h"
+#include "xxir_library_catalog.h"
 typedef struct XirNativeCache XirNativeCache;
 typedef enum XirNativeCacheHitKind {
     XIR_NATIVE_CACHE_MISS = 0, XIR_NATIVE_CACHE_MATCH = 1
@@ -23,6 +24,11 @@ typedef struct XirNativeCacheHit {
  * output; no caller-supplied callback or digest can grant execution authority. */
 XR_FUNC XrXirStatus xir_native_cache_open(const XrXirCompileContext *context,
     XirNativeCache **output);
+/* The trusted registry supplies only Checked bytes to this compiler-owned
+ * catalog. Native code admission remains the VM sealing worker's responsibility.
+ * Construction uses the caller's ledger, copies its root, and preserves output. */
+XR_FUNC XrXirStatus xir_native_cache_library_catalog_new(const XrXirCompileContext *context,
+    const char *physical_root, XrXirLibraryCatalog **output);
 XR_FUNC XrXirStatus xir_native_cache_retain(XirNativeCache *cache);
 XR_FUNC void xir_native_cache_drop(XirNativeCache *cache);
 XR_FUNC const XrXirCompileContext *xir_native_cache_context(const XirNativeCache *cache);
