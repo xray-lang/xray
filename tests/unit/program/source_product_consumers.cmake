@@ -232,3 +232,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_timer
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_timer_cgen.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_writer_stage_normal.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_writer_budget_occupied.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_writer_prefix_fi.cmake")
