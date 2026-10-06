@@ -1,0 +1,77 @@
+{
+  "status": "STATIC_CANDIDATE_NOT_BUILT_NOT_RUN",
+  "independent_expectation": {
+    "Checked": {
+      "answer": {
+        "suspend": "MAY",
+        "throws": "NONE"
+      },
+      "consumerAnswer": {
+        "suspend": "MAY",
+        "throws": "NONE"
+      }
+    },
+    "Lowered": {
+      "answer": {
+        "suspend": "MAY",
+        "throws": "NONE"
+      },
+      "consumerAnswer": {
+        "suspend": "MAY",
+        "throws": "NONE"
+      }
+    }
+  },
+  "oracle_basis": "The original source calls actual stdlib time.sleep(10), which executes a Unit TIMER_AFTER_MS; neither source function returns an error. Export adapter only calls answer. Public suspension inference is transitive along direct CALL. Values are fixed before any run, never copied from observed facts.",
+  "roots": {
+    "answer": "unique private root-module zero-argument I64 function",
+    "consumerAnswer": "unique exported root-module zero-argument I64 function",
+    "canonical_entry": "not substituted for either root; may perform only initialization"
+  },
+  "witness_oracle": {
+    "finite_bound": "strictly fewer than module function_count steps",
+    "call": "public cause CALL, actual instruction XR_XIR_CALL, immediate exactly callee, next distance exactly current minus one",
+    "first_edges": [
+      "answer -> authentic time.sleep",
+      "consumerAnswer -> root answer"
+    ],
+    "terminal": "distance zero, callee UINT32_MAX, cause SUSPEND, exact globally unique time-owned TIMER_AFTER_MS instruction, result Unit, operand I64",
+    "numeric_ids_and_distances": "reported as observations; no fixed literal index or distance oracle"
+  },
+  "source_authenticity": "public complete SourceProduct view resolves exact framed time identity to supplied actual stdlib/time/time.xr path; detached Checked owns the same module identity; no embedded fallback accepted",
+  "ownership": {
+    "detachment": "SourceProduct and compiler session destroyed before either effects analysis",
+    "effects": "each independently owned public summary freed before next stage",
+    "stage_release": "observer blocks/bytes and ledger live_bytes restored to pre-analysis values",
+    "final_release": "both artifacts and diagnostic freed; ledger live_bytes baseline then ledger released; limited compiler physical blocks/bytes 0/0",
+    "runtime": "VM take/Instance/native/output/HostWait not invoked; runtime physical release not claimed"
+  },
+  "compiler_analysis_cost": "Checked and Lowered report separate before/after actual malloc attempts, allocation_count, allocated_bytes, work; borrowed queries allocate zero; total program compiler attempts separate; never added to existing Timer runtime-baseline or FI denominator",
+  "normal_test_denominator": {
+    "ctest_tests": 1,
+    "stages": 2,
+    "root_queries": 4,
+    "compiler_full_FI": "NOT_RUN",
+    "runtime_full_FI": "NOT_RUN"
+  },
+  "old_responsibility": {
+    "body_bytes": 7123,
+    "body_sha256": "15fa93fc7c29d0e3e4761e1bfec410c7ebc13e5d4ea0d32b3822e036ab89ea49",
+    "assertion_sites": 46,
+    "loop_sites": 3,
+    "A08": "Only positive transitive suspension fact prepared. Old CALL|SUSPEND|CANCEL mask has no identical public field; CANCEL responsibility remains OPEN.",
+    "A09": "Coroutine/timer capability-mask and rejection/missing-provider responsibility OPEN.",
+    "A15": "Normal/cancel two-successor representation mapping OPEN.",
+    "A21_A22": "Literal safepoint0/state1 mapping OPEN.",
+    "A38_A39_A40": "All three old C spelling equivalents OPEN; no C emission in metadata target.",
+    "whole_TEST_migration": "OPEN, metadata success alone would not close the old TEST"
+  },
+  "all_execution": {
+    "MSVC": "NOT_RUN",
+    "ASan": "NOT_RUN",
+    "native_AOT": "NOT_RUN",
+    "HostWait_real_10ms": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "safety_default": "NOT_RUN"
+  }
+}

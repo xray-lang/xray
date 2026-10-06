@@ -1,0 +1,432 @@
+{
+  "kind": "Current public definition and writer consumer additive candidate",
+  "registration": "One normal CTest; no existing driver/inventory/denominator change.",
+  "integration_baseline": {
+    "historical_last_reported_HEAD": "87ef1b636b57c0326540a09b222c6f665837d845",
+    "actual_parent_base": "NOT_CAPTURED; parent39 and Timer10 are progressing; parent must append include on its fresh serialized final state.",
+    "direct_apply_claim": false
+  },
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "production_commit": "d5f1a5b0bc2c4ca16ffbc977633571b2710c733b",
+  "identity": {
+    "Checked_schema": 25,
+    "Checked_semantic": 67,
+    "opcode_count": 148,
+    "CONST_INT": 2,
+    "RETURN": 33
+  },
+  "source_binding": {
+    "original_reviewed_C_sha256": "f054cad36183135150dc8e2ad7e0fc5a078357eadcf1113418010cd4bd8050c6",
+    "new_C_sha256": "146626dc181b854a4f1e5f7d70ec69927d45e20fc5fce87e2de3eb9af62db0a9",
+    "only_source_delta": "One include string changed to dedicated public-writer golden filename.",
+    "golden_afterimage_sha256": "8c275074db761d7f5bd6f01d5a86e22c146cc93890214a0888c4606e347b3453",
+    "golden_source": "Complete independently named scalar body/header/hash; no production output sampling or patchVersion.",
+    "public_diagnostic_source_commit": "d5f1a5b0bc2c4ca16ffbc977633571b2710c733b",
+    "public_diagnostic_sources": {
+      "src/xir/xxir.c": {
+        "sha256": "a39b322b1e2b46c6837dad9d9ff241944be4ef276b72539ec2cedc26ef806e5c",
+        "anchors": {
+          "191": "    *output = copy; return XR_XIR_OK;",
+          "271": "    *output = copy;",
+          "278": "    if (!xir_compile_context_valid(budget) || !output)",
+          "281": "    if (status == XR_XIR_OK) status = xr_xir_compile_verify(budget, input, diagnostic);"
+        }
+      },
+      "src/xir/xxir_verify.c": {
+        "sha256": "34a8aae12f4282797ce282de0a1d66b1a516ee884d26036c7ef4ce636545f143",
+        "anchors": {
+          "326": "    if (!function->name || !function->name_length || !function->blocks ||",
+          "341": "    if (memchr(function->name, 0, function->name_length))",
+          "1158": "            context.location = (XrXirDiagnostic) {XR_XIR_OK, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};",
+          "1177": "    context.location.status = status;",
+          "1180": "        *diagnostic = context.location;"
+        }
+      },
+      "src/xir/xxir_checked.c": {
+        "sha256": "e268635fea9cb190f0a8291ece46a0d5169a930665df2bfa6d92caaedc740ee2",
+        "anchors": {
+          "72": "    c.status=xr_xir_compile_verify(&limits, &artifact->module, diagnostic);",
+          "74": "    if (c.status!=XR_XIR_OK) { xr_xir_compile_artifact_free(artifact); return c.status; }",
+          "75": "    *output=artifact;"
+        }
+      },
+      "src/xir/xxir_checked_codec.inc.c": {
+        "sha256": "a5a8f03e8dda4702192bae3acf15ceeefd6d92c13ab9375693185a1eca57146f",
+        "anchors": {}
+      }
+    },
+    "original_test_inputs": {
+      "tests/unit/xir/compile_owner/checked_sizing64_golden.h": "b0e830e687dd42d283826f07d118abf2947a80da0382d82a333e1d0676110b11",
+      "tests/unit/xir/compile_owner/checked_sizing65_golden.h": "daa22addb142cdad20d6f0783c642069f005948d21c167c33d4564aa0fda3679",
+      "tests/unit/xir/compile_owner/checked_sizing_cases.h": "18e1a343baac5fc63ce9c75d4693dc0e9b58e117507d13404a2efc7c9d5b7a37",
+      "tests/unit/xir/compile_owner/derive_checked_sizing64_golden.py": "8e4e854154efaf5cf844b74632ad5df37d311ae78b927cfb462be88f6c01d49a"
+    },
+    "test_inputs_commit": "25f4016d6f089169757a90ae11ba537002374711"
+  },
+  "observer": {
+    "repository_relative_include": "tests/unit/xir/xir_source_program_compile_owner.h",
+    "access": "Existing parent observer included read-only; not copied/edited/extended.",
+    "owner_limits": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000
+    },
+    "new_resource_threshold_claim": "NONE; these are finite caps only, not exact/minus1 proof."
+  },
+  "models": [
+    {
+      "index": 0,
+      "source_record": {
+        "previous": {
+          "path": "tests/unit/xir/compile_owner/checked_sizing64_golden.h",
+          "name": "sizing64_golden",
+          "bytes": 224,
+          "sha256": "4e250f30fadf13fb1a943de2533dd597842d54cc4e01a40d037ff3125e254ef9",
+          "body_sha256": "8f1005ebdd7902663e48886a3a2e57eb285853a95fd94c22a427c1957edbcb82",
+          "line": 14,
+          "users": [
+            "tests/unit/xir/compile_owner/checked_sizing_cases.h",
+            "tests/unit/xir/compile_owner/derive_checked_sizing64_golden.py"
+          ]
+        },
+        "name": "sizing65_golden",
+        "header": "tests/unit/xir/compile_owner/checked_sizing65_golden.h",
+        "reader_positive": true
+      },
+      "named_model": {
+        "linkage": 0,
+        "functions": [
+          {
+            "name": "main",
+            "parameters": [],
+            "result": 2,
+            "blocks": [
+              [
+                0,
+                2,
+                0,
+                0
+              ]
+            ],
+            "instructions": [
+              [
+                2,
+                2,
+                0,
+                0,
+                0,
+                0,
+                42,
+                0,
+                0
+              ],
+              [
+                33,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "operands": []
+          }
+        ],
+        "declarations": null,
+        "generics": null,
+        "nodes": [],
+        "nominals": [],
+        "interfaces": [],
+        "defaults": []
+      },
+      "encoded_bytes": 224,
+      "body_bytes": 160,
+      "body_sha256": "8f1005ebdd7902663e48886a3a2e57eb285853a95fd94c22a427c1957edbcb82",
+      "current67_packet_sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784",
+      "current67_wire_hash": "5dc7656880caf9c2bbe177ea5bc04b20e613acf673cd897be01543fb904cf216",
+      "public_role": "Legal Built/Checked/full writer byte equality, owned input destroyed before writer",
+      "oracle": "XR_XIR_OK with full224B equality",
+      "original_private_responsibility": {
+        "work": 648,
+        "formula": "1+38+(size+1)+2*(size-32)",
+        "sizing_integer_fields": 37,
+        "sizing_blob_advances": 1,
+        "storage_formula": "sizeof(XrCompileResources)+sizeof(CompileAllocation)+size",
+        "axes": {
+          "allocated_bytes": [
+            "storage-1:BUDGET",
+            "storage:OK"
+          ],
+          "live_bytes": [
+            "storage-1:BUDGET",
+            "storage:OK"
+          ]
+        },
+        "prefixes": "Every work cap from1 through648/636; status BUDGET below work, OK at work; exact spent from independent atomic-charge oracle",
+        "OOM": "failure0: owner new OUT_OF_MEMORY, null; failure1: encoder OUT_OF_MEMORY, attempts2, work40; physical0",
+        "out": "On encoder failure packet bytes/sentinel0x5a and length17 unchanged; after success packet free leaves owner only",
+        "name": "main"
+      },
+      "private_sizing_status": "OPEN_NOT_RUN"
+    },
+    {
+      "index": 1,
+      "source_record": {
+        "previous": {
+          "path": "tests/unit/xir/compile_owner/checked_sizing64_golden.h",
+          "name": "sizing64_embedded_golden",
+          "bytes": 224,
+          "sha256": "8f452d48c7edb0e727ecc0271bcbbab2bd603536910b1c6e7bdfa31da15006ff",
+          "body_sha256": "74ad8e8b929ff8a9a1a2d6a9de5474ee1788e3c7b888398d13e54c6f9b8b4c19",
+          "line": 35,
+          "users": [
+            "tests/unit/xir/compile_owner/checked_sizing_cases.h",
+            "tests/unit/xir/compile_owner/derive_checked_sizing64_golden.py"
+          ]
+        },
+        "name": "sizing65_embedded_golden",
+        "header": "tests/unit/xir/compile_owner/checked_sizing65_golden.h",
+        "reader_positive": false
+      },
+      "named_model": {
+        "linkage": 0,
+        "functions": [
+          {
+            "name": "m\u0000in",
+            "parameters": [],
+            "result": 2,
+            "blocks": [
+              [
+                0,
+                2,
+                0,
+                0
+              ]
+            ],
+            "instructions": [
+              [
+                2,
+                2,
+                0,
+                0,
+                0,
+                0,
+                42,
+                0,
+                0
+              ],
+              [
+                33,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "operands": []
+          }
+        ],
+        "declarations": null,
+        "generics": null,
+        "nodes": [],
+        "nominals": [],
+        "interfaces": [],
+        "defaults": []
+      },
+      "encoded_bytes": 224,
+      "body_bytes": 160,
+      "body_sha256": "74ad8e8b929ff8a9a1a2d6a9de5474ee1788e3c7b888398d13e54c6f9b8b4c19",
+      "current67_packet_sha256": "f1d7304765ebfe2a4e01405a5fb692816262d192065c818cbaa0c71a6cd7dd4c",
+      "current67_wire_hash": "6e5cde5aa2d40b42b03424f8082764dabdde113c8d7530bf8355f06c6267d441",
+      "public_role": "Negative Built/current packet only; original private writer sizing remains OPEN",
+      "oracle": "XR_XIR_BAD_STRUCTURE at function0 before CFG traversal; empty/real occupied output unchanged",
+      "original_private_responsibility": {
+        "work": 648,
+        "formula": "1+38+(size+1)+2*(size-32)",
+        "sizing_integer_fields": 37,
+        "sizing_blob_advances": 1,
+        "storage_formula": "sizeof(XrCompileResources)+sizeof(CompileAllocation)+size",
+        "axes": {
+          "allocated_bytes": [
+            "storage-1:BUDGET",
+            "storage:OK"
+          ],
+          "live_bytes": [
+            "storage-1:BUDGET",
+            "storage:OK"
+          ]
+        },
+        "prefixes": "Every work cap from1 through648/636; status BUDGET below work, OK at work; exact spent from independent atomic-charge oracle",
+        "OOM": "failure0: owner new OUT_OF_MEMORY, null; failure1: encoder OUT_OF_MEMORY, attempts2, work40; physical0",
+        "out": "On encoder failure packet bytes/sentinel0x5a and length17 unchanged; after success packet free leaves owner only",
+        "name": "four-byte m\\0in"
+      },
+      "private_sizing_status": "OPEN_NOT_RUN"
+    },
+    {
+      "index": 2,
+      "source_record": {
+        "previous": {
+          "path": "tests/unit/xir/compile_owner/checked_sizing64_golden.h",
+          "name": "sizing64_empty_golden",
+          "bytes": 220,
+          "sha256": "1ed3a0170192e3d711afd84dcdfe46fb6a660f186d7af1dfcd9ea57dcfcf1c01",
+          "body_sha256": "33a92fc203dc6783e74ba0d726d70b839167338686aa78594ab7257f608d9d5d",
+          "line": 56,
+          "users": [
+            "tests/unit/xir/compile_owner/checked_sizing_cases.h",
+            "tests/unit/xir/compile_owner/derive_checked_sizing64_golden.py"
+          ]
+        },
+        "name": "sizing65_empty_golden",
+        "header": "tests/unit/xir/compile_owner/checked_sizing65_golden.h",
+        "reader_positive": false
+      },
+      "named_model": {
+        "linkage": 0,
+        "functions": [
+          {
+            "name": "",
+            "parameters": [],
+            "result": 2,
+            "blocks": [
+              [
+                0,
+                2,
+                0,
+                0
+              ]
+            ],
+            "instructions": [
+              [
+                2,
+                2,
+                0,
+                0,
+                0,
+                0,
+                42,
+                0,
+                0
+              ],
+              [
+                33,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "operands": []
+          }
+        ],
+        "declarations": null,
+        "generics": null,
+        "nodes": [],
+        "nominals": [],
+        "interfaces": [],
+        "defaults": []
+      },
+      "encoded_bytes": 220,
+      "body_bytes": 156,
+      "body_sha256": "33a92fc203dc6783e74ba0d726d70b839167338686aa78594ab7257f608d9d5d",
+      "current67_packet_sha256": "d6f786d919ee66a3acc14208671689a86805ca5802684d7b196d2c16362a8bae",
+      "current67_wire_hash": "be5d6baac038897c71d49b979ee19b463d77e2a2deb51c88c85e351ace321965",
+      "public_role": "Negative Built/current packet only; original private writer sizing remains OPEN",
+      "oracle": "XR_XIR_BAD_STRUCTURE at function0 before CFG traversal; empty/real occupied output unchanged",
+      "original_private_responsibility": {
+        "work": 636,
+        "formula": "1+38+(size+1)+2*(size-32)",
+        "sizing_integer_fields": 37,
+        "sizing_blob_advances": 1,
+        "storage_formula": "sizeof(XrCompileResources)+sizeof(CompileAllocation)+size",
+        "axes": {
+          "allocated_bytes": [
+            "storage-1:BUDGET",
+            "storage:OK"
+          ],
+          "live_bytes": [
+            "storage-1:BUDGET",
+            "storage:OK"
+          ]
+        },
+        "prefixes": "Every work cap from1 through648/636; status BUDGET below work, OK at work; exact spent from independent atomic-charge oracle",
+        "OOM": "failure0: owner new OUT_OF_MEMORY, null; failure1: encoder OUT_OF_MEMORY, attempts2, work40; physical0",
+        "out": "On encoder failure packet bytes/sentinel0x5a and length17 unchanged; after success packet free leaves owner only",
+        "name": "length0 with unreadable pointer1"
+      },
+      "private_sizing_status": "OPEN_NOT_RUN"
+    }
+  ],
+  "public_oracles": {
+    "legal": "Counted main Built->Checked, destroy original counted name buffer, verify and full224B independent writer KAT; legal read+verify value42; no VM/native execution claim.",
+    "negative_forms": [
+      "counted m\\0in length4",
+      "unreadable pointer1 with length0 at Built; complete packet has empty counted name"
+    ],
+    "negative_paths": [
+      "Built check",
+      "full current67 packet read"
+    ],
+    "out_states": [
+      "NULL",
+      "real valid occupied artifact"
+    ],
+    "expected_diagnostic": {
+      "status": "XR_XIR_BAD_STRUCTURE",
+      "function": 0,
+      "block": "UINT32_MAX",
+      "instruction": "UINT32_MAX",
+      "reason": "XR_XIR_DIAGNOSTIC_NONE",
+      "initial_poison_indices": [
+        17,
+        18,
+        19
+      ],
+      "covered_paths": [
+        "Built name NUL",
+        "Built unreadable pointer1 length0",
+        "complete current67 name NUL packet",
+        "complete current67 empty-name packet"
+      ],
+      "basis": "Verifier initializes function location before function_shape and updates status while preserving absent CFG location. Checked reader semantic failure returns same diagnostic; no decode_failure wrapper."
+    },
+    "negative_checks": 8,
+    "negative_checks_scope": "Two original synthetic name forms only; neither this count nor legal224B closes23 named families.",
+    "memory": "Every public failure preserves output and compiler live baseline; packet failures attempt real allocation; all legal ownership freed and owner physical0 at end."
+  },
+  "public_path_source_review": {
+    "occupied_output": "Only address output is checked; prior pointee is not read. BUILT input verified before owned transition can assign output. Both empty/occupied get name BAD_STRUCTURE and preserve identity.",
+    "zero_length_unreadable_pointer": "function_shape uses short-circuit !name_length at326 before memchr at341; Built invalid pointer is never copied because definition verification fails. Decoded empty blob produces null name, then same function-shape admission rejects."
+  },
+  "qualification": {
+    "status": "NOT_BUILT_NOT_RUN",
+    "MSVC_MT_Release": "NOT_RUN",
+    "ASan_real_MD_Debug": "NOT_RUN",
+    "timeout_seconds": 120,
+    "FI": "NOT_RUN",
+    "complete_default_safety_native": "NOT_RUN"
+  },
+  "open": [
+    "Original2 private writer-only exact bytes/codec responsibilities cannot become public reader or writer positives.",
+    "Original work648/648/636 full prefixes, allocated/live exact/minus1 sizeof storage oracle, owner/encoder FI0/1 and sentinel/invalid-pointer/sticky cursor primitives; no use of those private values as public writer budget.",
+    "Remaining21-family original Source/native/VM/Task/ABI/lifecycle/FI/resource/ownership consumers and complete migration.",
+    "No private Checked construction or direct codec invocation is added by this public consumer."
+  ],
+  "parent_edit": {
+    "path": "tests/unit/program/source_product_consumers.cmake",
+    "kind": "One EOF include append on parent latest final state, preserve reader/roles/ENTRY/Timer includes",
+    "include": "include(\"${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_writer.cmake\")"
+  }
+}

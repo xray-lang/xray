@@ -227,3 +227,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_packe
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_entry_roles.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_packets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_writer.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_timer_effects.cmake")
