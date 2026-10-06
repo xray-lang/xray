@@ -4252,3 +4252,5 @@ include(xir/array_remove.cmake)
 include(xir/array_resize.cmake)
 
 include(xir/source_shadow_function.cmake)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/array_entries.cmake")

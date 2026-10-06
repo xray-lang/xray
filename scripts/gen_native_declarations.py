@@ -154,6 +154,8 @@ def simple_term(term, binder):
             return 'RESULT_VARIABLE'
         if term == ('name', 'Array', (('name', binder, ()),)):
             return 'ARRAY_ELEMENT'
+        if term == ('name', 'Array', (('tuple', (('name', 'i64', ()), ('name', binder, ()))),)):
+            return 'ARRAY_INDEX_ELEMENT'
         if term == ('name', 'Array', (('name', 'U', ()),)):
             return 'ARRAY_RESULT'
         if term == ('nullable', ('name', binder, ())):
@@ -195,6 +197,7 @@ def array_recipe_contracts(binder):
         'ARRAY_POP': ('pop', 'REF', f'() -> {binder}?', ordinary, 'owned'),
         'ARRAY_SHIFT': ('shift', 'REF', f'() -> {binder}?', ordinary, 'owned'),
         'ARRAY_RESIZE': ('resize', 'REF', f'(length: i64, fill: {binder}) -> Array<{binder}>', ordinary, 'owned'),
+        'ARRAY_ENTRIES': ('entries', 'READ', f'() -> Array<(i64, {binder})>', ordinary, 'owned'),
     }
 
 

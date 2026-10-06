@@ -1,0 +1,1 @@
+export fn main()->i64{const xs=[7];const out=xs.entries<i64>();return 0}

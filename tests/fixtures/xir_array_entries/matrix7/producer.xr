@@ -1,0 +1,2 @@
+export fn round<T>(item:T)->Array<(i64,T)>{const values=[item,item];return values.entries()}
+export fn divide(n:i64)->i64{return 10/n}

@@ -1,0 +1,1 @@
+export fn main()->i64{const out=[7].entriesIterator();return 0}

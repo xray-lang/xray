@@ -62,5 +62,6 @@ struct Array<T> {
     // entriesIterator()/next() yields (index, element) tuples.
     iterator() -> Iterator<T>
     entriesIterator() -> Iterator<(i64, T)>
+    // @native-operation ARRAY_ENTRIES allocation=may_heap failures=allocation,retain,limit ownership=owned
     entries() -> Array<(i64, T)>
 }

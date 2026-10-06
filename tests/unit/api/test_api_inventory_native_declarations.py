@@ -41,7 +41,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual("Array<T>", declaration["signature"])
         self.assertEqual("struct", declaration["declaration_kind"])
 
-    def test_twenty_operations_have_exact_admission_contracts(self) -> None:
+    def test_twenty_one_operations_have_exact_admission_contracts(self) -> None:
         members = [entry for entry in self.items if entry["kind"] != "type"]
         admitted = {entry["name"]: entry for entry in members if entry["xir_admitted"]}
         ordinary = ["allocation", "retain", "limit"]
@@ -53,6 +53,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("pop", "ARRAY_POP", "ref", "owned", ordinary),
             ("shift", "ARRAY_SHIFT", "ref", "owned", ordinary),
             ("resize", "ARRAY_RESIZE", "ref", "owned", ordinary),
+            ("entries", "ARRAY_ENTRIES", "read", "owned", ordinary),
             ("clear", "ARRAY_CLEAR", "ref", "unit", ordinary),
             ("reverse", "ARRAY_REVERSE", "ref", "owned", ordinary),
             ("unshift", "ARRAY_UNSHIFT", "ref", "unit", ordinary),
@@ -68,7 +69,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("every", "ARRAY_EVERY", "read", "owned", callback),
             ("some", "ARRAY_SOME", "read", "owned", callback),
         )
-        self.assertEqual(20, len(admitted))
+        self.assertEqual(21, len(admitted))
         self.assertEqual({row[0] for row in expected}, set(admitted))
         for name, operation, receiver, ownership, failures in expected:
             with self.subTest(name=name):
@@ -79,10 +80,10 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                 self.assertEqual(ownership, entry["ownership"])
                 self.assertEqual(failures, entry["failures"])
         unadmitted = [entry for entry in members if not entry["xir_admitted"]]
-        self.assertEqual(12, len(unadmitted))
+        self.assertEqual(11, len(unadmitted))
         self.assertEqual({"withCapacity", "capacity", "ptr", "mutPtr",
                           "reserve", "concat", "sort", "fill", "toString",
-                          "iterator", "entriesIterator", "entries"}, {entry["name"] for entry in unadmitted})
+                          "iterator", "entriesIterator"}, {entry["name"] for entry in unadmitted})
         self.assertTrue(all(entry["operation"] == "NONE" for entry in unadmitted))
         self.assertTrue(all(entry["allocation"] == "unknown" for entry in unadmitted))
         self.assertTrue(all(entry["ownership"] == "unknown" for entry in unadmitted))
@@ -101,6 +102,8 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual("(index: i64, value: T): ()", actual["set"]["signature"])
         self.assertEqual("(fn: fn(item: T, index: i64) -> U): Array<U>", actual["map"]["signature"])
         self.assertEqual("(value: T, start?: i64, end?: i64): Array<T>", actual["fill"]["signature"])
+        self.assertEqual("(): Array<(i64, T)>", actual["entries"]["signature"])
+        self.assertEqual(32, actual["entries"]["native_member_id"])
 
     def test_string_identity_contracts_and_member_completeness(self) -> None:
         path = ROOT / "stdlib/types/string.xr"

@@ -1,0 +1,1 @@
+export fn main()->Array<i64>{return [7].entries()}

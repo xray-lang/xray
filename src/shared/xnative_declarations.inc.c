@@ -99,11 +99,11 @@ static const XrNativeMemberDeclaration xr_native_array_members[] = {
     {29, "toString", "() -> string", "string", 59, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
     {30, "iterator", "() -> Iterator<T>", "Iterator < T >", 63, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {31, "entriesIterator", "() -> Iterator<(i64, T)>", "Iterator < ( i64 , T ) >", 64, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {32, "entries", "() -> Array<(i64, T)>", "Array < ( i64 , T ) >", 65, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {32, "entries", "() -> Array<(i64, T)>", "Array < ( i64 , T ) >", 66, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT},
 };
 static const XrNativeTypeDeclaration xr_native_array = {
     1, XR_NATIVE_DECLARATION_VALUE, "Array", "T", 1,
-    "stdlib/types/array.xr", "xray-native:prelude/Array", {{73, 37, 176, 24, 107, 117, 18, 163, 186, 98, 249, 127, 185, 252, 4, 66, 152, 84, 127, 242, 27, 234, 40, 68, 0, 8, 90, 218, 26, 200, 129, 228}},
+    "stdlib/types/array.xr", "xray-native:prelude/Array", {{169, 116, 249, 28, 18, 183, 213, 29, 0, 208, 79, 30, 202, 93, 214, 39, 95, 56, 179, 211, 84, 254, 124, 210, 187, 22, 80, 9, 80, 219, 94, 105}},
     3, 8, xr_native_array_members, 32
 };
 

@@ -1,0 +1,2 @@
+fn collect<T>(xs:Array<T>)->Array<(i64,T)>{const wrong:T=7;return xs.entries()}
+export fn main()->i64{return 0}

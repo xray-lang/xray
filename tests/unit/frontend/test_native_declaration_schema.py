@@ -67,12 +67,16 @@ class NativeDeclarations(unittest.TestCase):
                           schema.simple_term(resize.parameters[1][1], 'T'),
                           schema.simple_term(resize.result, 'T')),
                          ('REF', 'owned', 2, 'I64', 'ELEMENT', 'ARRAY_ELEMENT'))
+        entries = next(member for member in members if member.name == 'entries')
+        self.assertEqual((entries.receiver, entries.ownership, len(entries.parameters),
+                          entries.operation, schema.simple_term(entries.result, 'T')),
+                         ('READ', 'owned', 0, 'ARRAY_ENTRIES', 'ARRAY_INDEX_ELEMENT'))
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
                          {'withCapacity', 'capacity', 'ptr', 'mutPtr',
                           'reserve', 'concat', 'sort', 'fill', 'toString',
-                          'iterator', 'entriesIterator', 'entries'})
+                          'iterator', 'entriesIterator'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
         with self.assertRaises(ValueError):
@@ -126,6 +130,13 @@ class NativeDeclarations(unittest.TestCase):
             ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(fill: T, length: i64) -> Array<T>'),
             ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(length: i64, fill: Unknown) -> Array<T>'),
             ('ref resize(length: i64, fill: T) -> Array<T>', 'ref resize(length: i64, fill: T) -> T'),
+            ('entries() -> Array<(i64, T)>', 'ref entries() -> Array<(i64, T)>'),
+            ('entries() -> Array<(i64, T)>', 'entries(value: T) -> Array<(i64, T)>'),
+            ('entries() -> Array<(i64, T)>', 'entries() -> Array<(i32, T)>'),
+            ('entries() -> Array<(i64, T)>', 'entries() -> Array<(T, i64)>'),
+            ('entries() -> Array<(i64, T)>', 'entries() -> Array<(i64, Unknown)>'),
+            ('entries() -> Array<(i64, T)>', 'entries() -> Array<T>'),
+            ('entries() -> Array<(i64, T)>', 'entries() -> Array<(i64, T?)>'),
             ('struct Array<T>', 'struct Array<U>'),
         ]
         for before, after in cases:

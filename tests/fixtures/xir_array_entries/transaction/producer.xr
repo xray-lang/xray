@@ -1,0 +1,1 @@
+export fn collect<T>(values:Array<T>)->Array<(i64,T)>{return values.entries()}

@@ -1,0 +1,4 @@
+import "./producer" as producer
+export fn case0()->Array<(i64,Atomic<i64>)> {return producer.round<Atomic<i64>>(Atomic<i64>(7))}
+export fn case1()->Array<(i64,Atomic<bool>)> {return producer.round<Atomic<bool>>(Atomic<bool>(true))}
+export fn case2()->Array<(i64,Atomic<f64>)> {return producer.round<Atomic<f64>>(Atomic<f64>(1.5))}

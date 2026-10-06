@@ -1,0 +1,15 @@
+import "./producer" as producer
+var trace=0
+var original=[7,9]
+fn factory()->Array<i64>{trace=trace+1;return original}
+export fn result()->Array<(i64,i64)>{return producer.collect<i64>(factory())}
+export fn empty()->Array<(i64,i64)>{const xs:Array<i64>=[];return xs.entries()}
+export fn count()->i64{return trace}
+export fn saved()->Array<i64>{return original}
+export fn independent()->Array<i64>{var out=original.entries();out[0]=(99,42);return [out[0].0,out[0].1,original[0],original[1]]}
+export fn text()->Array<(i64,string)>{return ["owned中","a\0b"].entries()}
+export fn retainedCallable()->Array<(i64,fn()->i64)>{const captured=7;return [fn()->i64{return captured},fn()->i64{return captured}].entries()}
+export fn floatBits(values:Array<f64>)->Array<(i64,f64)>{return values.entries()}
+export fn shortBits(values:Array<f32>)->Array<(i64,f32)>{return values.entries()}
+fn delayedFactory()->Array<i64>{trace=trace+1;Coro.yield();return original}
+export fn delayed()->Array<(i64,i64)>{return delayedFactory().entries()}

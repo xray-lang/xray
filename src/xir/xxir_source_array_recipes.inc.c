@@ -29,6 +29,7 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation) {
     case XR_NATIVE_OPERATION_ARRAY_POP: return SOURCE_ARRAY_POP;
     case XR_NATIVE_OPERATION_ARRAY_SHIFT: return SOURCE_ARRAY_SHIFT;
     case XR_NATIVE_OPERATION_ARRAY_RESIZE: return SOURCE_ARRAY_RESIZE;
+    case XR_NATIVE_OPERATION_ARRAY_ENTRIES: return SOURCE_ARRAY_ENTRIES;
     default: return SOURCE_ARRAY_NONE;
     }
 }
@@ -356,8 +357,50 @@ static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceVa
     return true;
 }
 
+/* The immutable receiver snapshot owns every element until the completed result is retained. */
+static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
+    const SourceValue *evaluated, SourceValue *value) {
+    CallExprNode *call = &node->as.call_expr;
+    if (call->type_arg_count || call->default_arg_count || call->arg_count)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array entries takes no arguments");
+    SourceValue array;
+    if (evaluated) array = *evaluated;
+    else if (!expression(ctx, call->callee->as.member_access.object, &array)) return false;
+    if (!xr_xir_type_is_array(&ctx->types, array.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array entries receiver is not an Array");
+    XrXirType element = xr_xir_array_element(&ctx->types, array.type), tuple, result_type, cell_type;
+    XrXirCallableParameter *fields = source_alloc(ctx, 2, sizeof(*fields));
+    if (!fields) return false;
+    fields[0] = (XrXirCallableParameter) {XR_XIR_I64, 0};
+    fields[1] = (XrXirCallableParameter) {element, 0};
+    if (!source_intern_type(ctx, (XrXirTypeNode) {.kind = XR_XIR_TYPE_TUPLE,
+            .parameters = fields, .parameter_count = 2}, &tuple) ||
+        !source_array_element_type(ctx, tuple, &result_type) ||
+        !source_cell_type(ctx, result_type, &cell_type)) return false;
+    SourceValue seed, store, candidate, length, zero;
+    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, result_type, {0}, {0}, 0, {0}}, NULL, 0, &seed) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, cell_type, {seed.id}, {0}, 0, {0}}, &store) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_PLACE, result_type, {store.id}, {0}, 0, {0}}, &candidate) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id}, {0}, 0, {0}}, &length) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;
+    SourceCounter counter;
+    if (!source_counter_open(ctx, zero, length, false, &counter)) return false;
+    SourceValue payload, entry, pair[2];
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_GET, element,
+            {array.id, counter.index.id}, {0}, 0, {0}}, &payload)) return false;
+    pair[0] = counter.index; pair[1] = payload;
+    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_TUPLE_NEW, tuple, {0}, {0}, 0, {0}},
+            pair, element == XR_XIR_UNIT ? 1 : 2, &entry) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT,
+            {candidate.id, entry.id}, {0}, 0, {0}}, NULL) ||
+        !source_counter_close(ctx, &counter)) return false;
+    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, result_type,
+        {store.id}, {0}, 0, {0}}, value);
+}
+
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value) {
+    if (recipe == SOURCE_ARRAY_ENTRIES) return source_array_entries_call(ctx, node, evaluated, value);
     if (recipe == SOURCE_ARRAY_RESIZE) return source_array_resize_call(ctx, node, value);
     if (recipe == SOURCE_ARRAY_POP || recipe == SOURCE_ARRAY_SHIFT)
         return source_array_remove_call(ctx, node, recipe, value);

@@ -1,0 +1,7 @@
+import "./producer" as producer
+class Array<T>{value:T
+    constructor(value:T){this.value=value}
+    entries()->T{return this.value}
+}
+export fn case0()->i64{const value=Array<i64>(7);return value.entries()+value.entries()+producer.identity<i64>(2)}
+export fn case1()->bool{const value=Array<bool>(true);return value.entries()&&value.entries()&&producer.identity<bool>(true)}

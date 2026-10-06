@@ -1,0 +1,4 @@
+class Array<T>{value:T
+ constructor(value:T){this.value=value}
+ private entries()->T{return this.value}}
+export fn main()->i64{const xs=Array<i64>(7);return xs.entries()}
