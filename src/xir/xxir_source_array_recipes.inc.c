@@ -31,6 +31,7 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation) {
     case XR_NATIVE_OPERATION_ARRAY_RESIZE: return SOURCE_ARRAY_RESIZE;
     case XR_NATIVE_OPERATION_ARRAY_ENTRIES: return SOURCE_ARRAY_ENTRIES;
     case XR_NATIVE_OPERATION_ARRAY_FILL: return SOURCE_ARRAY_FILL;
+    case XR_NATIVE_OPERATION_ARRAY_CONCAT: return SOURCE_ARRAY_CONCAT;
     default: return SOURCE_ARRAY_NONE;
     }
 }
@@ -446,8 +447,57 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
         {store.id}, {0}, 0, {0}}, value);
 }
 
+/* Capture every input before constructing output so later argument effects cannot replace a snapshot. */
+static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
+    const SourceValue *evaluated, SourceValue *value) {
+    CallExprNode *call = &node->as.call_expr;
+    if (call->type_arg_count || call->default_arg_count || call->arg_count < 0 ||
+        (call->arg_count && !call->arguments))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat takes ordinary trailing Array arguments");
+    for (int i = 0; i < call->arg_count; ++i)
+        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat arguments use ordinary READ values");
+    SourceValue receiver;
+    if (evaluated) receiver = *evaluated;
+    else if (!expression(ctx, call->callee->as.member_access.object, &receiver)) return false;
+    if (!xr_xir_type_is_array(&ctx->types, receiver.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat receiver is not an Array");
+    const uint32_t count = (uint32_t)call->arg_count + 1;
+    SourceValue *arrays = source_alloc(ctx, count, sizeof(*arrays));
+    if (!arrays) return false;
+    arrays[0] = receiver;
+    for (uint32_t i = 1; i < count; ++i) {
+        if (!source_plan_expression(ctx, call->arguments[i - 1],
+                (SourceExpectedType){true, receiver.type, false}, &arrays[i])) return false;
+        if (arrays[i].type != receiver.type)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat argument type differs from its receiver");
+    }
+    XrXirType element = xr_xir_array_element(&ctx->types, receiver.type), cell_type;
+    SourceValue seed, store, candidate, zero;
+    if (!source_cell_type(ctx, receiver.type, &cell_type) ||
+        !source_recipe_group(ctx, (XrXirInstruction){XR_XIR_ARRAY_NEW, receiver.type, {0}, {0}, 0, {0}}, NULL, 0, &seed) ||
+        !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_NEW, cell_type, {seed.id}, {0}, 0, {0}}, &store) ||
+        !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_PLACE, receiver.type, {store.id}, {0}, 0, {0}}, &candidate) ||
+        !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;
+    for (uint32_t i = 0; i < count; ++i) {
+        SourceValue length, payload;
+        if (!source_recipe_record(ctx, (XrXirInstruction){XR_XIR_ARRAY_LEN, XR_XIR_I64,
+                {arrays[i].id}, {0}, 0, {0}}, &length)) return false;
+        SourceCounter counter;
+        if (!source_counter_open(ctx, zero, length, false, &counter) ||
+            !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_ARRAY_GET, element,
+                {arrays[i].id, counter.index.id}, {0}, 0, {0}}, &payload) ||
+            !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_ARRAY_PUSH, XR_XIR_UNIT,
+                {candidate.id, payload.id}, {0}, 0, {0}}, NULL) ||
+            !source_counter_close(ctx, &counter)) return false;
+    }
+    return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_READ, receiver.type,
+        {store.id}, {0}, 0, {0}}, value);
+}
+
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value) {
+    if (recipe == SOURCE_ARRAY_CONCAT) return source_array_concat_call(ctx, node, evaluated, value);
     if (recipe == SOURCE_ARRAY_ENTRIES) return source_array_entries_call(ctx, node, evaluated, value);
     if (recipe == SOURCE_ARRAY_RESIZE) return source_array_resize_call(ctx, node, value);
     if (recipe == SOURCE_ARRAY_FILL) return source_array_fill_call(ctx, node, value);

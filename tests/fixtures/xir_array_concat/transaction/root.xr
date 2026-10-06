@@ -1,0 +1,25 @@
+import "./producer" as producer
+var root:Array<i64>=[1,2]
+var argument:Array<i64>=[3,4]
+var trace=0
+export fn saved()->Array<i64>{return root}
+export fn savedArgument()->Array<i64>{return argument}
+export fn currentTrace()->i64{return trace}
+export fn numbers()->Array<i64>{return producer.combine<i64>(root,[3,4]).concat([5],[])}
+export fn zero()->Array<i64>{var xs=[1,2];const old=xs;var copy=old.concat();copy[0]=9;xs[1]=8;return [copy[0],copy[1],xs[0],xs[1],old[0],old[1]]}
+export fn self()->Array<i64>{const xs=[1,2];return xs.concat(xs,xs)}
+export fn vacant()->Array<i64>{const xs:Array<i64>=[];return xs.concat(xs,[])}
+export fn readTemporary()->Array<i64>{return producer.readCopy<i64>([6,7]).concat([8])}
+fn receiver()->Array<i64>{trace=trace*10+1;return root}
+fn firstArg()->Array<i64>{trace=trace*10+2;root=[99];return argument}
+fn secondArg()->Array<i64>{trace=trace*10+3;argument[0]=77;root=[90,91];return [5]}
+export fn rebound()->Array<i64>{trace=0;root=[1,2];argument=[3,4];return receiver().concat(firstArg(),secondArg())}
+fn failingArg()->Array<i64>{trace=trace*10+2;assert(false,"argument failure");return []}
+fn lateArg()->Array<i64>{trace=trace*10+3;return [8]}
+export fn caught()->i64{trace=0;try{const xs=receiver().concat(failingArg(),lateArg());return len(xs)}catch panic(p:PanicInfo){return p.code}}
+export fn nested()->Array<Array<i64>>{var xs:Array<Array<i64>>=[[1,2]];const result=xs.concat([[3]]);xs[0][0]=9;return result}
+class Box{number:i64=1}
+export fn identity()->Array<i64>{const box=Box();var xs=[box];const result=xs.concat(xs);box.number=7;xs[0]=Box();return [xs[0].number,result[0].number,result[1].number]}
+fn layer<T>(value:T)->T?{return value}
+export fn nullable()->Array<i64??>{const xs:Array<i64??>=[null,layer<i64?>(layer<i64>(7))];return xs.concat([null])}
+export fn text()->Array<string>{return ["a\0中"].concat(producer.text(),["tail"])}

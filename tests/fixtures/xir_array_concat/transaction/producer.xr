@@ -1,0 +1,3 @@
+export fn combine<T>(first:Array<T>,second:Array<T>)->Array<T>{return first.concat(second)}
+export fn readCopy<T>(values:Array<T>)->Array<T>{return values.concat()}
+export fn text()->Array<string>{return ["b\0c"]}

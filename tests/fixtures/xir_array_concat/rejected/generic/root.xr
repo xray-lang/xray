@@ -1,0 +1,1 @@
+fn bad<T>(values:Array<T>)->Array<T>{return values.concat(["bad"])}

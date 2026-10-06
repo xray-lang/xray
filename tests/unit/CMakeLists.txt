@@ -4294,4 +4294,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_outcome_copy_controls.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/range_check.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_fill.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/array_concat.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_late_cancel_cross.cmake")
