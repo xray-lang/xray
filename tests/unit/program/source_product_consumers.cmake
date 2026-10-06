@@ -218,3 +218,5 @@ add_test(NAME source_product_nominal_source_constructors
         --scratch "${CMAKE_BINARY_DIR}/consumer-nominal-constructor-evidence")
 set_tests_properties(source_product_nominal_source_constructors PROPERTIES TIMEOUT 120
     LABELS "unit;xir;source-product;program-consumer;inventory;nominal-graph")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_packet_roles.cmake")

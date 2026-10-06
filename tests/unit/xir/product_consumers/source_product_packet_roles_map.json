@@ -1,0 +1,382 @@
+{
+  "schema": 1,
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": {
+    "wire": 25,
+    "semantic": 67,
+    "value": 22,
+    "call": 28,
+    "program": 29,
+    "runtime_abi": 351
+  },
+  "scope": "Additive source-free Checked roles; no original Source responsibility is closed or replaced",
+  "packets": [
+    {
+      "name": "old_atomic65",
+      "provenance": {
+        "path": "tests/unit/xir/xir_atomic_types65_golden.h",
+        "name": "atomic_types65_golden",
+        "file_sha256": "f43adb309585e3dca8972085ecd788e9465c82a6324693703f4bc60e2886ea28"
+      },
+      "independent_named_encoder_exact": true,
+      "bytes": 233,
+      "sha256": "af08f02509b9fa2b23e98a7b2d4b7037fb7d3fc0b576ba2e2343ab837cf46242",
+      "body_sha256": "c6448ab5a5dbb2aa3be79aa31c4940086bb955f3a6c25da93ea030736fd51062",
+      "header_fields": [
+        25,
+        65,
+        2,
+        0,
+        169
+      ]
+    },
+    {
+      "name": "old_task_types66",
+      "provenance": {
+        "path": "tests/unit/xir/xir_task_types66_golden.h",
+        "name": "task_types66_golden",
+        "file_sha256": "d92c97e7c440a8189b82d612c3fae9b8aed57d9133b4cd87248f28271a0bf439"
+      },
+      "independent_named_encoder_exact": true,
+      "bytes": 221,
+      "sha256": "0d7873cd1450cc944f04cc7ed37670033b809517b3933733542f8e9a6eb7af45",
+      "body_sha256": "0727727d8de456ae4d0fa0d0e039b5b09e083274c3d62a8fec5897d2ab37fea1",
+      "header_fields": [
+        25,
+        66,
+        2,
+        0,
+        157
+      ]
+    },
+    {
+      "name": "current_task_types67",
+      "provenance": {
+        "path": "tests/unit/xir/xir_task_types67_golden.h",
+        "name": "task_types67_golden",
+        "file_sha256": "059a675402d4446fa34f9a1d53d6526eb60e10c023a78288fb5ee998708a213a"
+      },
+      "independent_named_encoder_exact": true,
+      "bytes": 221,
+      "sha256": "eade1bab7e8354c00dbae3f6661970ff55509a5196b411498a78178c7c094405",
+      "body_sha256": "0727727d8de456ae4d0fa0d0e039b5b09e083274c3d62a8fec5897d2ab37fea1",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        157
+      ]
+    },
+    {
+      "name": "current_task_unit67",
+      "provenance": {
+        "path": "tests/unit/xir/xir_task_unit67_golden.h",
+        "name": "task_unit67_golden",
+        "file_sha256": "b85b4391ecc335f3b81ac7e0e4562134a8f40b96e47734b095d0e53afad6cc04"
+      },
+      "independent_named_encoder_exact": true,
+      "bytes": 221,
+      "sha256": "b52fee7e9162c05e77be33fd600278b3ff300942602d5407e8f4b40a67c9db73",
+      "body_sha256": "daee0978f6bc05aeb133a25be28e5db4f7b22b5c17afcb2156e1864c463f2ca3",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        157
+      ]
+    },
+    {
+      "name": "old_task_go66",
+      "provenance": {
+        "path": "tests/unit/xir/xir_task_go66_golden.h",
+        "name": "task_go66_golden",
+        "file_sha256": "21994024425a42e1138935854783df75a375286fa5195b670e71e6a41f7b06fa"
+      },
+      "independent_named_encoder_exact": false,
+      "source": "complete committed named GO roles; production writer not invoked",
+      "bytes": 1621,
+      "sha256": "ad8acb8e277574d36adf7c2c778543d2aa556fbc67ed7ae698f8170cde597d45",
+      "body_sha256": "660e21d16f40c5c2ca6abb1bd5877f77f37baeed67d18a8bbbccec5873087076",
+      "header_fields": [
+        25,
+        66,
+        2,
+        0,
+        1557
+      ]
+    },
+    {
+      "name": "current_task_go67",
+      "provenance": {
+        "path": "tests/unit/xir/xir_task_go67_golden.h",
+        "name": "task_go67_golden",
+        "file_sha256": "90cbfbfa44ba64d805fe515e17c684512bbc3d32634b2f28de8597497981f672"
+      },
+      "independent_named_encoder_exact": false,
+      "source": "complete committed named GO roles; production writer not invoked",
+      "bytes": 1621,
+      "sha256": "9589a8adf8751f4b7b8518f6c69b03317f502c9bf6c05d52426eebf185f67663",
+      "body_sha256": "660e21d16f40c5c2ca6abb1bd5877f77f37baeed67d18a8bbbccec5873087076",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        1557
+      ]
+    },
+    {
+      "name": "current_roles67",
+      "source": "new independent five-function role encoder",
+      "independent_named_encoder_exact": true,
+      "bytes": 1208,
+      "sha256": "aeb9252e6efc3d1b5d38bf838a1f1e1edb65375e90308b9501e8fb93c3ce9365",
+      "body_sha256": "c999f90ea4135e86c847b59031e4f0669c462f3804eef1f6c65ca8759d6a2882",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        1144
+      ]
+    },
+    {
+      "name": "bad67_canonical_unit",
+      "source": "one named current semantic role violation, complete rehash",
+      "independent_named_encoder_exact": true,
+      "bytes": 1208,
+      "sha256": "d3aa5a94556c1798072a1e58c32dc09ba4af9a0a9745fa4b57e442a39e58b8ee",
+      "body_sha256": "b3193a95a129a5ae0d9d5ad7aec34dbb5e3a9dcdca6a32127c14be5177d7f9aa",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        1144
+      ]
+    },
+    {
+      "name": "bad67_initializer_exported",
+      "source": "one named current semantic role violation, complete rehash",
+      "independent_named_encoder_exact": true,
+      "bytes": 1208,
+      "sha256": "d4ee0b44012cdef15d96a0133e127b91266284a1b03be0cfa19de042fb27c338",
+      "body_sha256": "faf0d8e9c7cd5551ce62f4918d6e6767d6b3e8c53200edbbb0e6ff2ed87a31a0",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        1144
+      ]
+    },
+    {
+      "name": "bad67_initializer_i64",
+      "source": "one named current semantic role violation, complete rehash",
+      "independent_named_encoder_exact": true,
+      "bytes": 1208,
+      "sha256": "94ab461f472ce555b5c2cbe5724293c84864c5ae639d48e18fe135afd768a34c",
+      "body_sha256": "ec5bb745b10ff249e87dbf2dbd5b37b4647d8d9b5ee9ca5bd764da460529c28a",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        1144
+      ]
+    },
+    {
+      "name": "bad67_go_initializer",
+      "source": "one named current semantic role violation, complete rehash",
+      "independent_named_encoder_exact": true,
+      "bytes": 1208,
+      "sha256": "e921ec631d8aae772ff0fc580507781c149c77eb333843fb6015fecc9cf8919e",
+      "body_sha256": "792bbbb38f9971a018a0ed6ae84f817c9368581d6c96d2a1bb3f41b8deec3b37",
+      "header_fields": [
+        25,
+        67,
+        2,
+        0,
+        1144
+      ]
+    }
+  ],
+  "packet_expectations": {
+    "current_task_types67": "OK",
+    "current_task_unit67": "OK",
+    "current_task_go67": "OK",
+    "current_roles67": "OK",
+    "old_atomic65": "BAD_STRUCTURE_before_allocation",
+    "old_task_types66": "BAD_STRUCTURE_before_allocation",
+    "old_task_go66": "BAD_STRUCTURE_before_allocation",
+    "bad67_canonical_unit": "BAD_TYPE",
+    "bad67_initializer_exported": "BAD_STRUCTURE",
+    "bad67_initializer_i64": "BAD_TYPE",
+    "bad67_go_initializer": "BAD_TYPE_at_f2_b0_i0"
+  },
+  "roles": {
+    "initializer": 0,
+    "canonical_i64_entry": 1,
+    "exported_unit_root": 2,
+    "private_unit_worker": 3,
+    "exported_task_unit_handle": 4
+  },
+  "fixed_oracles": {
+    "initializer_output": 5,
+    "worker_output": 41,
+    "canonical_i64": 7,
+    "unit_fields": [
+      0,
+      0,
+      0
+    ],
+    "instances": 2,
+    "escaped_outcome_copies": 2,
+    "modes": [
+      "VM",
+      "native",
+      "native_worker_VM_caller",
+      "VM_worker_native_caller"
+    ]
+  },
+  "original_source_roles": [
+    {
+      "path": "tests/fixtures/xir_task_unit/inferred.xr",
+      "entry": "main",
+      "expected_result": "I64_7",
+      "output_41_groups": 1,
+      "instances": 2,
+      "repeated_terminal_copies": 0,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/explicit_unit.xr",
+      "entry": "main",
+      "expected_result": "I64_7",
+      "output_41_groups": 1,
+      "instances": 2,
+      "repeated_terminal_copies": 0,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/explicit_null.xr",
+      "entry": "main",
+      "expected_result": "I64_7",
+      "output_41_groups": 1,
+      "instances": 2,
+      "repeated_terminal_copies": 0,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/generic.xr",
+      "entry": "main",
+      "expected_result": "I64_7",
+      "output_41_groups": 1,
+      "instances": 2,
+      "repeated_terminal_copies": 0,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/escape.xr",
+      "entry": "handle",
+      "expected_result": "Task_Unit_owned_success",
+      "output_41_groups": 1,
+      "instances": 2,
+      "repeated_terminal_copies": 2,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/unit_root.xr",
+      "entry": "main",
+      "expected_result": "Unit_zero",
+      "output_41_groups": 1,
+      "instances": 2,
+      "repeated_terminal_copies": 0,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/unknown_waiter.xr",
+      "entry": "main",
+      "expected_result": "I64_7",
+      "output_41_groups": 1,
+      "instances": 2,
+      "repeated_terminal_copies": 0,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/escaped_error.xr",
+      "entry": "handle",
+      "expected_result": "Task_Unit_owned_Problem_Failed_owned_string",
+      "output_41_groups": 0,
+      "instances": 2,
+      "repeated_terminal_copies": 2,
+      "source_execution": "NOT_RUN",
+      "replaced_by_fixed_packet": false
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/construct.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/invariance.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/void.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/bare_null.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/ordinary_unit_arg.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/generic_missing.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/non_task.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    },
+    {
+      "path": "tests/fixtures/xir_task_unit/rejected/array_unit.xr",
+      "role": "original source rejection remains mandatory",
+      "exact_status": "NOT_ESTABLISHED_BY_THIS_UNBUILT_CANDIDATE",
+      "source_execution": "NOT_RUN"
+    }
+  ],
+  "remaining": [
+    "Original Source Task<Unit> 8 positive and 8 negative cases",
+    "Full compiler/runtime fault injection and resource axes",
+    "Cancel prefixes",
+    "Complete old packet family coverage",
+    "Default configuration, safety and 351-row ABI gates",
+    "Legacy dependency deletion"
+  ]
+}
