@@ -30,6 +30,12 @@ PROBES = {
     "source_owner_string_slice_scalar_range": "string_slice",
     "source_owner_integer_bitwise_exact_width": "integer_width",
 }
+REJECTIONS = {
+    "source_owner_bare_nullable_condition_has_no_product": {
+        "fixture": "bare_nullable", "status": "XR_XIR_BAD_TYPE", "message": "if requires bool"},
+    "source_owner_reports_structured_analysis_failure": {
+        "fixture": "missing_name", "status": "XR_XIR_BAD_VALUE", "message": "name is not an initialized value"},
+}
 COMMON_OBLIGATIONS = {
     "original_source_and_fixed_result": "The original source prefix and 42/48 oracle are retained byte for byte.",
     "detached_lifetimes": "Parse session, SourceProduct and independent Checked reader die before execution.",
@@ -173,6 +179,38 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
         literals = static_strings(body)
         current["static_input_literals"] = {name: {"bytes": len(value),
             "sha256": digest(value)} for name, value in literals.items()}
+        if case["name"] in REJECTIONS:
+            rejection = REJECTIONS[case["name"]]
+            data = literals.get("source")
+            if data is None:
+                match = re.search(rf'source_build_fixture_init\(&fixture,\s*((?:{STRING}\s*)+),\s*NULL\)', body)
+                if not match:
+                    raise ValueError("original rejection source literal is missing")
+                data = b"".join(c_literal(s) for s in re.findall(STRING, match[1]))
+            fixture = DEST / "fixtures" / rejection["fixture"] / "main.xr"
+            files[fixture] = data
+            prefix = f"test_source_product_rejections_{rejection['fixture']}"
+            current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
+                "sha256": digest(data), "input_bytes": len(data), "entry_adapter": None,
+                "stage": "XR_XIR_SOURCE_PRODUCT_CHECK", "status": rejection["status"],
+                "message": rejection["message"], "module": 0, "line": 1,
+                "column": 29 if rejection["fixture"] == "missing_name" else "NOT_REQUIRED_BY_ORIGINAL_TEST",
+                "scope": "Exact negative source input; reject before any executable product or backend projection."}
+            current["candidate_replacement_gates"] = [prefix, prefix + "_axes", prefix + "_compiler"]
+            current["projected_obligations"] = {
+                "semantic_rejection": {"status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "Exact Check status, semantic module/line/path and diagnostic text; structured missing-name position is column 29; product remains NULL."},
+                "diagnostic_ownership": {"status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "Diagnostic path remains readable after parser/session and caller ledger ownership are released."},
+                "compiler_failures": {"status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "Every measured actual allocation ordinal returns OOM, with no partial product and physical release."},
+                "compiler_budgets": {"status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "Measured allocated/live/work exact threshold preserves the semantic rejection; minus1 reports BUDGET."},
+                "full_safety": {"status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "Complete applicable sanitizer gates and integration-head qualification remain required."}}
+            if rejection["fixture"] == "bare_nullable":
+                current["additional_diagnostic_precision"] = {"status": "OPEN",
+                    "note": "The original only requires the condition-type rejection. Current AST_IF retains line 1 but no column; accurate if-token column is a production gap outside this lane."}
         if case["name"] in SELECTED or case["name"] in PROBES:
             selected = (SELECTED | PROBES)[case["name"]]
             fixture = DEST / "fixtures" / selected / "root.xr"

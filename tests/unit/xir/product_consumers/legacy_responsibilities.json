@@ -600,7 +600,51 @@
       "replacement_gates": [],
       "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
       "original_fixture": null,
-      "static_input_literals": {}
+      "static_input_literals": {},
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/bare_nullable/main.xr",
+        "sha256": "f646347acc7d2c421f3f68e585f38dcd7535e97d4cb8652de6f12e10768a15e1",
+        "input_bytes": 109,
+        "entry_adapter": null,
+        "stage": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "status": "XR_XIR_BAD_TYPE",
+        "message": "if requires bool",
+        "module": 0,
+        "line": 1,
+        "column": "NOT_REQUIRED_BY_ORIGINAL_TEST",
+        "scope": "Exact negative source input; reject before any executable product or backend projection."
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_rejections_bare_nullable",
+        "test_source_product_rejections_bare_nullable_axes",
+        "test_source_product_rejections_bare_nullable_compiler"
+      ],
+      "projected_obligations": {
+        "semantic_rejection": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Exact Check status, semantic module/line/path and diagnostic text; structured missing-name position is column 29; product remains NULL."
+        },
+        "diagnostic_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Diagnostic path remains readable after parser/session and caller ledger ownership are released."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every measured actual allocation ordinal returns OOM, with no partial product and physical release."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Measured allocated/live/work exact threshold preserves the semantic rejection; minus1 reports BUDGET."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head qualification remain required."
+        }
+      },
+      "additional_diagnostic_precision": {
+        "status": "OPEN",
+        "note": "The original only requires the condition-type rejection. Current AST_IF retains line 1 but no column; accurate if-token column is a production gap outside this lane."
+      }
     },
     {
       "name": "source_owner_channel_handles_execute",
@@ -3643,6 +3687,46 @@
         "source": {
           "bytes": 38,
           "sha256": "9f18e6111b1f759a8b7d4099b765479367defe4a8d264eab972ef73796a520ce"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/missing_name/main.xr",
+        "sha256": "9f18e6111b1f759a8b7d4099b765479367defe4a8d264eab972ef73796a520ce",
+        "input_bytes": 38,
+        "entry_adapter": null,
+        "stage": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "status": "XR_XIR_BAD_VALUE",
+        "message": "name is not an initialized value",
+        "module": 0,
+        "line": 1,
+        "column": 29,
+        "scope": "Exact negative source input; reject before any executable product or backend projection."
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_rejections_missing_name",
+        "test_source_product_rejections_missing_name_axes",
+        "test_source_product_rejections_missing_name_compiler"
+      ],
+      "projected_obligations": {
+        "semantic_rejection": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Exact Check status, semantic module/line/path and diagnostic text; structured missing-name position is column 29; product remains NULL."
+        },
+        "diagnostic_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Diagnostic path remains readable after parser/session and caller ledger ownership are released."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every measured actual allocation ordinal returns OOM, with no partial product and physical release."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Measured allocated/live/work exact threshold preserves the semantic rejection; minus1 reports BUDGET."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head qualification remain required."
         }
       }
     },

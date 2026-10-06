@@ -79,6 +79,26 @@ foreach(case IN ITEMS static_methods array_places generics callables class_ident
             LABELS "unit;xir;source-product;program-consumer;ownership;compiler-faults")
     endforeach()
 endforeach()
+add_executable(test_source_product_rejections
+    "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/test_source_product_rejections.c")
+target_link_libraries(test_source_product_rejections PRIVATE xray_xir_source_product)
+target_compile_definitions(test_source_product_rejections PRIVATE XR_REJECTION_ROOT="${product_consumer_fixture_root}")
+set_target_properties(test_source_product_rejections PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_product_rejections PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_source_product_rejections PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(case IN ITEMS bare_nullable missing_name)
+    set(test "test_source_product_rejections_${case}")
+    add_test(NAME ${test} COMMAND test_source_product_rejections ${case})
+    add_test(NAME ${test}_axes COMMAND test_source_product_rejections ${case} --axes)
+    add_test(NAME ${test}_compiler COMMAND test_source_product_rejections ${case} --compiler)
+    set_tests_properties(${test} ${test}_axes PROPERTIES TIMEOUT 120
+        LABELS "unit;xir;source-product;program-consumer;ownership;rejection")
+    set_tests_properties(${test}_compiler PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+        LABELS "unit;xir;source-product;program-consumer;ownership;compiler-faults")
+endforeach()
 add_test(NAME source_product_consumer_inventory
     COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_inventory.py" check)
 set_tests_properties(source_product_consumer_inventory PROPERTIES TIMEOUT 30
