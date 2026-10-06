@@ -1,0 +1,10 @@
+add_executable(test_xir_task_fault_order xir/test_xir_task_fault_order.c)
+target_link_libraries(test_xir_task_fault_order PRIVATE xray_xir_vm xray_xir_scalar)
+if(MSVC)
+    target_compile_options(test_xir_task_fault_order PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_task_fault_order PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_task_fault_order COMMAND test_xir_task_fault_order)
+set_tests_properties(test_xir_task_fault_order PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;task;runtime;ownership;resource-budget")

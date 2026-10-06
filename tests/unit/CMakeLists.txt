@@ -4272,3 +4272,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/go_source_native_resources.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/vm19_fault_runtime.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/executor_first_failure.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/task_fault_order.cmake")
