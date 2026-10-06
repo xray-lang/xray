@@ -1,0 +1,68 @@
+{
+  "status": "STATIC_CANDIDATE_NOT_BUILT_NOT_RUN",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "original_Timer_HEAD": "3584bcf2059db3e1e3b7855b7198d1992d5a2039",
+  "original_TEST": {
+    "bytes": 7123,
+    "sha256": "15fa93fc7c29d0e3e4761e1bfec410c7ebc13e5d4ea0d32b3822e036ab89ea49",
+    "assertion_sites": 46,
+    "loop_sites": 3,
+    "migration": "OPEN"
+  },
+  "limits": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000,
+    "generated_C_byte_limit": 16777216,
+    "note": "C byte limit is an output admission ceiling, not preallocation or an increased ledger live allowance."
+  },
+  "scope": {
+    "new_C_TU": 1,
+    "new_CTest": 1,
+    "runtime": "NOT_RUN",
+    "native_execution": "NOT_RUN",
+    "HostWait": "NOT_RUN",
+    "FI": "NOT_RUN"
+  },
+  "fixed_oracle": {
+    "source": "existing original62B + explicit54B export adapter; complete public view authentic framed time identity and actual stdlib path",
+    "Lowered": "globally unique time-owned exported sleep Unit TIMER_AFTER_MS, one I64 operand, zero unused fields; layout index in range, I64 size/alignment8, derived offset within frame",
+    "generated_owner": "actual fixed25f public emit_c output has prefix_state_function and prefix_fFunction; scope bound from owning state declaration to next function state or entry table",
+    "instruction": "actual generated case uses exact public Timer instruction index and pc=index+1; no literal old state/safepoint identity expected",
+    "action": "globally unique ACTION_TIMER full initializer has I64 value and scalar_load from the public Lowered layout.offsets[Timer.args[0]], within the owning instruction case",
+    "independence": "offset/function/instruction derived from verified public artifact; never copied from observed C as golden; two complete public emissions equal in length and bytes",
+    "format_boundary": "prefix_state_N/prefix_fN and current action initializer are fixed25f output-format test oracles verified by source review, not restored old interfaces or language-wide spelling promises"
+  },
+  "ownership": {
+    "SourceProduct_and_session": "destroyed before independently verifying Checked, lowering and emission",
+    "artifacts": "both destroyed before scanning owned generated C; TimerLayout contains only copied numeric facts",
+    "C_sources": "both freed, outputs become empty; ledger live returns baseline; ledger release leads limited compiler observer physical0/0",
+    "observations": "public emit each reports actual allocation attempts, allocation_count, allocated_bytes, before/after live_bytes and work delta; final totals and physical counters separately"
+  },
+  "legacy_mapping": {
+    "A38": {
+      "old": "UINT32_C(2), UINT32_C(1)",
+      "current": "typed TIMER action one I64 operand becomes common six-field TIMER_MS request",
+      "new": "metadata side action kind/one typed duration prepared",
+      "execution": "six-field10ms runtime belongs existing233 independently audited payload evidence",
+      "status": "NEW_METADATA_MAPPING_NOT_RUN_WHOLE_ASSERT_OPEN"
+    },
+    "A39": {
+      "old": "suspension_timer_after_ms",
+      "current": "ACTION_TIMER.value I64 from verified operand frame offset -> wait.after_ms",
+      "new": "precise layout-to-generated-load fixed oracle prepared",
+      "execution": "actual native after_ms10 remains separate existingTimer evidence",
+      "status": "NEW_METADATA_MAPPING_NOT_RUN_WHOLE_ASSERT_OPEN"
+    },
+    "A40": {
+      "old": "xr_aot_host_wait_timer",
+      "current": "same common HostWait begin/poll for VM/native",
+      "new": "none; CGen intentionally does not directly call HostWait",
+      "execution_reference": "HEAD3584 consumer_timer_arm/due/cancel_wait and existing233 native evidence require separate source/object/lib/raw-output audit binding",
+      "status": "OPEN_EXECUTION_EVIDENCE_SEPARATE"
+    },
+    "other": "A02/A03/A08/A09/A15/A21/A22 remain unchanged OPEN; no capability mask, old state numbers or old helper aliases restored",
+    "full_TEST": "OPEN; static metadata is not full native/permission/CFG/FI qualification"
+  },
+  "denominators": "New CGen metadata compiler costs stand alone. No old01e6 FI, no effects FI or Timer233 normal/FI count is borrowed. Two C-source emissions do not add two CTests or imply native runs."
+}
