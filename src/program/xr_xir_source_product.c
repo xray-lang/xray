@@ -12,6 +12,8 @@
  */
 #include "xr_xir_source_product.h"
 #include "../xir/xxir_vm.h"
+#include "../xir/xxir_vm_internal.h"
+#include "../xir/xxir_native_cache_internal.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
 #include "../base/xsha256.h"
@@ -304,11 +306,35 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduc
     if (diagnostic) diagnostic->status=status;
     return status;
 }
+/* Selection only chooses a trusted factory. The common VM worker still verifies
+ * the complete artifact and each advertised leaf before publishing code. */
+static XrXirStatus source_product_vm_cache(const XrXirArtifact *lowered,
+    XirNativeCache **output) {
+    static const char identity[] = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(lowered);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
+    if (!context || !module || !module->declarations) return XR_XIR_BAD_STRUCTURE;
+    const XrXirDeclarations *declarations = module->declarations;
+    for (uint32_t m = 0; m < declarations->module_count; ++m) {
+        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+        const XrXirSourceModule *owner = &declarations->modules[m];
+        if (owner->name_length != sizeof(identity)-1) continue;
+        if (!xir_compile_work(context, sizeof(identity)-1)) return XR_XIR_BUDGET;
+        if (!memcmp(owner->name, identity, sizeof(identity)-1))
+            return xir_native_cache_open(context, output);
+    }
+    return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *product,
     XrXirProgram **output) {
     if (!product || !output || *output) return XR_XIR_BAD_STRUCTURE;
     if (!product->lowered) return XR_XIR_BAD_STAGE;
-    return xr_xir_compile_vm_program_take(&product->lowered,output);
+    XirNativeCache *cache = NULL;
+    XrXirStatus status = source_product_vm_cache(product->lowered, &cache);
+    if (status == XR_XIR_OK)
+        status = xir_compile_vm_program_take_cached(&product->lowered, cache, output);
+    xir_native_cache_drop(cache);
+    return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct *product,
     const char *prefix,size_t byte_limit,XrXirCSource *output) {

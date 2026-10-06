@@ -4282,3 +4282,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_unit_native.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/library_generics.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/source_product_cache.cmake")
