@@ -4,6 +4,9 @@ set(XIR_NATIVE_CACHE_C ${XIR_NATIVE_CACHE_DIR}/io-output.c)
 set(XIR_NATIVE_CACHE_CHECKED ${XIR_NATIVE_CACHE_DIR}/io-output.chk)
 set(XIR_NATIVE_CACHE_PAIR ${XIR_NATIVE_CACHE_DIR}/pair.json)
 set(XIR_NATIVE_CACHE_REGISTRY ${XIR_NATIVE_CACHE_DIR}/native-cache-registry.c)
+set(XIR_NATIVE_CACHE_MANIFEST ${XIR_NATIVE_CACHE_DIR}/registry-manifest.json)
+set(XIR_NATIVE_CACHE_OBJECT_COPY ${XIR_NATIVE_CACHE_DIR}/io-output.native)
+set(XRAY_STDLIB_PAIR_MANIFEST ${XIR_NATIVE_CACHE_MANIFEST} PARENT_SCOPE)
 add_executable(xir_native_cache_pairgen ${CMAKE_CURRENT_LIST_DIR}/xxir_native_cache_pairgen.c)
 target_link_libraries(xir_native_cache_pairgen PRIVATE xray_xir_source xray_xir_cgen)
 target_include_directories(xir_native_cache_pairgen PRIVATE ${XRAY_COMMON_INCLUDES})
@@ -43,7 +46,7 @@ foreach(index RANGE 0 ${XIR_NATIVE_CACHE_SDK_LAST})
         list(APPEND XIR_NATIVE_CACHE_SDK_INPUTS ${PROJECT_SOURCE_DIR}/${path})
     endif()
 endforeach()
-add_custom_command(OUTPUT ${XIR_NATIVE_CACHE_REGISTRY}
+add_custom_command(OUTPUT ${XIR_NATIVE_CACHE_REGISTRY} ${XIR_NATIVE_CACHE_MANIFEST} ${XIR_NATIVE_CACHE_OBJECT_COPY}
     COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/gen_xir_native_cache_pair.py
         --root ${PROJECT_SOURCE_DIR} --directory ${XIR_NATIVE_CACHE_DIR}
         --object $<TARGET_OBJECTS:xir_native_cache_image>
@@ -58,6 +61,8 @@ add_library(xray_xir_native_cache STATIC xxir_native_cache.c ${XIR_NATIVE_CACHE_
 target_link_libraries(xray_xir_native_cache PUBLIC xray_xir_source xray_xir_scalar)
 target_include_directories(xray_xir_native_cache PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_vm PUBLIC xray_xir_native_cache)
+install(FILES ${XIR_NATIVE_CACHE_CHECKED} ${XIR_NATIVE_CACHE_C} ${XIR_NATIVE_CACHE_OBJECT_COPY}
+    DESTINATION lib/xray/stdlib-xir/io/output COMPONENT XrayCore)
 foreach(cache_target xir_native_cache_pairgen xir_native_cache_image xray_xir_native_cache)
     if(MSVC)
         target_compile_options(${cache_target} PRIVATE /W4 /WX)

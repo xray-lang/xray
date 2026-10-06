@@ -5888,106 +5888,13 @@ install(TARGETS xray
     RUNTIME DESTINATION bin
     COMPONENT XrayCore
 )
-
-# Install the bounded compiler and runtime products. xray_core remains a
-# build-tree-only aggregate for the CLI and tests; it must not become a public
-# install target.
-install(TARGETS xray_compiler
-    ARCHIVE DESTINATION lib/xray/compiler/${XRAY_HOST_TARGET_ABI}
-    COMPONENT XraySDK
-)
-install(TARGETS xray_vm
-    ARCHIVE DESTINATION lib/xray/vm/${XRAY_HOST_TARGET_ABI}
-    COMPONENT XrayCore
-)
-
-# TargetPlan loading is a Core runtime capability. Its header is intentionally
-# standalone and opaque; no compiler or SDK-private header is exposed.
-install(FILES
-    ${CMAKE_SOURCE_DIR}/include/xray_export.h
-    ${CMAKE_SOURCE_DIR}/include/xray_target_plan_load.h
-    ${CMAKE_SOURCE_DIR}/include/xray_runtime_generation.h
-    ${CMAKE_SOURCE_DIR}/include/xray_runtime_api.h
-    DESTINATION include/xray
-    COMPONENT XrayCore
-)
-install(TARGETS xray_aot_core xray_rt_coro
-    ARCHIVE DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
-    COMPONENT XraySDK
-)
-if(XRAY_RUNTIME_TLS_ENABLED)
-    install(FILES "${OPENSSL_SSL_LIBRARY}"
-        DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
-        RENAME "${XRAY_RUNTIME_TLS_SSL_FILE}"
-        COMPONENT XraySDK
-    )
-    install(FILES "${OPENSSL_CRYPTO_LIBRARY}"
-        DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
-        RENAME "${XRAY_RUNTIME_TLS_CRYPTO_FILE}"
-        COMPONENT XraySDK
-    )
+if(CMAKE_HOST_WIN32 AND ENABLE_ASAN)
+    install(FILES "${XRAY_WINDOWS_ASAN_RUNTIME_DIR}/clang_rt.asan_dynamic-x86_64.dll"
+        DESTINATION bin COMPONENT XrayCore)
 endif()
 
-# Apple's post-install ranlib stamps each archive table of contents with the
-# current time, so an installed archive is not a function of its members and a
-# replayed install republishes different bytes. Rewrite the tables
-# deterministically here, after every static library rule and before anything
-# hashes an installed archive.
-if(APPLE)
-    install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/NormalizeInstalledArchives.cmake"
-        ALL_COMPONENTS
-    )
-endif()
-
-install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
-    ALL_COMPONENTS
-)
-
-# Generated AOT C has six possible entry headers. Derive their complete quoted-
-# include closure at configure time, reject legacy/product headers in that
-# closure, and install no unrelated compiler or VM internals.
-set(_XRAY_AOT_SDK_CMAKE "${_XRAY_INSTALL_METADATA_DIR}/AotSdkClosure.cmake")
-set(_XRAY_AOT_SDK_MANIFEST "${_XRAY_INSTALL_METADATA_DIR}/aot-sdk-closure.json")
-execute_process(
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/derive_aot_sdk_closure.py
-        --root ${CMAKE_SOURCE_DIR}
-        --cmake-output ${_XRAY_AOT_SDK_CMAKE}
-        --manifest-output ${_XRAY_AOT_SDK_MANIFEST}
-    RESULT_VARIABLE _XRAY_AOT_SDK_RESULT
-    OUTPUT_VARIABLE _XRAY_AOT_SDK_OUTPUT
-    ERROR_VARIABLE _XRAY_AOT_SDK_ERROR
-)
-if(NOT _XRAY_AOT_SDK_RESULT EQUAL 0)
-    message(FATAL_ERROR
-        "Unable to derive the exact generated-C SDK closure:\n"
-        "${_XRAY_AOT_SDK_OUTPUT}${_XRAY_AOT_SDK_ERROR}")
-endif()
-include("${_XRAY_AOT_SDK_CMAKE}")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${XRAY_AOT_SDK_PUBLIC_FILES}
-    ${XRAY_AOT_SDK_PRIVATE_FILES}
-    ${CMAKE_SOURCE_DIR}/scripts/derive_aot_sdk_closure.py
-)
-
-foreach(_XRAY_AOT_SDK_PUBLIC IN LISTS XRAY_AOT_SDK_PUBLIC_FILES)
-    install(FILES "${CMAKE_SOURCE_DIR}/${_XRAY_AOT_SDK_PUBLIC}"
-        DESTINATION include/xray
-        COMPONENT XraySDK
-    )
-endforeach()
-foreach(_XRAY_AOT_SDK_PRIVATE IN LISTS XRAY_AOT_SDK_PRIVATE_FILES)
-    get_filename_component(_XRAY_AOT_SDK_DIRECTORY
-        "${_XRAY_AOT_SDK_PRIVATE}" DIRECTORY)
-    install(FILES "${CMAKE_SOURCE_DIR}/${_XRAY_AOT_SDK_PRIVATE}"
-        DESTINATION "lib/xray/sdk/${_XRAY_AOT_SDK_DIRECTORY}"
-        COMPONENT XraySDK
-    )
-endforeach()
-install(FILES "${_XRAY_AOT_SDK_MANIFEST}"
-    DESTINATION share/xray/install
-    COMPONENT XraySDK
-)
+# Native generated C consumes the closed XIR runtime bundle installed by XraySDK.
+# Legacy build targets remain private until their remaining tests are migrated.
 
 # Install stdlib source files
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/stdlib/
@@ -6035,6 +5942,11 @@ if(XRAY_BUNDLE_ZIG)
         )
     endif()
 endif()
+
+# Publish the static pair only after installed components and any present SDK match.
+configure_file("${CMAKE_SOURCE_DIR}/cmake/VerifyInstalledXirStdlibPair.cmake.in"
+    "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirStdlibPair.cmake" @ONLY)
+install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirStdlibPair.cmake" ALL_COMPONENTS)
 
 # Run after component payload rules.  ALL_COMPONENTS also gives a Core-only or
 # SDK-only staging install an exact manifest of what is actually present.

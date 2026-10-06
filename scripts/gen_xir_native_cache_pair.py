@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import struct
@@ -112,11 +113,23 @@ def main() -> None:
     output.append('{' + ','.join(digest_initializer(digest) for digest in leaves) + '},')
     output.append('xir_output_cache_entries,' + str(metadata['entry_count']) + 'u};\n')
     (directory/'native-cache-registry.c').write_text('\n'.join(output), encoding='utf-8', newline='\n')
-    record = dict(metadata, components=[dict(length=len(data), sha256=digest.hex())
-                                       for data, digest in zip(components, hashes)],
+    native = directory/'io-output.native'
+    with tempfile.NamedTemporaryFile(dir=directory, delete=False) as pending:
+        pending.write(components[1])
+        pending_native = Path(pending.name)
+    os.replace(pending_native, native)
+    roles = ('checked', 'native-object', 'generated-c')
+    paths = ('io-output.chk', 'io-output.native', 'io-output.c')
+    record = dict(metadata, components=[dict(role=role, path=path, length=len(data), sha256=digest.hex())
+                                       for role, path, data, digest in zip(roles, paths, components, hashes)],
                   variant=variant.decode(), sdk_identity=sdk.hex(), sdk_files=files,
-                  binding_digest=binding_digest.hex(), native_object=str(args.object.resolve()))
-    (directory/'registry-manifest.json').write_text(json.dumps(record, indent=2)+'\n', encoding='utf-8')
+                  binding_digest=binding_digest.hex(), schema=2,
+                  module_identity='stdlib-module-v1:module=2:io:path=12:io/output.xr',
+                  value_abi=versions[0], call_abi=versions[1], program_abi=versions[2])
+    with tempfile.NamedTemporaryFile(dir=directory, mode='w', encoding='utf-8', newline='\n', delete=False) as pending:
+        pending.write(json.dumps(record, indent=2)+'\n')
+        pending_manifest = Path(pending.name)
+    os.replace(pending_manifest, directory/'registry-manifest.json')
 
 
 if __name__ == '__main__':

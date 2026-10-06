@@ -23,7 +23,8 @@ function(_xray_component_for path output)
     elseif(path MATCHES "^include/xray(/|$)" OR
            path MATCHES "^lib/(lib)?xray_(aot_core|rt_coro|tls_ssl|tls_crypto)" OR
            path MATCHES "^lib/xray/aot/.+/(lib)?xray_(aot_core|rt_coro|tls_ssl|tls_crypto)" OR
-           path MATCHES "^lib/xray/sdk(/|$)")
+           path MATCHES "^lib/xray/sdk(/|$)" OR
+           path MATCHES "^lib/xray/xir-runtime-sdk(/|$)")
         set(_component "sdk")
     else()
         set(_component "core")

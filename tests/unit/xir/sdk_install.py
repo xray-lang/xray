@@ -11,7 +11,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='xir-sdk-installed-') as temporary:
         prefix=Path(temporary)
         result=subprocess.run(['cmake','--install',str(args.build),'--prefix',str(prefix),
-                               '--component','XirRuntimeSdk'],capture_output=True,timeout=120)
+                               '--component','XraySDK'],capture_output=True,timeout=120)
         assert not result.returncode,(result.stdout+result.stderr).decode(errors='replace')
         installed=prefix/'lib/xray/xir-runtime-sdk'
         assert (installed/'sdk_manifest.json').read_bytes()==(original/'sdk_manifest.json').read_bytes()

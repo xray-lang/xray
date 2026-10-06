@@ -1,0 +1,25 @@
+# The trusted build record grants publication only after real installed files match.
+set(_xir_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(_xir_pair "${_xir_root}/lib/xray/stdlib-xir/io/output")
+set(_xir_sdk "${_xir_root}/lib/xray/xir-runtime-sdk")
+if(EXISTS "${_xir_pair}")
+    execute_process(COMMAND "@XRAY_PYTHON@" -B
+        "@PROJECT_SOURCE_DIR@/scripts/verify_installed_xir_stdlib_pair.py"
+        --directory "${_xir_pair}" --expected "@XRAY_STDLIB_PAIR_MANIFEST@"
+        --sdk-root "${_xir_sdk}"
+        --expected-sdk "@CMAKE_BINARY_DIR@/xir-runtime-sdk/sdk_manifest.json"
+        --publish RESULT_VARIABLE _xir_status)
+    if(NOT _xir_status EQUAL 0)
+        message(FATAL_ERROR "Installed XIR stdlib pair is incomplete or inconsistent")
+    endif()
+elseif(EXISTS "${_xir_sdk}")
+    execute_process(COMMAND "@XRAY_PYTHON@" -B
+        "@PROJECT_SOURCE_DIR@/scripts/verify_installed_xir_stdlib_pair.py"
+        --directory "${_xir_pair}" --expected "@XRAY_STDLIB_PAIR_MANIFEST@"
+        --sdk-root "${_xir_sdk}"
+        --expected-sdk "@CMAKE_BINARY_DIR@/xir-runtime-sdk/sdk_manifest.json"
+        --sdk-only RESULT_VARIABLE _xir_status)
+    if(NOT _xir_status EQUAL 0)
+        message(FATAL_ERROR "Installed XIR runtime SDK is incomplete or inconsistent")
+    endif()
+endif()
