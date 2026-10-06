@@ -59,6 +59,9 @@ static size_t ordinal(const char *text) {
 static void fault(DetachmentCase *test, size_t index) {
     fixture_replay(test, REPLAY_WRITE);
     DetachmentRun result = run(test, index, limits());
+    printf("detachment-fault ordinal=%zu status=%u injected=%u attempts=%zu physical=%zu/%zu\n",
+        index, (unsigned)result.status, (unsigned)result.injected, result.attempts,
+        instance_compile_live, instance_compile_bytes);
     CHECK(result.status == XR_XIR_OUT_OF_MEMORY && result.injected && result.attempts > index);
     printf("detachment ordinal=%zu physical=0/0\n", index);
 }

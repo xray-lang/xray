@@ -17,6 +17,7 @@ from source_product_consumer_faults import ROOT, digest, inputs, write
 
 SUMMARY = re.compile(r"detachment-summary case=(\w+) sites=(\d+) shard=(\d+) shards=(\d+) covered=(\d+) physical=0/0")
 ORDINAL = re.compile(r"^detachment ordinal=(\d+) physical=0/0$", re.M)
+FAULT = re.compile(r"^detachment-fault ordinal=(\d+) status=(\d+) injected=(\d+) attempts=(\d+) physical=(\d+)/(\d+)$", re.M)
 FIXTURES = ROOT / "tests/unit/xir/product_consumers/fixtures"
 
 
@@ -73,6 +74,7 @@ def main() -> None:
         result = {"shard":index, "argv":command, "returncode":code, "timed_out":timed_out,
                   "pid":process.pid, "started_at":shard_started, "elapsed_seconds":time.monotonic()-shard_clock,
                   "log_sha256":digest(log), "ordinals":[int(value) for value in ORDINAL.findall(output)],
+                  "fault_statuses":[[int(value) for value in row] for row in FAULT.findall(output)],
                   "summaries":SUMMARY.findall(output),
                   "source_remaining":(private_roots[index]/"root.xr").exists()}
         write(run / f"shard-{index}.json", result)
@@ -99,6 +101,10 @@ def main() -> None:
         if (case != args.case or count != total or actual != index or jobs != args.jobs or
                 size != len(expected) or result["ordinals"] != expected):
             issues.append(f"shard {index} census differs from its exact ordinal range")
+        faults = result["fault_statuses"]
+        if ([row[0] for row in faults] != expected or
+                any(row[1] != 7 or row[2] != 1 or row[3] <= row[0] or row[4:] != [0,0] for row in faults)):
+            issues.append(f"shard {index} lacks exact OOM, injected allocation or physical-zero evidence")
         covered += result["ordinals"]
     if total is None or sorted(covered) != list(range(total)):
         issues.append("complete detachment allocation denominator was not covered exactly once")
