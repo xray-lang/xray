@@ -1,0 +1,10 @@
+import "./state" as State
+import "./worker" as Helpers
+import "std/io/output" as Output
+
+const first = State.bump()
+const task = go Helpers.worker(0)
+const answer = await task
+const stdoutAccepted = Output.writeStdout("A\0B")
+const stderrAccepted = Output.writeStderr("E\0R")
+print(first, answer, State.current(), stdoutAccepted, stderrAccepted, 1.5)

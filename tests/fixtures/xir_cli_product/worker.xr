@@ -1,0 +1,2 @@
+import "./state" as State
+export fn worker(value:i64) -> i64 { return State.bump() + value }

@@ -4286,3 +4286,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_product_cache.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache_resources.cmake")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")

@@ -1,0 +1,3 @@
+const serial = Atomic(40)
+export fn bump() -> i64 { return serial.fetchAdd(1) + 1 }
+export fn current() -> i64 { return serial.load() }
