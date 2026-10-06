@@ -6409,6 +6409,10 @@ n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；
 
 entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前21/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
 
+冻结只读声明族 `concat(...arrays: Array<T>) -> Array<T>`：一个可为空的尾部variadic参数、无可选/默认参数或方法类型参数，每个显式实参精确为接收者的Array<T>，参数模式READ。receiver表达式先且仅一次求值形成拥有快照，然后从左到右每个实参仅一次求值并分别持有快照；后续实参对源binding的重绑/写入不改变此前快照。全部实参成功后构造结果，顺序为receiver全部元素，随后各实参数组全部元素；零实参也返回独立拥有的逻辑副本。允许const/read receiver与临时Array，只要求已有Array可复制/可保存能力，不增加Equal、Compare、ToString、Sendable或反射/构造权限。普通泛型定义处检查，Checked特化后复验。
+
+concat不消费或回写receiver/实参，不产生PLACE_WRITE；完整结果构造并持有成功后才交给调用者。结果及输入可独立修改，嵌套值和Nullable各层保持，复制在class/同步身份处停止，String保留NUL与准确字节。更早receiver/实参/持有失败保优先级，已完成的参数副作用不回滚；结果准备失败/取消清理所有临时owner而不发布部分返回值。内部没有用户callback、新增语言挂起或跨挂起loan；参数本身的效应仍走普通管线。有限尺寸/费用沿现有LIMIT/预算失败，不先作可能溢出的长度和。qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺capacity/地址/零分配或复杂度；完整Source/VM/native/mixed、故障/三轴/取消/逃逸和物理释放资格尚未完成。
+
 冻结声明族 `ref fill(value: T, start?: i64, end?: i64) -> Array<T>`，value 是一个必需普通READ实参，start/end 是按声明顺序省略的两个尾部可选i64实参；没有方法类型参数、variadic或额外隐式约束。显式实参按value、start、end各一次，receiver的可写place选择器先求值且仅一次；全部显式实参成功后读取该binding当前Array及长度L。省略start取0，省略end取此时L，不能在实参之前抓取长度。const/read Array值、临时Array或无权/const字段拒绝，read class handle的可变字段沿既有身份与字段权限。只要求Array原有可复制/可保存能力；普通泛型在定义处检查，Checked特化后复验，描述查询不授予额外调用、可见性或构造权限。
 
 fill使用严格半开区间 `[start,end)`，必须 `0≤start≤end≤L`；不使用负索引归一化或clamp，不能继承Array切片的范围政策。合法空区间含 `[0,0)` 和 `[L,L)`，保全部元素；L=0时默认区间合法。非法负值、反序或越界在全部显式实参之后、任何填充候选或root发布之前，经真实NUMERIC_RANGE/E0422 panic拒绝。沿现有E0422 detail `{code=422,reserved=0,index=0,length=0}` 与消息，不伪造bounds、ASSERT或故意坏GET；更早已实际发生的选择器、求值、读取、持有或预算失败保持其原优先级，既有副作用不回滚。
