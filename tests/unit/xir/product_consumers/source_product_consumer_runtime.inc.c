@@ -47,7 +47,7 @@ static RuntimeProbe runtime_probe(const Consumer *run, size_t failure) {
         probe.status = runtime_drive(instance, run->entry, &probe.ticks);
         if (probe.status == XR_XIR_CALL_RETURNED) {
             fixed_result(instance, 0);
-            for (unsigned repeat = 0; repeat < 2; ++repeat) {
+            for (unsigned repeat = 0; repeat < consumer_repeat_count(); ++repeat) {
                 consumer_output_reset(&output);
                 probe.status = runtime_drive(instance, run->answer, &probe.ticks);
                 if (probe.status != XR_XIR_CALL_RETURNED)
@@ -108,6 +108,7 @@ static XrXirInstance *initialized(const Consumer *run, ConsumerOutput *output, X
 }
 
 static void cancel_prefixes(unsigned mode) {
+    CHECK(!consumer_stateful_case());
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
     CHECK(run.status == XR_XIR_OK);
     ConsumerOutput output = {0};

@@ -1671,6 +1671,106 @@
           "bytes": 429,
           "sha256": "028a1edf4d0961858449f6d34f838d29ab37106c38c6fbddedf0a1e8f406ed3b"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/narrow_array/root.xr",
+        "sha256": "49ff3b08987fff6bbd1d988497e27fa064642ec1889509fd76d0832728cd3908",
+        "original_prefix_sha256": "028a1edf4d0961858449f6d34f838d29ab37106c38c6fbddedf0a1e8f406ed3b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "invocation_policy": {
+          "first_result_per_instance": 42,
+          "successful_calls_per_instance": 1,
+          "second_call_status": "XR_XIR_CALL_ASSERTION",
+          "second_call_panic": "XR_XIR_PANIC_ASSERTION",
+          "note": "The original visits slot remains mutable; a second call increments it again and fails the original ordered-element assertion. No reset or source alteration is allowed."
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/first answer allocation ordinals retain the original first-call 42 oracle, sticky initialization failure and final physical release."
+        },
+        "cancellation": {
+          "status": "OPEN",
+          "verification": "Every active cancellation prefix must preserve the original partial visits state. The repeatable-fixture cancellation oracle is inapplicable; these gates are not registered until an independent state oracle is implemented."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_narrow_array_vm",
+        "test_source_product_narrow_array_native",
+        "test_source_product_narrow_array_mixed_even",
+        "test_source_product_narrow_array_mixed_odd",
+        "test_source_product_narrow_array_axes_0",
+        "test_source_product_narrow_array_axes_1",
+        "test_source_product_narrow_array_axes_2",
+        "test_source_product_narrow_array_axes_3",
+        "test_source_product_narrow_array_compiler_0",
+        "test_source_product_narrow_array_compiler_1",
+        "test_source_product_narrow_array_compiler_2",
+        "test_source_product_narrow_array_compiler_3",
+        "test_source_product_narrow_array_runtime_0",
+        "test_source_product_narrow_array_runtime_1",
+        "test_source_product_narrow_array_runtime_2",
+        "test_source_product_narrow_array_runtime_3"
+      ],
+      "pending_replacement_gates": [
+        "test_source_product_narrow_array_cancel_0",
+        "test_source_product_narrow_array_cancel_1",
+        "test_source_product_narrow_array_cancel_2",
+        "test_source_product_narrow_array_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "initializer_prefix_membership": {
+          "status": "OPEN",
+          "note": "The original preliminary initializer-prefix membership checks remain a separate responsibility."
+        },
+        "element_evaluation_precedes_allocation": {
+          "status": "OPEN",
+          "note": "Normal original assertions retain narrow element bounds and left-to-right visits 1,2,3. Allocation-failure ordering and retired Core/CGen representation checks still need a reviewed mapping."
+        },
+        "stateful_repeat_and_owned_panic": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Two detached instances each return the independent original 42 once, then the untouched answer asserts. Each copied assertion panic remains valid after its Instance is consumed; both panic owners are dropped before physical release."
+        }
       }
     },
     {

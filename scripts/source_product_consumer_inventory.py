@@ -37,6 +37,7 @@ SELECTED = {
     "source_owner_class_alias_final_transfer_coalesces_to_move": "class_alias_transfer",
     "source_owner_function_parameter_suspending_callable_has_one_program": "parameter_coroutine",
     "source_owner_cross_module_instance_method_preserves_receiver_across_suspend": "module_receiver_suspend",
+    "source_owner_narrow_array_elements_precede_allocation": "narrow_array",
     **NUMERIC.MATRICES,
 }
 PROBES = {
@@ -298,6 +299,19 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             current["candidate_replacement_gates"] = [f"{prefix}_{mode}" for mode in ("vm", "native", "mixed_even", "mixed_odd")]
             current["candidate_replacement_gates"] += [f"{prefix}_{kind}_{mode}"
                 for kind in ("axes", "compiler", "runtime", "cancel") for mode in range(4)]
+            if selected == "narrow_array":
+                current["candidate_replacement_gates"] = [gate for gate in current["candidate_replacement_gates"]
+                    if not re.fullmatch(rf"{prefix}_cancel_[0-3]", gate)]
+                current["pending_replacement_gates"] = [f"{prefix}_cancel_{mode}" for mode in range(4)]
+                current["initial_projection"]["invocation_policy"] = {
+                    "first_result_per_instance": 42, "successful_calls_per_instance": 1,
+                    "second_call_status": "XR_XIR_CALL_ASSERTION",
+                    "second_call_panic": "XR_XIR_PANIC_ASSERTION",
+                    "note": "The original visits slot remains mutable; a second call increments it again and fails the original ordered-element assertion. No reset or source alteration is allowed."}
+                current["projected_obligations"]["cancellation"] = {"status": "OPEN",
+                    "verification": "Every active cancellation prefix must preserve the original partial visits state. The repeatable-fixture cancellation oracle is inapplicable; these gates are not registered until an independent state oracle is implemented."}
+                current["projected_obligations"]["runtime_failures"]["verification"] = (
+                    "Actual instance/init/first answer allocation ordinals retain the original first-call 42 oracle, sticky initialization failure and final physical release.")
             if selected in ("generics", "callables", "single_module", "two_modules", "text_program"):
                 current["candidate_replacement_gates"].append(f"test_source_product_detachment_{selected}")
                 current["candidate_replacement_gates"] += [f"test_source_product_detachment_{selected}_{kind}"
@@ -355,6 +369,14 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 current["additional_legacy_obligations"] = {
                     "original_integer_conversion_operation_count": {"status": "OPEN",
                         "note": "The original requires at least four legacy INTEGER_CONVERT operations. Independent 255 results preserve the semantic oracle; the new Checked representation count still needs a reviewed mapping."}}
+            elif selected == "narrow_array":
+                current["additional_legacy_obligations"] = {
+                    "initializer_prefix_membership": {"status": "OPEN",
+                        "note": "The original preliminary initializer-prefix membership checks remain a separate responsibility."},
+                    "element_evaluation_precedes_allocation": {"status": "OPEN",
+                        "note": "Normal original assertions retain narrow element bounds and left-to-right visits 1,2,3. Allocation-failure ordering and retired Core/CGen representation checks still need a reviewed mapping."},
+                    "stateful_repeat_and_owned_panic": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Two detached instances each return the independent original 42 once, then the untouched answer asserts. Each copied assertion panic remains valid after its Instance is consumed; both panic owners are dropped before physical release."}}
             elif selected in ("class_alias_escape", "class_field_self_assignment", "class_alias_borrow", "class_alias_transfer"):
                 counts = {
                     "class_alias_escape": {"CLASS_CONSTRUCT": 3, "OWNER_ALIAS": 1,

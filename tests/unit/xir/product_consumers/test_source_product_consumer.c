@@ -299,6 +299,7 @@ static XrXirValue execute(XrXirInstance *instance, uint32_t entry, unsigned expe
 }
 
 #include "source_product_consumer_output.inc.c"
+#include "source_product_consumer_stateful.inc.c"
 
 static void normal(Consumer *run) {
     ConsumerOutput outputs[2] = {0};
@@ -317,16 +318,22 @@ static void normal(Consumer *run) {
         XrXirValue initialized = execute(instances[i], run->entry, 0);
         CHECK(initialized.type == XR_XIR_I64 && initialized.payload == 0);
         xr_xir_value_drop(&initialized);
-        for (unsigned repeat = 0; repeat < 2; ++repeat) {
+        for (unsigned repeat = 0; repeat < consumer_repeat_count(); ++repeat) {
             consumer_output_reset(&outputs[i]);
             XrXirValue result = execute(instances[i], run->answer, consumer_yield_count());
             CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
             xr_xir_value_drop(&result);
             consumer_output_complete(&outputs[i]);
         }
-        CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
+        if (consumer_stateful_case())
+            consumer_stateful_finish(instances[i], run->answer, i);
+        else
+            CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     }
-    puts("two detached instances; four independent fixed results; final physical release");
+    if (consumer_stateful_case())
+        puts("two detached instances; two original fixed results; two repeated-call assertions; escaped panic owners released physically");
+    else
+        puts("two detached instances; four independent fixed results; final physical release");
 }
 
 static void compiler_axes(unsigned mode) {
