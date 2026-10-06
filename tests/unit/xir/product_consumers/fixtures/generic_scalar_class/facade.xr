@@ -1,0 +1,6 @@
+export { Box as OriginBox } from "./library"
+export class Box<T> {
+  value: T
+  constructor(value: T) { this.value = value }
+  get() -> T { return this.value }
+}

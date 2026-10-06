@@ -383,7 +383,18 @@
           "bytes": 600,
           "sha256": "b420c7045c5270973e8ba9f04edfb1bec9be5b68ca41cfe3238de121b7e5a21b"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/byte_comparison/root.xr",
+        "sha256": "19355cd9955a110342a4984124535756090f5722ad73615b8884d3929640c66d",
+        "original_prefix_sha256": "b420c7045c5270973e8ba9f04edfb1bec9be5b68ca41cfe3238de121b7e5a21b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
+      },
+      "pending_admission": "The original crypto import is rejected at the assigned production baseline with name does not resolve to an admitted nominal type. Preserve every empty, alias, equal, differing-value and differing-length assertion and its positive 42 oracle."
     },
     {
       "name": "source_owner_string_builder_snapshot",
@@ -1744,7 +1755,84 @@
           "bytes": 309,
           "sha256": "e5739834b2ef5f35cd54b981f2ff3c90061ad4ae0b8216d5b3d5aa6bc9ad2c2d"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/array_runtime_length/root.xr",
+        "sha256": "09e03a8908825d0c6e6766047c396f57f6068577cf79e479bcd2122a716e8bb8",
+        "original_prefix_sha256": "e5739834b2ef5f35cd54b981f2ff3c90061ad4ae0b8216d5b3d5aa6bc9ad2c2d",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_array_runtime_length_vm",
+        "test_source_product_array_runtime_length_native",
+        "test_source_product_array_runtime_length_mixed_even",
+        "test_source_product_array_runtime_length_mixed_odd",
+        "test_source_product_array_runtime_length_axes_0",
+        "test_source_product_array_runtime_length_axes_1",
+        "test_source_product_array_runtime_length_axes_2",
+        "test_source_product_array_runtime_length_axes_3",
+        "test_source_product_array_runtime_length_compiler_0",
+        "test_source_product_array_runtime_length_compiler_1",
+        "test_source_product_array_runtime_length_compiler_2",
+        "test_source_product_array_runtime_length_compiler_3",
+        "test_source_product_array_runtime_length_runtime_0",
+        "test_source_product_array_runtime_length_runtime_1",
+        "test_source_product_array_runtime_length_runtime_2",
+        "test_source_product_array_runtime_length_runtime_3",
+        "test_source_product_array_runtime_length_cancel_0",
+        "test_source_product_array_runtime_length_cancel_1",
+        "test_source_product_array_runtime_length_cancel_2",
+        "test_source_product_array_runtime_length_cancel_3"
+      ]
     },
     {
       "name": "source_owner_string_slice_scalar_range",
@@ -1953,6 +2041,89 @@
         "source": {
           "bytes": 210,
           "sha256": "0a84cfabba66654078cc533176d0bf995a5a15a771f01a66e30cb33615834065"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_conversions/root.xr",
+        "sha256": "7f9bf4a5d20b3cb7cee5b096ebad9e20181084cb041fc96372d54d1cba9c7f36",
+        "original_prefix_sha256": "0a84cfabba66654078cc533176d0bf995a5a15a771f01a66e30cb33615834065",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 255,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_integer_conversions_vm",
+        "test_source_product_integer_conversions_native",
+        "test_source_product_integer_conversions_mixed_even",
+        "test_source_product_integer_conversions_mixed_odd",
+        "test_source_product_integer_conversions_axes_0",
+        "test_source_product_integer_conversions_axes_1",
+        "test_source_product_integer_conversions_axes_2",
+        "test_source_product_integer_conversions_axes_3",
+        "test_source_product_integer_conversions_compiler_0",
+        "test_source_product_integer_conversions_compiler_1",
+        "test_source_product_integer_conversions_compiler_2",
+        "test_source_product_integer_conversions_compiler_3",
+        "test_source_product_integer_conversions_runtime_0",
+        "test_source_product_integer_conversions_runtime_1",
+        "test_source_product_integer_conversions_runtime_2",
+        "test_source_product_integer_conversions_runtime_3",
+        "test_source_product_integer_conversions_cancel_0",
+        "test_source_product_integer_conversions_cancel_1",
+        "test_source_product_integer_conversions_cancel_2",
+        "test_source_product_integer_conversions_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "original_integer_conversion_operation_count": {
+          "status": "OPEN",
+          "note": "The original requires at least four legacy INTEGER_CONVERT operations. Independent 255 results preserve the semantic oracle; the new Checked representation count still needs a reviewed mapping."
         }
       }
     },
@@ -2739,7 +2910,28 @@
           "bytes": 71,
           "sha256": "342daf0870ebcff0237fe45a6d83d4f12b3d5e92de15f8b7e4875d372ca3748d"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/root.xr",
+        "sha256": "04dd4f7c82e0b7fd1a610363a1ac66cd57f60248a63282c3c7b00341b5ad341a",
+        "original_prefix_sha256": "c29e7b72b153a21a5e88be8e23937d4b2b04ede0e694d10c51f63ea20a83610f",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 877,
+            "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+          },
+          "facade.xr": {
+            "bytes": 136,
+            "sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "pending_admission": "The exact original root/library/facade input is rejected at the assigned production baseline with import requires an exported declaration. All original positive and negative variant literals remain in the responsibility census; the positive 42 oracle is not a rejection test."
     },
     {
       "name": "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates",
@@ -2779,7 +2971,28 @@
           "bytes": 769,
           "sha256": "34cd2ecad81517cdfa0651fbf4feb35dc274a3cf98ade6e93ea7dd35622ca9c9"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/root.xr",
+        "sha256": "7294a9ded3d1e555713afc934da5e919f908736ef7205c9669665e6e7d3aeb79",
+        "original_prefix_sha256": "34cd2ecad81517cdfa0651fbf4feb35dc274a3cf98ade6e93ea7dd35622ca9c9",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 152,
+            "sha256": "96036b42ffd1073661ae462cc7ccd57d88bccb788ed6b2ac29128978a01b9a75"
+          },
+          "facade.xr": {
+            "bytes": 132,
+            "sha256": "cd05da74d8ed285d4d55be89e745ea05a36ec50f26a3422655eaaea81e92d2be"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "pending_admission": "The exact original facade re-export is rejected at the assigned production baseline with statement syntax is not implemented in XIR (node 90). Root, library and facade bytes, the positive 42 oracle and all nominal-identity assertions remain OPEN."
     },
     {
       "name": "source_owner_generic_scalar_class_specializations_are_exact_class_references",
@@ -2821,7 +3034,28 @@
           "bytes": 507,
           "sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
+        "sha256": "ff5223a13033b1db8483424b750b06f050ff661beb1dd3f4913ead753e731775",
+        "original_prefix_sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 117,
+            "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+          },
+          "facade.xr": {
+            "bytes": 162,
+            "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "pending_admission": "The exact original facade re-export is rejected at the assigned production baseline with statement syntax is not implemented in XIR (node 90). Root, library and facade bytes, the positive 42 oracle and all nominal-identity assertions remain OPEN."
     },
     {
       "name": "source_owner_folds_constructor_literal_and_reordered_stores",

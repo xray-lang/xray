@@ -1,0 +1,6 @@
+fn widen(value: u8) -> i64 { return value as i64 }
+fn bits(value: u64) -> i64 { return value as i64 }
+var value: u8 = 255
+var high: u64 = (-1) as u64
+fn answer() -> i64 { return widen(value) + bits(high) + 1 }
+export fn consumerAnswer() -> i64 { return answer() }

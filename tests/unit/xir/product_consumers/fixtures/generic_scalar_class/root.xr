@@ -1,0 +1,21 @@
+import "./library" as direct
+import "./facade" as facade
+class Box<T> {
+  value: T
+  constructor(value: T) { this.value = value }
+  get() -> T { return this.value }
+}
+fn answer() -> i64 {
+  var a = direct.Box<i64>(20)
+  var b = direct.Box(1)
+  var c = facade.OriginBox<i64>(1)
+  var d = facade.OriginBox(1)
+  var e = facade.Box<i64>(10)
+  var f = Box<i64>(9)
+  var flag = facade.OriginBox<bool>(true)
+  if (flag.get()) {
+    return a.get() + b.get() + c.get() + d.get() + e.get() + f.get()
+  }
+  return 0
+}
+export fn consumerAnswer() -> i64 { return answer() }

@@ -25,6 +25,8 @@ SELECTED = {
     "source_owner_explicit_bool_conditions_execute": "bool_conditions",
     "source_owner_single_module_is_deterministic_and_detached": "single_module",
     "source_owner_text_program_is_exact_across_private_executors": "text_program",
+    "source_owner_exact_integer_constants_and_conversions": "integer_conversions",
+    "source_owner_array_runtime_length": "array_runtime_length",
 }
 PROBES = {
     "source_owner_tuple_array_elements": "tuple_array",
@@ -32,6 +34,10 @@ PROBES = {
     "source_owner_string_slice_scalar_range": "string_slice",
     "source_owner_integer_bitwise_exact_width": "integer_width",
     "source_owner_two_module_graph_is_deterministic": "two_modules",
+    "source_owner_byte_comparison": "byte_comparison",
+    "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates": "generic_value_struct",
+    "source_owner_generic_scalar_class_specializations_are_exact_class_references": "generic_scalar_class",
+    "source_owner_generic_constraint_methods_have_exact_concrete_targets": "generic_constraint_methods",
 }
 REJECTIONS = {
     "source_owner_bare_nullable_condition_has_no_product": {
@@ -220,18 +226,21 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             data = literals.get("source", literals.get("entry_source"))
             if data is None:
                 raise ValueError("original positive source literal is missing")
-            library = literals.get("library_source")
-            if library is not None:
-                files[fixture.parent / "library.xr"] = library
+            additional_files = {filename: literals[literal]
+                for literal, filename in (("library_source", "library.xr"), ("facade_source", "facade.xr"))
+                if literal in literals}
+            for filename, content in additional_files.items():
+                files[fixture.parent / filename] = content
             adapter = b"export fn consumerAnswer() -> i64 { return answer() }\n"
             files[fixture] = data + adapter
             current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
                 "sha256": digest(data + adapter), "original_prefix_sha256": digest(data),
                 "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": case["fixture"]["expected_exit"] if case["fixture"] else 42,
                 "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."}
-            if library is not None:
-                current["initial_projection"]["additional_files"] = {"library.xr": {
-                    "bytes": len(library), "sha256": digest(library)}}
+            if additional_files:
+                current["initial_projection"]["additional_files"] = {filename: {
+                    "bytes": len(content), "sha256": digest(content)}
+                    for filename, content in additional_files.items()}
             if selected == "text_program":
                 golden = literals["expected_stdout"]
                 if golden.hex() != case["fixture"]["expected_stdout_hex"]:
@@ -255,6 +264,12 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 if selected == "two_modules":
                     current["initial_projection"]["detached_probe_target"] = "test_source_product_detachment"
                     current["pending_admission"] = "Exact original library var offset is currently rejected by the root-only mutable module-slot boundary; retain its positive 42 oracle and all original graph assertions."
+                elif selected in ("generic_value_struct", "generic_scalar_class"):
+                    current["pending_admission"] = "The exact original facade re-export is rejected at the assigned production baseline with statement syntax is not implemented in XIR (node 90). Root, library and facade bytes, the positive 42 oracle and all nominal-identity assertions remain OPEN."
+                elif selected == "generic_constraint_methods":
+                    current["pending_admission"] = "The exact original root/library/facade input is rejected at the assigned production baseline with import requires an exported declaration. All original positive and negative variant literals remain in the responsibility census; the positive 42 oracle is not a rejection test."
+                elif selected == "byte_comparison":
+                    current["pending_admission"] = "The original crypto import is rejected at the assigned production baseline with name does not resolve to an admitted nominal type. Preserve every empty, alias, equal, differing-value and differing-length assertion and its positive 42 oracle."
                 sources.append(current)
                 continue
             current["projected_obligations"] = {name: {"status": "PENDING_FULL_QUALIFICATION", "verification": note}
@@ -316,7 +331,28 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                         "note": "Original owner-copy/drop, provider requirement and operation count assertions and obsolete generated spelling need a reviewed semantic mapping."},
                     "original_private_executor_step_identity": {"status": "OPEN",
                         "note": "The new public backends have independent fixed oracles; old private executor step equality needs a reviewed retirement mapping."}}
+            elif selected == "integer_conversions":
+                current["additional_legacy_obligations"] = {
+                    "original_integer_conversion_operation_count": {"status": "OPEN",
+                        "note": "The original requires at least four legacy INTEGER_CONVERT operations. Independent 255 results preserve the semantic oracle; the new Checked representation count still needs a reviewed mapping."}}
         sources.append(current)
+    expected = {}
+    for case in manifest["cases"]:
+        if case["name"] not in SELECTED:
+            continue
+        if case["fixture"]:
+            expected[case["name"]] = case["fixture"]["expected_exit"]
+        else:
+            literal = static_strings(bodies[case["name"]][0])["source"]
+            constants = re.findall(rb'fn answer\(\) -> i64 \{ return (-?\d+) \}', literal)
+            if len(constants) != 1:
+                raise ValueError("a non-fixture consumer needs one original constant-result oracle")
+            expected[case["name"]] = int(constants[0])
+    cmake = ["# Fixed result oracles come from the unchanged legacy manifest or original constant source.",
+             "set(product_consumer_cases " + " ".join(SELECTED.values()) + ")"]
+    cmake += [f"set(product_consumer_expected_{fixture} {expected[name]})"
+              for name, fixture in SELECTED.items()]
+    files[DEST / "source_product_consumer_cases.cmake"] = ("\n".join(cmake) + "\n").encode()
     families = {}
     paths = sorted((ROOT / "tests/unit/program").glob("*.c"))
     paths += sorted((ROOT / "tests/unit/aot").glob("test_xr_program_aot*.c"))

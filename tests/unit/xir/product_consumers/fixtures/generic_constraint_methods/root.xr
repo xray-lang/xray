@@ -1,0 +1,21 @@
+import { ReadCounter, LeftCounter, GenericReader, GenericStaticReader, OtherStaticReader, readCounter } from "./facade"
+import "./facade" as counters
+struct LocalCounter implements ReadCounter {
+  value: i64
+  current() -> i64 { return this.value }
+}
+fn genericRead<T>(_counter: T) -> i64 { return 999 }
+class DecoyReader {
+  genericRead<T>(_counter: T) -> i64 { return 999 }
+}
+fn answer() -> i64 {
+  var left = LeftCounter{value: 20}
+  var local = LocalCounter{value: 11}
+  var reader = GenericReader(0)
+  return readCounter<LeftCounter>(left) + readCounter<LocalCounter>(local) +
+         readCounter(local) + counters.readCounter(left) +
+         counters.readCounter(local) + reader.genericRead<LeftCounter>(left) +
+         reader.genericRead(local) + GenericStaticReader.genericRead<LeftCounter>(left) +
+         counters.GenericStaticReader.genericRead(local) + OtherStaticReader.genericRead(left) - 114
+}
+export fn consumerAnswer() -> i64 { return answer() }

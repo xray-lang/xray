@@ -1,0 +1,18 @@
+import crypto
+fn answer() -> i64 {
+ var a: Array<u8> = [0, 128, 255]
+ var b: Array<u8> = [0, 128, 255]
+ var changed: Array<u8> = [0, 129, 255]
+ var empty: Array<u8> = []
+ var shorter: Array<u8> = [0, 128]
+ assert(crypto.timingSafeEqualBytes(a, b))
+ assert(crypto.timingSafeEqualBytes(a, a))
+ assert(crypto.timingSafeEqualBytes(empty, empty))
+ assert(!crypto.timingSafeEqualBytes(a, changed))
+ assert(!crypto.timingSafeEqualBytes(a, shorter))
+ assert(!crypto.timingSafeEqualBytes(empty, a))
+ assert(!crypto.timingSafeEqualBytes(a, empty))
+ assert(a[0] == 0 && a[1] == 128 && a[2] == 255)
+ return 42
+}
+export fn consumerAnswer() -> i64 { return answer() }
