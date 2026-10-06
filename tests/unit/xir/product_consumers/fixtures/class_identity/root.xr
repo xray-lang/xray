@@ -1,0 +1,12 @@
+class Holder {
+ value: i64
+ constructor(value: i64) { this.value = value }
+}
+fn answer() -> i64 {
+ var rows: Array<Holder> = []
+ var original = Holder(19)
+ rows.push(original)
+ original.value = 42
+ return rows[0].value
+}
+export fn consumerAnswer() -> i64 { return answer() }

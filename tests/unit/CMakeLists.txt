@@ -4254,3 +4254,5 @@ include(xir/array_resize.cmake)
 include(xir/source_shadow_function.cmake)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/array_entries.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/program/source_product_consumers.cmake")

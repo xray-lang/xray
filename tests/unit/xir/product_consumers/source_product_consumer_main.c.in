@@ -1,0 +1,27 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * source_product_consumer_main.c - Fixed public consumer fixture
+ *
+ * KEY CONCEPT:
+ *   Independent expectations never derive from either backend's actual output.
+ */
+#include "source_product_consumer.h"
+#if @consumer_has_native@
+XR_DATA const XrXirProgramSpec product_consumer_program;
+XR_DATA const char product_consumer_c_sha[65];
+#endif
+int main(int argc, char **argv) {
+    const SourceProductConsumerFixture fixture = {
+        "@case@", "@product_consumer_fixture_root@/@case@", "@product_consumer_fixture_root@/@case@/root.xr", @expected@,
+#if @consumer_has_native@
+        &product_consumer_program, product_consumer_c_sha
+#else
+        NULL, NULL
+#endif
+    };
+    return xr_source_product_consumer_main(&fixture, argc, argv);
+}

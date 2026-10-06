@@ -1,0 +1,4 @@
+class First { static value() -> i64 { return 19 } }
+class Second { static value() -> i64 { return 23 } }
+fn answer() -> i64 { return First.value() + Second.value() }
+export fn consumerAnswer() -> i64 { return answer() }
