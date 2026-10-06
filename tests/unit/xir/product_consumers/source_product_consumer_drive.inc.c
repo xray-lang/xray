@@ -17,7 +17,9 @@ typedef struct ConsumerCursor {
 
 static unsigned consumer_yield_count(void) {
     return !strcmp(XR_CONSUMER_NAME, "parameter_coroutine") ||
-           !strcmp(XR_CONSUMER_NAME, "module_receiver_suspend") ? 2u : 0u;
+           !strcmp(XR_CONSUMER_NAME, "module_receiver_suspend") ||
+           !strcmp(XR_CONSUMER_NAME, "cross_module_coroutine") ||
+           !strcmp(XR_CONSUMER_NAME, "cross_module_static_coroutine") ? 2u : 0u;
 }
 
 static XrXirCallStatus consumer_advance(XrXirInstance *instance, ConsumerCursor *cursor,

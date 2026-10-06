@@ -1,0 +1,20 @@
+import { Leaf as DirectLeaf, Box as DirectBox } from "./library"
+import { Leaf as FacadeLeaf, Box as FacadeBox } from "./facade"
+class Leaf {
+  value: i64
+  constructor(value: i64) { this.value = value }
+}
+class Box<T> {
+  value: T
+  constructor(value: move T) { this.value = value }
+}
+fn answer() -> i64 {
+  var directLeaf = DirectLeaf(19)
+  var original = DirectBox<DirectLeaf>(move directLeaf)
+  var facadeLeaf = FacadeLeaf(6)
+  var facadeDecoy = FacadeBox<FacadeLeaf>(move facadeLeaf)
+  var localLeaf = Leaf(7)
+  var localDecoy = Box(move localLeaf)
+  return 42
+}
+export fn consumerAnswer() -> i64 { return answer() }

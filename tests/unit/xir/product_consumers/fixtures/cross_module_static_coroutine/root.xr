@@ -1,0 +1,3 @@
+import "./library" as library
+fn answer() -> i64 { return library.Worker.child(7) }
+export fn consumerAnswer() -> i64 { return answer() }

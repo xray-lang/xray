@@ -1,0 +1,7 @@
+export class Worker {
+  static child(value: i64) -> i64 {
+    Coro.yield()
+    Coro.yield()
+    return value
+  }
+}

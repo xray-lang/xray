@@ -3233,6 +3233,119 @@
           "bytes": 73,
           "sha256": "148e682a65b9188de5e5fcf723e593230b965e8b840858a285ea96acf7d09300"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/cross_module_coroutine/root.xr",
+        "sha256": "f09043352aa77c9b481644aac8ea14e41524e5df803bbbf7168a089ca1c6f105",
+        "original_prefix_sha256": "148e682a65b9188de5e5fcf723e593230b965e8b840858a285ea96acf7d09300",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 7,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 84,
+            "sha256": "58c3b56414f36dfcba1092ac787cf6966874b5a2523c1f79ba3c8e1a6eb667bf"
+          }
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "independent_product_failure_release": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole two-session/product, physical source deletion, independent Checked read/write, actual C emission and post-producer verification use one finite compiler ledger; every actual allocation fault releases all owners. Exact private fixture replay is finite and physically released before the measured operation."
+        },
+        "real_yield_and_wake_authority": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits. Wrong epoch/wake queries and resumes preserve their outputs and allocations; complete cancellation prefixes include both pending yields and reject their stale wake tokens."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_cross_module_coroutine_vm",
+        "test_source_product_cross_module_coroutine_native",
+        "test_source_product_cross_module_coroutine_mixed_even",
+        "test_source_product_cross_module_coroutine_mixed_odd",
+        "test_source_product_cross_module_coroutine_axes_0",
+        "test_source_product_cross_module_coroutine_axes_1",
+        "test_source_product_cross_module_coroutine_axes_2",
+        "test_source_product_cross_module_coroutine_axes_3",
+        "test_source_product_cross_module_coroutine_compiler_0",
+        "test_source_product_cross_module_coroutine_compiler_1",
+        "test_source_product_cross_module_coroutine_compiler_2",
+        "test_source_product_cross_module_coroutine_compiler_3",
+        "test_source_product_cross_module_coroutine_runtime_0",
+        "test_source_product_cross_module_coroutine_runtime_1",
+        "test_source_product_cross_module_coroutine_runtime_2",
+        "test_source_product_cross_module_coroutine_runtime_3",
+        "test_source_product_cross_module_coroutine_cancel_0",
+        "test_source_product_cross_module_coroutine_cancel_1",
+        "test_source_product_cross_module_coroutine_cancel_2",
+        "test_source_product_cross_module_coroutine_cancel_3",
+        "test_source_product_detachment_cross_module_coroutine",
+        "test_source_product_detachment_cross_module_coroutine_axes",
+        "test_source_product_detachment_cross_module_coroutine_compiler"
+      ],
+      "additional_legacy_obligations": {
+        "independent_product_determinism_and_source_detachment": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Two independent sessions publish identical source/closed bytes, facts and actual C. Both root and library private copies are physically removed before detached Checked reader admission; readers verify and rewrite after both products are destroyed."
+        },
+        "original_coroutine_representation": {
+          "status": "OPEN",
+          "shared_helper_body_lf_sha256": "b04016b973b53ef786782fb7310943a266a4da1db242887515d1ad7f0e335383",
+          "counts": {
+            "entry_coroutine_states": 2,
+            "entry_coroutine_safepoints": 1,
+            "child_coroutine_states": 3,
+            "child_coroutine_safepoints": 2,
+            "child_parameters": 1,
+            "sealed_call_successors": 2
+          },
+          "note": "Original entry/child effect and capability masks, READ i64 parameter, exact cancel successor publication, private safepoint/state identities and old generated spellings require a reviewed Checked/Lowered mapping. The full shared helper is retained by its body hash."
+        }
       }
     },
     {
@@ -3267,6 +3380,119 @@
         "entry_source": {
           "bytes": 84,
           "sha256": "7c3097081a355e364004dfe0b45237e01fc46aa3a16b3f6b35e285050a5646da"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/cross_module_static_coroutine/root.xr",
+        "sha256": "9580be783d4c99e2d278ad3fc079e80a127ea3f87d866b8f82ffc4652a680af2",
+        "original_prefix_sha256": "7c3097081a355e364004dfe0b45237e01fc46aa3a16b3f6b35e285050a5646da",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 7,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 115,
+            "sha256": "4375fae674a2d0dd0e042a3e09830030ebbb1a13775377117fc928267428ed45"
+          }
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "independent_product_failure_release": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole two-session/product, physical source deletion, independent Checked read/write, actual C emission and post-producer verification use one finite compiler ledger; every actual allocation fault releases all owners. Exact private fixture replay is finite and physically released before the measured operation."
+        },
+        "real_yield_and_wake_authority": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits. Wrong epoch/wake queries and resumes preserve their outputs and allocations; complete cancellation prefixes include both pending yields and reject their stale wake tokens."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_cross_module_static_coroutine_vm",
+        "test_source_product_cross_module_static_coroutine_native",
+        "test_source_product_cross_module_static_coroutine_mixed_even",
+        "test_source_product_cross_module_static_coroutine_mixed_odd",
+        "test_source_product_cross_module_static_coroutine_axes_0",
+        "test_source_product_cross_module_static_coroutine_axes_1",
+        "test_source_product_cross_module_static_coroutine_axes_2",
+        "test_source_product_cross_module_static_coroutine_axes_3",
+        "test_source_product_cross_module_static_coroutine_compiler_0",
+        "test_source_product_cross_module_static_coroutine_compiler_1",
+        "test_source_product_cross_module_static_coroutine_compiler_2",
+        "test_source_product_cross_module_static_coroutine_compiler_3",
+        "test_source_product_cross_module_static_coroutine_runtime_0",
+        "test_source_product_cross_module_static_coroutine_runtime_1",
+        "test_source_product_cross_module_static_coroutine_runtime_2",
+        "test_source_product_cross_module_static_coroutine_runtime_3",
+        "test_source_product_cross_module_static_coroutine_cancel_0",
+        "test_source_product_cross_module_static_coroutine_cancel_1",
+        "test_source_product_cross_module_static_coroutine_cancel_2",
+        "test_source_product_cross_module_static_coroutine_cancel_3",
+        "test_source_product_detachment_cross_module_static_coroutine",
+        "test_source_product_detachment_cross_module_static_coroutine_axes",
+        "test_source_product_detachment_cross_module_static_coroutine_compiler"
+      ],
+      "additional_legacy_obligations": {
+        "independent_product_determinism_and_source_detachment": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Two independent sessions publish identical source/closed bytes, facts and actual C. Both root and library private copies are physically removed before detached Checked reader admission; readers verify and rewrite after both products are destroyed."
+        },
+        "original_coroutine_representation": {
+          "status": "OPEN",
+          "shared_helper_body_lf_sha256": "b04016b973b53ef786782fb7310943a266a4da1db242887515d1ad7f0e335383",
+          "counts": {
+            "entry_coroutine_states": 2,
+            "entry_coroutine_safepoints": 1,
+            "child_coroutine_states": 3,
+            "child_coroutine_safepoints": 2,
+            "child_parameters": 1,
+            "sealed_call_successors": 2
+          },
+          "note": "Original entry/child effect and capability masks, READ i64 parameter, exact cancel successor publication, private safepoint/state identities and old generated spellings require a reviewed Checked/Lowered mapping. The full shared helper is retained by its body hash."
         }
       }
     },
@@ -3825,7 +4051,28 @@
           "bytes": 568,
           "sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
+        "sha256": "d3e9d0571d73d98c8eef95495f23b6c99cd47fc8abeed9c74a800987755ecf52",
+        "original_prefix_sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 171,
+            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          },
+          "facade.xr": {
+            "bytes": 171,
+            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "pending_admission": "The exact original root/library/facade positive source is rejected at the assigned production baseline with constructor parameter contract is not admitted. Preserve its 42 oracle, all three distinct nominal declaration scopes, original managed-struct negative literals and whole legacy type/ownership assertions."
     },
     {
       "name": "source_owner_recursive_class_type_reservation_is_cycle_safe",

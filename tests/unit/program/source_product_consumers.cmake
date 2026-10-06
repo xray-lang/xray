@@ -99,7 +99,7 @@ if(MSVC)
 else()
     target_compile_options(test_source_product_detachment PRIVATE -Wall -Wextra -Werror)
 endif()
-foreach(case IN ITEMS generics callables single_module text_program)
+foreach(case IN ITEMS generics callables single_module text_program cross_module_coroutine cross_module_static_coroutine)
     add_test(NAME test_source_product_detachment_${case}
         COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_detachment.py"
             --binary $<TARGET_FILE:test_source_product_detachment> --case ${case}

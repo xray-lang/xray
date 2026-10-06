@@ -27,6 +27,8 @@ typedef struct DetachmentCase {
     char root[1024], file[1056];
     uint8_t source[4096];
     size_t source_length;
+    uint8_t library_source[4096];
+    size_t library_length;
     bool remove_source;
 } DetachmentCase;
 
@@ -171,6 +173,11 @@ static bool private_root(const char *root) {
     return true;
 }
 
+static bool paired_source_case(const char *name) {
+    return !strcmp(name, "two_modules") || !strcmp(name, "cross_module_coroutine") ||
+        !strcmp(name, "cross_module_static_coroutine");
+}
+
 static XrXirStatus delete_sources(const XrXirCompileContext *context, const DetachmentCase *test) {
     CHECK(private_root(test->root));
     XrOsIoPolicy policy = xr_compile_io_policy(context->resources);
@@ -181,7 +188,7 @@ static XrXirStatus delete_sources(const XrXirCompileContext *context, const Deta
         CHECK(missing != XR_OS_IO_OK);
         return io_status(missing);
     }
-    if (!strcmp(test->name, "two_modules")) {
+    if (paired_source_case(test->name)) {
         char library[1056];
         int length = snprintf(library, sizeof(library), "%s/library.xr", test->root);
         CHECK(length > 0 && (size_t)length < sizeof(library));
@@ -307,7 +314,8 @@ done:
 int main(int argc, char **argv) {
     CHECK(argc == 2 || (argc >= 4 && argc <= 7 && !strcmp(argv[3], "--delete-source") && private_root(argv[2])));
     CHECK(!strcmp(argv[1], "generics") || !strcmp(argv[1], "callables") ||
-        !strcmp(argv[1], "single_module") || !strcmp(argv[1], "text_program") || !strcmp(argv[1], "two_modules"));
+        !strcmp(argv[1], "single_module") || !strcmp(argv[1], "text_program") || !strcmp(argv[1], "two_modules") ||
+        !strcmp(argv[1], "cross_module_coroutine") || !strcmp(argv[1], "cross_module_static_coroutine"));
     DetachmentCase test = {0};
     test.name = argv[1];
     test.remove_source = argc >= 4;

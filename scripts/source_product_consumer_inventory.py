@@ -38,6 +38,8 @@ SELECTED = {
     "source_owner_function_parameter_suspending_callable_has_one_program": "parameter_coroutine",
     "source_owner_cross_module_instance_method_preserves_receiver_across_suspend": "module_receiver_suspend",
     "source_owner_narrow_array_elements_precede_allocation": "narrow_array",
+    "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors": "cross_module_coroutine",
+    "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors": "cross_module_static_coroutine",
     **NUMERIC.MATRICES,
 }
 PROBES = {
@@ -50,6 +52,7 @@ PROBES = {
     "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates": "generic_value_struct",
     "source_owner_generic_scalar_class_specializations_are_exact_class_references": "generic_scalar_class",
     "source_owner_generic_constraint_methods_have_exact_concrete_targets": "generic_constraint_methods",
+    "source_owner_generic_nested_class_types_are_exact": "generic_nested_class",
 }
 REJECTIONS = {
     "source_owner_bare_nullable_condition_has_no_product": {
@@ -291,6 +294,8 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     current["pending_admission"] = "The exact original root/library/facade input is rejected at the assigned production baseline with import requires an exported declaration. All original positive and negative variant literals remain in the responsibility census; the positive 42 oracle is not a rejection test."
                 elif selected == "byte_comparison":
                     current["pending_admission"] = "The original crypto import is rejected at the assigned production baseline with name does not resolve to an admitted nominal type. Preserve every empty, alias, equal, differing-value and differing-length assertion and its positive 42 oracle."
+                elif selected == "generic_nested_class":
+                    current["pending_admission"] = "The exact original root/library/facade positive source is rejected at the assigned production baseline with constructor parameter contract is not admitted. Preserve its 42 oracle, all three distinct nominal declaration scopes, original managed-struct negative literals and whole legacy type/ownership assertions."
                 sources.append(current)
                 continue
             current["projected_obligations"] = {name: {"status": "PENDING_FULL_QUALIFICATION", "verification": note}
@@ -312,7 +317,8 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     "verification": "Every active cancellation prefix must preserve the original partial visits state. The repeatable-fixture cancellation oracle is inapplicable; these gates are not registered until an independent state oracle is implemented."}
                 current["projected_obligations"]["runtime_failures"]["verification"] = (
                     "Actual instance/init/first answer allocation ordinals retain the original first-call 42 oracle, sticky initialization failure and final physical release.")
-            if selected in ("generics", "callables", "single_module", "two_modules", "text_program"):
+            if selected in ("generics", "callables", "single_module", "two_modules", "text_program",
+                            "cross_module_coroutine", "cross_module_static_coroutine"):
                 current["candidate_replacement_gates"].append(f"test_source_product_detachment_{selected}")
                 current["candidate_replacement_gates"] += [f"test_source_product_detachment_{selected}_{kind}"
                                                           for kind in ("axes", "compiler")]
@@ -415,6 +421,21 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     current["additional_legacy_obligations"]["receiver_lifecycle_across_suspension"] = {
                         "status": "OPEN",
                         "note": "The original keeps the one receiver alive through both yields, cancels after each yield, rejects lifecycle-log overflow and requires one finalize/reclaim per construction on success and cancellation. Physical release and the fixed 42 oracle alone do not qualify event ordering."}
+            elif selected in ("cross_module_coroutine", "cross_module_static_coroutine"):
+                helper_start = text.index("static void assert_cross_module_coroutine_program(")
+                helper_body = text[helper_start:function_end(text, text.index("{", helper_start))]
+                current["projected_obligations"]["real_yield_and_wake_authority"] = {
+                    "status": "IMPLEMENTED_NOT_QUALIFIED",
+                    "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits. Wrong epoch/wake queries and resumes preserve their outputs and allocations; complete cancellation prefixes include both pending yields and reject their stale wake tokens."}
+                current["additional_legacy_obligations"] = {
+                    "independent_product_determinism_and_source_detachment": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Two independent sessions publish identical source/closed bytes, facts and actual C. Both root and library private copies are physically removed before detached Checked reader admission; readers verify and rewrite after both products are destroyed."},
+                    "original_coroutine_representation": {"status": "OPEN",
+                        "shared_helper_body_lf_sha256": digest(helper_body.encode()),
+                        "counts": {"entry_coroutine_states": 2, "entry_coroutine_safepoints": 1,
+                            "child_coroutine_states": 3, "child_coroutine_safepoints": 2,
+                            "child_parameters": 1, "sealed_call_successors": 2},
+                        "note": "Original entry/child effect and capability masks, READ i64 parameter, exact cancel successor publication, private safepoint/state identities and old generated spellings require a reviewed Checked/Lowered mapping. The full shared helper is retained by its body hash."}}
             elif numeric_metadata is not None:
                 current["candidate_replacement_gates"].append("source_product_integer_source_constructors")
                 current["additional_legacy_obligations"] = {
