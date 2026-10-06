@@ -5301,6 +5301,104 @@
           "bytes": 65,
           "sha256": "f5b21267d455abce479d4b3cbc369819e3cc0c94d14482c28a712626c58706bd"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/multi_safepoint/root.xr",
+        "sha256": "896bf5280b1e4e132fac8be41d2851052f3b2f3713ed274e4b60c3575befc6df",
+        "original_prefix_sha256": "f5b21267d455abce479d4b3cbc369819e3cc0c94d14482c28a712626c58706bd",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source and independent VM/native assertion value 42 through the exported adapter. Original native harness success exit 227 is retained separately and is not a language return value.",
+        "legacy_native_harness_exit": 227
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "real_yield_and_wake_authority": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Every answer call observes both original real YIELD waits before returning 42; wrong or stale epoch/wake tokens are rejected. All active cancellation prefixes include both pending yields and preserve a callable initialized instance."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_multi_safepoint_vm",
+        "test_source_product_multi_safepoint_native",
+        "test_source_product_multi_safepoint_mixed_even",
+        "test_source_product_multi_safepoint_mixed_odd",
+        "test_source_product_multi_safepoint_axes_0",
+        "test_source_product_multi_safepoint_axes_1",
+        "test_source_product_multi_safepoint_axes_2",
+        "test_source_product_multi_safepoint_axes_3",
+        "test_source_product_multi_safepoint_compiler_0",
+        "test_source_product_multi_safepoint_compiler_1",
+        "test_source_product_multi_safepoint_compiler_2",
+        "test_source_product_multi_safepoint_compiler_3",
+        "test_source_product_multi_safepoint_runtime_0",
+        "test_source_product_multi_safepoint_runtime_1",
+        "test_source_product_multi_safepoint_runtime_2",
+        "test_source_product_multi_safepoint_runtime_3",
+        "test_source_product_multi_safepoint_cancel_0",
+        "test_source_product_multi_safepoint_cancel_1",
+        "test_source_product_multi_safepoint_cancel_2",
+        "test_source_product_multi_safepoint_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "original_coroutine_representation": {
+          "status": "OPEN",
+          "counts": {
+            "coroutine_states": 3,
+            "coroutine_safepoints": 2,
+            "COROUTINE_YIELD": 2,
+            "safepoint_live_values": [
+              0,
+              0
+            ]
+          },
+          "legacy_native_harness_exit": 227,
+          "note": "Original dense resume states 1/2, safepoints 0/1, cancellation state identities, no live values and generated C state/suspend spellings require a reviewed Checked/Lowered mapping. Native harness exit 227 follows all independent value/state/cancellation assertions; retain its protocol separately from the returned 42."
+        }
       }
     },
     {

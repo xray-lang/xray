@@ -40,6 +40,7 @@ SELECTED = {
     "source_owner_narrow_array_elements_precede_allocation": "narrow_array",
     "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors": "cross_module_coroutine",
     "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors": "cross_module_static_coroutine",
+    "source_owner_runs_each_dense_coroutine_state_across_private_executors": "multi_safepoint",
     **NUMERIC.MATRICES,
 }
 PROBES = {
@@ -124,6 +125,21 @@ def static_strings(body: str) -> dict[str, bytes]:
             raise ValueError(f"ambiguous source literal: {name}")
         result[name] = b"".join(c_literal(s) for s in re.findall(STRING, literals))
     return result
+
+
+def multi_safepoint_oracle(body: str, literals: dict[str, bytes], fixture: dict) -> int:
+    """Separate the original returned value from its native harness success exit."""
+    values = re.findall(r'ASSERT_EQ_INT\(vm_outcome\.value\.as\.i64,\s*(-?\d+)\)', body)
+    source_values = re.findall(rb'\breturn\s+(-?\d+)\b', literals["source"])
+    if values != ["42"] or source_values != [b"42"]:
+        raise ValueError("the original dense coroutine result oracle changed")
+    if literals["source"].count(b"Coro.yield()") != 2:
+        raise ValueError("the original dense coroutine needs both real yields")
+    if "outcome.value != INT64_C(42)" not in body or '"    return 227;' not in body:
+        raise ValueError("the original native assertions or success exit changed")
+    if fixture["id"] != "multi_safepoint" or fixture["expected_exit"] != 227:
+        raise ValueError("the native harness success exit must remain 227")
+    return 42
 
 
 def allocation_scenarios() -> dict:
@@ -257,7 +273,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             files[fixture] = data + adapter
             current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
                 "sha256": digest(data + adapter), "original_prefix_sha256": digest(data),
-                "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": case["fixture"]["expected_exit"] if case["fixture"] else 42,
+                "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": multi_safepoint_oracle(body, literals, case["fixture"]) if selected == "multi_safepoint" else (case["fixture"]["expected_exit"] if case["fixture"] else 42),
                 "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."}
             if numeric_metadata is not None:
                 current["initial_projection"]["original_source_constructor"] = numeric_metadata
@@ -421,6 +437,18 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     current["additional_legacy_obligations"]["receiver_lifecycle_across_suspension"] = {
                         "status": "OPEN",
                         "note": "The original keeps the one receiver alive through both yields, cancels after each yield, rejects lifecycle-log overflow and requires one finalize/reclaim per construction on success and cancellation. Physical release and the fixed 42 oracle alone do not qualify event ordering."}
+            elif selected == "multi_safepoint":
+                current["initial_projection"]["legacy_native_harness_exit"] = case["fixture"]["expected_exit"]
+                current["initial_projection"]["scope"] = "Exact original source and independent VM/native assertion value 42 through the exported adapter. Original native harness success exit 227 is retained separately and is not a language return value."
+                current["projected_obligations"]["real_yield_and_wake_authority"] = {
+                    "status": "IMPLEMENTED_NOT_QUALIFIED",
+                    "verification": "Every answer call observes both original real YIELD waits before returning 42; wrong or stale epoch/wake tokens are rejected. All active cancellation prefixes include both pending yields and preserve a callable initialized instance."}
+                current["additional_legacy_obligations"] = {
+                    "original_coroutine_representation": {"status": "OPEN",
+                        "counts": {"coroutine_states": 3, "coroutine_safepoints": 2,
+                            "COROUTINE_YIELD": 2, "safepoint_live_values": [0, 0]},
+                        "legacy_native_harness_exit": 227,
+                        "note": "Original dense resume states 1/2, safepoints 0/1, cancellation state identities, no live values and generated C state/suspend spellings require a reviewed Checked/Lowered mapping. Native harness exit 227 follows all independent value/state/cancellation assertions; retain its protocol separately from the returned 42."}}
             elif selected in ("cross_module_coroutine", "cross_module_static_coroutine"):
                 helper_start = text.index("static void assert_cross_module_coroutine_program(")
                 helper_body = text[helper_start:function_end(text, text.index("{", helper_start))]
@@ -447,7 +475,10 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
     for case in manifest["cases"]:
         if case["name"] not in SELECTED:
             continue
-        if case["fixture"]:
+        if SELECTED[case["name"]] == "multi_safepoint":
+            body = bodies[case["name"]][0]
+            expected[case["name"]] = multi_safepoint_oracle(body, static_strings(body), case["fixture"])
+        elif case["fixture"]:
             expected[case["name"]] = case["fixture"]["expected_exit"]
         else:
             literal = static_strings(bodies[case["name"]][0])["source"]
@@ -455,7 +486,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             if len(constants) != 1:
                 raise ValueError("a non-fixture consumer needs one original constant-result oracle")
             expected[case["name"]] = int(constants[0])
-    cmake = ["# Fixed result oracles come from the unchanged legacy manifest or original constant source.",
+    cmake = ["# Fixed result oracles come from original language-result assertions, the manifest or constant source.",
              "set(product_consumer_cases " + " ".join(SELECTED.values()) + ")"]
     cmake += [f"set(product_consumer_expected_{fixture} {expected[name]})"
               for name, fixture in SELECTED.items()]
