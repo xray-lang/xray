@@ -1,0 +1,20 @@
+export fn round<T>(old:T,item:T)->Array<T> {
+    var values=[old,old,old]
+    const alias=values
+    const empty:Array<T>=[]
+    var result=values.concat([item],values,empty)
+    var zero=alias.concat()
+    const self=alias.concat(alias,empty)
+    const saved=result[0]
+    zero[1]=item
+    values[1]=item
+    result[0]=item
+    return [alias[0],alias[1],alias[2],saved,result[3],result[1],zero[0],zero[1],result[6],values[1],result[0],self[4],self[5],zero[2]]
+}
+export fn oldNumber()->i64{return 3}
+export fn newNumber()->i64{return 7}
+export fn oldBool()->bool{return false}
+export fn newBool()->bool{return true}
+export fn oldText()->string{return "old"}
+export fn newText()->string{return "a\0中"}
+export fn unit(){return ()}

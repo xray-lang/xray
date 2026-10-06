@@ -54,6 +54,10 @@ static void error_deep_value_cases(void) {
     XrXirFaultDetail fault = {0};
     CHECK(xr_xir_array_get(&array, 0, &admission, &error, &fault) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&array);
+    /* Empty variants retain their descriptor, but not the producer domain. */
+    XrXirDomain *receiving = NULL;
+    CHECK(xr_xir_domain_new(4194304, &receiving) == XR_XIR_VALUE_OK);
+    admission.domain = receiving;
     for (uint32_t i = 0; i <= DEPTH; ++i) {
         CHECK(xr_xir_error_narrow(&error, (XrXirType)256, &admission, &concrete) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&error);
@@ -62,6 +66,7 @@ static void error_deep_value_cases(void) {
         if (i < DEPTH) CHECK(xr_xir_enum_get(&concrete, 1, 0, &admission, &error) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&concrete);
     }
+    xr_xir_domain_drop(receiving);
     CHECK(!live);
 }
 static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirValue *pair,

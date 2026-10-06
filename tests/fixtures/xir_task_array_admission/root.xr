@@ -1,0 +1,8 @@
+import "./producer" as producer
+export fn case0()->Array<Task<i64>>{const old=go producer.oldNumber();const item=go producer.newNumber();return producer.round<Task<i64>>(old,item)}
+export fn case1()->Array<Task<bool>>{const old=go producer.oldBool();const item=go producer.newBool();return producer.round<Task<bool>>(old,item)}
+export fn case2()->Array<Task<string>>{const old=go producer.oldText();const item=go producer.newText();return producer.round<Task<string>>(old,item)}
+export fn case3()->Array<Task<()>>{const old=go producer.unit();const item=go producer.unit();return producer.round<Task<()>>(old,item)}
+
+export fn directTask()->Task<i64>{return go producer.oldNumber()}
+export fn plainArray()->Array<Task<i64>>{const item=go producer.oldNumber();return [item]}

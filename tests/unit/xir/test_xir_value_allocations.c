@@ -69,7 +69,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_types.c"
 #include "xir/xxir_constraints.c"
 #include "xir/xxir_constraint_proof.c"
-#include "xir/xxir_result_binders.inc.c"
+#include "xir/xxir_generic.c"
 #include "xir/xxir_implementation.c"
 #include "xir/xxir_implementation_verify.c"
 #include "xir/xxir_declarations.c"
