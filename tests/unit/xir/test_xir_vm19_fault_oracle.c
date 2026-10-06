@@ -44,13 +44,18 @@ typedef struct OracleOutput {PendingOutput *pending;RoleOutput *role;uint32_t id
 static XrXirOutputStatus oracle_output(void *context,const XrXirOutputGroup *group) {
     OracleOutput *out=context;++out->calls;
     XrXirOutputStatus status=out->id<9?pending_output(out->pending,group):role_output(out->role,group);
-    /* A requested cancellation is not a host/resource first failure. Only a
-     * legal cleanup provider failure can replace that marker; prior host faults
-     * and protocol-abort observations remain on their original channels. */
-    bool cleanup_host_after_cancel=oracle_reason==XR_XIR_CALL_CANCELLED &&
+    /* A cancellation request is not an accepted host/resource failure. The
+     * executing driver owns acceptance: an uncancelled worker or real cleanup
+     * can accept a legal host fault while the root has only requested cancel.
+     * Prior host faults and protocol observations remain sticky. */
+    XrXirInstance *instance=out->pending->instance;
+    XrXirCall *driver=instance && instance->executor && instance->executor->current ?
+        instance->executor->current->call : instance ? instance->call : NULL;
+    bool host_after_cancel=oracle_reason==XR_XIR_CALL_CANCELLED && oracle_executing_poll &&
+        (oracle_phase==ORACLE_POLL || oracle_phase==ORACLE_REPOLL) &&
         (status==XR_XIR_OUTPUT_ERROR || status==XR_XIR_OUTPUT_OOM || status==XR_XIR_OUTPUT_LIMIT) &&
-        observed_call && observed_call->top && observed_call->top->in_cleanup;
-    if(group->values[0].type!=XR_XIR_STRING && status!=XR_XIR_OUTPUT_OK && (!oracle_reason || cleanup_host_after_cancel)) {
+        driver && driver->driving && (!driver->cancel_requested || cleanup_active(driver));
+    if(group->values[0].type!=XR_XIR_STRING && status!=XR_XIR_OUTPUT_OK && (!oracle_reason || host_after_cancel)) {
         oracle_reason=out->id==PENDING_CANCEL_BEFORE?XR_XIR_CALL_CANCELLED:
             status==XR_XIR_OUTPUT_ERROR?XR_XIR_CALL_OUTPUT_ERROR:status==XR_XIR_OUTPUT_OOM?XR_XIR_CALL_OOM:
             status==XR_XIR_OUTPUT_LIMIT?XR_XIR_CALL_LIMIT:status==XR_XIR_OUTPUT_BAD_ABI?XR_XIR_CALL_BAD_ABI:XR_XIR_CALL_BAD_ARGUMENT;
