@@ -14,3 +14,16 @@ endif()
 add_test(NAME ${writer_stage_normal_target} COMMAND ${writer_stage_normal_target})
 set_tests_properties(${writer_stage_normal_target} PROPERTIES TIMEOUT 120
     LABELS "unit;xir;program-consumer;ownership;checked;public-writer;normal-resources")
+
+# The owner freezes this configuration's normal N before registering the replay.
+function(xray_register_writer_packet_oom normal_sites)
+    if(NOT "${normal_sites}" MATCHES "^[1-9][0-9]*$")
+        message(FATAL_ERROR "Public writer OOM requires the frozen cold normal allocation count")
+    endif()
+    add_test(NAME test_source_product_semantic67_writer_packet_oom
+        COMMAND test_source_product_semantic67_writer_stage_normal --packet-oom-last "${normal_sites}")
+    set_tests_properties(test_source_product_semantic67_writer_packet_oom PROPERTIES
+        TIMEOUT 120 LABELS "unit;xir;program-consumer;ownership;checked;public-writer;fault-injection")
+endfunction()
+
+xray_register_writer_packet_oom(10)

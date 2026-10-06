@@ -1,0 +1,75 @@
+{
+  "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "worker_commit_at_prepare": "ef78aa8cd39448abe86ec333272f9ef94b9dc5f5",
+  "normal_preimage_sha256": "9aa8010a555b205eb30ae1cc1839ae3c1a86377ab1c57b8e297051529003bf6d",
+  "model": {
+    "linkage": "PROGRAM",
+    "name_raw": "main",
+    "name_length": 4,
+    "result": "I64",
+    "blocks": 1,
+    "instructions": [
+      "CONST_INT:I64:42",
+      "RETURN:Unit:value0"
+    ],
+    "original_224B_golden_sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784"
+  },
+  "input_normal_N": "MANDATORY_EXTERNALLY_FROZEN_PER_CONFIGURATION_UNMEASURED_NOT_RUN",
+  "N_scope": "Fresh process zero-based actual compiler malloc attempts over cold owner creation + exact Built Check + public Checked write; real normal full224B oracle and complete owner release must PASS independently before using N.",
+  "fault_phase": "Separate new process, fresh public finite ledger. No in-process baseline, no counter reset, no released-ledger refill.",
+  "fault_site": "N-1; installed only after successful public resources_new+Check; must lie in checked_write range; shared postincrement index can match once at most; injected=true and attempts=N proves exactly one hit.",
+  "oracle": {
+    "owner": "XR_COMPILE_RESOURCE_OK",
+    "check": "XR_XIR_OK; independently owned main and public context same resources",
+    "write": "XR_XIR_OUT_OF_MEMORY",
+    "hit_count": 1,
+    "write_end": "N",
+    "output": "Valid empty bytes=NULL,length=0; full object initialized A5 then valid fields set; memcpy snapshot and sizeof-object memcmp must be unchanged before cleanup",
+    "diagnostic": {
+      "status": "XR_XIR_OUT_OF_MEMORY",
+      "function": "UINT32_MAX",
+      "block": "UINT32_MAX",
+      "instruction": "UINT32_MAX",
+      "reason": "XR_XIR_DIAGNOSTIC_NONE"
+    },
+    "cleanup": "Always free Checked+packet, query still-live resources, live equals constructor baseline, release resources, actual compiler physical0/0 and observer table actual xr_free+NULL"
+  },
+  "budgets": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000
+  },
+  "fault_branch_no_CHECK_exit_helpers": [
+    "No source_program_owner",
+    "No writer_check",
+    "No writer_observe",
+    "No source_program_owners_free",
+    "Public status handling then common cleanup"
+  ],
+  "shared_observer": "Read/use existing test allocator observer unchanged. The observer's internal consistency CHECKs remain; no private codec calls, no helper mutation.",
+  "CMake": {
+    "normal": "Original 1 normal CTest unchanged",
+    "fault": "One registration function; owner invokes it only after per-configuration N is frozen. No default guessed N and no fake registered test before binding.",
+    "binding_fragment": "xray_register_writer_packet_oom(<EXACT_NORMAL_N_FOR_THIS_CONFIGURATION>)",
+    "extra_TU": 0,
+    "new_CTest_when_bound": 1,
+    "timeout": 120
+  },
+  "responsibilities_OPEN": {
+    "private_work_prefixes": 1932,
+    "private_resource_axes": 12,
+    "private_FI_positions": 6,
+    "public_complete_FI": "OPEN; exactly one packet allocation candidate is not the entire domain",
+    "occupied_output": "OPEN_NOT_IMPLEMENTED",
+    "three_resource_axes": "OPEN_NOT_IMPLEMENTED",
+    "23families": "OPEN_UNCHANGED",
+    "VM_native_ABI_default_safety": "OPEN_UNCHANGED"
+  },
+  "normal_source_cost_same": "Fault path uses the identical public Built model; additional public owned-name/context queries are nonallocating. Fresh qualification must bind headers/libraries to fixed25f, never worker contract65.",
+  "source_proof_readonly": {
+    "checked_encode": "src/xir/xxir_checked_codec.inc.c:547-583: final actual allocation is packet xir_compile_calloc; failed allocation returns status before output publication; remaining write/digest path does not allocate",
+    "status": "src/xir/xxir_compile_memory.h maps RESOURCE_OUT_OF_MEMORY to XIR_OUT_OF_MEMORY; checked_error sets all indices max and reason NONE",
+    "runtime_measurement": "NOT_RUN"
+  }
+}
