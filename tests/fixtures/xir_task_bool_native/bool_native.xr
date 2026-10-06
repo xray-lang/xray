@@ -1,0 +1,15 @@
+export fn parameter(value: bool) -> bool { return value }
+fn identity<T: Sendable>(value: T) -> T { return value }
+fn spawn<T: Sendable>(value: T) -> Task<T> { return go identity(value) }
+export fn escaped() -> Task<bool> { return go identity(false) }
+export fn main() -> i64 {
+    const task = go parameter(true)
+    const first = await task
+    const second = await task
+    const third = await spawn(false)
+    print(first)
+    print(second)
+    print(third)
+    if (first && second && !third) { return 84 }
+    return 0
+}

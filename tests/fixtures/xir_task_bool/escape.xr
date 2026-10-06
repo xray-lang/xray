@@ -1,0 +1,3 @@
+fn worker(value: bool) -> bool { return value }
+export fn handle() -> Task<bool> { return go worker(true) }
+export fn main() -> i64 { return 7 }

@@ -1,0 +1,3 @@
+fn worker<T>(value: T) -> T { return value }
+fn spawn<T>(value: T) -> Task<T> { return go worker(value) }
+export fn main() -> bool { return await spawn(true) }

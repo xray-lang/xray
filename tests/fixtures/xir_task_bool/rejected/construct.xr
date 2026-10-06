@@ -1,0 +1,1 @@
+export fn main() -> bool { return await Task<bool>() }

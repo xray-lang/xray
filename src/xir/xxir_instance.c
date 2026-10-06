@@ -831,7 +831,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = xr_xir_task_element(program->types, task_type);
     if (!result || result != target->result) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (result != XR_XIR_I64 && result != XR_XIR_STRING) return XR_XIR_CALL_UNSUPPORTED;
+    if (result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) return XR_XIR_CALL_UNSUPPORTED;
     for (uint32_t p = 0; p < count; ++p) {
         if (!xr_xir_task_parameter_supported(program->types, target->parameters[p]))
             return XR_XIR_CALL_UNSUPPORTED;

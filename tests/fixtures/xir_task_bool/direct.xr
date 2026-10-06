@@ -1,0 +1,7 @@
+fn worker(value: bool) -> bool { return value }
+export fn main() -> bool {
+    const task: Task<bool> = go worker(true)
+    const first = await task
+    const second = await task
+    return first && second
+}

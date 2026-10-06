@@ -41,7 +41,7 @@ static XrXirValue task_core_task_value(XirTask *task) {
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(task->object.arena);
     XrXirType result = xr_xir_task_element(types, task->object.type);
-    if (result != XR_XIR_I64 && result != XR_XIR_STRING) return false;
+    if (result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) return false;
     XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
     if (state == XIR_TASK_PREPARING)
         return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
@@ -222,7 +222,7 @@ static XrXirCallStatus task_core_spawn(XrXirTaskExecutor *executor, XrXirCallVie
         return XR_XIR_CALL_BAD_STATE;
     const XrXirProgram *program = executor->config.program;
     XrXirType result = xr_xir_task_element(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
-    if ((result != XR_XIR_I64 && result != XR_XIR_STRING) || request->entry >= program->entry_count ||
+    if ((result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) || request->entry >= program->entry_count ||
         program->entries[request->entry].result != result || program->entries[request->entry].cleanup_owner)
         return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t p = 0; p < program->entries[request->entry].parameter_count; ++p) {

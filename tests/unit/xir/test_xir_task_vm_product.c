@@ -63,11 +63,6 @@ static XrXirProgram *task_product_program(uint32_t mode) {
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status = xr_xir_compile_lower(closed, &target, &lowered, &diagnostic);
     xr_xir_compile_artifact_free(closed);
-    if (mode == TASK_PRODUCT_BOOL_RESULT || mode == TASK_PRODUCT_BOOL_ARGUMENT) {
-        CHECK(status == XR_XIR_UNSUPPORTED && !lowered);
-        printf("Task used admission mode=%u: Checked valid, unsupported result/parameter rejected before execution\n", mode);
-        return NULL;
-    }
     if (status != XR_XIR_OK) fprintf(stderr, "mode=%u lower status=%u f=%u op=%u\n",
         mode, status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK);
@@ -115,7 +110,11 @@ static void task_product_execute(uint32_t mode) {
         }
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
         if (pass == 1) xr_xir_compile_program_drop(program);
-        if (mode == TASK_VM_I64 || mode == TASK_PRODUCT_UNUSED_BOOL || mode == TASK_PRODUCT_NO_ARENA) CHECK(value.type == XR_XIR_I64 && value.payload == 7);
+        if (mode == TASK_VM_I64 || mode == TASK_PRODUCT_BOOL_ARGUMENT ||
+            mode == TASK_PRODUCT_UNUSED_BOOL || mode == TASK_PRODUCT_NO_ARENA)
+            CHECK(value.type == XR_XIR_I64 && value.payload == 7);
+        if (mode == TASK_PRODUCT_BOOL_RESULT)
+            CHECK(value.type == XR_XIR_BOOL && !value.reserved && value.payload == 1);
         if (mode == TASK_VM_STRING) {
             const char *bytes = NULL; size_t length = 0;
             CHECK(xr_xir_string_view(&value, &bytes, &length) && length == 3 && !memcmp(bytes, "a\0b", 3));
@@ -132,8 +131,8 @@ int main(void) {
     task_product_execute(TASK_VM_DISCARD); task_product_execute(TASK_VM_PANIC);
     task_product_execute(TASK_PRODUCT_UNUSED_BOOL);
     task_product_execute(TASK_PRODUCT_NO_ARENA);
-    CHECK(!task_product_program(TASK_PRODUCT_BOOL_RESULT));
-    CHECK(!task_product_program(TASK_PRODUCT_BOOL_ARGUMENT));
+    task_product_execute(TASK_PRODUCT_BOOL_RESULT);
+    task_product_execute(TASK_PRODUCT_BOOL_ARGUMENT);
     effects_source_owners_free();
     return 0;
 }

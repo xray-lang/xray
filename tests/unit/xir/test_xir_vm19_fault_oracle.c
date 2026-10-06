@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include "xir/xxir_call.h"
 enum OraclePhase { ORACLE_PREP,ORACLE_NEW,ORACLE_INPUT,ORACLE_START,ORACLE_POLL,ORACLE_RESTART,ORACLE_REPOLL,ORACLE_TAKE,ORACLE_FREE };
 static unsigned oracle_phase,oracle_hit_phase,oracle_hits,oracle_reason,oracle_poll_step,oracle_hit_step;
 static bool oracle_cancel_seen,oracle_cancel_accepted;
@@ -24,10 +25,13 @@ static void oracle_allocation_attempt(unsigned kind,size_t bytes,size_t ordinal)
     oracle_allocations[oracle_allocation_count++]=(OracleAllocationEvent){ordinal,bytes,kind,oracle_phase,oracle_poll_step,oracle_epoch};
 }
 static unsigned oracle_budget_rejections,oracle_budget_first_phase;
+static bool oracle_executing_poll;
 static void oracle_budget_rejected(void) {
     if(oracle_phase>=ORACLE_NEW) {
         if(!oracle_budget_rejections)oracle_budget_first_phase=oracle_phase;
         ++oracle_budget_rejections;
+        if(oracle_executing_poll && (oracle_phase==ORACLE_POLL || oracle_phase==ORACLE_REPOLL) &&
+            (!oracle_reason || oracle_reason==XR_XIR_CALL_CANCELLED))oracle_reason=XR_XIR_CALL_LIMIT;
     }
 }
 static void oracle_malloc_failure(void) {
@@ -75,7 +79,8 @@ static XrXirInstanceResult measured_poll(XrXirInstance *instance,uint32_t id,
             oracle_cancel_seen=true;oracle_cancel_status=(unsigned)status;oracle_cancel_accepted=status==XR_XIR_CALL_CANCEL_REQUESTED;
             cancelled=true;
         }
-        oracle_poll_step=measured_steps;result=xr_xir_instance_poll_bounded(instance,1);++measured_steps;
+        oracle_poll_step=measured_steps;oracle_executing_poll=true;
+        result=xr_xir_instance_poll_bounded(instance,1);oracle_executing_poll=false;++measured_steps;
         CHECK(++loops<4096);
         if(id==PENDING_CANCEL_AFTER && pending->count && !cancelled) {
             CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_OUTPUT_ERROR);cancelled=true;
@@ -107,7 +112,7 @@ static void measure_operation(uint32_t id,size_t fail_at,unsigned axis,uint64_t 
     CHECK(id<19 && !runtime_live && !runtime_bytes);
     oracle_phase=ORACLE_PREP;oracle_hits=0;oracle_hit_phase=0;oracle_hit_step=0;oracle_reason=0;
     oracle_cancel_seen=false;oracle_cancel_accepted=false;oracle_cancel_status=UINT32_MAX;
-    oracle_budget_rejections=0;oracle_budget_first_phase=0;oracle_allocation_count=0;oracle_epoch=0;
+    oracle_budget_rejections=0;oracle_budget_first_phase=0;oracle_allocation_count=0;oracle_epoch=0;oracle_executing_poll=false;
     runtime_attempts=0;source_program_compile_attempts=0;
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     uint32_t kind=id<9?ROLE_OUTPUT:id<14?ROLE_OUTPUT:id<17?ROLE_TASK:ROLE_WRITE;

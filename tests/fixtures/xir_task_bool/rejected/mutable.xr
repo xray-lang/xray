@@ -1,0 +1,3 @@
+var flag = true
+fn worker() -> bool { return flag }
+export fn main() -> bool { return await go worker() }

@@ -1,0 +1,8 @@
+fn worker<T: Sendable>(value: T) -> T { return value }
+fn spawn<T: Sendable>(value: T) -> Task<T> { return go worker(value) }
+export fn main() -> bool {
+    const task: Task<bool> = spawn(false)
+    const first = await task
+    const second = await task
+    return first || second
+}

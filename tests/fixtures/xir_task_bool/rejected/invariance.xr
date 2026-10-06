@@ -1,0 +1,5 @@
+fn worker(value: bool) -> bool { return value }
+export fn main() -> i64 {
+    const task: Task<i64> = go worker(true)
+    return await task
+}

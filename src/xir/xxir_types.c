@@ -75,7 +75,7 @@ XR_FUNC XrXirType xr_xir_task_element(const XrXirTypes *types, XrXirType type) {
     return node && node->kind == XR_XIR_TYPE_TASK ? node->element : XR_XIR_UNIT;
 }
 XR_FUNC bool xr_xir_task_parameter_supported(const XrXirTypes *types, XrXirType type) {
-    if (type == XR_XIR_I64 || type == XR_XIR_STRING) return true;
+    if (type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && node->kind == XR_XIR_TYPE_NULLABLE && node->element == XR_XIR_I64;
 }
