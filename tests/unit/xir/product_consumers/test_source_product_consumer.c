@@ -72,7 +72,11 @@ static XrCompileResourceStats stats(const Consumer *run) {
     return result;
 }
 
+#include "source_product_consumer_nominal.inc.c"
+
 static void closed_shape(const XrXirModule *module, uint32_t answer) {
+    if (!strcmp(XR_CONSUMER_NAME, "constructor_folding"))
+        constructor_shape(module);
     if (strcmp(XR_CONSUMER_NAME, "generics"))
         return;
     const XrXirFunction *function = &module->functions[answer];

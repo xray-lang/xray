@@ -4005,6 +4005,93 @@
           "bytes": 399,
           "sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+        "sha256": "bd0860a1bed34d55530c87913ff78e25bc5c78fb6fefcc4a3cf6926d8ede4a62",
+        "original_prefix_sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 1006,
+        "scope": "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_constructor_folding_vm",
+        "test_source_product_constructor_folding_native",
+        "test_source_product_constructor_folding_mixed_even",
+        "test_source_product_constructor_folding_mixed_odd",
+        "test_source_product_constructor_folding_axes_0",
+        "test_source_product_constructor_folding_axes_1",
+        "test_source_product_constructor_folding_axes_2",
+        "test_source_product_constructor_folding_axes_3",
+        "test_source_product_constructor_folding_compiler_0",
+        "test_source_product_constructor_folding_compiler_1",
+        "test_source_product_constructor_folding_compiler_2",
+        "test_source_product_constructor_folding_compiler_3",
+        "test_source_product_constructor_folding_runtime_0",
+        "test_source_product_constructor_folding_runtime_1",
+        "test_source_product_constructor_folding_runtime_2",
+        "test_source_product_constructor_folding_runtime_3",
+        "test_source_product_constructor_folding_cancel_0",
+        "test_source_product_constructor_folding_cancel_1",
+        "test_source_product_constructor_folding_cancel_2",
+        "test_source_product_constructor_folding_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "class_construction_field_mapping": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Checked keeps exactly one construction for each Counter/Pair/Swap; all construction operands follow declared field types and order, Counter has constant0, Pair has constant true and Swap uses distinct values. Independent execution verifies Swap's crossed parameter values."
+        },
+        "literal_folding_representation": {
+          "status": "OPEN",
+          "note": "The original requires each folded literal to be a direct constant producer in the caller construction. Current declaration-owned constructor locals require a reviewed equivalent Checked/Lowered mapping; do not silently retire this original shape assertion."
+        }
       }
     },
     {
@@ -4090,6 +4177,42 @@
           "bytes": 122,
           "sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/recursive_class_graph/root.xr",
+        "sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+        "original_prefix_sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+        "expected_classes": 1,
+        "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_recursive_class_graph",
+        "test_source_product_recursive_class_graph_axes",
+        "test_source_product_recursive_class_graph_compiler"
+      ],
+      "projected_obligations": {
+        "exact_nominal_graph": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Exactly one self-cycle or two mutual class/Nullable cycles retain their nominal declaration/field identities and owned classification in Checked and Lowered readers."
+        },
+        "detached_producers_and_native_projection": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Session and SourceProduct die before descriptor inspection; rewritten Checked and re-lowered emitted C agree with the producer, and actual emitted C is strictly compiled."
+        },
+        "compiler_failures_and_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "One finite ledger covers the full producer/read/write/lower/emit operation, all actual malloc ordinals and allocated/live/work boundaries, ending at physical zero."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Full applicable safety and integration-head revalidation remain required."
+        }
+      },
+      "additional_legacy_obligations": {
+        "explicit_copy_contract_mapping": {
+          "status": "OPEN",
+          "note": "Original AFFINE/COPY_EXPLICIT enum assertions need a reviewed mapping to the current owned descriptor and source copy-permission rules. Owned classification alone does not prove source copy authority."
+        }
       }
     },
     {
@@ -4107,6 +4230,42 @@
         "source": {
           "bytes": 206,
           "sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/mutual_class_graph/root.xr",
+        "sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+        "original_prefix_sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+        "expected_classes": 2,
+        "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_mutual_class_graph",
+        "test_source_product_mutual_class_graph_axes",
+        "test_source_product_mutual_class_graph_compiler"
+      ],
+      "projected_obligations": {
+        "exact_nominal_graph": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Exactly one self-cycle or two mutual class/Nullable cycles retain their nominal declaration/field identities and owned classification in Checked and Lowered readers."
+        },
+        "detached_producers_and_native_projection": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Session and SourceProduct die before descriptor inspection; rewritten Checked and re-lowered emitted C agree with the producer, and actual emitted C is strictly compiled."
+        },
+        "compiler_failures_and_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "One finite ledger covers the full producer/read/write/lower/emit operation, all actual malloc ordinals and allocated/live/work boundaries, ending at physical zero."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Full applicable safety and integration-head revalidation remain required."
+        }
+      },
+      "additional_legacy_obligations": {
+        "explicit_copy_contract_mapping": {
+          "status": "OPEN",
+          "note": "Original AFFINE/COPY_EXPLICIT enum assertions need a reviewed mapping to the current owned descriptor and source copy-permission rules. Owned classification alone does not prove source copy authority."
         }
       }
     },

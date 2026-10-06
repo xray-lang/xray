@@ -41,6 +41,7 @@ SELECTED = {
     "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors": "cross_module_coroutine",
     "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors": "cross_module_static_coroutine",
     "source_owner_runs_each_dense_coroutine_state_across_private_executors": "multi_safepoint",
+    "source_owner_folds_constructor_literal_and_reordered_stores": "constructor_folding",
     **NUMERIC.MATRICES,
 }
 PROBES = {
@@ -54,6 +55,10 @@ PROBES = {
     "source_owner_generic_scalar_class_specializations_are_exact_class_references": "generic_scalar_class",
     "source_owner_generic_constraint_methods_have_exact_concrete_targets": "generic_constraint_methods",
     "source_owner_generic_nested_class_types_are_exact": "generic_nested_class",
+}
+DESCRIPTORS = {
+    "source_owner_recursive_class_type_reservation_is_cycle_safe": ("recursive_class_graph", 1),
+    "source_owner_mutual_class_type_reservation_is_cycle_safe": ("mutual_class_graph", 2),
 }
 REJECTIONS = {
     "source_owner_bare_nullable_condition_has_no_product": {
@@ -140,6 +145,23 @@ def multi_safepoint_oracle(body: str, literals: dict[str, bytes], fixture: dict)
     if fixture["id"] != "multi_safepoint" or fixture["expected_exit"] != 227:
         raise ValueError("the native harness success exit must remain 227")
     return 42
+
+
+def constructor_oracle(body: str, literals: dict[str, bytes]) -> int:
+    """Add an independent executable consequence to the original structural proof."""
+    source = literals["source"]
+    required = [b"constructor() { this.value = 0 }", b"this.b = true", b"this.a = x",
+        b"this.second = x", b"this.first = y",
+        b"return c.value + p.a + s.first * 100 + s.second"]
+    if not all(text in source for text in required):
+        raise ValueError("the original constructor field-value relationships changed")
+    pair = re.findall(rb'var p = Pair\((\d+)\)', source)
+    swap = re.findall(rb'var s = Swap\((\d+), (\d+)\)', source)
+    if pair != [b"5"] or swap != [(b"1", b"10")] or b"var c = Counter()" not in source:
+        raise ValueError("the original constructor argument values changed")
+    if not re.search(r'program_operation_count\(program, XR_CORE_OP_CORE_CLASS_CONSTRUCT\),\s*3u', body):
+        raise ValueError("the original three-construction structural assertion changed")
+    return 0 + int(pair[0]) + int(swap[0][1]) * 100 + int(swap[0][0])
 
 
 def allocation_scenarios() -> dict:
@@ -252,6 +274,29 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             if rejection["fixture"] == "bare_nullable":
                 current["additional_diagnostic_precision"] = {"status": "OPEN",
                     "note": "The original only requires the condition-type rejection. Current AST_IF retains line 1 but no column; accurate if-token column is a production gap outside this lane."}
+        if case["name"] in DESCRIPTORS:
+            selected, count = DESCRIPTORS[case["name"]]
+            fixture = DEST / "fixtures" / selected / "root.xr"
+            data = literals["source"]
+            files[fixture] = data
+            current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
+                "sha256": digest(data), "original_prefix_sha256": digest(data), "expected_classes": count,
+                "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."}
+            prefix = f"test_source_product_{selected}"
+            current["candidate_replacement_gates"] = [prefix, prefix + "_axes", prefix + "_compiler"]
+            current["projected_obligations"] = {
+                "exact_nominal_graph": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                    "verification": "Exactly one self-cycle or two mutual class/Nullable cycles retain their nominal declaration/field identities and owned classification in Checked and Lowered readers."},
+                "detached_producers_and_native_projection": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                    "verification": "Session and SourceProduct die before descriptor inspection; rewritten Checked and re-lowered emitted C agree with the producer, and actual emitted C is strictly compiled."},
+                "compiler_failures_and_budgets": {"status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "One finite ledger covers the full producer/read/write/lower/emit operation, all actual malloc ordinals and allocated/live/work boundaries, ending at physical zero."},
+                "full_safety": {"status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "Full applicable safety and integration-head revalidation remain required."}}
+            current["additional_legacy_obligations"] = {"explicit_copy_contract_mapping": {
+                "status": "OPEN", "note": "Original AFFINE/COPY_EXPLICIT enum assertions need a reviewed mapping to the current owned descriptor and source copy-permission rules. Owned classification alone does not prove source copy authority."}}
+            sources.append(current)
+            continue
         if case["name"] in SELECTED or case["name"] in PROBES:
             selected = (SELECTED | PROBES)[case["name"]]
             fixture = DEST / "fixtures" / selected / "root.xr"
@@ -277,6 +322,9 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."}
             if numeric_metadata is not None:
                 current["initial_projection"]["original_source_constructor"] = numeric_metadata
+            if selected == "constructor_folding":
+                current["initial_projection"]["expected_i64"] = constructor_oracle(body, literals)
+                current["initial_projection"]["scope"] = "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
             if additional_files:
                 current["initial_projection"]["additional_files"] = {filename: {
                     "bytes": len(content), "sha256": digest(content)}
@@ -437,6 +485,12 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     current["additional_legacy_obligations"]["receiver_lifecycle_across_suspension"] = {
                         "status": "OPEN",
                         "note": "The original keeps the one receiver alive through both yields, cancels after each yield, rejects lifecycle-log overflow and requires one finalize/reclaim per construction on success and cancellation. Physical release and the fixed 42 oracle alone do not qualify event ordering."}
+            elif selected == "constructor_folding":
+                current["additional_legacy_obligations"] = {
+                    "class_construction_field_mapping": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Checked keeps exactly one construction for each Counter/Pair/Swap; all construction operands follow declared field types and order, Counter has constant0, Pair has constant true and Swap uses distinct values. Independent execution verifies Swap's crossed parameter values."},
+                    "literal_folding_representation": {"status": "OPEN",
+                        "note": "The original requires each folded literal to be a direct constant producer in the caller construction. Current declaration-owned constructor locals require a reviewed equivalent Checked/Lowered mapping; do not silently retire this original shape assertion."}}
             elif selected == "multi_safepoint":
                 current["initial_projection"]["legacy_native_harness_exit"] = case["fixture"]["expected_exit"]
                 current["initial_projection"]["scope"] = "Exact original source and independent VM/native assertion value 42 through the exported adapter. Original native harness success exit 227 is retained separately and is not a language return value."
@@ -475,7 +529,10 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
     for case in manifest["cases"]:
         if case["name"] not in SELECTED:
             continue
-        if SELECTED[case["name"]] == "multi_safepoint":
+        if SELECTED[case["name"]] == "constructor_folding":
+            body = bodies[case["name"]][0]
+            expected[case["name"]] = constructor_oracle(body, static_strings(body))
+        elif SELECTED[case["name"]] == "multi_safepoint":
             body = bodies[case["name"]][0]
             expected[case["name"]] = multi_safepoint_oracle(body, static_strings(body), case["fixture"])
         elif case["fixture"]:
@@ -491,6 +548,10 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
     cmake += [f"set(product_consumer_expected_{fixture} {expected[name]})"
               for name, fixture in SELECTED.items()]
     files[DEST / "source_product_consumer_cases.cmake"] = ("\n".join(cmake) + "\n").encode()
+    graph_cmake = ["# Exact original structural inputs have no invented runtime result.",
+        "set(product_nominal_graph_cases " + " ".join(case for case, _ in DESCRIPTORS.values()) + ")"]
+    graph_cmake += [f"set(product_nominal_graph_expected_{case} {count})" for case, count in DESCRIPTORS.values()]
+    files[DEST / "source_product_nominal_graph_cases.cmake"] = ("\n".join(graph_cmake) + "\n").encode()
     families = {}
     paths = sorted((ROOT / "tests/unit/program").glob("*.c"))
     paths += sorted((ROOT / "tests/unit/aot").glob("test_xr_program_aot*.c"))
