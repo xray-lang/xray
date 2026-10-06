@@ -1,0 +1,524 @@
+{
+  "status": "PASS_ATOMIC_ORDERING_BUILD_NORMAL_ONLY",
+  "worker_parent": "4ad79cf433f6b5c2bc459ba81ea81853813d4ef0",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "spec": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\spec\\source\\sections\\011-10-concurrency-and-coroutines.md",
+    "bytes": 76231,
+    "sha256": "81e8f98752a00890d2a128abc4dc788b2e2e8dee38e8daee61ff6cf71be33d5a"
+  },
+  "original_test_body": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\original-bodies\\source_owner_atomic_ordering_preserves_exact_controls.txt",
+    "bytes": 2514,
+    "sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116"
+  },
+  "original_inputs": {
+    "Relaxed": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Relaxed\\root.xr",
+      "bytes": 184,
+      "sha256": "ad97041aef5e6f634282aa9681fc12edd6c5ac0eb933a6c11723980dbc5638bf"
+    },
+    "Acquire": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Acquire\\root.xr",
+      "bytes": 184,
+      "sha256": "d16164b5298517b34f0d16c4c46855176b551b8992dfb6574ce0020ebc77eb7e"
+    },
+    "Release": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Release\\root.xr",
+      "bytes": 184,
+      "sha256": "bc636b5dafb1c416477fa64fffb3fd7ddb68bbf07e2afc2bb7be046af65b6a1a"
+    },
+    "AcquireRelease": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_AcquireRelease\\root.xr",
+      "bytes": 205,
+      "sha256": "1e7de938ba81913f0c89cd2ac813481bd96e1f2da5f88c3a633c6f143dd38242"
+    },
+    "SeqCst": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_SeqCst\\root.xr",
+      "bytes": 181,
+      "sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc"
+    }
+  },
+  "cases": [
+    {
+      "case": "rmw_Relaxed",
+      "ordering": 0,
+      "store": 4,
+      "load": 4,
+      "original": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Relaxed\\root.xr",
+        "bytes": 184,
+        "sha256": "ad97041aef5e6f634282aa9681fc12edd6c5ac0eb933a6c11723980dbc5638bf"
+      },
+      "prior_legal_adapter_fixture": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\legal_rmw_Relaxed\\root.xr",
+        "bytes": 236,
+        "sha256": "30b3eba4fce42486458c47417e7a236f95aa59a456dfc786bdfe4adb789998a1"
+      },
+      "original_prefix_changed": true,
+      "prefix_bytes": 182,
+      "prefix_sha256": "4e26b0353f50938b52980b550071cdf4973c956bc251c5dc41a73b580446e166",
+      "appended_test_bytes": 257,
+      "appended_test_sha256": "3a258f8b0dceac7fa1857018c61f3ccaa8e8a3287ef9dfa293dc5de1c18e091e",
+      "source_bytes": 439,
+      "source_sha256": "643157bbc4069c45ead73d2efe845cd6d839b04c1f3ff1946b8d2a8a99027f2c",
+      "oracle": {
+        "answer": 82,
+        "old": 42,
+        "current": 40,
+        "canonical_entry": "I64(0)",
+        "test": "Unit",
+        "instances": 2,
+        "tests_per_instance": 2,
+        "controls_per_function": 3,
+        "typed_control": "governed Nullable<Ordering>"
+      }
+    },
+    {
+      "case": "rmw_Acquire",
+      "ordering": 1,
+      "store": 4,
+      "load": 4,
+      "original": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Acquire\\root.xr",
+        "bytes": 184,
+        "sha256": "d16164b5298517b34f0d16c4c46855176b551b8992dfb6574ce0020ebc77eb7e"
+      },
+      "prior_legal_adapter_fixture": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\legal_rmw_Acquire\\root.xr",
+        "bytes": 236,
+        "sha256": "9f7b12bb4e1bee4ecd90e8af618e2aac668fb4f9251ab89f54797865845fa583"
+      },
+      "original_prefix_changed": true,
+      "prefix_bytes": 182,
+      "prefix_sha256": "c8b7180568f6727e96021953c9722ad2ef4b2006f6c0a5eca8cd77b1fa1217dc",
+      "appended_test_bytes": 257,
+      "appended_test_sha256": "4204c9aecebf8ea7d93f25013ab2457c7c88dfe9ba70a76eb449e2e4177e6ec1",
+      "source_bytes": 439,
+      "source_sha256": "23b4f0ee2625f60e4a280854e10d59d8ad55c8713aabdb6154730435b03af834",
+      "oracle": {
+        "answer": 82,
+        "old": 42,
+        "current": 40,
+        "canonical_entry": "I64(0)",
+        "test": "Unit",
+        "instances": 2,
+        "tests_per_instance": 2,
+        "controls_per_function": 3,
+        "typed_control": "governed Nullable<Ordering>"
+      }
+    },
+    {
+      "case": "rmw_Release",
+      "ordering": 2,
+      "store": 4,
+      "load": 4,
+      "original": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Release\\root.xr",
+        "bytes": 184,
+        "sha256": "bc636b5dafb1c416477fa64fffb3fd7ddb68bbf07e2afc2bb7be046af65b6a1a"
+      },
+      "prior_legal_adapter_fixture": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\legal_rmw_Release\\root.xr",
+        "bytes": 236,
+        "sha256": "e20b5044b3addd9a04f7f51ca0b78b44028bb7e62526a6d5cf43e144ebd8cf3f"
+      },
+      "original_prefix_changed": true,
+      "prefix_bytes": 182,
+      "prefix_sha256": "5b5413a6a6b495da70d48d38d049f02420f15c8e7d0761748f529693e8954116",
+      "appended_test_bytes": 257,
+      "appended_test_sha256": "a406b21b70c36f0a74c192ed7aee1b5d5ff86a71317eb974bee7a78eb6e7c0a1",
+      "source_bytes": 439,
+      "source_sha256": "291d3f74822fa737ea0ba71ff1a0946c6aa22fcbad4a03d0c44e07ae77d1c400",
+      "oracle": {
+        "answer": 82,
+        "old": 42,
+        "current": 40,
+        "canonical_entry": "I64(0)",
+        "test": "Unit",
+        "instances": 2,
+        "tests_per_instance": 2,
+        "controls_per_function": 3,
+        "typed_control": "governed Nullable<Ordering>"
+      }
+    },
+    {
+      "case": "rmw_AcquireRelease",
+      "ordering": 3,
+      "store": 4,
+      "load": 4,
+      "original": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_AcquireRelease\\root.xr",
+        "bytes": 205,
+        "sha256": "1e7de938ba81913f0c89cd2ac813481bd96e1f2da5f88c3a633c6f143dd38242"
+      },
+      "prior_legal_adapter_fixture": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\legal_rmw_AcquireRelease\\root.xr",
+        "bytes": 243,
+        "sha256": "0fc24ac7b6757ae4bc0d3b70255b0defdad3bfa9f87d6988bf7a314eaea884e0"
+      },
+      "original_prefix_changed": true,
+      "prefix_bytes": 189,
+      "prefix_sha256": "9fbaef253baf57929829cb8b6c48a99cba4af78160b5b341b553ec345e1514cb",
+      "appended_test_bytes": 264,
+      "appended_test_sha256": "aa090b4f3f3da651ec079c0bdd14902073e98d9c01b461c71f43d57d026f274c",
+      "source_bytes": 453,
+      "source_sha256": "8c36d6c723e3e42a8174594eaf49ec67fb3e44259ded1fd8b6c10a96627b9bfb",
+      "oracle": {
+        "answer": 82,
+        "old": 42,
+        "current": 40,
+        "canonical_entry": "I64(0)",
+        "test": "Unit",
+        "instances": 2,
+        "tests_per_instance": 2,
+        "controls_per_function": 3,
+        "typed_control": "governed Nullable<Ordering>"
+      }
+    },
+    {
+      "case": "rmw_SeqCst",
+      "ordering": 4,
+      "store": 4,
+      "load": 4,
+      "original": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_SeqCst\\root.xr",
+        "bytes": 181,
+        "sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc"
+      },
+      "prior_legal_adapter_fixture": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\legal_rmw_SeqCst\\root.xr",
+        "bytes": 235,
+        "sha256": "13d2384e482dd52e3b66d2de8b1600433b6201d6955f3f9264c79c7c8aab8ef1"
+      },
+      "original_prefix_changed": false,
+      "prefix_bytes": 181,
+      "prefix_sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc",
+      "appended_test_bytes": 256,
+      "appended_test_sha256": "6761b040a439c8da3122c3c6e82c463d576c5049bcd6d8101e03213c281cc8eb",
+      "source_bytes": 437,
+      "source_sha256": "5045091b79d3807cff43a744aec42c6f2bc950cc01ec0b66d2d8375fc7a56996",
+      "oracle": {
+        "answer": 82,
+        "old": 42,
+        "current": 40,
+        "canonical_entry": "I64(0)",
+        "test": "Unit",
+        "instances": 2,
+        "tests_per_instance": 2,
+        "controls_per_function": 3,
+        "typed_control": "governed Nullable<Ordering>"
+      }
+    },
+    {
+      "case": "original_Relaxed",
+      "ordering": 0,
+      "store": 0,
+      "load": 0,
+      "original": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Relaxed\\root.xr",
+        "bytes": 184,
+        "sha256": "ad97041aef5e6f634282aa9681fc12edd6c5ac0eb933a6c11723980dbc5638bf"
+      },
+      "prior_legal_adapter_fixture": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\legal_original_Relaxed\\root.xr",
+        "bytes": 238,
+        "sha256": "ed7a663d3439b43295d927e2ffeb13b2051c6713f9a7f8c37ba3c083865cdbc8"
+      },
+      "original_prefix_changed": false,
+      "prefix_bytes": 184,
+      "prefix_sha256": "ad97041aef5e6f634282aa9681fc12edd6c5ac0eb933a6c11723980dbc5638bf",
+      "appended_test_bytes": 259,
+      "appended_test_sha256": "741666abe29dd13fd7228fca1ed6edd4405483a3d85f9c46ebe241c69cbbccd0",
+      "source_bytes": 443,
+      "source_sha256": "d4cbae16742fad7320101038f9225bdefda0d90caeed0219736db08cf772a2af",
+      "oracle": {
+        "answer": 82,
+        "old": 42,
+        "current": 40,
+        "canonical_entry": "I64(0)",
+        "test": "Unit",
+        "instances": 2,
+        "tests_per_instance": 2,
+        "controls_per_function": 3,
+        "typed_control": "governed Nullable<Ordering>"
+      }
+    },
+    {
+      "case": "original_SeqCst",
+      "ordering": 4,
+      "store": 4,
+      "load": 4,
+      "original": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_SeqCst\\root.xr",
+        "bytes": 181,
+        "sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc"
+      },
+      "prior_legal_adapter_fixture": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\legal_original_SeqCst\\root.xr",
+        "bytes": 235,
+        "sha256": "13d2384e482dd52e3b66d2de8b1600433b6201d6955f3f9264c79c7c8aab8ef1"
+      },
+      "original_prefix_changed": false,
+      "prefix_bytes": 181,
+      "prefix_sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc",
+      "appended_test_bytes": 256,
+      "appended_test_sha256": "6761b040a439c8da3122c3c6e82c463d576c5049bcd6d8101e03213c281cc8eb",
+      "source_bytes": 437,
+      "source_sha256": "5045091b79d3807cff43a744aec42c6f2bc950cc01ec0b66d2d8375fc7a56996",
+      "oracle": {
+        "answer": 82,
+        "old": 42,
+        "current": 40,
+        "canonical_entry": "I64(0)",
+        "test": "Unit",
+        "instances": 2,
+        "tests_per_instance": 2,
+        "controls_per_function": 3,
+        "typed_control": "governed Nullable<Ordering>"
+      }
+    }
+  ],
+  "syntax": "Exact reviewed answer prefix plus one same-module @test checkOrdering; no exported adapter or wrapper.",
+  "types": "Atomic<i64>; i64 old/current; real governed Nullable<Ordering> with exact Enum variant ordinal.",
+  "ownership": "Const Atomic synchronization handle; fresh constructor each call; local handles released at return; retained Checked packet owns bytes; detached Lowered owns code; two Instances retain Program after caller drop; each returned I64/Unit value dropped and zeroed.",
+  "effects": "Public Source pipeline verifies AtomicValue/AtomicNumber constraints and non-suspending Atomic operations. Allocation failures and assert failures are not ordinary throws; this normal-only slice does not exercise their failure domains or separately analyze effects metadata.",
+  "permissions": "Private answer host start rejects; root initializer and @test ordinary start reject; only canonical entry ordinary start and test-role start_test execute; no host export is added.",
+  "limits": {
+    "allocated": 67108864,
+    "live": 8388608,
+    "work": 128000000
+  },
+  "illegal_original_inputs": {
+    "Acquire": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Acquire\\root.xr",
+      "sha256": "d16164b5298517b34f0d16c4c46855176b551b8992dfb6574ce0020ebc77eb7e",
+      "responsibility": "Exact old input remains illegal under current load/store rule; previously registered rejection test is inherited, not changed or reclassified."
+    },
+    "Release": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_Release\\root.xr",
+      "sha256": "bc636b5dafb1c416477fa64fffb3fd7ddb68bbf07e2afc2bb7be046af65b6a1a",
+      "responsibility": "Exact old input remains illegal under current load/store rule; previously registered rejection test is inherited, not changed or reclassified."
+    },
+    "AcquireRelease": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\entry_roles\\fixtures\\original_atomic_ordering_AcquireRelease\\root.xr",
+      "sha256": "1e7de938ba81913f0c89cd2ac813481bd96e1f2da5f88c3a633c6f143dd38242",
+      "responsibility": "Exact old input remains illegal under current load/store rule; previously registered rejection test is inherited, not changed or reclassified."
+    }
+  },
+  "open": [
+    "all legal load/store combinations beyond this selected slice",
+    "dynamic invalid Ordering",
+    "CAS old/matched success/failure",
+    "i64 add/sub independent oracle",
+    "bool toggle independent oracle",
+    "f64 fetchAdd/toString independent oracle",
+    "full compiler/runtime FI",
+    "three budget axes",
+    "native/AOT execution",
+    "lock-free/CAS progress/concurrency and ABI risk full-family qualification"
+  ],
+  "product_execution": "NOT_RUN",
+  "normal_tests": 7,
+  "target": "test_source_product_atomic_ordering_oracles",
+  "source_fixture_generation": "Seven LF file(GENERATE) inputs; embedded independent C literals verify exact raw bytes before SourceProduct.",
+  "new_controls_observed": "answer and checkOrdering each STORE/FETCH_SUB/LOAD once, governed typed Nullable<Ordering>, exact fixed ordinals in Source Checked and Closed Checked.",
+  "pipeline": "SourceProduct -> Source/CLOSED Checked packet readers -> retained independent packet -> producer destruction -> Checked reverify/reread -> Lowered -> immutable Program take -> two retained Instances -> canonical entry -> repeated private test role -> result drop -> full release.",
+  "no_borrowed_denominator": "Previous ENTRY 16MiB runtime evidence and Source allocation aggregate42 do not qualify this 8MiB independent82/42/40 slice.",
+  "budget_failure_axes": "NOT_RUN",
+  "fault_injection": "NOT_RUN",
+  "native_execution": "NOT_RUN",
+  "normal_qualification": {
+    "scope": "Seven normal VM gates per configuration only; registration256 is not full256 execution.",
+    "configuration_results": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-msvc-r2\\result.json",
+          "bytes": 62611,
+          "sha256": "0485c4a8383c5c054cc13ce957a4295f41a876062f4b0a10f63f0070b90a14d5"
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-msvc-r2\\Root-terminal.json",
+          "bytes": 272,
+          "sha256": "4b482525f9c644a4390e268aed5567d2db0c8dccaa250fd4be800ebe52f8fd58"
+        },
+        "xml": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-msvc-r2\\selected.xml",
+          "bytes": 37094,
+          "sha256": "31a27f054802a459f49d2595132313817e244d63f4ef1c1e79e5c9cb7bf1d79d"
+        },
+        "raw_LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-msvc-r2\\LastTest.log",
+          "bytes": 42113,
+          "sha256": "c5b7a4ffe411277f3c07e04c0e4f0645638dc790641c3d5d6f69819a625c72c4"
+        },
+        "measurement": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-msvc-r2\\atomic-ordering-normal-measurements.json",
+          "bytes": 42792,
+          "sha256": "30e5b4aef4758d2967370b6b8fce929845ec945eab38e159f252b8d519a66dae"
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-msvc-r2\\actual-compilation-binding.json",
+          "bytes": 874752,
+          "sha256": "271c7619c9819b814e606834c729cc61a74bc9fe7ca92f3715a2a2c6fc873c2a"
+        }
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-asan-r2\\result.json",
+          "bytes": 63821,
+          "sha256": "1f1c78ed3390dba2cd3409c1f1089e90eb2262a7be26cabf0c1ee7d8603b582d"
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-asan-r2\\Root-terminal.json",
+          "bytes": 272,
+          "sha256": "e473c5aa3625503fedb7285a8df1cef5234fa75bfc197ec59d53c013d3395218"
+        },
+        "xml": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-asan-r2\\selected.xml",
+          "bytes": 37094,
+          "sha256": "98d0ad280c1b64f93531e70c1837c1df720baae44fc8ad2ad505f910d833944a"
+        },
+        "raw_LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-asan-r2\\LastTest.log",
+          "bytes": 42113,
+          "sha256": "6741adfa60b84180c679c985465389bade46d908f4eba6d698bd05942fd52aa8"
+        },
+        "measurement": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-asan-r2\\atomic-ordering-normal-measurements.json",
+          "bytes": 42792,
+          "sha256": "3be2ce44e7dacfdcd0cdefad2f630ca5631242ba8b4018704625647391477f79"
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-ordering-normal-qualification-asan-r2\\actual-compilation-binding.json",
+          "bytes": 923619,
+          "sha256": "3cd11832e6b4162004637cea2b3338b05640ff8b0aa26283d0a98b419132fc15"
+        }
+      }
+    },
+    "measured_costs": {
+      "msvc": {
+        "rmw_Relaxed": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806220,
+          "peak": 253531,
+          "work": 1198698
+        },
+        "rmw_Acquire": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806220,
+          "peak": 253531,
+          "work": 1198720
+        },
+        "rmw_Release": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806220,
+          "peak": 253531,
+          "work": 1198754
+        },
+        "rmw_AcquireRelease": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806584,
+          "peak": 253552,
+          "work": 1203924
+        },
+        "rmw_SeqCst": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806168,
+          "peak": 253528,
+          "work": 1198434
+        },
+        "original_Relaxed": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806468,
+          "peak": 253546,
+          "work": 1199996
+        },
+        "original_SeqCst": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806408,
+          "peak": 253543,
+          "work": 1199804
+        }
+      },
+      "asan": {
+        "rmw_Relaxed": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806220,
+          "peak": 253531,
+          "work": 1198698
+        },
+        "rmw_Acquire": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806220,
+          "peak": 253531,
+          "work": 1198720
+        },
+        "rmw_Release": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806220,
+          "peak": 253531,
+          "work": 1198754
+        },
+        "rmw_AcquireRelease": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806584,
+          "peak": 253552,
+          "work": 1203924
+        },
+        "rmw_SeqCst": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806168,
+          "peak": 253528,
+          "work": 1198434
+        },
+        "original_Relaxed": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806468,
+          "peak": 253546,
+          "work": 1199996
+        },
+        "original_SeqCst": {
+          "compiler_sites": 2526,
+          "runtime_sites": 104,
+          "allocated": 806408,
+          "peak": 253543,
+          "work": 1199804
+        }
+      }
+    },
+    "integrated_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\atomic-ordering-normal-integrated-audit-r1\\audit-report.json",
+      "bytes": 14552,
+      "sha256": "6e933da390ef1be75687c98b70bd46d7244d648b41b7db37aeb511640b1aacb3"
+    },
+    "per_case_obligations": {
+      "checked_control_rows": 18,
+      "metadata_rows": 4,
+      "canonical_I64_zero": 2,
+      "owned_Unit_completions": 4,
+      "permissions_per_Instance": 5,
+      "compiler_runtime_table_final": "0/0;0/0;0"
+    },
+    "original_candidate_product_execution": "Original product_execution=NOT_RUN records the immutable preparation phase; this added evidence describes actual normal execution.",
+    "denominator_scope": "Each compiler/runtime N is the complete normal execution of only its exact fixture and fresh bound executable, not FI qualification or other families.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "migration": "OPEN"
+  }
+}
