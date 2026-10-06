@@ -515,7 +515,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             elif selected in ("parameter_coroutine", "module_receiver_suspend"):
                 current["projected_obligations"]["real_yield_and_wake_authority"] = {
                     "status": "IMPLEMENTED_NOT_QUALIFIED",
-                    "verification": "Every ordinary answer call observes exactly two actual YIELD waits, rejects wrong epoch/wake without allocations or result output, and resumes with its exact tokens. Complete cancellation prefixes include both pending yields and reject each stale wake after cancellation."}
+                    "verification": "Every ordinary answer call observes exactly two actual YIELD waits and checks all six current wait fields, including zero subject/generation/ticket. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocations; exact tokens resume. Complete cancellation prefixes include both pending yields and reject each stale wake after cancellation."}
                 current["additional_legacy_obligations"] = {
                     "original_coroutine_representation": {"status": "OPEN",
                         "note": "Original operation counts, coroutine state/safepoint identities, parameter modes, live owners and normal/cancel cleanup edges require a reviewed Checked/Lowered mapping."}}
@@ -540,7 +540,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 current["initial_projection"]["scope"] = "Exact original source and independent VM/native assertion value 42 through the exported adapter. Original native harness success exit 227 is retained separately and is not a language return value."
                 current["projected_obligations"]["real_yield_and_wake_authority"] = {
                     "status": "IMPLEMENTED_NOT_QUALIFIED",
-                    "verification": "Every answer call observes both original real YIELD waits before returning 42; wrong or stale epoch/wake tokens are rejected. All active cancellation prefixes include both pending yields and preserve a callable initialized instance."}
+                    "verification": "Every answer call observes both original real YIELD waits before returning 42 and checks all six current wait fields. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocation, and stale tokens reject. All active cancellation prefixes include both pending yields and preserve a callable initialized instance."}
                 current["additional_legacy_obligations"] = {
                     "original_coroutine_representation": {"status": "OPEN",
                         "counts": {"coroutine_states": 3, "coroutine_safepoints": 2,
@@ -552,7 +552,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 helper_body = text[helper_start:function_end(text, text.index("{", helper_start))]
                 current["projected_obligations"]["real_yield_and_wake_authority"] = {
                     "status": "IMPLEMENTED_NOT_QUALIFIED",
-                    "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits. Wrong epoch/wake queries and resumes preserve their outputs and allocations; complete cancellation prefixes include both pending yields and reject their stale wake tokens."}
+                    "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits and checks all six current wait fields, including zero subject/generation/ticket. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocation; complete cancellation prefixes include both pending yields and reject stale wake tokens."}
                 current["additional_legacy_obligations"] = {
                     "independent_product_determinism_and_source_detachment": {"status": "IMPLEMENTED_NOT_QUALIFIED",
                         "verification": "Two independent sessions publish identical source/closed bytes, facts and actual C. Both root and library private copies are physically removed before detached Checked reader admission; readers verify and rewrite after both products are destroyed."},

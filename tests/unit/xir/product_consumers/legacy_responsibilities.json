@@ -3161,7 +3161,7 @@
         },
         "real_yield_and_wake_authority": {
           "status": "IMPLEMENTED_NOT_QUALIFIED",
-          "verification": "Every ordinary answer call observes exactly two actual YIELD waits, rejects wrong epoch/wake without allocations or result output, and resumes with its exact tokens. Complete cancellation prefixes include both pending yields and reject each stale wake after cancellation."
+          "verification": "Every ordinary answer call observes exactly two actual YIELD waits and checks all six current wait fields, including zero subject/generation/ticket. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocations; exact tokens resume. Complete cancellation prefixes include both pending yields and reject each stale wake after cancellation."
         }
       },
       "candidate_replacement_gates": [
@@ -3300,7 +3300,7 @@
         },
         "real_yield_and_wake_authority": {
           "status": "IMPLEMENTED_NOT_QUALIFIED",
-          "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits. Wrong epoch/wake queries and resumes preserve their outputs and allocations; complete cancellation prefixes include both pending yields and reject their stale wake tokens."
+          "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits and checks all six current wait fields, including zero subject/generation/ticket. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocation; complete cancellation prefixes include both pending yields and reject stale wake tokens."
         }
       },
       "candidate_replacement_gates": [
@@ -3448,7 +3448,7 @@
         },
         "real_yield_and_wake_authority": {
           "status": "IMPLEMENTED_NOT_QUALIFIED",
-          "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits. Wrong epoch/wake queries and resumes preserve their outputs and allocations; complete cancellation prefixes include both pending yields and reject their stale wake tokens."
+          "verification": "Each original cross-module answer returns the independent 7 after two real YIELD waits and checks all six current wait fields, including zero subject/generation/ticket. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocation; complete cancellation prefixes include both pending yields and reject stale wake tokens."
         }
       },
       "candidate_replacement_gates": [
@@ -4998,7 +4998,7 @@
         },
         "real_yield_and_wake_authority": {
           "status": "IMPLEMENTED_NOT_QUALIFIED",
-          "verification": "Every ordinary answer call observes exactly two actual YIELD waits, rejects wrong epoch/wake without allocations or result output, and resumes with its exact tokens. Complete cancellation prefixes include both pending yields and reject each stale wake after cancellation."
+          "verification": "Every ordinary answer call observes exactly two actual YIELD waits and checks all six current wait fields, including zero subject/generation/ticket. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocations; exact tokens resume. Complete cancellation prefixes include both pending yields and reject each stale wake after cancellation."
         }
       },
       "candidate_replacement_gates": [
@@ -5650,7 +5650,7 @@
         },
         "real_yield_and_wake_authority": {
           "status": "IMPLEMENTED_NOT_QUALIFIED",
-          "verification": "Every answer call observes both original real YIELD waits before returning 42; wrong or stale epoch/wake tokens are rejected. All active cancellation prefixes include both pending yields and preserve a callable initialized instance."
+          "verification": "Every answer call observes both original real YIELD waits before returning 42 and checks all six current wait fields. Wrong epoch/wake queries preserve every byte of wait and value sentinels without allocation, and stale tokens reject. All active cancellation prefixes include both pending yields and preserve a callable initialized instance."
         }
       },
       "candidate_replacement_gates": [
