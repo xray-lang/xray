@@ -1,0 +1,40 @@
+fn div_i8(a: i8, b: i8) -> i8 { return a / b }
+fn rem_i8(a: i8, b: i8) -> i8 { return a % b }
+fn div_i16(a: i16, b: i16) -> i16 { return a / b }
+fn rem_i16(a: i16, b: i16) -> i16 { return a % b }
+fn div_i32(a: i32, b: i32) -> i32 { return a / b }
+fn rem_i32(a: i32, b: i32) -> i32 { return a % b }
+fn div_i64(a: i64, b: i64) -> i64 { return a / b }
+fn rem_i64(a: i64, b: i64) -> i64 { return a % b }
+fn div_u8(a: u8, b: u8) -> u8 { return a / b }
+fn rem_u8(a: u8, b: u8) -> u8 { return a % b }
+fn div_u16(a: u16, b: u16) -> u16 { return a / b }
+fn rem_u16(a: u16, b: u16) -> u16 { return a % b }
+fn div_u32(a: u32, b: u32) -> u32 { return a / b }
+fn rem_u32(a: u32, b: u32) -> u32 { return a % b }
+fn div_u64(a: u64, b: u64) -> u64 { return a / b }
+fn rem_u64(a: u64, b: u64) -> u64 { return a % b }
+fn answer() -> i64 {
+if ((div_i8(-128, -1) as i64) != -128) { return 1 }
+if ((rem_i8(-128, -1) as i64) != 0) { return 2 }
+if ((div_i16(-32768, -1) as i64) != -32768) { return 3 }
+if ((rem_i16(-32768, -1) as i64) != 0) { return 4 }
+if ((div_i32(-2147483648, -1) as i64) != -2147483648) { return 5 }
+if ((rem_i32(-2147483648, -1) as i64) != 0) { return 6 }
+if ((div_i64(-9223372036854775808, -1) as i64) != -9223372036854775808) { return 7 }
+if ((rem_i64(-9223372036854775808, -1) as i64) != 0) { return 8 }
+if ((div_u8(255, 3) as i64) != 85) { return 9 }
+if ((rem_u8(255, 3) as i64) != 0) { return 10 }
+if ((div_u16(65535, 3) as i64) != 21845) { return 11 }
+if ((rem_u16(65535, 3) as i64) != 0) { return 12 }
+if ((div_u32(4294967295, 3) as i64) != 1431655765) { return 13 }
+if ((rem_u32(4294967295, 3) as i64) != 0) { return 14 }
+if ((div_u64(18446744073709551615, 10) as i64) != 1844674407370955161) { return 15 }
+if ((rem_u64(18446744073709551615, 10) as i64) != 5) { return 16 }
+if (div_i64(-7, 3) != -2) { return 17 }
+if (rem_i64(-7, 3) != -1) { return 18 }
+if (div_i64(7, -3) != -2) { return 19 }
+if (rem_i64(7, -3) != 1) { return 20 }
+return 0
+}
+export fn consumerAnswer() -> i64 { return answer() }

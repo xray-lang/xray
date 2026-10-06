@@ -1,5 +1,5 @@
 # Fixed result oracles come from the unchanged legacy manifest or original constant source.
-set(product_consumer_cases static_methods array_places generics callables class_identity struct_string bool_conditions single_module text_program integer_conversions array_runtime_length)
+set(product_consumer_cases static_methods array_places generics callables class_identity struct_string bool_conditions single_module text_program integer_conversions array_runtime_length integer_arithmetic integer_comparisons integer_division)
 set(product_consumer_expected_static_methods 42)
 set(product_consumer_expected_array_places 42)
 set(product_consumer_expected_generics 42)
@@ -11,3 +11,6 @@ set(product_consumer_expected_single_module 42)
 set(product_consumer_expected_text_program 7)
 set(product_consumer_expected_integer_conversions 255)
 set(product_consumer_expected_array_runtime_length 42)
+set(product_consumer_expected_integer_arithmetic 0)
+set(product_consumer_expected_integer_comparisons 0)
+set(product_consumer_expected_integer_division 0)

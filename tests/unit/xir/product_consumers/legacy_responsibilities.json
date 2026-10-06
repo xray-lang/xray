@@ -1946,6 +1946,130 @@
           "bytes": 170,
           "sha256": "39225f95da5f81bb09acd0c8c3e5698c3e6646d6e4109ab88e3fe6c993980405"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_division/root.xr",
+        "sha256": "6266d1efbae095eb9988e9a18d5ea51251d9a1ed70b9bb6247df63101328ae73",
+        "original_prefix_sha256": "d19b7af194ec24d30da3998326e2c5cf11e5ac83b926f82b9a59fd4066eae1dc",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 0,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_source_constructor": {
+          "bytes": 1951,
+          "sha256": "d19b7af194ec24d30da3998326e2c5cf11e5ac83b926f82b9a59fd4066eae1dc",
+          "constructor_lf_sha256": "03b47b3861901127816d416b0a5133518fee42196cc8884f4e65c5e517c7305e",
+          "types": [
+            "i8",
+            "i16",
+            "i32",
+            "i64",
+            "u8",
+            "u16",
+            "u32",
+            "u64"
+          ],
+          "functions": 17,
+          "checks": 20,
+          "failure_codes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ],
+          "original_buffer_capacity": 16384
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_integer_division_vm",
+        "test_source_product_integer_division_native",
+        "test_source_product_integer_division_mixed_even",
+        "test_source_product_integer_division_mixed_odd",
+        "test_source_product_integer_division_axes_0",
+        "test_source_product_integer_division_axes_1",
+        "test_source_product_integer_division_axes_2",
+        "test_source_product_integer_division_axes_3",
+        "test_source_product_integer_division_compiler_0",
+        "test_source_product_integer_division_compiler_1",
+        "test_source_product_integer_division_compiler_2",
+        "test_source_product_integer_division_compiler_3",
+        "test_source_product_integer_division_runtime_0",
+        "test_source_product_integer_division_runtime_1",
+        "test_source_product_integer_division_runtime_2",
+        "test_source_product_integer_division_runtime_3",
+        "test_source_product_integer_division_cancel_0",
+        "test_source_product_integer_division_cancel_1",
+        "test_source_product_integer_division_cancel_2",
+        "test_source_product_integer_division_cancel_3",
+        "source_product_integer_source_constructors"
+      ],
+      "additional_legacy_obligations": {
+        "complete_original_matrix": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "All eight widths, original failure codes and every mixed-width or signedness boundary remain in the source prefix. An independently compiled copy of the original C constructor must emit byte-identical original source."
+        }
       }
     },
     {
@@ -1979,6 +2103,258 @@
           "bytes": 259,
           "sha256": "94df7d210c911a4a80f92eaab942ffef18d4c5eaca36b2bf2536ca4e164a5efb"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_comparisons/root.xr",
+        "sha256": "19e398b2ef4af2e9d874d3e4f60141de6275cc203144042417879452d3f67dac",
+        "original_prefix_sha256": "1cbd6ac4006bcddb69b7d134796cb18bc3a39f2e9366edbf872e89d997c8fd0f",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 0,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_source_constructor": {
+          "bytes": 9753,
+          "sha256": "1cbd6ac4006bcddb69b7d134796cb18bc3a39f2e9366edbf872e89d997c8fd0f",
+          "constructor_lf_sha256": "38194c5b4feae0c997681897ed578d174b5c63a089fb8eff678f4b0701bf8f43",
+          "types": [
+            "i8",
+            "u8",
+            "i16",
+            "u16",
+            "i32",
+            "u32",
+            "i64",
+            "u64"
+          ],
+          "functions": 51,
+          "checks": 148,
+          "failure_codes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "original_buffer_capacity": 32768
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_integer_comparisons_vm",
+        "test_source_product_integer_comparisons_native",
+        "test_source_product_integer_comparisons_mixed_even",
+        "test_source_product_integer_comparisons_mixed_odd",
+        "test_source_product_integer_comparisons_axes_0",
+        "test_source_product_integer_comparisons_axes_1",
+        "test_source_product_integer_comparisons_axes_2",
+        "test_source_product_integer_comparisons_axes_3",
+        "test_source_product_integer_comparisons_compiler_0",
+        "test_source_product_integer_comparisons_compiler_1",
+        "test_source_product_integer_comparisons_compiler_2",
+        "test_source_product_integer_comparisons_compiler_3",
+        "test_source_product_integer_comparisons_runtime_0",
+        "test_source_product_integer_comparisons_runtime_1",
+        "test_source_product_integer_comparisons_runtime_2",
+        "test_source_product_integer_comparisons_runtime_3",
+        "test_source_product_integer_comparisons_cancel_0",
+        "test_source_product_integer_comparisons_cancel_1",
+        "test_source_product_integer_comparisons_cancel_2",
+        "test_source_product_integer_comparisons_cancel_3",
+        "source_product_integer_source_constructors"
+      ],
+      "additional_legacy_obligations": {
+        "complete_original_matrix": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "All eight widths, original failure codes and every mixed-width or signedness boundary remain in the source prefix. An independently compiled copy of the original C constructor must emit byte-identical original source."
+        }
       }
     },
     {
@@ -2011,6 +2387,135 @@
         "suffix": {
           "bytes": 60,
           "sha256": "50fc7bd5a265cda888cfd6d3fb1b56a7e67ef0147935078b95058fbf040747f6"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_arithmetic/root.xr",
+        "sha256": "024d75e808e3daa92e304bbac83d785dd109743597310b1cb95102bec025d004",
+        "original_prefix_sha256": "c0de6c81380613c86f18cea91f65b2be0d02cdcae0891571ee8f6d4ef6de0d5a",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 0,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_source_constructor": {
+          "bytes": 2719,
+          "sha256": "c0de6c81380613c86f18cea91f65b2be0d02cdcae0891571ee8f6d4ef6de0d5a",
+          "constructor_lf_sha256": "61ae4ebb232fb857796b4ba7a29a7be4208a5f3cc3f8deebabaab43b50eca167",
+          "types": [
+            "i8",
+            "u8",
+            "i16",
+            "u16",
+            "i32",
+            "u32",
+            "i64",
+            "u64"
+          ],
+          "functions": 26,
+          "checks": 25,
+          "failure_codes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "original_buffer_capacity": 16384
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_integer_arithmetic_vm",
+        "test_source_product_integer_arithmetic_native",
+        "test_source_product_integer_arithmetic_mixed_even",
+        "test_source_product_integer_arithmetic_mixed_odd",
+        "test_source_product_integer_arithmetic_axes_0",
+        "test_source_product_integer_arithmetic_axes_1",
+        "test_source_product_integer_arithmetic_axes_2",
+        "test_source_product_integer_arithmetic_axes_3",
+        "test_source_product_integer_arithmetic_compiler_0",
+        "test_source_product_integer_arithmetic_compiler_1",
+        "test_source_product_integer_arithmetic_compiler_2",
+        "test_source_product_integer_arithmetic_compiler_3",
+        "test_source_product_integer_arithmetic_runtime_0",
+        "test_source_product_integer_arithmetic_runtime_1",
+        "test_source_product_integer_arithmetic_runtime_2",
+        "test_source_product_integer_arithmetic_runtime_3",
+        "test_source_product_integer_arithmetic_cancel_0",
+        "test_source_product_integer_arithmetic_cancel_1",
+        "test_source_product_integer_arithmetic_cancel_2",
+        "test_source_product_integer_arithmetic_cancel_3",
+        "source_product_integer_source_constructors"
+      ],
+      "additional_legacy_obligations": {
+        "complete_original_matrix": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "All eight widths, original failure codes and every mixed-width or signedness boundary remain in the source prefix. An independently compiled copy of the original C constructor must emit byte-identical original source."
         }
       }
     },

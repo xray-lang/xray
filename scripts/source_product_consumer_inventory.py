@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -15,6 +16,9 @@ MANIFEST = ROOT / "tests/unit/program/xr_program_source_cases.json"
 SOURCE = ROOT / "tests/unit/program/test_xr_program_source_build.c"
 BASE = "01e6d38401b0f5c8684b64c35a99ac651024c0c1"
 MANIFEST_SHA = "c298392053c1557d8402a8da25078749d99ad095c9671b514526b1b89d643205"
+NUMERIC_SPEC = importlib.util.spec_from_file_location("numeric_sources", ROOT / "scripts/source_product_consumer_numeric_sources.py")
+NUMERIC = importlib.util.module_from_spec(NUMERIC_SPEC)
+NUMERIC_SPEC.loader.exec_module(NUMERIC)
 SELECTED = {
     "source_owner_static_method_declarations": "static_methods",
     "source_owner_array_index_reads_and_replaces_elements": "array_places",
@@ -27,6 +31,7 @@ SELECTED = {
     "source_owner_text_program_is_exact_across_private_executors": "text_program",
     "source_owner_exact_integer_constants_and_conversions": "integer_conversions",
     "source_owner_array_runtime_length": "array_runtime_length",
+    **NUMERIC.MATRICES,
 }
 PROBES = {
     "source_owner_tuple_array_elements": "tuple_array",
@@ -181,6 +186,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
         raise ValueError("source responsibility census differs from manifest")
     sources = []
     files = {}
+    numeric_constructors = {}
     for case in manifest["cases"]:
         body, line = bodies[case["name"]]
         current = row(SOURCE, case["name"], body, line)
@@ -224,6 +230,12 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             selected = (SELECTED | PROBES)[case["name"]]
             fixture = DEST / "fixtures" / selected / "root.xr"
             data = literals.get("source", literals.get("entry_source"))
+            numeric_metadata = None
+            if case["name"] in NUMERIC.MATRICES:
+                data, numeric_metadata, constructor = NUMERIC.construct_source(
+                    body, selected, c_literal, static_strings, function_end, STRING)
+                numeric_constructors[selected] = constructor
+                files[fixture.parent / "original.xr"] = data
             if data is None:
                 raise ValueError("original positive source literal is missing")
             additional_files = {filename: literals[literal]
@@ -237,6 +249,8 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 "sha256": digest(data + adapter), "original_prefix_sha256": digest(data),
                 "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": case["fixture"]["expected_exit"] if case["fixture"] else 42,
                 "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."}
+            if numeric_metadata is not None:
+                current["initial_projection"]["original_source_constructor"] = numeric_metadata
             if additional_files:
                 current["initial_projection"]["additional_files"] = {filename: {
                     "bytes": len(content), "sha256": digest(content)}
@@ -335,7 +349,13 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 current["additional_legacy_obligations"] = {
                     "original_integer_conversion_operation_count": {"status": "OPEN",
                         "note": "The original requires at least four legacy INTEGER_CONVERT operations. Independent 255 results preserve the semantic oracle; the new Checked representation count still needs a reviewed mapping."}}
+            elif numeric_metadata is not None:
+                current["candidate_replacement_gates"].append("source_product_integer_source_constructors")
+                current["additional_legacy_obligations"] = {
+                    "complete_original_matrix": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "All eight widths, original failure codes and every mixed-width or signedness boundary remain in the source prefix. An independently compiled copy of the original C constructor must emit byte-identical original source."}}
         sources.append(current)
+    files[DEST / "source_product_integer_constructors.c"] = NUMERIC.constructor_oracle(numeric_constructors)
     expected = {}
     for case in manifest["cases"]:
         if case["name"] not in SELECTED:

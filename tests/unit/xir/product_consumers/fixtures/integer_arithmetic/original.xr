@@ -1,0 +1,53 @@
+fn add_i8(a: i8, b: i8) -> i8 { return a + b }
+fn sub_i8(a: i8, b: i8) -> i8 { return a - b }
+fn mul_i8(a: i8, b: i8) -> i8 { return a * b }
+fn add_u8(a: u8, b: u8) -> u8 { return a + b }
+fn sub_u8(a: u8, b: u8) -> u8 { return a - b }
+fn mul_u8(a: u8, b: u8) -> u8 { return a * b }
+fn add_i16(a: i16, b: i16) -> i16 { return a + b }
+fn sub_i16(a: i16, b: i16) -> i16 { return a - b }
+fn mul_i16(a: i16, b: i16) -> i16 { return a * b }
+fn add_u16(a: u16, b: u16) -> u16 { return a + b }
+fn sub_u16(a: u16, b: u16) -> u16 { return a - b }
+fn mul_u16(a: u16, b: u16) -> u16 { return a * b }
+fn add_i32(a: i32, b: i32) -> i32 { return a + b }
+fn sub_i32(a: i32, b: i32) -> i32 { return a - b }
+fn mul_i32(a: i32, b: i32) -> i32 { return a * b }
+fn add_u32(a: u32, b: u32) -> u32 { return a + b }
+fn sub_u32(a: u32, b: u32) -> u32 { return a - b }
+fn mul_u32(a: u32, b: u32) -> u32 { return a * b }
+fn add_i64(a: i64, b: i64) -> i64 { return a + b }
+fn sub_i64(a: i64, b: i64) -> i64 { return a - b }
+fn mul_i64(a: i64, b: i64) -> i64 { return a * b }
+fn add_u64(a: u64, b: u64) -> u64 { return a + b }
+fn sub_u64(a: u64, b: u64) -> u64 { return a - b }
+fn mul_u64(a: u64, b: u64) -> u64 { return a * b }
+fn mixed(a: u8, b: u16) -> u16 { return a + b }
+fn answer() -> i64 {
+if ((add_i8(127, 1) as i64) != -128) { return 1 }
+if ((sub_i8(-128, 1) as i64) != 127) { return 2 }
+if ((mul_i8(127, 2) as i64) != -2) { return 3 }
+if ((add_u8(255, 1) as i64) != 0) { return 4 }
+if ((sub_u8(0, 1) as i64) != 255) { return 5 }
+if ((mul_u8(255, 2) as i64) != 254) { return 6 }
+if ((add_i16(32767, 1) as i64) != -32768) { return 7 }
+if ((sub_i16(-32768, 1) as i64) != 32767) { return 8 }
+if ((mul_i16(32767, 2) as i64) != -2) { return 9 }
+if ((add_u16(65535, 1) as i64) != 0) { return 10 }
+if ((sub_u16(0, 1) as i64) != 65535) { return 11 }
+if ((mul_u16(65535, 2) as i64) != 65534) { return 12 }
+if ((add_i32(2147483647, 1) as i64) != -2147483648) { return 13 }
+if ((sub_i32(-2147483648, 1) as i64) != 2147483647) { return 14 }
+if ((mul_i32(2147483647, 2) as i64) != -2) { return 15 }
+if ((add_u32(4294967295, 1) as i64) != 0) { return 16 }
+if ((sub_u32(0, 1) as i64) != 4294967295) { return 17 }
+if ((mul_u32(4294967295, 2) as i64) != 4294967294) { return 18 }
+if ((add_i64(9223372036854775807, 1) as i64) != -9223372036854775808) { return 19 }
+if ((sub_i64(-9223372036854775808, 1) as i64) != 9223372036854775807) { return 20 }
+if ((mul_i64(9223372036854775807, 2) as i64) != -2) { return 21 }
+if ((add_u64(18446744073709551615, 1) as i64) != 0) { return 22 }
+if ((sub_u64(0, 1) as i64) != -1) { return 23 }
+if ((mul_u64(18446744073709551615, 2) as i64) != -2) { return 24 }
+if ((mixed(255, 1) as i64) != 256) { return 25 }
+return 0
+}
