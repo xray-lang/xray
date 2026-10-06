@@ -51,14 +51,23 @@ static XrXirOutputStatus oracle_output(void *context,const XrXirOutputGroup *gro
     XrXirInstance *instance=out->pending->instance;
     XrXirCall *driver=instance && instance->executor && instance->executor->current ?
         instance->executor->current->call : instance ? instance->call : NULL;
-    bool host_after_cancel=oracle_reason==XR_XIR_CALL_CANCELLED && oracle_executing_poll &&
+    bool host_after_cancel=group->values[0].type!=XR_XIR_STRING &&
+        oracle_reason==XR_XIR_CALL_CANCELLED && oracle_executing_poll &&
         (oracle_phase==ORACLE_POLL || oracle_phase==ORACLE_REPOLL) &&
         (status==XR_XIR_OUTPUT_ERROR || status==XR_XIR_OUTPUT_OOM || status==XR_XIR_OUTPUT_LIMIT) &&
-        driver && driver->driving && (!driver->cancel_requested || cleanup_active(driver));
+        driver && driver->driving && (!driver->cancel_requested || cleanup_active(driver)) &&
+        (driver->abort_reason==XR_XIR_CALL_READY || driver->abort_reason==XR_XIR_CALL_CANCELLED);
     if(group->values[0].type!=XR_XIR_STRING && status!=XR_XIR_OUTPUT_OK && (!oracle_reason || host_after_cancel)) {
-        oracle_reason=out->id==PENDING_CANCEL_BEFORE?XR_XIR_CALL_CANCELLED:
+        bool cancel_arbitrates=driver && driver->cancel_requested && !cleanup_active(driver) &&
+            driver->abort_reason==XR_XIR_CALL_READY;
+        oracle_reason=cancel_arbitrates?XR_XIR_CALL_CANCELLED:
             status==XR_XIR_OUTPUT_ERROR?XR_XIR_CALL_OUTPUT_ERROR:status==XR_XIR_OUTPUT_OOM?XR_XIR_CALL_OOM:
             status==XR_XIR_OUTPUT_LIMIT?XR_XIR_CALL_LIMIT:status==XR_XIR_OUTPUT_BAD_ABI?XR_XIR_CALL_BAD_ABI:XR_XIR_CALL_BAD_ARGUMENT;
+    }
+    if(host_after_cancel) {
+        fprintf(stderr,"HOST_AFTER_CANCEL provider%u accepted%u phase%u step%u drivercancel%u cleanup%u prior%u epoch%llu ASSERT\n",
+            (unsigned)status,oracle_reason,oracle_phase,oracle_poll_step,driver->cancel_requested,
+            cleanup_active(driver),(unsigned)driver->abort_reason,(unsigned long long)oracle_epoch);
     }
     return status;
 }
