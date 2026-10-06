@@ -265,6 +265,11 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 for kind in ("axes", "compiler", "runtime", "cancel") for mode in range(4)]
             if selected in ("generics", "callables", "single_module", "two_modules", "text_program"):
                 current["candidate_replacement_gates"].append(f"test_source_product_detachment_{selected}")
+                current["candidate_replacement_gates"] += [f"test_source_product_detachment_{selected}_{kind}"
+                                                          for kind in ("axes", "compiler")]
+                current["projected_obligations"]["independent_product_failure_release"] = {
+                    "status": "PENDING_FULL_QUALIFICATION",
+                    "verification": "Whole two-session/product, physical source deletion, independent Checked read/write, actual C emission and post-producer verification use one finite compiler ledger; every actual allocation fault releases all owners. Exact private fixture replay is finite and physically released before the measured operation."}
             if selected == "generics":
                 current["additional_legacy_obligations"] = {
                     "specialization_identity": {"status": "IMPLEMENTED_NOT_QUALIFIED",

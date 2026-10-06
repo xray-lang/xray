@@ -25,7 +25,11 @@ def main() -> None:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--case", choices=("generics", "callables", "single_module", "text_program"), required=True)
     parser.add_argument("--scratch", type=Path, required=True)
+    parser.add_argument("--check", choices=("normal", "axes", "baseline", "site"), default="normal")
+    parser.add_argument("--ordinal", type=int)
     args = parser.parse_args()
+    if (args.check == "site") != (args.ordinal is not None) or (args.ordinal is not None and args.ordinal < 0):
+        parser.error("only a site check takes a nonnegative ordinal")
     binary = args.binary.resolve(strict=True)
     scratch = args.scratch.resolve()
     owned = scratch / (args.case + "-" + uuid.uuid4().hex)
@@ -45,7 +49,13 @@ def main() -> None:
     if not (owned / "root.xr").is_file():
         raise ValueError("private fixture has no root source")
     argv = [str(binary), args.case, str(owned), "--delete-source"]
+    if args.check != "normal":
+        argv += [{"axes":"--axes", "baseline":"--compiler-baseline", "site":"--compiler-site"}[args.check]]
+    if args.ordinal is not None:
+        argv.append(str(args.ordinal))
     record = {"argv": argv, "binary_sha256": digest(binary), "owner_pid": os.getpid(),
+              "check": args.check, "ordinal": args.ordinal,
+              "fixture_preparation": "Exact private copies; finite replay ledger released before each measured product operation",
               "started_at": datetime.now(timezone.utc).isoformat(), "originals": before,
               "private_source_paths": [str(owned / Path(path).name) for path in before]}
     clock = time.monotonic()
@@ -62,7 +72,8 @@ def main() -> None:
     record["status"] = "PASS" if passed else "FAIL"
     (owned / "result.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print((owned / "consumer.log").read_text(encoding="utf-8", errors="replace"), end="")
-    print(json.dumps({"status": record["status"], "case": args.case, "sources_deleted": len(before)-len(record["remaining_private_sources"]), "evidence": str(owned)}))
+    print(json.dumps({"status": record["status"], "case": args.case, "check": args.check,
+                      "sources_deleted": len(before)-len(record["remaining_private_sources"]), "evidence": str(owned)}))
     if not passed:
         raise SystemExit(1)
 

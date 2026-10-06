@@ -106,6 +106,19 @@ foreach(case IN ITEMS generics callables single_module text_program)
             --scratch "${CMAKE_BINARY_DIR}/consumer-detachment-inputs")
     set_tests_properties(test_source_product_detachment_${case} PROPERTIES TIMEOUT 120
         LABELS "unit;xir;source-product;program-consumer;ownership;detachment")
+    add_test(NAME test_source_product_detachment_${case}_axes
+        COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_detachment.py"
+            --binary $<TARGET_FILE:test_source_product_detachment> --case ${case}
+            --scratch "${CMAKE_BINARY_DIR}/consumer-detachment-inputs" --check axes)
+    set_tests_properties(test_source_product_detachment_${case}_axes PROPERTIES TIMEOUT 120
+        LABELS "unit;xir;source-product;program-consumer;ownership;detachment;axes")
+    add_test(NAME test_source_product_detachment_${case}_compiler
+        COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_detachment_faults.py"
+            --binary $<TARGET_FILE:test_source_product_detachment> --case ${case}
+            --scratch "${CMAKE_BINARY_DIR}/consumer-detachment-inputs" --jobs 8
+            --evidence "${CMAKE_BINARY_DIR}/consumer-detachment-fault-evidence/${case}")
+    set_tests_properties(test_source_product_detachment_${case}_compiler PROPERTIES TIMEOUT 600 PROCESSORS 8
+        LABELS "unit;xir;source-product;program-consumer;ownership;detachment;compiler-faults")
 endforeach()
 add_executable(test_source_product_rejections
     "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/test_source_product_rejections.c")

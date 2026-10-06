@@ -2190,6 +2190,10 @@
         "full_safety": {
           "status": "PENDING_FULL_QUALIFICATION",
           "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "independent_product_failure_release": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole two-session/product, physical source deletion, independent Checked read/write, actual C emission and post-producer verification use one finite compiler ledger; every actual allocation fault releases all owners. Exact private fixture replay is finite and physically released before the measured operation."
         }
       },
       "candidate_replacement_gates": [
@@ -2213,7 +2217,9 @@
         "test_source_product_single_module_cancel_1",
         "test_source_product_single_module_cancel_2",
         "test_source_product_single_module_cancel_3",
-        "test_source_product_detachment_single_module"
+        "test_source_product_detachment_single_module",
+        "test_source_product_detachment_single_module_axes",
+        "test_source_product_detachment_single_module_compiler"
       ],
       "additional_legacy_obligations": {
         "independent_product_determinism": {
@@ -2469,6 +2475,10 @@
         "full_safety": {
           "status": "PENDING_FULL_QUALIFICATION",
           "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "independent_product_failure_release": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole two-session/product, physical source deletion, independent Checked read/write, actual C emission and post-producer verification use one finite compiler ledger; every actual allocation fault releases all owners. Exact private fixture replay is finite and physically released before the measured operation."
         }
       },
       "candidate_replacement_gates": [
@@ -2492,7 +2502,9 @@
         "test_source_product_callables_cancel_1",
         "test_source_product_callables_cancel_2",
         "test_source_product_callables_cancel_3",
-        "test_source_product_detachment_callables"
+        "test_source_product_detachment_callables",
+        "test_source_product_detachment_callables_axes",
+        "test_source_product_detachment_callables_compiler"
       ],
       "additional_legacy_obligations": {
         "independent_product_determinism": {
@@ -2591,6 +2603,10 @@
         "full_safety": {
           "status": "PENDING_FULL_QUALIFICATION",
           "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "independent_product_failure_release": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole two-session/product, physical source deletion, independent Checked read/write, actual C emission and post-producer verification use one finite compiler ledger; every actual allocation fault releases all owners. Exact private fixture replay is finite and physically released before the measured operation."
         }
       },
       "candidate_replacement_gates": [
@@ -2614,7 +2630,9 @@
         "test_source_product_generics_cancel_1",
         "test_source_product_generics_cancel_2",
         "test_source_product_generics_cancel_3",
-        "test_source_product_detachment_generics"
+        "test_source_product_detachment_generics",
+        "test_source_product_detachment_generics_axes",
+        "test_source_product_detachment_generics_compiler"
       ],
       "additional_legacy_obligations": {
         "specialization_identity": {
@@ -3189,6 +3207,10 @@
         "full_safety": {
           "status": "PENDING_FULL_QUALIFICATION",
           "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        },
+        "independent_product_failure_release": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole two-session/product, physical source deletion, independent Checked read/write, actual C emission and post-producer verification use one finite compiler ledger; every actual allocation fault releases all owners. Exact private fixture replay is finite and physically released before the measured operation."
         }
       },
       "candidate_replacement_gates": [
@@ -3213,6 +3235,8 @@
         "test_source_product_text_program_cancel_2",
         "test_source_product_text_program_cancel_3",
         "test_source_product_detachment_text_program",
+        "test_source_product_detachment_text_program_axes",
+        "test_source_product_detachment_text_program_compiler",
         "test_source_product_text_program_output_status_0",
         "test_source_product_text_program_output_status_1",
         "test_source_product_text_program_output_status_2",
