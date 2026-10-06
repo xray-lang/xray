@@ -31,6 +31,10 @@ SELECTED = {
     "source_owner_text_program_is_exact_across_private_executors": "text_program",
     "source_owner_exact_integer_constants_and_conversions": "integer_conversions",
     "source_owner_array_runtime_length": "array_runtime_length",
+    "source_owner_class_alias_escape_projects_one_share": "class_alias_escape",
+    "source_owner_class_field_self_assignment_shares_before_exchange": "class_field_self_assignment",
+    "source_owner_class_alias_borrows_coalesce_without_share": "class_alias_borrow",
+    "source_owner_class_alias_final_transfer_coalesces_to_move": "class_alias_transfer",
     **NUMERIC.MATRICES,
 }
 PROBES = {
@@ -349,6 +353,27 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 current["additional_legacy_obligations"] = {
                     "original_integer_conversion_operation_count": {"status": "OPEN",
                         "note": "The original requires at least four legacy INTEGER_CONVERT operations. Independent 255 results preserve the semantic oracle; the new Checked representation count still needs a reviewed mapping."}}
+            elif selected in ("class_alias_escape", "class_field_self_assignment", "class_alias_borrow", "class_alias_transfer"):
+                counts = {
+                    "class_alias_escape": {"CLASS_CONSTRUCT": 3, "OWNER_ALIAS": 1,
+                        "CLASS_FIELD_PLACE": 2, "PLACE_EXCHANGE": 2, "CLASS_FIELD_LOAD": 2, "OWNER_COPY": 0},
+                    "class_field_self_assignment": {"CLASS_CONSTRUCT": 2, "OWNER_ALIAS": 1,
+                        "CLASS_FIELD_PLACE": 1, "PLACE_EXCHANGE": 1},
+                    "class_alias_borrow": {"CLASS_CONSTRUCT": 1, "OWNER_ALIAS": 0,
+                        "CLASS_FIELD_PLACE": 1, "PLACE_EXCHANGE": 1, "CLASS_FIELD_LOAD": 1, "OWNER_COPY": 0},
+                    "class_alias_transfer": {"CLASS_CONSTRUCT": 2, "OWNER_ALIAS": 0,
+                        "OWNER_MOVE": 1, "CLASS_FIELD_LOAD": 2, "OWNER_COPY": 0},
+                }
+                current["additional_legacy_obligations"] = {
+                    "original_operation_counts": {"status": "OPEN", "counts": counts[selected],
+                        "note": "Exact retired Core operation counts require a reviewed mapping to Checked/Lowered ownership facts; independent 42 results do not qualify these counts."}}
+                if selected in ("class_alias_escape", "class_field_self_assignment"):
+                    current["additional_legacy_obligations"]["exchange_drop_edges"] = {
+                        "status": "OPEN",
+                        "note": "The original requires field-place/exchange operand identity and exactly one matching owner drop after every affine exchange; escape also distinguishes one trivial exchange. Self-assignment requires sharing the borrowed field before its exchange."}
+                    current["additional_legacy_obligations"]["class_lifecycle_order"] = {
+                        "status": "OPEN",
+                        "note": "Original lifecycle logs must not overflow or use domain teardown. Escape requires distinct exchanged identities, an immediate operation-origin drop and exactly one finalize/reclaim for both identities. Self-assignment requires share/place/exchange/drop order with identical referent identities and exactly one finalize/reclaim."}
             elif numeric_metadata is not None:
                 current["candidate_replacement_gates"].append("source_product_integer_source_constructors")
                 current["additional_legacy_obligations"] = {

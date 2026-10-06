@@ -1,0 +1,18 @@
+class Cell {
+  value: i64
+  constructor(value: i64) { this.value = value }
+}
+class Holder {
+  child: Cell
+  constructor(child: Cell) { this.child = child }
+}
+fn answer() -> i64 {
+  var cell = Cell(1)
+  var alias = cell
+  var holder = Holder(alias)
+  cell.value = 17
+  var replacement = Cell(42)
+  holder.child = replacement
+  return holder.child.value
+}
+export fn consumerAnswer() -> i64 { return answer() }

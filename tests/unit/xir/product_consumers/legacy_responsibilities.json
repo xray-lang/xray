@@ -3703,6 +3703,105 @@
           "bytes": 354,
           "sha256": "2b6f5d470dc865e6c7966c7421d0bc450a37a242a3fc64d3f1a47a4b72cb0569"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
+        "sha256": "54bbca567d79c1fb30ef7809d4c3fa889d6e96a8c904dfe227f94ed60aebcc57",
+        "original_prefix_sha256": "2b6f5d470dc865e6c7966c7421d0bc450a37a242a3fc64d3f1a47a4b72cb0569",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_class_alias_escape_vm",
+        "test_source_product_class_alias_escape_native",
+        "test_source_product_class_alias_escape_mixed_even",
+        "test_source_product_class_alias_escape_mixed_odd",
+        "test_source_product_class_alias_escape_axes_0",
+        "test_source_product_class_alias_escape_axes_1",
+        "test_source_product_class_alias_escape_axes_2",
+        "test_source_product_class_alias_escape_axes_3",
+        "test_source_product_class_alias_escape_compiler_0",
+        "test_source_product_class_alias_escape_compiler_1",
+        "test_source_product_class_alias_escape_compiler_2",
+        "test_source_product_class_alias_escape_compiler_3",
+        "test_source_product_class_alias_escape_runtime_0",
+        "test_source_product_class_alias_escape_runtime_1",
+        "test_source_product_class_alias_escape_runtime_2",
+        "test_source_product_class_alias_escape_runtime_3",
+        "test_source_product_class_alias_escape_cancel_0",
+        "test_source_product_class_alias_escape_cancel_1",
+        "test_source_product_class_alias_escape_cancel_2",
+        "test_source_product_class_alias_escape_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "original_operation_counts": {
+          "status": "OPEN",
+          "counts": {
+            "CLASS_CONSTRUCT": 3,
+            "OWNER_ALIAS": 1,
+            "CLASS_FIELD_PLACE": 2,
+            "PLACE_EXCHANGE": 2,
+            "CLASS_FIELD_LOAD": 2,
+            "OWNER_COPY": 0
+          },
+          "note": "Exact retired Core operation counts require a reviewed mapping to Checked/Lowered ownership facts; independent 42 results do not qualify these counts."
+        },
+        "exchange_drop_edges": {
+          "status": "OPEN",
+          "note": "The original requires field-place/exchange operand identity and exactly one matching owner drop after every affine exchange; escape also distinguishes one trivial exchange. Self-assignment requires sharing the borrowed field before its exchange."
+        },
+        "class_lifecycle_order": {
+          "status": "OPEN",
+          "note": "Original lifecycle logs must not overflow or use domain teardown. Escape requires distinct exchanged identities, an immediate operation-origin drop and exactly one finalize/reclaim for both identities. Self-assignment requires share/place/exchange/drop order with identical referent identities and exactly one finalize/reclaim."
+        }
       }
     },
     {
@@ -3732,6 +3831,103 @@
         "source": {
           "bytes": 271,
           "sha256": "bbbe864d45bd3a03c958a68cd2c05493c0311d746c2fd72d7d0da61f46aeaa8c"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
+        "sha256": "3073b990a3c383d03a98cab1e26f8d671e6a247f3d45e8c5bda004f284eac6aa",
+        "original_prefix_sha256": "bbbe864d45bd3a03c958a68cd2c05493c0311d746c2fd72d7d0da61f46aeaa8c",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_class_field_self_assignment_vm",
+        "test_source_product_class_field_self_assignment_native",
+        "test_source_product_class_field_self_assignment_mixed_even",
+        "test_source_product_class_field_self_assignment_mixed_odd",
+        "test_source_product_class_field_self_assignment_axes_0",
+        "test_source_product_class_field_self_assignment_axes_1",
+        "test_source_product_class_field_self_assignment_axes_2",
+        "test_source_product_class_field_self_assignment_axes_3",
+        "test_source_product_class_field_self_assignment_compiler_0",
+        "test_source_product_class_field_self_assignment_compiler_1",
+        "test_source_product_class_field_self_assignment_compiler_2",
+        "test_source_product_class_field_self_assignment_compiler_3",
+        "test_source_product_class_field_self_assignment_runtime_0",
+        "test_source_product_class_field_self_assignment_runtime_1",
+        "test_source_product_class_field_self_assignment_runtime_2",
+        "test_source_product_class_field_self_assignment_runtime_3",
+        "test_source_product_class_field_self_assignment_cancel_0",
+        "test_source_product_class_field_self_assignment_cancel_1",
+        "test_source_product_class_field_self_assignment_cancel_2",
+        "test_source_product_class_field_self_assignment_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "original_operation_counts": {
+          "status": "OPEN",
+          "counts": {
+            "CLASS_CONSTRUCT": 2,
+            "OWNER_ALIAS": 1,
+            "CLASS_FIELD_PLACE": 1,
+            "PLACE_EXCHANGE": 1
+          },
+          "note": "Exact retired Core operation counts require a reviewed mapping to Checked/Lowered ownership facts; independent 42 results do not qualify these counts."
+        },
+        "exchange_drop_edges": {
+          "status": "OPEN",
+          "note": "The original requires field-place/exchange operand identity and exactly one matching owner drop after every affine exchange; escape also distinguishes one trivial exchange. Self-assignment requires sharing the borrowed field before its exchange."
+        },
+        "class_lifecycle_order": {
+          "status": "OPEN",
+          "note": "Original lifecycle logs must not overflow or use domain teardown. Escape requires distinct exchanged identities, an immediate operation-origin drop and exactly one finalize/reclaim for both identities. Self-assignment requires share/place/exchange/drop order with identical referent identities and exactly one finalize/reclaim."
         }
       }
     },
@@ -3763,6 +3959,97 @@
           "bytes": 179,
           "sha256": "f186dab919dda2f76fe70e4ce2293acb91c4a2d0d19367b6f66fbcbdd8ce2e02"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
+        "sha256": "8d48f5a353f491869c55422447c1b0f243c7b2dab3e2701f4b91fe2a13bbe514",
+        "original_prefix_sha256": "f186dab919dda2f76fe70e4ce2293acb91c4a2d0d19367b6f66fbcbdd8ce2e02",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_class_alias_borrow_vm",
+        "test_source_product_class_alias_borrow_native",
+        "test_source_product_class_alias_borrow_mixed_even",
+        "test_source_product_class_alias_borrow_mixed_odd",
+        "test_source_product_class_alias_borrow_axes_0",
+        "test_source_product_class_alias_borrow_axes_1",
+        "test_source_product_class_alias_borrow_axes_2",
+        "test_source_product_class_alias_borrow_axes_3",
+        "test_source_product_class_alias_borrow_compiler_0",
+        "test_source_product_class_alias_borrow_compiler_1",
+        "test_source_product_class_alias_borrow_compiler_2",
+        "test_source_product_class_alias_borrow_compiler_3",
+        "test_source_product_class_alias_borrow_runtime_0",
+        "test_source_product_class_alias_borrow_runtime_1",
+        "test_source_product_class_alias_borrow_runtime_2",
+        "test_source_product_class_alias_borrow_runtime_3",
+        "test_source_product_class_alias_borrow_cancel_0",
+        "test_source_product_class_alias_borrow_cancel_1",
+        "test_source_product_class_alias_borrow_cancel_2",
+        "test_source_product_class_alias_borrow_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "original_operation_counts": {
+          "status": "OPEN",
+          "counts": {
+            "CLASS_CONSTRUCT": 1,
+            "OWNER_ALIAS": 0,
+            "CLASS_FIELD_PLACE": 1,
+            "PLACE_EXCHANGE": 1,
+            "CLASS_FIELD_LOAD": 1,
+            "OWNER_COPY": 0
+          },
+          "note": "Exact retired Core operation counts require a reviewed mapping to Checked/Lowered ownership facts; independent 42 results do not qualify these counts."
+        }
       }
     },
     {
@@ -3792,6 +4079,96 @@
         "source": {
           "bytes": 279,
           "sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+        "sha256": "a115d26f0d793c37d1e141b9a9c719de8238a346905143e39e9b6c4c052de39b",
+        "original_prefix_sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_class_alias_transfer_vm",
+        "test_source_product_class_alias_transfer_native",
+        "test_source_product_class_alias_transfer_mixed_even",
+        "test_source_product_class_alias_transfer_mixed_odd",
+        "test_source_product_class_alias_transfer_axes_0",
+        "test_source_product_class_alias_transfer_axes_1",
+        "test_source_product_class_alias_transfer_axes_2",
+        "test_source_product_class_alias_transfer_axes_3",
+        "test_source_product_class_alias_transfer_compiler_0",
+        "test_source_product_class_alias_transfer_compiler_1",
+        "test_source_product_class_alias_transfer_compiler_2",
+        "test_source_product_class_alias_transfer_compiler_3",
+        "test_source_product_class_alias_transfer_runtime_0",
+        "test_source_product_class_alias_transfer_runtime_1",
+        "test_source_product_class_alias_transfer_runtime_2",
+        "test_source_product_class_alias_transfer_runtime_3",
+        "test_source_product_class_alias_transfer_cancel_0",
+        "test_source_product_class_alias_transfer_cancel_1",
+        "test_source_product_class_alias_transfer_cancel_2",
+        "test_source_product_class_alias_transfer_cancel_3"
+      ],
+      "additional_legacy_obligations": {
+        "original_operation_counts": {
+          "status": "OPEN",
+          "counts": {
+            "CLASS_CONSTRUCT": 2,
+            "OWNER_ALIAS": 0,
+            "OWNER_MOVE": 1,
+            "CLASS_FIELD_LOAD": 2,
+            "OWNER_COPY": 0
+          },
+          "note": "Exact retired Core operation counts require a reviewed mapping to Checked/Lowered ownership facts; independent 42 results do not qualify these counts."
         }
       }
     },
