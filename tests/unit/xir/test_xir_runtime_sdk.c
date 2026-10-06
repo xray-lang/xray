@@ -57,6 +57,13 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_preimage
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
+#define current_sdk_kat_preimage previous67_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous67_sdk_kat_file_digest
+#define current_sdk_kat_digest previous67_sdk_kat_digest
+#include "sdk_previous67_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
 
 static void sdk_known_bytes(void) {
@@ -67,9 +74,13 @@ static void sdk_known_bytes(void) {
     xr_sha256(previous66_sdk_kat_preimage,sizeof(previous66_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous66_sdk_kat_digest,32));
     const size_t semantic_offset=sizeof("xray:xir-runtime-sdk:v1")-1+2*sizeof(uint32_t);
-    CHECK(previous66_sdk_kat_preimage[semantic_offset]==66 && current_sdk_kat_preimage[semantic_offset]==67);
-    xr_sha256((const uint8_t *)"hi",2,old_hash);CHECK(!memcmp(old_hash,previous66_sdk_kat_file_digest,32));
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,25,67,22,28,29,1,1,1,11,2,0,1,0,3,1,1};
+    _Static_assert(sizeof(previous67_sdk_kat_preimage)==3098,"complete previous67 SDK preimage");
+    xr_sha256(previous67_sdk_kat_preimage,sizeof(previous67_sdk_kat_preimage),old_hash);
+    CHECK(!memcmp(old_hash,previous67_sdk_kat_digest,32));
+    CHECK(previous66_sdk_kat_preimage[semantic_offset]==66 && previous67_sdk_kat_preimage[semantic_offset]==67 &&
+        current_sdk_kat_preimage[semantic_offset]==68);
+    xr_sha256((const uint8_t *)"hi",2,old_hash);CHECK(!memcmp(old_hash,previous66_sdk_kat_file_digest,32) && !memcmp(old_hash,previous67_sdk_kat_file_digest,32));
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,25,68,22,28,29,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";

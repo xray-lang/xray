@@ -30,6 +30,7 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation) {
     case XR_NATIVE_OPERATION_ARRAY_SHIFT: return SOURCE_ARRAY_SHIFT;
     case XR_NATIVE_OPERATION_ARRAY_RESIZE: return SOURCE_ARRAY_RESIZE;
     case XR_NATIVE_OPERATION_ARRAY_ENTRIES: return SOURCE_ARRAY_ENTRIES;
+    case XR_NATIVE_OPERATION_ARRAY_FILL: return SOURCE_ARRAY_FILL;
     default: return SOURCE_ARRAY_NONE;
     }
 }
@@ -357,6 +358,53 @@ static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceVa
     return true;
 }
 
+/* Bind once, evaluate inputs, check the current range, then publish the owned replacement. */
+static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    CallExprNode *call = &node->as.call_expr;
+    MemberAccessNode *access = &call->callee->as.member_access;
+    if (call->type_arg_count || call->default_arg_count || call->arg_count < 1 || call->arg_count > 3 || !call->arguments)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill requires value and optional start and end");
+    for (int a = 0; a < call->arg_count; ++a)
+        if (call->arg_accesses && call->arg_accesses[a] != XR_CALL_ARG_PLAIN)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill arguments use ordinary READ values");
+    SourceValue root, fill, start = {0}, end = {0}, array, length;
+    if (!source_value_place(ctx, access->object, &root)) return false;
+    if (!xr_xir_type_is_array(&ctx->types, root.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill receiver is not an Array place");
+    XrXirType element = xr_xir_array_element(&ctx->types, root.type), cell;
+    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element, false}, &fill)) return false;
+    if (fill.type != element) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill value differs from its element type");
+    if (call->arg_count > 1) {
+        if (!source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, XR_XIR_I64, false}, &start)) return false;
+        if (start.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill start must be i64");
+    }
+    if (call->arg_count > 2) {
+        if (!source_plan_expression(ctx, call->arguments[2], (SourceExpectedType) {true, XR_XIR_I64, false}, &end)) return false;
+        if (end.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill end must be i64");
+    }
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id}, {0}, 0, {0}}, &length)) return false;
+    if (call->arg_count < 2 &&
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &start)) return false;
+    if (call->arg_count < 3) end = length;
+    SourceValue bounds[3] = {start, end, length};
+    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_RANGE_CHECK, XR_XIR_UNIT, {0}, {0}, 0, {0}}, bounds, 3, NULL)) return false;
+    SourceValue store, candidate;
+    if (!source_cell_type(ctx, root.type, &cell) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, cell, {array.id}, {0}, 0, {0}}, &store) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_PLACE, root.type, {store.id}, {0}, 0, {0}}, &candidate)) return false;
+    SourceCounter counter;
+    if (!source_counter_open(ctx, start, end, false, &counter)) return false;
+    SourceValue assignment[3] = {candidate, counter.index, fill};
+    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0}, {0}, 0, {0}}, assignment, 3, NULL) ||
+        !source_counter_close(ctx, &counter)) return false;
+    SourceValue result;
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, root.type, {store.id}, {0}, 0, {0}}, &result) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {root.id, result.id}, {0}, 0, {0}}, NULL)) return false;
+    *value = result;
+    return true;
+}
+
 /* The immutable receiver snapshot owns every element until the completed result is retained. */
 static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
     const SourceValue *evaluated, SourceValue *value) {
@@ -402,6 +450,7 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     const SourceValue *evaluated, SourceValue *value) {
     if (recipe == SOURCE_ARRAY_ENTRIES) return source_array_entries_call(ctx, node, evaluated, value);
     if (recipe == SOURCE_ARRAY_RESIZE) return source_array_resize_call(ctx, node, value);
+    if (recipe == SOURCE_ARRAY_FILL) return source_array_fill_call(ctx, node, value);
     if (recipe == SOURCE_ARRAY_POP || recipe == SOURCE_ARRAY_SHIFT)
         return source_array_remove_call(ctx, node, recipe, value);
     if (recipe == SOURCE_ARRAY_REVERSE || recipe == SOURCE_ARRAY_UNSHIFT)

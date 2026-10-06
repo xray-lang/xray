@@ -1,0 +1,2 @@
+export fn change<T>(values:ref Array<T>,value:T)->Array<T>{return values.fill(value)}
+export fn interval<T>(values:ref Array<T>,value:T,start:i64,end:i64)->Array<T>{return values.fill(value,start,end)}

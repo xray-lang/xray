@@ -198,6 +198,7 @@ def array_recipe_contracts(binder):
         'ARRAY_SHIFT': ('shift', 'REF', f'() -> {binder}?', ordinary, 'owned'),
         'ARRAY_RESIZE': ('resize', 'REF', f'(length: i64, fill: {binder}) -> Array<{binder}>', ordinary, 'owned'),
         'ARRAY_ENTRIES': ('entries', 'READ', f'() -> Array<(i64, {binder})>', ordinary, 'owned'),
+        'ARRAY_FILL': ('fill', 'REF', f'(value: {binder}, start?: i64, end?: i64) -> Array<{binder}>', ordinary, 'owned'),
     }
 
 

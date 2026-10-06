@@ -760,6 +760,15 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         value = op->immediate ? !equal : equal;
         break;
     }
+    case XR_XIR_RANGE_CHECK: {
+        const uint32_t *ids = &run->function->operands[op->args[0]];
+        if (!xr_xir_range_valid(
+                xr_xir_scalar_load(run->frame, run->layout->offsets[ids[0]]),
+                xr_xir_scalar_load(run->frame, run->layout->offsets[ids[1]]),
+                xr_xir_scalar_load(run->frame, run->layout->offsets[ids[2]])))
+            return XR_XIR_RUN_NUMERIC_RANGE;
+        break;
+    }
     case XR_XIR_ASSERT_CONDITION:
         if (!xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])) {
             XrXirValue message = vm_value_operand(run, op->args[1]);

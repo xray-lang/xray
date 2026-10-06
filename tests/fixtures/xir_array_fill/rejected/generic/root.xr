@@ -1,0 +1,1 @@
+fn bad<T>(values:ref Array<T>)->Array<T>{return values.fill("bad")}

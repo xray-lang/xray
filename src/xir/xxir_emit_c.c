@@ -1014,6 +1014,15 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         "            status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             "        xr_xir_scalar_store(state->frame,%uu,%sequal); }\n",destination,op->immediate ? "!" : "");
         break;
+    case XR_XIR_RANGE_CHECK: {
+        const uint32_t *ids = &function->operands[op->args[0]];
+        append(buffer, "        if (!xr_xir_range_valid(xr_xir_scalar_load(state->frame,%uu),"
+            "xr_xir_scalar_load(state->frame,%uu),xr_xir_scalar_load(state->frame,%uu))) ",
+            layout->offsets[ids[0]], layout->offsets[ids[1]], layout->offsets[ids[2]]);
+        emit_fault_return(buffer, function, layout, index, "xr_xir_call_fault(XR_XIR_RUN_NUMERIC_RANGE)");
+        append(buffer, "\n");
+        break;
+    }
     case XR_XIR_ASSERT_CONDITION:
         append(buffer, "        if (!xr_xir_scalar_load(state->frame, %uu)) {\n"
             "            XrXirValue message = ", layout->offsets[op->args[0]]);

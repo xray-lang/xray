@@ -95,15 +95,15 @@ static const XrNativeMemberDeclaration xr_native_array_members[] = {
     {25, "findIndex", "(fn: fn(item: T) -> bool) -> i64", "i64", 51, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FIND_INDEX, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_24, 1, XR_NATIVE_TERM_I64},
     {26, "every", "(fn: fn(item: T) -> bool) -> bool", "bool", 53, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_EVERY, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_25, 1, XR_NATIVE_TERM_BOOL},
     {27, "some", "(fn: fn(item: T) -> bool) -> bool", "bool", 55, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_SOME, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_26, 1, XR_NATIVE_TERM_BOOL},
-    {28, "fill", "(value: T, start?: i64, end?: i64) -> Array<T>", "Array < T >", 56, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_array_parameters_27, 3, XR_NATIVE_TERM_ARRAY_ELEMENT},
-    {29, "toString", "() -> string", "string", 59, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
-    {30, "iterator", "() -> Iterator<T>", "Iterator < T >", 63, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {31, "entriesIterator", "() -> Iterator<(i64, T)>", "Iterator < ( i64 , T ) >", 64, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {32, "entries", "() -> Array<(i64, T)>", "Array < ( i64 , T ) >", 66, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT},
+    {28, "fill", "(value: T, start?: i64, end?: i64) -> Array<T>", "Array < T >", 57, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FILL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_27, 3, XR_NATIVE_TERM_ARRAY_ELEMENT},
+    {29, "toString", "() -> string", "string", 60, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
+    {30, "iterator", "() -> Iterator<T>", "Iterator < T >", 64, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {31, "entriesIterator", "() -> Iterator<(i64, T)>", "Iterator < ( i64 , T ) >", 65, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {32, "entries", "() -> Array<(i64, T)>", "Array < ( i64 , T ) >", 67, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT},
 };
 static const XrNativeTypeDeclaration xr_native_array = {
     1, XR_NATIVE_DECLARATION_VALUE, "Array", "T", 1,
-    "stdlib/types/array.xr", "xray-native:prelude/Array", {{169, 116, 249, 28, 18, 183, 213, 29, 0, 208, 79, 30, 202, 93, 214, 39, 95, 56, 179, 211, 84, 254, 124, 210, 187, 22, 80, 9, 80, 219, 94, 105}},
+    "stdlib/types/array.xr", "xray-native:prelude/Array", {{231, 241, 74, 132, 23, 251, 199, 163, 68, 220, 62, 111, 60, 233, 90, 156, 47, 28, 223, 95, 244, 222, 121, 201, 3, 16, 117, 211, 83, 138, 201, 72}},
     3, 8, xr_native_array_members, 32
 };
 

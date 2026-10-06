@@ -1,0 +1,1 @@
+var xs=[1];xs.fill(7,0,"bad")

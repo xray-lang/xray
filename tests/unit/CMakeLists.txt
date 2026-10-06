@@ -4291,3 +4291,7 @@ include("${PROJECT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_catalog.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache_preparation.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_outcome_copy_controls.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/range_check.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/array_fill.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_late_cancel_cross.cmake")

@@ -1,0 +1,46 @@
+import "./producer" as producer
+var root:Array<i64>=[1,2,3]
+var trace=0
+export fn saved()->Array<i64>{return root}
+export fn currentTrace()->i64{return trace}
+export fn numbers()->Array<i64>{
+    var xs=[1,2,3]
+    const old=xs
+    const all=producer.change<i64>(ref xs,9)
+    const tail=xs.fill(7,1)
+    const middle=producer.interval<i64>(ref xs,8,1,2)
+    const empty=xs.fill(4,3,3)
+    return [old[0],old[1],old[2],all[0],all[1],all[2],tail[0],tail[1],tail[2],middle[0],middle[1],middle[2],empty[0],empty[1],empty[2],len(xs)]
+}
+export fn independent()->Array<i64>{var xs=[1,2,3];var result=xs.fill(7,1,2);result[0]=99;xs[1]=42;return [result[0],result[1],xs[0],xs[1],xs[2]]}
+export fn vacant()->Array<i64>{var xs:Array<i64>=[];const a=xs.fill(9);const b=xs.fill(8,0);const c=xs.fill(7,0,0);return [len(a),len(b),len(c),len(xs)]}
+export fn noChange()->Array<i64>{var xs=[1,2,3];return xs.fill(9,1,1)}
+struct Item{values:Array<i64>}
+var items=[Item{values:[11,22,33]}]
+fn pathIndex()->i64{trace=trace*10+1;return 0}
+fn valueArg()->i64{trace=trace*10+2;items=[Item{values:[71,73]}];return 9}
+fn startArg()->i64{trace=trace*10+3;items=[Item{values:[81,83,85]}];return 1}
+fn endArg()->i64{trace=trace*10+4;items=[Item{values:[91,93,95,97]}];return 3}
+export fn rebound()->Array<i64>{trace=0;items=[Item{values:[11,22,33]}];return items[pathIndex()].values.fill(valueArg(),startArg(),endArg())}
+fn defaultValue()->i64{trace=trace*10+1;root=[41,43,45,47];return 6}
+export fn defaultRebound()->Array<i64>{trace=0;return root.fill(defaultValue())}
+fn invalidValue()->i64{trace=trace*10+1;return 9}
+fn invalidStart()->i64{trace=trace*10+2;return -1}
+fn invalidEnd()->i64{trace=trace*10+3;return 2}
+export fn negative()->Array<i64>{trace=0;return root.fill(invalidValue(),invalidStart(),invalidEnd())}
+export fn negativeEnd()->Array<i64>{return root.fill(9,0,-1)}
+export fn reversed()->Array<i64>{return root.fill(9,2,1)}
+export fn excessive()->Array<i64>{return root.fill(9,0,4)}
+export fn excessiveEmpty()->Array<i64>{return root.fill(9,4,4)}
+export fn minimum()->Array<i64>{return root.fill(9,-9223372036854775808,0)}
+export fn maximum()->Array<i64>{return root.fill(9,0,9223372036854775807)}
+export fn committed()->Array<i64>{return root.fill(7,1,2)}
+class Handle{values:Array<i64>=[1,2,3]}
+fn readHandleBody(handle:Handle)->Array<i64>{return handle.values.fill(7,1,2)}
+export fn readHandle()->Array<i64>{const h=Handle();const value=readHandleBody(h);return [h.values[0],h.values[1],h.values[2],value[1]]}
+export fn text()->Array<string>{var xs=["kept","old","tail"];return xs.fill("a\0中",1,2)}
+fn layer<T>(value:T)->T?{return value}
+export fn nullable()->Array<i64??>{var xs:Array<i64??>=[null,layer<i64?>(layer<i64>(7)),null];return xs.fill(null,1,2)}
+export fn committedThenAllocate()->Array<i64>{const result=root.fill(7,1,2);const after=["owned"];if(len(after)!=1){return []};return result}
+export fn committedThenAssert()->Array<i64>{defer{trace=99};const result=root.fill(7,1,2);assert(false,"after fill");return result}
+export fn caughtRange()->i64{defer{trace=55};try{const result=root.fill(7,-1,2);return len(result)}catch panic(p:PanicInfo){return p.code}}

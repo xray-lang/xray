@@ -21,6 +21,9 @@
 #include "xir_task_types67_golden.h"
 #include "xir_task_go67_golden.h"
 #include "xir_task_unit67_golden.h"
+#include "xir_task_types68_golden.h"
+#include "xir_task_go68_golden.h"
+#include "xir_task_unit68_golden.h"
 #include "xir_atomic_types65_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 #include "task_outcome_sendable_cases.h"
@@ -49,14 +52,14 @@ static XrXirStatus task_types_pipeline(const XrXirCompileContext *c) {
     XrXirStatus status = xr_xir_compile_check(c, &f.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, NULL);
     if (status == XR_XIR_OK) {
-        if (packet.length != sizeof(task_types67_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types67_golden));
-        for (size_t i = 64; i < packet.length && i < sizeof(task_types67_golden); ++i)
-            if (packet.bytes[i] != task_types67_golden[i]) {
-                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types67_golden[i]); break;
+        if (packet.length != sizeof(task_types68_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types68_golden));
+        for (size_t i = 64; i < packet.length && i < sizeof(task_types68_golden); ++i)
+            if (packet.bytes[i] != task_types68_golden[i]) {
+                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types68_golden[i]); break;
             }
-        CHECK(packet.length == sizeof(task_types67_golden) && !memcmp(packet.bytes, task_types67_golden, packet.length));
+        CHECK(packet.length == sizeof(task_types68_golden) && !memcmp(packet.bytes, task_types68_golden, packet.length));
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types67_golden, sizeof(task_types67_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types68_golden, sizeof(task_types68_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, xr_xir_compile_artifact_module(decoded)->types, &clone);
     if (status == XR_XIR_OK) {
         CHECK(clone->nodes != f.nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK &&
@@ -115,8 +118,8 @@ static void task_types_reject(void) {
             XrXirCheckedPacket packet = {0};
             CHECK(xr_xir_compile_check(&c, &f.module, &out, NULL) == XR_XIR_OK && out);
             CHECK(xr_xir_compile_checked_write(out, &packet, NULL) == XR_XIR_OK);
-            CHECK(packet.length == sizeof(task_unit67_golden) &&
-                !memcmp(packet.bytes, task_unit67_golden, packet.length));
+            CHECK(packet.length == sizeof(task_unit68_golden) &&
+                !memcmp(packet.bytes, task_unit68_golden, packet.length));
             xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(out);
         } else CHECK(xr_xir_compile_check(&c, &f.module, &out, NULL) ==
             (mutation >= 5 && mutation <= 10 ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !out);
@@ -255,11 +258,11 @@ static void task_types_faults(void) {
         CHECK(!live && !live_bytes);
     }
     fail_at = SIZE_MAX;
-    printf("Task Checked67 independent current KAT, old65/66 zeroalloc reject, original Unit0 mutation now positive and other11 rejected, actual compiler OOM ordinals=%zu physical0\n", sites);
+    printf("Task Checked68 independent current KAT, old65/66/67 zeroalloc reject, original Unit0 mutation now positive and other11 rejected, actual compiler OOM ordinals=%zu physical0\n", sites);
 }
 int main(void) {
     task_types_reject(); task_definition(); task_dag_constraints(); task_error_reject();
     task_error_axes(); task_go_reject(); task_go_slots(); task_go_definition();
     task_go_outcomes(); task_go_caught(); task_go_cleanup(); task_go_visibility();
-    task_go_phi(); task_go_packets(); task_go_cleanup_permissions(); task_go_axes(); task_types_faults(); return 0;
+    task_go_phi(); task_go_packets(); task_go_previous67_packets(); task_go_cleanup_permissions(); task_go_axes(); task_types_faults(); return 0;
 }

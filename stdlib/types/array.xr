@@ -53,6 +53,7 @@ struct Array<T> {
     every(fn: fn(item: T) -> bool) -> bool
     // @native-operation ARRAY_SOME allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
     some(fn: fn(item: T) -> bool) -> bool
+    // @native-operation ARRAY_FILL allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref fill(value: T, start?: i64, end?: i64) -> Array<T>
     // All arrays, including Array<byte>, render the "[a, b]" container form.
     // Decode UTF-8 byte arrays explicitly with string.fromUtf8().

@@ -1,0 +1,1 @@
+class C{const values:Array<i64>=[1]};var c=C();c.values.fill(7)
