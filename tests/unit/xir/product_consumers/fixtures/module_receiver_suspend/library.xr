@@ -1,0 +1,9 @@
+export final class Worker {
+  value: i64
+  constructor(value: i64) { this.value = value }
+  child(add: i64) -> i64 {
+    Coro.yield()
+    Coro.yield()
+    return this.value + add
+  }
+}

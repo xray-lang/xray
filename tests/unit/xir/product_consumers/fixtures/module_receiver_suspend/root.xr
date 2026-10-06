@@ -1,0 +1,6 @@
+import { Worker } from "./library"
+fn answer() -> i64 {
+  var worker = Worker(40)
+  return worker.child(2)
+}
+export fn consumerAnswer() -> i64 { return answer() }

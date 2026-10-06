@@ -276,14 +276,25 @@ static void release(Consumer *run) {
     CHECK(!runtime_live && !runtime_bytes);
 }
 
-static XrXirValue execute(XrXirInstance *instance, uint32_t entry) {
+#include "source_product_consumer_drive.inc.c"
+
+static XrXirValue execute(XrXirInstance *instance, uint32_t entry, unsigned expected_resumes) {
     XrXirCallStatus status = xr_xir_instance_start(instance, entry, NULL, 0);
     if (status != XR_XIR_CALL_READY)
         fprintf(stderr, "start entry=%u status=%u\n", entry, status);
     CHECK(status == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_C(1000000)).outcome.status == XR_XIR_CALL_RETURNED);
+    ConsumerCursor cursor = {0};
+    size_t actions = 0;
+    do {
+        CHECK(++actions < 4096);
+        status = consumer_advance(instance, &cursor, UINT64_C(1000000));
+    } while (status == XR_XIR_CALL_READY);
+    CHECK(status == XR_XIR_CALL_RETURNED && cursor.resumes == expected_resumes);
     XrXirValue value = {0};
     CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
+    if (expected_resumes)
+        printf("coroutine-call entry=%u resumes=%zu actions=%zu value=%lld\n",
+            entry, cursor.resumes, actions, (long long)(int64_t)value.payload);
     return value;
 }
 
@@ -303,12 +314,12 @@ static void normal(Consumer *run) {
         size_t before = runtime_attempts;
         CHECK(xr_xir_instance_start(instances[i], run->private_answer, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
         CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_NEW && runtime_attempts == before);
-        XrXirValue initialized = execute(instances[i], run->entry);
+        XrXirValue initialized = execute(instances[i], run->entry, 0);
         CHECK(initialized.type == XR_XIR_I64 && initialized.payload == 0);
         xr_xir_value_drop(&initialized);
         for (unsigned repeat = 0; repeat < 2; ++repeat) {
             consumer_output_reset(&outputs[i]);
-            XrXirValue result = execute(instances[i], run->answer);
+            XrXirValue result = execute(instances[i], run->answer, consumer_yield_count());
             CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
             xr_xir_value_drop(&result);
             consumer_output_complete(&outputs[i]);
