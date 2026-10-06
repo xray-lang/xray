@@ -287,13 +287,16 @@ static XrXirValue execute(XrXirInstance *instance, uint32_t entry) {
     return value;
 }
 
+#include "source_product_consumer_output.inc.c"
+
 static void normal(Consumer *run) {
-    XrXirInstanceConfig config;
-    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-    config.value_limit = UINT64_C(1048576);
+    ConsumerOutput outputs[2] = {0};
+    XrXirOutputSink sinks[2] = {0};
     XrXirInstance *instances[2] = {0};
-    for (unsigned i = 0; i < 2; ++i)
+    for (unsigned i = 0; i < 2; ++i) {
+        XrXirInstanceConfig config = consumer_config(&outputs[i], &sinks[i]);
         CHECK(xr_xir_instance_new(run->program, &config, &instances[i]) == XR_XIR_CALL_READY);
+    }
     xr_xir_compile_program_drop(run->program);
     run->program = NULL;
     for (unsigned i = 0; i < 2; ++i) {
@@ -304,9 +307,11 @@ static void normal(Consumer *run) {
         CHECK(initialized.type == XR_XIR_I64 && initialized.payload == 0);
         xr_xir_value_drop(&initialized);
         for (unsigned repeat = 0; repeat < 2; ++repeat) {
+            consumer_output_reset(&outputs[i]);
             XrXirValue result = execute(instances[i], run->answer);
             CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
             xr_xir_value_drop(&result);
+            consumer_output_complete(&outputs[i]);
         }
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     }
@@ -388,6 +393,10 @@ int xr_source_product_consumer_main(const SourceProductConsumerFixture *fixture,
     }
     if (argc == 3 && !strcmp(argv[2], "--cancel")) {
         cancel_prefixes(mode);
+        return 0;
+    }
+    if (argc == 3 && !strcmp(argv[2], "--output-status")) {
+        output_statuses(mode);
         return 0;
     }
     if (argc == 5) {

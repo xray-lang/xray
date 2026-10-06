@@ -47,7 +47,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -193,7 +193,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -523,7 +523,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -895,7 +895,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -1566,7 +1566,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -2149,7 +2149,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -2428,7 +2428,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -2550,7 +2550,7 @@
       "projected_obligations": {
         "original_source_and_fixed_result": {
           "status": "PENDING_FULL_QUALIFICATION",
-          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
         },
         "detached_lifetimes": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -3128,6 +3128,115 @@
         "expected_stdout": {
           "bytes": 48,
           "sha256": "68ffccaa7e0c8e9f5640afa524275c1770a04dbcbe9a211a4511a9128546ffa0"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/text_program/root.xr",
+        "sha256": "b3615737744acf066c4ef57068dc08dd57df337012ca2871701acb77c28360d7",
+        "original_prefix_sha256": "1ae3daa6c0b67ad1082faa37c276eb731e1025158a1a216bab6dbf60dc4bf713",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 7,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "output_golden": {
+          "bytes": 48,
+          "sha256": "68ffccaa7e0c8e9f5640afa524275c1770a04dbcbe9a211a4511a9128546ffa0",
+          "hex": "68656c6c6f2c20776f726c640a616e737765723d3432207472756520780a636f646520332078787820796573206e6f0a",
+          "groups_per_call": 3
+        }
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and manifest result oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_text_program_vm",
+        "test_source_product_text_program_native",
+        "test_source_product_text_program_mixed_even",
+        "test_source_product_text_program_mixed_odd",
+        "test_source_product_text_program_axes_0",
+        "test_source_product_text_program_axes_1",
+        "test_source_product_text_program_axes_2",
+        "test_source_product_text_program_axes_3",
+        "test_source_product_text_program_compiler_0",
+        "test_source_product_text_program_compiler_1",
+        "test_source_product_text_program_compiler_2",
+        "test_source_product_text_program_compiler_3",
+        "test_source_product_text_program_runtime_0",
+        "test_source_product_text_program_runtime_1",
+        "test_source_product_text_program_runtime_2",
+        "test_source_product_text_program_runtime_3",
+        "test_source_product_text_program_cancel_0",
+        "test_source_product_text_program_cancel_1",
+        "test_source_product_text_program_cancel_2",
+        "test_source_product_text_program_cancel_3",
+        "test_source_product_text_program_output_status_0",
+        "test_source_product_text_program_output_status_1",
+        "test_source_product_text_program_output_status_2",
+        "test_source_product_text_program_output_status_3"
+      ],
+      "additional_legacy_obligations": {
+        "fixed_text_and_typed_groups": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Every successful call verifies original 48 rendered bytes and three exact string/bool/rune/i64 groups independently in each backend and Instance."
+        },
+        "provider_failure_cleanup": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Each group position preserves prior bytes and exact closed output failure status, then the initialized Instance runs another successful call and releases physically."
+        },
+        "independent_product_determinism": {
+          "status": "OPEN",
+          "note": "Two independent producers remain a distinct original obligation beyond repeated emission from one producer."
+        },
+        "original_operation_and_generated_spelling": {
+          "status": "OPEN",
+          "note": "Original owner-copy/drop, provider requirement and operation count assertions and obsolete generated spelling need a reviewed semantic mapping."
+        },
+        "original_private_executor_step_identity": {
+          "status": "OPEN",
+          "note": "The new public backends have independent fixed oracles; old private executor step equality needs a reviewed retirement mapping."
         }
       }
     },

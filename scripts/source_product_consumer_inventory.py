@@ -24,6 +24,7 @@ SELECTED = {
     "source_owner_value_struct_string_copy_preserves_original": "struct_string",
     "source_owner_explicit_bool_conditions_execute": "bool_conditions",
     "source_owner_single_module_is_deterministic_and_detached": "single_module",
+    "source_owner_text_program_is_exact_across_private_executors": "text_program",
 }
 PROBES = {
     "source_owner_tuple_array_elements": "tuple_array",
@@ -39,7 +40,7 @@ REJECTIONS = {
         "fixture": "missing_name", "status": "XR_XIR_BAD_VALUE", "message": "name is not an initialized value"},
 }
 COMMON_OBLIGATIONS = {
-    "original_source_and_fixed_result": "The original source prefix and 42/48 oracle are retained byte for byte.",
+    "original_source_and_fixed_result": "The original source prefix and manifest result oracle are retained byte for byte.",
     "detached_lifetimes": "Parse session, SourceProduct and independent Checked reader die before execution.",
     "native_emission": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256.",
     "backend_equivalence": "VM, native and both mixed partitions each verify independent fixed goldens.",
@@ -231,6 +232,23 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             if library is not None:
                 current["initial_projection"]["additional_files"] = {"library.xr": {
                     "bytes": len(library), "sha256": digest(library)}}
+            if selected == "text_program":
+                golden = literals["expected_stdout"]
+                if golden.hex() != case["fixture"]["expected_stdout_hex"]:
+                    raise ValueError("original text output golden differs from the legacy manifest")
+                files[fixture.parent / "expected.stdout"] = golden
+                header = ("/*\n * xray - Lightweight typed scripting with native concurrency\n"
+                    " * https://www.xray-lang.org\n *\n"
+                    " * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>\n"
+                    " * Licensed under the MIT License\n *\n"
+                    " * expected_output.h - Original independent text output golden\n *\n"
+                    " * KEY CONCEPT:\n *   Expected bytes come from the original source test and manifest.\n */\n"
+                    "#ifndef SOURCE_PRODUCT_TEXT_EXPECTED_OUTPUT_H\n#define SOURCE_PRODUCT_TEXT_EXPECTED_OUTPUT_H\n"
+                    "static const char consumer_text_golden[] = {" + ",".join(str(b) for b in golden) + ",0};\n"
+                    "#endif // SOURCE_PRODUCT_TEXT_EXPECTED_OUTPUT_H\n")
+                files[fixture.parent / "expected_output.h"] = header.encode()
+                current["initial_projection"]["output_golden"] = {"bytes": len(golden),
+                    "sha256": digest(golden), "hex": golden.hex(), "groups_per_call": 3}
             if case["name"] in PROBES:
                 current["initial_projection"]["scope"] = "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet."
                 current["initial_projection"]["probe_target"] = "test_source_product_probe"
@@ -280,6 +298,19 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 if selected == "single_module":
                     current["additional_legacy_obligations"]["record_and_net_resource_type_identity"] = {
                         "status": "OPEN", "note": "The original preliminary type copy/equality/subclass and exact resource identity checks remain separate responsibilities."}
+            elif selected == "text_program":
+                current["candidate_replacement_gates"] += [f"{prefix}_output_status_{mode}" for mode in range(4)]
+                current["additional_legacy_obligations"] = {
+                    "fixed_text_and_typed_groups": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Every successful call verifies original 48 rendered bytes and three exact string/bool/rune/i64 groups independently in each backend and Instance."},
+                    "provider_failure_cleanup": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Each group position preserves prior bytes and exact closed output failure status, then the initialized Instance runs another successful call and releases physically."},
+                    "independent_product_determinism": {"status": "OPEN",
+                        "note": "Two independent producers remain a distinct original obligation beyond repeated emission from one producer."},
+                    "original_operation_and_generated_spelling": {"status": "OPEN",
+                        "note": "Original owner-copy/drop, provider requirement and operation count assertions and obsolete generated spelling need a reviewed semantic mapping."},
+                    "original_private_executor_step_identity": {"status": "OPEN",
+                        "note": "The new public backends have independent fixed oracles; old private executor step equality needs a reviewed retirement mapping."}}
         sources.append(current)
     families = {}
     paths = sorted((ROOT / "tests/unit/program").glob("*.c"))
