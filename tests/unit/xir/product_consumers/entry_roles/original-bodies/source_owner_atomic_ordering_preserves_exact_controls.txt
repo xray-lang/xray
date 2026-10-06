@@ -1,0 +1,47 @@
+TEST(source_owner_atomic_ordering_preserves_exact_controls) {
+    static const char *const names[] = {"Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"};
+    static const uint32_t stores[] = {0u, 0u, 2u, 2u, 4u};
+    for (uint32_t order = 0u; order < 5u; ++order) {
+        char source[1024];
+        int length = snprintf(source, sizeof(source),
+            "fn answer() -> i64 {\n const counter = Atomic(40)\n"
+            " counter.store(42, Ordering.%s)\n"
+            " const old = counter.fetchSub(2, Ordering.%s)\n"
+            " return old + counter.load(Ordering.%s)\n}\n",
+            names[order], names[order], names[order]);
+        ASSERT_TRUE(length > 0 && (size_t) length < sizeof(source));
+        SourceBuildFixture fixture;
+        ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+        XrProgramSourceProduct product = {0};
+        XrProgramSourceDiagnostic diagnostic;
+        assert_source_build_ok(&fixture.input, &product, &diagnostic);
+        const XrValidatedProgram *program = product.program;
+        uint32_t seen[3] = {0};
+        for (uint32_t f = 0u; f < program->function_count; ++f) {
+            const XrValidatedFunction *function = &program->functions[f];
+            for (uint32_t b = 0u; b < function->block_count; ++b) {
+                const XrValidatedBlock *block = &function->blocks[b];
+                for (uint32_t i = 0u; i < block->instruction_count; ++i) {
+                    const XrValidatedInstruction *instruction = &block->instructions[i];
+                    uint32_t slot, expected;
+                    switch (instruction->operation_id) {
+                        case XR_CORE_OP_CORE_ATOMIC_LOAD:
+                            slot = 0u; expected = order; break;
+                        case XR_CORE_OP_CORE_ATOMIC_EXCHANGE:
+                            slot = 1u; expected = stores[order]; break;
+                        case XR_CORE_OP_CORE_ATOMIC_UPDATE:
+                            slot = 2u; expected = 8u + order; break;
+                        default: continue;
+                    }
+                    ASSERT_EQ_UINT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_U32);
+                    ASSERT_EQ_UINT(instruction->immediate.u32, expected);
+                    ++seen[slot];
+                }
+            }
+        }
+        for (uint32_t slot = 0u; slot < 3u; ++slot)
+            ASSERT_EQ_UINT(seen[slot], 1u);
+        source_build_fixture_free(&fixture);
+        xr_program_source_product_free(&product);
+    }
+}

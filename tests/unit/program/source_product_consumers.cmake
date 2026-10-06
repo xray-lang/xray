@@ -220,3 +220,6 @@ set_tests_properties(source_product_nominal_source_constructors PROPERTIES TIMEO
     LABELS "unit;xir;source-product;program-consumer;inventory;nominal-graph")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_packet_roles.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_entry_roles.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_packets.cmake")

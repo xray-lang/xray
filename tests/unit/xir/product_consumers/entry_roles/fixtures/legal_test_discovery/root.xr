@@ -1,0 +1,16 @@
+import "./library"
+fn answer() -> i64 { return 0 }
+@test(timeout: 2)
+fn first() { assert(library.bump() == 41) }
+@test
+fn second() { assert(library.read() == 41) }
+@test(skip)
+fn skipped() {}
+@before_each
+fn beforeEach() {}
+@after_each
+fn afterEach() {}
+@before_all
+fn beforeAll() {}
+@after_all
+fn afterAll() {}

@@ -1,0 +1,6 @@
+fn answer() -> i64 {
+ const counter = Atomic(40)
+ counter.store(42, Ordering.Release)
+ const old = counter.fetchSub(2, Ordering.Release)
+ return old + counter.load(Ordering.Release)
+}

@@ -1,0 +1,5 @@
+var counter: i64 = 40
+export fn bump() -> i64 { counter = counter + 1; return counter }
+export fn read() -> i64 { return counter }
+@test
+fn dependencyTest() { assert(false) }

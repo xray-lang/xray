@@ -1,0 +1,897 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "case": "original_canonical_initializer",
+      "original_case": "canonical_initializer",
+      "original_name": "source_owner_module_initializer_is_a_canonical_entry",
+      "original_body_lf_sha256": "ee182be4c3f19f8f10711d989755a6ece783da73a9d47db35990f3eda2dae432",
+      "kind": "EXACT_ORIGINAL",
+      "expectation": "SOURCE_ADMISSION_PASS",
+      "retirement": null,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_canonical_initializer/root.xr",
+          "bytes": 64,
+          "sha256": "d6b664f92f5dc7325fe6b8e8fea21b65914c78f5d6878c5d735e77f903e005ac"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [],
+        "runtime_attempts": 0,
+        "checked_facts": {
+          "functions": 2,
+          "modules": 1,
+          "entry": 1
+        }
+      },
+      "full_candidate_input_changed": false
+    },
+    {
+      "case": "original_test_discovery",
+      "original_case": "test_discovery",
+      "original_name": "source_owner_test_discovery_detaches_metadata_and_exact_ids",
+      "original_body_lf_sha256": "52b6c0b271121d46ff5271a5363e1ab4017624a08cd84fea568958d9bd9ad487",
+      "kind": "EXACT_ORIGINAL",
+      "expectation": "RETIRED_INVALID_STATE_REJECTION",
+      "retirement": "library module var is prohibited",
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_test_discovery/root.xr",
+          "bytes": 312,
+          "sha256": "bc2100c5cc39873b741f71c4e98d46595ced0b9f1add0df75f3dacddd5b3a889"
+        },
+        "library.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_test_discovery/library.xr",
+          "bytes": 175,
+          "sha256": "a6363e582a3a16660d0355c6657c7adb3724d6f2aeaea22fdafd968fea4562d8"
+        }
+      },
+      "oracle": {
+        "returncode": 1,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "diagnostic": {
+          "status": 1,
+          "stage": 1,
+          "source-status": 1,
+          "module": 1,
+          "line": 1,
+          "column": 5,
+          "xir-status": 0,
+          "function": 0,
+          "block": 0,
+          "instruction": 0,
+          "reason": 0,
+          "message": "library mutable or exported state is not admitted",
+          "source_path_basename": "library.xr"
+        },
+        "checking_coordinates_from_source_message": null,
+        "runtime_attempts": 0
+      },
+      "full_candidate_input_changed": false
+    },
+    {
+      "case": "original_atomic_ordering_Relaxed",
+      "original_case": "atomic_ordering_Relaxed",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXACT_ORIGINAL",
+      "expectation": "SOURCE_ADMISSION_PASS",
+      "retirement": null,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_atomic_ordering_Relaxed/root.xr",
+          "bytes": 184,
+          "sha256": "ad97041aef5e6f634282aa9681fc12edd6c5ac0eb933a6c11723980dbc5638bf"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "Relaxed",
+            "tag": 0,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "Relaxed",
+            "tag": 0,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "Relaxed",
+            "tag": 0,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 0,
+        "checked_facts": {
+          "functions": 4,
+          "modules": 2,
+          "entry": 3
+        }
+      },
+      "full_candidate_input_changed": false
+    },
+    {
+      "case": "original_atomic_ordering_Acquire",
+      "original_case": "atomic_ordering_Acquire",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXACT_ORIGINAL",
+      "expectation": "STATIC_ILLEGAL_ORDER_REJECTION",
+      "retirement": "store/load does not admit this known order",
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_atomic_ordering_Acquire/root.xr",
+          "bytes": 184,
+          "sha256": "d16164b5298517b34f0d16c4c46855176b551b8992dfb6574ce0020ebc77eb7e"
+        }
+      },
+      "oracle": {
+        "returncode": 1,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "diagnostic": {
+          "status": 3,
+          "stage": 1,
+          "source-status": 3,
+          "module": 0,
+          "line": 1,
+          "column": 4,
+          "xir-status": 0,
+          "function": 0,
+          "block": 0,
+          "instruction": 0,
+          "reason": 0,
+          "message": "constructed XIR failed checking at function 2 block 0 instruction 5",
+          "source_path_basename": "root.xr"
+        },
+        "checking_coordinates_from_source_message": {
+          "function": 2,
+          "block": 0,
+          "instruction": 5
+        },
+        "runtime_attempts": 0
+      },
+      "full_candidate_input_changed": false
+    },
+    {
+      "case": "original_atomic_ordering_Release",
+      "original_case": "atomic_ordering_Release",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXACT_ORIGINAL",
+      "expectation": "STATIC_ILLEGAL_ORDER_REJECTION",
+      "retirement": "store/load does not admit this known order",
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_atomic_ordering_Release/root.xr",
+          "bytes": 184,
+          "sha256": "bc636b5dafb1c416477fa64fffb3fd7ddb68bbf07e2afc2bb7be046af65b6a1a"
+        }
+      },
+      "oracle": {
+        "returncode": 1,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "diagnostic": {
+          "status": 3,
+          "stage": 1,
+          "source-status": 3,
+          "module": 0,
+          "line": 1,
+          "column": 4,
+          "xir-status": 0,
+          "function": 0,
+          "block": 0,
+          "instruction": 0,
+          "reason": 0,
+          "message": "constructed XIR failed checking at function 2 block 0 instruction 12",
+          "source_path_basename": "root.xr"
+        },
+        "checking_coordinates_from_source_message": {
+          "function": 2,
+          "block": 0,
+          "instruction": 12
+        },
+        "runtime_attempts": 0
+      },
+      "full_candidate_input_changed": false
+    },
+    {
+      "case": "original_atomic_ordering_AcquireRelease",
+      "original_case": "atomic_ordering_AcquireRelease",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXACT_ORIGINAL",
+      "expectation": "STATIC_ILLEGAL_ORDER_REJECTION",
+      "retirement": "store/load does not admit this known order",
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_atomic_ordering_AcquireRelease/root.xr",
+          "bytes": 205,
+          "sha256": "1e7de938ba81913f0c89cd2ac813481bd96e1f2da5f88c3a633c6f143dd38242"
+        }
+      },
+      "oracle": {
+        "returncode": 1,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "diagnostic": {
+          "status": 3,
+          "stage": 1,
+          "source-status": 3,
+          "module": 0,
+          "line": 1,
+          "column": 4,
+          "xir-status": 0,
+          "function": 0,
+          "block": 0,
+          "instruction": 0,
+          "reason": 0,
+          "message": "constructed XIR failed checking at function 2 block 0 instruction 5",
+          "source_path_basename": "root.xr"
+        },
+        "checking_coordinates_from_source_message": {
+          "function": 2,
+          "block": 0,
+          "instruction": 5
+        },
+        "runtime_attempts": 0
+      },
+      "full_candidate_input_changed": false
+    },
+    {
+      "case": "original_atomic_ordering_SeqCst",
+      "original_case": "atomic_ordering_SeqCst",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXACT_ORIGINAL",
+      "expectation": "SOURCE_ADMISSION_PASS",
+      "retirement": null,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_atomic_ordering_SeqCst/root.xr",
+          "bytes": 181,
+          "sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 0,
+        "checked_facts": {
+          "functions": 4,
+          "modules": 2,
+          "entry": 3
+        }
+      },
+      "full_candidate_input_changed": false
+    },
+    {
+      "case": "legal_rmw_Relaxed",
+      "original_case": "atomic_ordering_Relaxed",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXPLICIT_LEGAL_MIGRATION",
+      "expectation": "SOURCE_ADMISSION_AND_VM_82",
+      "store_order": "SeqCst",
+      "load_order": "SeqCst",
+      "fetch_sub_order": "Relaxed",
+      "fetch_sub_order_identity": 0,
+      "expected_i64": 82,
+      "reviewed_prefix_sha256": "4e26b0353f50938b52980b550071cdf4973c956bc251c5dc41a73b580446e166",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "original_bytes_preserved_separately": true,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_rmw_Relaxed/root.xr",
+          "bytes": 236,
+          "sha256": "30b3eba4fce42486458c47417e7a236f95aa59a456dfc786bdfe4adb789998a1"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "Relaxed",
+            "tag": 0,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 52,
+        "execution": {
+          "instances": 2,
+          "repeats": 2,
+          "expected_i64": 82
+        },
+        "checked_facts": {
+          "functions": 5,
+          "modules": 2,
+          "entry": 4
+        }
+      },
+      "reviewed_original_prefix_changed": true,
+      "full_candidate_input_changed": true
+    },
+    {
+      "case": "legal_rmw_Acquire",
+      "original_case": "atomic_ordering_Acquire",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXPLICIT_LEGAL_MIGRATION",
+      "expectation": "SOURCE_ADMISSION_AND_VM_82",
+      "store_order": "SeqCst",
+      "load_order": "SeqCst",
+      "fetch_sub_order": "Acquire",
+      "fetch_sub_order_identity": 1,
+      "expected_i64": 82,
+      "reviewed_prefix_sha256": "c8b7180568f6727e96021953c9722ad2ef4b2006f6c0a5eca8cd77b1fa1217dc",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "original_bytes_preserved_separately": true,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_rmw_Acquire/root.xr",
+          "bytes": 236,
+          "sha256": "9f7b12bb4e1bee4ecd90e8af618e2aac668fb4f9251ab89f54797865845fa583"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "Acquire",
+            "tag": 1,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 52,
+        "execution": {
+          "instances": 2,
+          "repeats": 2,
+          "expected_i64": 82
+        },
+        "checked_facts": {
+          "functions": 5,
+          "modules": 2,
+          "entry": 4
+        }
+      },
+      "reviewed_original_prefix_changed": true,
+      "full_candidate_input_changed": true
+    },
+    {
+      "case": "legal_rmw_Release",
+      "original_case": "atomic_ordering_Release",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXPLICIT_LEGAL_MIGRATION",
+      "expectation": "SOURCE_ADMISSION_AND_VM_82",
+      "store_order": "SeqCst",
+      "load_order": "SeqCst",
+      "fetch_sub_order": "Release",
+      "fetch_sub_order_identity": 2,
+      "expected_i64": 82,
+      "reviewed_prefix_sha256": "5b5413a6a6b495da70d48d38d049f02420f15c8e7d0761748f529693e8954116",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "original_bytes_preserved_separately": true,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_rmw_Release/root.xr",
+          "bytes": 236,
+          "sha256": "e20b5044b3addd9a04f7f51ca0b78b44028bb7e62526a6d5cf43e144ebd8cf3f"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "Release",
+            "tag": 2,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 52,
+        "execution": {
+          "instances": 2,
+          "repeats": 2,
+          "expected_i64": 82
+        },
+        "checked_facts": {
+          "functions": 5,
+          "modules": 2,
+          "entry": 4
+        }
+      },
+      "reviewed_original_prefix_changed": true,
+      "full_candidate_input_changed": true
+    },
+    {
+      "case": "legal_rmw_AcquireRelease",
+      "original_case": "atomic_ordering_AcquireRelease",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXPLICIT_LEGAL_MIGRATION",
+      "expectation": "SOURCE_ADMISSION_AND_VM_82",
+      "store_order": "SeqCst",
+      "load_order": "SeqCst",
+      "fetch_sub_order": "AcquireRelease",
+      "fetch_sub_order_identity": 3,
+      "expected_i64": 82,
+      "reviewed_prefix_sha256": "9fbaef253baf57929829cb8b6c48a99cba4af78160b5b341b553ec345e1514cb",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "original_bytes_preserved_separately": true,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_rmw_AcquireRelease/root.xr",
+          "bytes": 243,
+          "sha256": "0fc24ac7b6757ae4bc0d3b70255b0defdad3bfa9f87d6988bf7a314eaea884e0"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "AcquireRelease",
+            "tag": 3,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 52,
+        "execution": {
+          "instances": 2,
+          "repeats": 2,
+          "expected_i64": 82
+        },
+        "checked_facts": {
+          "functions": 5,
+          "modules": 2,
+          "entry": 4
+        }
+      },
+      "reviewed_original_prefix_changed": true,
+      "full_candidate_input_changed": true
+    },
+    {
+      "case": "legal_rmw_SeqCst",
+      "original_case": "atomic_ordering_SeqCst",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXPLICIT_LEGAL_MIGRATION",
+      "expectation": "SOURCE_ADMISSION_AND_VM_82",
+      "store_order": "SeqCst",
+      "load_order": "SeqCst",
+      "fetch_sub_order": "SeqCst",
+      "fetch_sub_order_identity": 4,
+      "expected_i64": 82,
+      "reviewed_prefix_sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "original_bytes_preserved_separately": true,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_rmw_SeqCst/root.xr",
+          "bytes": 235,
+          "sha256": "13d2384e482dd52e3b66d2de8b1600433b6201d6955f3f9264c79c7c8aab8ef1"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 52,
+        "execution": {
+          "instances": 2,
+          "repeats": 2,
+          "expected_i64": 82
+        },
+        "checked_facts": {
+          "functions": 5,
+          "modules": 2,
+          "entry": 4
+        }
+      },
+      "reviewed_original_prefix_changed": false,
+      "full_candidate_input_changed": true
+    },
+    {
+      "case": "legal_test_discovery",
+      "original_case": "test_discovery",
+      "original_name": "source_owner_test_discovery_detaches_metadata_and_exact_ids",
+      "original_body_lf_sha256": "52b6c0b271121d46ff5271a5363e1ab4017624a08cd84fea568958d9bd9ad487",
+      "kind": "EXPLICIT_LEGAL_MIGRATION",
+      "expectation": "SEVEN_ROLES_TIMEOUT_2_UNIT_RESULTS_TWO_INSTANCES",
+      "root_input_unchanged": true,
+      "library_representation": "const Sendable Atomic(40)",
+      "bump": "fetchAdd(1)+1",
+      "read": "load()",
+      "ordering": "default SeqCst",
+      "role_names": [
+        "first",
+        "second",
+        "skipped",
+        "beforeEach",
+        "afterEach",
+        "beforeAll",
+        "afterAll"
+      ],
+      "role_ids": [
+        1,
+        1,
+        2,
+        5,
+        6,
+        3,
+        4
+      ],
+      "timeout_seconds": [
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dependency_test_authority": "DENIED",
+      "lifecycle_and_allocation_gates": "OPEN",
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_test_discovery/root.xr",
+          "bytes": 312,
+          "sha256": "bc2100c5cc39873b741f71c4e98d46595ced0b9f1add0df75f3dacddd5b3a889"
+        },
+        "library.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_test_discovery/library.xr",
+          "bytes": 180,
+          "sha256": "c991e8f9f4d11fc3c9c153bc04287886f48457248dab7cc4b3bf5b36433ede18"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [],
+        "runtime_attempts": 60,
+        "test_roles": {
+          "names": [
+            "first",
+            "second",
+            "skipped",
+            "beforeEach",
+            "afterEach",
+            "beforeAll",
+            "afterAll"
+          ],
+          "roles": [
+            1,
+            1,
+            2,
+            5,
+            6,
+            3,
+            4
+          ],
+          "timeouts": [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "sequence": [
+            5,
+            3,
+            0,
+            4,
+            3,
+            1,
+            4,
+            6
+          ],
+          "instances": 2,
+          "results": "Unit",
+          "first_bump": 41,
+          "second_read": 41,
+          "dependency_denied": 1,
+          "skip_denied": 1
+        },
+        "checked_facts": {
+          "functions": 18,
+          "modules": 4,
+          "entry": 14
+        }
+      },
+      "full_candidate_input_changed": true
+    },
+    {
+      "case": "legal_original_Relaxed",
+      "original_case": "atomic_ordering_Relaxed",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXACT_ORIGINAL_PREFIX_EXPLICIT_RUNTIME_ADAPTER",
+      "expectation": "SOURCE_ADMISSION_AND_VM_82",
+      "original_prefix_sha256": "ad97041aef5e6f634282aa9681fc12edd6c5ac0eb933a6c11723980dbc5638bf",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "store_order": "Relaxed",
+      "load_order": "Relaxed",
+      "fetch_sub_order": "Relaxed",
+      "expected_i64": 82,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_original_Relaxed/root.xr",
+          "bytes": 238,
+          "sha256": "ed7a663d3439b43295d927e2ffeb13b2051c6713f9a7f8c37ba3c083865cdbc8"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "Relaxed",
+            "tag": 0,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "Relaxed",
+            "tag": 0,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "Relaxed",
+            "tag": 0,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 52,
+        "execution": {
+          "instances": 2,
+          "repeats": 2,
+          "expected_i64": 82
+        },
+        "checked_facts": {
+          "functions": 5,
+          "modules": 2,
+          "entry": 4
+        }
+      },
+      "full_candidate_input_changed": true
+    },
+    {
+      "case": "legal_original_SeqCst",
+      "original_case": "atomic_ordering_SeqCst",
+      "original_name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "original_body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "kind": "EXACT_ORIGINAL_PREFIX_EXPLICIT_RUNTIME_ADAPTER",
+      "expectation": "SOURCE_ADMISSION_AND_VM_82",
+      "original_prefix_sha256": "56383b6dfc3548aaac8a4cb42c1c701ddbcc74110b1ed0511ab9df2b3a3dabbc",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "store_order": "SeqCst",
+      "load_order": "SeqCst",
+      "fetch_sub_order": "SeqCst",
+      "expected_i64": 82,
+      "files": {
+        "root.xr": {
+          "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/legal_original_SeqCst/root.xr",
+          "bytes": 235,
+          "sha256": "13d2384e482dd52e3b66d2de8b1600433b6201d6955f3f9264c79c7c8aab8ef1"
+        }
+      },
+      "oracle": {
+        "returncode": 0,
+        "source_node": "NOT_EXPOSED",
+        "full_fi": "NOT_RUN",
+        "native_execution": "NOT_RUN",
+        "projection": "detached-Checked-Lowered=PASS C-identical=PASS",
+        "controls": [
+          {
+            "operation": "ATOMIC_STORE",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_FETCH_SUB",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          },
+          {
+            "operation": "ATOMIC_LOAD",
+            "ordering": "SeqCst",
+            "tag": 4,
+            "typed": "Nullable<Ordering>"
+          }
+        ],
+        "runtime_attempts": 52,
+        "execution": {
+          "instances": 2,
+          "repeats": 2,
+          "expected_i64": 82
+        },
+        "checked_facts": {
+          "functions": 5,
+          "modules": 2,
+          "entry": 4
+        }
+      },
+      "full_candidate_input_changed": true
+    }
+  ],
+  "original_inputs": 7,
+  "original_bodies": {
+    "source_owner_atomic_ordering_preserves_exact_controls": {
+      "path": "tests/unit/xir/product_consumers/entry_roles/original-bodies/source_owner_atomic_ordering_preserves_exact_controls.txt",
+      "bytes": 2514,
+      "sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "legacy_source_lf_sha256": "0418b77da68445daf0da7b26e2916719274737afa4d2f9e3870c70e467eeded8"
+    },
+    "source_owner_test_discovery_detaches_metadata_and_exact_ids": {
+      "path": "tests/unit/xir/product_consumers/entry_roles/original-bodies/source_owner_test_discovery_detaches_metadata_and_exact_ids.txt",
+      "bytes": 3779,
+      "sha256": "52b6c0b271121d46ff5271a5363e1ab4017624a08cd84fea568958d9bd9ad487",
+      "legacy_source_lf_sha256": "0418b77da68445daf0da7b26e2916719274737afa4d2f9e3870c70e467eeded8"
+    },
+    "source_owner_module_initializer_is_a_canonical_entry": {
+      "path": "tests/unit/xir/product_consumers/entry_roles/original-bodies/source_owner_module_initializer_is_a_canonical_entry.txt",
+      "bytes": 2256,
+      "sha256": "ee182be4c3f19f8f10711d989755a6ece783da73a9d47db35990f3eda2dae432",
+      "legacy_source_lf_sha256": "0418b77da68445daf0da7b26e2916719274737afa4d2f9e3870c70e467eeded8"
+    }
+  },
+  "legal_execution_projections": 8,
+  "original_admissions": 3,
+  "original_rejections": 4,
+  "checked_schema": 25,
+  "checked_contract": 67,
+  "abi": {
+    "value": 22,
+    "call": 28,
+    "program": 29
+  },
+  "migration": "OPEN",
+  "native_execution": "NOT_RUN",
+  "full_fi": "NOT_RUN",
+  "full_safety": "NOT_RUN"
+}

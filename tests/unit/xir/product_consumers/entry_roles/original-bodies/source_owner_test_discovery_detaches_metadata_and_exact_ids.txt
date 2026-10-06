@@ -1,0 +1,72 @@
+TEST(source_owner_test_discovery_detaches_metadata_and_exact_ids) {
+    static const char source[] =
+        "import \"./library\"\n"
+        "fn answer() -> i64 { return 0 }\n"
+        "@test(timeout: 2)\nfn first() { assert(library.bump() == 41) }\n"
+        "@test\nfn second() { assert(library.read() == 41) }\n"
+        "@test(skip)\nfn skipped() {}\n"
+        "@before_each\nfn beforeEach() {}\n"
+        "@after_each\nfn afterEach() {}\n"
+        "@before_all\nfn beforeAll() {}\n"
+        "@after_all\nfn afterAll() {}\n";
+    static const char library[] =
+        "var counter: i64 = 40\n"
+        "export fn bump() -> i64 { counter = counter + 1; return counter }\n"
+        "export fn read() -> i64 { return counter }\n"
+        "@test\nfn dependencyTest() { assert(false) }\n";
+    static const char *names[] = {"first", "second", "skipped", "beforeEach", "afterEach",
+                                   "beforeAll", "afterAll"};
+    static const XrProgramSourceTestKind kinds[] = {
+        XR_PROGRAM_TEST_CASE, XR_PROGRAM_TEST_CASE, XR_PROGRAM_TEST_SKIP,
+        XR_PROGRAM_TEST_BEFORE_EACH, XR_PROGRAM_TEST_AFTER_EACH,
+        XR_PROGRAM_TEST_BEFORE_ALL, XR_PROGRAM_TEST_AFTER_ALL,
+    };
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, library));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    fixture.input.discover_tests = 1u;
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    ASSERT_EQ_UINT(product.retained_function_count, 0u);
+    ASSERT_NULL(product.retained_function_ids);
+    ASSERT_EQ_UINT(product.test_entry_count, 7u);
+    for (uint32_t index = 0u; index < 7u; ++index) {
+        ASSERT_EQ_INT(strcmp(product.tests[index].name, names[index]), 0);
+        ASSERT_EQ_INT(product.tests[index].kind, kinds[index]);
+        ASSERT_EQ_UINT(product.tests[index].timeout_seconds, index == 0u ? 2u : 0u);
+        ASSERT_LT(product.tests[index].function_id,
+                  xr_validated_program_function_count(product.program));
+        for (uint32_t prior = 0u; prior < index; ++prior)
+            ASSERT_NE(product.tests[index].function_id, product.tests[prior].function_id);
+    }
+    XrVmCode *code = NULL;
+    ASSERT_EQ_INT(xr_vm_code_build(product.program, profile, NULL, &code, NULL), XR_VM_CODE_OK);
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = product.program, .profile = profile, .generation = 1u,
+    };
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, NULL), XR_EXECUTION_OK);
+    {
+        for (uint32_t index = 0u; index < 2u; ++index) {
+            XrVmOutcome result = xr_vm_code_execute(code, instance,
+                                                     product.tests[index].function_id, NULL, 0u);
+            ASSERT_EQ_INT(result.kind, XR_VM_OUTCOME_RETURN);
+            ASSERT_EQ_INT(result.value.kind, XR_VM_VALUE_VOID);
+            xr_vm_outcome_dispose(&result);
+        }
+    }
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, NULL), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, NULL), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, NULL), XR_EXECUTION_OK);
+    xr_vm_code_free(code);
+    xr_program_source_product_free(&product);
+    ASSERT_NULL(product.tests);
+    ASSERT_EQ_UINT(product.test_entry_count, 0u);
+    xr_target_profile_free(profile);
+}

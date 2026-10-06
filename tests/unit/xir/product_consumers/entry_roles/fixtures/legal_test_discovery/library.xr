@@ -1,0 +1,5 @@
+const counter = Atomic(40)
+export fn bump() -> i64 { return counter.fetchAdd(1) + 1 }
+export fn read() -> i64 { return counter.load() }
+@test
+fn dependencyTest() { assert(false) }
