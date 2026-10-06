@@ -52,3 +52,5 @@ foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/native_cache_pair.cmake")

@@ -15,6 +15,8 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_vm_internal.h"
+#include "xxir_native_cache_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
 #include "xxir_task.h"
@@ -917,29 +919,51 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_bind(const XrXirArtifact *artifact, uint32
     return status == XR_XIR_OK ? bind_verified(artifact, function, binding, entry) : status;
 }
 
-typedef struct VmProgramOwner { XrXirArtifact *artifact; XrXirVmBinding *bindings; } VmProgramOwner;
+typedef struct VmProgramOwner {
+    XrXirArtifact *artifact;
+    XrXirVmBinding *bindings;
+    XirNativeCache *cache;
+} VmProgramOwner;
 static void vm_program_release(void *pointer) {
     VmProgramOwner *owner = pointer;
     xr_xir_compile_artifact_free(owner->artifact);
     xr_compile_resources_free(owner->bindings);
+    xir_native_cache_drop(owner->cache);
     xr_compile_resources_free(owner);
 }
-XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact, XrXirProgram **output) {
+static XrXirStatus vm_program_take(XrXirArtifact **artifact, XirNativeCache *cache,
+    XrXirProgram **output) {
     if (!output || *output || !artifact) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_compile_artifact_module(*artifact);
     if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context = xr_xir_compile_artifact_context(*artifact);
+    if (cache) {
+        const XrXirCompileContext *cache_context = xir_native_cache_context(cache);
+        if (!cache_context || cache_context->resources != context->resources) return XR_XIR_BAD_STRUCTURE;
+    }
     XrXirStatus status = xr_xir_compile_artifact_verify(*artifact, NULL);
     if (status != XR_XIR_OK) return status;
     VmProgramOwner *owner = xir_compile_calloc(context, 1, sizeof(*owner), &status);
     if (!owner) return status;
+    if (cache) {
+        status = xir_native_cache_retain(cache);
+        if (status != XR_XIR_OK) { vm_program_release(owner); return status; }
+        owner->cache = cache;
+    }
     owner->bindings = xir_compile_calloc(context, module->function_count, sizeof(*owner->bindings), &status);
     XrXirCallEntry *entries = xir_compile_calloc(context, module->function_count, sizeof(*entries), &status);
     if (status != XR_XIR_OK) goto finish;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         status = bind_verified(*artifact, i, &owner->bindings[i], &entries[i]);
         if (status != XR_XIR_OK) goto finish;
+        if (cache) {
+            XirNativeCacheHit hit = {0};
+            status = xir_native_cache_lookup(cache, *artifact, i, &hit);
+            if (status != XR_XIR_OK) goto finish;
+            if (hit.kind == XIR_NATIVE_CACHE_MATCH) entries[i] = hit.entry;
+            else if (hit.kind != XIR_NATIVE_CACHE_MISS) { status = XR_XIR_BAD_STRUCTURE; goto finish; }
+        }
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*artifact),
         entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types,
@@ -950,6 +974,13 @@ finish:
     xr_compile_resources_free(entries);
     if (status != XR_XIR_OK) vm_program_release(owner);
     return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact, XrXirProgram **output) {
+    return vm_program_take(artifact, NULL, output);
+}
+XR_FUNC XrXirStatus xir_compile_vm_program_take_cached(XrXirArtifact **artifact,
+    XirNativeCache *cache, XrXirProgram **output) {
+    return vm_program_take(artifact, cache, output);
 }
 
 XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint32_t function,
