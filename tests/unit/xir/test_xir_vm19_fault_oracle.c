@@ -153,7 +153,16 @@ static void measure_operation(uint32_t id,size_t fail_at,unsigned axis,uint64_t 
     if(created==XR_XIR_CALL_READY) {
         lease=instance->domain;CHECK(xr_xir_domain_retain(lease));pending.instance=instance;
         oracle_phase=ORACLE_INPUT;XrXirValueStatus input=XR_XIR_VALUE_OK;
-        if(mode==PENDING_WRITE_STREAM && id!=18)input=xr_xir_string_new(lease,"a\0b",3,&argument);
+        if(mode==PENDING_WRITE_STREAM && id!=18) {
+            input=xr_xir_string_new(lease,"a\0b",3,&argument);
+            if(input==XR_XIR_VALUE_LIMIT) {
+                CHECK(oracle_phase==ORACLE_INPUT && !oracle_executing_poll && !oracle_reason);
+                fprintf(stderr,"INPUT_REJECT valueStatus%u phase%u pollActive%u epochMarker%u\n",
+                    (unsigned)input,oracle_phase,oracle_executing_poll,oracle_reason);
+                oracle_budget_rejected();
+                CHECK(!oracle_reason);
+            }
+        }
         if(input==XR_XIR_VALUE_OK) {
             oracle_phase=ORACLE_START;uint64_t start_epoch=instance->epoch;XrXirCall *start_call=instance->call;
             started=xr_xir_instance_start(instance,1,argument.type?&argument:NULL,argument.type?1u:0u);
