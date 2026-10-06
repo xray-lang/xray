@@ -1,0 +1,378 @@
+{
+  "status": "PUBLIC_VM_SIX_NORMAL_PER_CONFIGURATION_VERIFIED_RESIDUE_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "original_responsibilities": "tests/unit/xir/product_consumers/legacy_responsibilities.json",
+  "original_1_2_3": {
+    "1": {
+      "bytes": 305,
+      "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c"
+    },
+    "2": {
+      "bytes": 352,
+      "sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd"
+    },
+    "3": {
+      "bytes": 483,
+      "sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540"
+    }
+  },
+  "new_fixtures": [
+    {
+      "scenario": 1,
+      "mode": "base",
+      "bytes": 305,
+      "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "base_bytes": 305,
+      "base_sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "relation_to_original": "exact_original",
+      "Atomic_body_executed": false,
+      "future_command": [
+        "EXE",
+        "1",
+        "base",
+        "ROOT",
+        "ROOT/scenario1-base.xr"
+      ]
+    },
+    {
+      "scenario": 1,
+      "mode": "atomic",
+      "bytes": 361,
+      "sha256": "11ddc9bd4b158875f6952535a49546d406507ee2134d72be5f2916150974a3cb",
+      "base_bytes": 305,
+      "base_sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "relation_to_original": "same_module_test_append_to_exact_original",
+      "Atomic_body_executed": true,
+      "future_command": [
+        "EXE",
+        "1",
+        "atomic",
+        "ROOT",
+        "ROOT/scenario1-atomic.xr"
+      ]
+    },
+    {
+      "scenario": 2,
+      "mode": "base",
+      "bytes": 345,
+      "sha256": "0c70181860ffb26bd2952a7ff549ce3ada421f365fb4eb568c9c837ba1539c33",
+      "base_bytes": 345,
+      "base_sha256": "0c70181860ffb26bd2952a7ff549ce3ada421f365fb4eb568c9c837ba1539c33",
+      "relation_to_original": "one_store_order_substitution",
+      "Atomic_body_executed": false,
+      "future_command": [
+        "EXE",
+        "2",
+        "base",
+        "ROOT",
+        "ROOT/scenario2-base.xr"
+      ]
+    },
+    {
+      "scenario": 2,
+      "mode": "atomic",
+      "bytes": 401,
+      "sha256": "cff22826fe4ba4166dc65f1de871e997446f81f48db6b6f509b42f670374ffee",
+      "base_bytes": 345,
+      "base_sha256": "0c70181860ffb26bd2952a7ff549ce3ada421f365fb4eb568c9c837ba1539c33",
+      "relation_to_original": "same_module_test_append_to_legal_store_variant",
+      "Atomic_body_executed": true,
+      "future_command": [
+        "EXE",
+        "2",
+        "atomic",
+        "ROOT",
+        "ROOT/scenario2-atomic.xr"
+      ]
+    },
+    {
+      "scenario": 3,
+      "mode": "base",
+      "bytes": 483,
+      "sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "base_bytes": 483,
+      "base_sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "relation_to_original": "exact_original",
+      "Atomic_body_executed": false,
+      "future_command": [
+        "EXE",
+        "3",
+        "base",
+        "ROOT",
+        "ROOT/scenario3-base.xr"
+      ]
+    },
+    {
+      "scenario": 3,
+      "mode": "atomic",
+      "bytes": 539,
+      "sha256": "52acb2b2ca992ca205c2fd614185a4e0e6b53d35d4806f6bd8e997e682f8dda6",
+      "base_bytes": 483,
+      "base_sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "relation_to_original": "same_module_test_append_to_exact_original",
+      "Atomic_body_executed": true,
+      "future_command": [
+        "EXE",
+        "3",
+        "atomic",
+        "ROOT",
+        "ROOT/scenario3-atomic.xr"
+      ]
+    }
+  ],
+  "new_test_suffix": {
+    "bytes": 56,
+    "sha256": "23dc2b48d9d6477e829c6d4d2c8943a0374df1787ce70f5cf2adf8434a83e6d4",
+    "text": "@test\nfn checkAtomicAnswer() { assert(answer() == 42) }\n"
+  },
+  "contract": {
+    "declarations": "answer remains private zero-argument I64; exported remains private fixed I64(42); original checkAnswer remains private zero-argument Unit TEST; appended checkAtomicAnswer is private zero-argument Unit TEST in the same root module",
+    "syntax": "Append an ordinary non-generic top-level @test function; no imports, wrappers, aliases, exports or compatibility path",
+    "types": "Atomic<i64>, Atomic<bool>, Atomic<f64> require exact AtomicValue/Number/Boolean bounds; compareExchange is owned Tuple; test calls answer and compares I64 against independent literal42",
+    "ownership": "const copied handles preserve synchronization identity; local Atomic/Tuple/String ownership follows the public pipeline; SourceProduct/session drop precedes retained Checked verification and Lowered sealing; two Instances retain caller-dropped Program; taken values reset to canonical zero after drop",
+    "effects": "Test role changes neither export nor effect and grants no no_suspend exemption; synchronized interior mutation stays in the ordinary Checked/Lowered pipeline",
+    "authority": "Ordinary host start rejects initializer, answer, exported, original test and appended test; start_test rejects answer/exported/initializer; selected root TEST identities alone are executed",
+    "oracles": "Root canonical entry returns I64(0), distinct from answer; original test only proves exported42. Appended test must actually RETURN Unit after assert(answer()==42), twice on each of two Instances. Each admission rejection must leave all compiler stats, runtime attempts/live and NEW state unchanged",
+    "source2": "Original352B AcquireRelease store is an exact static Checked negative, already diagnosed in both configurations. New345B variant substitutes only Release and is separately qualified; neither relaxes the store contract nor claims five-order RMW completion"
+  },
+  "evidence": {
+    "spec/source/sections/011-10-concurrency-and-coroutines.md": {
+      "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+      "bytes": 76231,
+      "sha256": "81e8f98752a00890d2a128abc4dc788b2e2e8dee38e8daee61ff6cf71be33d5a",
+      "lines": [
+        [
+          380,
+          449
+        ]
+      ]
+    },
+    "spec/source/sections/015-14-built-in-type-methods.md": {
+      "path": "spec/source/sections/015-14-built-in-type-methods.md",
+      "bytes": 65693,
+      "sha256": "c48205c335b6e9473f8b1d1797446d71199b873502677c70815a4a171ff84d6d",
+      "lines": [
+        [
+          346,
+          365
+        ]
+      ]
+    },
+    "spec/source/sections/013-12-testing.md": {
+      "path": "spec/source/sections/013-12-testing.md",
+      "bytes": 14691,
+      "sha256": "26b94a1bccafd3e8e6e0f963bbfc5ad69d8a001f26d01920892c84da838d77b2",
+      "lines": [
+        [
+          12,
+          96
+        ]
+      ]
+    },
+    "spec/source/sections/003-2-type-system.md": {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "bytes": 137949,
+      "sha256": "679a08936c9c9f577eba1b4f0a6878488b70544509163114083b30150a625539",
+      "lines": [
+        [
+          986,
+          988
+        ]
+      ]
+    },
+    "src/xir/xxir_atomic_verify.inc.c": {
+      "path": "src/xir/xxir_atomic_verify.inc.c",
+      "bytes": 6080,
+      "sha256": "a3ac0f92511047ed1ac12c9aa2ad85e0cde618e3a2dbe6a31d8ce77acbee4236",
+      "lines": [
+        [
+          97,
+          103
+        ]
+      ]
+    },
+    "src/xir/xxir_source_atomic_calls.inc.c": {
+      "path": "src/xir/xxir_source_atomic_calls.inc.c",
+      "bytes": 11936,
+      "sha256": "a5ab47d062e5f811b367819e266d6552fa926d8a96083846999f8f770b3c7f36",
+      "lines": [
+        [
+          123,
+          165
+        ]
+      ]
+    },
+    "stdlib/prelude/builtin_symbols.def": {
+      "path": "stdlib/prelude/builtin_symbols.def",
+      "bytes": 13362,
+      "sha256": "0d1769f548dcb0c2bbf3cc04f23c38407f8160691f194d3eb8864fce1a46ab05",
+      "lines": [
+        [
+          180,
+          185
+        ]
+      ]
+    },
+    "src/xir/xxir_instance.c": {
+      "path": "src/xir/xxir_instance.c",
+      "bytes": 52792,
+      "sha256": "e4deefa6d4591f21afc8408a3ebf9da3557eeb5085a8e3dd1643450de387c8be",
+      "lines": [
+        [
+          307,
+          345
+        ]
+      ]
+    },
+    "src/xir/xxir_source.c": {
+      "path": "src/xir/xxir_source.c",
+      "bytes": 182249,
+      "sha256": "52258010440971dbc1d3d1ef495bb55e82ea639dc36f674c1c163f29abc8ecc7",
+      "lines": [
+        [
+          1949,
+          2020
+        ]
+      ]
+    }
+  },
+  "candidate_default_gate": {
+    "new_TU": 1,
+    "new_normal_CTests": 6,
+    "TIMEOUT_each": 120,
+    "limits": {
+      "allocated": 67108864,
+      "live": 8388608,
+      "work": 128000000
+    },
+    "measured_costs": "VERIFIED_NORMAL_ONLY_CURRENT_FIXED25F_PUBLIC_INPUT_GRAPHS; FI_NOT_RUN",
+    "fault_or_axis_CTests": 0,
+    "old_registry_and_targets": "UNCHANGED"
+  },
+  "OPEN": [
+    "All original eight Source FI graphs and their independent subject-only budgets",
+    "Atomic full order matrix, contention, lock-free provider probes, CAS allocation-before-effect and cancellation boundaries",
+    "Cross-Instance module-state isolation beyond this local construction fixture",
+    "Native exports/nativeHidden/native AOT/generated-C and independent target ABI validation",
+    "Original Source4/5 Object and Source7 StringBuilder blockers; Source6 complete net dependency graph",
+    "All original nineteen consumer responsibilities outside this exact input and ownership slice"
+  ],
+  "native": "NOT_RUN",
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "normal_qualification": {
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "worker_parent": "773b254b6a6bcf397d310f9feb5f099c7540a9d6",
+    "normal_tests_per_configuration": 6,
+    "configurations": [
+      "MSVC_MT_Release",
+      "ASan_MD_Debug_UBSan"
+    ],
+    "new_TUs": 1,
+    "total_TUs": 200,
+    "registry249": "RECORDED_ONLY_NOT_EXECUTED",
+    "fixture_cases": {
+      "test_source_product_atomic_source1_base_normal": {
+        "fixture": {
+          "bytes": 305,
+          "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+          "relation_to_original": "exact_original"
+        },
+        "costs_per_configuration": {
+          "compiler_N": 2665,
+          "runtime_N": 32,
+          "allocated": 836610,
+          "cumulative_peak": 259827,
+          "work": 1050171
+        },
+        "old_Unit_rows": 4,
+        "same_module_Atomic_Unit_rows": 0
+      },
+      "test_source_product_atomic_source1_atomic_normal": {
+        "fixture": {
+          "bytes": 361,
+          "sha256": "11ddc9bd4b158875f6952535a49546d406507ee2134d72be5f2916150974a3cb",
+          "relation_to_original": "same_module_test_append_to_exact_original"
+        },
+        "costs_per_configuration": {
+          "compiler_N": 2797,
+          "runtime_N": 72,
+          "allocated": 866381,
+          "cumulative_peak": 260285,
+          "work": 1114783
+        },
+        "old_Unit_rows": 4,
+        "same_module_Atomic_Unit_rows": 4
+      },
+      "test_source_product_atomic_source2_base_normal": {
+        "fixture": {
+          "bytes": 345,
+          "sha256": "0c70181860ffb26bd2952a7ff549ce3ada421f365fb4eb568c9c837ba1539c33",
+          "relation_to_original": "one_store_order_substitution"
+        },
+        "costs_per_configuration": {
+          "compiler_N": 2670,
+          "runtime_N": 32,
+          "allocated": 845907,
+          "cumulative_peak": 254554,
+          "work": 1121210
+        },
+        "old_Unit_rows": 4,
+        "same_module_Atomic_Unit_rows": 0
+      },
+      "test_source_product_atomic_source2_atomic_normal": {
+        "fixture": {
+          "bytes": 401,
+          "sha256": "cff22826fe4ba4166dc65f1de871e997446f81f48db6b6f509b42f670374ffee",
+          "relation_to_original": "same_module_test_append_to_legal_store_variant"
+        },
+        "costs_per_configuration": {
+          "compiler_N": 2803,
+          "runtime_N": 80,
+          "allocated": 883382,
+          "cumulative_peak": 260745,
+          "work": 1197366
+        },
+        "old_Unit_rows": 4,
+        "same_module_Atomic_Unit_rows": 4
+      },
+      "test_source_product_atomic_source3_base_normal": {
+        "fixture": {
+          "bytes": 483,
+          "sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+          "relation_to_original": "exact_original"
+        },
+        "costs_per_configuration": {
+          "compiler_N": 2820,
+          "runtime_N": 32,
+          "allocated": 902225,
+          "cumulative_peak": 265665,
+          "work": 1649680
+        },
+        "old_Unit_rows": 4,
+        "same_module_Atomic_Unit_rows": 0
+      },
+      "test_source_product_atomic_source3_atomic_normal": {
+        "fixture": {
+          "bytes": 539,
+          "sha256": "52acb2b2ca992ca205c2fd614185a4e0e6b53d35d4806f6bd8e997e682f8dda6",
+          "relation_to_original": "same_module_test_append_to_exact_original"
+        },
+        "costs_per_configuration": {
+          "compiler_N": 2951,
+          "runtime_N": 80,
+          "allocated": 930940,
+          "cumulative_peak": 266123,
+          "work": 1712786
+        },
+        "old_Unit_rows": 4,
+        "same_module_Atomic_Unit_rows": 4
+      }
+    },
+    "C_sha256": "bd5195ebc0a5903937beebc4f08b7c5a538c4bff9bcaa1421f49af801d294ee1",
+    "aggregate_oracle_limit": "Only atomic mode enters private answer via same-module assert(answer()==42). Final42 validates fixture aggregate; does not independently prove every CAS old/matched, each arithmetic operation, all five Ordering combinations or contention.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN"
+  }
+}
