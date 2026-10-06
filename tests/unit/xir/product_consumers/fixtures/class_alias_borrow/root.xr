@@ -1,0 +1,11 @@
+class Cell {
+  value: i64
+  constructor(value: i64) { this.value = value }
+}
+fn answer() -> i64 {
+  var cell = Cell(1)
+  var alias = cell
+  alias.value = 42
+  return cell.value
+}
+export fn consumerAnswer() -> i64 { return answer() }

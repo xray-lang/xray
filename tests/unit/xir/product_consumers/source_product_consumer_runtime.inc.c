@@ -16,10 +16,11 @@ typedef struct RuntimeProbe {
 
 static XrXirCallStatus runtime_drive(XrXirInstance *instance, uint32_t entry, size_t *ticks) {
     XrXirCallStatus status = xr_xir_instance_start(instance, entry, NULL, 0);
+    ConsumerCursor cursor = {0};
     while (status == XR_XIR_CALL_READY) {
         CHECK(*ticks < 4096);
         ++*ticks;
-        status = xr_xir_instance_poll_bounded(instance, 1).outcome.status;
+        status = consumer_advance(instance, &cursor, 1);
     }
     return status;
 }
@@ -100,7 +101,7 @@ static XrXirInstance *initialized(const Consumer *run, ConsumerOutput *output, X
     XrXirInstanceConfig config = consumer_config(output, sink);
     XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(run->program, &config, &instance) == XR_XIR_CALL_READY);
-    XrXirValue result = execute(instance, run->entry);
+    XrXirValue result = execute(instance, run->entry, 0);
     CHECK(result.type == XR_XIR_I64 && !result.payload);
     xr_xir_value_drop(&result);
     return instance;
@@ -117,11 +118,15 @@ static void cancel_prefixes(unsigned mode) {
     fixed_result(instance, XR_CONSUMER_EXPECTED);
     consumer_output_complete(&output);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
+    size_t pending_yields = 0;
     for (size_t prefix = 0; prefix < ticks; ++prefix) {
         instance = initialized(&run, &output, &sink);
         CHECK(xr_xir_instance_start(instance, run.answer, NULL, 0) == XR_XIR_CALL_READY);
+        ConsumerCursor cursor = {0};
         for (size_t tick = 0; tick < prefix; ++tick)
-            CHECK(xr_xir_instance_poll_bounded(instance, 1).outcome.status == XR_XIR_CALL_READY);
+            CHECK(consumer_advance(instance, &cursor, 1) == XR_XIR_CALL_READY);
+        if (cursor.pending)
+            ++pending_yields;
         CHECK(xr_xir_instance_cancel_current(instance) == XR_XIR_CALL_CANCEL_REQUESTED);
         XrXirCallStatus status;
         size_t drain = 0;
@@ -130,21 +135,27 @@ static void cancel_prefixes(unsigned mode) {
             status = xr_xir_instance_poll_bounded(instance, 1).outcome.status;
         } while (status == XR_XIR_CALL_READY);
         CHECK(status == XR_XIR_CALL_CANCELLED);
+        if (cursor.pending)
+            CHECK(xr_xir_instance_resume(instance, cursor.epoch, cursor.wake) == XR_XIR_CALL_BAD_STATE);
         XrXirValue untouched = {0};
         CHECK(xr_xir_instance_take_result(instance, &untouched) == XR_XIR_CALL_BAD_STATE);
         CHECK(!untouched.type && !untouched.payload);
         /* Cancellation preserves initialized module state and future calls. */
         consumer_output_reset(&output);
-        XrXirValue result = execute(instance, run.answer);
+        XrXirValue result = execute(instance, run.answer, consumer_yield_count());
         CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
         xr_xir_value_drop(&result);
         consumer_output_complete(&output);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
         printf("cancel prefix=%zu physical=0/0\n", prefix);
     }
+    CHECK(pending_yields == consumer_yield_count());
     release(&run);
     printf("cancel-summary case=%s mode=%u prefixes=%zu covered=%zu physical=0/0\n",
         XR_CONSUMER_NAME, mode, ticks, ticks);
+    if (pending_yields)
+        printf("cancel-yield-summary case=%s mode=%u pending-yields=%zu stale-wakes-rejected=%zu physical=0/0\n",
+            XR_CONSUMER_NAME, mode, pending_yields, pending_yields);
 }
 
 static void output_statuses(unsigned mode) {
@@ -172,7 +183,7 @@ static void output_statuses(unsigned mode) {
             CHECK(xr_xir_instance_take_result(instance, &untouched) == XR_XIR_CALL_BAD_STATE);
             CHECK(!untouched.type && !untouched.payload);
             consumer_output_reset(&output);
-            XrXirValue result = execute(instance, run.answer);
+            XrXirValue result = execute(instance, run.answer, consumer_yield_count());
             CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
             xr_xir_value_drop(&result);
             consumer_output_complete(&output);
