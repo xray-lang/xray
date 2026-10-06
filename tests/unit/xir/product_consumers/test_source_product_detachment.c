@@ -181,7 +181,7 @@ static void detach(const XrXirCompileContext *context, XrXirSourceProduct *first
 int main(int argc, char **argv) {
     CHECK(argc == 2 || (argc == 4 && !strcmp(argv[3], "--delete-source") && private_root(argv[2])));
     CHECK(!strcmp(argv[1], "generics") || !strcmp(argv[1], "callables") ||
-        !strcmp(argv[1], "single_module") || !strcmp(argv[1], "two_modules"));
+        !strcmp(argv[1], "single_module") || !strcmp(argv[1], "text_program") || !strcmp(argv[1], "two_modules"));
     char root[1024], file[1056];
     int length = argc == 4 ? snprintf(root, sizeof(root), "%s", argv[2]) :
         snprintf(root, sizeof(root), "%s/%s", XR_DETACHMENT_ROOT, argv[1]);

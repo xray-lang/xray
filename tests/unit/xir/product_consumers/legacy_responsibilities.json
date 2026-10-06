@@ -3212,6 +3212,7 @@
         "test_source_product_text_program_cancel_1",
         "test_source_product_text_program_cancel_2",
         "test_source_product_text_program_cancel_3",
+        "test_source_product_detachment_text_program",
         "test_source_product_text_program_output_status_0",
         "test_source_product_text_program_output_status_1",
         "test_source_product_text_program_output_status_2",
@@ -3227,8 +3228,8 @@
           "verification": "Each group position preserves prior bytes and exact closed output failure status, then the initialized Instance runs another successful call and releases physically."
         },
         "independent_product_determinism": {
-          "status": "OPEN",
-          "note": "Two independent producers remain a distinct original obligation beyond repeated emission from one producer."
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Two independent sessions publish byte-identical source/closed packets and actual C; private source files are physically removed before reader admission, and both readers survive producer destruction."
         },
         "original_operation_and_generated_spelling": {
           "status": "OPEN",

@@ -263,7 +263,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             current["candidate_replacement_gates"] = [f"{prefix}_{mode}" for mode in ("vm", "native", "mixed_even", "mixed_odd")]
             current["candidate_replacement_gates"] += [f"{prefix}_{kind}_{mode}"
                 for kind in ("axes", "compiler", "runtime", "cancel") for mode in range(4)]
-            if selected in ("generics", "callables", "single_module", "two_modules"):
+            if selected in ("generics", "callables", "single_module", "two_modules", "text_program"):
                 current["candidate_replacement_gates"].append(f"test_source_product_detachment_{selected}")
             if selected == "generics":
                 current["additional_legacy_obligations"] = {
@@ -305,8 +305,8 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                         "verification": "Every successful call verifies original 48 rendered bytes and three exact string/bool/rune/i64 groups independently in each backend and Instance."},
                     "provider_failure_cleanup": {"status": "IMPLEMENTED_NOT_QUALIFIED",
                         "verification": "Each group position preserves prior bytes and exact closed output failure status, then the initialized Instance runs another successful call and releases physically."},
-                    "independent_product_determinism": {"status": "OPEN",
-                        "note": "Two independent producers remain a distinct original obligation beyond repeated emission from one producer."},
+                    "independent_product_determinism": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Two independent sessions publish byte-identical source/closed packets and actual C; private source files are physically removed before reader admission, and both readers survive producer destruction."},
                     "original_operation_and_generated_spelling": {"status": "OPEN",
                         "note": "Original owner-copy/drop, provider requirement and operation count assertions and obsolete generated spelling need a reviewed semantic mapping."},
                     "original_private_executor_step_identity": {"status": "OPEN",
