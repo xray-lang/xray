@@ -234,3 +234,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_seman
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_writer_budget_occupied.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_semantic67_writer_prefix_fi.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_allocation_scenario0.cmake")

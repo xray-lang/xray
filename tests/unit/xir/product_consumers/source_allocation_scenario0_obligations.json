@@ -1,0 +1,278 @@
+{
+  "status": "CANDIDATE_STATIC_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "source_family": "tests/unit/program/test_xr_program_source_allocations.c",
+  "original_whole_file": {
+    "archive_bytes": 9562,
+    "archive_sha256": "6fa8b7fb17e51d584098709ac6ce01394172dfa0915e4c516bcdd7a0a29c7d62",
+    "worker_bytes": 9562,
+    "worker_sha256": "6fa8b7fb17e51d584098709ac6ce01394172dfa0915e4c516bcdd7a0a29c7d62",
+    "LF_equal": true
+  },
+  "original_run_body": {
+    "bytes": 5745,
+    "sha256": "b040bbb817bb2f13cb4e59493d966824dd9352ad7667d860022863fb9e385de1",
+    "REQUIRE_calls": 17
+  },
+  "original_main_body": {
+    "bytes": 624,
+    "sha256": "971925978b260afc6fc96ce66d526ddd23a759588f1a9d2455327d22abb65f93",
+    "REQUIRE_calls": 2
+  },
+  "original_scenarios": [
+    {
+      "scenario": 0,
+      "bytes": 119,
+      "sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+      "source": "fn answer() -> i64 { return 0 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    },
+    {
+      "scenario": 1,
+      "bytes": 305,
+      "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "source": "fn answer() -> i64 {\n const counter = Atomic(40)\n const alias = counter\n var (old, matched) = alias.compareExchange(40, 42)\n counter.store(42, Ordering.Release)\n counter.add(1)\n counter.sub(1)\n return counter.load()\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    },
+    {
+      "scenario": 2,
+      "bytes": 352,
+      "sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd",
+      "source": "fn answer() -> i64 {\n const flag = Atomic(false)\n const alias = flag\n var (old, matched) = alias.compareExchange(false, true)\n flag.store(true, Ordering.AcquireRelease)\n const before = flag.toggle(Ordering.Relaxed)\n if (matched && before) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    },
+    {
+      "scenario": 3,
+      "bytes": 483,
+      "sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "source": "fn identity(value: f64) -> f64 { return value }\nfn answer() -> i64 {\n const value = identity(1.5)\n const other = identity(2.25)\n const counter = Atomic(value)\n const old = counter.fetchAdd(other)\n var (before, matched) = counter.compareExchange(3.75, 1.5)\n counter.store(1.5, Ordering.Release)\n const text = counter.load().toString()\n if (old < other && len(text) == 3) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    },
+    {
+      "scenario": 4,
+      "bytes": 208,
+      "sha256": "14b80d72fa93d3c58fe6c4af421044fe81529b726a6d3c067f4bb6a85618f848",
+      "source": "type State = { token:i64, enabled:bool, nested:{ text:string }? }\nvar state:State?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    },
+    {
+      "scenario": 5,
+      "bytes": 377,
+      "sha256": "ba1de6818baaf15e872bfe1be06bd6f95793d053c39320c946c21dc95a867810",
+      "source": "type Child = { text:string }\ntype State = { token:i64, child:Child }\nfn answer() -> i64 {\n var child:Child={text:\"before\"}\n var state:State={child:child,token:7}\n var alias=state\n alias.token=42\n alias.child.text=\"after\"\n if (state.child.text == \"after\") { return state.token }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    },
+    {
+      "scenario": 6,
+      "bytes": 177,
+      "sha256": "2e8a3680cd3d51d65977a7ace39b2f27a479bf547946944630dc290c1e282fa4",
+      "source": "import { NetConn } from net\nvar connection:NetConn?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    },
+    {
+      "scenario": 7,
+      "bytes": 278,
+      "sha256": "2a9bfcbf2a340eb9dc70e30331753a2326263355154bafd2005eb5c0b3eca1df",
+      "source": "fn answer() -> i64 {\n var text = StringBuilder()\n text.append(\"first\").append(42)\n const snapshot = text.toString()\n text.clear().append(\"second\")\n assert(snapshot == \"first42\")\n return 42\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+    }
+  ],
+  "selected_source": {
+    "scenario": 0,
+    "bytes": 119,
+    "sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+    "source": "fn answer() -> i64 { return 0 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+    "relation": "EXACT_ORIGINAL_NO_WRAPPER_NO_EXPORT_REWRITE"
+  },
+  "normal_fixed_oracles": {
+    "source_input": "Complete119B byte equality, not substring or observed copied expectation",
+    "SourceProduct_status": "XR_XIR_OK; stage/location/status/path diagnostics printed on real rejection",
+    "source_and_closed_packets": "Each public Checked reader admission succeeds; root answer private i64 return0/exported private i64 return42/checkAnswer private TEST Unit timeout0",
+    "root_source_path": "One source query path equals actual independently supplied fixture file after only slash normalization",
+    "test_metadata": "Exactly one test; name checkAnswer length11; roleTEST; timeout0; function refers to closed root original checkAnswer",
+    "checked_detachment": "Destroy session and SourceProduct; both Checked readers still verify; separate full closed packet remains independently readable/verifiable",
+    "Lowered": "Public lower and verify; root function IDs/roles and constant return oracles remain same; source/closedChecked/retained packet destroyed before seal",
+    "Program": "Public vm_program_take consumes and clears actual detached Lowered, then two independent Instances retain code after caller Program drop",
+    "Instance": "Each beginsNEW; public ordinary starts of private initializer/answer/exported/test and privileged test starts of answer/exported/initializer all BAD_ARGUMENT. All7 rejections together preserve compiler attempts and all5 compiler-ledger fields/runtime attempts+physical blocks/bytes/Instance NEW. Canonical entry returnsI640; original checkAnswer returnsUnit twice; final stateREADY.",
+    "result_ownership": "All taken values complete type/reserved/payload checked and dropped; common cleanup also owns any pending result",
+    "physical_release": "Actual finite compiler observer and runtime allocation/table counters; all owners destroyed before ledger live returns owner baseline, final release requires compiler0/0 +runtime0/0 +tableNULL/capacity0"
+  },
+  "limits": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000,
+    "model": "One explicit fresh shared finite compiler ledger; owner construction included. No budget reset or context replacement."
+  },
+  "measurement_semantics": {
+    "compiler_sites": "Actual owner+original-input preflight+session+SourceProduct+two readers+full closed writer+reread+lower+Program seal normal ordinal count; UNMEASURED_NOT_RUN; not original subject-only8-family FI denominator",
+    "runtime_sites": "Actual two Instances/new/entry/original test executions; UNMEASURED_NOT_RUN; neither native nor an injected sweep",
+    "stage_stats": "Print cumulative allocated/live/peak/work and actual allocator attempts at each named ownership boundary; not per-stage copied normal constants"
+  },
+  "original_assertion_responsibilities": [
+    {
+      "ordinal": 1,
+      "original_exact_assert": "scenario < XR_COUNTOF(sources)",
+      "domain": "scope",
+      "mapping": "All original eight source bodies are preserved; only source0 has a candidate. Seven others OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 2,
+      "original_exact_assert": "source_build_fixture_init(&fixture, source, NULL)",
+      "domain": "fixture construction",
+      "mapping": "Public finite owner/session/file identity and original119B preflight candidate; VM-backed old fixture retired. Actual run NOT_RUN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 3,
+      "original_exact_assert": "toml != NULL",
+      "domain": "native manifest parse",
+      "mapping": "Original164B TOML retained; native export plan integration OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 4,
+      "original_exact_assert": "plan && plan->valid",
+      "domain": "native plan admission",
+      "mapping": "Old valid plan/hidden/header/native ABI/external symbol metadata remain OPEN; no replacement claim.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 5,
+      "original_exact_assert": "live_count == 0u",
+      "domain": "pre-build physical zero",
+      "mapping": "Existing compiler observer checks initial physical0; candidate NOT_RUN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 6,
+      "original_exact_assert": "status == XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY",
+      "domain": "all injected statuses OOM",
+      "mapping": "Whole SourceProduct and downstream actual compiler FI OPEN; no injection or shortened denominator.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 7,
+      "original_exact_assert": "diagnostic.message[0] != '\\0'",
+      "domain": "nonempty OOM diagnostic",
+      "mapping": "Failure reporting retains stage/status/path/location; every injected OOM diagnostic check OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 8,
+      "original_exact_assert": "product.program == NULL && product.artifact.bytes == NULL",
+      "domain": "empty failed Program and artifact",
+      "mapping": "Opaque new product pointer failure preservation plus Program/artifact owner cleanup is proposed; actual injected failure/output-prefix proof OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 9,
+      "original_exact_assert": "product.exports == NULL && product.export_function_ids == NULL",
+      "domain": "empty failed export arrays",
+      "mapping": "Retired representation has no equivalent native export metadata query in SourceProduct; original responsibility OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 10,
+      "original_exact_assert": "product.tests == NULL && product.test_entry_count == 0u",
+      "domain": "empty failed tests",
+      "mapping": "New owned test query exists; public failure pointer preservation to be verified per actual ordinal. FI OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 11,
+      "original_exact_assert": "product.export_count == 0u && product.retained_function_count == 0u",
+      "domain": "empty failed counts",
+      "mapping": "Original retained/export counts retained; no false equalities from canonical/test roles. OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 12,
+      "original_exact_assert": "live_count == 0u",
+      "domain": "physical zero after each OOM",
+      "mapping": "Compiler observer finite owner and runtime physical/table observation prepared, not executed. All OOM ordinals OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 13,
+      "original_exact_assert": "status == XR_PROGRAM_SOURCE_BUILD_OK",
+      "domain": "normal Source success",
+      "mapping": "Exact original source0 public SourceProduct success fixed oracle prepared; normal NOT_RUN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 14,
+      "original_exact_assert": "product.export_count == 2u && product.test_entry_count == 1u",
+      "domain": "two exports and one test",
+      "mapping": "One original root @test exact role/name/function/timeout prepared; original two external native exports OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 15,
+      "original_exact_assert": "strcmp(product.exports[0].symbol, \"external_answer\") == 0",
+      "domain": "external_answer spelling",
+      "mapping": "Original external_answer/native hidden/header symbol ABI preserved164B. OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 16,
+      "original_exact_assert": "product.export_function_ids[0] < xr_validated_program_function_count(product.program)",
+      "domain": "export function valid ID",
+      "mapping": "Test current closed-ID bounds and root identity prepared; old export_function_ids and symbol correspondence OPEN.",
+      "status": "OPEN_NOT_VALIDATED"
+    },
+    {
+      "ordinal": 17,
+      "original_exact_assert": "live_count == 0u",
+      "domain": "final physical release",
+      "mapping": "Original lifecycle sourcefixture/plan/product all preserved; public source/session/Checked/Lowered/Program/Instance/value/resource cleanup candidate. Actual normal/FI release NOT_RUN.",
+      "status": "OPEN_NOT_VALIDATED"
+    }
+  ],
+  "original_main_responsibilities": [
+    {
+      "original_exact_assert": "count > 0u",
+      "status": "OPEN",
+      "reason": "Original per-source actual N>0 and second fresh normal exactN replay preserved; one current normal probe cannot replace eight-family full FI."
+    },
+    {
+      "original_exact_assert": "run_allocation_case(scenario, 0u) == count",
+      "status": "OPEN",
+      "reason": "Original per-source actual N>0 and second fresh normal exactN replay preserved; one current normal probe cannot replace eight-family full FI."
+    }
+  ],
+  "native_export_responsibilities": {
+    "bytes": 164,
+    "sha256": "cf1a1e14d20fafca09a649f47ddcba036ea57a27e5febfeb5184518c05c45ac7",
+    "body": "[[export.c]]\nxray = \"exported\"\nsymbol = \"external_answer\"\nabi = \"native\"\nvisibility = \"hidden\"\nheader = true\n[[export.c]]\nxray = \"answer\"\nsymbol = \"external_entry\"\n"
+  },
+  "native_export_status": "OPEN: external_answer/external_entry/native ABI/hidden/header/twoexport mapping not implemented or tested by this candidate. Original answer named entry differs from new canonical $entry; that authority change is explicit OPEN.",
+  "source_scenario4": "Original208B nullable State/root mutable state preserved unchanged; normal/FI/native OPEN",
+  "source_scenario7": "Original278B StringBuilder snapshot/clear/chain source preserved unchanged; normal/FI/native OPEN",
+  "fault_followup": [
+    "Record actual SourceProduct whole-run and subject-stage N per configuration from this exact source/producer; no old1932/FI6/WriterN10/N12 borrowing.",
+    "Fresh process/finite owner per ordinal, public output pointer initially empty or real occupied product; preserve pointer/complete packet prefix on failure; diagnosis stage identifies exact called/not-entered stage.",
+    "Sweep actual compiler sites with public cleanup and actual hit1/OOM/nonempty diagnostic as applicable; downstream success artifacts remain separately owned; include diagnostics retained snapshots/path cleanup.",
+    "Measure fresh normal A/L/W first, then exact/minus1 independently; report real first failing phase and complete output preservation; do not claim writer/runtime refusal when Source rejected earlier.",
+    "Independent runtime allocation sweep for sealed Program/Instances/result/drop and cleanup, then corresponding native current source projection if and when legacy export ABI responsibility has an admitted public replacement."
+  ],
+  "registration": {
+    "target": "test_source_product_allocation_scenario0",
+    "normal_CTest": "test_source_product_allocation_scenario0_normal",
+    "new_translation_units": 1,
+    "default_normal_tests": 1,
+    "TIMEOUT_seconds": 120,
+    "FI_registered": 0,
+    "axes_registered": 0,
+    "native_targets": 0,
+    "scope": "Only separate source consumer; no shared driver/inventory/status denominator edits"
+  },
+  "validation": {
+    "build": "NOT_RUN",
+    "normal": "NOT_RUN",
+    "compiler_FI": "NOT_RUN",
+    "runtime_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "original_8_scenarios": "OPEN_UNCHANGED"
+  },
+  "review_revision": {
+    "prior_r1_manifest_sha256": "3499cd26344c1ea739fdb712f19402f126dc7bfd2917149917c9bc312710644e",
+    "finding": "Missing explicit ordinary initializer refusal",
+    "fix": "Add initializer ordinary BAD_ARGUMENT, freeze both allocation domains and all public ledger stats around complete permission-refusal prefix; no source/budget/API change",
+    "scope": "STATIC_ONLY_NOT_BUILT_NOT_RUN"
+  }
+}
