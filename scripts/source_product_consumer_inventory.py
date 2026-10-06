@@ -45,6 +45,7 @@ SELECTED = {
     "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors": "cross_module_static_coroutine",
     "source_owner_runs_each_dense_coroutine_state_across_private_executors": "multi_safepoint",
     "source_owner_folds_constructor_literal_and_reordered_stores": "constructor_folding",
+    "source_owner_module_initializer_is_a_canonical_entry": "canonical_initializer",
     **NUMERIC.MATRICES,
 }
 PROBES = {
@@ -329,7 +330,7 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                 if literal in literals}
             for filename, content in additional_files.items():
                 files[fixture.parent / filename] = content
-            adapter = b"export fn consumerAnswer() -> i64 { return answer() }\n"
+            adapter = b"" if selected == "canonical_initializer" else b"export fn consumerAnswer() -> i64 { return answer() }\n"
             files[fixture] = data + adapter
             current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
                 "sha256": digest(data + adapter), "original_prefix_sha256": digest(data),
@@ -340,6 +341,24 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             if selected == "constructor_folding":
                 current["initial_projection"]["expected_i64"] = constructor_oracle(body, literals)
                 current["initial_projection"]["scope"] = "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
+            if selected == "canonical_initializer":
+                if data != b"struct Box<T> { value: T }\nprint(Box<i64>{value: 41}.value + 1)\n":
+                    raise ValueError("original root initializer source differs")
+                golden = b"42\n"
+                files[fixture.parent / "expected.stdout"] = golden
+                files[fixture.parent / "expected_output.h"] = (
+                    "/*\n * xray - Lightweight typed scripting with native concurrency\n"
+                    " * https://www.xray-lang.org\n *\n"
+                    " * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>\n"
+                    " * Licensed under the MIT License\n *\n"
+                    " * expected_output.h - Independent original initializer output\n *\n"
+                    " * KEY CONCEPT:\n *   Expected bytes follow the original print expression, 41 + 1.\n */\n"
+                    "#ifndef SOURCE_PRODUCT_INITIALIZER_EXPECTED_OUTPUT_H\n#define SOURCE_PRODUCT_INITIALIZER_EXPECTED_OUTPUT_H\n"
+                    "static const char consumer_initializer_golden[] = {52,50,10,0};\n"
+                    "#endif // SOURCE_PRODUCT_INITIALIZER_EXPECTED_OUTPUT_H\n").encode()
+                current["initial_projection"].update(entry_adapter=None, entry="canonical root entry", expected_i64=0,
+                    output_golden={"bytes": len(golden), "sha256": digest(golden), "hex": golden.hex(), "groups_per_instance": 1},
+                    scope="Exact original structural-only module initializer source, without an adapter. Added independent execution proof is one typed i64 output 42/newline per Instance, including repeated canonical entry calls; the entry protocol returns zero.")
             if additional_files:
                 current["initial_projection"]["additional_files"] = {filename: {
                     "bytes": len(content), "sha256": digest(content)}
@@ -383,6 +402,16 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             current["candidate_replacement_gates"] = [f"{prefix}_{mode}" for mode in ("vm", "native", "mixed_even", "mixed_odd")]
             current["candidate_replacement_gates"] += [f"{prefix}_{kind}_{mode}"
                 for kind in ("axes", "compiler", "runtime", "cancel") for mode in range(4)]
+            if selected == "canonical_initializer":
+                current["candidate_replacement_gates"] += [f"{prefix}_output_status_{mode}" for mode in range(4)]
+                current["projected_obligations"]["original_source_and_fixed_result"]["verification"] = "The entire original two-line structural-only input is retained without an adapter. Added independent output is one i64 value 42/newline per Instance; the canonical entry protocol returns zero."
+                current["projected_obligations"]["host_authority"]["verification"] = "Direct host starts of the private module initializer are rejected without allocation or initialization; only the canonical root entry initializes it."
+                current["additional_legacy_obligations"] = {
+                    "original_generic_aggregate_and_field_counts": {"status": "IMPLEMENTED_NOT_QUALIFIED", "verification": "Closed Checked retains exactly one Box<i64> STRUCT_NEW with value 41, one i64 STRUCT_GET and one typed PRINT of the field plus one."},
+                    "one_time_initialization_output": {"status": "IMPLEMENTED_NOT_QUALIFIED", "verification": "Two isolated Instances each print typed i64 42 and exact bytes 42/newline once. Repeated root entries do not repeat output; all four backends use independent oracles."},
+                    "sticky_provider_failure_and_isolation": {"status": "IMPLEMENTED_NOT_QUALIFIED", "verification": "Six output-provider statuses fail initialization, stick without re-execution/allocation, preserve an owned failure copy and leave an independent Instance successful."},
+                    "cold_and_warm_cancellation": {"status": "IMPLEMENTED_NOT_QUALIFIED", "verification": "Every measured quantum-one prefix of first initialization and repeated entry is cancelled. Public module publication events independently require sticky FAILED before publication and READY after publication, with at most one original output and release of both physical domains."},
+                    "old_entry_and_native_representation": {"status": "OPEN", "note": "Original one-function/entry-zero/provider-requirement-one and int-main emission assertions need a reviewed mapping to explicit Unit module initializer plus canonical i64 entry and sealed native ProgramSpec. No legacy main or selective-program format is restored."}}
             if selected == "narrow_array":
                 current["candidate_replacement_gates"] = [gate for gate in current["candidate_replacement_gates"]
                     if not re.fullmatch(rf"{prefix}_cancel_[0-3]", gate)]
@@ -544,7 +573,9 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
     for case in manifest["cases"]:
         if case["name"] not in SELECTED:
             continue
-        if SELECTED[case["name"]] == "constructor_folding":
+        if SELECTED[case["name"]] == "canonical_initializer":
+            expected[case["name"]] = 0
+        elif SELECTED[case["name"]] == "constructor_folding":
             body = bodies[case["name"]][0]
             expected[case["name"]] = constructor_oracle(body, static_strings(body))
         elif SELECTED[case["name"]] == "multi_safepoint":

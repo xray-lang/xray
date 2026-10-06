@@ -48,7 +48,8 @@ static RuntimeProbe runtime_probe(const Consumer *run, size_t failure) {
         if (probe.status == XR_XIR_CALL_RETURNED) {
             fixed_result(instance, 0);
             for (unsigned repeat = 0; repeat < consumer_repeat_count(); ++repeat) {
-                consumer_output_reset(&output);
+                if (!consumer_initializer_case())
+                    consumer_output_reset(&output);
                 probe.status = runtime_drive(instance, run->answer, &probe.ticks);
                 if (probe.status != XR_XIR_CALL_RETURNED)
                     break;
@@ -107,6 +108,67 @@ static XrXirInstance *initialized(const Consumer *run, ConsumerOutput *output, X
     return instance;
 }
 
+static void initializer_cancel_prefixes(const Consumer *run) {
+    ConsumerOutput output = {0};
+    XrXirOutputSink sink = {0};
+    ConsumerInitializerTrace trace = {0};
+    XrXirInstanceConfig config = consumer_config(&output, &sink);
+    config.trace = consumer_initializer_trace;
+    config.trace_context = &trace;
+    XrXirInstance *instance = NULL;
+    CHECK(xr_xir_instance_new(run->program, &config, &instance) == XR_XIR_CALL_READY);
+    size_t ticks = 0;
+    CHECK(runtime_drive(instance, run->entry, &ticks) == XR_XIR_CALL_RETURNED && ticks);
+    fixed_result(instance, 0);
+    consumer_output_complete(&output);
+    CHECK(trace.begins == 1 && trace.ready == 1);
+    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
+    for (size_t prefix = 0; prefix < ticks; ++prefix) {
+        config = consumer_config(&output, &sink);
+        trace = (ConsumerInitializerTrace){0};
+        config.trace = consumer_initializer_trace;
+        config.trace_context = &trace;
+        CHECK(xr_xir_instance_new(run->program, &config, &instance) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_start(instance, run->entry, NULL, 0) == XR_XIR_CALL_READY);
+        ConsumerCursor cursor = {0};
+        for (size_t tick = 0; tick < prefix; ++tick)
+            CHECK(consumer_advance(instance, &cursor, 1) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_cancel_current(instance) == XR_XIR_CALL_CANCEL_REQUESTED);
+        XrXirCallStatus status;
+        size_t drain = 0;
+        do {
+            CHECK(++drain < 4096);
+            status = xr_xir_instance_poll_bounded(instance, 1).outcome.status;
+        } while (status == XR_XIR_CALL_READY);
+        CHECK(status == XR_XIR_CALL_CANCELLED && !output.rejected);
+        CHECK((!output.groups && !output.bytes) || (output.groups == 1 && output.bytes == 3));
+        XrXirValue untouched = {0};
+        CHECK(xr_xir_instance_take_result(instance, &untouched) == XR_XIR_CALL_BAD_STATE);
+        CHECK(!untouched.type && !untouched.payload);
+        XrXirInstanceState state = xr_xir_instance_state(instance);
+        CHECK(state == (trace.ready ? XR_XIR_INSTANCE_READY : XR_XIR_INSTANCE_FAILED));
+        if (state == XR_XIR_INSTANCE_FAILED) {
+            size_t attempts = runtime_attempts;
+            CHECK(xr_xir_instance_start(instance, run->entry, NULL, 0) == XR_XIR_CALL_CANCELLED);
+            CHECK(runtime_attempts == attempts);
+            XrXirCallResult failure = {0};
+            CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_CANCELLED);
+            CHECK(failure.status == XR_XIR_CALL_CANCELLED);
+            xr_xir_call_result_drop(&failure);
+        } else {
+            CHECK(state == XR_XIR_INSTANCE_READY && trace.begins == 1);
+            XrXirValue result = execute(instance, run->entry, 0);
+            CHECK(result.type == XR_XIR_I64 && !result.payload);
+            xr_xir_value_drop(&result);
+            consumer_output_complete(&output);
+        }
+        CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
+        printf("initializer-cancel prefix=%zu state=%u begins=%u ready=%u groups=%zu bytes=%zu runtime-physical=0/0\n",
+            prefix, state, trace.begins, trace.ready, output.groups, output.bytes);
+    }
+    printf("initializer-cancel-summary prefixes=%zu covered=%zu runtime-physical=0/0\n", ticks, ticks);
+}
+
 static void cancel_prefixes(unsigned mode) {
     CHECK(!consumer_stateful_case());
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
@@ -142,7 +204,8 @@ static void cancel_prefixes(unsigned mode) {
         CHECK(xr_xir_instance_take_result(instance, &untouched) == XR_XIR_CALL_BAD_STATE);
         CHECK(!untouched.type && !untouched.payload);
         /* Cancellation preserves initialized module state and future calls. */
-        consumer_output_reset(&output);
+        if (!consumer_initializer_case())
+            consumer_output_reset(&output);
         XrXirValue result = execute(instance, run.answer, consumer_yield_count());
         CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
         xr_xir_value_drop(&result);
@@ -151,6 +214,8 @@ static void cancel_prefixes(unsigned mode) {
         printf("cancel prefix=%zu physical=0/0\n", prefix);
     }
     CHECK(pending_yields == consumer_yield_count());
+    if (consumer_initializer_case())
+        initializer_cancel_prefixes(&run);
     release(&run);
     printf("cancel-summary case=%s mode=%u prefixes=%zu covered=%zu physical=0/0\n",
         XR_CONSUMER_NAME, mode, ticks, ticks);
@@ -159,7 +224,57 @@ static void cancel_prefixes(unsigned mode) {
             XR_CONSUMER_NAME, mode, pending_yields, pending_yields);
 }
 
+static void initializer_output_statuses(unsigned mode) {
+    CHECK(consumer_initializer_case());
+    const XrXirOutputStatus statuses[] = {XR_XIR_OUTPUT_ERROR, XR_XIR_OUTPUT_OOM, XR_XIR_OUTPUT_LIMIT,
+        XR_XIR_OUTPUT_BAD_ARGUMENT, XR_XIR_OUTPUT_BAD_ABI, (XrXirOutputStatus)99};
+    const XrXirCallStatus expected[] = {XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_OOM, XR_XIR_CALL_LIMIT,
+        XR_XIR_CALL_BAD_ARGUMENT, XR_XIR_CALL_BAD_ABI, XR_XIR_CALL_BAD_ARGUMENT};
+    Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
+    CHECK(run.status == XR_XIR_OK);
+    for (unsigned kind = 0; kind < sizeof(statuses) / sizeof(statuses[0]); ++kind) {
+        ConsumerOutput output = {0};
+        XrXirOutputSink sink = {0};
+        XrXirInstanceConfig config = consumer_config(&output, &sink);
+        output.reject_at = 1;
+        output.reject_status = statuses[kind];
+        XrXirInstance *instance = NULL;
+        CHECK(xr_xir_instance_new(run.program, &config, &instance) == XR_XIR_CALL_READY);
+        size_t ticks = 0;
+        CHECK(runtime_drive(instance, run.entry, &ticks) == expected[kind]);
+        CHECK(output.rejected && output.groups == 1 && !output.bytes);
+        CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED);
+        size_t attempts = runtime_attempts;
+        CHECK(xr_xir_instance_start(instance, run.entry, NULL, 0) == expected[kind]);
+        CHECK(runtime_attempts == attempts && output.groups == 1 && !output.bytes);
+        XrXirValue untouched = {0};
+        CHECK(xr_xir_instance_take_result(instance, &untouched) == XR_XIR_CALL_BAD_STATE);
+        CHECK(!untouched.type && !untouched.payload);
+        XrXirCallResult failure = {0};
+        CHECK(xr_xir_instance_copy_failure(instance, &failure) == expected[kind]);
+        CHECK(failure.status == expected[kind]);
+        CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+        CHECK(failure.status == expected[kind]);
+        xr_xir_call_result_drop(&failure);
+        CHECK(!runtime_live && !runtime_bytes);
+        instance = initialized(&run, &output, &sink);
+        consumer_output_complete(&output);
+        XrXirValue result = execute(instance, run.entry, 0);
+        CHECK(result.type == XR_XIR_I64 && !result.payload);
+        xr_xir_value_drop(&result);
+        consumer_output_complete(&output);
+        CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
+        printf("initializer-output-status kind=%u status=%u sticky=1 isolated=1 runtime-physical=0/0\n", kind, expected[kind]);
+    }
+    release(&run);
+    printf("initializer-output-status-summary case=%s mode=%u statuses=6 covered=6 physical=0/0\n", XR_CONSUMER_NAME, mode);
+}
+
 static void output_statuses(unsigned mode) {
+    if (consumer_initializer_case()) {
+        initializer_output_statuses(mode);
+        return;
+    }
     CHECK(consumer_text_case());
     const XrXirOutputStatus statuses[] = {XR_XIR_OUTPUT_ERROR, XR_XIR_OUTPUT_OOM, XR_XIR_OUTPUT_LIMIT,
         XR_XIR_OUTPUT_BAD_ARGUMENT, XR_XIR_OUTPUT_BAD_ABI, (XrXirOutputStatus)99};

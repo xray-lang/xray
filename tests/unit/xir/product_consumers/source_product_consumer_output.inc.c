@@ -12,6 +12,7 @@
  */
 #include "xir/xxir_output.h"
 #include "fixtures/text_program/expected_output.h"
+#include "fixtures/canonical_initializer/expected_output.h"
 
 typedef struct ConsumerOutput {
     size_t groups, bytes, reject_at;
@@ -21,7 +22,15 @@ typedef struct ConsumerOutput {
 } ConsumerOutput;
 
 static bool consumer_text_case(void) {
-    return !strcmp(XR_CONSUMER_NAME, "text_program");
+    return !strcmp(XR_CONSUMER_NAME, "text_program") || consumer_initializer_case();
+}
+
+static size_t consumer_output_golden_length(void) {
+    return consumer_initializer_case() ? sizeof(consumer_initializer_golden) - 1 : sizeof(consumer_text_golden) - 1;
+}
+
+static const char *consumer_output_golden(void) {
+    return consumer_initializer_case() ? consumer_initializer_golden : consumer_text_golden;
 }
 
 static void consumer_output_reset(ConsumerOutput *output) {
@@ -40,9 +49,9 @@ static XrXirOutputStatus consumer_output_bytes(void *context, XrXirOutputStream 
     const char *bytes, size_t length) {
     ConsumerOutput *output = context;
     CHECK(stream == XR_XIR_STDOUT && bytes && length);
-    CHECK(output->bytes <= sizeof(consumer_text_golden) - 1);
-    CHECK(length <= sizeof(consumer_text_golden) - 1 - output->bytes);
-    CHECK(!memcmp(bytes, consumer_text_golden + output->bytes, length));
+    CHECK(output->bytes <= consumer_output_golden_length());
+    CHECK(length <= consumer_output_golden_length() - output->bytes);
+    CHECK(!memcmp(bytes, consumer_output_golden() + output->bytes, length));
     if (output->groups == output->reject_at) {
         output->rejected = true;
         return output->reject_status;
@@ -57,8 +66,10 @@ static XrXirOutputStatus consumer_output_group(void *context, const XrXirOutputG
     XrXirOutputSink *sink = context;
     ConsumerOutput *output = sink->context;
     CHECK(group && group->stream == XR_XIR_STDOUT && group->line && group->values);
-    CHECK(output->groups < 3 && !output->rejected);
-    if (!output->groups) {
+    CHECK(output->groups < (consumer_initializer_case() ? 1u : 3u) && !output->rejected);
+    if (consumer_initializer_case()) {
+        CHECK(group->count == 1 && group->values[0].type == XR_XIR_I64 && group->values[0].payload == 42);
+    } else if (!output->groups) {
         CHECK(group->count == 1);
         consumer_output_string(&group->values[0], "hello, world");
     } else if (output->groups == 1) {
@@ -95,6 +106,7 @@ static void consumer_output_complete(const ConsumerOutput *output) {
         CHECK(!output->groups && !output->bytes);
         return;
     }
-    CHECK(!output->rejected && output->groups == 3 && output->bytes == sizeof(consumer_text_golden) - 1);
-    CHECK(!memcmp(output->text, consumer_text_golden, output->bytes));
+    CHECK(!output->rejected && output->groups == (consumer_initializer_case() ? 1u : 3u));
+    CHECK(output->bytes == consumer_output_golden_length());
+    CHECK(!memcmp(output->text, consumer_output_golden(), output->bytes));
 }

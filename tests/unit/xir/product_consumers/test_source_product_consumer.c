@@ -73,8 +73,11 @@ static XrCompileResourceStats stats(const Consumer *run) {
 }
 
 #include "source_product_consumer_nominal.inc.c"
+#include "source_product_consumer_initializers.inc.c"
 
 static void closed_shape(const XrXirModule *module, uint32_t answer) {
+    if (consumer_initializer_case())
+        consumer_initializer_shape(module);
     if (!strcmp(XR_CONSUMER_NAME, "constructor_folding"))
         constructor_shape(module);
     if (strcmp(XR_CONSUMER_NAME, "generics"))
@@ -223,7 +226,13 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
             run.private_answer = f;
         }
     }
-    CHECK(run.answer != UINT32_MAX && run.private_answer != UINT32_MAX);
+    if (consumer_initializer_case()) {
+        CHECK(run.answer == UINT32_MAX && run.private_answer == UINT32_MAX);
+        run.answer = run.entry;
+        run.private_answer = module->declarations->modules[module->declarations->root_module].initializer;
+    } else {
+        CHECK(run.answer != UINT32_MAX && run.private_answer != UINT32_MAX);
+    }
     closed_shape(module, run.private_answer);
     /* Subsequent reads and execution own all data after the parse session dies. */
     xr_compile_session_free(session);
@@ -322,13 +331,19 @@ static void normal(Consumer *run) {
         XrXirValue initialized = execute(instances[i], run->entry, 0);
         CHECK(initialized.type == XR_XIR_I64 && initialized.payload == 0);
         xr_xir_value_drop(&initialized);
+        if (consumer_initializer_case())
+            consumer_output_complete(&outputs[i]);
         for (unsigned repeat = 0; repeat < consumer_repeat_count(); ++repeat) {
-            consumer_output_reset(&outputs[i]);
+            if (!consumer_initializer_case())
+                consumer_output_reset(&outputs[i]);
             XrXirValue result = execute(instances[i], run->answer, consumer_yield_count());
             CHECK(result.type == XR_XIR_I64 && (int64_t)result.payload == XR_CONSUMER_EXPECTED);
             xr_xir_value_drop(&result);
             consumer_output_complete(&outputs[i]);
         }
+        if (consumer_initializer_case())
+            printf("initializer instance=%u groups=%zu bytes=%zu entry=0 repeats=%u\n",
+                i, outputs[i].groups, outputs[i].bytes, consumer_repeat_count());
         if (consumer_stateful_case())
             consumer_stateful_finish(instances[i], run->answer, i);
         else

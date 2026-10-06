@@ -80,7 +80,7 @@ foreach(case IN LISTS product_consumer_cases)
                 --evidence "${CMAKE_BINARY_DIR}/consumer-fault-evidence/${case}-${mode}")
         set_tests_properties(${producer}_compiler_${mode} PROPERTIES TIMEOUT 600 PROCESSORS 8
             LABELS "unit;xir;source-product;program-consumer;ownership;compiler-faults")
-        if(case STREQUAL "text_program")
+        if(case STREQUAL "text_program" OR case STREQUAL "canonical_initializer")
             add_test(NAME ${producer}_output_status_${mode} COMMAND ${executable} ${mode} --output-status)
             set_tests_properties(${producer}_output_status_${mode} PROPERTIES TIMEOUT 120
                 LABELS "unit;xir;source-product;program-consumer;ownership;output")
