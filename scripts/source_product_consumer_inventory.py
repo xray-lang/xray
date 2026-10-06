@@ -23,12 +23,14 @@ SELECTED = {
     "source_owner_array_append_preserves_class_identity": "class_identity",
     "source_owner_value_struct_string_copy_preserves_original": "struct_string",
     "source_owner_explicit_bool_conditions_execute": "bool_conditions",
+    "source_owner_single_module_is_deterministic_and_detached": "single_module",
 }
 PROBES = {
     "source_owner_tuple_array_elements": "tuple_array",
     "source_owner_repeated_tuple_elements": "tuple_repeated",
     "source_owner_string_slice_scalar_range": "string_slice",
     "source_owner_integer_bitwise_exact_width": "integer_width",
+    "source_owner_two_module_graph_is_deterministic": "two_modules",
 }
 REJECTIONS = {
     "source_owner_bare_nullable_condition_has_no_product": {
@@ -214,16 +216,27 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
         if case["name"] in SELECTED or case["name"] in PROBES:
             selected = (SELECTED | PROBES)[case["name"]]
             fixture = DEST / "fixtures" / selected / "root.xr"
-            data = literals["source"]
+            data = literals.get("source", literals.get("entry_source"))
+            if data is None:
+                raise ValueError("original positive source literal is missing")
+            library = literals.get("library_source")
+            if library is not None:
+                files[fixture.parent / "library.xr"] = library
             adapter = b"export fn consumerAnswer() -> i64 { return answer() }\n"
             files[fixture] = data + adapter
             current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
                 "sha256": digest(data + adapter), "original_prefix_sha256": digest(data),
-                "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": case["fixture"]["expected_exit"],
+                "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": case["fixture"]["expected_exit"] if case["fixture"] else 42,
                 "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."}
+            if library is not None:
+                current["initial_projection"]["additional_files"] = {"library.xr": {
+                    "bytes": len(library), "sha256": digest(library)}}
             if case["name"] in PROBES:
                 current["initial_projection"]["scope"] = "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet."
                 current["initial_projection"]["probe_target"] = "test_source_product_probe"
+                if selected == "two_modules":
+                    current["initial_projection"]["detached_probe_target"] = "test_source_product_detachment"
+                    current["pending_admission"] = "Exact original library var offset is currently rejected by the root-only mutable module-slot boundary; retain its positive 42 oracle and all original graph assertions."
                 sources.append(current)
                 continue
             current["projected_obligations"] = {name: {"status": "PENDING_FULL_QUALIFICATION", "verification": note}
@@ -232,22 +245,41 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             current["candidate_replacement_gates"] = [f"{prefix}_{mode}" for mode in ("vm", "native", "mixed_even", "mixed_odd")]
             current["candidate_replacement_gates"] += [f"{prefix}_{kind}_{mode}"
                 for kind in ("axes", "compiler", "runtime", "cancel") for mode in range(4)]
+            if selected in ("generics", "callables", "single_module", "two_modules"):
+                current["candidate_replacement_gates"].append(f"test_source_product_detachment_{selected}")
             if selected == "generics":
                 current["additional_legacy_obligations"] = {
                     "specialization_identity": {"status": "IMPLEMENTED_NOT_QUALIFIED",
                         "verification": "Closed Checked answer calls one exact i64 specialization twice and a distinct bool specialization once; operand/result types are exact."},
-                    "independent_product_determinism": {"status": "OPEN"},
+                    "independent_product_determinism": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Two fresh sessions publish independent source/closed packets and identical actual C; detached readers survive both producer destructions."},
                     "open_generic_entry_rejection": {"status": "OPEN",
                         "note": "The removed selectable legacy source entry must be mapped to a current public authority/admission rejection."},
                     "legacy_four_function_count_and_param_mode_layout": {"status": "OPEN",
                         "note": "The new graph has an explicit host adapter and synthetic entry; retirement of old representation assertions needs a reviewed mapping."}}
             elif selected == "callables":
                 current["additional_legacy_obligations"] = {
-                    "independent_product_determinism": {"status": "OPEN"},
+                    "independent_product_determinism": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Two fresh sessions publish independent source/closed packets and identical actual C; detached readers survive both producer destructions."},
                     "entry_callable_effect_rejection": {"status": "OPEN",
                         "note": "The old source entry rejection is not a language ban on legal callable parameters; preserve its authority/effect responsibility in a current admission test."},
                     "legacy_function_id_emission_spelling": {"status": "OPEN",
                         "note": "Actual sealed bindings are verified; the obsolete generated representation assertion needs a reviewed retirement mapping."}}
+            elif selected == "single_module":
+                current["additional_legacy_obligations"] = {
+                    "independent_product_determinism": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Independent parser sessions, exact source/closed packet bytes, facts and actual C."},
+                    "detached_input_admission": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Copied packet corruption is rejected; existing independent Checked readers verify after producer destruction, and reader work=1 rejects without output."},
+                    "module_shape": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "One root module has no dependency or slot; its initializer is distinct from the synthetic entry."},
+                    "original_function_and_operation_counts": {"status": "OPEN",
+                        "note": "The current whole program includes a synthetic entry and exported host adapter; retired selective-program counts require reviewed representation mapping."},
+                    "source_file_unlink_before_admission": {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                        "verification": "Exact private source copies are physically removed and probed missing before the independent Checked readers; tracked originals stay intact."}}
+                if selected == "single_module":
+                    current["additional_legacy_obligations"]["record_and_net_resource_type_identity"] = {
+                        "status": "OPEN", "note": "The original preliminary type copy/equality/subclass and exact resource identity checks remain separate responsibilities."}
         sources.append(current)
     families = {}
     paths = sorted((ROOT / "tests/unit/program").glob("*.c"))

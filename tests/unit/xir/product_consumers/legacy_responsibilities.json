@@ -2136,6 +2136,110 @@
           "bytes": 106,
           "sha256": "d04c110eeccc73bf8494f4039f0cb68dbae7e5222c051f9d0f85507984e92478"
         }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/single_module/root.xr",
+        "sha256": "b6399ad088d49af5540f8a64ee0d7df9501b157aef89833a0e84a918e3f74f77",
+        "original_prefix_sha256": "d04c110eeccc73bf8494f4039f0cb68dbae7e5222c051f9d0f85507984e92478",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "projected_obligations": {
+        "original_source_and_fixed_result": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "The original source prefix and 42/48 oracle are retained byte for byte."
+        },
+        "detached_lifetimes": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Parse session, SourceProduct and independent Checked reader die before execution."
+        },
+        "native_emission": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two emissions are byte-identical; actual C is compiled and bound by its SHA256."
+        },
+        "backend_equivalence": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "VM, native and both mixed partitions each verify independent fixed goldens."
+        },
+        "instance_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Two instances retain one immutable Program after caller ownership is dropped."
+        },
+        "host_authority": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Calling private answer is rejected without allocations or initialization."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Whole producer/read/emit/seal/reverify operation needs every measured physical ordinal."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Each allocated/live/work threshold is measured and exact/minus1 checked."
+        },
+        "runtime_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Actual instance/init/entry allocation ordinals, sticky init failure and physical release."
+        },
+        "cancellation": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every real active prefix cancels, preserves initialized state and releases physically."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head revalidation remain required."
+        }
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_single_module_vm",
+        "test_source_product_single_module_native",
+        "test_source_product_single_module_mixed_even",
+        "test_source_product_single_module_mixed_odd",
+        "test_source_product_single_module_axes_0",
+        "test_source_product_single_module_axes_1",
+        "test_source_product_single_module_axes_2",
+        "test_source_product_single_module_axes_3",
+        "test_source_product_single_module_compiler_0",
+        "test_source_product_single_module_compiler_1",
+        "test_source_product_single_module_compiler_2",
+        "test_source_product_single_module_compiler_3",
+        "test_source_product_single_module_runtime_0",
+        "test_source_product_single_module_runtime_1",
+        "test_source_product_single_module_runtime_2",
+        "test_source_product_single_module_runtime_3",
+        "test_source_product_single_module_cancel_0",
+        "test_source_product_single_module_cancel_1",
+        "test_source_product_single_module_cancel_2",
+        "test_source_product_single_module_cancel_3",
+        "test_source_product_detachment_single_module"
+      ],
+      "additional_legacy_obligations": {
+        "independent_product_determinism": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Independent parser sessions, exact source/closed packet bytes, facts and actual C."
+        },
+        "detached_input_admission": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Copied packet corruption is rejected; existing independent Checked readers verify after producer destruction, and reader work=1 rejects without output."
+        },
+        "module_shape": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "One root module has no dependency or slot; its initializer is distinct from the synthetic entry."
+        },
+        "original_function_and_operation_counts": {
+          "status": "OPEN",
+          "note": "The current whole program includes a synthetic entry and exported host adapter; retired selective-program counts require reviewed representation mapping."
+        },
+        "source_file_unlink_before_admission": {
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Exact private source copies are physically removed and probed missing before the independent Checked readers; tracked originals stay intact."
+        },
+        "record_and_net_resource_type_identity": {
+          "status": "OPEN",
+          "note": "The original preliminary type copy/equality/subclass and exact resource identity checks remain separate responsibilities."
+        }
       }
     },
     {
@@ -2158,7 +2262,25 @@
           "bytes": 106,
           "sha256": "ef0526622ec84e47c1ae7b298eab7a3990d59770089ac4e737eb0c38ebe61b39"
         }
-      }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/two_modules/root.xr",
+        "sha256": "9d73c0d71becfcd55a188efc84f573fcdb91eb954b67c84a433f0e5f92db7db0",
+        "original_prefix_sha256": "ef0526622ec84e47c1ae7b298eab7a3990d59770089ac4e737eb0c38ebe61b39",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 224,
+            "sha256": "a5de40cec575e4452a43492662ff8c5db9174feb8ed3384f724d914cedb21c94"
+          }
+        },
+        "probe_target": "test_source_product_probe",
+        "detached_probe_target": "test_source_product_detachment"
+      },
+      "pending_admission": "Exact original library var offset is currently rejected by the root-only mutable module-slot boundary; retain its positive 42 oracle and all original graph assertions."
     },
     {
       "name": "source_owner_cross_module_instance_method_preserves_receiver_across_suspend",
@@ -2369,11 +2491,13 @@
         "test_source_product_callables_cancel_0",
         "test_source_product_callables_cancel_1",
         "test_source_product_callables_cancel_2",
-        "test_source_product_callables_cancel_3"
+        "test_source_product_callables_cancel_3",
+        "test_source_product_detachment_callables"
       ],
       "additional_legacy_obligations": {
         "independent_product_determinism": {
-          "status": "OPEN"
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Two fresh sessions publish independent source/closed packets and identical actual C; detached readers survive both producer destructions."
         },
         "entry_callable_effect_rejection": {
           "status": "OPEN",
@@ -2489,7 +2613,8 @@
         "test_source_product_generics_cancel_0",
         "test_source_product_generics_cancel_1",
         "test_source_product_generics_cancel_2",
-        "test_source_product_generics_cancel_3"
+        "test_source_product_generics_cancel_3",
+        "test_source_product_detachment_generics"
       ],
       "additional_legacy_obligations": {
         "specialization_identity": {
@@ -2497,7 +2622,8 @@
           "verification": "Closed Checked answer calls one exact i64 specialization twice and a distinct bool specialization once; operand/result types are exact."
         },
         "independent_product_determinism": {
-          "status": "OPEN"
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Two fresh sessions publish independent source/closed packets and identical actual C; detached readers survive both producer destructions."
         },
         "open_generic_entry_rejection": {
           "status": "OPEN",

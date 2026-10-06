@@ -1,0 +1,3 @@
+fn answer() -> i64 { return 42 }
+fn choose(flag: bool) -> i64 { if (flag) { return answer() }; return 0 }
+export fn consumerAnswer() -> i64 { return answer() }

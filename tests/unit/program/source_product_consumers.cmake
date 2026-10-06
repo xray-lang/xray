@@ -21,7 +21,7 @@ if(MSVC)
 else()
     target_compile_options(test_source_product_probe PRIVATE -Wall -Wextra -Werror)
 endif()
-foreach(case IN ITEMS static_methods array_places generics callables class_identity struct_string bool_conditions)
+foreach(case IN ITEMS static_methods array_places generics callables class_identity struct_string bool_conditions single_module)
     if(case STREQUAL "callables")
         set(expected 48)
     else()
@@ -35,10 +35,11 @@ foreach(case IN ITEMS static_methods array_places generics callables class_ident
     configure_file("${product_consumer_main_template}" "${main}" @ONLY)
     add_executable(${producer} "${main}")
     target_link_libraries(${producer} PRIVATE source_product_consumer_driver)
+    file(GLOB product_consumer_case_sources "${product_consumer_fixture_root}/${case}/*.xr")
     add_custom_command(OUTPUT "${generated}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
         COMMAND $<TARGET_FILE:${producer}> 0 "${generated}"
-        DEPENDS ${producer} "${product_consumer_fixture_root}/${case}/root.xr"
+        DEPENDS ${producer} ${product_consumer_case_sources}
         VERBATIM)
     set(consumer_has_native 1)
     set(native_main "${CMAKE_CURRENT_BINARY_DIR}/source_product_${case}_native_main.c")
@@ -78,6 +79,26 @@ foreach(case IN ITEMS static_methods array_places generics callables class_ident
         set_tests_properties(${producer}_compiler_${mode} PROPERTIES TIMEOUT 600 PROCESSORS 8
             LABELS "unit;xir;source-product;program-consumer;ownership;compiler-faults")
     endforeach()
+endforeach()
+add_executable(test_source_product_detachment
+    "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/test_source_product_detachment.c")
+target_link_libraries(test_source_product_detachment PRIVATE xray_xir_source_product)
+target_compile_definitions(test_source_product_detachment PRIVATE
+    XR_DETACHMENT_ROOT="${product_consumer_fixture_root}"
+    XR_DETACHMENT_SCRATCH="${CMAKE_BINARY_DIR}/consumer-detachment-inputs")
+set_target_properties(test_source_product_detachment PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_product_detachment PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_source_product_detachment PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(case IN ITEMS generics callables single_module)
+    add_test(NAME test_source_product_detachment_${case}
+        COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_detachment.py"
+            --binary $<TARGET_FILE:test_source_product_detachment> --case ${case}
+            --scratch "${CMAKE_BINARY_DIR}/consumer-detachment-inputs")
+    set_tests_properties(test_source_product_detachment_${case} PROPERTIES TIMEOUT 120
+        LABELS "unit;xir;source-product;program-consumer;ownership;detachment")
 endforeach()
 add_executable(test_source_product_rejections
     "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/test_source_product_rejections.c")
