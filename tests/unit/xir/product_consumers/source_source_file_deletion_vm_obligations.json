@@ -1,0 +1,375 @@
+{
+  "status": "PASS_VM_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "parent": "da3cf3574c7cd4654bb8611afe70a7a196140590",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "accepted_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-Root-prep-r1\\accepted-contract.json",
+    "bytes": 1186,
+    "sha256": "275773bff0fa0e59a6f7e4e0c0bf6e791394906046fe07597496f2bb500055e7"
+  },
+  "code_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-Root-prep-r1\\contract.json",
+    "bytes": 4230,
+    "sha256": "f65a0e28ec0913cb02ebcca4da9ca664f331ad9f9bf278e236ba72109cafd137"
+  },
+  "baseline_delivery": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-delivery-r1\\delivery.json",
+    "bytes": 25488,
+    "sha256": "38954cd44d0e43508307d2e29d91aaa4dfb524b5702c629d25d5a1c052d51742"
+  },
+  "inputs": [
+    {
+      "id": "source_file_deletion",
+      "full_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\current67-source-file-deletion-native1-candidate-r2\\literal-main402.xr",
+        "bytes": 402,
+        "sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d"
+      },
+      "full_input_bytes": 402,
+      "full_input_sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d",
+      "library_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\current67-source-file-deletion-native1-candidate-r2\\literal-library80.xr",
+        "bytes": 80,
+        "sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213"
+      },
+      "library_input_bytes": 80,
+      "library_input_sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213",
+      "existing_full_fixtures": {
+        "msvc": {
+          "main.xr": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-imported-enum-catch\\main.xr",
+            "bytes": 402,
+            "sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d"
+          },
+          "library.xr": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-imported-enum-catch\\library.xr",
+            "bytes": 80,
+            "sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213"
+          }
+        },
+        "asan": {
+          "main.xr": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-imported-enum-catch\\main.xr",
+            "bytes": 402,
+            "sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d"
+          },
+          "library.xr": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-imported-enum-catch\\library.xr",
+            "bytes": 80,
+            "sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213"
+          }
+        }
+      },
+      "new_disk_sources": "CREATE_NEW_AT_RUNTIME_THEN_DELETED; NOT_STATIC_BUILD_INPUTS",
+      "runtime_source_root": "generated/source-file-deletion-vm1/private-source"
+    }
+  ],
+  "pipeline": "Source Product -> owned source/closed Checked and retained packet -> producer destruction -> physical delete+NOT_FOUND -> verify/reread Checked -> Lowered -> public VM Program take+seal -> two Instances -> all owners free -> NOT_FOUND -> five physical zeros",
+  "normal_gate": {
+    "name": "test_source_product_source_file_deletion_vm_normal",
+    "executed": true,
+    "tests_per_configuration": 1,
+    "fresh_TUs_per_configuration": 1,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "costs": "NOT_MEASURED",
+    "expected_oracles": {
+      "canonical": 2,
+      "Unit": 4,
+      "permissions_per_instance": 10,
+      "permission_total": 20,
+      "typed_source_answer": 42,
+      "host_answer": "NOT_EXPOSED",
+      "nominal": "One exported Problem; Failed variant0 has no payload; ImportedProblem alias identity; two typed catches in each Checked stage. Lowered identity only.",
+      "exported_fail_ordinary": "ALLOWED_NOT_EXECUTED: export identity metadata; no ordinary fail call is performed. Test-role fail is one of ten denied cases.",
+      "source_absence": 6,
+      "source_creations": 2,
+      "source_deletions": 2,
+      "physical_final": "COMPILER_BLOCKS_BYTES_RUNTIME_BLOCKS_BYTES_TABLE_CAPACITY_ZERO"
+    }
+  },
+  "source_boundary": {
+    "owned_root": "${CMAKE_BINARY_DIR}/generated/source-file-deletion-vm1/private-source",
+    "leaves": [
+      "main.xr",
+      "library.xr"
+    ],
+    "precondition": "CMake creates only reserved directory. Real selected build cwd and canonical root must match; no file(GENERATE), static Source outputs or Source-file DEPENDS. Existing or reparse leaves fail without overwrite.",
+    "creation": "Acquire each creation bit only after successful CREATE_NEW/Flush/Close, then finite-policy readback exact original402/library80 bytes; no new Source semantics or runtime digest golden.",
+    "deletion": "After session/product/diagnostics/input buffers are freed, remove only the two saved absolute leaves owned by this process. Require each remove OK, then both stat/read NOT_FOUND with caller outputs unchanged and parent DIR before detached Checked verify/read/lower.",
+    "final_absence": "After every result, Instance, Program/code lease, artifact, packet and finite ledger owner is destroyed, use a newly selected system IO policy to recheck both saved paths; do not reuse released compiler policy.",
+    "claim_boundary": "Only two own disk leaves. Static Source literals remain in consumer image. No arbitrary path independence, hostile concurrent ancestor race, source-content erasure or combined cancellation/stickiness closure."
+  },
+  "failure_cleanup": {
+    "failure": "Only creation bits set after OK authorize leaf cleanup. A non-OK write may leave unknown residue: fail and preserve path, do not remove unowned residue. Partial successful removal clears only that bit; remaining owned leaf cleanup uses explicit system policy.",
+    "scope_protection": "All current1343 artifacts, Source10933, existing qualified Source fixture paths and historical12 dirty files remain byte-exact; only scope4 product files may be Root-applied.",
+    "budget": "Real OS operations are charged to the finite owner; no allocation/work invariance is asserted for actual IO. Private permission rejections preserve both attempt counters, five ledger fields, compiler live/bytes, runtime live/bytes and table pointer/capacity plus NEW state.",
+    "threat_boundary": "Serial normal consumer in reserved Root-owned build directory; no security/SDK/hostile race qualification."
+  },
+  "ownership": {
+    "producer_release_before_delete": true,
+    "finite_compiler_owner_live_for_delete_and_detached_pipeline": true,
+    "VM_take": "Public xr_xir_compile_vm_program_take consumes Lowered only on success and internally verifies full types/declarations/parameter vectors/layouts and Program proof seal; failure preserves caller Lowered. No scalar vm_run, native or CGen substitute.",
+    "code_lease": "Program-owned Lowered VM artifact remains alive throughout both Instances. Drop caller Program after two Instance retains; last Instance free releases code artifact/bindings through the owned lease. Do not claim all code/compiler owners die before VM execution.",
+    "results": "Owned legal empty value output; each returned I64(0)/Unit(0) is dropped to all-zero carrier, Instance READY; canonical2/Unit4 actual counters.",
+    "static_Source_literals": "RETAINED_IN_CONSUMER_IMAGE"
+  },
+  "OPEN": [
+    "Original old Core declaration/typeID/class identity equality",
+    "Original direct detached host answer I64(42) interface semantics",
+    "Original AOT/native/mixed generatedC and ABI obligations",
+    "Whole compiler/runtime FI and all budget axes",
+    "External uncaught-error/panic stderr and process exit behavior",
+    "Cancellation, initialization failure stickiness and physical source deletion",
+    "Main semantic/Checked contract68 integration; producer remains25f"
+  ],
+  "original_VM_OPEN_snapshot": [
+    "Original old Core declaration/typeID/class identity equality",
+    "Original direct detached host answer I64(42) interface semantics",
+    "Original AOT/native/mixed generatedC and ABI obligations",
+    "Whole compiler/runtime FI and all budget axes",
+    "External uncaught-error/panic stderr and process exit behavior",
+    "Cancellation, initialization failure stickiness and physical source deletion",
+    "Main semantic/Checked contract68 integration; producer remains25f"
+  ],
+  "old_denominators": {
+    "Source": 108,
+    "split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "source_retirement": "NONE",
+  "retired": 0,
+  "source_deletion_subproof": {
+    "status": "PASS_TWO_SELF_CREATED_DISK_LEAVES_VM_NORMAL_ONLY",
+    "executed": true,
+    "scope": "TWO_SELF_CREATED_DISK_SOURCE_LEAVES_VM_NORMAL_ONLY",
+    "combined_cancel_sticky_OPEN_retired": false,
+    "whole_Source108_retired": false,
+    "static_Source_literals": "RETAINED_IN_CONSUMER_IMAGE",
+    "deletion_point": "AFTER_PRODUCER_FREE_BEFORE_DETACHED_CHECKED_VERIFY_READ_LOWER",
+    "final_absence_point": "AFTER_ALL_COMPILER_EXECUTION_OWNERS_RELEASED_WITH_NEW_SYSTEM_POLICY",
+    "expected_deleted_files_per_process": 2,
+    "expected_absence_checks_per_process": 6,
+    "independent_decoded": {
+      "msvc": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\actual-audit-r2\\msvc-independent-decoded.json",
+        "bytes": 7001,
+        "sha256": "80d718409c6c14aa0b30bcf7be2bcead0bfd672daa21ec6864fae53804d281bb"
+      },
+      "asan": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\actual-audit-r2\\asan-independent-decoded.json",
+        "bytes": 7001,
+        "sha256": "80d718409c6c14aa0b30bcf7be2bcead0bfd672daa21ec6864fae53804d281bb"
+      }
+    },
+    "independent_actual_audits": {
+      "normal_audit": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\actual-audit-r2\\audit-report.json",
+        "bytes": 15148,
+        "sha256": "1b3d169c020a1264830ce833495b75a7fd9b3cc4a5a6c454ddca30f8056595a2"
+      },
+      "normal_audit_terminal": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\actual-audit-terminal.json",
+        "bytes": 1328,
+        "sha256": "39e3a10f323ee6635f4ce3772e31252035b5a25849aba891cfd55c09349806db"
+      }
+    },
+    "deleted_files_per_process": 2,
+    "absence_checks_per_process": 6
+  },
+  "physical_source_deletion_proof": "PASS normal-only two self-created disk Source leaves, complete main402/library80: successful CREATE_NEW precedes exact successful remove; stat/read NOT_FOUND with unchanged outputs after producer destruction before detached Checked verify/read/lower and again after all owners release. Original imported nominal catch42, public VM Program take/deep seal and code lease, permission and physical-zero oracles retained. Static Source literals remain in the consumer image. Cancellation and initialization stickiness remain OPEN; no whole-Source108, old-consumer-file deletion, class/Core, stderr, FI, ABI/full-safety retirement.",
+  "build_state": "BUILT_MSVC_AND_ASAN_NORMAL_ONLY",
+  "product_executions": 2,
+  "actual_costs": {
+    "msvc": {
+      "source_file_deletion": {
+        "compiler_sites": 2819,
+        "runtime_sites": 44,
+        "allocated": 964393,
+        "peak": 252138,
+        "work": 1304365
+      }
+    },
+    "asan": {
+      "source_file_deletion": {
+        "compiler_sites": 2819,
+        "runtime_sites": 44,
+        "allocated": 964393,
+        "peak": 252138,
+        "work": 1304365
+      }
+    }
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "future_actual_TUs": 264,
+  "actual_current_baseline": {
+    "delivery": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-delivery-r1\\delivery.json",
+      "bytes": 25488,
+      "sha256": "38954cd44d0e43508307d2e29d91aaa4dfb524b5702c629d25d5a1c052d51742"
+    },
+    "source_inputs": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-Root-prep-r1\\source-inputs-current.json",
+      "bytes": 2712271,
+      "sha256": "423299cc977e9a9d81aad216d28ee0aef6ae87bbfd13beb7d5c29acdf8c563ee"
+    },
+    "artifacts263": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-Root-prep-r1\\artifacts-current263.json",
+      "bytes": 316715,
+      "sha256": "cf4dc50384ecfaffc07951bb60cbfefa8620c447246be849fc92c56995f5f5de"
+    },
+    "actual263_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual263-successor-pointers-precommit-r1.json",
+      "bytes": 12975,
+      "sha256": "6b8cc3f5c791c97df16a900858dafef7b8e3195754baf8b7a8c22807fe08a794"
+    },
+    "postcommit_live_domains": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-Root-prep-r1\\postcommit-live-domains.json",
+      "bytes": 1871,
+      "sha256": "4443063d5179d6330077d34a9681f12bca0a8d96d0d6356d89e4796aca157eaa"
+    },
+    "worker_tracked": 10700,
+    "source_count": 10933,
+    "artifact_count": 1343,
+    "actual_TUs": 263,
+    "registered_applicable": 303,
+    "registered_scope": "REGISTRATION_ONLY",
+    "worker_parent": "da3cf3574c7cd4654bb8611afe70a7a196140590",
+    "current_vs_qualified_source": "Current delivery supplies the committed normal metadata map successor; prior qualified input map remains immutable."
+  },
+  "prior_native_only_deletion": {
+    "delivery": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-delivery-r1\\delivery.json",
+      "bytes": 25488,
+      "sha256": "38954cd44d0e43508307d2e29d91aaa4dfb524b5702c629d25d5a1c052d51742"
+    },
+    "current_map": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_source_file_deletion_native_obligations.json",
+      "bytes": 24111,
+      "sha256": "0e0696e21b658f55860e6e4eaf817344e55072f9b0f0bd5761b2bb18d7710291"
+    },
+    "meaning": "Separately verified native two-leaf evidence; this new VM normal proof is NOT_RUN."
+  },
+  "normal_qualification": {
+    "worker_qualification_parent": "da3cf3574c7cd4654bb8611afe70a7a196140590",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_SOURCE_FILE_DELETION_VM_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 264,
+    "new_TUs_per_configuration": 1,
+    "normal_tests_per_configuration": 1,
+    "registered_applicable304_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-msvc-normal-r1\\result.json",
+          "bytes": 113777,
+          "sha256": "a2ee047da06de5077d5a9f4505aa2f2f41a0d1d1b2afcb9232f8f79dfbd98e2d"
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-msvc-normal-r1\\Root-terminal.json",
+          "bytes": 898,
+          "sha256": "d082057a8d556d9758d4e219881bb6716a39a70cdb5c50c90227e1ffb9f04683"
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-msvc-normal-r1\\source-file-deletion-vm1-normal-measurements.json",
+          "bytes": 7096,
+          "sha256": "ad7c483ccefe306917a1ba6ba8ccbbde4b705e12e6f1894d0d24399dce31cd78"
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-msvc-normal-r1\\actual-compilation-binding.json",
+          "bytes": 2923759,
+          "sha256": "cec434cb958b3312f7dcde1ef757ce92dce9dc7ffe9cd4c543da7184914003ef"
+        },
+        "registered304": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-msvc-normal-r1\\registered-applicable-304.json",
+          "bytes": 262764,
+          "sha256": "1e6e2add736fd76316a86f67f15a9d1ae6081af6951cad696ebd7ac37607be07"
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-asan-normal-r1\\result.json",
+          "bytes": 110892,
+          "sha256": "a6b693b0b692ea8300d0786205912f0fdd1e86f0755bca255b7d4a984e019205"
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-asan-normal-r1\\Root-terminal.json",
+          "bytes": 565,
+          "sha256": "41babd4be07f8ab96a9390eb9590dbfd2b2f8f591010d323bc7532b7cc933594"
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-asan-normal-r1\\source-file-deletion-vm1-normal-measurements.json",
+          "bytes": 7096,
+          "sha256": "f2342e09a8f5409b5ceb43d6722588800b9a6c501eca53d98dbfc818f03710e8"
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-asan-normal-r1\\actual-compilation-binding.json",
+          "bytes": 2998521,
+          "sha256": "758d687ef3e8fcba3247cdab183280811d5b4cfcfa75163a6e949fb61a33c235"
+        },
+        "registered304": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-asan-normal-r1\\registered-applicable-304.json",
+          "bytes": 315052,
+          "sha256": "b29b865dbba01055742015c2e796c106bfa65b1903e4dd81c3b961d898824135"
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\actual-audit-r2\\audit-report.json",
+      "bytes": 15148,
+      "sha256": "1b3d169c020a1264830ce833495b75a7fd9b3cc4a5a6c454ddca30f8056595a2"
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\actual-audit-terminal.json",
+      "bytes": 1328,
+      "sha256": "39e3a10f323ee6635f4ce3772e31252035b5a25849aba891cfd55c09349806db"
+    },
+    "actual264_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\actual264-successor-pointers-precommit-r1.json",
+      "bytes": 9284,
+      "sha256": "b62c75d4a3a42389a8304bde1c267a7c2e71b1a2b9bc6026084f9fdb8343dbd7"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-vm1-msvc-normal-r1\\source-inputs-after.json",
+      "bytes": 2713100,
+      "sha256": "e1110955b082a3dd5a9653a5a934b38c3887fbf33c02567cce5eeed05f9c4f1a"
+    },
+    "joint_artifacts_qualified264": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-independent-audit-prep-r1\\joint-artifacts-current264-canonical-r1.json",
+      "bytes": 317985,
+      "sha256": "1391b65592075b0f8affd3b66e4617a122e1fb2ca07604a3b514382ebe6607d0"
+    },
+    "related_tests_per_configuration": 2,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-related-two-actual-audit-r1\\related-normal2-supplement.json",
+      "bytes": 38426,
+      "sha256": "98c57827d750864dd9f117ccb2fdf163272415d15dd9076e2779a3cebed62377"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-vm1-related-two-actual-audit-r1\\actual-audit-terminal.json",
+      "bytes": 755,
+      "sha256": "bd07d24c60f339f07916d7dfd5e06009041c44a63d5642b829dee780cfe8bcc3"
+    },
+    "preparation_snapshot": {
+      "build_state": "NOT_BUILT",
+      "product_executions": 0,
+      "normal_gate.costs": "NOT_MEASURED",
+      "future_actual_TUs": "UNBOUND",
+      "meaning": "Original preparation values retained in this snapshot. Top-level build_state/product_executions/future_actual_TUs now reflect real dual builds and two VM normal product processes; related gates are separate and normal_gate.costs remains a historical preparation field. Current measured costs and full264 are established by this normal_qualification and its independent actual audits."
+    },
+    "boundary": "VM normal1 and separate existing ImportedEnum VM1/OwnedSourceDelete native1 related2 per provider. Original main402/library80 and nominal catch42 remain byte-exact. Only two disk leaves acquired by complete successful CREATE_NEW are removed after Source producer destruction and before detached Checked verify/reread/lower. Same saved canonical leaves have strict stat/read NOT_FOUND with preserved outputs and parent DIR, and are rechecked after all VM/compiler owners release using a new explicit system policy. Public VM Program take consumes Lowered into its owned code lease; two Instances retain it after caller Program drop until their own destruction. Two canonical I64(0), four Unit Test completions, ten refused starts per Instance and five final physical zeros remain. Source literals stay in the consumer image. Original seven OPEN responsibilities, all Source108 denominators, cancel/sticky initialization, class/Core, stderr, FI, complete ABI/safety and Main integration remain unchanged and unretired.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "PASS_TWO_SELF_CREATED_DISK_LEAVES_NORMAL_ONLY_ALL_OTHER_OPEN_RETAINED",
+    "old_obligations_retired": 0
+  }
+}
