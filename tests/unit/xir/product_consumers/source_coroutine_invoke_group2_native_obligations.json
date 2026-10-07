@@ -1,0 +1,599 @@
+{
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "public_contracts": {
+    "wire": 25,
+    "semantic": 67,
+    "Value": 22,
+    "Call": 28,
+    "Program": 29
+  },
+  "preparation_worker_parent": "372ea7b92d7e5ba972ce014b7eb32df9af66f6a7",
+  "accepted_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-Root-prep-r1\\accepted-contract.json",
+    "bytes": 2314,
+    "sha256": "d31a0bc54016f5454884d6e6729feb4cb0e2aa5dfa46546ee0e16de25e3a500d"
+  },
+  "code_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\current67-coroutine-typed-invoke-native2-contract-candidate-r1\\native-code-contract.json",
+    "bytes": 25370,
+    "sha256": "f43a8e6bec62240e85016f896a7a7c9718a65b5330e6e65d12a1bee0a4a80c91"
+  },
+  "original_VM_consumer": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\test_source_product_coroutine_panic_group4.c",
+    "bytes": 42891,
+    "sha256": "cb04b0e0fa9ac7c5fc8d31f471312316a7a1e2d00876f7ed8d3e04debc36a079"
+  },
+  "original_VM_map": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_coroutine_panic_group4_obligations.json",
+    "bytes": 120869,
+    "sha256": "e6da168cb09a471b2b86f9494d371872e6af51f40250f51e89d948a89d70e676"
+  },
+  "families": [
+    {
+      "id": "sealed_coroutine_invoke",
+      "original_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\sealed_coroutine_invoke\\original.xr",
+        "bytes": 840,
+        "sha256": "93174fbd55879bff7b5d0e65f536566211e6191959af974c2fa04aad6837d374"
+      },
+      "original_bytes": 840,
+      "original_sha256": "93174fbd55879bff7b5d0e65f536566211e6191959af974c2fa04aad6837d374",
+      "test_suffix": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\sealed_coroutine_invoke\\tests.xr",
+        "bytes": 270,
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6"
+      },
+      "full_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\sealed_coroutine_invoke\\full.xr",
+        "bytes": 1110,
+        "sha256": "7c65c4758355bf66ead9e11691503f37bfd7792ec861c1dba63c35297249510b"
+      },
+      "full_input_bytes": 1110,
+      "full_input_sha256": "7c65c4758355bf66ead9e11691503f37bfd7792ec861c1dba63c35297249510b",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-coroutine-panic-group4\\sealed_coroutine_invoke\\root.xr",
+          "bytes": 1110,
+          "sha256": "7c65c4758355bf66ead9e11691503f37bfd7792ec861c1dba63c35297249510b"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-coroutine-panic-group4\\sealed_coroutine_invoke\\root.xr",
+          "bytes": 1110,
+          "sha256": "7c65c4758355bf66ead9e11691503f37bfd7792ec861c1dba63c35297249510b"
+        }
+      },
+      "symbol": "source_coroutine_invoke_sealed",
+      "generated_C": "generated/coroutine-invoke-native2/sealed_coroutine_invoke.c",
+      "normal_test": "test_source_product_coroutine_invoke_group2_sealed_coroutine_invoke_native_normal",
+      "original_external_exit": 1,
+      "original_stderr": "[Uncaught Panic] E0420: division by zero\\n",
+      "business_catch7": "SOURCE_ASSERT_ON_SUCCESS_ONLY_FAILURE_BYPASSES_TYPED_CATCH",
+      "executed": false
+    },
+    {
+      "id": "indirect_coroutine_invoke",
+      "original_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\indirect_coroutine_invoke\\original.xr",
+        "bytes": 864,
+        "sha256": "fbee3d379bd66c7fe05f89618606ce2669e7e90fa493df298ea0c206be401ee2"
+      },
+      "original_bytes": 864,
+      "original_sha256": "fbee3d379bd66c7fe05f89618606ce2669e7e90fa493df298ea0c206be401ee2",
+      "test_suffix": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\indirect_coroutine_invoke\\tests.xr",
+        "bytes": 270,
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6"
+      },
+      "full_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\indirect_coroutine_invoke\\full.xr",
+        "bytes": 1134,
+        "sha256": "f44899e613eafb71797c84d7e961b2a03e0dfcd07648bb115ecd74d6be4fa6cf"
+      },
+      "full_input_bytes": 1134,
+      "full_input_sha256": "f44899e613eafb71797c84d7e961b2a03e0dfcd07648bb115ecd74d6be4fa6cf",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-coroutine-panic-group4\\indirect_coroutine_invoke\\root.xr",
+          "bytes": 1134,
+          "sha256": "f44899e613eafb71797c84d7e961b2a03e0dfcd07648bb115ecd74d6be4fa6cf"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-coroutine-panic-group4\\indirect_coroutine_invoke\\root.xr",
+          "bytes": 1134,
+          "sha256": "f44899e613eafb71797c84d7e961b2a03e0dfcd07648bb115ecd74d6be4fa6cf"
+        }
+      },
+      "symbol": "source_coroutine_invoke_indirect",
+      "generated_C": "generated/coroutine-invoke-native2/indirect_coroutine_invoke.c",
+      "normal_test": "test_source_product_coroutine_invoke_group2_indirect_coroutine_invoke_native_normal",
+      "original_external_exit": 1,
+      "original_stderr": "[Uncaught Panic] E0420: division by zero\\n",
+      "business_catch7": "SOURCE_ASSERT_ON_SUCCESS_ONLY_FAILURE_BYPASSES_TYPED_CATCH",
+      "executed": false
+    }
+  ],
+  "normal_gate": {
+    "names": [
+      "test_source_product_coroutine_invoke_group2_sealed_coroutine_invoke_native_normal",
+      "test_source_product_coroutine_invoke_group2_indirect_coroutine_invoke_native_normal"
+    ],
+    "executed": true,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "fresh_TUs_expected_only": 4,
+    "cold_independent_case_processes": true,
+    "oracle": {
+      "per_case": {
+        "sealed_coroutine_invoke": {
+          "canonical_I64_zero": 2,
+          "Unit_completions": 10,
+          "permission_rejections_per_Instance": 14,
+          "permission_rejections_total": 28,
+          "two_Instances": 2,
+          "per_Instance_repeats": 2,
+          "copied_ordinary_panic_facts": 4,
+          "success_Source_assert": 42,
+          "business_catch7": "SOURCE_ASSERT_ON_SUCCESS_ONLY",
+          "defer_sequence": [
+            0,
+            22,
+            11
+          ],
+          "yield_count": 12,
+          "resume_count": 12,
+          "wait_invalid_guards": 60,
+          "driver_calls": 16,
+          "failure_yields": 1,
+          "success_yields": 2
+        },
+        "indirect_coroutine_invoke": {
+          "canonical_I64_zero": 2,
+          "Unit_completions": 10,
+          "permission_rejections_per_Instance": 14,
+          "permission_rejections_total": 28,
+          "two_Instances": 2,
+          "per_Instance_repeats": 2,
+          "copied_ordinary_panic_facts": 4,
+          "success_Source_assert": 42,
+          "business_catch7": "SOURCE_ASSERT_ON_SUCCESS_ONLY",
+          "defer_sequence": [
+            0,
+            22,
+            11
+          ],
+          "yield_count": 12,
+          "resume_count": 12,
+          "wait_invalid_guards": 60,
+          "driver_calls": 16,
+          "failure_yields": 1,
+          "success_yields": 2
+        }
+      },
+      "public_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+      "fault_detail": 420,
+      "message_value": "UNIT with type/reserved/payload0",
+      "fresh_caller_scratch_capacity": 96,
+      "fresh_formatted_text": "division by zero",
+      "fresh_formatted_bytes": 16,
+      "owned_STRING_not_claimed": true,
+      "READY_after_ordinary_panic": true,
+      "legal_EMPTY_BAD_STATE_outputs_full_bytes_unchanged": true,
+      "after_all_execution_and_compiler_owners": true,
+      "all_five_physical_values_final_zero": true
+    },
+    "costs": "NOT_MEASURED"
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "build_state": "NOT_BUILT",
+  "product_executions": 0,
+  "effect_contract": {
+    "stages": [
+      "SourceChecked",
+      "retainedClosedChecked",
+      "independently_rereadChecked",
+      "reverifiedLowered"
+    ],
+    "ordered_public_queries": [
+      "entry",
+      "initializer",
+      "quotient",
+      "read-cleanup",
+      "fresh",
+      "failure-cleanup",
+      "checked",
+      "answer",
+      "failure",
+      "success"
+    ],
+    "expected_static_pairs_NOT_ACTUAL": {
+      "sealed_coroutine_invoke": {
+        "entry": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "initializer": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "quotient": {
+          "suspend": "MAY",
+          "throws": "MAY"
+        },
+        "read-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "fresh": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "failure-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "checked": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "answer": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "failure": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "success": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        }
+      },
+      "indirect_coroutine_invoke": {
+        "entry": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "initializer": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "quotient": {
+          "suspend": "MAY",
+          "throws": "MAY"
+        },
+        "read-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "fresh": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "failure-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "checked": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        },
+        "answer": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        },
+        "failure": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        },
+        "success": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        }
+      }
+    },
+    "implementation_requirement": "Own XrXirEffects in run/release state; analyze via public API on each verified artifact under same cumulative ledger, query every role and print actual suspend/throws pair, then free before the next stage. Free on every failure path. Do not reuse one Lowered summary as four-stage evidence.",
+    "signature": "At three Checked stages inspect matching indirect quotient FUNCTION_REF: public callable signature flags0, complete one-I64 parameter vector and I64 result, uncaptured reference. Require at least one Checked match; at Lowered check each remaining matching reference if present without fixed opcode count. Never inject NO_SUSPEND or infer NONE from runtime token observations.",
+    "public_legend": {
+      "NONE": 0,
+      "UNKNOWN": 1,
+      "MAY": 2,
+      "pair_order": [
+        "suspend",
+        "throws"
+      ]
+    },
+    "derivation": "Quotient SUSPEND seeds MAY and explicit nominal THROW seeds MAY. Direct typed catch removes sole Negative atom from checked outward throws while suspension propagates MAY. Indirect flags0 seeds suspension UNKNOWN and error bit0 UNKNOWN; enum filtering removes only a+2 nominal atoms, so checked/answer/failure/success retain both UNKNOWN. These are source-backed static expectations requiring actual four-stage queries, not execution claims."
+  },
+  "generated_cleanup_helper_validation": "At four artifacts traverse every public identity with cleanup_owner!=0: Unit result, same-root/private/noexport/noTest/noTestTimeout, parent==checked+1, not entry/initializer/named role. Dynamic helper count and captured parameter vector; public declaration verifier and CLEANUP_REGISTER restrict authority. Do not hardcode helper/function/op counts.",
+  "native_contract": {
+    "pipeline": "Public SourceProduct -> SourceChecked + independently retainedClosed/rereadChecked -> producer/session destruction -> specialization/reverification -> complete C emission twice simultaneously owned -> full generated payload -> compiled callback ProgramSpec -> native correspondence+public compile_program_seal -> two independent Instances.",
+    "correspondence": "Recompute payload SHA from current complete emission; match exact generated footer. Match target/ABI, complete proof bytes+identity/layouts, all declaration identities including test/private/cleanup_owner/promises, complete type graph, full parameter vectors and result types, entry flags/cleanup ownership, every callback resume+release. Public proof_verify/program_match supplies deep type/declaration/vector checks, not counts-only matching.",
+    "all_native": "Every generated entry is the compiled native callback. No xr_xir_vm_program_take, VM fallback, mixed substitution, external callback fake or copied Source internals.",
+    "code_lease": "Statically linked generated code has null code.owner/release; this does not test dynamic DLL/image unload.",
+    "ownership": "Free repeated emission after byte equality. After seal drop Lowered and remaining owned C. Create two Instances retaining sealed Program; drop caller Program before execution. SourceProduct/session already dead; copied results must outlive all remaining compiler/execution owners."
+  },
+  "suspend_resume_contract": {
+    "public_APIs": [
+      "xr_xir_instance_poll_bounded",
+      "xr_xir_instance_wait_request",
+      "xr_xir_instance_resume"
+    ],
+    "bounded_polls_per_activation": 4096,
+    "quantum": 1000000,
+    "status_contract": "Only READY bounded-poll progress or SUSPENDED exact YIELD until terminal. Initialized Instance remains READY. Failure activation yields exactly1; success activation yields exactly2 in order quotient(2) then quotient(-1). Canonical/fresh/failureCleanup activations yield0.",
+    "Wait_fields": {
+      "kind": "XR_XIR_WAIT_YIELD",
+      "reserved": 0,
+      "after_ms": 0,
+      "subject": null,
+      "generation": 0,
+      "ticket": 0
+    },
+    "token": "For each pending activation require nonzero/nonMAX epoch and nonzero wake from actual poll result; use exact epoch/wake for Wait and resume. No global uniqueness, provider-equality or constant-token assumption.",
+    "five_invalid_guards": [
+      "resume(epoch+1,wake) => BAD_STATE",
+      "resume(epoch,wake XOR 1) => BAD_STATE",
+      "wait(epoch+1,wake,wholeA5Wait) => BAD_STATE with entire output bytes unchanged",
+      "wait(epoch,wake XOR 1,wholeA5Wait) => BAD_STATE with entire output bytes unchanged",
+      "take_result(wholeA5Value) while suspended => BAD_STATE with entire output bytes unchanged"
+    ],
+    "guard_preservation": "All five ledger fields, compiler+runtime attempts, compiler live/bytes, runtime live/bytes/table identity/capacity and Instance READY unchanged; reread original valid Wait six fields exactly. Output can be A5 only where actual early state/token guard precedes output value inspection; copy_failure must use legal EMPTY.",
+    "valid_resume": "After guards, exact pair resume returns READY and is separately logged; continue same activation to expected terminal. Do not restart to bypass suspension.",
+    "per_case_totals": {
+      "Instances": 2,
+      "repeats_per_Instance": 2,
+      "failure_yields": 1,
+      "success_yields": 2,
+      "YIELD": 12,
+      "matching_resume": 12,
+      "invalid_guards": 60,
+      "terminal_driver_calls": 16,
+      "scope": "INDEPENDENT_ORACLE_EXPECTATIONS_NOT_NEW_NATIVE_MEASUREMENTS"
+    },
+    "not_claimed": "No public host slot observation while suspended; no cancel/Timer/Task scheduler/structured concurrency/image-unload proof.",
+    "per_activation_records": "Each individual yield has actual case/Instance/repeat/operation/serial/epoch/wake and six Wait fields, five bad guard proofs, then its own exact matching READY resume. A success activation is not complete after its first yield. Record terminal only after expected return/panic; no reused old VM Lowered-only effect oracle."
+  },
+  "permissions": {
+    "per_Instance": 14,
+    "total_two_Instances": 28,
+    "composition": "ordinary start rejects initializer+eight named private/Test roles (9), start_test rejects initializer+four ordinary private roles (5)",
+    "exact_status": "XR_XIR_CALL_BAD_ARGUMENT",
+    "argument_types": {
+      "checked": "BOOL(false)",
+      "quotient": "I64(0)"
+    },
+    "before_after": "Instance remains NEW; all five cumulative resource fields allocation_count/allocated_bytes/live_bytes/peak_bytes/work, compiler and runtime attempts, compiler live/bytes, runtime live/bytes/table identity/capacity unchanged",
+    "start_has_output_parameter": false
+  },
+  "callable_reference_validation": "At three Checked stages inspect matching indirect quotient FUNCTION_REF: public callable signature flags0, complete one-I64 parameter vector and I64 result, uncaptured reference. Require at least one Checked match; at Lowered check each remaining matching reference if present without fixed opcode count. Never inject NO_SUSPEND or infer NONE from runtime token observations.",
+  "original_VM_OPEN_snapshot": [
+    "old Core operation shape and shared emission representations",
+    "class construct/finalize/reclaim identities and reverse failure order",
+    "original external exit1 and E0420 stderr rendering",
+    "all native/mixed backends",
+    "wholecompiler/runtime FI and all allocated/live/work axes",
+    "cancel and structured Task lifecycle not observed by these normal cases",
+    "physical removal of input files after Source death",
+    "Main semantic/Checked68 integration qualification",
+    "remaining oldSource108 and other26files/160functions/8allocation/7shared-owner denominators"
+  ],
+  "OPEN": [
+    "old Core operation shape and shared emission representations",
+    "class construct/finalize/reclaim identities and reverse failure order",
+    "original external exit1 and E0420 stderr rendering",
+    "all native/mixed backends",
+    "wholecompiler/runtime FI and all allocated/live/work axes",
+    "cancel and structured Task lifecycle not observed by these normal cases",
+    "physical removal of input files after Source death",
+    "Main semantic/Checked68 integration qualification",
+    "remaining oldSource108 and other26files/160functions/8allocation/7shared-owner denominators"
+  ],
+  "additional_OPEN": [
+    "selected two native normal cases are NOT_RUN; other coroutine inputs and all mixed configurations remain OPEN",
+    "W1-W4/wholecompiler-runtime FI/allocated-live-work axes/fullSDK-fullsan need Main queued windows",
+    "static null code lease does not observe dynamic DLL/image unload or full native ABI safety"
+  ],
+  "all_original_denominators": {
+    "Source": 108,
+    "Source_split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "legacy_denominators_retired": false,
+  "original_Source_responsibilities_retired": 0,
+  "old_obligations_retired": 0,
+  "preparation_snapshot": {
+    "meaning": "Immutable admission/build/measurement preparation. Future actual current normal state must be in normal_qualification; preparation NOT_BUILT/product_executions0/families.executedfalse/costsNOT_MEASURED are historical snapshot only.",
+    "normal_semantic_boundary": "Only selected native2 normal and separate relatedVM2 can become measured; all original OPEN and denominators remain accounted."
+  },
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "OPEN",
+  "full_native_mixed_matrix": "OPEN",
+  "ABI351_and_Value22_Call28_Program29": "OPEN",
+  "Main_semantic68_integration": "OPEN",
+  "physical_source_deletion": "OPEN",
+  "production_release": "NOT_CLAIMED",
+  "typed_business_error": {
+    "nominal_declaration": "root DivisionFailure enum with Negative variant0 and zero payload; never use a structurally equal unrelated enum",
+    "signature": "quotient(I64)->I64; original Coro.yield() precedes its Negative throw/division. Error set is not an extra public throws type.",
+    "original_source_unchanged": [
+      "throw DivisionFailure.Negative",
+      "catch (error: DivisionFailure) { result = 7 }",
+      "catch (error: DivisionFailure) { caughtResult = 7 }",
+      "assert(caughtResult == 7)",
+      "indirect var selected = quotient"
+    ],
+    "negative_path": "Success Test resumes second quotient(-1)/selected(-1) YIELD, receives nominal Negative through its value channel, and the original typed catch assigns caughtResult7. Original assert(caughtResult == 7) is required to complete the Unit Test.",
+    "success_path": "Success Test resumes quotient(2) YIELD to84/2=42, then resumes the distinct quotient(-1) YIELD/Negative/catch7 route; unchanged Source asserts checked(true)==42 and cleanup11.",
+    "panic_path": "Failure Test resumes first quotient(0)/selected(0) YIELD to ordinary DIVIDE_BY_ZERO/detail420. It bypasses typed catch before the later quotient(-1); failure must not claim catch7 execution.",
+    "checked_evidence": "At all three Checked artifacts resolve the unique root private DivisionFailure enum and Negative variant0/zero payload by public nominal declarations/types. Check both checked ERROR_IS immediates and ERROR_NARROW types refer to that same artifact-local nominal identity. Do not equate an unrelated structurally similar enum or compare numeric IDs across artifacts.",
+    "Lowered_boundary": "At owned reverified Lowered recheck public nominal/declaration/signature/type identity and effects, then deep seal actual proof. Do not force identical Checked/Lowered catch opcode counts, global type numbers, helper counts or function counts.",
+    "host_authority": "No ordinary private quotient(-1), checked(true) or helper execution introduced to sample typed7/42; use existing public entry/Test authority and the full original source assertions."
+  },
+  "actual_costs": {
+    "msvc": {
+      "sealed_coroutine_invoke": {
+        "compiler_sites": 4948,
+        "runtime_sites": 178,
+        "allocated": 2240652,
+        "peak": 332826,
+        "work": 17069151
+      },
+      "indirect_coroutine_invoke": {
+        "compiler_sites": 4965,
+        "runtime_sites": 196,
+        "allocated": 2339174,
+        "peak": 344945,
+        "work": 18439491
+      }
+    },
+    "asan": {
+      "sealed_coroutine_invoke": {
+        "compiler_sites": 4948,
+        "runtime_sites": 178,
+        "allocated": 2240652,
+        "peak": 332826,
+        "work": 17069151
+      },
+      "indirect_coroutine_invoke": {
+        "compiler_sites": 4965,
+        "runtime_sites": 196,
+        "allocated": 2339174,
+        "peak": 344945,
+        "work": 18439491
+      }
+    }
+  },
+  "normal_qualification": {
+    "worker_qualification_parent": "372ea7b92d7e5ba972ce014b7eb32df9af66f6a7",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_COROUTINE_INVOKE_GROUP2_NATIVE_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 260,
+    "new_TUs_per_configuration": 4,
+    "normal_tests_per_configuration": 2,
+    "registered_applicable302_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-msvc-r1\\result.json",
+          "sha256": "48dc9aea696360a84535830cd77077c006636cd6396dd894baf2e0536b694d48",
+          "bytes": 213505
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-msvc-r1\\Root-terminal.json",
+          "sha256": "665e71766df773564ad4efae9a83413a85a8122a3a04eb4b16dfad131504193b",
+          "bytes": 872
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-msvc-r1\\coroutine-invoke-native2-normal-measurements.json",
+          "sha256": "f17b8c099ba32ffe72614bb79ff66ae2b4a25ea9554d613c8ac1729b970da6da",
+          "bytes": 41397
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-msvc-r1\\emitter-build-measurements.json",
+          "sha256": "46cc6039bd2cd07c2c62bd13e5bd225eb2cb1651573ee21423e2ccfb538460fc",
+          "bytes": 17259
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "a5047296bc4e838e28e5636ceb56825cf4d42dec5844ffcb1dafa58b589b8acd",
+          "bytes": 2775364
+        },
+        "registered302": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-msvc-r1\\registered-applicable-302.json",
+          "sha256": "5f8633794ef6bde2ae4014c22a1bce7a535baa5db95ab73bbba01628f7a07891",
+          "bytes": 260355
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-asan-r1\\result.json",
+          "sha256": "ca2d503b8bf6d729e7a4fff8dc1c66c609be52f54e88049a5b17e1bac630cbae",
+          "bytes": 209032
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-asan-r1\\Root-terminal.json",
+          "sha256": "a7e5e0456fb08d918c12886a8c13fdfc61bef317df959611889006d5cd53e079",
+          "bytes": 870
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-asan-r1\\coroutine-invoke-native2-normal-measurements.json",
+          "sha256": "4cf8995b9c20b16ff2913c20eabe161bbe7bff13c6c95d5bf4133d2af45bce9a",
+          "bytes": 41397
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-asan-r1\\emitter-build-measurements.json",
+          "sha256": "08ed9ab4e0e3124bd69dc03fac4d189ae45dfeaf78339aacd72c45886844d4ba",
+          "bytes": 17259
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-asan-r1\\actual-compilation-binding.json",
+          "sha256": "ca304f31ff155460e1cd35aed2e0a25655392e1c08791bcd8e21357d59f497bd",
+          "bytes": 2848454
+        },
+        "registered302": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-asan-r1\\registered-applicable-302.json",
+          "sha256": "8d22aaf6f0c8ba11ecf72a11defed3327656d8c09bd6dc85a9235a359f2c43ee",
+          "bytes": 312299
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-typed-invoke-native2-independent-audit-prep-r1\\audit-report.json",
+      "bytes": 25100,
+      "sha256": "0d617cdadfe48db0642b6ff85348f1480c6ef4903c45c4e227219dcdfcaa10d1"
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-typed-invoke-native2-independent-audit-prep-r1\\actual-audit-terminal.json",
+      "bytes": 1320,
+      "sha256": "2f788fcd46770d80e424ac8cbc9d3ff5fe605d0a44fc8cb1f2b4aa8328844219"
+    },
+    "actual260_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-typed-invoke-native2-independent-audit-prep-r1\\actual260-successor-pointers-precommit-r1.json",
+      "bytes": 14290,
+      "sha256": "89064dd14d270f7d3924b56c009fd3b33d8260f9f9cf887a113a3ca7cd10eb63"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-normal-msvc-r1\\source-inputs-after.json",
+      "bytes": 2711430,
+      "sha256": "8c9e85f0c35ae4bfe50d432d5a2e51ca73a23a5af9b28bf0051b524e6613cc26"
+    },
+    "joint_artifacts_qualified260": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-typed-invoke-native2-independent-audit-prep-r1\\joint-artifacts-current260-canonical-r1.json",
+      "bytes": 313423,
+      "sha256": "b587c992bb08ceebd9a5eb3e10523b99d86f1a9d1c1662c0057edb0dc15318bb"
+    },
+    "related_tests_per_configuration": 2,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\coroutine-typed-invoke-native2-tool-prep-r1\\related-vm2-audit-prep-r1\\actual-related-vm-two-audit-r1\\related-normal2-supplement.json",
+      "bytes": 210048,
+      "sha256": "8d198b034ab7f48e2a581f734a409be3b56e803fefb282c2890306e8ed17125e"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-Root-prep-r1\\actual-related-audit-terminal.json",
+      "bytes": 1456,
+      "sha256": "1421a839d7bee62e9bc97bf7955d7e30c449d1631f6c50f430110bb50b33a29d"
+    },
+    "preparation_snapshot": {
+      "build_state": "NOT_BUILT",
+      "product_executions": 0,
+      "normal_gate.costs": "NOT_MEASURED",
+      "meaning": "Immutable preparation fields; current executed build/normal status and measured costs are established by this normal_qualification and its independent actual audits."
+    },
+    "boundary": "Normal2 and separate existing VM related2 only. Complete1110/1134B unchanged; nominal DivisionFailure.Negative and the original success-route caught7 and business42 Source assertions remain. Failure0 yields once and the intrinsic UNIT420 panic bypasses typed catch; success yields twice and catches the original Negative as7. Each case canonical2/Unit10/14 refusals per Instance, same-Instance cleanup0/22/11, four copied all-zero UNIT420 facts survive all execution/compiler owners and format fresh96B caller scratch to16B. Twelve YIELD/resume pairs and sixteen terminal drivers per case are independently observed; five invalid guards per suspension preserve attempts, all5ledger, compiler/runtime physical values and runtime table. Three Checked artifacts each validate the same nominal enum identity and two typed catch pairs; Lowered has no fixed catch opcode count. Four-stage ten-role public effects preserve quotient2/2, direct propagation2/0, indirect1/1; indirect callable flags0 and full I64-to-I64 signature are checked. Cancellation and structured-Task success remain OPEN. Original nine OPEN responsibilities and denominators unchanged.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "OPEN",
+    "old_obligations_retired": 0
+  }
+}
