@@ -253,3 +253,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_asser
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_division_defer.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_builtin_panic_group6.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_call_error_panic_group5.cmake")
