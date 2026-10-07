@@ -255,3 +255,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integ
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_builtin_panic_group6.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_call_error_panic_group5.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_coroutine_panic_group4.cmake")

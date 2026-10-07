@@ -1,0 +1,3493 @@
+{
+  "schema": 1,
+  "status": "VM_NORMAL_ONLY_VERIFIED_MIGRATION_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "wire_schema": 25,
+  "semantic_contract": 67,
+  "declaration_family": "Original suspending quotient/direct or indirect invoke/error/panic/conditional defer.",
+  "target": "test_source_product_coroutine_panic_group4",
+  "normal_gate": {
+    "executed": true,
+    "tests": 4,
+    "new_TUs": 1,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "finite_independent_process": true
+  },
+  "fixtures": [
+    {
+      "id": "sealed_coroutine_invoke",
+      "legacy_name": "source_owner_sealed_coroutine_invoke_runs_defer_after_suspension",
+      "legacy_line": 7262,
+      "original_exit": 1,
+      "original_stderr_hex": "5b556e6361756768742050616e69635d2045303432303a206469766973696f6e206279207a65726f0a",
+      "dispatch": 5,
+      "gate": "test_source_product_coroutine_panic_group4_sealed_coroutine_invoke_vm_normal",
+      "argv": [
+        "test_source_product_coroutine_panic_group4",
+        "sealed_coroutine_invoke",
+        "generated/source-coroutine-panic-group4/sealed_coroutine_invoke",
+        "generated/source-coroutine-panic-group4/sealed_coroutine_invoke/root.xr"
+      ],
+      "fallible": true,
+      "defer": true,
+      "root_mutable_I64_slots": 1,
+      "private_named_functions": 4,
+      "test_roles": 4,
+      "permissions_per_instance": 14,
+      "proper_private_arguments": {
+        "checked": [
+          "BOOL(false)"
+        ],
+        "quotient": [
+          "I64(0)"
+        ]
+      },
+      "suspend_effects": {
+        "quotient": "MAY",
+        "checked_answer_failure_success": "MAY",
+        "entry_initializer_read_fresh_failureCleanup": "NONE"
+      },
+      "expected_yields_total": 12,
+      "expected_resume_total": 12,
+      "expected_invalid_wait_guards": 60,
+      "original_source": {
+        "sha256": "93174fbd55879bff7b5d0e65f536566211e6191959af974c2fa04aad6837d374",
+        "bytes": 840
+      },
+      "same_root_tests": {
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6",
+        "bytes": 270
+      },
+      "full_source": {
+        "sha256": "7c65c4758355bf66ead9e11691503f37bfd7792ec861c1dba63c35297249510b",
+        "bytes": 1110
+      },
+      "legacy_generator": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "whole_file_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+        "line": 7262,
+        "wrapper_LF_no_terminal_newline_sha256": "2fb0abccc54de2d646e1de6dcbfcf96739cccbc2bd4afee8e638b8762067e99f"
+      },
+      "original_status": "OPEN",
+      "initial_projection": null,
+      "new_input_admission": "VM_NORMAL_ONLY_VERIFIED",
+      "normal_costs": {
+        "msvc": {
+          "compiler_sites": 4553,
+          "runtime_sites": 178,
+          "allocated": 1766438,
+          "peak": 242590,
+          "work": 11355075
+        },
+        "asan": {
+          "compiler_sites": 4553,
+          "runtime_sites": 178,
+          "allocated": 1766438,
+          "peak": 242590,
+          "work": 11355075
+        }
+      },
+      "normal_oracle": {
+        "canonical_I64_zero": 2,
+        "panic_detail": 420,
+        "panic_payload": "Unit, separately formatted 16B division by zero",
+        "panic_copies_after_all_owners": 4,
+        "ordinary_failure_instance_READY": true,
+        "success": 42,
+        "business_error_caught_result": 7,
+        "cleanup_fresh": 0,
+        "cleanup_after_failure": 22,
+        "cleanup_after_success": 11,
+        "normal_yields_failure_per_call": 1,
+        "normal_yields_success_per_call": 2,
+        "two_instances": true,
+        "failure_and_success_repeated_twice_per_instance": true,
+        "finite_independent_ledger": true,
+        "final_compiler_runtime_blocks_bytes_tables": 0,
+        "Unit": 10,
+        "permissions_per_instance": 14,
+        "wait_invalid_guards": 60
+      }
+    },
+    {
+      "id": "indirect_coroutine_invoke",
+      "legacy_name": "source_owner_indirect_coroutine_invoke_runs_defer_after_suspension",
+      "legacy_line": 7267,
+      "original_exit": 1,
+      "original_stderr_hex": "5b556e6361756768742050616e69635d2045303432303a206469766973696f6e206279207a65726f0a",
+      "dispatch": 6,
+      "gate": "test_source_product_coroutine_panic_group4_indirect_coroutine_invoke_vm_normal",
+      "argv": [
+        "test_source_product_coroutine_panic_group4",
+        "indirect_coroutine_invoke",
+        "generated/source-coroutine-panic-group4/indirect_coroutine_invoke",
+        "generated/source-coroutine-panic-group4/indirect_coroutine_invoke/root.xr"
+      ],
+      "fallible": true,
+      "defer": true,
+      "root_mutable_I64_slots": 1,
+      "private_named_functions": 4,
+      "test_roles": 4,
+      "permissions_per_instance": 14,
+      "proper_private_arguments": {
+        "checked": [
+          "BOOL(false)"
+        ],
+        "quotient": [
+          "I64(0)"
+        ]
+      },
+      "suspend_effects": {
+        "quotient": "MAY",
+        "checked_answer_failure_success": "UNKNOWN",
+        "entry_initializer_read_fresh_failureCleanup": "NONE"
+      },
+      "expected_yields_total": 12,
+      "expected_resume_total": 12,
+      "expected_invalid_wait_guards": 60,
+      "original_source": {
+        "sha256": "fbee3d379bd66c7fe05f89618606ce2669e7e90fa493df298ea0c206be401ee2",
+        "bytes": 864
+      },
+      "same_root_tests": {
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6",
+        "bytes": 270
+      },
+      "full_source": {
+        "sha256": "f44899e613eafb71797c84d7e961b2a03e0dfcd07648bb115ecd74d6be4fa6cf",
+        "bytes": 1134
+      },
+      "legacy_generator": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "whole_file_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+        "line": 7267,
+        "wrapper_LF_no_terminal_newline_sha256": "9de3542ca58fbee57104c585883101ad8244844b5e1d79bb572767279be20118"
+      },
+      "original_status": "OPEN",
+      "initial_projection": null,
+      "new_input_admission": "VM_NORMAL_ONLY_VERIFIED",
+      "normal_costs": {
+        "msvc": {
+          "compiler_sites": 4570,
+          "runtime_sites": 196,
+          "allocated": 1841930,
+          "peak": 245944,
+          "work": 12359898
+        },
+        "asan": {
+          "compiler_sites": 4570,
+          "runtime_sites": 196,
+          "allocated": 1841930,
+          "peak": 245944,
+          "work": 12359898
+        }
+      },
+      "normal_oracle": {
+        "canonical_I64_zero": 2,
+        "panic_detail": 420,
+        "panic_payload": "Unit, separately formatted 16B division by zero",
+        "panic_copies_after_all_owners": 4,
+        "ordinary_failure_instance_READY": true,
+        "success": 42,
+        "business_error_caught_result": 7,
+        "cleanup_fresh": 0,
+        "cleanup_after_failure": 22,
+        "cleanup_after_success": 11,
+        "normal_yields_failure_per_call": 1,
+        "normal_yields_success_per_call": 2,
+        "two_instances": true,
+        "failure_and_success_repeated_twice_per_instance": true,
+        "finite_independent_ledger": true,
+        "final_compiler_runtime_blocks_bytes_tables": 0,
+        "Unit": 10,
+        "permissions_per_instance": 14,
+        "wait_invalid_guards": 60
+      }
+    },
+    {
+      "id": "sealed_coroutine_panic",
+      "legacy_name": "source_owner_sealed_coroutine_panic_runs_defer_after_suspension",
+      "legacy_line": 7272,
+      "original_exit": 1,
+      "original_stderr_hex": "5b556e6361756768742050616e69635d2045303432303a206469766973696f6e206279207a65726f0a",
+      "dispatch": 1,
+      "gate": "test_source_product_coroutine_panic_group4_sealed_coroutine_panic_vm_normal",
+      "argv": [
+        "test_source_product_coroutine_panic_group4",
+        "sealed_coroutine_panic",
+        "generated/source-coroutine-panic-group4/sealed_coroutine_panic",
+        "generated/source-coroutine-panic-group4/sealed_coroutine_panic/root.xr"
+      ],
+      "fallible": false,
+      "defer": true,
+      "root_mutable_I64_slots": 1,
+      "private_named_functions": 4,
+      "test_roles": 4,
+      "permissions_per_instance": 14,
+      "proper_private_arguments": {
+        "checked": [
+          "BOOL(false)"
+        ],
+        "quotient": [
+          "I64(0)"
+        ]
+      },
+      "suspend_effects": {
+        "quotient": "MAY",
+        "checked_answer_failure_success": "MAY",
+        "entry_initializer_read_fresh_failureCleanup": "NONE"
+      },
+      "expected_yields_total": 8,
+      "expected_resume_total": 8,
+      "expected_invalid_wait_guards": 40,
+      "original_source": {
+        "sha256": "51ae3b105af7b9c3f58ebcb98e54385c4a5a016bc5207d2cf2493f95eaa860ca",
+        "bytes": 554
+      },
+      "same_root_tests": {
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6",
+        "bytes": 270
+      },
+      "full_source": {
+        "sha256": "180b247e695a48caf084de5bb00b047d89e8dbad8e277fc151437e4254bd8e69",
+        "bytes": 824
+      },
+      "legacy_generator": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "whole_file_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+        "line": 7272,
+        "wrapper_LF_no_terminal_newline_sha256": "bcccfd6064edf303c9724d3ed5d706e193a6ff587d8e376042621e556759535a"
+      },
+      "original_status": "OPEN",
+      "initial_projection": null,
+      "new_input_admission": "VM_NORMAL_ONLY_VERIFIED",
+      "normal_costs": {
+        "msvc": {
+          "compiler_sites": 4265,
+          "runtime_sites": 162,
+          "allocated": 1147232,
+          "peak": 217698,
+          "work": 3174652
+        },
+        "asan": {
+          "compiler_sites": 4265,
+          "runtime_sites": 162,
+          "allocated": 1147232,
+          "peak": 217698,
+          "work": 3174652
+        }
+      },
+      "normal_oracle": {
+        "canonical_I64_zero": 2,
+        "panic_detail": 420,
+        "panic_payload": "Unit, separately formatted 16B division by zero",
+        "panic_copies_after_all_owners": 4,
+        "ordinary_failure_instance_READY": true,
+        "success": 42,
+        "business_error_caught_result": null,
+        "cleanup_fresh": 0,
+        "cleanup_after_failure": 22,
+        "cleanup_after_success": 11,
+        "normal_yields_failure_per_call": 1,
+        "normal_yields_success_per_call": 1,
+        "two_instances": true,
+        "failure_and_success_repeated_twice_per_instance": true,
+        "finite_independent_ledger": true,
+        "final_compiler_runtime_blocks_bytes_tables": 0,
+        "Unit": 10,
+        "permissions_per_instance": 14,
+        "wait_invalid_guards": 40
+      }
+    },
+    {
+      "id": "indirect_coroutine_panic",
+      "legacy_name": "source_owner_indirect_coroutine_panic_runs_defer_after_suspension",
+      "legacy_line": 7277,
+      "original_exit": 1,
+      "original_stderr_hex": "5b556e6361756768742050616e69635d2045303432303a206469766973696f6e206279207a65726f0a",
+      "dispatch": 2,
+      "gate": "test_source_product_coroutine_panic_group4_indirect_coroutine_panic_vm_normal",
+      "argv": [
+        "test_source_product_coroutine_panic_group4",
+        "indirect_coroutine_panic",
+        "generated/source-coroutine-panic-group4/indirect_coroutine_panic",
+        "generated/source-coroutine-panic-group4/indirect_coroutine_panic/root.xr"
+      ],
+      "fallible": false,
+      "defer": true,
+      "root_mutable_I64_slots": 1,
+      "private_named_functions": 4,
+      "test_roles": 4,
+      "permissions_per_instance": 14,
+      "proper_private_arguments": {
+        "checked": [
+          "BOOL(false)"
+        ],
+        "quotient": [
+          "I64(0)"
+        ]
+      },
+      "suspend_effects": {
+        "quotient": "MAY",
+        "checked_answer_failure_success": "UNKNOWN",
+        "entry_initializer_read_fresh_failureCleanup": "NONE"
+      },
+      "expected_yields_total": 8,
+      "expected_resume_total": 8,
+      "expected_invalid_wait_guards": 40,
+      "original_source": {
+        "sha256": "11d36645adbcffbd9980a0fdb1a4cd62bd09e8d10f11734d066b24d7f709f889",
+        "bytes": 578
+      },
+      "same_root_tests": {
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6",
+        "bytes": 270
+      },
+      "full_source": {
+        "sha256": "44fd79872ee4ae20c0ebbb91ca1bbeca4d767e64cc7b09230978f9f1c4a3e883",
+        "bytes": 848
+      },
+      "legacy_generator": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "whole_file_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+        "line": 7277,
+        "wrapper_LF_no_terminal_newline_sha256": "ab8592f057dc893834107a491c1db74ee721f702428c287b9f1b3e10f1f2afae"
+      },
+      "original_status": "OPEN",
+      "initial_projection": null,
+      "new_input_admission": "VM_NORMAL_ONLY_VERIFIED",
+      "normal_costs": {
+        "msvc": {
+          "compiler_sites": 4283,
+          "runtime_sites": 180,
+          "allocated": 1180087,
+          "peak": 220316,
+          "work": 3716113
+        },
+        "asan": {
+          "compiler_sites": 4283,
+          "runtime_sites": 180,
+          "allocated": 1180087,
+          "peak": 220316,
+          "work": 3716113
+        }
+      },
+      "normal_oracle": {
+        "canonical_I64_zero": 2,
+        "panic_detail": 420,
+        "panic_payload": "Unit, separately formatted 16B division by zero",
+        "panic_copies_after_all_owners": 4,
+        "ordinary_failure_instance_READY": true,
+        "success": 42,
+        "business_error_caught_result": null,
+        "cleanup_fresh": 0,
+        "cleanup_after_failure": 22,
+        "cleanup_after_success": 11,
+        "normal_yields_failure_per_call": 1,
+        "normal_yields_success_per_call": 1,
+        "two_instances": true,
+        "failure_and_success_repeated_twice_per_instance": true,
+        "finite_independent_ledger": true,
+        "final_compiler_runtime_blocks_bytes_tables": 0,
+        "Unit": 10,
+        "permissions_per_instance": 14,
+        "wait_invalid_guards": 40
+      }
+    }
+  ],
+  "owned_result_scope": "Copied intrinsic Unitpanicfacts;16Bcaller scratch; no ownedSTRING.",
+  "effects_scope": "Public verifiedLowered suspension summary, cumulativecosts; throws notasserted.",
+  "runtime_status": "VM_NORMAL4_ONLY_VERIFIED_CANCEL_NATIVE_FI_OPEN",
+  "actual_costs": {
+    "status": "ACTUAL_PER_CONFIGURATION_PER_FIXTURE",
+    "configurations": {
+      "msvc": {
+        "sealed_coroutine_invoke": {
+          "compiler_sites": 4553,
+          "runtime_sites": 178,
+          "allocated": 1766438,
+          "peak": 242590,
+          "work": 11355075
+        },
+        "indirect_coroutine_invoke": {
+          "compiler_sites": 4570,
+          "runtime_sites": 196,
+          "allocated": 1841930,
+          "peak": 245944,
+          "work": 12359898
+        },
+        "sealed_coroutine_panic": {
+          "compiler_sites": 4265,
+          "runtime_sites": 162,
+          "allocated": 1147232,
+          "peak": 217698,
+          "work": 3174652
+        },
+        "indirect_coroutine_panic": {
+          "compiler_sites": 4283,
+          "runtime_sites": 180,
+          "allocated": 1180087,
+          "peak": 220316,
+          "work": 3716113
+        }
+      },
+      "asan": {
+        "sealed_coroutine_invoke": {
+          "compiler_sites": 4553,
+          "runtime_sites": 178,
+          "allocated": 1766438,
+          "peak": 242590,
+          "work": 11355075
+        },
+        "indirect_coroutine_invoke": {
+          "compiler_sites": 4570,
+          "runtime_sites": 196,
+          "allocated": 1841930,
+          "peak": 245944,
+          "work": 12359898
+        },
+        "sealed_coroutine_panic": {
+          "compiler_sites": 4265,
+          "runtime_sites": 162,
+          "allocated": 1147232,
+          "peak": 217698,
+          "work": 3174652
+        },
+        "indirect_coroutine_panic": {
+          "compiler_sites": 4283,
+          "runtime_sites": 180,
+          "allocated": 1180087,
+          "peak": 220316,
+          "work": 3716113
+        }
+      }
+    },
+    "independence": "Four separate cold processes per provider; fees and epoch/wake tokens need not match providers"
+  },
+  "OPEN": [
+    "old Core operation shape and shared emission representations",
+    "class construct/finalize/reclaim identities and reverse failure order",
+    "original external exit1 and E0420 stderr rendering",
+    "all native/mixed backends",
+    "wholecompiler/runtime FI and all allocated/live/work axes",
+    "cancel and structured Task lifecycle not observed by these normal cases",
+    "physical removal of input files after Source death",
+    "Main semantic/Checked68 integration qualification",
+    "remaining oldSource108 and other26files/160functions/8allocation/7shared-owner denominators"
+  ],
+  "old_denominators": {
+    "Source": 108,
+    "Source_split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "original_Source_responsibilities_retired": 0,
+  "normal_qualification": {
+    "status": "PASS_COROUTINE_PANIC_GROUP4_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 218,
+    "new_TUs_per_configuration": 1,
+    "normal_tests_per_configuration": 4,
+    "registered279": "REGISTRATION_ONLY",
+    "normal_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\coroutine-panic-group4-normal-integrated-audit-r2\\audit-report-final.json",
+      "sha256": "1fccbf858b7e8bd3d9f2ad4cde852a5a8ae87edcab60b15065576a51d70dd461",
+      "bytes": 18919
+    },
+    "actual_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\coroutine-panic-group4-normal-integrated-audit-r2\\audit-terminal.json",
+      "sha256": "b67a2aacc71890806bbe1e4675506acdfd79965ef6d61073e0ec03f0ba2e178a",
+      "bytes": 5526
+    },
+    "actual218_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\coroutine-panic-group4-normal-integrated-audit-r2\\actual218-successor-pointers-precommit-related-final.json",
+      "sha256": "9d2e48abd4d4ee1b998bd7aee1d069581561884f3233c64641b307b215245960",
+      "bytes": 9274
+    },
+    "configurations": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\result.json",
+          "sha256": "87be12eda8ef9031a14b63e6f2d0c26c120c96c55e89a91d683f4d303c096465",
+          "bytes": 165024
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\Root-terminal.json",
+          "sha256": "7360066727b7e1a8d6997433d88793d42a720a5c52dc727fad9a55533cec3c5a",
+          "bytes": 1123
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\actual-compilation-binding.json",
+          "sha256": "eec054898c3bcda688da86cd7c19bb180bf5f6668d561b400bd82c5463be054e",
+          "bytes": 1481146
+        },
+        "registry279": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\registered-applicable-279.json",
+          "sha256": "4b21b95d4b8422fa3dfd2dbb30a8cfe33d2feb86fea001ac8a3294f2bea3b47e",
+          "bytes": 234256
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\coroutine-panic-group4-normal-measurements.json",
+          "sha256": "38e3da7b74ec46371df8f0a52608d0ddd59d5a7965173d58fde11008bb9a2657",
+          "bytes": 52202
+        },
+        "normal_costs": {
+          "sealed_coroutine_invoke": {
+            "compiler_sites": 4553,
+            "runtime_sites": 178,
+            "allocated": 1766438,
+            "peak": 242590,
+            "work": 11355075
+          },
+          "indirect_coroutine_invoke": {
+            "compiler_sites": 4570,
+            "runtime_sites": 196,
+            "allocated": 1841930,
+            "peak": 245944,
+            "work": 12359898
+          },
+          "sealed_coroutine_panic": {
+            "compiler_sites": 4265,
+            "runtime_sites": 162,
+            "allocated": 1147232,
+            "peak": 217698,
+            "work": 3174652
+          },
+          "indirect_coroutine_panic": {
+            "compiler_sites": 4283,
+            "runtime_sites": 180,
+            "allocated": 1180087,
+            "peak": 220316,
+            "work": 3716113
+          }
+        },
+        "coroutine_observations": {
+          "sealed_coroutine_invoke": {
+            "yield_count": 12,
+            "resume_count": 12,
+            "wait_invalid_guards": 60,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 3,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 6,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 9,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 10,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 11,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 12,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "MAY",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "38e3da7b74ec46371df8f0a52608d0ddd59d5a7965173d58fde11008bb9a2657",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          },
+          "indirect_coroutine_invoke": {
+            "yield_count": 12,
+            "resume_count": 12,
+            "wait_invalid_guards": 60,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 3,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 6,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 9,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 10,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 11,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 12,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "UNKNOWN",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "38e3da7b74ec46371df8f0a52608d0ddd59d5a7965173d58fde11008bb9a2657",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          },
+          "sealed_coroutine_panic": {
+            "yield_count": 8,
+            "resume_count": 8,
+            "wait_invalid_guards": 40,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 3,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 6,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "MAY",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "38e3da7b74ec46371df8f0a52608d0ddd59d5a7965173d58fde11008bb9a2657",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          },
+          "indirect_coroutine_panic": {
+            "yield_count": 8,
+            "resume_count": 8,
+            "wait_invalid_guards": 40,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 3,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 6,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "UNKNOWN",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "38e3da7b74ec46371df8f0a52608d0ddd59d5a7965173d58fde11008bb9a2657",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          }
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\selected.xml",
+          "sha256": "569af5be72e4fdd0091e5d7efa4f50a6ced916520d3bc48b81657884bed2779e",
+          "bytes": 49413
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\LastTest.log",
+          "sha256": "f08e1fbcf4cbe39fd485a48aa65f13a559bf459ea9b3042a5ba55eb4e4fc1ef7",
+          "bytes": 53579
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\new-actual-compilation-binding.json",
+          "sha256": "7923fdd3294b30d2444978030eff5f270f59123efd07fd470bf56a94b75f9ac9",
+          "bytes": 47002
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\fresh.stdout.raw",
+          "bytes": 3663,
+          "sha256": "2ecac91c013485e12a2b9675806e7fd42a8fbce2db732c524eb2cefb01a50e7f"
+        },
+        "deps_raw": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-msvc-r2\\deps.stdout.raw",
+          "bytes": 14386,
+          "sha256": "5e02d408e24a8dbf984a0322ee88f1855276a7f04d5edca21b6a673d1f6ab9bd"
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\coroutine-panic-group4-normal-integrated-audit-r2\\msvc-independently-decoded.json",
+          "sha256": "c4d2e7440291fd7bb5858cf9fc611b829647f3c3c32f07772db5d21fffdc07df",
+          "bytes": 54262
+        },
+        "actual_dependency_count": 159
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\result.json",
+          "sha256": "20f06463de2f1c1bd24279dd09eff584822e309b5e7de14c23d434a25dec01db",
+          "bytes": 161299
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\Root-terminal.json",
+          "sha256": "ab2e5e3c2959c6cf24b0ebe6fe3c7a99e1b5557d09f432f2d43b6a033a5a02e3",
+          "bytes": 1123
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\actual-compilation-binding.json",
+          "sha256": "02c3d463b0ece8f7036c6081cd219d071fa68e4fc43c2c9525bd146c64553301",
+          "bytes": 1537056
+        },
+        "registry279": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\registered-applicable-279.json",
+          "sha256": "d11717b497fed5c7412044e0df12c30bc299df21d427fa9d694d3b193c8933e1",
+          "bytes": 282244
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\coroutine-panic-group4-normal-measurements.json",
+          "sha256": "48f3a73d7f12057e0dd8fa8f04e36c929628981bc15cdf1aeecd74d896370de3",
+          "bytes": 52202
+        },
+        "normal_costs": {
+          "sealed_coroutine_invoke": {
+            "compiler_sites": 4553,
+            "runtime_sites": 178,
+            "allocated": 1766438,
+            "peak": 242590,
+            "work": 11355075
+          },
+          "indirect_coroutine_invoke": {
+            "compiler_sites": 4570,
+            "runtime_sites": 196,
+            "allocated": 1841930,
+            "peak": 245944,
+            "work": 12359898
+          },
+          "sealed_coroutine_panic": {
+            "compiler_sites": 4265,
+            "runtime_sites": 162,
+            "allocated": 1147232,
+            "peak": 217698,
+            "work": 3174652
+          },
+          "indirect_coroutine_panic": {
+            "compiler_sites": 4283,
+            "runtime_sites": 180,
+            "allocated": 1180087,
+            "peak": 220316,
+            "work": 3716113
+          }
+        },
+        "coroutine_observations": {
+          "sealed_coroutine_invoke": {
+            "yield_count": 12,
+            "resume_count": 12,
+            "wait_invalid_guards": 60,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 3,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 6,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 9,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 10,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 11,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 12,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "MAY",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "48f3a73d7f12057e0dd8fa8f04e36c929628981bc15cdf1aeecd74d896370de3",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          },
+          "indirect_coroutine_invoke": {
+            "yield_count": 12,
+            "resume_count": 12,
+            "wait_invalid_guards": 60,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 3,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 6,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 9,
+                "epoch": 5,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 10,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 11,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 1,
+                "serial": 12,
+                "epoch": 8,
+                "wake": 2,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 2,
+                "expected_yields": 2
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "UNKNOWN",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "48f3a73d7f12057e0dd8fa8f04e36c929628981bc15cdf1aeecd74d896370de3",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          },
+          "sealed_coroutine_panic": {
+            "yield_count": 8,
+            "resume_count": 8,
+            "wait_invalid_guards": 40,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 3,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 6,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "MAY",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "48f3a73d7f12057e0dd8fa8f04e36c929628981bc15cdf1aeecd74d896370de3",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          },
+          "indirect_coroutine_panic": {
+            "yield_count": 8,
+            "resume_count": 8,
+            "wait_invalid_guards": 40,
+            "suspension_events": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 1,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 2,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 3,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 4,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 5,
+                "epoch": 3,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 6,
+                "epoch": 5,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "call_suspension_index": 0,
+                "serial": 7,
+                "epoch": 6,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "call_suspension_index": 0,
+                "serial": 8,
+                "epoch": 8,
+                "wake": 1,
+                "wait": {
+                  "kind": "YIELD",
+                  "reserved": 0,
+                  "after_ms": 0,
+                  "subject": null,
+                  "generation": 0,
+                  "ticket": 0
+                },
+                "invalid_guards": 5,
+                "full_A5_outputs_preserved": true,
+                "ledger_unchanged": true,
+                "physical_unchanged": true
+              }
+            ],
+            "driver_calls16": [
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 0,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "canonical-entry",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFreshCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 0,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicFailure",
+                "driver_yields": 1,
+                "expected_yields": 1
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkFailureCleanup",
+                "driver_yields": 0,
+                "expected_yields": 0
+              },
+              {
+                "instance": 1,
+                "repeat": 1,
+                "operation": "checkPanicSuccess",
+                "driver_yields": 1,
+                "expected_yields": 1
+              }
+            ],
+            "lowered_suspend_effects": {
+              "quotient": "MAY",
+              "propagated": "UNKNOWN",
+              "propagated_functions": 4,
+              "non_suspending_functions": 5,
+              "summary_freed": true
+            },
+            "source_evidence": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\coroutine-panic-group4-normal-measurements.json",
+              "sha256": "48f3a73d7f12057e0dd8fa8f04e36c929628981bc15cdf1aeecd74d896370de3",
+              "bytes": 52202
+            },
+            "cancel": "NOT_RUN"
+          }
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\selected.xml",
+          "sha256": "0bde4f724246bb1f86fdcc26d18cd09546c4d1270135f04d0f42b60ad81d6b59",
+          "bytes": 49412
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\LastTest.log",
+          "sha256": "88fdade0291af50c1d77b0cf1a07b954f50c448b3b9c0bd7a2cde61a38fc828b",
+          "bytes": 53579
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\new-actual-compilation-binding.json",
+          "sha256": "a1a569ae4bf30036d6554c2eeccfa6b2736539a2341c4bb077119b502d3ffa3f",
+          "bytes": 48333
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\fresh.stdout.raw",
+          "bytes": 4160,
+          "sha256": "54bf75ccc5a58d53b30effb577e87a445c3a0fc0ccf891e2d431833087b9e87c"
+        },
+        "deps_raw": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\coroutine-panic-group4-normal-qualification-asan-r2\\deps.stdout.raw",
+          "bytes": 14386,
+          "sha256": "810c6560d5a577c491b55278bc0e1bdd859a1a77ab647f3af8574320557a9e1c"
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\coroutine-panic-group4-normal-integrated-audit-r2\\asan-independently-decoded.json",
+          "sha256": "c4d2e7440291fd7bb5858cf9fc611b829647f3c3c32f07772db5d21fffdc07df",
+          "bytes": 54262
+        },
+        "actual_dependency_count": 159
+      }
+    },
+    "qualified_source_inputs_immutable": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\coroutine-panic-group4-normal-integrated-audit-r2\\source-inputs-qualified.json",
+      "sha256": "b5b73b872a1c114cce35271131260e4eefd33ad9c1f138bd75193b87af889956",
+      "bytes": 2701329
+    },
+    "original_candidate_map_preserved": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\new-files\\source_coroutine_panic_group4_obligations.json",
+      "sha256": "fd39f57edf8cd38fd9daf8722b1ff98f87cf7fddeb952c3e09ad9b10da941ac2",
+      "bytes": 13797
+    },
+    "baseline_group5_delivery_immutable": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-error-panic-group5-delivery-r1\\delivery.json",
+      "sha256": "9c4061b83d66d3d7b62508562ae77218ca64c8fcf213aa2d8a6021dd5d8f4415",
+      "bytes": 18188
+    },
+    "qualification_scope": "Four complete original coroutine inputs with explicit same-module Test suffixes; ordinary panic returns READY; related5 separate",
+    "limits_unchanged": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000
+    },
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "class_identities": "OPEN",
+    "original_stderr": "OPEN"
+  },
+  "product_executions": {
+    "configurations": [
+      "msvc",
+      "asan"
+    ],
+    "cold_normal_processes_per_configuration": 4,
+    "total_cold_normal_processes": 8,
+    "fixture_ids": [
+      "sealed_coroutine_invoke",
+      "indirect_coroutine_invoke",
+      "sealed_coroutine_panic",
+      "indirect_coroutine_panic"
+    ],
+    "related_normal5": "SEPARATE_DENOMINATOR",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN",
+    "cancel": "NOT_RUN"
+  }
+}
