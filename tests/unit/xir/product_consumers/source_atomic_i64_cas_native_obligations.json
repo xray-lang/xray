@@ -1,0 +1,356 @@
+{
+  "status": "NATIVE_CAS_NORMAL_QUALIFIED_MIGRATION_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "preparation_worker_parent": "5c9d34292833e1b52ae288b5981cf1661126b85e",
+  "source_identities": {
+    "original_Source1_prefix": {
+      "bytes": 305,
+      "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c"
+    },
+    "full_fixture": {
+      "bytes": 883,
+      "sha256": "48f2b9ae959185e12959952ce0c18722840dc3e47a9e22abe00606d0446148c4"
+    },
+    "fixture_generated_existing": "generated/atomic-i64-cas-oracles/scenario1-cas.xr; do not rewrite/add wrapper",
+    "module_authority": "SCRIPT root directory; root file same883; stdlib selection identical NULL request; SourceProduct proves root source-path identity"
+  },
+  "contract": {
+    "schema": 25,
+    "Checked_contract": 67,
+    "Value_ABI": 22,
+    "Call_ABI": 28,
+    "Program_ABI": 29,
+    "target": "x86_64",
+    "types": "Atomic<i64> owned identity; compareExchange exact owned Tuple(mode0 i64, mode0 bool); explicit original store Nullable<Ordering>.Some(Release); omitted CAS/load SeqCst absent operand; constructed numeric type IDs must be read from actual types, not hardcoded",
+    "owner": "Finite compiler64Mi allocated/8Mi live/128Mwork; runtime admitted arena/domain; per callback atomic progress owns retained receiver, owned slots hold Atomic/tuple and release exactly once. native static image NULL code lease legal; Program seals/clones metadata/type arena before Lowered/C freed; Instances retain Program after caller drop.",
+    "effects": "Fixed25f effects switch admits Atomic ops without suspension/ordinary throw; resource/OOM/frame/work failures and assertion panic remain observable, not ordinary throw. No future FI/cancel claim.",
+    "authority": "answer/exported/private original/new @test remain private; plain start rejects initializer/answer/exported/both tests; start_test rejects ordinary roles, root test role solely grants test permission. 8 rejects per Instance, no adapter/export/nativeHidden",
+    "oracle": "success old40/matchedtrue/shared42/independent40; failure expected40 at42 gives old42/matchedfalse/shared42/independent40; canonicalI64zero2, originalUnit4/CASUnit4; every test fresh cells; local identity does not prove moduleglobal crossInstance isolation"
+  },
+  "normal_gate": {
+    "executed": true,
+    "configurations": [
+      "MSVC Release MT",
+      "clang-cl Debug MD ASan+UBSan"
+    ],
+    "tests_per_configuration": 1,
+    "test": "test_source_product_atomic_i64_cas_native_normal",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "expected": {
+    "Checked_controls": {
+      "owners": 3,
+      "total": 48,
+      "original_answer_per_owner": {
+        "NEW": 1,
+        "CAS": 1,
+        "LOAD": 1,
+        "STORE": 1,
+        "ADD": 1,
+        "SUB": 1
+      },
+      "new_test_per_owner": {
+        "NEW": 2,
+        "CAS": 2,
+        "LOAD": 6
+      }
+    },
+    "metadata": {
+      "Checked": 3,
+      "Lowered": 1,
+      "typed_tuple": "mode0 i64/bool",
+      "constructed_type_ids": "actual_arena_not_hardcoded"
+    },
+    "canonical_I64_zero": 2,
+    "original_Unit": 4,
+    "CAS_Unit": 4,
+    "permission_rejections_per_Instance": 8,
+    "success": {
+      "old": 40,
+      "matched": true,
+      "shared": 42,
+      "independent": 40
+    },
+    "failure": {
+      "expected": 40,
+      "desired": 99,
+      "old": 42,
+      "matched": false,
+      "shared": 42,
+      "independent": 40
+    },
+    "owned_C": {
+      "count": 2,
+      "different_allocation": true,
+      "bytes_identical": true,
+      "repeat_freed": true,
+      "byte_limit": 16777216
+    },
+    "compiled_correspondence": {
+      "payload_digest": "compare_reemission_to_compiled_const",
+      "full_proof_bytes_identity": "memcmp_exact",
+      "layouts": "every_function",
+      "identities": "every_function",
+      "all_native_callbacks": "function_count_dynamic",
+      "parameter_result_types": "every_entry",
+      "types": "sealed_from_same_proof",
+      "null_static_image_lease": true
+    },
+    "release": {
+      "C_Lowered_before_execute": true,
+      "Program_caller_before_execute": true,
+      "compiler_blocks": 0,
+      "compiler_bytes": 0,
+      "runtime_blocks": 0,
+      "runtime_bytes": 0,
+      "tracker_capacity": 0
+    },
+    "first_new_translation_units": 3,
+    "previous_TUs": 205,
+    "expected_total_TUs": 208,
+    "previous_registered": 258,
+    "expected_registered_only": 259,
+    "new_CTest": 1
+  },
+  "implementation": {
+    "prefix": "source_atomic_i64_cas",
+    "macro": "XR_SOURCE_ATOMIC_CAS_NATIVE",
+    "emitter": "test_source_product_atomic_i64_cas_c_emitter",
+    "driver": "test_source_product_atomic_i64_cas_native",
+    "fixture": "generated/atomic-i64-cas-oracles/scenario1-cas.xr (existing exact883, not rewritten)",
+    "generated_complete_TU": "generated/atomic-i64-cas-native/program.c",
+    "footer": "const char source_atomic_i64_cas_c_sha[65]",
+    "emitter_argc": 6,
+    "native_argc": 4,
+    "single_native_path": "No VMProgram take, no leaf/legacy fallback, no direct include whole .c"
+  },
+  "limits": {
+    "allocated": 67108864,
+    "live": 8388608,
+    "work": 128000000
+  },
+  "actual_costs": {
+    "scope": "This exact883B source/native208 batch and admitted compiler configuration; not FI denominators or other family budgets",
+    "configurations": {
+      "msvc": {
+        "compiler_sites": 2922,
+        "runtime_sites": 184,
+        "allocated": 1315032,
+        "peak": 317811,
+        "work": 5376662
+      },
+      "asan": {
+        "compiler_sites": 2922,
+        "runtime_sites": 184,
+        "allocated": 1315032,
+        "peak": 317811,
+        "work": 5376662
+      }
+    }
+  },
+  "runtime_status": "NATIVE_NORMAL_ONLY_VERIFIED; FI/AXES/FULL_SECURITY_NOT_RUN",
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "native_security": "NOT_RUN",
+  "OPEN": [
+    "5CAS orderings",
+    "bool/f64 CAS",
+    "FI",
+    "budget axes",
+    "provider/contention/progress/cancel/precommit/postcommit",
+    "foreignexports164",
+    "full security matrix",
+    "moduleglobal crossInstance state isolation",
+    "originalSource8",
+    "migration/wholegoal"
+  ],
+  "normal_qualification": {
+    "worker_parent": "5c9d34292833e1b52ae288b5981cf1661126b85e",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "candidate": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-native-cas-scope4-candidate-r1\\qualification-candidate.json",
+      "sha256": "bf1aa625a24164b046721fa59bd30339d70d63b0683484e33831336ddc38135e",
+      "bytes": 2506
+    },
+    "seal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-native-cas-scope4-prechange-r1\\manifest.json",
+      "sha256": "d579a99514e1dccab9881c09a4765d16ada48b608ccf9282b6c3145ed38f02ae",
+      "bytes": 4313345
+    },
+    "actual_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-cas-normal-integrated-audit-r1\\audit-report.json",
+      "sha256": "cab169643907bff7f184ede1e8d9c2deded2db9e540cad2bd92bfe3ef7d5519b",
+      "bytes": 14772
+    },
+    "actual_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-cas-normal-integrated-audit-r1\\actual-audit-terminal.json",
+      "sha256": "efd454f16df702458b13e41c40b770c6579d9b3405f99586b7cd54ff9184f85c",
+      "bytes": 2470
+    },
+    "actual208_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-cas-normal-integrated-audit-r1\\actual208-successor-pointers-precommit.json",
+      "sha256": "44878d4676f56b783d44d73fa5106fa5efcca710e732693e16d73ea14bf6ed4f",
+      "bytes": 26776
+    },
+    "normal_tests_per_configuration": 1,
+    "actual_TUs_per_configuration": 208,
+    "new_TUs_per_configuration": 3,
+    "registry259": "REGISTRATION_ONLY; one native normal/config actually executed",
+    "configurations": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\result.json",
+          "sha256": "b99881d81a29802efb839cb56238d10cc811f04dcf5457be9e8ad5938e1c3487",
+          "bytes": 85292
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\Root-terminal.json",
+          "sha256": "c265e78f9b9d52c88b91060c103b2f6fc349dbbe0b151e395ebdf0987d4920ad",
+          "bytes": 309
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\selected.xml",
+          "sha256": "04143529cad19f82ed8500fbcd99d54a1d5d43104141c6ea85afb2c8d02db290",
+          "bytes": 9988
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\LastTest.log",
+          "sha256": "10ee15c787d3f0c3605bb269017edf8032139457a13dda281c0174639aafd9c7",
+          "bytes": 10919
+        },
+        "raw_normal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\normal-XML-output.log",
+          "sha256": "bc68c6f7d7964577afd1f8655ae9b47c5be91a4a2a4976e43ce44db3be8725a7",
+          "bytes": 9354
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\actual-compilation-binding.json",
+          "sha256": "68d187cbf431d121ac7ec18a7c7f4b55e9c08b8df598d9c14fe421aad660ab15",
+          "bytes": 1121903
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\new-actual-compilation-binding.json",
+          "sha256": "9157daf3027c9e928975fb8d3e4c7110101276a66fda5ba2f978aef01fded782",
+          "bytes": 110766
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\atomic-cas-native-normal-measurements.json",
+          "sha256": "2e0b4be050c4554abb0095ef00200ab7a39e5a471059b6398138b021af39cd24",
+          "bytes": 9361
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\emitter-build-measurements.json",
+          "sha256": "85cc91afbf9ee3913b23ac62ea1f394d0ac9c681dcfd55953c64385fb4537553",
+          "bytes": 8338
+        },
+        "registry259": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r2\\registered-applicable-259.json",
+          "sha256": "e0209942d55012f1fb93875b05a4d471fc0ebb5695ea661b5269a19dd383d665",
+          "bytes": 213548
+        },
+        "fixture": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\atomic-i64-cas-oracles\\scenario1-cas.xr",
+          "sha256": "48f2b9ae959185e12959952ce0c18722840dc3e47a9e22abe00606d0446148c4",
+          "bytes": 883
+        },
+        "generatedTU": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\atomic-i64-cas-native\\program.c",
+          "sha256": "15b69070432e83cf8baf47e8c31393349c756cae6eeea810f029559499262c9e",
+          "bytes": 131788
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-msvc-r1\\fresh.log",
+          "sha256": "73320879ad4babd4483582a2f433f214feacbeb5efeaa475fcecc34c3039298a",
+          "bytes": 17848
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-cas-normal-integrated-audit-r1\\msvc-decoded-normal.json",
+          "sha256": "a7dad7d6373e4476e125bf9fab358dcee99c5e06fa322ee0a65061d8d370c854",
+          "bytes": 19743
+        }
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\result.json",
+          "sha256": "a7bbbea472992c998a860e381bff2511de0fd09ae066e7f48d764aa5c9d1deff",
+          "bytes": 151579
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\Root-terminal.json",
+          "sha256": "8e2ff8d60c080a18e4a0f0439392ee378817aeb28b149d9709f71896c39fe393",
+          "bytes": 289
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\selected.xml",
+          "sha256": "eb5f28b972d1d4de5c91b0b7579f80bbfcb8b3686948c5f95d18f2018b20efd0",
+          "bytes": 9988
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\LastTest.log",
+          "sha256": "491b42e7e902c4eda5508d1ba0c0bd5bbf04f89c38d8b286a50327bcfa266d24",
+          "bytes": 10919
+        },
+        "raw_normal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\normal-XML-output.log",
+          "sha256": "bc68c6f7d7964577afd1f8655ae9b47c5be91a4a2a4976e43ce44db3be8725a7",
+          "bytes": 9354
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\actual-compilation-binding.json",
+          "sha256": "66c701b949870d74fb1738be244c4e96ba192f531ef8d72a0dec2402b7530cc7",
+          "bytes": 1173689
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\new-actual-compilation-binding.json",
+          "sha256": "56a2065ff536cb3651f0083bec03e1a3e34396df08ea9e4db4d13da28e16dd13",
+          "bytes": 113567
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\atomic-cas-native-normal-measurements.json",
+          "sha256": "5d62710a9cc13b2376b0b6d7668092abec39b3acc72e79de5b240ef897750e6e",
+          "bytes": 9361
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\emitter-build-measurements.json",
+          "sha256": "a9a83ecee37936544ed4ab916464d59d745c021183741a5d3add2240659ef4b5",
+          "bytes": 8338
+        },
+        "registry259": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\registered-applicable-259.json",
+          "sha256": "ef849514dad997343159e8676dca3a3550004c92e85deb2147c1391bef3f3e26",
+          "bytes": 258096
+        },
+        "fixture": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\atomic-i64-cas-oracles\\scenario1-cas.xr",
+          "sha256": "48f2b9ae959185e12959952ce0c18722840dc3e47a9e22abe00606d0446148c4",
+          "bytes": 883
+        },
+        "generatedTU": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\atomic-i64-cas-native\\program.c",
+          "sha256": "15b69070432e83cf8baf47e8c31393349c756cae6eeea810f029559499262c9e",
+          "bytes": 131788
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-cas-native-normal-qualification-asan-r2\\fresh.log",
+          "sha256": "59e1edd7e4ac427e8748a17d08a7caaba83717143f146e3da6a7bb97c293952a",
+          "bytes": 19147
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-cas-normal-integrated-audit-r1\\asan-decoded-normal.json",
+          "sha256": "a3b6cb93a63b83faf31679b5fd7ab714a6eecbbdfa9cbd2300404f7ef0eb6c50",
+          "bytes": 19743
+        }
+      }
+    },
+    "limits_unchanged": true,
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_security": "NOT_RUN",
+    "migration": "OPEN",
+    "original_candidate_preserved": {
+      "sha256": "6028e4549b9920d8adbe623bc049d3dbdabc561027188d1c3f9aa566b5c70d13",
+      "boundary": "Original6028 candidate immutable; only its prepared native execution NOT_RUN item is closed by these two actual normal gates. Remaining OPEN items exact including FI, provider/cancel, fiveOrderings, bool/f64, fullsecurity, externalexports164 and moduleglobal isolation."
+    }
+  }
+}
