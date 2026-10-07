@@ -1,0 +1,7 @@
+struct Array<T>{
+    value:T
+    capacity:i64=5
+    constructor(value:T){this.value=value}
+    reserve(n:i64)->i64{return this.capacity+n}
+}
+export fn control()->bool{const value=Array<i64>{value:7};return value.reserve(8)==13&&value.capacity==5}

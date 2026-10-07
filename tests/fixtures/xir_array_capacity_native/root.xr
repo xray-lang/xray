@@ -1,0 +1,15 @@
+import "./producer" as producer
+var trace=0
+var roots:Array<Array<string>>=[["seed\0x"]]
+export fn main()->i64{print(17);print("cap\0native");return 0}
+export fn shape()->bool{var xs=producer.create<i64>(9);xs.push(1);const cap=xs.capacity;const old=xs;var result=producer.reserve<i64>(ref xs,3);xs[0]=7;result[0]=8;return cap>=9&&xs.capacity>=cap&&result.capacity>=cap&&old.capacity==cap&&old[0]==1&&xs[0]==7&&result[0]==8&&len(xs)==1&&len(result)==1}
+export fn nestedPath()->bool{return roots[0].capacity>=1&&len(roots[0])==1&&roots[0][0]=="seed\0x"}
+fn index()->i64{trace=trace*10+1;return 0}
+fn requested()->i64{trace=trace*10+2;roots=[producer.text()];return 11}
+export fn reserveSnapshot()->Array<string>{return roots[index()].reserve(requested())}
+export fn snapshot()->Array<string>{return roots[0]}
+export fn traceValue()->i64{return trace}
+export fn mutate()->i64{roots[0][0]="mutated";return 0}
+export fn negativeNew()->i64{try{const xs=Array<i64>.withCapacity(-1);return len(xs)}catch panic(p:PanicInfo){return p.code}}
+export fn negativeReserve()->i64{var xs=[1,2];const cap=xs.capacity;try{const result=xs.reserve(-1);return len(result)}catch panic(p:PanicInfo){if(len(xs)==2&&xs[0]==1&&xs[1]==2&&xs.capacity==cap){return p.code};return 0}}
+export fn overflow()->Array<i64>{return Array<i64>.withCapacity(9223372036854775807)}

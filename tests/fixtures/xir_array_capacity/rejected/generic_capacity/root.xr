@@ -1,0 +1,2 @@
+fn invalid<T>(xs:T)->i64{return xs.capacity}
+export fn main()->i64{return 0}

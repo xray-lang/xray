@@ -1,0 +1,4 @@
+export fn create<T>(n:i64)->Array<T>{return Array<T>.withCapacity(n)}
+export fn readCap<T>(xs:Array<T>)->i64{return xs.capacity}
+export fn enlarged<T>(xs:ref Array<T>,n:i64)->Array<T>{return xs.reserve(n)}
+export fn text()->Array<string>{var xs=Array<string>.withCapacity(9);xs.push("a\0中");xs.push("b\0c");return xs}

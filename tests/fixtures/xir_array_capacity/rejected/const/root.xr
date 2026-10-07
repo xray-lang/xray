@@ -1,0 +1,1 @@
+export fn main()->i64{const xs=[1];const result=xs.reserve(4);return len(result)}

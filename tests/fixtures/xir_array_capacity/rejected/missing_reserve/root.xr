@@ -1,0 +1,1 @@
+export fn main()->i64{var xs=[1];const result=xs.reserve();return len(result)}

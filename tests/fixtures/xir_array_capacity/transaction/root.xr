@@ -1,0 +1,32 @@
+import "./producer" as producer
+import "./shadow" as shadow
+var trace=0
+var roots:Array<Array<i64>>=[[1,2]]
+var state:Array<i64>=[1,2,3]
+var spare:Array<i64>=Array<i64>.withCapacity(2)
+export fn main()->i64{return 0}
+export fn empty()->bool{const xs=producer.create<i64>(8);return len(xs)==0&&xs.capacity>=8&&xs.capacity<=9223372036854775807}
+export fn zero()->bool{var xs=Array<i64>.withCapacity(0);const result=xs.reserve(0);return len(xs)==0&&len(result)==0&&xs.capacity>=0&&result.capacity==xs.capacity}
+export fn absolute()->bool{var xs=[1,2];const before=xs.capacity;const old=xs;var returned=xs.reserve(8);const cap=xs.capacity;xs[0]=9;returned[1]=7;return len(xs)==2&&cap>=8&&xs.capacity>=cap&&returned.capacity>=cap&&old.capacity==before&&old[0]==1&&old[1]==2&&returned[0]==1&&returned[1]==7&&xs[0]==9&&xs[1]==2}
+export fn noChange()->bool{var xs=Array<i64>.withCapacity(12);xs.push(1);const before=xs.capacity;const old=xs;const result=xs.reserve(2);return xs.capacity>=before&&result.capacity==xs.capacity&&old.capacity==before&&len(result)==1&&result[0]==1}
+export fn pushSet()->bool{var xs=Array<i64>.withCapacity(12);xs.push(1);const cap=xs.capacity;const old=xs;xs[0]=9;xs.push(2);return xs.capacity>=cap&&old.capacity==cap&&old[0]==1&&xs[0]==9&&xs[1]==2}
+export fn nested()->bool{var inner=Array<i64>.withCapacity(12);inner.push(1);var outer=[inner];const old=outer;const cap=inner.capacity;outer[0].push(2);outer[0][0]=9;return outer[0].capacity>=cap&&old[0].capacity==cap&&old[0][0]==1&&len(old[0])==1&&outer[0][0]==9&&len(outer[0])==2}
+fn index()->i64{trace=trace*10+1;return 0}
+fn requested()->i64{trace=trace*10+2;roots=[[8,9,10]];return 11}
+export fn rebound()->bool{trace=0;roots=[[1,2]];const old=roots;const result=roots[index()].reserve(requested());return trace==12&&len(result)==3&&result[0]==8&&result[1]==9&&result[2]==10&&roots[0].capacity>=11&&result.capacity==roots[0].capacity&&len(old[0])==2&&old[0][0]==1}
+export fn readTemporary()->bool{return producer.readCap<i64>([1,2])>=2&&Array<i64>.withCapacity(3).capacity>=3}
+export fn generic()->bool{var xs=producer.create<i64>(5);xs.push(7);const result=producer.enlarged<i64>(ref xs,9);return result.capacity>=9&&xs.capacity==result.capacity&&result[0]==7}
+class Box{number:i64=1}
+export fn identity()->bool{const box=Box();var xs=Array<Box>.withCapacity(7);xs.push(box);const old=xs;const result=xs.reserve(9);box.number=7;return old[0].number==7&&result[0].number==7&&xs[0].number==7&&len(result)==1&&result.capacity>=9}
+struct Empty{}
+export fn emptyElement()->bool{const xs=Array<Empty>.withCapacity(9);return len(xs)==0&&xs.capacity>=9}
+export fn nullable()->bool{var xs=Array<i64?>.withCapacity(8);xs.push(null);xs.push(7);const old=xs;const result=xs.reserve(12);return len(result)==2&&result.capacity>=12&&old[0]==null&&old[1]==7&&result[0]==null&&result[1]==7}
+export fn negativeNew()->i64{try{const xs=Array<i64>.withCapacity(-1);return len(xs)}catch panic(p:PanicInfo){return p.code}}
+export fn negativeReserve()->i64{var xs=[1,2];const cap=xs.capacity;try{const result=xs.reserve(-1);return len(result)}catch panic(p:PanicInfo){if(len(xs)==2&&xs[0]==1&&xs[1]==2&&xs.capacity==cap){return p.code};return 0}}
+export fn overflow()->Array<i64>{return Array<i64>.withCapacity(9223372036854775807)}
+export fn text()->Array<string>{return producer.text()}
+export fn shadowControl()->bool{return shadow.control()}
+export fn widened()->bool{const n:i32=4;var xs=Array<i64>.withCapacity(n);const result=xs.reserve(n);return len(xs)==0&&len(result)==0&&xs.capacity>=4&&result.capacity==xs.capacity}
+export fn saved()->Array<i64>{return state}
+export fn committed()->Array<i64>{return state.reserve(13)}
+export fn committedThenAllocate()->Array<i64>{const result=state.reserve(13);const extra=Array<i64>.withCapacity(7);assert(len(extra)==0);return result}

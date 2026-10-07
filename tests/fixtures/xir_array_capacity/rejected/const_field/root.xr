@@ -1,0 +1,2 @@
+class Holder{const xs:Array<i64>;constructor(){this.xs=[1]}}
+export fn main()->i64{const h=Holder();const result=h.xs.reserve(4);return len(result)}

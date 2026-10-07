@@ -1,0 +1,1 @@
+export fn main()->i64{var xs=[1];xs.capacity=7;return len(xs)}

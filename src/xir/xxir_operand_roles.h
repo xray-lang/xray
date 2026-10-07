@@ -51,7 +51,7 @@ static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, ui
 
 /* Ordinals describe expanded semantic operands, including ARRAY_SET's table. */
 static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal) {
-    if (!ordinal && (op == XR_XIR_ARRAY_GET || op == XR_XIR_ARRAY_LEN || op == XR_XIR_PLACE_READ ||
+    if (!ordinal && (op == XR_XIR_ARRAY_GET || op == XR_XIR_ARRAY_LEN || op == XR_XIR_ARRAY_CAPACITY || op == XR_XIR_PLACE_READ ||
         op == XR_XIR_FIELD_PLACE || op == XR_XIR_INDEX_PLACE)) return XR_XIR_OPERAND_READ;
     if (!ordinal && (op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_STRUCT_SET ||
         op == XR_XIR_PLACE_WRITE)) return XR_XIR_OPERAND_WRITE;
@@ -91,7 +91,7 @@ static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
 static inline bool xr_xir_op_uses_value_path(const XrXirFunction *function, const XrXirInstruction *op) {
     if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) return true;
     if (op->op != XR_XIR_ARRAY_GET && op->op != XR_XIR_ARRAY_SET && op->op != XR_XIR_ARRAY_PUSH &&
-        op->op != XR_XIR_ARRAY_LEN && op->op != XR_XIR_STRUCT_SET) return false;
+        op->op != XR_XIR_ARRAY_LEN && op->op != XR_XIR_ARRAY_CAPACITY && op->op != XR_XIR_STRUCT_SET) return false;
     uint32_t id = xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0]] : op->args[0];
     XrXirPlaceKind kind = xr_xir_place_kind(function, id);
     return kind == XR_XIR_PLACE_FIELD || kind == XR_XIR_PLACE_INDEX;

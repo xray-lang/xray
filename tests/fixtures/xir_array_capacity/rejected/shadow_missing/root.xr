@@ -1,0 +1,3 @@
+struct Array<T>{value:T
+    constructor(value:T){this.value=value}}
+export fn main()->i64{var xs=Array<i64>{value:7};return xs.reserve(4).capacity}

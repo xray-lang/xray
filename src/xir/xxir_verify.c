@@ -647,7 +647,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
         cell = xr_xir_operand_type(function, op->args[0]);
         if (!xr_xir_type_is_cell(types, cell) || xr_xir_cell_element(types, cell) != array)
             return XR_XIR_BAD_TYPE;
-    } else if (op->op != XR_XIR_ARRAY_NEW && op->op != XR_XIR_ARRAY_REPEAT) {
+    } else if (op->op != XR_XIR_ARRAY_NEW && op->op != XR_XIR_ARRAY_REPEAT && op->op != XR_XIR_ARRAY_WITH_CAPACITY) {
         uint32_t receiver = op->op == XR_XIR_ARRAY_SET ? function->operands[op->args[0]] : op->args[0];
         array = xr_xir_operand_type(function, receiver);
         if (!xr_xir_type_is_array(types, array)) return XR_XIR_BAD_TYPE;
@@ -660,6 +660,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
         xr_xir_compile_type_satisfies(&context->remaining, context->module, context->location.function, element, (XrXirConstraint){0});
     if (status != XR_XIR_OK) return status;
     if (op->op == XR_XIR_ARRAY_GET && op->type != element) return XR_XIR_BAD_TYPE;
+    if (op->op == XR_XIR_ARRAY_RESERVE && op->type != array) return XR_XIR_BAD_TYPE;
     uint32_t count = operand_count(function, op, context->module);
     if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
     for (uint32_t a = 0; a < count; ++a) {
@@ -667,6 +668,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_CELL_PLACE) expected = cell;
         if (op->op == XR_XIR_ARRAY_NEW) expected = element;
         if (op->op == XR_XIR_ARRAY_REPEAT) expected = a ? element : XR_XIR_I64;
+        if (op->op == XR_XIR_ARRAY_WITH_CAPACITY || (op->op == XR_XIR_ARRAY_RESERVE && a == 1)) expected = XR_XIR_I64;
         if ((op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET) && a == 1) expected = XR_XIR_I64;
         status = role_operand(function, graph, context, instruction, a, expected);
         if (status != XR_XIR_OK) return status;
@@ -824,7 +826,8 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (status != XR_XIR_OK) return status;
             continue;
         }
-        if ((op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) || op->op == XR_XIR_ARRAY_REPEAT) {
+        if ((op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) || op->op == XR_XIR_ARRAY_REPEAT ||
+            (op->op >= XR_XIR_ARRAY_CAPACITY && op->op <= XR_XIR_ARRAY_RESERVE)) {
             XrXirStatus status = array_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;
             continue;

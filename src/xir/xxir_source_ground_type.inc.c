@@ -52,8 +52,24 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         return true;
     }
     if (!member || member->type!=AST_MEMBER_ACCESS) return true;
+    if (call && source_array_static_receiver(ctx, member->as.member_access.object)) {
+        const XrNativeMemberDeclaration *native = source_array_member(ctx, member, member->as.member_access.name);
+        if (!native || native->operation != XR_NATIVE_OPERATION_ARRAY_WITH_CAPACITY || !native->is_static)
+            return source_fail(ctx, member, XR_XIR_BAD_TYPE, "Array static member has no admitted result contract");
+        if (!source_array_static_type(ctx, member->as.member_access.object, &output->type)) return false;
+        output->present = true; return true;
+    }
     SourceExpectedType receiver;
     if (!source_ground_type(ctx,member->as.member_access.object,depth+1,&receiver)) return false;
+    if (receiver.present && xr_xir_type_is_array(&ctx->types, receiver.type)) {
+        const XrNativeMemberDeclaration *native = source_array_member(ctx, member, member->as.member_access.name);
+        if (!native || native->is_method != call || native->is_static) return true;
+        if (native->operation == XR_NATIVE_OPERATION_ARRAY_CAPACITY)
+            *output = (SourceExpectedType) {true, XR_XIR_I64, false};
+        else if (native->operation == XR_NATIVE_OPERATION_ARRAY_RESERVE)
+            *output = receiver;
+        return true;
+    }
     if (!call && receiver.present && xr_xir_tuple_signature(&ctx->types,receiver.type)) {
         uint32_t field=0;
         if (!source_tuple_index(ctx,member,member->as.member_access.name,&field)) return false;

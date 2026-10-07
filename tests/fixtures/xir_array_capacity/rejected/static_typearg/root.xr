@@ -1,0 +1,1 @@
+export fn main()->i64{const xs=Array<i64>.withCapacity<i64>(4);return len(xs)}

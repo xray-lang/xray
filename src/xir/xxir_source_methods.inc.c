@@ -126,6 +126,15 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     }
     SourceValue receiver;
     if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
+    if (xr_xir_type_is_array(&ctx->types, receiver.type)) {
+        if (type_arguments->count)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array property has no method type arguments");
+        const XrNativeMemberDeclaration *member = source_array_member(ctx, node, node->as.member_access.name);
+        if (!member || member->is_method || member->is_static || member->operation != XR_NATIVE_OPERATION_ARRAY_CAPACITY)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array property requires its governed read contract");
+        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_CAPACITY, XR_XIR_I64,
+            {receiver.id, 0}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member);
+    }
     if (xr_xir_tuple_signature(&ctx->types,receiver.type)) {
         if (type_arguments->count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field has no method type arguments");
         return source_tuple_field(ctx,node,receiver,value);

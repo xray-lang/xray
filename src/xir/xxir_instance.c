@@ -545,6 +545,44 @@ XrXirCallStatus xr_xir_instance_array_repeat(XrXirCallView *view, XrXirType type
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     return value_call_status(xr_xir_array_repeat(type, length, fill, admission, output));
 }
+XR_FUNC XrXirCallStatus xr_xir_instance_array_with_capacity(XrXirCallView *view,
+    XrXirType type, int64_t capacity, XrXirValue *output) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance) return XR_XIR_CALL_BAD_STATE;
+    if (!output || !value_unit(*output)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (capacity < 0) return XR_XIR_CALL_NUMERIC_RANGE;
+    return value_call_status(xr_xir_array_with_capacity(type, capacity, xr_xir_call_admission(view), output));
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_array_reserve(XrXirCallView *view,
+    const XrXirValue *array, int64_t capacity, XrXirValue *output) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance) return XR_XIR_CALL_BAD_STATE;
+    if (!output || !value_unit(*output)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (capacity < 0) return XR_XIR_CALL_NUMERIC_RANGE;
+    return value_call_status(xr_xir_array_reserve(array, capacity, xr_xir_call_admission(view), output));
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_array_capacity(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, XrXirValue *output) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !receiver || !output || !value_unit(*output)) return XR_XIR_CALL_BAD_STATE;
+    XrXirValueAdmission *admission = xr_xir_call_admission(view);
+    XrXirValue borrowed = {0};
+    if (receiver->kind == XR_XIR_ROOT_VALUE) {
+        if (receiver->local_payload || receiver->slot || receiver->value.type != (uint32_t)receiver->type)
+            return XR_XIR_CALL_BAD_STATE;
+        borrowed = receiver->value;
+    } else {
+        XrXirValuePlace place = {0};
+        XrXirCallStatus status = value_place(view, instance, receiver, false, admission, &place);
+        if (status != XR_XIR_CALL_READY) return status;
+        borrowed.type = (uint32_t)place.type;
+        memcpy(&borrowed.payload, place.payload, sizeof(borrowed.payload));
+    }
+    int64_t capacity = 0;
+    XrXirCallStatus status = value_call_status(xr_xir_array_capacity(&borrowed, admission, &capacity));
+    if (status == XR_XIR_CALL_READY) *output = (XrXirValue){XR_XIR_I64, 0, capacity};
+    return status;
+}
 XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,
     const XrXirValueReceiver *receiver, int64_t index, bool length,
     XrXirValue *output, XrXirFaultDetail *fault) {

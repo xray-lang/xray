@@ -335,6 +335,9 @@ def parse_source(source, prelude):
             'ARRAY_GET': ('get', 'READ', ('I64',), 'ELEMENT', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'ARRAY_SET': ('set', 'REF', ('I64', 'ELEMENT'), 'UNIT', 'may_heap', 'bounds,allocation,retain,limit', 'unit'),
             'ARRAY_PUSH': ('push', 'REF', ('ELEMENT',), 'UNIT', 'may_heap', 'allocation,retain,limit', 'unit'),
+            'ARRAY_CAPACITY': ('capacity', 'READ', (), 'I64', 'no_heap', 'limit', 'owned'),
+            'ARRAY_WITH_CAPACITY': ('withCapacity', 'READ', ('I64',), 'ARRAY_ELEMENT', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'ARRAY_RESERVE': ('reserve', 'REF', ('I64',), 'ARRAY_ELEMENT', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_INDEX_OF': ('indexOf', 'READ', ('STRING', 'I64'), 'I64', 'no_heap', 'bounds,limit', 'owned'),
             'STRING_LAST_INDEX_OF': ('lastIndexOf', 'READ', ('STRING',), 'I64', 'no_heap', 'limit', 'owned'),
             'STRING_CONTAINS': ('contains', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
@@ -343,9 +346,11 @@ def parse_source(source, prelude):
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
         expected_optional = (False, True) if member.operation == 'STRING_INDEX_OF' else (False,) * len(member.parameters)
-        if shape != expected or member.static or not member.method or optional != expected_optional or any(p[4] for p in member.parameters):
+        expected_static = member.operation == 'ARRAY_WITH_CAPACITY'
+        expected_method = member.operation != 'ARRAY_CAPACITY'
+        if shape != expected or member.static != expected_static or member.method != expected_method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
-    required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(recipes) if header[0] == 1 else {
+    required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')

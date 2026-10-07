@@ -40,9 +40,18 @@ XR_FUNC XrXirCallStatus xr_xir_instance_path_push(XrXirCallView *view,
 XR_FUNC XrXirCallStatus xr_xir_instance_path_length(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     XrXirValue *output, XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_capacity(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, const XrXirValuePath *path,
+    XrXirValue *output, XrXirFaultDetail *fault);
 
 XR_FUNC XrXirCallStatus xr_xir_instance_array_new(XrXirCallView *view, XrXirType type,
     const XrXirValue *values, uint32_t count, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_array_capacity(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_array_with_capacity(XrXirCallView *view,
+    XrXirType type, int64_t capacity, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_array_reserve(XrXirCallView *view,
+    const XrXirValue *array, int64_t capacity, XrXirValue *output);
 /* A negative length is the numeric-range status; nothing is published on any failure. */
 XR_FUNC XrXirCallStatus xr_xir_instance_array_repeat(XrXirCallView *view, XrXirType type,
     int64_t length, const XrXirValue *fill, XrXirValue *output);

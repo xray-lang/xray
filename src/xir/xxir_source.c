@@ -1051,6 +1051,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
+        if (source_array_static_receiver(ctx, member->object))
+            return source_array_static_call(ctx, node, value);
         SourceName *base = member->object->type == AST_VARIABLE ?
             visible_name(ctx, member->object->as.variable.name) : NULL;
         if (!base && member->object->type == AST_VARIABLE && source_text_same(ctx, NULL, member->object->as.variable.name, "Coro") &&

@@ -24,6 +24,8 @@
 #include "xir_task_go67_golden.h"
 #include "xir_task_go68_golden.h"
 #include "xir_task_unit68_golden.h"
+#include "xir_task_go69_golden.h"
+#include "xir_task_unit69_golden.h"
 
 typedef struct UnitOracle { const char *name, *entry; bool escaped, unit_root, error; unsigned outputs; } UnitOracle;
 static const UnitOracle unit_oracles[] = {
@@ -197,8 +199,8 @@ static void unit_fixed_codec(void) {
     _Static_assert(XR_XIR_RETURN == 33, "fixed Unit codec RETURN ordinal");
     CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(task_unit68_golden) && !memcmp(packet.bytes, task_unit68_golden, packet.length));
-    CHECK(xr_xir_compile_checked_read(context, task_unit68_golden, sizeof(task_unit68_golden), &decoded, NULL) == XR_XIR_OK);
+    CHECK(packet.length == sizeof(task_unit69_golden) && !memcmp(packet.bytes, task_unit69_golden, packet.length));
+    CHECK(xr_xir_compile_checked_read(context, task_unit69_golden, sizeof(task_unit69_golden), &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_types_clone(context, xr_xir_compile_artifact_module(decoded)->types, &clone) == XR_XIR_OK);
     CHECK(clone->nodes != nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK && clone->nodes[0].element == XR_XIR_UNIT);
     memset(nodes, 0xa5, sizeof(nodes)); memset(parameters, 0xa5, sizeof(parameters));
@@ -206,7 +208,7 @@ static void unit_fixed_codec(void) {
     CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_types_free(clone); xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(decoded); xr_xir_compile_artifact_free(checked);
-    puts("Task<Unit> independent221B named-role codec and deep clone: current68 writer/read exact");
+    puts("Task<Unit> independent221B named-role codec and deep clone: current69 writer/read exact");
 }
 static void unit_old_packet_reject(void) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
@@ -222,16 +224,26 @@ static void unit_old_packet_reject(void) {
     out = (XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(context, task_go67_golden, sizeof(task_go67_golden), &out, NULL) ==
         XR_XIR_BAD_STRUCTURE && out == (XrXirArtifact *)(uintptr_t)1 && effects_compile_attempts == before);
-    CHECK(sizeof(task_go68_golden) == sizeof(task_go66_golden) &&
-        !memcmp(task_go68_golden + 64, task_go66_golden + 64, sizeof(task_go66_golden) - 64));
+    const uint8_t *previous[] = {task_go68_golden, task_unit68_golden};
+    const size_t lengths[] = {sizeof(task_go68_golden), sizeof(task_unit68_golden)};
+    for (size_t i = 0; i < sizeof(previous) / sizeof(previous[0]); ++i) {
+        out = NULL;
+        CHECK(xr_xir_compile_checked_read(context, previous[i], lengths[i], &out, NULL) ==
+            XR_XIR_BAD_STRUCTURE && !out && effects_compile_attempts == before);
+        out = (XrXirArtifact *)(uintptr_t)1;
+        CHECK(xr_xir_compile_checked_read(context, previous[i], lengths[i], &out, NULL) ==
+            XR_XIR_BAD_STRUCTURE && out == (XrXirArtifact *)(uintptr_t)1 && effects_compile_attempts == before);
+    }
+    CHECK(sizeof(task_go69_golden) == sizeof(task_go66_golden) &&
+        !memcmp(task_go69_golden + 64, task_go66_golden + 64, sizeof(task_go66_golden) - 64));
     out = NULL;
-    CHECK(xr_xir_compile_checked_read(context, task_go68_golden, sizeof(task_go68_golden), &out, NULL) == XR_XIR_OK && out);
+    CHECK(xr_xir_compile_checked_read(context, task_go69_golden, sizeof(task_go69_golden), &out, NULL) == XR_XIR_OK && out);
     xr_xir_compile_artifact_free(out);
     XrXirValue not_task = {XR_XIR_BOOL, 0, 0}; XrXirCallResult outcome = {0};
     CHECK(xr_xir_task_copy_outcome(&not_task, &outcome) == XR_XIR_CALL_BAD_ARGUMENT && xr_xir_call_result_empty(&outcome));
     not_task = (XrXirValue){0};
     CHECK(xr_xir_task_copy_outcome(&not_task, &outcome) == XR_XIR_CALL_BAD_ARGUMENT && xr_xir_call_result_empty(&outcome));
-    puts("Task<Unit> old complete66/67 packets empty/occupied: early reject, zero allocation; independent same-body68 positive; false/Unit not handles");
+    puts("Task<Unit> old complete66/67/68 packets empty/occupied: early reject, zero allocation; independent same-body69 positive; false/Unit not handles");
 }
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -239,7 +251,7 @@ int main(void) {
     const char *rejects[] = {"construct", "invariance", "void", "bare_null", "ordinary_unit_arg", "generic_missing", "non_task", "array_unit"};
     for (unsigned i = 0; i < sizeof(rejects) / sizeof(*rejects); ++i) unit_reject(rejects[i]);
     unit_fixed_codec(); unit_old_packet_reject(); effects_source_owners_free();
-    printf("Task<Unit> private sizes: Executor=%zu Task=%zu Call=%zu Frame=%zu state=%u; identity=25/68/22/28/29\n",
+    printf("Task<Unit> private sizes: Executor=%zu Task=%zu Call=%zu Frame=%zu state=%u; identity=25/69/22/28/29\n",
         sizeof(XrXirTaskExecutor), sizeof(XirTask), sizeof(XrXirCall), sizeof(CallFrame),
         (unsigned)((sizeof(CallFrame) + 15u) & ~(size_t)15u));
     return 0;

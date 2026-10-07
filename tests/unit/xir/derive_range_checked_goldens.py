@@ -2,6 +2,7 @@
 """Frame independent strict-range packets from named wire fields."""
 from hashlib import sha256
 from pathlib import Path
+import re
 import struct
 
 def words(*values):
@@ -25,8 +26,8 @@ def packet(contract):
 
 def render():
     lines = ['/* Independently framed strict-range packets; no Xray writer is used. */',
-             '#ifndef XIR_CHECKED_RANGE68_GOLDEN_H','#define XIR_CHECKED_RANGE68_GOLDEN_H']
-    for name, contract in [('checked_range68_golden',68),('checked_range67_rejected',67)]:
+             '#ifndef XIR_CHECKED_RANGE69_GOLDEN_H','#define XIR_CHECKED_RANGE69_GOLDEN_H']
+    for name, contract in [('checked_range69_golden',69),('checked_range68_rejected',68)]:
         data = packet(contract)
         lines.append('static const uint8_t '+name+'[] = {')
         lines += ['    '+','.join('0x%02x'%b for b in data[i:i+12])+',' for i in range(0,len(data),12)]
@@ -34,5 +35,12 @@ def render():
     return '\n'.join(lines+['#endif',''])
 
 if __name__ == '__main__':
-    path = Path(__file__).with_name('xir_checked_range68_golden.h')
+    previous = Path(__file__).with_name('xir_checked_range68_golden.h').read_text(encoding='utf-8')
+    for name, contract in [('checked_range68_golden',68),('checked_range67_rejected',67)]:
+        match = re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};', previous, re.S)
+        assert match
+        data = bytes(int(x,16) for x in re.findall(r'0x([0-9a-fA-F]{2})',match.group(1)))
+        assert data == packet(contract), name
+    assert packet(69)[64:] == packet(68)[64:]
+    path = Path(__file__).with_name('xir_checked_range69_golden.h')
     path.write_text(render(),encoding='utf-8',newline='\n')

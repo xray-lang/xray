@@ -1,0 +1,1 @@
+export fn main()->i64{var xs=[1];var n=4;const result=xs.reserve(ref n);return len(result)}

@@ -19,9 +19,10 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_instance_compile_observer.h"
 #include "xir_checked_range68_golden.h"
+#include "xir_checked_range69_golden.h"
 _Static_assert(XR_XIR_RANGE_CHECK == 148 && XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147,
     "The range instruction preserves existing operation ordinals");
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 25 && XR_XIR_CHECKED_CONTRACT == 68,
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 25 && XR_XIR_CHECKED_CONTRACT == 69,
     "The unchanged wire schema carries the range semantic revision");
 
 typedef struct RangeView {
@@ -130,9 +131,9 @@ static size_t range_pipeline(size_t failure, bool execute) {
     XrXirStatus status = xr_xir_compile_check(&context,&view.module,&checked,NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked,&packet,NULL);
     if (status == XR_XIR_OK) {
-        CHECK(packet.length == sizeof(checked_range68_golden));
-        CHECK(!memcmp(packet.bytes,checked_range68_golden,packet.length));
-        status = xr_xir_compile_checked_read(&context,checked_range68_golden,sizeof(checked_range68_golden),&decoded,NULL);
+        CHECK(packet.length == sizeof(checked_range69_golden));
+        CHECK(!memcmp(packet.bytes,checked_range69_golden,packet.length));
+        status = xr_xir_compile_checked_read(&context,checked_range69_golden,sizeof(checked_range69_golden),&decoded,NULL);
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(decoded,&target,&lowered,NULL);
@@ -153,10 +154,20 @@ static size_t range_pipeline(size_t failure, bool execute) {
 static void range_old_packet(void) {
     XrXirCompileContext context = range_context();
     const size_t before = instance_compile_attempts;
-    XrXirArtifact *artifact = NULL;
-    XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_checked_read(&context,checked_range67_rejected,sizeof(checked_range67_rejected),&artifact,&diagnostic) == XR_XIR_BAD_STRUCTURE);
-    CHECK(!artifact && diagnostic.status == XR_XIR_BAD_STRUCTURE && instance_compile_attempts == before);
+    const uint8_t *packets[] = {checked_range67_rejected, checked_range68_rejected};
+    const size_t lengths[] = {sizeof(checked_range67_rejected), sizeof(checked_range68_rejected)};
+    CHECK(sizeof(checked_range68_rejected) == sizeof(checked_range68_golden) &&
+        !memcmp(checked_range68_rejected, checked_range68_golden, sizeof(checked_range68_golden)));
+    for (size_t i = 0; i < sizeof(packets) / sizeof(packets[0]); ++i) {
+        XrXirArtifact *artifact = NULL;
+        XrXirDiagnostic diagnostic = {0};
+        CHECK(xr_xir_compile_checked_read(&context,packets[i],lengths[i],&artifact,&diagnostic) == XR_XIR_BAD_STRUCTURE);
+        CHECK(!artifact && diagnostic.status == XR_XIR_BAD_STRUCTURE && instance_compile_attempts == before);
+        artifact = (XrXirArtifact *)(uintptr_t)1;
+        CHECK(xr_xir_compile_checked_read(&context,packets[i],lengths[i],&artifact,&diagnostic) == XR_XIR_BAD_STRUCTURE);
+        CHECK(artifact == (XrXirArtifact *)(uintptr_t)1 && diagnostic.status == XR_XIR_BAD_STRUCTURE &&
+            instance_compile_attempts == before);
+    }
     range_context_free(&context);
 }
 
@@ -167,6 +178,6 @@ int main(void) {
     for (size_t i = 0; i < sites; ++i) CHECK(range_pipeline(i,false) == i+1);
     instance_compile_fail_at = SIZE_MAX;
     instance_compile_report();
-    printf("range vectors=13 rejections=11 complete compiler OOM=%zu old67=early-reject\n",sites);
+    printf("range vectors=13 rejections=11 complete compiler OOM=%zu old67/68=early-reject-zeroalloc-empty-occupied\n",sites);
     return 0;
 }

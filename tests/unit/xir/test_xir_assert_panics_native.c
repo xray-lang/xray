@@ -9,6 +9,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_source_query.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,10 +68,42 @@ static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool 
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==21 && sizeof(XrXirValue)==16,"public value ABI");
-    _Static_assert(XR_XIR_CALL_ABI_VERSION==26 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
-        sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
-    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==29 && sizeof(XrXirProgramSpec)==96,"public program ABI");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==22 && XR_XIR_CALL_ABI_VERSION==28 &&
+        XR_XIR_PROGRAM_ABI_VERSION==29,"current typed execution ABI");
+    _Static_assert(sizeof(XrXirValue)==16 && _Alignof(XrXirValue)==8 &&
+        offsetof(XrXirValue,type)==0 && offsetof(XrXirValue,reserved)==4 &&
+        offsetof(XrXirValue,payload)==8,"XrXirValue complete current carrier layout");
+    _Static_assert(sizeof(XrXirFaultDetail)==24 && _Alignof(XrXirFaultDetail)==8 &&
+        offsetof(XrXirFaultDetail,code)==0 && offsetof(XrXirFaultDetail,reserved)==4 &&
+        offsetof(XrXirFaultDetail,index)==8 && offsetof(XrXirFaultDetail,length)==16,"XrXirFaultDetail complete current carrier layout");
+    _Static_assert(sizeof(XrXirPanicPayload)==40 && _Alignof(XrXirPanicPayload)==8 &&
+        offsetof(XrXirPanicPayload,detail)==0 && offsetof(XrXirPanicPayload,message)==24,"XrXirPanicPayload complete current carrier layout");
+    _Static_assert(sizeof(XrXirAction)==88 && _Alignof(XrXirAction)==8 &&
+        offsetof(XrXirAction,kind)==0 && offsetof(XrXirAction,callee)==4 &&
+        offsetof(XrXirAction,arguments)==8 && offsetof(XrXirAction,argument_count)==16 &&
+        offsetof(XrXirAction,value)==24 && offsetof(XrXirAction,panic)==40 &&
+        offsetof(XrXirAction,flags)==80,"XrXirAction complete current carrier layout");
+    _Static_assert(sizeof(XrXirCallResult)==72 && _Alignof(XrXirCallResult)==8 &&
+        offsetof(XrXirCallResult,status)==0 && offsetof(XrXirCallResult,value)==8 &&
+        offsetof(XrXirCallResult,wake)==24 && offsetof(XrXirCallResult,panic)==32,"XrXirCallResult complete current carrier layout");
+    _Static_assert(sizeof(XrXirCallView)==216 && _Alignof(XrXirCallView)==8 &&
+        offsetof(XrXirCallView,activation)==0 && offsetof(XrXirCallView,instance)==8 &&
+        offsetof(XrXirCallView,environment)==16 && offsetof(XrXirCallView,state)==24 &&
+        offsetof(XrXirCallView,arguments)==32 && offsetof(XrXirCallView,argument_count)==40 &&
+        offsetof(XrXirCallView,inbox)==48 && offsetof(XrXirCallView,arena)==120 &&
+        offsetof(XrXirCallView,phase)==128 && offsetof(XrXirCallView,exit)==136 &&
+        offsetof(XrXirCallView,scope_exit)==208,"XrXirCallView complete current carrier layout");
+    _Static_assert(sizeof(XrXirCallEntry)==64 && _Alignof(XrXirCallEntry)==8 &&
+        offsetof(XrXirCallEntry,abi_version)==0 && offsetof(XrXirCallEntry,parameters)==8 &&
+        offsetof(XrXirCallEntry,parameter_count)==16 && offsetof(XrXirCallEntry,result)==20 &&
+        offsetof(XrXirCallEntry,state_bytes)==24 && offsetof(XrXirCallEntry,resume)==32 &&
+        offsetof(XrXirCallEntry,release)==40 && offsetof(XrXirCallEntry,environment)==48 &&
+        offsetof(XrXirCallEntry,flags)==56 && offsetof(XrXirCallEntry,cleanup_owner)==60,"XrXirCallEntry complete current carrier layout");
+    _Static_assert(sizeof(XrXirProgramSpec)==96 && _Alignof(XrXirProgramSpec)==8 &&
+        offsetof(XrXirProgramSpec,abi_version)==0 && offsetof(XrXirProgramSpec,target)==4 &&
+        offsetof(XrXirProgramSpec,entries)==16 && offsetof(XrXirProgramSpec,entry_count)==24 &&
+        offsetof(XrXirProgramSpec,declarations)==32 && offsetof(XrXirProgramSpec,code)==40 &&
+        offsetof(XrXirProgramSpec,types)==56 && offsetof(XrXirProgramSpec,proof)==64,"XrXirProgramSpec complete current carrier layout");
     for (uint32_t matrix=0;matrix<2;++matrix) {
         const XrXirProgramSpec *spec=matrix ? &panics_matrix_program : &panics_checked_program;
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(assert_compile_context,spec,&program)==XR_XIR_OK);
@@ -79,5 +112,5 @@ int main(void) {
         panics_native_mixed(spec,matrix!=0,true);CHECK(!runtime_live && !runtime_bytes);
     }
     CHECK(panics_native_releases==4);
-    puts("18 independent outcomes: native and both VM/native directions PASS; Value21 Call26 Program29; carrier layouts unchanged; physical baseline restored");assert_compile_end();return 0;
+    puts("18 independent outcomes: native and both VM/native directions PASS; Value22 Call28 Program29; complete carrier layouts verified; physical baseline restored");assert_compile_end();return 0;
 }

@@ -1,0 +1,2 @@
+import "./owner" as owner
+export fn main()->i64{var h=owner.make();const result=h.xs.reserve(4);return len(result)}

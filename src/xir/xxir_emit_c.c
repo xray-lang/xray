@@ -605,6 +605,37 @@ static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     append(buffer, "        }\n        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
 }
 
+/* Capacity reads and candidate preparation keep the runtime's active-view
+ * authority. Reserve never writes a receiver: Source publishes separately. */
+static void emit_array_capacity_step(CBuffer *buffer, const XrXirFunction *function,
+    const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
+    append(buffer, "        { XrXirValue value = {0}; XrXirCallStatus status;\n");
+    if (op->op == XR_XIR_ARRAY_CAPACITY) {
+        emit_value_receiver(buffer, function, layout, op->args[0]);
+        append(buffer, "        status = xr_xir_instance_array_capacity(view, &receiver, &value);\n");
+    } else if (op->op == XR_XIR_ARRAY_WITH_CAPACITY) {
+        append(buffer, "        status = xr_xir_instance_array_with_capacity(view, (XrXirType) %uu, "
+            "xr_xir_scalar_load(state->frame, %uu), &value);\n", (uint32_t) op->type, layout->offsets[op->args[0]]);
+    } else {
+        append(buffer, "        XrXirValue receiver = ");
+        emit_value(buffer, function, layout, op->args[0]);
+        append(buffer, ";\n        status = xr_xir_instance_array_reserve(view, &receiver, "
+            "xr_xir_scalar_load(state->frame, %uu), &value);\n", layout->offsets[op->args[1]]);
+    }
+    append(buffer, "        if (status == XR_XIR_CALL_NUMERIC_RANGE) ");
+    emit_fault_return(buffer, function, layout, index, "xr_xir_call_fault(XR_XIR_RUN_NUMERIC_RANGE)");
+    append(buffer, "\n        if (status != XR_XIR_CALL_READY) ");
+    emit_fault_return(buffer, function, layout, index,
+        "xr_xir_call_fault(status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY : "
+        "status == XR_XIR_CALL_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : "
+        "status == XR_XIR_CALL_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT)");
+    append(buffer, "\n");
+    if (op->op == XR_XIR_ARRAY_CAPACITY)
+        append(buffer, "        xr_xir_scalar_store(state->frame, %uu, value.payload);\n", destination);
+    else append(buffer, "        xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
+    append(buffer, "        }\n        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
+}
+
 static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     append(buffer,"        { XrXirValue value={0}; XrXirValueStatus status;\n");
@@ -841,6 +872,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
         op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
         emit_nominal_step(buffer, function, op, layout, destination); return;
+    }
+    if (op->op == XR_XIR_ARRAY_CAPACITY || op->op == XR_XIR_ARRAY_WITH_CAPACITY || op->op == XR_XIR_ARRAY_RESERVE) {
+        emit_array_capacity_step(buffer, function, op, layout, destination, index);
+        return;
     }
     if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
         emit_array_step(buffer, function, op, layout, destination, index);

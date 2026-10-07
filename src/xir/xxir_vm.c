@@ -173,6 +173,40 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
 }
 #include "xxir_vm_atomic.inc.c"
 #include "xxir_vm_path.inc.c"
+static XrXirRunStatus vm_array_capacity_step(ScalarRun *run, VmState *state,
+    const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
+    if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+    XrXirValue output = {0};
+    XrXirFaultDetail fault = {0};
+    XrXirCallStatus status;
+    if (op->op == XR_XIR_ARRAY_CAPACITY) {
+        XrXirValueReceiver receiver = {0};
+        XrXirValuePath path = {0};
+        status = vm_path_receiver(run, state, op, &receiver, &path);
+        if (status == XR_XIR_CALL_READY)
+            status = path.count ? xr_xir_instance_path_capacity(run->view,
+                &receiver, &path, &output, &fault) :
+                xr_xir_instance_array_capacity(run->view, &receiver, &output);
+    } else if (op->op == XR_XIR_ARRAY_WITH_CAPACITY) {
+        status = xr_xir_instance_array_with_capacity(run->view, op->type,
+            vm_value_operand(run, op->args[0]).payload, &output);
+    } else {
+        XrXirValue receiver = vm_value_operand(run, op->args[0]);
+        status = xr_xir_instance_array_reserve(run->view, &receiver,
+            vm_value_operand(run, op->args[1]).payload, &output);
+    }
+    if (status != XR_XIR_CALL_READY) {
+        *action = status == XR_XIR_CALL_NUMERIC_RANGE ?
+            xr_xir_call_fault(XR_XIR_RUN_NUMERIC_RANGE) :
+            (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,
+                {XR_XIR_I64, 0, status}, {fault, {0}}, 0};
+        return XR_XIR_RUN_OK;
+    }
+    if (xr_xir_type_is_owned(run->module->types, op->type))
+        xr_xir_owned_slot_move(run->frame, destination, &output);
+    else xr_xir_scalar_store(run->frame, destination, output.payload);
+    return XR_XIR_RUN_OK;
+}
 static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -587,6 +621,11 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_INDEX_PLACE) {
         state->instruction = next;
         return XR_XIR_RUN_OK;
+    }
+    if (op->op == XR_XIR_ARRAY_CAPACITY || op->op == XR_XIR_ARRAY_WITH_CAPACITY ||
+        op->op == XR_XIR_ARRAY_RESERVE) {
+        state->instruction = next;
+        return vm_array_capacity_step(run, state, op, run->layout->offsets[result_id], action);
     }
     if (xr_xir_op_uses_value_path(run->function, op)) {
         state->instruction = next;

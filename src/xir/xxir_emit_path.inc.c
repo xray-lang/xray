@@ -46,7 +46,8 @@ static void emit_path_receiver(CBuffer *buffer, const XrXirFunction *function,
 static void emit_path_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     append(buffer, "        { XrXirFaultDetail fault = {0};\n");
-    bool read = op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_LEN;
+    bool read = op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_ARRAY_GET ||
+        op->op == XR_XIR_ARRAY_LEN || op->op == XR_XIR_ARRAY_CAPACITY;
     if (read) append(buffer, "        XrXirValue value = {0};\n");
     else {
         uint32_t id = op->op == XR_XIR_ARRAY_SET ? function->operands[op->args[0] + 2] : op->args[1];
@@ -54,7 +55,8 @@ static void emit_path_step(CBuffer *buffer, const XrXirFunction *function,
         append(buffer, ";\n");
     }
     emit_path_receiver(buffer, function, layout, op);
-    const char *operation = read ? (op->op == XR_XIR_ARRAY_LEN ? "length" : "read") :
+    const char *operation = read ? (op->op == XR_XIR_ARRAY_CAPACITY ? "capacity" :
+        op->op == XR_XIR_ARRAY_LEN ? "length" : "read") :
         op->op == XR_XIR_ARRAY_PUSH ? "push" : "write";
     append(buffer, "        if (status == XR_XIR_CALL_READY)\n"
         "            status = xr_xir_instance_path_%s(view, &receiver, &path, &value, &fault);\n"

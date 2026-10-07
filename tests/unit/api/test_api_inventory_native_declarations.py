@@ -47,6 +47,9 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         ordinary = ["allocation", "retain", "limit"]
         callback = ordinary + ["callback"]
         expected = (
+            ("capacity", "ARRAY_CAPACITY", "read", "owned", ["limit"]),
+            ("withCapacity", "ARRAY_WITH_CAPACITY", "read", "owned", ordinary),
+            ("reserve", "ARRAY_RESERVE", "ref", "owned", ordinary),
             ("get", "ARRAY_GET", "read", "owned", ["bounds", "allocation", "retain", "limit"]),
             ("set", "ARRAY_SET", "ref", "unit", ["bounds", "allocation", "retain", "limit"]),
             ("push", "ARRAY_PUSH", "ref", "unit", ordinary),
@@ -71,20 +74,19 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("every", "ARRAY_EVERY", "read", "owned", callback),
             ("some", "ARRAY_SOME", "read", "owned", callback),
         )
-        self.assertEqual(23, len(admitted))
+        self.assertEqual(26, len(admitted))
         self.assertEqual({row[0] for row in expected}, set(admitted))
         for name, operation, receiver, ownership, failures in expected:
             with self.subTest(name=name):
                 entry = admitted[name]
                 self.assertEqual(operation, entry["operation"])
                 self.assertEqual(receiver, entry["receiver"])
-                self.assertEqual("may_heap", entry["allocation"])
+                self.assertEqual("no_heap" if name == "capacity" else "may_heap", entry["allocation"])
                 self.assertEqual(ownership, entry["ownership"])
                 self.assertEqual(failures, entry["failures"])
         unadmitted = [entry for entry in members if not entry["xir_admitted"]]
-        self.assertEqual(9, len(unadmitted))
-        self.assertEqual({"withCapacity", "capacity", "ptr", "mutPtr",
-                          "reserve", "sort", "toString",
+        self.assertEqual(6, len(unadmitted))
+        self.assertEqual({"ptr", "mutPtr", "sort", "toString",
                           "iterator", "entriesIterator"}, {entry["name"] for entry in unadmitted})
         self.assertTrue(all(entry["operation"] == "NONE" for entry in unadmitted))
         self.assertTrue(all(entry["allocation"] == "unknown" for entry in unadmitted))

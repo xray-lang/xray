@@ -90,15 +90,15 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
             xr_xir_effects_task_creation(effects, 4) == XR_XIR_EFFECT_NONE);
         status = xr_xir_compile_checked_write(checked, &packet, NULL);
         if (status == XR_XIR_OK) {
-            CHECK(packet.length == sizeof(task_go68_golden));
-            for (size_t i = 64; i < packet.length; ++i) if (packet.bytes[i] != task_go68_golden[i]) {
+            CHECK(packet.length == sizeof(task_go69_golden));
+            for (size_t i = 64; i < packet.length; ++i) if (packet.bytes[i] != task_go69_golden[i]) {
                 fprintf(stderr, "GO named packet mismatch offset%zu actual%u expected%u\n",
-                    i, packet.bytes[i], task_go68_golden[i]); break;
+                    i, packet.bytes[i], task_go69_golden[i]); break;
             }
-            CHECK(!memcmp(packet.bytes, task_go68_golden, packet.length));
+            CHECK(!memcmp(packet.bytes, task_go69_golden, packet.length));
         }
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_go68_golden, sizeof(task_go68_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_go69_golden, sizeof(task_go69_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &specialized, NULL);
     if (status == XR_XIR_OK) {
         memset(f.worker, 0xcc, sizeof(f.worker)); memset(f.root, 0xcc, sizeof(f.root));
@@ -110,8 +110,10 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
 }
 static void task_go_reject(void) {
     XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
-    _Static_assert(XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147 && XR_XIR_OP_COUNT == 149,
-        "Task operation ordinals append after the unchanged SlotGroup ordinal");
+    _Static_assert(XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147 && XR_XIR_RANGE_CHECK == 148 &&
+        XR_XIR_ARRAY_CAPACITY == 149 && XR_XIR_ARRAY_WITH_CAPACITY == 150 &&
+        XR_XIR_ARRAY_RESERVE == 151 && XR_XIR_OP_COUNT == 152,
+        "Capacity operations append after the unchanged Task and range ordinals");
     for (uint32_t mutation = 0; mutation < 14; ++mutation) {
         TaskGoFixture f; task_go_fixture(&f);
         switch (mutation) {
@@ -345,12 +347,12 @@ static void task_go_axes(void) {
 }
 static void task_go_packets(void) {
     XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
-    const uint8_t *bad[] = {task_go68_scalar_go, task_go68_initializer_target,
-        task_go68_await_place, task_go68_go_target, task_go68_await_binding,
-        task_go68_mutable_worker, task_go68_cleanup_helper};
-    const size_t lengths[] = {sizeof(task_go68_scalar_go), sizeof(task_go68_initializer_target),
-        sizeof(task_go68_await_place), sizeof(task_go68_go_target), sizeof(task_go68_await_binding),
-        sizeof(task_go68_mutable_worker), sizeof(task_go68_cleanup_helper)};
+    const uint8_t *bad[] = {task_go69_scalar_go, task_go69_initializer_target,
+        task_go69_await_place, task_go69_go_target, task_go69_await_binding,
+        task_go69_mutable_worker, task_go69_cleanup_helper};
+    const size_t lengths[] = {sizeof(task_go69_scalar_go), sizeof(task_go69_initializer_target),
+        sizeof(task_go69_await_place), sizeof(task_go69_go_target), sizeof(task_go69_await_binding),
+        sizeof(task_go69_mutable_worker), sizeof(task_go69_cleanup_helper)};
     const uint8_t *historical[] = {task_go66_scalar_go, task_go66_initializer_target,
         task_go66_await_place, task_go66_go_target, task_go66_await_binding,
         task_go66_mutable_worker, task_go66_cleanup_helper};
@@ -364,31 +366,57 @@ static void task_go_packets(void) {
         out = NULL;
         XrXirStatus status = xr_xir_compile_checked_read(&c, bad[i], lengths[i], &out, NULL);
         CHECK((status == XR_XIR_BAD_STRUCTURE || status == XR_XIR_BAD_TYPE || status == XR_XIR_BAD_VALUE) && !out);
-        CHECK(attempts > before && bad[i][8] == 25 && bad[i][12] == 68);
+        CHECK(attempts > before && bad[i][8] == 25 && bad[i][12] == 69);
         out = (XrXirArtifact *)(uintptr_t)1;
         CHECK(xr_xir_compile_checked_read(&c, bad[i], lengths[i], &out, NULL) == status &&
             out == (XrXirArtifact *)(uintptr_t)1 && stats(&c).live_bytes == baseline);
     }
     owner_free(&c, baseline);
 }
-static void task_go_previous67_packets(void) {
+static void task_go_previous_packets(void) {
     XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
+    const uint64_t prefix_work = 8 + 4 + 4 + 4 + 4 + 8;
     const uint8_t *packets[] = {task_types67_golden, task_unit67_golden, task_go67_golden,
         task_go67_scalar_go, task_go67_initializer_target, task_go67_await_place,
-        task_go67_go_target, task_go67_await_binding, task_go67_mutable_worker, task_go67_cleanup_helper};
+        task_go67_go_target, task_go67_await_binding, task_go67_mutable_worker, task_go67_cleanup_helper,
+        task_types68_golden, task_unit68_golden, task_go68_golden,
+        task_go68_scalar_go, task_go68_initializer_target, task_go68_await_place,
+        task_go68_go_target, task_go68_await_binding, task_go68_mutable_worker, task_go68_cleanup_helper};
     const size_t lengths[] = {sizeof(task_types67_golden), sizeof(task_unit67_golden), sizeof(task_go67_golden),
         sizeof(task_go67_scalar_go), sizeof(task_go67_initializer_target), sizeof(task_go67_await_place),
-        sizeof(task_go67_go_target), sizeof(task_go67_await_binding), sizeof(task_go67_mutable_worker), sizeof(task_go67_cleanup_helper)};
+        sizeof(task_go67_go_target), sizeof(task_go67_await_binding), sizeof(task_go67_mutable_worker), sizeof(task_go67_cleanup_helper),
+        sizeof(task_types68_golden), sizeof(task_unit68_golden), sizeof(task_go68_golden),
+        sizeof(task_go68_scalar_go), sizeof(task_go68_initializer_target), sizeof(task_go68_await_place),
+        sizeof(task_go68_go_target), sizeof(task_go68_await_binding), sizeof(task_go68_mutable_worker), sizeof(task_go68_cleanup_helper)};
     for (size_t i = 0; i < sizeof(packets) / sizeof(packets[0]); ++i) {
         XrXirArtifact *out = NULL; size_t before = attempts;
+        XrCompileResourceStats budget = stats(&c);
         CHECK(xr_xir_compile_checked_read(&c, packets[i], lengths[i], &out, NULL) ==
             XR_XIR_BAD_STRUCTURE && !out && attempts == before);
         out = (XrXirArtifact *)(uintptr_t)1;
         CHECK(xr_xir_compile_checked_read(&c, packets[i], lengths[i], &out, NULL) ==
             XR_XIR_BAD_STRUCTURE && out == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
-        CHECK(stats(&c).live_bytes == baseline);
+        CHECK(stats(&c).live_bytes == baseline && stats(&c).allocated_bytes == budget.allocated_bytes &&
+            stats(&c).work == budget.work + 2 * prefix_work && stats(&c).peak_bytes == budget.peak_bytes);
     }
     owner_free(&c, baseline);
+    for (size_t i = 0; i < sizeof(packets) / sizeof(packets[0]); ++i)
+        for (uint32_t minus = 0; minus < 2; ++minus) for (uint32_t occupied = 0; occupied < 2; ++occupied) {
+            XrCompileResourceLimits limits = caps(); limits.work = 1 + prefix_work - minus;
+            c = owner_new(limits); XrCompileResourceStats budget = stats(&c);
+            CHECK(budget.work == 1);
+            baseline = budget.live_bytes; size_t before = attempts;
+            XrXirArtifact *sentinel = occupied ? (XrXirArtifact *)(uintptr_t)1 : NULL;
+            XrXirArtifact *out = sentinel;
+            CHECK(xr_xir_compile_checked_read(&c, packets[i], lengths[i], &out, NULL) ==
+                (minus ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE));
+            XrCompileResourceStats after = stats(&c);
+            CHECK(out == sentinel && attempts == before && after.live_bytes == baseline &&
+                after.allocated_bytes == budget.allocated_bytes && after.peak_bytes == budget.peak_bytes &&
+                after.work == budget.work + prefix_work - (minus ? 8 : 0));
+            owner_free(&c, baseline);
+        }
+    printf("Task complete old67/68 packets=20 prefix32work exact/minus1 empty/occupied=80 zeroalloc physical0\n");
 }
 static void task_go_cleanup_fixture(TaskGoFixture *f, uint32_t spawn, uint32_t mutable) {
         task_go_fixture(f);

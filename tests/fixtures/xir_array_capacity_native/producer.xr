@@ -1,0 +1,3 @@
+export fn create<T>(n:i64)->Array<T>{return Array<T>.withCapacity(n)}
+export fn reserve<T>(xs:ref Array<T>,n:i64)->Array<T>{return xs.reserve(n)}
+export fn text()->Array<string>{var xs=Array<string>.withCapacity(6);xs.push("fresh\0z");xs.push("tail");return xs}

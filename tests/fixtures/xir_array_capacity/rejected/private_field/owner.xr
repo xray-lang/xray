@@ -1,0 +1,2 @@
+export class Holder{private xs:Array<i64>;constructor(){this.xs=[1]}}
+export fn make()->Holder{return Holder()}
