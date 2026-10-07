@@ -1,0 +1,8 @@
+export class Leaf {
+  value: i64
+  constructor(value: i64) { this.value = value }
+}
+export class Box<T> {
+  value: T
+  constructor(value: move T) { this.value = value }
+}

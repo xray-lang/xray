@@ -1,0 +1,11 @@
+class Left {
+  right: Right?
+  constructor(right: Right?) { this.right = right }
+}
+class Right {
+  left: Left?
+  constructor(left: Left?) { this.left = left }
+}
+fn answer(left: Left) -> i64 {
+  return 42
+}

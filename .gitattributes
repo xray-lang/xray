@@ -50,3 +50,10 @@ tests/unit/xir/test_declarations_owner/old_program27.c text eol=lf
 
 # Public output oracles bind LF bytes independently of the checkout host.
 tests/fixtures/public_source_program/root.out text eol=lf
+
+# Consumer fixtures and generated censuses are compared with exact original
+# constructor bytes.  Preserve LF on every host without weakening those checks.
+tests/unit/xir/product_consumers/fixtures/** text eol=lf
+tests/unit/xir/product_consumers/*_cases.cmake text eol=lf
+tests/unit/xir/product_consumers/source_product_*_constructors.c text eol=lf
+tests/unit/xir/product_consumers/legacy_responsibilities.json text eol=lf

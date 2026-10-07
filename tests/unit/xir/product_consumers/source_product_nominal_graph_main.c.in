@@ -1,0 +1,15 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * source_product_nominal_graph_main.c.in - Exact structural consumer entry
+ */
+#include "source_product_nominal_graphs.h"
+int main(int argc, char **argv) {
+    const SourceProductNominalFixture fixture = {
+        "@case@", "@product_consumer_fixture_root@/@case@",
+        "@product_consumer_fixture_root@/@case@/root.xr", @expected@};
+    return xr_source_product_nominal_main(&fixture, argc, argv);
+}

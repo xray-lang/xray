@@ -11,6 +11,34 @@ typedef enum FixtureReplay { REPLAY_LOAD, REPLAY_WRITE, REPLAY_REMOVE } FixtureR
 /* Test fixture preparation has its own finite ledger and releases every block
  * before the observed two-producer operation starts. It never writes originals.
  * Physical source deletion inside that operation uses its sole compiler ledger. */
+static void fixture_replay_file(XrCompileResources *resources, XrOsIoPolicy *policy,
+    const char *path, uint8_t storage[4096], size_t *stored_length, FixtureReplay mode) {
+    uint8_t *bytes = NULL;
+    size_t length = 0;
+    if (mode != REPLAY_LOAD) {
+        XrOsIoStatus removed = xr_os_io_remove(policy, path);
+        CHECK(removed == XR_OS_IO_OK || removed == XR_OS_IO_NOT_FOUND);
+    }
+    if (mode == REPLAY_WRITE) {
+        CHECK(*stored_length && *stored_length <= 4096);
+        CHECK(xr_os_io_write_new_file_sync(policy, path, storage, *stored_length) == XR_OS_IO_OK);
+    }
+    if (mode != REPLAY_REMOVE) {
+        CHECK(xr_os_io_read_regular_file(policy, path, 4096, &bytes, &length) == XR_OS_IO_OK);
+        CHECK(length && length <= 4096);
+        CHECK(xr_compile_resources_work(resources, length) == XR_COMPILE_RESOURCE_OK);
+        if (mode == REPLAY_LOAD) {
+            memcpy(storage, bytes, length);
+            *stored_length = length;
+        } else {
+            CHECK(length == *stored_length && !memcmp(bytes, storage, length));
+        }
+        policy->free(policy->context, bytes);
+    } else {
+        CHECK(xr_file_probe_owned(policy, path, false) == XR_OS_IO_NOT_FOUND);
+    }
+}
+
 static void fixture_replay(DetachmentCase *test, FixtureReplay mode) {
     CHECK(private_root(test->root) && instance_compile_fail_at == SIZE_MAX);
     instance_compile_zero();
@@ -18,29 +46,12 @@ static void fixture_replay(DetachmentCase *test, FixtureReplay mode) {
     XrCompileResourceLimits budget = limits();
     CHECK(xr_compile_resources_new(&budget, &resources) == XR_COMPILE_RESOURCE_OK);
     XrOsIoPolicy policy = xr_compile_io_policy(resources);
-    uint8_t *bytes = NULL;
-    size_t length = 0;
-    if (mode != REPLAY_LOAD) {
-        XrOsIoStatus removed = xr_os_io_remove(&policy, test->file);
-        CHECK(removed == XR_OS_IO_OK || removed == XR_OS_IO_NOT_FOUND);
-    }
-    if (mode == REPLAY_WRITE) {
-        CHECK(test->source_length && test->source_length <= sizeof(test->source));
-        CHECK(xr_os_io_write_new_file_sync(&policy, test->file, test->source, test->source_length) == XR_OS_IO_OK);
-    }
-    if (mode != REPLAY_REMOVE) {
-        CHECK(xr_os_io_read_regular_file(&policy, test->file, sizeof(test->source), &bytes, &length) == XR_OS_IO_OK);
-        CHECK(length && length <= sizeof(test->source));
-        CHECK(xr_compile_resources_work(resources, length) == XR_COMPILE_RESOURCE_OK);
-        if (mode == REPLAY_LOAD) {
-            memcpy(test->source, bytes, length);
-            test->source_length = length;
-        } else {
-            CHECK(length == test->source_length && !memcmp(bytes, test->source, length));
-        }
-        policy.free(policy.context, bytes);
-    } else {
-        CHECK(xr_file_probe_owned(&policy, test->file, false) == XR_OS_IO_NOT_FOUND);
+    fixture_replay_file(resources, &policy, test->file, test->source, &test->source_length, mode);
+    if (paired_source_case(test->name)) {
+        char library[1056];
+        int length = snprintf(library, sizeof(library), "%s/library.xr", test->root);
+        CHECK(length > 0 && (size_t)length < sizeof(library));
+        fixture_replay_file(resources, &policy, library, test->library_source, &test->library_length, mode);
     }
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);

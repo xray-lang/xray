@@ -24,7 +24,8 @@ FIXTURES = ROOT / "tests/unit/xir/product_consumers/fixtures"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--case", choices=("generics", "callables", "single_module", "text_program"), required=True)
+    parser.add_argument("--case", choices=("generics", "callables", "single_module", "text_program",
+        "cross_module_coroutine", "cross_module_static_coroutine"), required=True)
     parser.add_argument("--scratch", type=Path, required=True)
     parser.add_argument("--jobs", type=int, choices=range(1, 9), default=8)
     parser.add_argument("--evidence", type=Path, required=True)

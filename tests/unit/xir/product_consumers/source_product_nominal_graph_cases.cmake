@@ -1,0 +1,5 @@
+# Exact original structural inputs have no invented runtime result.
+set(product_nominal_graph_cases recursive_class_graph mutual_class_graph deep_class_graph)
+set(product_nominal_graph_expected_recursive_class_graph 1)
+set(product_nominal_graph_expected_mutual_class_graph 2)
+set(product_nominal_graph_expected_deep_class_graph 80)

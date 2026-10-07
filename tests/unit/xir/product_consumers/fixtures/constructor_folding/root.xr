@@ -1,0 +1,23 @@
+class Counter {
+  value: i64
+  constructor() { this.value = 0 }
+}
+class Pair {
+  a: i64
+  b: bool
+  constructor(x: i64) { this.b = true
+    this.a = x }
+}
+class Swap {
+  first: i64
+  second: i64
+  constructor(x: i64, y: i64) { this.second = x
+    this.first = y }
+}
+fn answer() -> i64 {
+  var c = Counter()
+  var p = Pair(5)
+  var s = Swap(1, 10)
+  return c.value + p.a + s.first * 100 + s.second
+}
+export fn consumerAnswer() -> i64 { return answer() }
