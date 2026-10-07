@@ -1089,9 +1089,12 @@ static XrXirValueStatus array_grow(XirArray *array, size_t capacity) {
     }
     domain_lock(domain);
     size_t extra = bytes - array->capacity * array->stride;
-    if (extra > domain->limit - domain->stats.live_bytes || domain->stats.reallocations == UINT64_MAX) {
+    if (extra > domain->limit - domain->stats.live_bytes || domain->stats.reallocations == UINT64_MAX ||
+        (domain->budget.bound && (bytes > domain->budget.requested_limit - domain->budget.requested_bytes ||
+            domain->budget.work == domain->budget.work_limit))) {
         domain_unlock(domain); return XR_XIR_VALUE_LIMIT;
     }
+    if (domain->budget.bound) { domain->budget.requested_bytes += bytes; ++domain->budget.work; }
     unsigned char *replacement = xr_realloc(array->data, bytes);
     if (!replacement) { domain_unlock(domain); return XR_XIR_VALUE_OOM; }
     array->data = replacement; array->capacity = capacity;
