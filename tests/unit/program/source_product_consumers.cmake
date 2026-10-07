@@ -246,3 +246,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_alloc
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomic_i64_cas_oracles.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomic_i64_cas_native.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomic_source_families_native.cmake")

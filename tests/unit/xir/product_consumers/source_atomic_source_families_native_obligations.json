@@ -1,0 +1,548 @@
+{
+  "status": "PASS_ATOMIC_FAMILIES_NATIVE_BUILD_NORMAL_ONLY",
+  "worker_parent": "00676559ec0d2f1136321ed181cae85533a26da3",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "scope": "Three original Atomic Source families native normal only, without VM fallback",
+  "source_identities": [
+    {
+      "scenario": "1",
+      "family": "i64",
+      "original_bytes": 305,
+      "original_sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "atomic_bytes": 361,
+      "atomic_sha256": "11ddc9bd4b158875f6952535a49546d406507ee2134d72be5f2916150974a3cb",
+      "symbol": "source_atomic_i64_family"
+    },
+    {
+      "scenario": "2",
+      "family": "bool",
+      "original_illegal_bytes": 352,
+      "original_illegal_sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd",
+      "legal_base_bytes": 345,
+      "legal_base_sha256": "0c70181860ffb26bd2952a7ff549ce3ada421f365fb4eb568c9c837ba1539c33",
+      "explicit_rewrite": "Only original store AcquireRelease becomes Release; original illegal source remains a negative subject",
+      "atomic_bytes": 401,
+      "atomic_sha256": "cff22826fe4ba4166dc65f1de871e997446f81f48db6b6f509b42f670374ffee",
+      "symbol": "source_atomic_bool_family"
+    },
+    {
+      "scenario": "3",
+      "family": "f64",
+      "original_bytes": 483,
+      "original_sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "atomic_bytes": 539,
+      "atomic_sha256": "52acb2b2ca992ca205c2fd614185a4e0e6b53d35d4806f6bd8e997e682f8dda6",
+      "symbol": "source_atomic_f64_family"
+    }
+  ],
+  "append": {
+    "bytes": 56,
+    "sha256": "23dc2b48d9d6477e829c6d4d2c8943a0374df1787ce70f5cf2adf8434a83e6d4",
+    "text": "@test\nfn checkAtomicAnswer() { assert(answer() == 42) }\n"
+  },
+  "syntax_types": "Reuse all three admitted complete VM atomic fixtures. Same-module test role, private answer/exported/test functions. i64, bool and f64 Atomic; owned CAS Tuple and scalar-text String remain public checked types.",
+  "ordering": "Preserve fixture defaults; i64 and f64 Release store; bool legal Release store and Relaxed toggle. No new syntax, default ordering, constraint or effect relaxation.",
+  "effects_authority": "SourceProduct and Checked check current constraints/effects; Lowered verified before full C. Native Program seal recomputes authority and matches all types, function parameter vectors and declarations. No host authority for private functions, no export adapter.",
+  "pipeline": [
+    "SourceProduct",
+    "source Checked reader",
+    "closed Checked reader",
+    "retained reread Checked after producers destroyed",
+    "verified Lowered",
+    "two complete owned C emissions and SHA",
+    "complete generated C native ProgramSpec",
+    "public Program seal",
+    "two distinct Instance owners after caller Program drop"
+  ],
+  "fixed_oracles_per_family": {
+    "canonical_instances": [
+      0,
+      1
+    ],
+    "canonical_completions": 2,
+    "canonical_owned_result": "I64(0)",
+    "original_test_unit_completions": 4,
+    "atomic_test_unit_completions": 4,
+    "original_test_source_oracle": "exported() == 42",
+    "atomic_test_source_oracle": "answer() == 42",
+    "permission_bad_argument_per_instance": 8,
+    "metadata_rows": 4,
+    "compiler_and_runtime_physical_final": "0 blocks / 0 bytes; runtime tracking table NULL/0"
+  },
+  "compiler_limits": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000,
+    "emit_byte_limit": 16777216
+  },
+  "build_expected": {
+    "new_TUs_per_configuration": 5,
+    "targets": [
+      "test_source_product_atomic_source_families_c_emitter",
+      "test_source_product_atomic_source_families_native"
+    ],
+    "default_normal_tests": 3,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "C_STANDARD": 11,
+    "C_EXTENSIONS": false,
+    "sanitizer": "All five real TUs under ASan+UBSan in ASan configuration"
+  },
+  "actual_costs": {
+    "msvc": {
+      "1": {
+        "compiler_sites": 2848,
+        "runtime_sites": 72,
+        "allocated": 1040322,
+        "peak": 260285,
+        "work": 3150858
+      },
+      "2": {
+        "compiler_sites": 2854,
+        "runtime_sites": 80,
+        "allocated": 1063870,
+        "peak": 260745,
+        "work": 3310126
+      },
+      "3": {
+        "compiler_sites": 3004,
+        "runtime_sites": 80,
+        "allocated": 1130633,
+        "peak": 266123,
+        "work": 4064444
+      }
+    },
+    "asan": {
+      "1": {
+        "compiler_sites": 2848,
+        "runtime_sites": 72,
+        "allocated": 1040322,
+        "peak": 260285,
+        "work": 3150858
+      },
+      "2": {
+        "compiler_sites": 2854,
+        "runtime_sites": 80,
+        "allocated": 1063870,
+        "peak": 260745,
+        "work": 3310126
+      },
+      "3": {
+        "compiler_sites": 3004,
+        "runtime_sites": 80,
+        "allocated": 1130633,
+        "peak": 266123,
+        "work": 4064444
+      }
+    }
+  },
+  "runtime_status": "THREE_NATIVE_NORMAL_TESTS_PASSED_PER_CONFIGURATION",
+  "OPEN": [
+    "All original eight Source allocation FI, all budget axes and physical failure paths",
+    "Full five Ordering, contention, lock-free and allocation-before-effect/cancellation obligations",
+    "Separate old/matched CAS fields, bool toggle state and f64 text-content oracles beyond existing aggregate answer42",
+    "Module-global cross-Instance state and sticky failure isolation",
+    "Foreign exports/nativeHidden/full164 ABI/security/provider matrices",
+    "Source4/5 record object, Source6 net and Source7 StringBuilder blockers",
+    "Whole consumer migration, physical old-chain removal"
+  ],
+  "static_source_evidence": {
+    "src/xir/xxir_emit_atomic.inc.c": {
+      "sha256": "9292a25a93abc37119e06fedcb276cbaed5e63270711d443aceeae9b68744970",
+      "location": "emit_atomic_step:9-73 common Atomic start/resume, typed owned move",
+      "claim": "STATIC_LOCATED_NOT_RUNTIME_VERIFIED"
+    },
+    "src/xir/xxir_emit_c.c": {
+      "sha256": "1613c043586d6fec8d421831221f12a132cb7647c73256595cb9a0b61c966f1a",
+      "location": "XR_XIR_TO_STRING:438-442 public scalar-text call and owned-slot transfer",
+      "claim": "STATIC_LOCATED_NOT_RUNTIME_VERIFIED"
+    },
+    "src/xir/xxir_atomic_value.inc.c": {
+      "sha256": "ae4a59e898d2ccbd3fff6713c2313fc7302760af8ed95c53eb1ab5d4b5ca5455",
+      "location": "atomic_attempt:162-220 bool toggle, CAS, f64 arithmetic and owned results",
+      "claim": "STATIC_LOCATED_NOT_RUNTIME_VERIFIED"
+    },
+    "src/xir/xxir_program_match.c": {
+      "sha256": "988a109af38887a0046bfb66f7cc7c737328b805d4b2409650817746a5c6b7c4",
+      "location": "compile_program_match:169 parameter vector,171 full type tree",
+      "claim": "STATIC_LOCATED_NOT_RUNTIME_VERIFIED"
+    }
+  },
+  "reuse": {
+    "tests/unit/xir/product_consumers/test_source_product_atomic_source_families.c": {
+      "sha256": "bd5195ebc0a5903937beebc4f08b7c5a538c4bff9bcaa1421f49af801d294ee1",
+      "bytes": 25506
+    },
+    "tests/unit/xir/product_consumers/test_source_product_atomic_i64_cas_native.c": {
+      "sha256": "d03bdaf103267a4f68db907f088734508fa67ead4cf04e482c3bfaefef2a7ff9",
+      "bytes": 35893
+    }
+  },
+  "expected_tests": [
+    "test_source_product_atomic_source1_native_normal",
+    "test_source_product_atomic_source2_native_normal",
+    "test_source_product_atomic_source3_native_normal"
+  ],
+  "normal_gate": {
+    "executed": true,
+    "normal_tests_per_configuration": 3,
+    "new_TUs_per_configuration": 5
+  },
+  "contract": {
+    "sha256": "511f6987645e7e2c17f3b7d95869aa821e3112ce5f741dd92fac573a460aff7e",
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\native-families-candidate-r1\\contract-report.json"
+  },
+  "fixture_policy": "Reuse already generated scenario1/2/3-atomic.xr; no Source, VM consumer or original fixture writes",
+  "source_authority": "SCRIPT identity rooted at exact generated fixture root; no stdlib override",
+  "program_contract": {
+    "ABI": 29,
+    "value_ABI": 22,
+    "call_ABI": 28,
+    "Checked_schema": 25,
+    "Checked_contract": 67,
+    "callbacks": "All functions real native; complete whole C per family",
+    "image_lease": "Static linked ProgramSpec has NULL code owner/release; physical image unload not applicable",
+    "proof": "Byte-identical fresh public Lowered proof, identity, layouts, declarations, typed argument vectors; public seal revalidates full type trees"
+  },
+  "build_state": "FRESH_BUILT_FIVE_REAL_TUS_PER_CONFIGURATION",
+  "expected_previous_TUs": 208,
+  "expected_total_TUs": 213,
+  "registration": {
+    "previous": 259,
+    "new_only": 3,
+    "expected_total": 262,
+    "actual_execution": "Only new three normal cases; not all registered tests"
+  },
+  "normal_qualification": {
+    "audit_report": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\audit-report.json",
+      "sha256": "60f2106f9faa957721b3b6ec9164508e3266059468bb2691af45a56077a3ebe6",
+      "bytes": 34119
+    },
+    "audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\actual-audit-terminal.json",
+      "sha256": "da7bfc6ff5ddcec967916dcecb19b1117a0239a8b613f1de424c365c07f2f83c",
+      "bytes": 2040
+    },
+    "actual213_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\actual213-successor-pointers-precommit.json",
+      "sha256": "5fdcf6f74522fa3fa0d8672a9a288a3d0e1a0e8373ab70b1cd0c6b6fb97d2df8",
+      "bytes": 52918
+    },
+    "configuration_results": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\result.json",
+          "sha256": "0a6d30e1e06ac430513fa2b2299e97d67fda528fd1cf968b709e93d5ca9c35b0",
+          "bytes": 190473
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\Root-terminal.json",
+          "sha256": "7883c85997dcd17dc30f3c7815e630c00d8085f5d60cd52dc949c108bd82251a",
+          "bytes": 411
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\selected.xml",
+          "sha256": "4bd25b3801f3e6a255e0e9744e128d417f9d69ad74a7b701539b71ea45725e5f",
+          "bytes": 13466
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\LastTest.log",
+          "sha256": "086f34157ee8ad9e43dc42864d2d1e01fa2795e8062e6cfdfa29fdbb14068648",
+          "bytes": 15965
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "3f24a6ef26b7dea48eca2157ecb283ab1414ea92ac8708f38e9a1cc5aa925c81",
+          "bytes": 1256951
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\new-actual-compilation-binding.json",
+          "sha256": "dcfaa02a8e9f1e8398ea8807f839a2544f318c025ef32807208e42aab25944eb",
+          "bytes": 146424
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\atomic-families-native-normal-measurements.json",
+          "sha256": "6d0e11584afd4d12e00df66095c693fa1e94c64e8eaaea21145621fec1282df6",
+          "bytes": 16918
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\emitter-build-measurements.json",
+          "sha256": "6e7f7ad1c4d9c2adaf84e80e51cff53b8c768de73e10177b97ef6e8085cf3933",
+          "bytes": 12651
+        },
+        "registry262": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\registered-applicable-262.json",
+          "sha256": "ff206e2de5eebc67dbe64fbbbd0d486014e78967ad3bea66bfd9b1b7d2d197ef",
+          "bytes": 216650
+        },
+        "cases": {
+          "1": {
+            "fixture": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-atomic-families\\scenario1-atomic.xr",
+              "sha256": "11ddc9bd4b158875f6952535a49546d406507ee2134d72be5f2916150974a3cb",
+              "bytes": 361
+            },
+            "generatedTU": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\atomic-source-families-native\\scenario1.c",
+              "sha256": "e49427e92b3a20227d708686afbc1e661ffc288bc6da78df4e635378d7f761c2",
+              "bytes": 73661
+            },
+            "raw_normal": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\normal-XML-output-1.log",
+              "sha256": "787a223a24f2b73e665b18c16d049f25516f94b1bf897d787eacd9d6a46b9ec0",
+              "bytes": 4030
+            },
+            "independent_decoded": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\msvc-scenario1-decoded.json",
+              "sha256": "2a6e6549b0b93b19a2b727a046fa4c0f72640a6803ec1ea90eb9d72dfef536e8",
+              "bytes": 8882
+            },
+            "payload_sha256": "c7fee97fbf617829d84d5a0685b0de0c7bd60ce02f9a45f8cc78a99e1ed83014",
+            "wholeTU_sha256": "e49427e92b3a20227d708686afbc1e661ffc288bc6da78df4e635378d7f761c2",
+            "function_count": 10,
+            "proof_bytes": 8057,
+            "f64_identity": []
+          },
+          "2": {
+            "fixture": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-atomic-families\\scenario2-atomic.xr",
+              "sha256": "cff22826fe4ba4166dc65f1de871e997446f81f48db6b6f509b42f670374ffee",
+              "bytes": 401
+            },
+            "generatedTU": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\atomic-source-families-native\\scenario2.c",
+              "sha256": "7d95425db5d061f41649bce9f44c2156037532279a360f539d9f56b7dbd096aa",
+              "bytes": 76485
+            },
+            "raw_normal": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\normal-XML-output-2.log",
+              "sha256": "1d2d1ca5380b7e321af7c1a22aeda66d51e53b11042fa652fa7acb12367a232e",
+              "bytes": 4036
+            },
+            "independent_decoded": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\msvc-scenario2-decoded.json",
+              "sha256": "46efb88f7b70e5ed9bd09c9f89a995a12bf9fb1bbadc72f9abf6fe475ae9f92c",
+              "bytes": 8895
+            },
+            "payload_sha256": "4cb175115f9c0bbf2df1bdc356573bc33e0b34b6e910317192462d8c71573bc8",
+            "wholeTU_sha256": "7d95425db5d061f41649bce9f44c2156037532279a360f539d9f56b7dbd096aa",
+            "function_count": 10,
+            "proof_bytes": 8889,
+            "f64_identity": []
+          },
+          "3": {
+            "fixture": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-atomic-families\\scenario3-atomic.xr",
+              "sha256": "52acb2b2ca992ca205c2fd614185a4e0e6b53d35d4806f6bd8e997e682f8dda6",
+              "bytes": 539
+            },
+            "generatedTU": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\atomic-source-families-native\\scenario3.c",
+              "sha256": "4370d36a8c833096dab26698fe071b73ed1c0957b012ed5b272575a85c2f28c6",
+              "bytes": 84821
+            },
+            "raw_normal": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-msvc-r1\\normal-XML-output-3.log",
+              "sha256": "a6b6d6f61f3e5ca7e1738180ae68b93ab5ead62d403b86478c74ded59b17d4bd",
+              "bytes": 4040
+            },
+            "independent_decoded": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\msvc-scenario3-decoded.json",
+              "sha256": "abf36472d77aec2a5e9c18dc05dce90c7ba38a422131cff3448e133805a0f9e2",
+              "bytes": 8903
+            },
+            "payload_sha256": "29947de9c9a6797c34ca0ef7e11cc2077b517d2176b68d1c77d1399c47148bb7",
+            "wholeTU_sha256": "4370d36a8c833096dab26698fe071b73ed1c0957b012ed5b272575a85c2f28c6",
+            "function_count": 11,
+            "proof_bytes": 9693,
+            "f64_identity": [
+              {
+                "function": 2,
+                "parameter_count": 1,
+                "parameters": [
+                  13
+                ],
+                "result": 13
+              }
+            ]
+          }
+        },
+        "actual_dependency_counts": [
+          159,
+          159,
+          34,
+          34,
+          34
+        ],
+        "actual_native_normal_tests": 3
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\result.json",
+          "sha256": "d0e3e07201a8a17fcbc6f7a9def87bb479459184fadf25a0d302df1391fccb07",
+          "bytes": 198855
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\Root-terminal.json",
+          "sha256": "ff43ae184b6aa1f15f441f1e6d785df5b868d28409f5a4d2488fa4f8b681e619",
+          "bytes": 412
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\selected.xml",
+          "sha256": "e48ae8d7c23e1b7f58ae0ca4ac8dc493490cc6a1e3f1448e9ecde8dca7e0a26e",
+          "bytes": 13467
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\LastTest.log",
+          "sha256": "1817f1641f278327c09f7878fec0fec7053257e77131d94cfb4a760b00339884",
+          "bytes": 15965
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\actual-compilation-binding.json",
+          "sha256": "18fc9f9ab8c01dfd35cc9d5332dbbdabbed2648bd76394258ea8d765949b88da",
+          "bytes": 1310751
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\new-actual-compilation-binding.json",
+          "sha256": "0ca8340c4ae2707e880fdbd6009b018a490f1b580317f863c597c733d988cf6a",
+          "bytes": 150468
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\atomic-families-native-normal-measurements.json",
+          "sha256": "974c0403fc2e93bbbc1d5193c6cbdf5f7afc00e2a3d6a99574f1dacc784a8cae",
+          "bytes": 16918
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\emitter-build-measurements.json",
+          "sha256": "01294636b77909250215a8ca17a71230c65b1c2a8f0e7a680c8082cf5163921b",
+          "bytes": 12651
+        },
+        "registry262": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\registered-applicable-262.json",
+          "sha256": "43aca8ceaa711da0f121a82c15600074af12acf6cc934039a414bab12d4686f0",
+          "bytes": 261714
+        },
+        "cases": {
+          "1": {
+            "fixture": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-atomic-families\\scenario1-atomic.xr",
+              "sha256": "11ddc9bd4b158875f6952535a49546d406507ee2134d72be5f2916150974a3cb",
+              "bytes": 361
+            },
+            "generatedTU": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\atomic-source-families-native\\scenario1.c",
+              "sha256": "e49427e92b3a20227d708686afbc1e661ffc288bc6da78df4e635378d7f761c2",
+              "bytes": 73661
+            },
+            "raw_normal": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\normal-XML-output-1.log",
+              "sha256": "787a223a24f2b73e665b18c16d049f25516f94b1bf897d787eacd9d6a46b9ec0",
+              "bytes": 4030
+            },
+            "independent_decoded": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\asan-scenario1-decoded.json",
+              "sha256": "65637adf0addd82f225eab54c3da8f9b6f5db261ac7d3d8da156e46d728aa9f5",
+              "bytes": 8882
+            },
+            "payload_sha256": "c7fee97fbf617829d84d5a0685b0de0c7bd60ce02f9a45f8cc78a99e1ed83014",
+            "wholeTU_sha256": "e49427e92b3a20227d708686afbc1e661ffc288bc6da78df4e635378d7f761c2",
+            "function_count": 10,
+            "proof_bytes": 8057,
+            "f64_identity": []
+          },
+          "2": {
+            "fixture": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-atomic-families\\scenario2-atomic.xr",
+              "sha256": "cff22826fe4ba4166dc65f1de871e997446f81f48db6b6f509b42f670374ffee",
+              "bytes": 401
+            },
+            "generatedTU": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\atomic-source-families-native\\scenario2.c",
+              "sha256": "7d95425db5d061f41649bce9f44c2156037532279a360f539d9f56b7dbd096aa",
+              "bytes": 76485
+            },
+            "raw_normal": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\normal-XML-output-2.log",
+              "sha256": "1d2d1ca5380b7e321af7c1a22aeda66d51e53b11042fa652fa7acb12367a232e",
+              "bytes": 4036
+            },
+            "independent_decoded": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\asan-scenario2-decoded.json",
+              "sha256": "3f5cb642131f39abe6dc8d47f7027c84bb5bce379f6ef884407a59562e64f648",
+              "bytes": 8895
+            },
+            "payload_sha256": "4cb175115f9c0bbf2df1bdc356573bc33e0b34b6e910317192462d8c71573bc8",
+            "wholeTU_sha256": "7d95425db5d061f41649bce9f44c2156037532279a360f539d9f56b7dbd096aa",
+            "function_count": 10,
+            "proof_bytes": 8889,
+            "f64_identity": []
+          },
+          "3": {
+            "fixture": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-atomic-families\\scenario3-atomic.xr",
+              "sha256": "52acb2b2ca992ca205c2fd614185a4e0e6b53d35d4806f6bd8e997e682f8dda6",
+              "bytes": 539
+            },
+            "generatedTU": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\atomic-source-families-native\\scenario3.c",
+              "sha256": "4370d36a8c833096dab26698fe071b73ed1c0957b012ed5b272575a85c2f28c6",
+              "bytes": 84821
+            },
+            "raw_normal": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-families-native-normal-qualification-asan-r1\\normal-XML-output-3.log",
+              "sha256": "a6b6d6f61f3e5ca7e1738180ae68b93ab5ead62d403b86478c74ded59b17d4bd",
+              "bytes": 4040
+            },
+            "independent_decoded": {
+              "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\asan-scenario3-decoded.json",
+              "sha256": "6776b5412867b2a30f5195269b2d7c1e25fb2afe573c527471364a839236588d",
+              "bytes": 8903
+            },
+            "payload_sha256": "29947de9c9a6797c34ca0ef7e11cc2077b517d2176b68d1c77d1399c47148bb7",
+            "wholeTU_sha256": "4370d36a8c833096dab26698fe071b73ed1c0957b012ed5b272575a85c2f28c6",
+            "function_count": 11,
+            "proof_bytes": 9693,
+            "f64_identity": [
+              {
+                "function": 2,
+                "parameter_count": 1,
+                "parameters": [
+                  13
+                ],
+                "result": 13
+              }
+            ]
+          }
+        },
+        "actual_dependency_counts": [
+          159,
+          159,
+          34,
+          34,
+          34
+        ],
+        "actual_native_normal_tests": 3
+      }
+    },
+    "related_normal8": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-families-normal-integrated-audit-r1\\related-normal8-supplement.json",
+      "sha256": "3d0fed0a9c9c8d71f7ae943f21438d8bb5cfcb240cc9e46627deb7a5f15ca3a1",
+      "bytes": 6043
+    },
+    "related_scope": "Only legal VM six normal cases plus Source0 native and native CAS; no illegal Ordering rejection in this run.",
+    "actual_native_tests_per_configuration": 3,
+    "related_tests_per_configuration": 8,
+    "registered_applicable262_ONLY": true,
+    "old208_metadata_exact": true,
+    "old259_commands_properties_exact": true,
+    "old1058_artifacts_exact": true,
+    "joint_artifacts_count": 1079,
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "cross_provider_fees": "Independently observed per configuration; equality is not a qualification requirement.",
+    "qualified_source_map": "Original c7fdee map stays immutable in qualification snapshots; this proposal is a separate metadata successor."
+  }
+}

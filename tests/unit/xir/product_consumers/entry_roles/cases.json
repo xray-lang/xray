@@ -38,8 +38,9 @@
       "original_name": "source_owner_test_discovery_detaches_metadata_and_exact_ids",
       "original_body_lf_sha256": "52b6c0b271121d46ff5271a5363e1ab4017624a08cd84fea568958d9bd9ad487",
       "kind": "EXACT_ORIGINAL",
-      "expectation": "RETIRED_INVALID_STATE_REJECTION",
-      "retirement": "library module var is prohibited",
+      "expectation": "OPEN_REQUIRED_MODULE_STATE",
+      "retirement": null,
+      "responsibility_note": "OPEN original module-state responsibility: private library counter40 is retained by BASELINE_CHANGE_ORDER_20261006_25F4-cn.txt and is not retired into a negative test. The fixed25f admission subset has not implemented this original graph. The unchanged oracle records the historical 01e6 input diagnostic under fixed25f (returncode1, library mutable or exported state is not admitted); it does not discharge the original positive module-state/test-discovery responsibility. Original fixture bytes, consumer assertions and first-red evidence remain unchanged.",
       "files": {
         "root.xr": {
           "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_test_discovery/root.xr",
