@@ -1,0 +1,318 @@
+{
+  "status": "PASS_ATOMIC_I64_CAS_BUILD_NORMAL_ONLY",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "preparation_worker_HEAD": "4ad79cf433f6b5c2bc459ba81ea81853813d4ef0",
+  "future_apply_parent": "UNBOUND_PENDING_ROOT_CURRENT_BATCH_COMMIT",
+  "original_prefix": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\atomic-i64-cas-contract-r1\\original-prefix305.xr",
+    "bytes": 305,
+    "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c"
+  },
+  "appended_test": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\atomic-i64-cas-contract-r1\\appended-test.xr",
+    "bytes": 578,
+    "sha256": "4a3ea76b70650716b0ca33c85c0acb76b8595fc1aaa531889f0fa153004d6528"
+  },
+  "full_fixture": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\atomic-i64-cas-contract-r1\\scenario1-cas-oracles.xr",
+    "bytes": 883,
+    "sha256": "48f2b9ae959185e12959952ce0c18722840dc3e47a9e22abe00606d0446148c4"
+  },
+  "prefix_provenance": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_product_atomic_source_families.cmake",
+    "bytes": 4666,
+    "sha256": "601579593c92ec204935343b343cf94c189d26a8cd2f9b5502a3d143d1794aca"
+  },
+  "fixed_source_evidence": [
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\spec\\source\\sections\\015-14-built-in-type-methods.md",
+      "bytes": 65693,
+      "sha256": "c48205c335b6e9473f8b1d1797446d71199b873502677c70815a4a171ff84d6d"
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\spec\\source\\sections\\011-10-concurrency-and-coroutines.md",
+      "bytes": 76231,
+      "sha256": "81e8f98752a00890d2a128abc4dc788b2e2e8dee38e8daee61ff6cf71be33d5a"
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\stdlib\\types\\atomic.xr",
+      "bytes": 654,
+      "sha256": "7606f6ff7dc86a808dc83f63b357da5573e97d34410464f20c0b483003233ee1"
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\src\\xir\\xxir_source_atomic_calls.inc.c",
+      "bytes": 11936,
+      "sha256": "a5ab47d062e5f811b367819e266d6552fa926d8a96083846999f8f770b3c7f36"
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\src\\xir\\xxir_atomic_verify.inc.c",
+      "bytes": 6080,
+      "sha256": "a3ac0f92511047ed1ac12c9aa2ad85e0cde618e3a2dbe6a31d8ce77acbee4236"
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\src\\xir\\xxir_atomic_value.inc.c",
+      "bytes": 16749,
+      "sha256": "ae4a59e898d2ccbd3fff6713c2313fc7302760af8ed95c53eb1ab5d4b5ca5455"
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\src\\xir\\xxir_vm_atomic.inc.c",
+      "bytes": 3488,
+      "sha256": "9523c4fb0a5be7140ffdb241a27fff15f1f0192fd71626791a09e90fc4d5b77a"
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\src\\xir\\xxir_types.h",
+      "bytes": 5048,
+      "sha256": "7781639a699fc43d8ea1631fd3368b373e9da75c9ba9abf60f3afc47a5087738"
+    }
+  ],
+  "scope": "One fixture only; no new C/CMake/shared registration in this draft; no changes to seven RMW fixtures.",
+  "syntax": "Append exactly one lower-case @test checkCompareExchange; var tuple destructuring follows the original admitted Source1 syntax; assert(bool==true/false) uses ordinary typed boolean equality.",
+  "types": "Atomic<i64> inferred from40; const aliases preserve synchronization identity; compareExchange(40,42)/(40,99) result exact owned Tuple(i64,bool), then ordinary typed destructuring. Source constraint AtomicValue<i64> required; no Numeric-only narrowing for CAS.",
+  "ordering": {
+    "source_arguments": "ordering omitted in both new CAS and all six new loads",
+    "default": "SeqCst",
+    "success": "SeqCst",
+    "failure": "SeqCst",
+    "proof": "Spec14.19 methods and10.9 omission rule; Source passes3 CAS operands without optional order; VM supplies NULL ordering; actual atomic_ordering sets ordinal4; success_order(4) and failure_order(4) are memory_order_seq_cst.",
+    "representation": "Checked omitted ordering is operand absence, not fabricated NullableSome/enum metadata."
+  },
+  "test_oracles": [
+    {
+      "operation": "original private answer",
+      "expected": 42,
+      "role": "Preserved original Source1 body gets actual same-module execution; aggregate42 is not the new CAS field oracle."
+    },
+    {
+      "operation": "alias.compareExchange(40,42)",
+      "expected_old": 40,
+      "expected_matched": true,
+      "counter_after": 42,
+      "alias_after": 42,
+      "independent_after": 40
+    },
+    {
+      "operation": "counter.compareExchange(40,99)",
+      "expected_old": 42,
+      "expected_matched": false,
+      "counter_after": 42,
+      "alias_after": 42,
+      "independent_after": 40,
+      "responsibility": "Observed42 must be returned, not expected40; desired99 must not be stored."
+    }
+  ],
+  "ownership": "Every test invocation constructs counter and independent anew; alias shares only counter. Both CAS own real Tuple carriers; destructured scalars and all temporary/const Atomic handles cleaned by checked scope semantics. Public consumer must detach packets/Lowered and drop all returned values/Program/Instances, then compiler/runtime/table physical0.",
+  "effects": "No suspension/ordinary throw from normal i64 atomic value operations; constructors and CAS result preparation may fail in runtime allocation domain. Assertion panic is an oracle failure. Cancellation/precommit/postcommit guarantees remain independent OPEN responsibilities.",
+  "authority": "answer, function named exported, original checkAnswer, and new checkCompareExchange are private; no export adapter/wrapper/nativeHidden bypass. Host plain start rejects test role; test starts only via root start_test; original metadata checkAnswer kept. Canonical program entry may return I64(0).",
+  "future_normal_projection": "Reuse Source→Checked source/closed/retained→producer destruction→Lowered verify→Program→two Instances; original checkAnswer and new checkCompareExchange execute with owned Unit results. New test twice per Instance is proposed, not measured.",
+  "limits": {
+    "allocated": 67108864,
+    "live": 8388608,
+    "work": 128000000
+  },
+  "metadata_oracles_to_implement": [
+    "New test exactly2 AtomicNew and2 CompareExchange; answer original1CAS separate.",
+    "CAS receiver Atomic<i64>,3 ordinary source operands, result Tuple with ordered mode0 i64/bool fields via actual public tuple signature.",
+    "New test six load receivers Atomici64 and omitted ordering; no implicit source permission or host export granted."
+  ],
+  "OPEN": [
+    "Source admission of the appended full fixture has not run",
+    "actual Checked/CLOSED/Lowered metadata proof",
+    "actual defaultSeqCst execution on each provider",
+    "MSVC/ASan normal tests",
+    "CAS all5Ordering",
+    "budget axes",
+    "compiler/runtime FI and before/aftercommit barriers",
+    "native/AOT",
+    "lockfree provider/CAS contention/progress/cancellation",
+    "bool/f64 CAS bitcases",
+    "whole original8Source allocation FI"
+  ],
+  "normal": "NOT_RUN",
+  "FI": "NOT_RUN",
+  "native": "NOT_RUN",
+  "shared_writes": 0,
+  "product_processes_started": 0,
+  "candidate_scope": "One new TU and one normal CTest; no FI or native registration.",
+  "target": "test_source_product_atomic_i64_cas_oracles",
+  "normal_test": "test_source_product_atomic_i64_cas_normal",
+  "current_public_API": "SourceProduct/Checked packet readers/Lowered verifier/VM Program/Instance/start_test; public xxir_types tuple signature and Atomic/nullable metadata helpers.",
+  "Checked_control_observation": "Each source/closed/retained Checked: original answer6 atomic operations separately; new test2 constructors+2 real Tuple CAS+6 loads. Omitted order absence is distinct from typed original Release NullableSome; Lowered does not borrow the Checked shape.",
+  "execution_expected": {
+    "instances": 2,
+    "canonical": "two I64(0)",
+    "permission_rejections_per_Instance": 8,
+    "checkAnswer_Unit": 4,
+    "checkCompareExchange_Unit": 4,
+    "result_take_drop_zero": true,
+    "final_compiler_runtime_table": "0/0;0/0;0"
+  },
+  "scope_limits": {
+    "allocated": 67108864,
+    "live": 8388608,
+    "work": 128000000
+  },
+  "normal_costs": "NOT_MEASURED",
+  "first_product_execution": "NOT_RUN",
+  "coverage_boundary": "aggregate original answer42 never substitutes for new success old40/matchedtrue and failure observed42/matchedfalse/source state assertions.",
+  "normal_qualification": {
+    "status": "PASS_ATOMIC_I64_CAS_BUILD_NORMAL_ONLY",
+    "snapshot_explanation": "All other draft/NOT_RUN/preparation-parent/OPEN fields are retained immutable preparation history. This section records the actual current r6 normal qualification; it does not close those wider responsibilities.",
+    "actual_audit": {
+      "path": "build-consumer-evidence/current67-next-slice-agent-r1/atomic-i64-cas-normal-integrated-audit-r1/audit-report.json",
+      "sha256": "a35cf38b0d3a5c1072012eb262484b322c5e0a6d8ce5e7199cf83eae9c2f159c"
+    },
+    "actual205_successor_pointers": {
+      "path": "build-consumer-evidence/current67-next-slice-agent-r1/atomic-i64-cas-normal-integrated-audit-r1/actual205-successor-pointers-precommit.json",
+      "sha256": "15b8424b5af1edf39afc0dbff756e1753f3a7c10b0b4e3b9e2930a3d40fa3351"
+    },
+    "configuration_results": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\result.json",
+          "sha256": "dc9160b52ff8caccae37e11230779d343c394aa9e27d2bf0bf8d3b5127ca6b74",
+          "bytes": 96831
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\Root-terminal.json",
+          "sha256": "dea6bcf391cab633a582300d23a97e43ee9cc9c44117b01bfabb746550c54e89",
+          "bytes": 323
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\selected.xml",
+          "sha256": "0725bed205147bfc9473c2d6c3881eb28f1fca522ae94a2158a3938bfa0725a5",
+          "bytes": 8779
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\LastTest.log",
+          "sha256": "55e95c3f80faaa8bd32f222ef68b6f9e48a7cbde650f12f1ad51b5a8e11f15eb",
+          "bytes": 9689
+        },
+        "raw_normal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\normal-XML-output.log",
+          "sha256": "46a011508e3971c45196da4b336c2a0460c14b5900990121c9b0a2d25a469847",
+          "bytes": 8166
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\actual-compilation-binding.json",
+          "sha256": "3844325754eaed701ebea6a959e5969cd88754e9ad181025cf2bb3d7b8980157",
+          "bytes": 1018798
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\new-actual-compilation-binding.json",
+          "sha256": "ce0625d8630770b2b56e98dc0c1740c02ff086375383768451db715cdb7f0233",
+          "bytes": 46405
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\atomic-i64-cas-normal-measurements.json",
+          "sha256": "a03131eb82b81c1d0ad73935b70c3efdc70c7fcac861c380239d8ab67808a913",
+          "bytes": 8328
+        },
+        "registry258": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-msvc-r6\\registered-applicable-258.json",
+          "sha256": "b1fb7b7d330ae19e9b7e8b2c393c5ea58df4e5a9fc04bf4992f662ae2c036934",
+          "bytes": 212535
+        },
+        "fixture": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\atomic-i64-cas-oracles\\scenario1-cas.xr",
+          "sha256": "48f2b9ae959185e12959952ce0c18722840dc3e47a9e22abe00606d0446148c4",
+          "bytes": 883
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\atomic-i64-cas-normal-integrated-audit-r1\\msvc-decoded-normal.json",
+          "sha256": "d76443fb771aa09d6650e89f6f8ae4343b2152da33e3d4963e260ac45e1077de",
+          "bytes": 8591
+        },
+        "actual_dependency_count": 159,
+        "normal_costs": {
+          "compiler_sites": 2871,
+          "runtime_sites": 184,
+          "allocated": 1009593,
+          "peak": 263188,
+          "work": 1588079
+        },
+        "old204_exact": true,
+        "old257_exact": true,
+        "public10": true,
+        "san3": 0
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\result.json",
+          "sha256": "904feb6c4afec2d7475762a2e2b1ee7694de25e9df4dbf874cd3d982a979c025",
+          "bytes": 95849
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\Root-terminal.json",
+          "sha256": "1a814dc047db8f4e9d4e2e0fdf52dee46809fb74a67b39761c07ff6a928176cd",
+          "bytes": 330
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\selected.xml",
+          "sha256": "bbd92961aa7bf7c1774649b0bd5eb55e7ed9d3b9cfde9622d53f3b8cf246b2ce",
+          "bytes": 8779
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\LastTest.log",
+          "sha256": "4cfb5672b47929cb182a642e1ad84cc17e5d7a5b48920c8733ec5b07bf47ed8d",
+          "bytes": 9689
+        },
+        "raw_normal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\normal-XML-output.log",
+          "sha256": "46a011508e3971c45196da4b336c2a0460c14b5900990121c9b0a2d25a469847",
+          "bytes": 8166
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\actual-compilation-binding.json",
+          "sha256": "9f254ccdea7f7c2010c29ec8c037da1b38b936779d0b7ced1340cc5d66e32c51",
+          "bytes": 1069334
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\new-actual-compilation-binding.json",
+          "sha256": "a6b07420f464f2b5c5652a81a4ce4995677caff0a9134ccfc9db6706ed8bd551",
+          "bytes": 47736
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\atomic-i64-cas-normal-measurements.json",
+          "sha256": "d2e7ad8d56465ffa74b347db5758242dcd9955d98e12da3bee4fe2add8fdf114",
+          "bytes": 8328
+        },
+        "registry258": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\atomic-i64-cas-normal-qualification-asan-r6\\registered-applicable-258.json",
+          "sha256": "8640a44328b46c8926ce36c4b3f91e3c0e28767f9c283e7d89f6891de24b59b3",
+          "bytes": 256911
+        },
+        "fixture": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\atomic-i64-cas-oracles\\scenario1-cas.xr",
+          "sha256": "48f2b9ae959185e12959952ce0c18722840dc3e47a9e22abe00606d0446148c4",
+          "bytes": 883
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\atomic-i64-cas-normal-integrated-audit-r1\\asan-decoded-normal.json",
+          "sha256": "d76443fb771aa09d6650e89f6f8ae4343b2152da33e3d4963e260ac45e1077de",
+          "bytes": 8591
+        },
+        "actual_dependency_count": 159,
+        "normal_costs": {
+          "compiler_sites": 2871,
+          "runtime_sites": 184,
+          "allocated": 1009593,
+          "peak": 263188,
+          "work": 1588079
+        },
+        "old204_exact": true,
+        "old257_exact": true,
+        "public10": true,
+        "san3": 3
+      }
+    },
+    "C_lineage": "Original preparation C427f was not the passing code. Actual r6 uses Cebb3eed5974ba542f3c2add52a332f6cf7441bb8ba469e565a1954bd94d6e148 after the narrow warning-only global rename; fixture883B is unchanged. r6 actual q/seal/qualifier and separately observed Root terminal0 are bound by the actual audit references.",
+    "registry258": "REGISTRATION_ONLY; one normal CTest executed per configuration",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN",
+    "all5_CAS_orderings": "OPEN",
+    "full_family": "OPEN",
+    "full_safety": "OPEN",
+    "provider_contention_cancellation_commit_barriers": "OPEN"
+  }
+}
