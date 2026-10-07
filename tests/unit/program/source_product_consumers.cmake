@@ -257,3 +257,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_built
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_call_error_panic_group5.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_coroutine_panic_group4.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_default_assertion_group2.cmake")
