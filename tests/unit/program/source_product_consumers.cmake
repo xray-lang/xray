@@ -261,3 +261,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_corou
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_default_assertion_group2.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_imported_enum_catch.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_imported_enum_catch_native.cmake")

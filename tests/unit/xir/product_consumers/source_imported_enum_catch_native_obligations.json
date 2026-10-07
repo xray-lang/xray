@@ -1,0 +1,347 @@
+{
+  "schema": 1,
+  "status": "NORMAL_QUALIFIED_PARTIAL",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "Checked": {
+    "schema": 25,
+    "semantic_contract": 67
+  },
+  "public_ABI": {
+    "Value": 22,
+    "Call": 28,
+    "Program": 29
+  },
+  "legacy": {
+    "file": "tests/unit/program/test_xr_program_source_build.c",
+    "test": "source_owner_imported_enum_catch_preserves_declaration_identity",
+    "whole_file_bytes": 478590,
+    "whole_file_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+    "wrapper_LF_no_terminal_newline": {
+      "bytes": 1567,
+      "sha256": "8fcb2e271b062c0eb789399bff6d20cac71d26313584af13767ca25f1418b8c6"
+    },
+    "native_fixture": "XR_SOURCE_FIXTURE_IMPORTED_ENUM_CATCH",
+    "original_expected_answer": 42
+  },
+  "inputs": {
+    "main_original": {
+      "bytes": 342,
+      "sha256": "f6ef752924b9b4bab85fa6125ee680f65040ad98007ad593ac74d2754192d057"
+    },
+    "library_original": {
+      "bytes": 80,
+      "sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213"
+    },
+    "same_root_test_suffix": {
+      "bytes": 60,
+      "sha256": "86f5a2b28fb4545eb1b45249a8ab232d2fe4f7076fb00d7334848bf75aee2e65"
+    },
+    "main_proposed_full": {
+      "bytes": 402,
+      "sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d"
+    }
+  },
+  "declarations": "Complete library exported Problem.Failed and fail, root ImportedProblem alias/private localFail/private answer and legal same-root Test. No exports or syntax changed.",
+  "normal_gate": {
+    "name": "test_source_product_imported_enum_catch_native_normal",
+    "executed": true,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "new_TUs": 3,
+    "same_config_emitter_driver_generatedC": true,
+    "public_link": "xray_xir_source_product closure public10; no Host11 or VM fallback",
+    "actual_counts_required": {
+      "Instances": 2,
+      "canonical_I64_zero": 2,
+      "Unit": 4,
+      "permissions": 20
+    },
+    "typed_source_Test_oracle": 42,
+    "host_answer": "NOT_EXPOSED"
+  },
+  "native_proof": "Double owned full-C same bytes; actual compiled whole payload and exact digest footer; runtime independent re-emission; public seal rechecks proof, parameter type vectors, deep nominal type/declaration identities and layouts. Same typed catches with20+22 checked and reread; Lowered identity-only.",
+  "ownership": "Independent retained Checked bytes survive producer destruction. Free retained/Checked; seal then free CSource/Lowered; two distinct Instances retain Program after caller drop; each returned owned value dropped; final compiler/runtime blocks/bytes/table0.",
+  "code_lease": "Static generated callbacks; code.owner/release NULL. No dynamic DLL unload/death proof.",
+  "finite_limits": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000,
+    "emitted_C_limit_bytes": 16777216,
+    "origin": "Unchanged qualified nativeCAS lifecycle limits; no FI/exact/minus1 or expanded budget authorization."
+  },
+  "runtime_status": "NATIVE_NORMAL_ONLY_VERIFIED",
+  "actual_costs": {
+    "scope": "INDEPENDENT_NORMAL_ONLY_PER_CONFIGURATION",
+    "configurations": {
+      "msvc": {
+        "compiler_sites": 2830,
+        "runtime_sites": 44,
+        "allocated": 1135791,
+        "peak": 252054,
+        "work": 3306869
+      },
+      "asan": {
+        "compiler_sites": 2830,
+        "runtime_sites": 44,
+        "allocated": 1135791,
+        "peak": 252054,
+        "work": 3306869
+      }
+    }
+  },
+  "ABI351_risk": "Global native ABI351 from BASELINE_CHANGE_ORDER_20261006_25F4-cn.txt line4 remains OPEN; does not replace public ABI22/28/29.",
+  "OPEN": [
+    "Original old Core declaration/typeID/class identity equality",
+    "Original direct detached host answer I64(42) interface semantics",
+    "Original AOT/native/mixed generatedC and ABI obligations",
+    "Whole compiler/runtime FI and all budget axes",
+    "External uncaught-error/panic stderr and process exit behavior",
+    "Cancellation, initialization failure stickiness and physical source deletion",
+    "Main semantic/Checked contract68 integration; producer remains25f"
+  ],
+  "old_denominators": {
+    "Source": 108,
+    "split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "source_retirement": "NONE",
+  "Main_integration": "NOT_PERFORMED_FIXED_PRODUCER",
+  "normal_qualification": {
+    "scope": "NORMAL_PARTIAL_NO_FI_AXES_SAFETY_RETIREMENT",
+    "worker_parent": "21c31650dd887c3715601707cd3e30771598a22c",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "actual_TUs_per_configuration": 223,
+    "new_TUs_per_configuration": 3,
+    "normal_tests_per_configuration": 1,
+    "product_cold_normal_processes": 2,
+    "registered283": "REGISTRATION_ONLY",
+    "normal_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-native-normal-integrated-audit-r2\\audit-report.json",
+      "sha256": "24564f6a22d946074fdbcbc30302884af7746912d4d2868649f6bbb1419969a1",
+      "bytes": 14359
+    },
+    "actual223_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-native-normal-integrated-audit-r2\\actual223-successor-pointers-precommit-final.json",
+      "sha256": "1c59a635b0033320359e9aa97b1f55def5f571512a77069d05e8ebb9662867b7",
+      "bytes": 6510
+    },
+    "actual_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-native-normal-integrated-audit-r2\\audit-terminal.json",
+      "sha256": "823c9d09728f4b5c3af0ca822459a8dcebd1dbd71491399bd259bbf504ee426c",
+      "bytes": 2570
+    },
+    "configurations": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\result.json",
+          "bytes": 157788,
+          "sha256": "68bc4eec7d757b8f11c64674614dedabc60461a76a75abf616e9bc0a90239cfe"
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\Root-terminal.json",
+          "bytes": 889,
+          "sha256": "f381589fa869bf51d4e526388ebcb833dcf398d0d9cfc2bb4622b7d9947884e8"
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\actual-compilation-binding.json",
+          "bytes": 1673578,
+          "sha256": "70538693e28251f139a672bec0f3f2baec2a8776936cd908ff053099ad216f43"
+        },
+        "registry283": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\registered-applicable-283.json",
+          "bytes": 238730,
+          "sha256": "65c387f8eb21dd169d099b5c97a2259bc8200aaa94c0c7afc805614ab7a30e95"
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\imported-enum-native-normal-measurements.json",
+          "bytes": 4902,
+          "sha256": "c779bc0e4df54bd3759fddb8c30e13d46b425adbfa6b2245df542e30aaf806c3"
+        },
+        "normal_costs": {
+          "compiler_sites": 2830,
+          "runtime_sites": 44,
+          "allocated": 1135791,
+          "peak": 252054,
+          "work": 3306869
+        },
+        "normal_observations": {
+          "Instances": 2,
+          "canonical_I64_zero": 2,
+          "Unit": 4,
+          "permissions": 20,
+          "original_source_Test_oracle": 42,
+          "typed_catch_pairs_per_Checked": 2,
+          "Lowered": "IDENTITY_ONLY",
+          "all_callbacks_native": true,
+          "code_lease": "STATIC_NOT_DLL_UNLOAD_PROOF",
+          "physical_final": {
+            "compiler_blocks": 0,
+            "compiler_bytes": 0,
+            "runtime_blocks": 0,
+            "runtime_bytes": 0,
+            "table": 0
+          }
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\selected.xml",
+          "bytes": 4975,
+          "sha256": "936e35c185b9f0546e27a5a65e080231dffd16734adff9c16e9a9fba575c8bc7"
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\LastTest.log",
+          "bytes": 6041,
+          "sha256": "b6c9ce74ec3abfd244c469705907506e5a66a22e17c133e006e8cc9272e7ae53"
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\new-actual-compilation-binding.json",
+          "bytes": 110639,
+          "sha256": "de828e811d64db14d644c237286575a38ee3da2c9b05b539c8de178701b411a2"
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\emitter-build-measurements.json",
+          "bytes": 3945,
+          "sha256": "5861c08205416708fcf6d3fc75d7ad49162e53bdc612021a4dd8c5cf53e53f56"
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-msvc-r1\\fresh.log",
+          "bytes": 13495,
+          "sha256": "b2eb02f17f004c1e9c068876cbb06902410d996f00ceff1d262e027bc16404c0"
+        },
+        "generatedTU": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-imported-enum-native\\program.c",
+          "bytes": 77070,
+          "sha256": "a9269d559a12a07055a2e6b6b1e1a49c13df842a9e20cdef46f5b4dad73c5152"
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-native-normal-integrated-audit-r2\\msvc-independent-normal-and-emitter.json",
+          "bytes": 9599,
+          "sha256": "d3bfdb29b844fddab78d53a3586bd1235e1662dd2622e06bcc141900c8d65152"
+        }
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\result.json",
+          "bytes": 155599,
+          "sha256": "975ee825b62ec5e7d4280d5aec7dc2208232d6f092a454b47ec47423c364525e"
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\Root-terminal.json",
+          "bytes": 889,
+          "sha256": "d891bf544b02522e691b3dadf28b23a0f3ce2a1fcfc11bd58fd0ca67c8a86cae"
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\actual-compilation-binding.json",
+          "bytes": 1731582,
+          "sha256": "e46cd861ee3fa758b222b4a481b6338892e6cbb99b3dec3eb6f04a27c81416c2"
+        },
+        "registry283": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\registered-applicable-283.json",
+          "bytes": 287406,
+          "sha256": "874dd0c7a1a8fabbc1586d848d1809c13f29315f886b202fc90d445df336f56b"
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\imported-enum-native-normal-measurements.json",
+          "bytes": 4902,
+          "sha256": "c7cc8f844d0ec6f387b3379d323cdebe99e8f734ca4a88295cc35a3c529bad3a"
+        },
+        "normal_costs": {
+          "compiler_sites": 2830,
+          "runtime_sites": 44,
+          "allocated": 1135791,
+          "peak": 252054,
+          "work": 3306869
+        },
+        "normal_observations": {
+          "Instances": 2,
+          "canonical_I64_zero": 2,
+          "Unit": 4,
+          "permissions": 20,
+          "original_source_Test_oracle": 42,
+          "typed_catch_pairs_per_Checked": 2,
+          "Lowered": "IDENTITY_ONLY",
+          "all_callbacks_native": true,
+          "code_lease": "STATIC_NOT_DLL_UNLOAD_PROOF",
+          "physical_final": {
+            "compiler_blocks": 0,
+            "compiler_bytes": 0,
+            "runtime_blocks": 0,
+            "runtime_bytes": 0,
+            "table": 0
+          }
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\selected.xml",
+          "bytes": 4975,
+          "sha256": "a79f71fcd203507f8035ca8e004818f7391971ee62184a53ae0d05899fac0fdf"
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\LastTest.log",
+          "bytes": 6041,
+          "sha256": "ec4ca18547c3a854dec9262188994361bdb2154ecbf9c5588ed222257a1cd09b"
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\new-actual-compilation-binding.json",
+          "bytes": 113441,
+          "sha256": "d62fce31c014ab7973dd363db93820d8dcdb3541fac72b76c1f8e3e013ce3837"
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\emitter-build-measurements.json",
+          "bytes": 3945,
+          "sha256": "7a9cda8f11593fa218ec3caef6d169d3ab5bdfe1f8e5f50eb8aaf88b0b3611d4"
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-native-normal-qualification-asan-r1\\fresh.log",
+          "bytes": 14794,
+          "sha256": "cdb780fa382cca99b55fbba8f6de5d765e47bb4b1e8f76d0e42772feedb045f0"
+        },
+        "generatedTU": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-imported-enum-native\\program.c",
+          "bytes": 77070,
+          "sha256": "a9269d559a12a07055a2e6b6b1e1a49c13df842a9e20cdef46f5b4dad73c5152"
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-native-normal-integrated-audit-r2\\asan-independent-normal-and-emitter.json",
+          "bytes": 9599,
+          "sha256": "b64680173863f832b966cdd9ac22e04b352f6300a2a3fab36367676b41d89686"
+        }
+      }
+    },
+    "original_candidate_map": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\imported-enum-native-candidate-r1\\new-files\\source_imported_enum_catch_native_obligations.json",
+      "sha256": "8eb61d8be2c0d544c971bc71cb00421e8b6461484e5fab1b539196f8db03f545",
+      "bytes": 4022
+    },
+    "qualified_source_inputs_immutable": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-native-normal-integrated-audit-r2\\source-inputs-qualified.json",
+      "bytes": 2703816,
+      "sha256": "f0c668ed12a1e370c869cc1ec2d8537b796eb032a064f8a8b4fd427c5dbc1266"
+    },
+    "metadata_first_reds_preserved": [
+      {
+        "record": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-native-normal-audit-prep-r1\\metadata-first-red-r1.json",
+          "bytes": 538,
+          "sha256": "499da1cc24d3b352ec22438d8608915df1536e21c1a56baf61e57266867a5467"
+        },
+        "actual_tool_terminal": {
+          "chunk_id": "3c4c68",
+          "exit_code": 1,
+          "wall_time_seconds": 0.4392159
+        },
+        "classification": "metadata-only missing evidence-local qualifier.py; actual canonical qualifier path corrected in private r3; no product rerun"
+      }
+    ],
+    "original_OPEN_and_denominators_exact": true,
+    "code_lease": "STATIC_NOT_DYNAMIC_DLL_UNLOAD",
+    "full_native_matrix": "NOT_RUN",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN"
+  }
+}
