@@ -1,0 +1,557 @@
+{
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "public_contracts": {
+    "wire": 25,
+    "semantic": 67,
+    "Value": 22,
+    "Call": 28,
+    "Program": 29
+  },
+  "preparation_worker_parent": "1f42166fa1d236175543b10f24d0cfdedf29667c",
+  "accepted_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-Root-prep-r1\\accepted-contract.json",
+    "bytes": 2335,
+    "sha256": "f10d1dc2366474d0aacfe85d898dcb40a44deb86ab1ff1e82c6744c88f964dc1"
+  },
+  "code_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\current67-coroutine-panic-native2-contract-candidate-r2\\native-code-contract.json",
+    "bytes": 18262,
+    "sha256": "982524a0c971abc3e9a5f59106dfdba60ef7ecd93d829c48f2f1db96d61b0a16"
+  },
+  "original_VM_consumer": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\test_source_product_coroutine_panic_group4.c",
+    "bytes": 42891,
+    "sha256": "cb04b0e0fa9ac7c5fc8d31f471312316a7a1e2d00876f7ed8d3e04debc36a079"
+  },
+  "original_VM_map": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_coroutine_panic_group4_obligations.json",
+    "bytes": 120869,
+    "sha256": "e6da168cb09a471b2b86f9494d371872e6af51f40250f51e89d948a89d70e676"
+  },
+  "families": [
+    {
+      "id": "sealed_coroutine_panic",
+      "original_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\sealed_coroutine_panic\\original.xr",
+        "bytes": 554,
+        "sha256": "51ae3b105af7b9c3f58ebcb98e54385c4a5a016bc5207d2cf2493f95eaa860ca"
+      },
+      "original_bytes": 554,
+      "original_sha256": "51ae3b105af7b9c3f58ebcb98e54385c4a5a016bc5207d2cf2493f95eaa860ca",
+      "test_suffix": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\sealed_coroutine_panic\\tests.xr",
+        "bytes": 270,
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6"
+      },
+      "full_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\sealed_coroutine_panic\\full.xr",
+        "bytes": 824,
+        "sha256": "180b247e695a48caf084de5bb00b047d89e8dbad8e277fc151437e4254bd8e69"
+      },
+      "full_input_bytes": 824,
+      "full_input_sha256": "180b247e695a48caf084de5bb00b047d89e8dbad8e277fc151437e4254bd8e69",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-coroutine-panic-group4\\sealed_coroutine_panic\\root.xr",
+          "bytes": 824,
+          "sha256": "180b247e695a48caf084de5bb00b047d89e8dbad8e277fc151437e4254bd8e69"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-coroutine-panic-group4\\sealed_coroutine_panic\\root.xr",
+          "bytes": 824,
+          "sha256": "180b247e695a48caf084de5bb00b047d89e8dbad8e277fc151437e4254bd8e69"
+        }
+      },
+      "symbol": "source_coroutine_panic_sealed",
+      "generated_C": "generated/coroutine-panic-native2/sealed_coroutine_panic.c",
+      "normal_test": "test_source_product_coroutine_panic_group2_sealed_coroutine_panic_native_normal",
+      "original_external_exit": 1,
+      "original_stderr": "[Uncaught Panic] E0420: division by zero\\n",
+      "business_catch7": "NOT_APPLICABLE",
+      "executed": false
+    },
+    {
+      "id": "indirect_coroutine_panic",
+      "original_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\indirect_coroutine_panic\\original.xr",
+        "bytes": 578,
+        "sha256": "11d36645adbcffbd9980a0fdb1a4cd62bd09e8d10f11734d066b24d7f709f889"
+      },
+      "original_bytes": 578,
+      "original_sha256": "11d36645adbcffbd9980a0fdb1a4cd62bd09e8d10f11734d066b24d7f709f889",
+      "test_suffix": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\indirect_coroutine_panic\\tests.xr",
+        "bytes": 270,
+        "sha256": "d0da14a33c1e50d4d68f081f49bafa22d9af6521f3a83beed195d44675fcfea6"
+      },
+      "full_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-group4-candidate-r1\\inputs\\indirect_coroutine_panic\\full.xr",
+        "bytes": 848,
+        "sha256": "44fd79872ee4ae20c0ebbb91ca1bbeca4d767e64cc7b09230978f9f1c4a3e883"
+      },
+      "full_input_bytes": 848,
+      "full_input_sha256": "44fd79872ee4ae20c0ebbb91ca1bbeca4d767e64cc7b09230978f9f1c4a3e883",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-coroutine-panic-group4\\indirect_coroutine_panic\\root.xr",
+          "bytes": 848,
+          "sha256": "44fd79872ee4ae20c0ebbb91ca1bbeca4d767e64cc7b09230978f9f1c4a3e883"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-coroutine-panic-group4\\indirect_coroutine_panic\\root.xr",
+          "bytes": 848,
+          "sha256": "44fd79872ee4ae20c0ebbb91ca1bbeca4d767e64cc7b09230978f9f1c4a3e883"
+        }
+      },
+      "symbol": "source_coroutine_panic_indirect",
+      "generated_C": "generated/coroutine-panic-native2/indirect_coroutine_panic.c",
+      "normal_test": "test_source_product_coroutine_panic_group2_indirect_coroutine_panic_native_normal",
+      "original_external_exit": 1,
+      "original_stderr": "[Uncaught Panic] E0420: division by zero\\n",
+      "business_catch7": "NOT_APPLICABLE",
+      "executed": false
+    }
+  ],
+  "normal_gate": {
+    "names": [
+      "test_source_product_coroutine_panic_group2_sealed_coroutine_panic_native_normal",
+      "test_source_product_coroutine_panic_group2_indirect_coroutine_panic_native_normal"
+    ],
+    "executed": true,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "fresh_TUs_expected_only": 4,
+    "cold_independent_case_processes": true,
+    "oracle": {
+      "per_case": {
+        "sealed_coroutine_panic": {
+          "canonical_I64_zero": 2,
+          "Unit_completions": 10,
+          "permission_rejections_per_Instance": 14,
+          "permission_rejections_total": 28,
+          "two_Instances": 2,
+          "per_Instance_repeats": 2,
+          "copied_ordinary_panic_facts": 4,
+          "success_Source_assert": 42,
+          "business_catch7": "NOT_APPLICABLE",
+          "defer_sequence": [
+            0,
+            22,
+            11
+          ],
+          "yield_count": 8,
+          "resume_count": 8,
+          "wait_invalid_guards": 40,
+          "driver_calls": 16
+        },
+        "indirect_coroutine_panic": {
+          "canonical_I64_zero": 2,
+          "Unit_completions": 10,
+          "permission_rejections_per_Instance": 14,
+          "permission_rejections_total": 28,
+          "two_Instances": 2,
+          "per_Instance_repeats": 2,
+          "copied_ordinary_panic_facts": 4,
+          "success_Source_assert": 42,
+          "business_catch7": "NOT_APPLICABLE",
+          "defer_sequence": [
+            0,
+            22,
+            11
+          ],
+          "yield_count": 8,
+          "resume_count": 8,
+          "wait_invalid_guards": 40,
+          "driver_calls": 16
+        }
+      },
+      "public_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+      "fault_detail": 420,
+      "message_value": "UNIT with type/reserved/payload0",
+      "fresh_caller_scratch_capacity": 96,
+      "fresh_formatted_text": "division by zero",
+      "fresh_formatted_bytes": 16,
+      "owned_STRING_not_claimed": true,
+      "READY_after_ordinary_panic": true,
+      "legal_EMPTY_BAD_STATE_outputs_full_bytes_unchanged": true,
+      "after_all_execution_and_compiler_owners": true,
+      "all_five_physical_values_final_zero": true
+    },
+    "costs": "NOT_MEASURED"
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "build_state": "NOT_BUILT",
+  "product_executions": 0,
+  "effect_contract": {
+    "stages": [
+      "SourceChecked",
+      "retainedClosedChecked",
+      "independently_rereadChecked",
+      "reverifiedLowered"
+    ],
+    "ordered_public_queries": [
+      "entry",
+      "initializer",
+      "quotient",
+      "read-cleanup",
+      "fresh",
+      "failure-cleanup",
+      "checked",
+      "answer",
+      "failure",
+      "success"
+    ],
+    "expected_static_pairs_NOT_ACTUAL": {
+      "sealed_coroutine_panic": {
+        "entry": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "initializer": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "quotient": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "read-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "fresh": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "failure-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "checked": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "answer": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "failure": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "success": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        }
+      },
+      "indirect_coroutine_panic": {
+        "entry": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "initializer": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "quotient": {
+          "suspend": "MAY",
+          "throws": "NONE"
+        },
+        "read-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "fresh": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "failure-cleanup": {
+          "suspend": "NONE",
+          "throws": "NONE"
+        },
+        "checked": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        },
+        "answer": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        },
+        "failure": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        },
+        "success": {
+          "suspend": "UNKNOWN",
+          "throws": "UNKNOWN"
+        }
+      }
+    },
+    "implementation_requirement": "Own XrXirEffects in run/release state; analyze via public API on each verified artifact under same cumulative ledger, query every role and print actual suspend/throws pair, then free before the next stage. Free on every failure path. Do not reuse one Lowered summary as four-stage evidence.",
+    "signature": "Indirect inferred callable flags remain 0; do not turn absent observed suspension into NONE or upgrade to explicit NO_SUSPEND."
+  },
+  "generated_cleanup_helper_validation": "At all four artifacts traverse every public identity with cleanup_owner!=0: Unit result, same-root/private/noexport/noTest/noTestTimeout, parent==checked+1 and not entry/initializer/named role. Dynamic count and signature; do not freeze helper/function/op counts. Public verifier restricts cleanup references and preserves authority.",
+  "native_contract": {
+    "pipeline": "Public SourceProduct -> SourceChecked + independently retainedClosed/rereadChecked -> producer/session destruction -> specialization/reverification -> complete C emission twice simultaneously owned -> full generated payload -> compiled callback ProgramSpec -> native correspondence+public compile_program_seal -> two independent Instances.",
+    "correspondence": "Recompute payload SHA from current complete emission; match exact generated footer. Match target/ABI, complete proof bytes+identity/layouts, all declaration identities including test/private/cleanup_owner/promises, complete type graph, full parameter vectors and result types, entry flags/cleanup ownership, every callback resume+release. Public proof_verify/program_match supplies deep type/declaration/vector checks, not counts-only matching.",
+    "all_native": "Every generated entry is the compiled native callback. No xr_xir_vm_program_take, VM fallback, mixed substitution, external callback fake or copied Source internals.",
+    "code_lease": "Statically linked generated code has null code.owner/release; this does not test dynamic DLL/image unload.",
+    "ownership": "Free repeated emission after byte equality. After seal drop Lowered and remaining owned C. Create two Instances retaining sealed Program; drop caller Program before execution. SourceProduct/session already dead; copied results must outlive all remaining compiler/execution owners."
+  },
+  "suspend_resume_contract": {
+    "public_APIs": [
+      "xr_xir_instance_poll_bounded",
+      "xr_xir_instance_wait_request",
+      "xr_xir_instance_resume"
+    ],
+    "bounded_polls_per_activation": 4096,
+    "quantum": 1000000,
+    "status_contract": "Only READY poll progress or SUSPENDED exact YIELD until terminal outcome; Instance state remains READY, never fabricate WAITING/RUNNING state. Exactly one yield on each failure and success activation; no yields on canonical/fresh/failureCleanup.",
+    "Wait_fields": {
+      "kind": "XR_XIR_WAIT_YIELD",
+      "reserved": 0,
+      "after_ms": 0,
+      "subject": null,
+      "generation": 0,
+      "ticket": 0
+    },
+    "token": "For each pending activation require nonzero/nonMAX epoch and nonzero wake from actual poll result; use exact epoch/wake for Wait and resume. No global uniqueness, provider-equality or constant-token assumption.",
+    "five_invalid_guards": [
+      "resume(epoch+1,wake) => BAD_STATE",
+      "resume(epoch,wake XOR 1) => BAD_STATE",
+      "wait(epoch+1,wake,wholeA5Wait) => BAD_STATE with entire output bytes unchanged",
+      "wait(epoch,wake XOR 1,wholeA5Wait) => BAD_STATE with entire output bytes unchanged",
+      "take_result(wholeA5Value) while suspended => BAD_STATE with entire output bytes unchanged"
+    ],
+    "guard_preservation": "All five ledger fields, compiler+runtime attempts, compiler live/bytes, runtime live/bytes/table identity/capacity and Instance READY unchanged; reread original valid Wait six fields exactly. Output can be A5 only where actual early state/token guard precedes output value inspection; copy_failure must use legal EMPTY.",
+    "valid_resume": "After guards, exact pair resume returns READY and is separately logged; continue same activation to expected terminal. Do not restart to bypass suspension.",
+    "per_case_totals": "8 actual YIELD +8 matching resume, 40 bad guards and16 terminal driver calls for twoInstances/twoRepeats. These are oracle expectations, not measured evidence.",
+    "not_claimed": "No public host slot observation while suspended; no cancel/Timer/Task scheduler/structured concurrency/image-unload proof."
+  },
+  "permissions": {
+    "per_Instance": 14,
+    "total_two_Instances": 28,
+    "composition": "ordinary start rejects initializer+eight named private/Test roles (9), start_test rejects initializer+four ordinary private roles (5)",
+    "exact_status": "XR_XIR_CALL_BAD_ARGUMENT",
+    "argument_types": {
+      "checked": "BOOL(false)",
+      "quotient": "I64(0)"
+    },
+    "before_after": "Instance remains NEW; all five cumulative resource fields allocation_count/allocated_bytes/live_bytes/peak_bytes/work, compiler and runtime attempts, compiler live/bytes, runtime live/bytes/table identity/capacity unchanged",
+    "start_has_output_parameter": false
+  },
+  "callable_reference_validation": "Indirect matched quotient FUNCTION_REF at three Checked stages: public signature flags0, parameter I64, result I64, no bound capture. One-or-more matches; Lowered checks every remaining match, no fixed opcode count.",
+  "original_VM_OPEN_snapshot": [
+    "old Core operation shape and shared emission representations",
+    "class construct/finalize/reclaim identities and reverse failure order",
+    "original external exit1 and E0420 stderr rendering",
+    "all native/mixed backends",
+    "wholecompiler/runtime FI and all allocated/live/work axes",
+    "cancel and structured Task lifecycle not observed by these normal cases",
+    "physical removal of input files after Source death",
+    "Main semantic/Checked68 integration qualification",
+    "remaining oldSource108 and other26files/160functions/8allocation/7shared-owner denominators"
+  ],
+  "OPEN": [
+    "old Core operation shape and shared emission representations",
+    "class construct/finalize/reclaim identities and reverse failure order",
+    "original external exit1 and E0420 stderr rendering",
+    "all native/mixed backends",
+    "wholecompiler/runtime FI and all allocated/live/work axes",
+    "cancel and structured Task lifecycle not observed by these normal cases",
+    "physical removal of input files after Source death",
+    "Main semantic/Checked68 integration qualification",
+    "remaining oldSource108 and other26files/160functions/8allocation/7shared-owner denominators"
+  ],
+  "additional_OPEN": [
+    "selected two native normal cases are NOT_RUN; other coroutine inputs and all mixed configurations remain OPEN",
+    "W1-W4/wholecompiler-runtime FI/allocated-live-work axes/fullSDK-fullsan need Main queued windows",
+    "static null code lease does not observe dynamic DLL/image unload or full native ABI safety"
+  ],
+  "all_original_denominators": {
+    "Source": 108,
+    "Source_split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "legacy_denominators_retired": false,
+  "original_Source_responsibilities_retired": 0,
+  "old_obligations_retired": 0,
+  "preparation_snapshot": {
+    "meaning": "Immutable admission/build/measurement preparation. Future actual current normal state must be in normal_qualification; preparation NOT_BUILT/product_executions0/families.executedfalse/costsNOT_MEASURED are historical snapshot only.",
+    "normal_semantic_boundary": "Only selected native2 normal and separate relatedVM2 can become measured; all original OPEN and denominators remain accounted."
+  },
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "OPEN",
+  "full_native_mixed_matrix": "OPEN",
+  "ABI351_and_Value22_Call28_Program29": "OPEN",
+  "Main_semantic68_integration": "OPEN",
+  "physical_source_deletion": "OPEN",
+  "production_release": "NOT_CLAIMED",
+  "actual_costs": {
+    "msvc": {
+      "sealed_coroutine_panic": {
+        "compiler_sites": 4628,
+        "runtime_sites": 162,
+        "allocated": 1450493,
+        "peak": 262230,
+        "work": 6519038
+      },
+      "indirect_coroutine_panic": {
+        "compiler_sites": 4646,
+        "runtime_sites": 180,
+        "allocated": 1495908,
+        "peak": 270952,
+        "work": 7283847
+      }
+    },
+    "asan": {
+      "sealed_coroutine_panic": {
+        "compiler_sites": 4628,
+        "runtime_sites": 162,
+        "allocated": 1450493,
+        "peak": 262230,
+        "work": 6519038
+      },
+      "indirect_coroutine_panic": {
+        "compiler_sites": 4646,
+        "runtime_sites": 180,
+        "allocated": 1495908,
+        "peak": 270952,
+        "work": 7283847
+      }
+    }
+  },
+  "normal_qualification": {
+    "worker_qualification_parent": "1f42166fa1d236175543b10f24d0cfdedf29667c",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_COROUTINE_PANIC_GROUP2_NATIVE_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 256,
+    "new_TUs_per_configuration": 4,
+    "normal_tests_per_configuration": 2,
+    "registered_applicable300_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-msvc-r1\\result.json",
+          "sha256": "1bd2c37686eaead094e2f9408d79b6f13c72d7f5b80d8442c131159c549bb420",
+          "bytes": 199032
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-msvc-r1\\Root-terminal.json",
+          "sha256": "fe55aaff8339e62821eb39e3d2af61b4d822f50759267aac14d19a7e2fee1ae1",
+          "bytes": 870
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-msvc-r1\\coroutine-panic-native2-normal-measurements.json",
+          "sha256": "c78740b89b8430797ac2b91abec3c6fa415c7b10ca04d58db6d97caabed54358",
+          "bytes": 34143
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-msvc-r1\\emitter-build-measurements.json",
+          "sha256": "5f45073af2dbfcf2b447618324f15db8b0d703aaf2244692d3454863b4654ac8",
+          "bytes": 15591
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "8cb06d104c5da8f656d4a6a89450186534e28bbf7a7f66d3f32652a7ff3baa05",
+          "bytes": 2654664
+        },
+        "registered300": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-msvc-r1\\registered-applicable-300.json",
+          "sha256": "5df6b2001258fb1c603eadb97dd2f96eee1e4fe7c2a20c4ddebbeff55ec904ae",
+          "bytes": 257931
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-asan-r1\\result.json",
+          "sha256": "8107703c8ef57263f72df13b1e3e6332fbe26094a65b737c584882b8cbfc0ff8",
+          "bytes": 201481
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-asan-r1\\Root-terminal.json",
+          "sha256": "d629dfc1bc327dfcfc204340ef350bc3b6b9221ecc7a55edd206ca13e214def2",
+          "bytes": 871
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-asan-r1\\coroutine-panic-native2-normal-measurements.json",
+          "sha256": "8622036417e1a129d1487cbe5b2f7d53a02c3c5ea85c055992504ed8b9586cfd",
+          "bytes": 34143
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-asan-r1\\emitter-build-measurements.json",
+          "sha256": "3a34b2124c54bcaf877e1097d659a394128445c2fac1d9d222d75e87d07ac5c0",
+          "bytes": 15591
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-asan-r1\\actual-compilation-binding.json",
+          "sha256": "b7445704994bcc8c7f120596acde2130c7db50e6e5c5980c2ea8399a812284fc",
+          "bytes": 2726114
+        },
+        "registered300": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-asan-r1\\registered-applicable-300.json",
+          "sha256": "2486124134f48038627e5962919604716cf92ac72d7936b762f8e0d8c544130b",
+          "bytes": 309531
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-native2-independent-audit-prep-r1\\audit-report.json",
+      "bytes": 24319,
+      "sha256": "6329c8584227fd85ca9f1bf81ce8452f15a0212e14895e0bcfef61a4c29faba1"
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-native2-independent-audit-prep-r1\\actual-audit-terminal.json",
+      "bytes": 1271,
+      "sha256": "a8d7d93510ad4ba0f51ef6d1666ca204ecb903e44ffe3600290f75820f9c3d56"
+    },
+    "actual256_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-native2-independent-audit-prep-r1\\actual256-successor-pointers-precommit-r1.json",
+      "bytes": 14104,
+      "sha256": "d4699cc4c21c625095f99801f96095727c5c30a8f096b14ecc2d2ed536cfa07f"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-normal-msvc-r1\\source-inputs-after.json",
+      "bytes": 2710580,
+      "sha256": "5f2c5f233a9ac2155229c9e973f66894043f6369236d9152a7440ce41ed9d750"
+    },
+    "joint_artifacts_qualified256": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-panic-native2-independent-audit-prep-r1\\joint-artifacts-current256-canonical-r1.json",
+      "bytes": 309024,
+      "sha256": "ba3c95e7a08dcd3e4c021cf220e0de4650059d448a53962e435b71a5125ff5ac"
+    },
+    "related_tests_per_configuration": 2,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\coroutine-panic-native2-tool-prep-r1\\related-vm2-audit-prep-r1\\actual-related-vm-two-audit-r1\\related-normal2-supplement.json",
+      "bytes": 209871,
+      "sha256": "8afca9602dc868a5f643272a98e59ed779d4013bb415d9cbe7f467546df9a7fe"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-panic-native2-Root-prep-r1\\related-audit.Root-terminal.json",
+      "bytes": 3829,
+      "sha256": "7e7292f677994d3c85fc05b2ddb34fdd4f98b4fd08844c5a8ba65f71ddd74093"
+    },
+    "preparation_snapshot": {
+      "build_state": "NOT_BUILT",
+      "product_executions": 0,
+      "normal_gate.costs": "NOT_MEASURED",
+      "meaning": "Immutable preparation fields; current executed build/normal status and measured costs are established by this normal_qualification and its independent actual audits."
+    },
+    "boundary": "Normal2 and separate existing VM related2 only. Complete824/848B unchanged; each case canonical2/Unit10/14 refusals per Instance, same-Instance cleanup0/22/11, four copied all-zero UNIT420 facts survive all execution/compiler owners and format fresh96B caller scratch to16B. Eight YIELD/resume pairs and sixteen terminal drivers per case are independently observed; five invalid guards per suspension preserve attempts, all5ledger, compiler/runtime physical values and runtime table. Four-stage ten-role public effects preserve quotient2/0, direct propagation2/0, indirect1/1; indirect callable flags0 and full I64-to-I64 signature are checked. No typed catch7, cancellation or structured-Task success is claimed. Original nine OPEN responsibilities and denominators unchanged.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "OPEN",
+    "old_obligations_retired": 0
+  }
+}
