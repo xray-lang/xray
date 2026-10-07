@@ -1,0 +1,207 @@
+{
+  "status": "PASS_SOURCE0_NATIVE_BUILD_NORMAL_ONLY",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "source": {
+    "bytes": 119,
+    "sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+    "modifications": 0
+  },
+  "original_external_manifest": {
+    "bytes": 164,
+    "sha256": "cf1a1e14d20fafca09a649f47ddcba036ea57a27e5febfeb5184518c05c45ac7",
+    "applied": false,
+    "responsibility": "OPEN"
+  },
+  "pipeline": "SourceProduct -> owned Checked source/closed readers -> detached Lowered -> public whole-C emission -> externally compiled native callback ProgramSpec -> public Program/Instance",
+  "normal_gate": {
+    "target": "test_source_product_allocation_scenario0_native",
+    "name": "test_source_product_allocation_scenario0_native_normal",
+    "argv": [
+      "ROOT",
+      "ROOT/root.xr"
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "executed": true
+  },
+  "independent_oracles": {
+    "instances": 2,
+    "repeats_per_instance": 2,
+    "canonical": "I64(0), full value type/reserved/payload then drop zero",
+    "original_test": "checkAnswer -> Unit, original assert(exported() == 42)",
+    "private_authority": "7 public start/start_test refusals per Instance, unchanged 5 ledger fields/attempts/physical and NEW state",
+    "permissions_total": 14,
+    "owned_results": "take/drop on each of 4 I64 and 4 Unit calls; caller Program and Lowered/C owners destroyed before calls",
+    "physical_release": "observed compiler/runtime blocks+bytes and runtime tracker table all zero; static linked image is not an unload test"
+  },
+  "generated_C": {
+    "owned_emissions_per_process": 2,
+    "determinism": "distinct owned pointers; equal lengths and complete bytes; repeated buffer freed",
+    "compiled_correspondence": "fresh payload SHA equals generated compiled digest; exact proof bytes+identity, all function identities and physical layouts, all native resume/release callbacks",
+    "observer_requirement": "hash actual generated TU; verify payload prefix SHA and exact digest footer; bind compile command, actual object, VALID header deps and public libraries",
+    "VM_fallback": false
+  },
+  "fresh_build": {
+    "expected_new_TUs": 3,
+    "actual_new_TUs": "NOT_BUILT",
+    "emitter_target": "test_source_product_allocation_scenario0_c_emitter",
+    "sequence": [
+      "emitter C compile/link",
+      "emitter ROOT FILE --emit generated/source-allocation0-native/program.c",
+      "native driver C compile with XR_SOURCE_ALLOCATION0_NATIVE=1",
+      "generated whole-C compile",
+      "native link"
+    ],
+    "strict": [
+      "C11",
+      "UTF8",
+      "W4/WX or Wall/Wextra/Werror"
+    ],
+    "ASan": "actual generated TU and driver/emitter compile commands/objects must show address+undefined flags; ASan DLL and both import libraries bound before/after",
+    "public_libraries": 10,
+    "Host11_required": false
+  },
+  "budgets": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000,
+    "emitted_source_bytes": 16777216,
+    "normal_N": "NOT_MEASURED"
+  },
+  "OPEN": [
+    "external_answer/external_entry direct exports",
+    "hidden visibility/header projection",
+    "whole compiler/runtime FI",
+    "resource axes",
+    "cancellation lifecycle",
+    "full default security/native/SDK matrix",
+    "physical Source file deletion",
+    "general migration old denominators"
+  ],
+  "fault_execution": "NOT_RUN",
+  "normal_qualification": {
+    "scope": "One native callback normal per configuration, strict public25f/current67. Emitter is a build trace, not a second CTest; registration257 does not mean full257 execution.",
+    "configuration_results": {
+      "msvc": {
+        "evidence_directory": "build-consumer-evidence/current67-baseline-r2/source0-native-normal-qualification-msvc-r3",
+        "files_sha256": {
+          "result.json": "0f34643f378241f84b7b011e5a6ccfa1419e2d7e3633a172b5b91e7ec79814ba",
+          "Root-terminal.json": "81627b8567344967a250442439e83787e8731ff9ceb61a203f68ff8ba16ca466",
+          "selected.xml": "97885c2b197f372f1db76f72b43f6eeb9e0ef7142c98b9883e7b1a9c923976a8",
+          "LastTest.log": "d120c200d27d7c57e968552d00570cf0cff7aa51629495eff0fcdbb78fa45dd2",
+          "native-normal-measurements.json": "2910a48daa0454503e5987ebea6f9c71f625a645ff7018caecca2e28db707610",
+          "emitter-build-measurements.json": "5d2f5ba5bdce3837f9f1bce9c443f84e71e105a952bda092793af0b01259fedf",
+          "new-actual-compilation-binding.json": "438e9b8cf4f522cb7fefcd72b2a60a8290ff99269de1322548beb243a1398379",
+          "actual-compilation-binding.json": "20eae534e996a1133fd0d99de5aa42ca548973dfa09193b4afc38c15132feb39"
+        },
+        "normal_costs": {
+          "compiler_sites": 2075,
+          "runtime_sites": 36,
+          "allocated": 710217,
+          "peak": 179234,
+          "work": 1755324
+        },
+        "build": {
+          "fresh_origin": "msvc-r1",
+          "new_compiles_this_execution": 0,
+          "original_normal_tests": 0,
+          "r1_result_sha256": "9cf8bf1f047ff2d90d07d87934381bee270cd85b585fb9c397b06cb74a518c50",
+          "r1_terminal_sha256": "c5cdf50d62c99e71f14c1a1600fe4b98637ebc2b6749073165dfa4808648215a",
+          "fresh_raw_sha256": "9cc371f502e8d7045c95331d95868a0f0655f24252e4151702ad35f8a6342a69"
+        },
+        "generated_C": {
+          "payload_bytes": 39771,
+          "payload_sha256": "e5065b0642b7d5ef580eb7ebf1889cfa5d9e516df7b46a8df0d66d0527f7f04a",
+          "whole_TU_sha256": "ae7faeaf4452d379432a7f893a0aa913a2faa0d3f0c25071952c063536544cb4"
+        },
+        "actual_dependencies_per_new_TU": [
+          158,
+          158,
+          34
+        ],
+        "normal_oracles": {
+          "phases": 11,
+          "Checked_Lowered_metadata": 3,
+          "canonical_I64_zero": 4,
+          "owned_Unit": 4,
+          "permission14": "same-SHA C assertions and actual exit0; no independent raw flag",
+          "physical_final": "0/0;0/0;0"
+        }
+      },
+      "asan": {
+        "evidence_directory": "build-consumer-evidence/current67-baseline-r2/source0-native-normal-qualification-asan-r3",
+        "files_sha256": {
+          "result.json": "86ae205ecbe7bb8a46a87d639d876604855489838032eb661a03e080931f3b88",
+          "Root-terminal.json": "12edc70c197b774644ee63e7f75cfc7b03216ba0bcc732104018fdf54cf73ec8",
+          "selected.xml": "d8a317afe6ce1b511733c4185f8e0c2fa3ba9169e3feac24f8a3d38d694aeda3",
+          "LastTest.log": "adcb191a7abe2c5ee2ec61680a1b4da59504ec7831e8e7112c24995a03c5af71",
+          "native-normal-measurements.json": "2910a48daa0454503e5987ebea6f9c71f625a645ff7018caecca2e28db707610",
+          "emitter-build-measurements.json": "7f0fb1e9567e31d5ff2dab19e99ebbe1bf926044a98ca48f8439ccdb8e400593",
+          "new-actual-compilation-binding.json": "fc981ee38470f60efe0800e0e967f65aadb7b22ceb5f084d7126ed975715a311",
+          "actual-compilation-binding.json": "5924543dc58f2f5d74fb49b9b12a4392e369089327d8eca8c32a1f7b77d36090"
+        },
+        "normal_costs": {
+          "compiler_sites": 2075,
+          "runtime_sites": 36,
+          "allocated": 710217,
+          "peak": 179234,
+          "work": 1755324
+        },
+        "build": {
+          "fresh_origin": "asan-r3",
+          "new_compiles_this_execution": 3,
+          "fresh_raw_sha256": "721989b6338f9b4738564ecafb3a893c29626cb92e8d1d04125171ac16fd7958"
+        },
+        "generated_C": {
+          "payload_bytes": 39771,
+          "payload_sha256": "e5065b0642b7d5ef580eb7ebf1889cfa5d9e516df7b46a8df0d66d0527f7f04a",
+          "whole_TU_sha256": "ae7faeaf4452d379432a7f893a0aa913a2faa0d3f0c25071952c063536544cb4"
+        },
+        "actual_dependencies_per_new_TU": [
+          158,
+          158,
+          34
+        ],
+        "normal_oracles": {
+          "phases": 11,
+          "Checked_Lowered_metadata": 3,
+          "canonical_I64_zero": 4,
+          "owned_Unit": 4,
+          "permission14": "same-SHA C assertions and actual exit0; no independent raw flag",
+          "physical_final": "0/0;0/0;0"
+        }
+      }
+    },
+    "actual_audit": {
+      "path": "build-consumer-evidence/current67-entry-roles-agent-r1/source0-native-normal-integrated-audit-r1/audit-report.json",
+      "sha256": "6c26c20520218708d21592626c456bcaacd4aa078c7ac136b155c57178eb74e9"
+    },
+    "fresh_TUs_per_configuration": 3,
+    "total_TUs_per_configuration": 204,
+    "old201_metadata": "ENTIRE_ROWS_EXACT",
+    "original_preparation_fields": "Retained NOT_BUILT/NOT_MEASURED fields describe the original frozen proposal; actual normal3-TU evidence and costs are recorded here.",
+    "registry257": "REGISTRATION_ONLY",
+    "old256_commands_properties": "EXACT",
+    "observer_first_reds": [
+      {
+        "evidence_directory": "build-consumer-evidence/current67-baseline-r2/source0-native-normal-qualification-msvc-r1",
+        "result_sha256": "9cf8bf1f047ff2d90d07d87934381bee270cd85b585fb9c397b06cb74a518c50",
+        "terminal_sha256": "c5cdf50d62c99e71f14c1a1600fe4b98637ebc2b6749073165dfa4808648215a",
+        "classification": "CTest omitted default PROCESSORS1; observer stopped before normal"
+      },
+      {
+        "evidence_directory": "build-consumer-evidence/current67-baseline-r2/source0-native-normal-qualification-msvc-r2",
+        "result_sha256": "5e07df5bd92c2dbb4d6a01da1ddb545ad3771a5e3daf2707246ad80d818462b7",
+        "terminal_sha256": "56e847d90050cdf214d12becf5fa7f25c032cf1546d632088b3fc61cb5a1f698",
+        "classification": "JSON list/tuple observation mismatch; inherited fresh guard stopped before normal"
+      }
+    ],
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "extern_exports164": "OPEN",
+    "source_physical_removal": "OPEN",
+    "full_native_matrix": "NOT_RUN",
+    "migration": "OPEN"
+  }
+}

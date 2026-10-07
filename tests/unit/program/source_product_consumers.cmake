@@ -240,3 +240,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_alloc
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomic_source_families.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomic_ordering_oracles.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_allocation_scenario0_native.cmake")
