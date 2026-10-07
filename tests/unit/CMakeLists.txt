@@ -4342,3 +4342,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/root_identity_vm.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_identity_vm_resources.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_execution_native.cmake")
+include(xir/root_identity_vm_compiler_resources.cmake)
