@@ -281,3 +281,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_typed
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_coroutine_panic_group2_native.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_coroutine_invoke_group2_native.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_source_file_deletion_native.cmake")

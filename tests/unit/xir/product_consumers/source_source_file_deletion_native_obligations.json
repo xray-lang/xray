@@ -1,0 +1,366 @@
+{
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "parent": "48976f92925cee53a4c9b8c88917401072165ab0",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "code_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\current67-source-file-deletion-native1-contract-candidate-r1\\compact-contract.json",
+    "bytes": 13699,
+    "sha256": "6d9e2f2cbfd9da3bc7f595ab0ba602bb4cedb6ed46163eee953256f8802fdec7"
+  },
+  "accepted_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-Root-prep-r1\\accepted-contract.json",
+    "bytes": 3068,
+    "sha256": "726ff6cfe104d6ae89b9d46838fa68577801fad546a5043ef44392ac8e2ef9ef"
+  },
+  "baseline_delivery": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-delivery-r1\\delivery.json",
+    "bytes": 24477,
+    "sha256": "3406865e1c6eeb0d5f4397f27f40ae23e7683cfdfedcbe40f45ca06d9e5d92fb"
+  },
+  "inputs": {
+    "main_original": {
+      "bytes": 342,
+      "sha256": "f6ef752924b9b4bab85fa6125ee680f65040ad98007ad593ac74d2754192d057"
+    },
+    "library_original": {
+      "bytes": 80,
+      "sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213"
+    },
+    "same_root_test_suffix": {
+      "bytes": 60,
+      "sha256": "86f5a2b28fb4545eb1b45249a8ab232d2fe4f7076fb00d7334848bf75aee2e65"
+    },
+    "main_proposed_full": {
+      "bytes": 402,
+      "sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d"
+    }
+  },
+  "pipeline": [
+    "Create own main402 and library80 without overwriting anything; exact-read both sources.",
+    "Public SourceProduct build; source and closed borrowed packet reads into independently owned Checked artifacts; write independent closed Checked packet and verify exact bytes.",
+    "Free session, product and diagnostic/snapshot; free every raw input buffer; discard all borrowed product views. Null owner fields. The compile-resource ledger and independently owned packets/artifacts remain live by design.",
+    "Before the first detached reverify/reread/lower, xr_os_io_remove on exactly owned main and library returns OK. Clear owned_created after each success.",
+    "xr_os_io_stat returns XR_OS_IO_NOT_FOUND for both files with unchanged output. A regular-file read also returns NOT_FOUND with NULL/zero output unchanged, proving absence rather than merely releasing handles.",
+    "Reverify original owned source/closed Checked and reread the independent retained packet while files remain absent; inspect public declarations/nominal Problem identity and original typed catch metadata.",
+    "Fresh public lower from owned Checked, reverify Lowered and inspect roles; release Checked/retained packet. Emit two simultaneously owned identical whole-C buffers, SHA complete payload and exact footer; no file recreation.",
+    "Emitter writes only generated program.c. Its temporary Source files are already absent before output; normal recreates its own two files only at process start and repeats deletion before its fresh lower/emission.",
+    "Normal deep-compares actual Lowered against linked native ProgramSpec including proof, types, all identities, parameter vectors and physical layouts; public seal with all callbacks native and no VM fallback.",
+    "Two Instances canonical I64(0), each twice same-root @Test Unit with original result42 assertions and same nominal imported/local error identity. Existing ten permission refusals per Instance retained with correct arguments, NEW state, attempts/all5ledger/compiler/runtime physical snapshots.",
+    "Before calls drop caller Program/Lowered/C and every producer owner as the successful native template already does. Then call through Instances, free both and prove final compiler blocks/bytes, runtime blocks/bytes and tracker capacity all zero.",
+    "Re-stat both leaves after execution/release using an explicitly selected non-compiler system policy after the finite owner dies; both still NOT_FOUND. Do not recreate Source to validate."
+  ],
+  "normal_gate": {
+    "target": "test_source_product_source_file_deletion_native",
+    "name": "test_source_product_source_file_deletion_native_normal",
+    "argv": [
+      "ROOT",
+      "ROOT/main.xr",
+      "ROOT/library.xr"
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "executed": true,
+    "costs": "NOT_MEASURED",
+    "oracle": {
+      "Source_main": {
+        "bytes": 402,
+        "sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d"
+      },
+      "Source_library": {
+        "bytes": 80,
+        "sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213"
+      },
+      "canonical_instances": 2,
+      "canonical_value": "I64 full value 0",
+      "Unit_completions": 4,
+      "permission_rejections_per_instance": 10,
+      "typed_result": "42 exists in original Source and same-root Test assertions; no new direct host-private answer authority.",
+      "deleted_files": 2,
+      "deletion_point": "AFTER_SOURCE_PRODUCER_FREE_BEFORE_DETACHED_CHECKED_READ_LOWER",
+      "absent_checkpoints": [
+        "before detached Checked processing",
+        "after native execution and all owners released"
+      ],
+      "generated_C": "full independently recomputed payload SHA plus exact footer, complete public deep seal, no fixed opcode/function/proof count",
+      "costs": "Fresh compiler/runtime/allocated/peak/work and dependencies measured independently per provider. Never inherit original native/VM fees."
+    }
+  },
+  "generated_C": {
+    "symbol": "source_file_deletion_native",
+    "macro": "XR_SOURCE_FILE_DELETION_NATIVE",
+    "whole_payload_and_exact_footer": true,
+    "VM_fallback": false
+  },
+  "source_boundary": {
+    "owned_root": "${CMAKE_BINARY_DIR}/generated/source-file-deletion-native1/private-source",
+    "leaves": [
+      "main.xr",
+      "library.xr"
+    ],
+    "generated_C": "${CMAKE_BINARY_DIR}/generated/source-file-deletion-native1/program.c",
+    "precondition": "CMake creates only the reserved directory; resolves under the current selected build tree. Reject reparse/symlink leaves and reject any pre-existing file. No CMake file(GENERATE) Source outputs or Source-file DEPENDS.",
+    "create": "xr_os_io_write_new_file_sync with xr_compile_io_policy on the finite owner. Windows CREATE_NEW; set each owned_created bit only after OK. Read back exact 402/80 bytes and SHA before producing Source.",
+    "correspondence": "Emitter and normal create/delete the SAME canonical per-provider reserved path, serially. No assumption that different physical Source paths yield the same proof/hash. Generated payload and complete proof must match freshly in normal.",
+    "deletion_scope": "Only the two exact leaves whose owned_created bits were set by this process; no recursive removal, directory deletion, wildcard, rename, replacement or existing qualified fixture mutation."
+  },
+  "failure_cleanup": {
+    "failure": "Use per-leaf creation flags and an explicitly selected cleanup policy to attempt removal only of owned leaves. Deletion/admission/absence failure makes the new test fail; preserve genuine first-red and remaining owned path evidence. Existing files are never deleted as cleanup.",
+    "source_budget": "Creation/read/remove/stat charge the explicit finite owner; do not require allocation/work invariance for actual OS operations. Existing permission guard invariance remains unchanged.",
+    "scope_protection": "All current1330 qualified artifacts, original Source fixtures, Source10930 and historical12 dirty files remain byte-exact. Only two own-created build-private leaves may transition PRESENT -> ABSENT.",
+    "threat_boundary": "Serial consumer test in Root-owned reserved directory; no claimed hostile concurrent rename/ancestor race, SDK security matrix or general filesystem deletion capability."
+  },
+  "OPEN": [
+    "Original old Core declaration/typeID/class identity equality",
+    "Original direct detached host answer I64(42) interface semantics",
+    "Original AOT/native/mixed generatedC and ABI obligations",
+    "Whole compiler/runtime FI and all budget axes",
+    "External uncaught-error/panic stderr and process exit behavior",
+    "Cancellation, initialization failure stickiness and physical source deletion",
+    "Main semantic/Checked contract68 integration; producer remains25f"
+  ],
+  "old_denominators": {
+    "Source": 108,
+    "split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "source_retirement": "NONE",
+  "retired": 0,
+  "physical_source_deletion_proof": "PASS normal-only two self-created disk Source leaves, complete main402/library80: successful CREATE_NEW precedes exact successful remove; stat/read NOT_FOUND with unchanged outputs after producer destruction before detached Checked verify/read/lower and again after all owners release. Original imported nominal catch42, native whole-C/deepseal, public permission and physical-zero oracles retained. Static Source literals remain in the consumer image. Cancellation and initialization stickiness remain OPEN; no whole-Source108, old-consumer-file deletion, class/Core, stderr, FI, ABI/full-safety retirement.",
+  "build_state": "BUILT_MSVC_AND_ASAN_NORMAL_ONLY",
+  "product_executions": 4,
+  "actual_costs": {
+    "msvc": {
+      "source_file_deletion": {
+        "compiler_sites": 2874,
+        "runtime_sites": 44,
+        "allocated": 1144727,
+        "peak": 252166,
+        "work": 3313201
+      }
+    },
+    "asan": {
+      "source_file_deletion": {
+        "compiler_sites": 2874,
+        "runtime_sites": 44,
+        "allocated": 1144727,
+        "peak": 252166,
+        "work": 3313201
+      }
+    }
+  },
+  "future_actual_TUs": 263,
+  "actual_current_baseline": {
+    "delivery": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-delivery-r1\\delivery.json",
+      "bytes": 24477,
+      "sha256": "3406865e1c6eeb0d5f4397f27f40ae23e7683cfdfedcbe40f45ca06d9e5d92fb"
+    },
+    "source_inputs": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-Root-prep-r1\\source-inputs-current.json",
+      "bytes": 2711430,
+      "sha256": "e95a948ce571414c1a56ec56e00c1a93a7eb49709cb5371195d1c7e76c71cb1c"
+    },
+    "artifacts260": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-Root-prep-r1\\artifacts-current260.json",
+      "bytes": 313423,
+      "sha256": "b587c992bb08ceebd9a5eb3e10523b99d86f1a9d1c1662c0057edb0dc15318bb"
+    },
+    "actual260_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\coroutine-typed-invoke-native2-independent-audit-prep-r1\\actual260-successor-pointers-precommit-r1.json",
+      "bytes": 14290,
+      "sha256": "89064dd14d270f7d3924b56c009fd3b33d8260f9f9cf887a113a3ca7cd10eb63"
+    },
+    "postcommit_live_domains": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-coroutine-typed-invoke-native2-Root-prep-r1\\postcommit-live-domains.json",
+      "bytes": 1889,
+      "sha256": "30d25e3df881bdb462042cd83b22c01ae06efd79e1205f697576fdb9c99256fb"
+    },
+    "worker_tracked": 10697,
+    "source_count": 10930,
+    "artifact_count": 1330,
+    "actual_TUs": 260,
+    "registered_applicable": 302,
+    "registered_scope": "REGISTRATION_ONLY",
+    "worker_parent": "48976f92925cee53a4c9b8c88917401072165ab0",
+    "current_vs_qualified_source": "Current map is the final normal metadata successor; qualified snapshot retains originalb50cd and is immutable."
+  },
+  "historical_contract_scope_protection": "All pre-existing qualified Source fixtures, current source archive and protected artifact1313 remain byte-exact. Only new controlled build-private leaves may transition PRESENT -> ABSENT.",
+  "ownership": {
+    "producer_release_before_delete": true,
+    "finite_compiler_owner_live_for_delete_and_detached_pipeline": true,
+    "post_owner_absence_policy": "NEW_EXPLICIT_SYSTEM_POLICY",
+    "static_Source_literals": "RETAINED_IN_CONSUMER_IMAGE",
+    "code_lease": "STATIC_LINKED_CALLBACKS_NULL_OWNER_RELEASE_NOT_DYNAMIC_DLL_UNLOAD"
+  },
+  "ABI351_risk": "W1-W4/Value22/Call28/Program29/native external safety and complete ABI matrix remain OPEN; this is one normal-only static code-lease consumer.",
+  "Main_integration": "OPEN_FIXED_PRODUCER25F",
+  "source_deletion_subproof": {
+    "executed": true,
+    "status": "PASS_TWO_SELF_CREATED_DISK_LEAVES_NORMAL_ONLY",
+    "scope": "TWO_SELF_CREATED_DISK_SOURCE_LEAVES_ONLY",
+    "combined_cancel_sticky_OPEN_retired": false,
+    "whole_Source108_retired": false,
+    "independent_decoded": {
+      "msvc": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual-normal-audit-r3\\msvc-independent-decoded.json",
+        "bytes": 15799,
+        "sha256": "531d6cb15c6321cee879ac0c9bcd0c359b82bd469b94d581c771d10125069ff5"
+      },
+      "asan": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual-normal-audit-r3\\asan-independent-decoded.json",
+        "bytes": 15799,
+        "sha256": "610d25cb87c5714abf1e9af9b59fdc615df91d00c5ef23ce66433b5fc4992e65"
+      }
+    },
+    "independent_actual_audits": {
+      "normal_audit": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual-normal-audit-r3\\audit-report.json",
+        "bytes": 20283,
+        "sha256": "681ae7fb2f8d238ecea6f6fa7c94c683352da1377089d64393e8eb22448b6bf3"
+      },
+      "normal_audit_terminal": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual-audit-terminal.json",
+        "bytes": 1327,
+        "sha256": "9b342b7ffe638b509c5ff38f785e723a65e1f8a93eeaf642947170cbb11be961"
+      }
+    },
+    "static_Source_literals": "RETAINED_IN_CONSUMER_IMAGE",
+    "deletion_point": "AFTER_PRODUCER_FREE_BEFORE_DETACHED_CHECKED_VERIFY_READ_LOWER",
+    "final_absence_point": "AFTER_ALL_COMPILER_EXECUTION_OWNERS_RELEASED_WITH_NEW_SYSTEM_POLICY",
+    "deleted_files_per_process": 2,
+    "absence_checks_per_process": 6
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "normal_qualification": {
+    "worker_qualification_parent": "48976f92925cee53a4c9b8c88917401072165ab0",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_SOURCE_FILE_DELETION_NATIVE_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 263,
+    "new_TUs_per_configuration": 3,
+    "normal_tests_per_configuration": 1,
+    "registered_applicable303_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-msvc-normal-r1\\result.json",
+          "bytes": 147009,
+          "sha256": "459185c1eec8a75ccfa498bcdf489a64b29350c94e858278d7ad5bacea84e5b4"
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-msvc-normal-r1\\Root-terminal.json",
+          "bytes": 1240,
+          "sha256": "f6fb35a22dd46d31166f22ba6deb4674e0c107e5d2263d6fb2dfc50eebeed077"
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-msvc-normal-r1\\source-file-deletion-native1-normal-measurements.json",
+          "bytes": 6911,
+          "sha256": "5144e618c84d75b872bbe7a66863a6d934efe723db46cc927a9824f7b0b24a9f"
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-msvc-normal-r1\\emitter-build-measurements.json",
+          "bytes": 5837,
+          "sha256": "e729b2e5b85b097e917dfb92319cc8f07e37f67b4307660e395c660b1800b6af"
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-msvc-normal-r1\\actual-compilation-binding.json",
+          "bytes": 2879669,
+          "sha256": "997f0249d8966069eb768de0fe52752f15f0a7f2777d6f7830a51be245b20be6"
+        },
+        "registered303": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-msvc-normal-r1\\registered-applicable-303.json",
+          "bytes": 261576,
+          "sha256": "3d93e1dfa5fe7a8e8b0d865733485186a58fcc5eb4d59e58fff637c7189dbc10"
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-asan-normal-r1\\result.json",
+          "bytes": 149234,
+          "sha256": "a2cc116bf8c56074856696fb66f2b87e80b2b80940141d426694554ae912aa80"
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-asan-normal-r1\\Root-terminal.json",
+          "bytes": 1239,
+          "sha256": "1ed0b771514000ce598c2053f0c1c13dce3481f6843369af0450fb89bc09a29e"
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-asan-normal-r1\\source-file-deletion-native1-normal-measurements.json",
+          "bytes": 6911,
+          "sha256": "616327cd92aa6e17effc2ccd896058e585306ed166e55cead1e9d9c45d42a39c"
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-asan-normal-r1\\emitter-build-measurements.json",
+          "bytes": 5837,
+          "sha256": "97e772f4de0825281146576d1a98e40998ff10eed28005ef854420198c95943a"
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-asan-normal-r1\\actual-compilation-binding.json",
+          "bytes": 2954009,
+          "sha256": "e96287fd4386ad1f5be28a883a35926ec714f937f8072761c070cdde18be3819"
+        },
+        "registered303": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-asan-normal-r1\\registered-applicable-303.json",
+          "bytes": 313692,
+          "sha256": "c52a905dc1c3c507e206140414fa7f43c69607690b3d507370a6ceddf3d99d20"
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual-normal-audit-r3\\audit-report.json",
+      "bytes": 20283,
+      "sha256": "681ae7fb2f8d238ecea6f6fa7c94c683352da1377089d64393e8eb22448b6bf3"
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual-audit-terminal.json",
+      "bytes": 1327,
+      "sha256": "9b342b7ffe638b509c5ff38f785e723a65e1f8a93eeaf642947170cbb11be961"
+    },
+    "actual263_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\actual263-successor-pointers-precommit-r1.json",
+      "bytes": 12975,
+      "sha256": "6b8cc3f5c791c97df16a900858dafef7b8e3195754baf8b7a8c22807fe08a794"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-source-file-deletion-native1-msvc-normal-r1\\source-inputs-after.json",
+      "bytes": 2712271,
+      "sha256": "6fca016129d7fc2be82f8f2a611855dc9701ce776227eb23b4c5e5693f7294ff"
+    },
+    "joint_artifacts_qualified263": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\source-file-deletion-native1-audit-prep-r1\\joint-artifacts-current263-canonical-r1.json",
+      "bytes": 316715,
+      "sha256": "cf4dc50384ecfaffc07951bb60cbfefa8620c447246be849fc92c56995f5f5de"
+    },
+    "related_tests_per_configuration": 2,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\source-file-deletion-native1-related-enum-two-actual-audit-r1\\related-normal2-supplement.json",
+      "bytes": 38016,
+      "sha256": "efd674f834b562af637f4025528ba87530781013b84d39214472008c01f4b5b9"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\source-file-deletion-native1-related-enum-two-actual-audit-r1\\Root-audit-terminal.json",
+      "bytes": 1433,
+      "sha256": "3d8a068bf04f3857fff785ec2a9aeaa9e4711e323d1f0123410afe17eee2dc3f"
+    },
+    "preparation_snapshot": {
+      "build_state": "NOT_BUILT",
+      "product_executions": 0,
+      "normal_gate.costs": "NOT_MEASURED",
+      "future_actual_TUs": "UNBOUND",
+      "meaning": "Original preparation values retained in this snapshot. Top-level build_state/product_executions/future_actual_TUs now reflect real dual builds and four product processes; normal_gate.costs remains a historical preparation field. Current measured costs and full263 are established by this normal_qualification and its independent actual audits."
+    },
+    "boundary": "Native normal1 and separate existing ImportedEnum VM1/native1 related2 per provider. Complete original main402/library80 and nominal catch42 remain unchanged. Only two disk leaves created successfully with CREATE_NEW by each process are removed, after Source producer destruction and before detached Checked verification/reread/lower. Strict stat/read NOT_FOUND preserve outputs at the same saved canonical leaves; final absence is rechecked after all owners release with a new explicit system policy. Two canonical Instances, four Unit Test completions, ten permission refusals per Instance, complete owned generated C, public deep seal and five final physical zero values remain. Static Source literals remain in the consumer image. Original seven OPEN responsibilities, Source108 and all denominators, cancellation/sticky initialization, class/Core, stderr, FI and complete ABI/safety remain unchanged and unretired.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "PASS_TWO_SELF_CREATED_DISK_LEAVES_NORMAL_ONLY_ALL_OTHER_OPEN_RETAINED",
+    "old_obligations_retired": 0
+  }
+}
