@@ -1,0 +1,373 @@
+{
+  "schema": 1,
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "contracts": {
+    "wire": 25,
+    "semantic": 67,
+    "Value": 22,
+    "Call": 28,
+    "Program": 29,
+    "global_ABI351": "RISK_OPEN; workorder line4 does not replace three public ABIs"
+  },
+  "target": "test_source_product_integer_intrinsic_panic_group3_native",
+  "emitter_target": "test_source_product_integer_intrinsic_panic_group3_c_emitter",
+  "normal_gate": {
+    "executed": true,
+    "names": [
+      "test_source_product_integer_intrinsic_panic_group3_integer_division_zero_native_normal",
+      "test_source_product_integer_intrinsic_panic_group3_integer_remainder_zero_native_normal",
+      "test_source_product_integer_intrinsic_panic_group3_integer_division_defer_native_normal"
+    ],
+    "tests_per_configuration": 3,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "cost_scope": "Independent cold whole native normal per fixture and provider; constructor and complete finite ledger included"
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "actual_costs": {
+    "msvc": {
+      "integer_division_zero": {
+        "compiler_sites": 3531,
+        "runtime_sites": 124,
+        "allocated": 1100993,
+        "peak": 200284,
+        "work": 4270709
+      },
+      "integer_remainder_zero": {
+        "compiler_sites": 3531,
+        "runtime_sites": 124,
+        "allocated": 1101400,
+        "peak": 200285,
+        "work": 4274846
+      },
+      "integer_division_defer": {
+        "compiler_sites": 4074,
+        "runtime_sites": 162,
+        "allocated": 1353823,
+        "peak": 258869,
+        "work": 6042613
+      }
+    },
+    "asan": {
+      "integer_division_zero": {
+        "compiler_sites": 3531,
+        "runtime_sites": 124,
+        "allocated": 1100993,
+        "peak": 200284,
+        "work": 4270709
+      },
+      "integer_remainder_zero": {
+        "compiler_sites": 3531,
+        "runtime_sites": 124,
+        "allocated": 1101400,
+        "peak": 200285,
+        "work": 4274846
+      },
+      "integer_division_defer": {
+        "compiler_sites": 4074,
+        "runtime_sites": 162,
+        "allocated": 1353823,
+        "peak": 258869,
+        "work": 6042613
+      }
+    }
+  },
+  "families": [
+    {
+      "id": "integer_division_zero",
+      "legacy_test": "source_owner_integer_division_zero_cleans_live_owners",
+      "legacy_wrapper_body_LF_sha256": "cd768aa5c611c44bad334611a60f55f92d1305514c8ab2039d4966fc0d3b4d51",
+      "original_bytes": 324,
+      "original_sha256": "b6bd7215bf3f5a8a3f72ce0bb33c1eb503082d2121a54b1bcb21370a3c3c5178",
+      "test_suffix_bytes": 103,
+      "test_suffix_sha256": "4acf9099649d19907c1b05eb91c504dc870ce3e6b866c688bf3fb029df347318",
+      "full_input_bytes": 427,
+      "full_input_sha256": "2edc64400c8485579addc7bb4615d82d023c03248a572e9a3c78fee62eaf0517",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-builtin-panic-group6\\integer_division_zero\\root.xr",
+          "bytes": 427,
+          "sha256": "2edc64400c8485579addc7bb4615d82d023c03248a572e9a3c78fee62eaf0517"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-builtin-panic-group6\\integer_division_zero\\root.xr",
+          "bytes": 427,
+          "sha256": "2edc64400c8485579addc7bb4615d82d023c03248a572e9a3c78fee62eaf0517"
+        }
+      },
+      "code": 420,
+      "intrinsic_message_bytes": 16,
+      "public_native_call_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+      "panic_message_kind": "UNIT_ALL_FIELDS_ZERO",
+      "scratch_text": "division by zero",
+      "private_functions": 2,
+      "test_roles": 2,
+      "root_mutable_I64_slots": 0,
+      "defer": false,
+      "permissions_per_instance": 8,
+      "canonical_results": 2,
+      "Unit_results": 4,
+      "copied_intrinsic_panic_facts": 4
+    },
+    {
+      "id": "integer_remainder_zero",
+      "legacy_test": "source_owner_integer_remainder_zero_cleans_live_owners",
+      "legacy_wrapper_body_LF_sha256": "f505f069268a37c602ad39c3dafb3d160d6ab9a83f120fe00bbdfc4177fa868e",
+      "original_bytes": 323,
+      "original_sha256": "a717f979c32d9b8dfeeca4fd61a38302e87561ab5f04263afe53e1ffdf13a1f8",
+      "test_suffix_bytes": 103,
+      "test_suffix_sha256": "4acf9099649d19907c1b05eb91c504dc870ce3e6b866c688bf3fb029df347318",
+      "full_input_bytes": 426,
+      "full_input_sha256": "b26a0b1b8464912125a2e5e7c63559388e2489e275cb201c62b14dbbf76f2c19",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-builtin-panic-group6\\integer_remainder_zero\\root.xr",
+          "bytes": 426,
+          "sha256": "b26a0b1b8464912125a2e5e7c63559388e2489e275cb201c62b14dbbf76f2c19"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-builtin-panic-group6\\integer_remainder_zero\\root.xr",
+          "bytes": 426,
+          "sha256": "b26a0b1b8464912125a2e5e7c63559388e2489e275cb201c62b14dbbf76f2c19"
+        }
+      },
+      "code": 421,
+      "intrinsic_message_bytes": 14,
+      "public_native_call_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+      "panic_message_kind": "UNIT_ALL_FIELDS_ZERO",
+      "scratch_text": "modulo by zero",
+      "private_functions": 2,
+      "test_roles": 2,
+      "root_mutable_I64_slots": 0,
+      "defer": false,
+      "permissions_per_instance": 8,
+      "canonical_results": 2,
+      "Unit_results": 4,
+      "copied_intrinsic_panic_facts": 4
+    },
+    {
+      "id": "integer_division_defer",
+      "legacy_test": "source_owner_integer_division_runs_conditional_defer",
+      "legacy_wrapper_body_LF_sha256": "91f6e144df92d87eb2400dacd85aa08e39204950be85d2eceb9b95eec08028b7",
+      "original_bytes": 491,
+      "original_sha256": "be8acf2731b6948d9293a60f0b89877982f8d44ae298181c969f4d20cc0c7b91",
+      "test_suffix_bytes": 275,
+      "test_suffix_sha256": "9621aab2035ac06e1aba3f41c106649834ce2e8afdfaa6d78d500e9e2838c6a9",
+      "full_input_bytes": 766,
+      "full_input_sha256": "03ccf60ad85879c1ca2735ba72dd90542c9fd48093adefef93c067dcd3542fe9",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-integer-division-defer\\root.xr",
+          "bytes": 766,
+          "sha256": "03ccf60ad85879c1ca2735ba72dd90542c9fd48093adefef93c067dcd3542fe9"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-integer-division-defer\\root.xr",
+          "bytes": 766,
+          "sha256": "03ccf60ad85879c1ca2735ba72dd90542c9fd48093adefef93c067dcd3542fe9"
+        }
+      },
+      "code": 420,
+      "intrinsic_message_bytes": 16,
+      "public_native_call_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+      "panic_message_kind": "UNIT_ALL_FIELDS_ZERO",
+      "scratch_text": "division by zero",
+      "private_functions": 3,
+      "test_roles": 4,
+      "root_mutable_I64_slots": 1,
+      "defer": true,
+      "permissions_per_instance": 12,
+      "canonical_results": 2,
+      "Unit_results": 10,
+      "copied_intrinsic_panic_facts": 4
+    }
+  ],
+  "pipeline": "Two simultaneousownedC samebytes/fullpayload+digestfooter actualcompiledC; public deepseal allcallbacks/types/declidentity/parameter vectors/layouts. All5 actualTU use sameconfigsan/public10(noHost) closure; noVMfallback. StaticcodeleaseNULL owner/release; notDLL unload proof.",
+  "source_fixture_policy": "Reuse exact existing full427/426/766B; no generator, export adapter or source replacement",
+  "owner_oracle": "EachColdCase2Instances after callerProgramdrop: canonicalI640×2, 2failure+2success/instance; publiccopy four intrinsicUnit panic facts, READY after ordinarypanic, owner-dead scratchreformat16/14B then dropempty and physicalCompilerRuntimeBlocksBytes/Table0. Defer Fresh0, failure22, success42+11; directcases success42. Actual FAIL summarycounters mustreflect actualexecution. No ownedSTRING/heap/nonnull/uniqueness assumption.",
+  "permissions": "Private answer/checked(bool), private readCleanupCount(defer only), same-root explicit@Test; ordinary/private or Test wrong-role admissions exact BAD_ARGUMENT with NEW/ledger5/attempts/physical unchanged. start APIs no output arg, take/copy_failure legalempty fullbytes BAD_STATE preserved. IDs dynamically query own Checked; no export adapter.",
+  "scratch_lifetime": "UNIT type/reserved/payload all zero carries no text. Every exact_fault call creates fresh caller96B scratch, formats16/14/16B and compares immediately. No old scratch pointer retained; four complete public CallResult facts survive all owners then drop to EMPTY.",
+  "original_VM_OPEN_snapshots": [
+    {
+      "map": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_builtin_panic_group6_obligations.json",
+        "bytes": 27722,
+        "sha256": "75de3f4c3a7e681b4de7221c9cb221538f2441312c19c7bafee02ee204139875"
+      },
+      "OPEN": [
+        "old exact class identity/finalization/reclaim/event order and CORE instruction/successor assertions",
+        "old external exit1 and exact stderr VM/native expectations",
+        "native/allocation prefix FI/budget axes/cancellation/full safety",
+        "Main semantic/Checked contract68 integration (wire25 unchanged; no producer authorization) and physical removal of legacy consumers"
+      ]
+    },
+    {
+      "map": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_integer_division_defer_obligations.json",
+        "bytes": 12656,
+        "sha256": "6d90f118d991f8aff0042cf0dca9c2602548c475417530892aa329ea5d367e1d"
+      },
+      "OPEN": [
+        "Exact766B public VM normal projection qualified in both configurations; remaining original responsibilities remain OPEN",
+        "Original2 class constructs/2 finalizes, reverse failure finalization, finalize1/reclaim1 per identity, no terminal events after retire",
+        "Old CORE_INTEGER_DIVMOD failure successor1 mapping",
+        "Original external VM/AOT exit1 and exact stderr",
+        "Native generated C and external ABI",
+        "All original source FI allocation ordinals, resource axes, cancellation and complete safety",
+        "OriginalSource108=88+20, allocation8,other26/160,shared7 denominators unchanged"
+      ]
+    }
+  ],
+  "existing_VM_evidence": [
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\builtin-panic-group6-eof-normal-integrated-audit-r2\\audit-report.json",
+      "sha256": "b2783545577c7a1aa90fbd8393be021716ed4d50f4cc4a33dc8e6a5e966fc6d9",
+      "bytes": 14978
+    },
+    {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\integer-division-defer-normal-integrated-audit-r1\\audit-report-final.json",
+      "sha256": "056efe6f0be7cfc8b073a4f29d331c21ac865162b92795c1748a3cefc1375765",
+      "bytes": 35950
+    }
+  ],
+  "compiler_limits": {
+    "allocated": 67108864,
+    "live": 8388608,
+    "work": 128000000,
+    "owned_C_cap": 16777216
+  },
+  "product_executions": 0,
+  "preparation_snapshot": "All NOT_RUN fields describe immutable preparation. A later normal_qualification may record bounded actual normal results without retiring original obligations.",
+  "OPEN": [
+    "Original class identities/reverse finalization/per-id finalize and reclaim/CORE DIVMOD failure successor counts",
+    "Original external VM/AOT exit1 and exactE0420/E0421 stderr; public420/421 not legacy adapter",
+    "Whole compiler/runtime fault ordinals/allocated-live-work axes/cancel/initializersticky/fullsanity",
+    "Owned STRING payloads not claimed: intrinsic Unit facts and fresh caller scratch only",
+    "All108=88+20/26files160functions/8allocations/7owners unchanged, no retirement or source deletion",
+    "Main semantic68 integration and global ABI351/release credentials/remote qualification"
+  ],
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "native_full_safety_ABI351_Main_legacy_removal": "OPEN",
+  "unknown": "Actual Cgen sizes/function counts/proof/dependencies/costs/normal outcomes are unmeasured; 235/289 are prospective counts only.",
+  "normal_qualification": {
+    "worker_qualification_parent": "34f71a579f37e970b9e1114582b32d522a47fc50",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_INTEGER_INTRINSIC_PANIC_GROUP3_NATIVE_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 235,
+    "new_TUs_per_configuration": 5,
+    "normal_tests_per_configuration": 3,
+    "registered_applicable289_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-msvc-r1\\result.json",
+          "sha256": "2deb7747624600f3bb4f0712cf93b10ebdf3c3e652983e15b947106f55dabe4e",
+          "bytes": 192467
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-msvc-r1\\Root-terminal.json",
+          "sha256": "b188ab6a85f36df3245d5914c280fa748ce09055b2e28db03175ff8b629b4fb4",
+          "bytes": 899
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-msvc-r1\\integer-intrinsic-panic-native3-normal-measurements.json",
+          "sha256": "935719a7ee94b35939dd02c40859bd572842d2964541417f3c9c04534f7a9d7f",
+          "bytes": 17348
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-msvc-r1\\emitter-build-measurements.json",
+          "sha256": "1c5311071b04b0e6318277488063840d9f001cebb5bf1bdacaf71d731ab1ea04",
+          "bytes": 12220
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "5a64f8a6f2e505c04454b90745441c1a1eaca89d45403b42efccf98492d3802a",
+          "bytes": 2036218
+        },
+        "registered289": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-msvc-r1\\registered-applicable-289.json",
+          "sha256": "d4ffbf274ecfffcce22214fe6ef22ee40586242f8b5d321aa7b9a00f5aea8501",
+          "bytes": 245368
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-asan-r1\\result.json",
+          "sha256": "89c0335be608470ba041d8eefa2d1af53db60c52d3cbd0f805d842c4782b4b13",
+          "bytes": 192708
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-asan-r1\\Root-terminal.json",
+          "sha256": "1018ba2d5abd8726cb18f3b2387c5ad0430b34415947fd613cdcc1039aff465f",
+          "bytes": 899
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-asan-r1\\integer-intrinsic-panic-native3-normal-measurements.json",
+          "sha256": "83cc177ecfb28600648e30ae4872ed9b2ef3a2e58f9c391ca422e76fddd9ed56",
+          "bytes": 17348
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-asan-r1\\emitter-build-measurements.json",
+          "sha256": "5e9088732f28dd0c0194e9007be51801453353ae4b4ecd803a05615c74670931",
+          "bytes": 12220
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-asan-r1\\actual-compilation-binding.json",
+          "sha256": "36bab2b10b819b548090f69f624a75138685ebfa26e4511cfe48a3fe9489f6c7",
+          "bytes": 2099126
+        },
+        "registered289": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-asan-r1\\registered-applicable-289.json",
+          "sha256": "cbe19d2b66a1b1bd8086722edf21965c49c75ec0c5fb650c40728c2f5de60ae9",
+          "bytes": 295076
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\integer-intrinsic-panic-native3-audit-prep-r1\\audit-report.json",
+      "bytes": 29586,
+      "sha256": "ed723386489627654d8f8d9f1fe6e67e42b0d817114e771db97dc6b834e5bdc2"
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\integer-intrinsic-panic-native3-audit-prep-r1\\actual-audit-terminal.json",
+      "bytes": 1650,
+      "sha256": "e51645d67a5830130d28d383bca405de357efd734d682f47dd10c48d1b354dc3"
+    },
+    "actual235_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\integer-intrinsic-panic-native3-audit-prep-r1\\actual235-successor-pointers-precommit-r1.json",
+      "bytes": 17142,
+      "sha256": "9194c049a61de6ad9fc698d6ca316703a956f701420ab56fee67cc66639985b1"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-intrinsic-panic-native3-normal-qualification-msvc-r1\\source-inputs-after.json",
+      "bytes": 2706372,
+      "sha256": "ffb1ebedb4ee2dbb7326c23cfd8c90e20666d4dadb33b6ff909a43878177dec8"
+    },
+    "joint_artifacts_qualified235": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\integer-intrinsic-panic-native3-audit-prep-r1\\joint-artifacts-current235-canonical-r1.json",
+      "bytes": 286563,
+      "sha256": "c42f5c3c8bebf6340d5eb57ae1bd7550323203e316f3c99d5139d64670c93f51"
+    },
+    "related_tests_per_configuration": 3,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\integer-intrinsic-panic-native3-related-three-actual-audit-r1\\related-normal3-supplement.json",
+      "bytes": 311646,
+      "sha256": "9db7d110ef8d6b1e48dabab94f044f47bfd34f0ece5aff48d024a37a7f818075"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\integer-intrinsic-panic-native3-related-three-actual-audit-r1\\actual-audit-terminal.json",
+      "bytes": 1898,
+      "sha256": "4d2340175b836509b084614e9d02c3310c2359f5f313206ee7e66a5812609765"
+    },
+    "boundary": "Normal3 and separate VM related3 only. Intrinsic UNIT panic facts regenerate fresh caller scratch; no owned STRING payload is claimed. Preparation labels remain historical. Original OPEN responsibilities and denominators are unchanged.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "OPEN",
+    "old_obligations_retired": 0
+  }
+}
