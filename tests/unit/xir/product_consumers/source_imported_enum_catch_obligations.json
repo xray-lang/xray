@@ -1,0 +1,372 @@
+{
+  "schema": 1,
+  "status": "VM_NORMAL_ONLY_VERIFIED_MIGRATION_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "Checked": {
+    "wire_schema": 25,
+    "semantic_contract": 67
+  },
+  "ABI": {
+    "value": 22,
+    "call": 28,
+    "program": 29
+  },
+  "legacy_name": "source_owner_imported_enum_catch_preserves_declaration_identity",
+  "legacy_source": {
+    "path": "tests/unit/program/test_xr_program_source_build.c",
+    "line": 8915,
+    "whole_file_bytes": 478590,
+    "whole_file_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+    "wrapper_bytes": 1567,
+    "wrapper_LF_no_terminal_newline_sha256": "8fcb2e271b062c0eb789399bff6d20cac71d26313584af13767ca25f1418b8c6",
+    "original_expected_detached_I64": 42,
+    "original_AOT_fixture": "XR_SOURCE_FIXTURE_IMPORTED_ENUM_CATCH"
+  },
+  "original_inputs": {
+    "main_original": {
+      "bytes": 342,
+      "sha256": "f6ef752924b9b4bab85fa6125ee680f65040ad98007ad593ac74d2754192d057"
+    },
+    "library_original": {
+      "bytes": 80,
+      "sha256": "a7c4b770146e3233709ab37eff6c44be2d9021c522605b69d714f909d28d5213"
+    },
+    "same_root_test_suffix": {
+      "bytes": 60,
+      "sha256": "86f5a2b28fb4545eb1b45249a8ab232d2fe4f7076fb00d7334848bf75aee2e65"
+    },
+    "main_proposed_full": {
+      "bytes": 402,
+      "sha256": "5df976bf9d347a8186204ec60dec9f16f22815e3436cae508b2c1380a60ea12d"
+    }
+  },
+  "input_names": {
+    "entry": "main.xr",
+    "dependency": "library.xr",
+    "specifier": "./library"
+  },
+  "declaration_identity": "One exported Problem ENUM declaration in actual library module, arity0/one Failed variant/zero payload; ImportedProblem is a binding alias, not another declaration. Both Checked throw builders and two ERROR_IS/ERROR_NARROW pairs use the same actual nominal type.",
+  "public_permission": "Root answer/localFail remain private. Root Test only through start_test; ordinary exported fail remains legal and is not executed or rejected through ordinary host start in this gate. fail is rejected only through start_test for missing Test role. Two module initializers cannot be externally started.",
+  "normal_gate": {
+    "executed": true,
+    "target": "test_source_product_imported_enum_catch",
+    "new_TU": 1,
+    "tests": [
+      {
+        "name": "test_source_product_imported_enum_catch_vm_normal",
+        "argv": [
+          "test_source_product_imported_enum_catch",
+          "GENERATED_ROOT",
+          "GENERATED_ROOT/main.xr",
+          "GENERATED_ROOT/library.xr"
+        ],
+        "TIMEOUT": 120,
+        "PROCESSORS": 1
+      }
+    ],
+    "costs": {
+      "status": "ACTUAL_PER_CONFIGURATION",
+      "configurations": {
+        "msvc": {
+          "imported_enum_catch": {
+            "compiler_sites": 2775,
+            "runtime_sites": 44,
+            "allocated": 953428,
+            "peak": 252047,
+            "work": 1273929
+          }
+        },
+        "asan": {
+          "imported_enum_catch": {
+            "compiler_sites": 2775,
+            "runtime_sites": 44,
+            "allocated": 953428,
+            "peak": 252047,
+            "work": 1273929
+          }
+        }
+      },
+      "independence": "One cold process per provider; independently measured fees, no equality oracle"
+    },
+    "limits": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000
+    },
+    "two_Instances": true,
+    "canonical_I64_zero": 2,
+    "same_root_Unit": 4,
+    "Test_answer_fixed_oracle": 42,
+    "permission_rejections_per_Instance": 10,
+    "host_answer": "NOT_EXPOSED",
+    "outside_copied_thrown_error": "NOT_CLAIMED",
+    "compiler_runtime_physical_final": "blocks/bytes/table0"
+  },
+  "ownership": "SourceProduct and borrowed queries/packets die only after public retained Checked copy/read; detached verified artifact chain -> Lowered -> immutable VM Program; two Instances retain after caller Program drop; all output drops and compiler/runtime observer/table physical zero.",
+  "OPEN": [
+    "Original old Core declaration/typeID/class identity equality",
+    "Original direct detached host answer I64(42) interface semantics",
+    "Original AOT/native/mixed generatedC and ABI obligations",
+    "Whole compiler/runtime FI and all budget axes",
+    "External uncaught-error/panic stderr and process exit behavior",
+    "Cancellation, initialization failure stickiness and physical source deletion",
+    "Main semantic/Checked contract68 integration; producer remains25f"
+  ],
+  "old_denominators": {
+    "Source": 108,
+    "split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "product_executions": {
+    "configurations": [
+      "msvc",
+      "asan"
+    ],
+    "cold_normal_processes_per_configuration": 1,
+    "total_cold_normal_processes": 2,
+    "fixture_ids": [
+      "imported_enum_catch"
+    ],
+    "related_regressions": "SEPARATE_DENOMINATOR",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN"
+  },
+  "normal_qualification": {
+    "status": "PASS_IMPORTED_ENUM_CATCH_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 220,
+    "new_TUs_per_configuration": 1,
+    "normal_tests_per_configuration": 1,
+    "registered282": "REGISTRATION_ONLY",
+    "normal_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-catch-normal-integrated-audit-r1\\audit-report-related-final.json",
+      "sha256": "4051ed65f92321b6b953a9731397b466c83c3853a1bc8d3da8bb3e26d751a9c6",
+      "bytes": 14153
+    },
+    "actual_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-catch-normal-integrated-audit-r1\\audit-terminal-related-final.json",
+      "sha256": "8bd627474eb2f1f0ddc2e7d6fbc9eaa3dc5f65af8871ea2b6405aecaed4997df",
+      "bytes": 2508
+    },
+    "actual220_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-catch-normal-integrated-audit-r1\\actual220-successor-pointers-precommit-related-final.json",
+      "sha256": "3643cd57173c11d261bb2ff807da488c6bef6d49ca508da419d5acdfea6d5b26",
+      "bytes": 6776
+    },
+    "configurations": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\result.json",
+          "sha256": "45d41bc2b9f0ca592f3d001bfc7701cbe172bfad33c487ac4281ff95069fcbc8",
+          "bytes": 110090
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\Root-terminal.json",
+          "sha256": "fec1c47a02d2c89de3e9ce3556f0272155be63b82b2117739602c01d23579643",
+          "bytes": 1120
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "14918b0e3295854d34c425593c1bc22804dbb8ea622f1f0f3d8c207433d46601",
+          "bytes": 1570184
+        },
+        "registry282": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\registered-applicable-282.json",
+          "sha256": "67806743c54ed31e0987e66f9c659b862999220cde564d657663576e021b3087",
+          "bytes": 237586
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\imported-enum-catch-normal-measurements.json",
+          "sha256": "04094161507b165ab957c5e1e42b1b4ac35ce3adc1e837a1dd93756b3f15575f",
+          "bytes": 5377
+        },
+        "normal_costs": {
+          "imported_enum_catch": {
+            "compiler_sites": 2775,
+            "runtime_sites": 44,
+            "allocated": 953428,
+            "peak": 252047,
+            "work": 1273929
+          }
+        },
+        "normal_observations": {
+          "canonical_I64_zero": 2,
+          "Unit": 4,
+          "permissions_per_Instance": 10,
+          "typed_source_Test_oracle": 42,
+          "three_Checked_views": {
+            "nominal_constructors_per_view": 2,
+            "ERROR_IS_per_view": 2,
+            "ERROR_NARROW_per_view": 2
+          },
+          "Lowered": "IDENTITY_ONLY",
+          "physical_final": {
+            "compiler_blocks": 0,
+            "compiler_bytes": 0,
+            "runtime_blocks": 0,
+            "runtime_bytes": 0,
+            "table": 0
+          },
+          "host_answer": "NOT_EXPOSED",
+          "outside_copied_thrown_error": "NOT_CLAIMED"
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\selected.xml",
+          "sha256": "369845d458b958148da153e1a7ea292ba5a4c136ea822ccb8ba4149eb9532280",
+          "bytes": 4133
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\LastTest.log",
+          "sha256": "49a02ac85b661af08cfcbe845680a1b84d9ac118044392573a178a3876d50d92",
+          "bytes": 5177
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\new-actual-compilation-binding.json",
+          "sha256": "69d936a7a083b2c915ea87b7c03643d29a9477a182c48cfc446f40fc3402378f",
+          "bytes": 46927
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\fresh.stdout.raw",
+          "bytes": 3630,
+          "sha256": "0fba143703d15d313fcbe7824b654095eb38ebfd1f3cde20b855b319d0949b1d"
+        },
+        "deps_raw": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-msvc-r1\\deps.stdout.raw",
+          "bytes": 14380,
+          "sha256": "db18076b64f51b2f36ad9caad63af19f44600f73e679e0f28020ec447b528576"
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-catch-normal-integrated-audit-r1\\msvc-independently-decoded.json",
+          "sha256": "72db1f247d268c47357574f35c9ccbe089c62a95365677ed0e8b5bd6da6dae75",
+          "bytes": 5184
+        },
+        "actual_dependency_count": 159
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\result.json",
+          "sha256": "0987d91a23f1c329cdac1388571b1fe40e3f612d2bf4ce8619bb178531c525a4",
+          "bytes": 108355
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\Root-terminal.json",
+          "sha256": "f246996ff3fbf70b544d8b72d60be2677d615e9dce42da49c48eea4e13602c27",
+          "bytes": 1119
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\actual-compilation-binding.json",
+          "sha256": "ff73d3351923292bcbe444b55efef88b9782dcc598d8b27c65863fb643331239",
+          "bytes": 1626938
+        },
+        "registry282": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\registered-applicable-282.json",
+          "sha256": "23b5d06d8b0615d996018fa67fca524b7acc606e439c7d05426062039d29b2e5",
+          "bytes": 286090
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\imported-enum-catch-normal-measurements.json",
+          "sha256": "fca1bfd7829fefaa0bc9cc13ae57d4e0f0c25ec64338e06b0fb1396748dbc0b6",
+          "bytes": 5377
+        },
+        "normal_costs": {
+          "imported_enum_catch": {
+            "compiler_sites": 2775,
+            "runtime_sites": 44,
+            "allocated": 953428,
+            "peak": 252047,
+            "work": 1273929
+          }
+        },
+        "normal_observations": {
+          "canonical_I64_zero": 2,
+          "Unit": 4,
+          "permissions_per_Instance": 10,
+          "typed_source_Test_oracle": 42,
+          "three_Checked_views": {
+            "nominal_constructors_per_view": 2,
+            "ERROR_IS_per_view": 2,
+            "ERROR_NARROW_per_view": 2
+          },
+          "Lowered": "IDENTITY_ONLY",
+          "physical_final": {
+            "compiler_blocks": 0,
+            "compiler_bytes": 0,
+            "runtime_blocks": 0,
+            "runtime_bytes": 0,
+            "table": 0
+          },
+          "host_answer": "NOT_EXPOSED",
+          "outside_copied_thrown_error": "NOT_CLAIMED"
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\selected.xml",
+          "sha256": "fe5ee08e8ae23c43d5d3f38666226547768a3a14168b6a196b9ef92af288b59b",
+          "bytes": 4133
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\LastTest.log",
+          "sha256": "a5c4cab3ace3e035621f64723dfaf7a6a17dac35b4b8b4642b181b5226f2c3c0",
+          "bytes": 5177
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\new-actual-compilation-binding.json",
+          "sha256": "bc683930c5b1cddd1ccfb5a42079e296dc73d4e0d3939f16e9e01c01f9167d67",
+          "bytes": 48258
+        },
+        "fresh_log": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\fresh.stdout.raw",
+          "bytes": 4127,
+          "sha256": "d9b7cb9c07ee13497fcd491da65015d2ac431178111fcf481a9cd711c4c2ff25"
+        },
+        "deps_raw": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\imported-enum-catch-normal-qualification-asan-r1\\deps.stdout.raw",
+          "bytes": 14380,
+          "sha256": "0bb8ee1fa3d84e21bc55df8647f6ab12aaf53318626b63c5f6b626ded6d6bef3"
+        },
+        "independent_decoded": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-catch-normal-integrated-audit-r1\\asan-independently-decoded.json",
+          "sha256": "72db1f247d268c47357574f35c9ccbe089c62a95365677ed0e8b5bd6da6dae75",
+          "bytes": 5184
+        },
+        "actual_dependency_count": 159
+      }
+    },
+    "qualified_source_inputs_immutable": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\imported-enum-catch-normal-integrated-audit-r1\\source-inputs-qualified.json",
+      "sha256": "833ed39d20bb9f460a64311405c08d86d8651ffac25e0cb2e1087f3f9dae3a4c",
+      "bytes": 2702978
+    },
+    "original_candidate_map_preserved": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\imported-enum-catch-candidate-r1\\new-files\\source_imported_enum_catch_obligations.json",
+      "sha256": "91e7eccd0316e1382b9eb193721957632a60eed69925a64393e9670681772cb7",
+      "bytes": 4063
+    },
+    "baseline_delivery_immutable": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-default-assertion-group2-delivery-r1\\delivery.json",
+      "sha256": "b19faa7bc7e433fec50205caf0ce02f752623d213c7e5b2ff30f3b944339f3cd",
+      "bytes": 19858
+    },
+    "qualification_scope": "Complete original root342+same-root Test60/library80; typed42 proved by original assert and four Test Unit completions; no direct private host answer or intermediate20/22 sample",
+    "limits_unchanged": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000
+    },
+    "Lowered": "DECLARATION_ROLE_TYPE_IDENTITY_ONLY",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "native": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "original_Core_identity": "OPEN",
+    "original_external_stderr": "OPEN",
+    "initializer_failure_stickiness": "OPEN",
+    "original_old_denominators_preserved": true,
+    "Main_integration": "OPEN_FIXED_PRODUCER_NOT_UPGRADED"
+  }
+}

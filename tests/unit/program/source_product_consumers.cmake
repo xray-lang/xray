@@ -259,3 +259,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_call_
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_coroutine_panic_group4.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_default_assertion_group2.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_imported_enum_catch.cmake")
