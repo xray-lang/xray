@@ -1,0 +1,1 @@
+export fn pure()->i64{return 31}

@@ -1,0 +1,5 @@
+var state:i64=1
+fn readRoot()->i64{return state}
+fn owner(value:i64=readRoot())->i64{return value}
+fn worker()->i64{return owner()}
+export fn main()->i64{return await go worker()}

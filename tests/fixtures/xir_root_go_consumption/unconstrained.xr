@@ -1,0 +1,3 @@
+fn worker<T>(value:T)->i64{return 1}
+fn parent<T>(value:T)->i64{return await go worker<T>(value)}
+export fn main()->i64{return parent<i64>(7)}

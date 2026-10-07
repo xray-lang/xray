@@ -1,0 +1,16 @@
+fn fail()->i64 {
+    assert(false, "root-init" + "-failure")
+    return 0
+}
+
+var owned:string = "owned" + "-slot"
+var failed:i64 = fail()
+
+export fn run()->i64 {
+    print(999)
+    return 999
+}
+
+fn main()->i64 {
+    return 0
+}

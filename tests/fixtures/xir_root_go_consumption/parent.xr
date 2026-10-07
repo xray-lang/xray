@@ -1,0 +1,5 @@
+var state:i64=1
+fn readRoot()->i64{return state}
+fn child(value:i64)->i64{return value}
+fn parent()->i64{return await go child(readRoot())}
+export fn main()->i64{return await go parent()}

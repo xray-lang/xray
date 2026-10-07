@@ -1,0 +1,3 @@
+var mutableAtomic=Atomic<i64>(4)
+export fn read()->Atomic<i64>{return mutableAtomic}
+export fn main()->i64{return 0}

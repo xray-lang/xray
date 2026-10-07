@@ -1,0 +1,3 @@
+var state:i64=1
+fn worker()->i64{defer{const value=state};return 1}
+export fn main()->i64{return await go worker()}

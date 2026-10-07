@@ -1,0 +1,11 @@
+add_executable(test_xir_root_cause_trace ${CMAKE_CURRENT_LIST_DIR}/test_xir_root_cause_trace.c)
+target_include_directories(test_xir_root_cause_trace PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_root_cause_trace PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_root_cause_trace PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_root_cause_trace PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_root_cause_trace COMMAND test_xir_root_cause_trace)
+set_tests_properties(test_xir_root_cause_trace PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;root-effects;metadata;ownership;budget;memory")

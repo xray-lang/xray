@@ -78,7 +78,7 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
     if (status == XR_XIR_OK) status = xr_xir_compile_effects_analyze(checked, &effects);
     if (status == XR_XIR_OK) {
         CHECK(xr_xir_effects_go_safe(effects, 0) == XR_XIR_OK);
-        CHECK(xr_xir_effects_go_safe(effects, 5) == XR_XIR_OK);
+        CHECK(xr_xir_effects_go_safe(effects, 5) == XR_XIR_BAD_TYPE);
         CHECK(xr_xir_effects_function(effects, 2)->suspend == XR_XIR_EFFECT_NONE &&
             xr_xir_effects_function(effects, 2)->throws == XR_XIR_EFFECT_NONE);
         CHECK(xr_xir_effects_function(effects, 1)->suspend == XR_XIR_EFFECT_MAY &&

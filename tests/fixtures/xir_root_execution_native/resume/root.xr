@@ -1,0 +1,20 @@
+var count:i64 = 0
+
+export fn run()->string {
+    const held = "root" + "-result"
+    count += 1
+    print(count)
+    Coro.yield()
+    count += 10
+    print(count)
+    Coro.yield()
+    return held
+}
+
+export fn current()->i64 {
+    return count
+}
+
+fn main()->i64 {
+    return 0
+}

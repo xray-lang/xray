@@ -7,18 +7,15 @@
  * xxir_go_safe.inc.c - Reverified direct worker execution permissions
  *
  * KEY CONCEPT:
- *   Local nonSendable storage is legal; module mutable authority cannot cross.
+ *   Root permission consumes final facts; borrow shape is an independent rule.
  */
-static XrXirStatus effect_go_seed(const XrXirModule *module, uint32_t f,
-    const XrXirInstruction *op, const XrXirCompileContext *work) {
-    if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE || op->op == XR_XIR_SLOT_GROUP_INIT ||
-        op->op == XR_XIR_SLOT_PLACE || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT ||
-        op->op == XR_XIR_CALL_REQUIREMENT) return XR_XIR_BAD_TYPE;
-    if (op->op != XR_XIR_SLOT_LOAD) return XR_XIR_OK;
-    const XrXirSlot *slot = &module->declarations->slots[op->immediate];
-    if (slot->mutable) return XR_XIR_BAD_TYPE;
-    XrXirProofContext proof = {module, {XR_XIR_CONTEXT_FUNCTION, f, 0}};
-    return xr_xir_compile_type_markers_prove(work, &proof, slot->type, XR_XIR_CONSTRAINT_SENDABLE);
+static XrXirStatus effect_go_shape(const XrXirFunction *function,
+    const XrXirCompileContext *work) {
+    for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+        if (function->instructions[i].op == XR_XIR_SLOT_PLACE) return XR_XIR_BAD_TYPE;
+    }
+    return XR_XIR_OK;
 }
 static XrXirStatus effect_go_safe(const XrXirModule *module, XrXirEffects *effects,
     EffectGraph *graph, const XrXirCompileContext *work) {
@@ -27,18 +24,13 @@ static XrXirStatus effect_go_safe(const XrXirModule *module, XrXirEffects *effec
         if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
         /* Permission to enter through GO is a separate shape obligation.
          * A safe lexical cleanup body may execute inside an ordinary worker. */
-        XrXirStatus qualified = XR_XIR_OK;
-        const XrXirFunction *function = &module->functions[f];
-        for (uint32_t i = 0; qualified == XR_XIR_OK && i < function->instruction_count; ++i) {
-            if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
-            qualified = effect_go_seed(module, f, &function->instructions[i], work);
-            if (qualified == XR_XIR_BUDGET || qualified == XR_XIR_OUT_OF_MEMORY) return qualified;
-        }
+        XrXirStatus qualified = effect_go_shape(&module->functions[f], work);
+        if (qualified == XR_XIR_BUDGET) return qualified;
         effects->go_safe[f] = qualified;
         if (qualified != XR_XIR_OK) graph->queue[back++] = f;
     }
-    /* Every function changes from qualified at most once. Reverse execution
-     * edges include direct calls, defaults, cleanup and recursive components. */
+    /* Only the independent borrow shape propagates here. The shared solver
+     * has already closed root facts over calls, defaults, cleanup and cycles. */
     while (front < back) {
         if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
         uint32_t callee = graph->queue[front++];
@@ -49,6 +41,11 @@ static XrXirStatus effect_go_safe(const XrXirModule *module, XrXirEffects *effec
                 effects->go_safe[caller] = XR_XIR_BAD_TYPE; graph->queue[back++] = caller;
             }
         }
+    }
+    for (uint32_t f = 0; f < effects->count; ++f) {
+        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+        if (effects->root[f].requires_root || effects->root[f].unresolved)
+            effects->go_safe[f] = XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
 }

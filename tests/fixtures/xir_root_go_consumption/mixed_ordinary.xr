@@ -1,0 +1,4 @@
+var state:i64=1
+fn leaf()->i64{return 5}
+fn worker()->i64{const callback:fn()->i64=leaf;return state+callback()}
+export fn main()->i64{return 0}

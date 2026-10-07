@@ -1,0 +1,26 @@
+var count:i64 = 40
+
+export fn next()->i64 {
+    count += 2
+    return count
+}
+
+export fn current()->i64 {
+    return count
+}
+
+export fn handle()->fn()->i64 {
+    return fn()->i64 {
+        count += 2
+        return count
+    }
+}
+
+export fn probe()->i64 {
+    print(count)
+    return count
+}
+
+fn main()->i64 {
+    return 0
+}

@@ -35,7 +35,11 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
                 site = ctx->bodies[location.function].node;
                 ctx->module = ctx->bodies[location.function].module;
             }
-            const char *cause = location.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND ?
+            const char *cause = location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED ?
+                "GO target requires the current instance root execution" :
+                location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED ?
+                "GO target lacks proof for worker execution" :
+                location.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND ?
                 "declared no_suspend function may suspend or call an unqualified callable" :
                 location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
                 "E0387: an error can escape the defer body" :

@@ -1,0 +1,3 @@
+fn leaf()->i64{return 5}
+fn worker()->i64{const callback:fn()->i64=leaf;return callback()}
+export fn main()->i64{return 0}

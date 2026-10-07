@@ -1,0 +1,4 @@
+var state:i64=1
+fn first()->i64{return second()}
+fn second()->i64{return state+first()}
+export fn main()->i64{return await go first()}

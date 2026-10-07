@@ -1,0 +1,3 @@
+var state:i64=1
+fn child()->i64{return state}
+export fn main()->i64{return await go child()}

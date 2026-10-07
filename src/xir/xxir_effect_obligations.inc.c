@@ -47,8 +47,15 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_GO) continue;
             status = xr_xir_effects_go_safe(effects, (uint32_t)op->immediate);
+            XrXirDiagnosticReason reason = XR_XIR_DIAGNOSTIC_NONE;
+            if (status == XR_XIR_BAD_TYPE) {
+                const XrXirRootEffects *root = xr_xir_effects_root(effects, (uint32_t)op->immediate);
+                if (!root) status = XR_XIR_BAD_STRUCTURE;
+                else if (root->requires_root) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED;
+                else if (root->unresolved) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED;
+            }
             if (status == XR_XIR_OK) status = xr_xir_effects_task_errors(effects, (uint32_t)op->immediate);
-            if (status != XR_XIR_OK) *diagnostic = (XrXirDiagnostic){status, f, UINT32_MAX, i, XR_XIR_DIAGNOSTIC_NONE};
+            if (status != XR_XIR_OK) *diagnostic = (XrXirDiagnostic){status, f, UINT32_MAX, i, reason};
         }
     }
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {

@@ -1,0 +1,15 @@
+var state:i64=9
+const constant:i64=5
+const shared=Atomic<i64>(4)
+fn prepare()->i64{return state}
+fn worker(value:i64)->i64{return value+constant}
+fn syncRead()->i64{return shared.load()}
+fn local()->i64{var value=1;value+=2;defer{const done=1};return value}
+fn owner(value:i64=prepare())->i64{return value}
+export fn defaultParent()->i64{return await go owner()}
+export fn main()->i64{
+    const first=go worker(prepare())
+    const second=go syncRead()
+    const third=go local()
+    return (await first)+(await second)+(await third)
+}

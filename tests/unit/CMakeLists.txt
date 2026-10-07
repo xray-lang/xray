@@ -4330,3 +4330,15 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity_native_contract.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/native_projection69.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_layout22.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_effects.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_go_consumption.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_cause_trace.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_identity_vm.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_identity_vm_resources.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_execution_native.cmake")

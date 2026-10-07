@@ -1,0 +1,5 @@
+var state:i64=1
+fn read()->i64{return state}
+fn pure(value:i64)->i64{return value}
+fn parent()->i64{return await go pure(read())}
+export fn main()->i64{return await go parent()}

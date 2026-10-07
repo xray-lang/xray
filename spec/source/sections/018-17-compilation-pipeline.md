@@ -500,6 +500,18 @@ Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移�
 
 固定独立输出为stdout out\0中七字节、stderr err!四字节及空，覆盖双Instance/四provider模式/三向量、no-cache/both-hit/one-miss、身份重排/同名拒错配、各字段独立破坏前拒、真实code lease与producer死亡、所有新增OOM/三轴exact-minus1/取消/双物理释放。W1–W4、strict C11、MSVC与Clang ASan/UBSan和原库/output责任不减少。一般非叶重定位、泛型cache完整键、默认构建/安装双产物、公开source-free run/build及最后旧链删除仍OPEN；本首族不替代这些完成条件。
 
+### 17.38 共同根执行流事实与原因查询
+
+在已完整验证的Checked/Lowered上，同一owned XrXirEffects推导每函数独立的requires_root与unresolved。两项可同时为真；缺字段、推导失败或空初始化不是NONE证明。mutable模块槽读写/PLACE及真实module initializer产生根要求；const读/PLACE在真实定义上下文证明Sendable，不满足产生根要求，OOM/预算失败原样拒绝。初始化group的first slot按既有high32编码读取。库var和库非Sendable const当前禁令保留。
+
+复用唯一反向执行图传播CALL/INVOKE、真实default helper及已注册cleanup，cleanup只传播根事实而不改变既有控制效果规则。间接/requirement调用保持unresolved，即使NO_SUSPEND也不证明无根依赖。FUNCTION_REF不执行目标body；局部var/cell不因可变自动产生根要求。GO child不是父方普通调用边，父方实参准备的真实普通执行仍计入父方。未分类执行op拒绝；普通运行期路径取保守并集，不依赖优化删除。
+
+查询返回同summary拥有的事实和两条独立最短numeric原因链；生产artifact死亡后仍有效，直到summary释放。局部原因distance0，CALL/cleanup步的callee distance严格下降；等距按真实instruction/callee/cause/slot身份排序，不靠邻接顺序。全部求解/原因/类型证明共享累计资源账本，失败不发布半摘要，occupied输出不覆盖。无参数化布尔图为O(I+F+C)，类型证明和高阶变量成本另外计费。本查询合同不改变wire/opcode/ABI，不代表GO消费者、函数值参数上界、执行身份或库var保护已完成。
+
+GO消费者从同一summary的已闭合root事实取得权限，不再逐槽或按indirect种类重复推导；known root或unresolved均拒绝，二者并存时诊断优先known root且不丢两条原因。当前SLOT_PLACE借用形状限制独立传播，Sendable const的root NONE不解除该尚未资格的限制；其失败不得伪报root/unknown。角色、参数/结果及捕获Sendable、Task错误和所有类型/所有权/可见性规则保持独立，GO父实参准备仍在父方执行。Source区分需要当前实例根执行流与缺少worker效果证明；本片只保留既有函数层定位，完整用户函数/变量原因载荷与精确GO表达式位置继续未完成。
+
+拥有式原因链复制接口从同一效果owner复制known与unresolved两条有限numeric链；facts与steps只借用独立trace自身，效果summary、Checked/Lowered产物及原生产者释放后仍可读取。有效NONE可得到拥有式空链。copy要求相同实际资源owner和空输出，先拒非法参数，累计预算预准入后原子发布；OOM/预算失败清理临时owner且保留已收费。free不再分配或格式化，最后实际资源引用与物理计数归零。该接口不增加wire或runtime ABI，不是完整Source名称、来源与GO位置诊断。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1110,5 +1122,17 @@ Entry keys include authenticated module/declaration identity, complete ordered t
 The same VM sealing worker first prepares the complete Lowered binding table, replaces only actual MATCH entries and keeps the same Lowered for misses. Mandatory Checked origins, canonical layouts, GO permissions and Program seal remain. An opaque cache deeply owns manifests/Checked/entries with real code-owner retention. Aggregate VmProgramOwner retains artifact/bindings/cache; sealing transfers only on success, while failure preserves inputs and releases temporary holds. Execution survives producer/cache-original-reference destruction; the last Program/Instance/escaped Function lease releases exactly once. Static code has explicit process storage without invented unloading; dynamic DLLs need authentic admission/symbol/unload closure. AOT consumes only Checked, misses need no C toolchain and ordinary instances cannot be appended after sealing.
 
 Independent output vectors are seven stdout bytes out\0 followed by U+4E2D, four stderr bytes err! and empty. Cover two Instances/four provider modes/three vectors, no-cache/both-hit/one-miss, reordered identities and same-spelling declarations, independently corrupted fields rejecting early, real code leases and producer death, every new OOM/exact-minus1 axis/cancellation and both physical domains. Retain W1–W4, strict C11, MSVC/Clang ASan/UBSan and all original library/output responsibilities. General nonleaf relocation, complete generic-cache keys, default paired build/install, public source-free run/build and final legacy deletion remain open; this initial family does not replace those completion conditions.
+
+### 17.38 Shared root execution facts and owned causes
+
+After complete Checked/Lowered verification, the sole owned XrXirEffects derives independent requires_root and unresolved facts per function; both may be true. Missing data, zero initialization and failed inference never prove NONE. Mutable module slot reads/writes/PLACE and authentic module initializer identities require root. Const reads/PLACE prove Sendable in the actual definition context; a type failure requires root, while allocation/budget failures abort unchanged. Group initialization uses the existing high32 first-slot encoding. Library mutable variables and nonSendable constants remain forbidden.
+
+Use the sole reverse execution graph for CALL/INVOKE, authentic default helpers and registered cleanup. Cleanup propagates root facts without changing control-effect rules. Indirect/requirement calls remain unresolved even under NO_SUSPEND. FUNCTION_REF does not execute its body, and local variables/cells are not root state merely because they are mutable. A GO child is not a same-flow parent call edge; actual parent argument preparation still contributes to the parent. Unclassified executing operations reject, and runtime paths conservatively join independently of optimization.
+
+Queries borrow facts and two separate shortest numeric cause chains from the same summary, which survives producer artifact destruction until freed. Local terminals have distance0; CALL/cleanup steps strictly decrease callee distance. Equal-distance choices order actual instruction/callee/cause/slot identities rather than adjacency insertion. Solving, causes and type proofs share cumulative resources; failure publishes no partial summary and never overwrites occupied output. The nonparameterized boolean graph costs O(I+F+C), excluding type proofs and higher-order variables. This query contract changes no wire/opcode/ABI and does not complete GO consumers, callable parameter bounds, execution identities or library-state protection.
+
+GO consumers obtain permission from the final root facts in that same summary, without repeating slot or indirect-call root inference. Known root and unresolved both reject; when both occur, the primary diagnostic selects known root while retaining both causes. The current SLOT_PLACE borrow-shape limit propagates independently: root NONE for Sendable const does not remove this unqualified limit, and shape failure is never mislabeled root or unknown. Roles, parameter/result and capture Sendable, Task errors and all type/ownership/visibility obligations stay separate; GO argument preparation still executes in the parent. Source distinguishes required instance-root execution from missing worker-effect proof. This slice keeps the existing function-level location; complete user function/variable cause payloads and precise GO-expression locations remain open.
+
+The owned cause-trace copy interface copies finite known and unresolved numeric chains from the same effects owner. Facts and steps borrow only the independent trace; they remain readable after effects, Checked/Lowered artifacts and their original producer are released. Valid NONE may produce an owned empty trace. Copy requires the same actual resource owner and an empty output, rejects invalid arguments before work, admits cumulative resources before atomic publication, and releases temporary ownership on OOM or budget failure without refunding charges. Free neither allocates nor formats; the final real resource references and physical counts reach zero. This interface adds no wire or runtime ABI and is not complete Source-name, origin or GO-location reporting.
 
 <!-- /xr-spec:en -->

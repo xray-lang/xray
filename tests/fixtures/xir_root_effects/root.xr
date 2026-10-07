@@ -1,0 +1,49 @@
+import "./empty" as empty
+var mutableScalar:i64=3
+var mutableAtomicContainer:(Atomic<i64>,i64)=(Atomic<i64>(4),0)
+var state:Array<i64>=[1,2]
+const scalar:i64=5
+const atomic=Atomic<i64>(6)
+class Box { number:i64=7 }
+const box=Box()
+const (first,second)=(8,9)
+enum Fault { Failed }
+interface Read { read()->i64 }
+struct Token implements Read { read()->i64{return 17} }
+export fn main()->i64{return 0}
+export fn pure()->i64{return 1}
+export fn selfPure()->i64{return selfPure()}
+export fn pureA()->i64{return pureB()}
+export fn pureB()->i64{return pureA()}
+export fn mutableRead()->i64{return mutableScalar}
+export fn mutableAtomicContainerRead()->Atomic<i64>{return mutableAtomicContainer.0}
+export fn projection()->i64{state[0]=9;return state[0]}
+export fn constRead()->i64{return scalar}
+export fn constAtomicRead()->Atomic<i64>{return atomic}
+export fn atomicParameter(value:Atomic<i64>)->Atomic<i64>{return value}
+export fn atomicSnapshot()->Atomic<i64>{return atomicParameter(mutableAtomicContainer.0)}
+export fn constBoxRead()->Box{return box}
+export fn local()->i64{var n=1;n+=2;return n}
+export fn localCell()->i64{var n=1;const update=fn(){n+=1};n+=2;return n}
+export fn localBox()->i64{const value=Box();value.number=11;return value.number}
+export fn relay()->i64{return mutableRead()}
+export fn rootA()->i64{const value=mutableScalar;return value+rootB()}
+export fn rootB()->i64{return rootA()}
+fn rootFail()->i64{const value=mutableScalar;throw Fault.Failed}
+export fn invoke()->i64{try{return rootFail()}catch(e){return 19}}
+fn defaultOwner(value:i64=mutableRead())->i64{return value}
+export fn defaultUse()->i64{return defaultOwner()}
+export fn cleanupOwner()->i64{defer{const value=mutableScalar};return 23}
+export fn indirect(f:fn()->i64)->i64{return f()}
+export fn indirectInvoke(f:fn()->i64)->i64{try{return f()}catch(e){return 29}}
+export fn requirement<T:Read>(value:T)->i64{return value.read()}
+export fn instantiateRequirement()->i64{return requirement<Token>(Token{})}
+export fn reference()->fn()->i64{return mutableRead}
+export fn mixed(f:fn()->i64)->i64{return mutableScalar+f()}
+export fn mixedRelay(f:fn()->i64)->i64{return mixed(f)}
+fn worker(value:i64)->i64{return value}
+export fn goParent()->i64{return await go worker(mutableRead())}
+export fn left()->i64{return mutableRead()}
+export fn right()->i64{return mutableRead()}
+export fn diamond()->i64{return right()+left()}
+export fn emptyUse()->i64{return empty.pure()}

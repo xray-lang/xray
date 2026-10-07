@@ -1,0 +1,4 @@
+class Box{value:i64=7}
+const state=Box()
+fn worker()->i64{return state.value}
+export fn main()->i64{return await go worker()}
