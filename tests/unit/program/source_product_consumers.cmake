@@ -269,3 +269,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_asser
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_default_assertion_group2_native.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_intrinsic_panic_group3_native.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_call_panic_group2_native.cmake")

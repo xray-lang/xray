@@ -1,0 +1,380 @@
+{
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "preparation_worker_parent": "1cb7ab55fb8c6c1b052323c7aa9ec9ca5e1be647",
+  "accepted_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-Root-prep-r1\\accepted-contract.json",
+    "bytes": 1630,
+    "sha256": "44a8d87da32a8d2c5f1601b6e1e6e99bb4c95ae064e74b8daf38758977dc6dcd"
+  },
+  "code_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\current67-call-panic-native2-contract-r1\\native-code-contract.json",
+    "bytes": 23647,
+    "sha256": "a56cd6b3862595e784f27eb5e838dc4972f5de9b3bc27b3d4e84efc5cb4974e8"
+  },
+  "original_VM_consumer": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\test_source_product_builtin_panic_group6.c",
+    "bytes": 35105,
+    "sha256": "16bdb4580551192315b6435cb1accc2558a5d1d02bb9b6f34c9876ff77c246d1"
+  },
+  "original_VM_map": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_builtin_panic_group6_obligations.json",
+    "bytes": 27722,
+    "sha256": "75de3f4c3a7e681b4de7221c9cb221538f2441312c19c7bafee02ee204139875"
+  },
+  "families": [
+    {
+      "id": "sealed_call_panic",
+      "legacy_test": "source_owner_sealed_call_propagates_panic_and_cleans_owners",
+      "legacy_line": 7197,
+      "legacy_wrapper_body_LF_sha256": "d00f1c203fd45ac2d383ebaba662aabe88429724e6793506b361a28dcd7eadf2",
+      "original_bytes": 374,
+      "original_sha256": "199cbbcc3a9b17365c8d5697a0b85d135e09984f1c54ca3601c69e03ccbc94f1",
+      "test_suffix_bytes": 103,
+      "test_suffix_sha256": "4acf9099649d19907c1b05eb91c504dc870ce3e6b866c688bf3fb029df347318",
+      "full_input_bytes": 477,
+      "full_input_sha256": "0796719a9f2dde0f4b802457a7da69e9429be409e96687def8c4c8b3ed2ca55c",
+      "existing_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-builtin-panic-group6\\sealed_call_panic\\root.xr",
+          "bytes": 477,
+          "sha256": "0796719a9f2dde0f4b802457a7da69e9429be409e96687def8c4c8b3ed2ca55c"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-builtin-panic-group6\\sealed_call_panic\\root.xr",
+          "bytes": 477,
+          "sha256": "0796719a9f2dde0f4b802457a7da69e9429be409e96687def8c4c8b3ed2ca55c"
+        }
+      },
+      "original_expected_exit": 1,
+      "original_stderr": "[Uncaught Panic] E0420: division by zero\n"
+    },
+    {
+      "id": "indirect_call_panic",
+      "legacy_test": "source_owner_indirect_call_propagates_panic_and_cleans_owners",
+      "legacy_line": 7202,
+      "legacy_wrapper_body_LF_sha256": "3c18c2e0b8abf1bd8867178770c121b24f562384bcfe1d74a2ca17d91b12fbac",
+      "original_bytes": 398,
+      "original_sha256": "f8193490635c217ce17a4a1a7cbdae26dd32d3ba51e571e9e4bf1b2f969631c4",
+      "test_suffix_bytes": 103,
+      "test_suffix_sha256": "4acf9099649d19907c1b05eb91c504dc870ce3e6b866c688bf3fb029df347318",
+      "full_input_bytes": 501,
+      "full_input_sha256": "0717df32b4868ed621d7e31be4dffeafc0c92592fe2ff9be4bad847489b14e9e",
+      "existing_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-builtin-panic-group6\\indirect_call_panic\\root.xr",
+          "bytes": 501,
+          "sha256": "0717df32b4868ed621d7e31be4dffeafc0c92592fe2ff9be4bad847489b14e9e"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-builtin-panic-group6\\indirect_call_panic\\root.xr",
+          "bytes": 501,
+          "sha256": "0717df32b4868ed621d7e31be4dffeafc0c92592fe2ff9be4bad847489b14e9e"
+        }
+      },
+      "original_expected_exit": 1,
+      "original_stderr": "[Uncaught Panic] E0420: division by zero\n"
+    }
+  ],
+  "normal_gate": {
+    "names": [
+      "test_source_product_call_panic_group2_sealed_call_panic_native_normal",
+      "test_source_product_call_panic_group2_indirect_call_panic_native_normal"
+    ],
+    "executed": true,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "fresh_TUs_expected_only": 4,
+    "cold_independent_case_processes": true,
+    "oracle": {
+      "per_case_canonical_I64_zero": 2,
+      "per_case_Unit_success_Test": 4,
+      "permission_rejections_per_Instance": 10,
+      "two_Instances": true,
+      "copied_ordinary_panic_facts": 4,
+      "public_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+      "fault_detail": 420,
+      "message_value": "UNIT with type/reserved/payload0",
+      "fresh_caller_scratch_text": "division by zero",
+      "fresh_formatted_bytes": 16,
+      "owned_STRING_not_claimed": true,
+      "after_all_execution_and_compiler_owners": true,
+      "READY_after_ordinary_panic": true,
+      "all_five_physical_values_final_zero": true
+    },
+    "costs": "NOT_MEASURED"
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "build_state": "NOT_BUILT",
+  "product_executions": 0,
+  "effect_contract": {
+    "inspection_stages": [
+      "SourceChecked",
+      "closedChecked",
+      "retained_reread_Checked",
+      "Lowered"
+    ],
+    "suspend_throws_pairs": {
+      "sealed_call_panic": {
+        "entry": [
+          0,
+          0
+        ],
+        "initializer": [
+          0,
+          0
+        ],
+        "quotient": [
+          0,
+          0
+        ],
+        "checked": [
+          0,
+          0
+        ],
+        "answer": [
+          0,
+          0
+        ],
+        "failure": [
+          0,
+          0
+        ],
+        "success": [
+          0,
+          0
+        ]
+      },
+      "indirect_call_panic": {
+        "entry": [
+          0,
+          0
+        ],
+        "initializer": [
+          0,
+          0
+        ],
+        "quotient": [
+          0,
+          0
+        ],
+        "checked": [
+          1,
+          1
+        ],
+        "answer": [
+          1,
+          1
+        ],
+        "failure": [
+          1,
+          1
+        ],
+        "success": [
+          1,
+          1
+        ]
+      }
+    },
+    "actual_public_summary_required": true,
+    "owning_summary_freed_on_all_cleanup_paths": true,
+    "indirect_callable_flags": 0,
+    "no_added_source_promise": true
+  },
+  "native_contract": {
+    "public_deep_seal": true,
+    "all_callbacks_native": true,
+    "VM_fallback": false,
+    "full_types_flags_parameter_vectors_proof_and_layouts": true,
+    "two_simultaneous_owned_C_emissions": true,
+    "complete_payload_and_exact_footer_hashes": true,
+    "static_code_lease_only": true,
+    "actual_functions_proof_layout_sizes_and_dependencies": "NOT_MEASURED"
+  },
+  "permissions": {
+    "private_answer": "I64()",
+    "private_checked": "I64(BOOL)",
+    "private_quotient": "I64(I64)",
+    "ordinary_private_arguments": {
+      "checked": "BOOL(false)",
+      "quotient": "I64(0)"
+    },
+    "unchanged_NEW_ledger_attempts_and_physical_state": true,
+    "output_preservation": "NOT_APPLICABLE_NO_OUTPUT_ARGUMENT"
+  },
+  "original_VM_OPEN_snapshot": [
+    "old exact class identity/finalization/reclaim/event order and CORE instruction/successor assertions",
+    "old external exit1 and exact stderr VM/native expectations",
+    "native/allocation prefix FI/budget axes/cancellation/full safety",
+    "Main semantic/Checked contract68 integration (wire25 unchanged; no producer authorization) and physical removal of legacy consumers"
+  ],
+  "OPEN": [
+    "old exact class identity/finalization/reclaim/event order and CORE instruction/successor assertions",
+    "old external exit1 and exact stderr VM/native expectations",
+    "native/allocation prefix FI/budget axes/cancellation/full safety",
+    "Main semantic/Checked contract68 integration (wire25 unchanged; no producer authorization) and physical removal of legacy consumers"
+  ],
+  "all_original_denominators": "108=88+20 /26/160/8/7 unchanged",
+  "old_obligations_retired": 0,
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "OPEN",
+  "full_native_mixed_matrix": "NOT_RUN",
+  "ABI351_and_Value22_Call28_Program29": "RISK_OPEN",
+  "Main_semantic68_integration": "OPEN",
+  "physical_source_deletion": "OPEN",
+  "production_release": "NOT_CLAIMED",
+  "actual_costs": {
+    "msvc": {
+      "sealed_call_panic": {
+        "compiler_sites": 4059,
+        "runtime_sites": 124,
+        "allocated": 1181628,
+        "peak": 202104,
+        "work": 4600487
+      },
+      "indirect_call_panic": {
+        "compiler_sites": 4077,
+        "runtime_sites": 142,
+        "allocated": 1225377,
+        "peak": 204666,
+        "work": 5161865
+      }
+    },
+    "asan": {
+      "sealed_call_panic": {
+        "compiler_sites": 4059,
+        "runtime_sites": 124,
+        "allocated": 1181628,
+        "peak": 202104,
+        "work": 4600487
+      },
+      "indirect_call_panic": {
+        "compiler_sites": 4077,
+        "runtime_sites": 142,
+        "allocated": 1225377,
+        "peak": 204666,
+        "work": 5161865
+      }
+    }
+  },
+  "normal_qualification": {
+    "worker_qualification_parent": "1cb7ab55fb8c6c1b052323c7aa9ec9ca5e1be647",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_CALL_PANIC_GROUP2_NATIVE_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 239,
+    "new_TUs_per_configuration": 4,
+    "normal_tests_per_configuration": 2,
+    "registered_applicable291_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-msvc-normal-r1\\result.json",
+          "sha256": "ea56e684b6af051c5f6c701f1801a4f8251fef05b14f0043336cce0f5d5e3a0c",
+          "bytes": 177116
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-msvc-normal-r1\\Root-terminal.json",
+          "sha256": "d71abb1ef19c0a85a6c119cab8e1baba65a81d54a0ae85616f77712b6536f17a",
+          "bytes": 863
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-msvc-normal-r1\\call-panic-native2-normal-measurements.json",
+          "sha256": "53ac76a529029fd9a3943ffa8da836fb261c559c549fd1c69a69b7099a0134ae",
+          "bytes": 15623
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-msvc-normal-r1\\emitter-build-measurements.json",
+          "sha256": "3e94c6c115a4f575372b549fa4c14eb28bef00b7622fba1e70b8c74922b2813d",
+          "bytes": 12305
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-msvc-normal-r1\\actual-compilation-binding.json",
+          "sha256": "4948533a911411e16b55391a94afd8edd3457f1ab19a61e9c163ab7410c0a876",
+          "bytes": 2156183
+        },
+        "registered291": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-msvc-normal-r1\\registered-applicable-291.json",
+          "sha256": "b22aa6bcbc5b9a0b224f87895d929365b442434e1fdff4b78a289c8a4a4522ad",
+          "bytes": 247578
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-asan-normal-r1\\result.json",
+          "sha256": "1e4773953dc9a19a7fc3b5c67e470cfcabd373e2dd1a0e632f43e57128aa5e83",
+          "bytes": 176584
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-asan-normal-r1\\Root-terminal.json",
+          "sha256": "a9aa2818ef21a296203b0091bd91cd359eaba149bb1fb94ab85a1db501ec4145",
+          "bytes": 865
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-asan-normal-r1\\call-panic-native2-normal-measurements.json",
+          "sha256": "617a6a1b2517c94127cbd27746cdc76f9e5b0789c602b12613bbfdf5437368e7",
+          "bytes": 15623
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-asan-normal-r1\\emitter-build-measurements.json",
+          "sha256": "42b22ded98c5ef6ea199f20ef840b0cf66cfe1303f5d6c43da54f061dc76eb88",
+          "bytes": 12305
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-asan-normal-r1\\actual-compilation-binding.json",
+          "sha256": "1d0b601c7b94358d3cc163b657c33e5f88a262bfbb28f8084ec3e57c6b56f49e",
+          "bytes": 2220731
+        },
+        "registered291": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-asan-normal-r1\\registered-applicable-291.json",
+          "sha256": "f2b7dc3c26d8e558ab8513d1346e56367592e2d4d782e34e97d830c1d2ad6505",
+          "bytes": 297630
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-call-panic-group2-audit-prep-r1\\audit-report.json",
+      "bytes": 22802,
+      "sha256": "1c8676e028b61784a1028879e9f35d691a463aad2aef7d266af71feb94f62396"
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-call-panic-group2-audit-prep-r1\\actual-audit-terminal.json",
+      "bytes": 1639,
+      "sha256": "7686abbf2eda1da050384fe7ed38a84083c63886b9ef650dc324546f518380ca"
+    },
+    "actual239_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-call-panic-group2-audit-prep-r1\\actual239-successor-pointers-precommit-r1.json",
+      "bytes": 13709,
+      "sha256": "a526e81388aadadc4810c2e69afb043417457a2bea090cad7a1db5c1c6a8e959"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-call-panic-native2-msvc-normal-r1\\source-inputs-after.json",
+      "bytes": 2707204,
+      "sha256": "90719a1ef98d010010c07d68e468d9be0032cb6bcd4d434189a359e1719231e1"
+    },
+    "joint_artifacts_qualified239": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-call-panic-group2-audit-prep-r1\\joint-artifacts-current239-canonical-r1.json",
+      "bytes": 290764,
+      "sha256": "a86099660217f69e61065b14ac1ccb9d6a26724b9f5d1fd6a98cd2b6fbc5530e"
+    },
+    "related_tests_per_configuration": 2,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-call-panic-group2-related-two-actual-audit-r1\\related-normal2-supplement.json",
+      "bytes": 210251,
+      "sha256": "c786d7fecfc184976cda89fd524984cd8193bc1fe90aa72570a04b0e099dd24b"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-call-panic-group2-related-two-actual-audit-r1\\actual-audit-terminal.json",
+      "bytes": 1695,
+      "sha256": "8deb0b05a1a70eb781853860e812550246b99a85ec8a73a1b31467e05cea966c"
+    },
+    "boundary": "Normal2 and separate existing VM related2 only. Intrinsic UNIT panic420 facts use fresh16B caller scratch; indirect suspend/throws UNKNOWN remain unchanged. Preparation labels remain historical. Original OPEN responsibilities and denominators are unchanged.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "OPEN",
+    "old_obligations_retired": 0
+  }
+}
