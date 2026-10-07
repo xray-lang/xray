@@ -1,0 +1,408 @@
+{
+  "schema": 1,
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "consumer": "tests/unit/xir/product_consumers/test_source_product_default_assertion_group2_native.c",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "Checked": {
+    "schema": 25,
+    "contract": 67
+  },
+  "ABI": {
+    "Value": 22,
+    "Call": 28,
+    "Program": 29
+  },
+  "input_relation": "Exact original238/405B prefixes plus existing same-root111/278B @test suffixes, complete349/683B. No source edits, exports, private answer starts, wrapper/compat, changedclass literal or alternativedefault assertion. Private originals/suffixes/full inputs frozen raw bytes; read-only VM C strings/CM-generated LF/full existing files bothcfg matched.",
+  "families": [
+    {
+      "id": "assertion_owner_cleanup",
+      "original_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-empty-STRING-native2-contract-r1\\inputs\\assertion_owner_cleanup\\original.xr",
+        "bytes": 238,
+        "sha256": "21f626bb4cf378e51c61c71ffe9f6f2696d0f09f5be48954c045ee7563cbd879"
+      },
+      "test_suffix": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-empty-STRING-native2-contract-r1\\inputs\\assertion_owner_cleanup\\same-root-tests.xr",
+        "bytes": 111,
+        "sha256": "81242058caca1c8e78b07f33bad080bf1f903687ac5c9a019b4538b59fc67458"
+      },
+      "full_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-empty-STRING-native2-contract-r1\\inputs\\assertion_owner_cleanup\\full.xr",
+        "bytes": 349,
+        "sha256": "abda45e63bcfdc246e4e01cef8eacc44fe41fadc390632b4dd4393cc291645d4"
+      },
+      "roles": {
+        "private": 2,
+        "test": 2,
+        "root_mutable_I64_slots": 0,
+        "permissions_per_Instance": 8
+      },
+      "expected": {
+        "failure": "CALL_ASSERTION19/PANIC_ASSERTION445/STRING with exact zero-byte default message",
+        "success": 42,
+        "canonical_I64_zero": 2,
+        "Unit": 4,
+        "copies": 4,
+        "ordinary_panic_state": "READY",
+        "cleanup": null,
+        "permissions_per_instance": 8,
+        "physical_final": "compiler/runtime blocks/bytes/table0",
+        "permissions_total": 16
+      },
+      "symbol_prefix": "source_default_assertion_owner_cleanup"
+    },
+    {
+      "id": "assertion_defer",
+      "original_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-empty-STRING-native2-contract-r1\\inputs\\assertion_defer\\original.xr",
+        "bytes": 405,
+        "sha256": "6442ffdf47ced91e78eab090a50e9b154aa89c2a67304326dfb298b70f9d4751"
+      },
+      "test_suffix": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-empty-STRING-native2-contract-r1\\inputs\\assertion_defer\\same-root-tests.xr",
+        "bytes": 278,
+        "sha256": "15e2ffedc1d6b45a5643d13f1a226506bdd02d2ba4df32e79024daa2a0836796"
+      },
+      "full_input": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-empty-STRING-native2-contract-r1\\inputs\\assertion_defer\\full.xr",
+        "bytes": 683,
+        "sha256": "a5576b344b689df752e200b13f7f746cab6ee57f20d1486bddb9b930dd5226b0"
+      },
+      "roles": {
+        "private": 3,
+        "test": 4,
+        "root_mutable_I64_slots": 1,
+        "permissions_per_Instance": 12
+      },
+      "expected": {
+        "failure": "CALL_ASSERTION19/PANIC_ASSERTION445/STRING with exact zero-byte default message",
+        "success": 42,
+        "canonical_I64_zero": 2,
+        "Unit": 10,
+        "copies": 4,
+        "ordinary_panic_state": "READY",
+        "cleanup": [
+          0,
+          22,
+          11
+        ],
+        "permissions_per_instance": 12,
+        "physical_final": "compiler/runtime blocks/bytes/table0",
+        "permissions_total": 24
+      },
+      "symbol_prefix": "source_default_assertion_defer"
+    }
+  ],
+  "normal_gate": {
+    "names": [
+      "test_source_product_default_assertion_group2_assertion_owner_cleanup_native_normal",
+      "test_source_product_default_assertion_group2_assertion_defer_native_normal"
+    ],
+    "executed": true,
+    "tests_per_configuration": 2,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "emitter_CTest": false,
+    "expected_new_TUs": 4,
+    "expected_total_TUs": 230,
+    "registration_only_expected": 286,
+    "public_libraries": 10,
+    "preserved_old_libraries": 11
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "actual_costs": {
+    "msvc": {
+      "assertion_owner_cleanup": {
+        "compiler_sites": 3556,
+        "runtime_sites": 128,
+        "allocated": 1009069,
+        "peak": 195005,
+        "work": 3272172
+      },
+      "assertion_defer": {
+        "compiler_sites": 4098,
+        "runtime_sites": 166,
+        "allocated": 1252712,
+        "peak": 233693,
+        "work": 4949477
+      }
+    },
+    "asan": {
+      "assertion_owner_cleanup": {
+        "compiler_sites": 3556,
+        "runtime_sites": 128,
+        "allocated": 1009069,
+        "peak": 195005,
+        "work": 3272172
+      },
+      "assertion_defer": {
+        "compiler_sites": 4098,
+        "runtime_sites": 166,
+        "allocated": 1252712,
+        "peak": 233693,
+        "work": 4949477
+      }
+    }
+  },
+  "product_executions": 0,
+  "owner_oracle": [
+    "SourceProduct; independent SourceChecked/ClosedChecked readers; retain closed packet and destroy producer/session/input owners; reverify/reread retained packet; independent Lowered verify/role identities.",
+    "Emit twice with two simultaneous public owned C objects; compare complete lengths/bytes, independently hash payload. Use each case unique symbol and exact full-payload SHA footer; no literal digest-only oracle.",
+    "Public native ProgramSpec entries all generated callbacks, complete parameter vectors/results/cleanup/layout/identity/types/proof match; call public seal, then release both C emissions/Lowered before execution. No compile_vm/vm_bind fallback.",
+    "Two Instances retain sealed Program after caller Program drop. Check real 8/12 denial counts while NEW with all five compiler ledgers, compiler/runtime attempt counts and physical runtime blocks/bytes unchanged. checked rejected ordinary call uses exact BOOL false argument; do not authorize private answer/read/constructor starts.",
+    "Each Instance canonical I64 zero. Nondefer two ordinary failure/success pairs =>4 Unit and4 copied facts total. Defer Fresh0 plus two failureCleanup22/success42-cleanup11 pairs =>10 Unit and4 copied facts total. First Instance changes do not initialize second root slot.",
+    "Ordinary failure is CALL_ASSERTION19/detail445/STRING length0; Instance stays READY. Copy with xr_xir_call_result_copy to legal empty slots. take_result/copy_failure return BAD_STATE with all original zero EMPTY bytes preserved.",
+    "Release both Instances/caller Program, artifact/packet/product/diagnostic/session/input/compiler resource owners first. Then independently string_view and panic_message_borrow(NULL,0) each of4 logical owned STRING0 results, then drop to empty and physical compiler/runtime blocks/bytes/table all0. Do not require non-NULL pointer, unique pointer, allocation delta or heap residency for zero-byte STRING."
+  ],
+  "static_code_lease": "All generated callbacks are statically linked with null code owner/release; this does not demonstrate DLL unload, code death, or physical source deletion.",
+  "original_VM_snapshot": {
+    "qualification": {
+      "contract": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\default-assertion-owned-group2-candidate-r1\\contract.json",
+        "bytes": 17785,
+        "sha256": "a4b2bbc54ebcb8ffddbdec2a16bfffeece44d3f40ce4b8ad090cccd3ca5c0f45"
+      },
+      "consumer": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\test_source_product_default_assertion_group2.c",
+        "bytes": 31038,
+        "sha256": "b99cdf6ffc7763f5abee5a97faad3325648dbe7c3809bb9d10c9daf5803cc479"
+      },
+      "CMake": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_product_default_assertion_group2.cmake",
+        "bytes": 3630,
+        "sha256": "2a1c993c1f7f064a685f46e9992d48a75e3ae2076b627dd8121b61617a826d16"
+      },
+      "map": {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_default_assertion_group2_obligations.json",
+        "bytes": 24336,
+        "sha256": "bedbbad38d36ad69680056e9773d407fa040db5840d3d66ccadc0b1f212a3f60"
+      },
+      "map_JSON_pointer": "/normal_qualification",
+      "status": "PASS_DEFAULT_ASSERTION_GROUP2_BUILD_NORMAL_ONLY",
+      "actual_only": "Eachcfg historical fresh1/normal2/full219. Costs/deps/exes notnewnative. True Root terminals checked against actualresultSHA; RETURNING notexit.",
+      "configurations": {
+        "msvc": {
+          "result": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-msvc-r1\\result.json",
+            "sha256": "8e4af87a32548a17e49c8c7587507a4da1afe4aff33acbd5025ec86dcc47988f",
+            "bytes": 116117
+          },
+          "Root_terminal": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-msvc-r1\\Root-terminal.json",
+            "sha256": "3d6cf99d802ffacd424cde9109774547a6defc196611c58dedadf1f23223bdcf",
+            "bytes": 1125
+          },
+          "normal_measurements": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-msvc-r1\\default-assertion-group2-normal-measurements.json",
+            "sha256": "2c60bbe75f2820cf67eb69b6a8e10a2c1054327ec5e0246e97b9befbead8eb1b",
+            "bytes": 10448
+          },
+          "selected_XML": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-msvc-r1\\selected.xml",
+            "sha256": "823d4f672875376489eff0b4dab4f3478465053dfab92cbd8570b180a4c4989a",
+            "bytes": 11426
+          },
+          "LastTest": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-msvc-r1\\LastTest.log",
+            "sha256": "8e3acef4dc9b140c60d8a0abdede8069874d1dfe568da7feac17322a6d7d56ed",
+            "bytes": 13404
+          },
+          "independent_decoded": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-assertion-group2-normal-integrated-audit-r2\\msvc-independently-decoded.json",
+            "sha256": "8277d7cd5933d651e595fe04de2475ed9cd38f2d1cc4b9551ae16e9a20a39aa7",
+            "bytes": 8762
+          }
+        },
+        "asan": {
+          "result": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-asan-r1\\result.json",
+            "sha256": "82823475ef533b0ee5fb3ff9b35364629a35495ce29bb22529efc3c8faee8292",
+            "bytes": 113690
+          },
+          "Root_terminal": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-asan-r1\\Root-terminal.json",
+            "sha256": "7c00a591d132360dc4fb5c9d6f88b9591e0742c81fd0578e7fc9e1da1b2f92cd",
+            "bytes": 1125
+          },
+          "normal_measurements": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-asan-r1\\default-assertion-group2-normal-measurements.json",
+            "sha256": "6d64c89797c43d1b33812aeb71ec8d7ac88af78369cb0d1c946e49d8e1cac661",
+            "bytes": 10448
+          },
+          "selected_XML": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-asan-r1\\selected.xml",
+            "sha256": "d4e0b06d5c7af7d249f6668900f9dbe6eba2cc80299a31417260be4a3e002410",
+            "bytes": 11426
+          },
+          "LastTest": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-group2-normal-qualification-asan-r1\\LastTest.log",
+            "sha256": "e25a7ef243c7da9370a5e9a9ccbe7c982cffb0ffb250bb630d284e083a6bef1d",
+            "bytes": 13404
+          },
+          "independent_decoded": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-assertion-group2-normal-integrated-audit-r2\\asan-independently-decoded.json",
+            "sha256": "8277d7cd5933d651e595fe04de2475ed9cd38f2d1cc4b9551ae16e9a20a39aa7",
+            "bytes": 8762
+          }
+        }
+      }
+    },
+    "snapshot_note": "Previously qualified VM normal2 only. These original bytes and original OPEN responsibilities are retained; VM fees and generated/native claims are not inherited."
+  },
+  "OPEN": [
+    "Original Core class/operation/type identity and reverse finalization/reclaim protocol",
+    "Original process exit1 and [Uncaught Panic] E0001: uncaught panic stderr mapping",
+    "native/mixed and generated-C qualification",
+    "whole compiler/runtime FI and every budget axis",
+    "cancellation and initialization failure stickiness",
+    "physical source deletion",
+    "Main semantic/Checked contract68 integration; fixed producer is not upgraded"
+  ],
+  "extra_OPEN": [
+    "Full ABI351/W1-W4/provider/security/native-mixed matrix",
+    "Dynamic DLL/code death and physical Source deletion; static process-lifetime codelease alone does not prove either",
+    "Original Core class identity/reverse finalize/reclaim and processE0001/stderr/exit1; cleanup0/22/11 and physical0 do not substitute",
+    "FI/all budget axes/cancel/initializer/Main68 remain OPEN/NOT_RUN"
+  ],
+  "old_denominators": {
+    "Source": 108,
+    "split": [
+      88,
+      20
+    ],
+    "other_files": 26,
+    "functions": 160,
+    "allocation_families": 8,
+    "shared_owners": 7
+  },
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "OPEN",
+  "Main68": "OPEN",
+  "accepted_native_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\default-empty-STRING-native2-contract-r1\\native-code-contract.json",
+    "bytes": 27515,
+    "sha256": "6b0f0ef0e15148a9adbd47563e78ff479327199d9140b6101d47407f723ca453"
+  },
+  "preparation_worker_parent": "a3bc87b4118d699abb13d84aa718e4fb8567bdfb",
+  "preparation_snapshot": "All NOT_RUN/PREPARED/expected values are immutable preparation evidence. Only a separately added normal_qualification may record actual normal2 after both real tool terminals and independent audit; no old OPEN denominator is retired.",
+  "normal_qualification": {
+    "worker_qualification_parent": "a3bc87b4118d699abb13d84aa718e4fb8567bdfb",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_DEFAULT_ASSERTION_GROUP2_NATIVE_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 230,
+    "new_TUs_per_configuration": 4,
+    "normal_tests_per_configuration": 2,
+    "registered_applicable286_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-msvc-r1\\result.json",
+          "sha256": "4c94d2fe7841e5ccc5dcb7c389f7c760c55d6092a38a656695a0257c7e08fcd2",
+          "bytes": 169847
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-msvc-r1\\Root-terminal.json",
+          "sha256": "97b2378e8b26106959a06b31e07fa25752128972f2facdc755bde69ad84ad0bb",
+          "bytes": 892
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-msvc-r1\\default-assertion-native2-normal-measurements.json",
+          "sha256": "9fecf37c0ba2c8ef8b5b88ae9324a950be94388d4dfaefba5961daf0d4401180",
+          "bytes": 11323
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-msvc-r1\\emitter-build-measurements.json",
+          "sha256": "8d1cedb5f0a7cff7938c7d9952cb5a3864344a5b9a0d3538c8a8e9a5f809234d",
+          "bytes": 7807
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "286cb43b9628365b8f2ab70b6792755158bd7be6d4e1546ad148cf408db05991",
+          "bytes": 1897625
+        },
+        "registered286": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-msvc-r1\\registered-applicable-286.json",
+          "sha256": "ce1993bd7e133694b3f23540aa4187ab0820b65a0da69167ad568afc80d7f372",
+          "bytes": 241964
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-asan-r1\\result.json",
+          "sha256": "83d152a52d68a1682ec92277496dce28fcd5c656c4961838c39ba88f6af5323b",
+          "bytes": 174029
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-asan-r1\\Root-terminal.json",
+          "sha256": "49f1a76fd01b3fbbe8685ca6fdf6718f61f5a081518a14b445c1ee00c618600a",
+          "bytes": 893
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-asan-r1\\default-assertion-native2-normal-measurements.json",
+          "sha256": "686a754197ce946d739d2940af657df71a4f6ff5216f33b0a89ab57fe079ad6b",
+          "bytes": 11323
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-asan-r1\\emitter-build-measurements.json",
+          "sha256": "39c620377094ab1813897aa7776fd985e5422c40b7c29fc1994df26869ee4df3",
+          "bytes": 7807
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-asan-r1\\actual-compilation-binding.json",
+          "sha256": "6807dccfb3f33de12a746cf88785e059d86e2482236ae38d8295dd6b9d2df10b",
+          "bytes": 1958519
+        },
+        "registered286": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-asan-r1\\registered-applicable-286.json",
+          "sha256": "eada9583032002587984bf769981b72a9e5906868938d77e2372639fef11c479",
+          "bytes": 291156
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\default-empty-STRING-native2-audit-prep-r1\\audit-report.json",
+      "sha256": "cf37dc41f31af81b37cab038285d940d5b5f8059f4084edad21bb1680539877a",
+      "bytes": 23996
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\default-empty-STRING-native2-audit-prep-r1\\actual-audit-terminal.json",
+      "sha256": "d3948ceb45715c6eeb5700a2c71e08506a8a7f9efd4cd95c1e4c7471bd9116d1",
+      "bytes": 1608
+    },
+    "actual230_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\default-empty-STRING-native2-audit-prep-r1\\actual230-successor-pointers-precommit-r1.json",
+      "bytes": 14430,
+      "sha256": "f33979b39390c47a10b25247fe401dbf76baca9663bbcaa519a2a60d16a8140a"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\default-assertion-native2-normal-qualification-msvc-r1\\source-inputs-after.json",
+      "sha256": "7f87275f677a4c981cde12fe64d3fd50e995036c619b750180840928f8a10c6b",
+      "bytes": 2705501
+    },
+    "joint_artifacts_qualified230": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\default-empty-STRING-native2-audit-prep-r1\\joint-artifacts-current230-canonical-r1.json",
+      "sha256": "b015fc49776cf212bea56283a2de871fc2634cd0ef8220808b4e6e652d7b8569",
+      "bytes": 280809
+    },
+    "related_tests_per_configuration": 3,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\related-three-actual-audit-r1\\related-normal3-supplement.json",
+      "bytes": 344237,
+      "sha256": "8a7fa094f99e7734490ac7fce267be5390a020a2c7274d121be29bb59d2c1f5c"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\related-three-actual-audit-r1\\actual-audit-terminal.json",
+      "bytes": 1408,
+      "sha256": "dc51c035fd946a1b09eb586cdcee05905cf58c4143fe7c8e7729780a01e5c46a"
+    },
+    "boundary": "Normal2 and separate related3 only. Preparation labels remain historical. Original OPEN responsibilities and denominators are unchanged.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "OPEN",
+    "old_obligations_retired": 0
+  }
+}
