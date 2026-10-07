@@ -1,0 +1,234 @@
+{
+  "schema": 1,
+  "status": "NORMAL_VM_PROJECTION_VERIFIED_FAMILY_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "contracts": {
+    "Checked_schema": 25,
+    "Checked_contract": 67,
+    "value_ABI": 22,
+    "call_ABI": 28,
+    "program_ABI": 29
+  },
+  "legacy": {
+    "responsibility": "source_owner_integer_division_runs_conditional_defer",
+    "path": "tests/unit/program/test_xr_program_source_build.c",
+    "line": 7188,
+    "whole_original_file_raw_bytes": 478590,
+    "whole_original_file_raw_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+    "wrapper_body_LF_sha256": "91f6e144df92d87eb2400dacd85aa08e39204950be85d2eceb9b95eec08028b7",
+    "helper_excerpt_LF_bytes": 17010,
+    "helper_excerpt_LF_sha256": "df351143f1b981056a6bbca7f820374133e9ae1bcc11f739ccac795b745a490a",
+    "fixture": "integer_division_defer",
+    "original_source_bytes": 491,
+    "original_source_sha256": "be8acf2731b6948d9293a60f0b89877982f8d44ae298181c969f4d20cc0c7b91",
+    "source_recipe": "assert_builtin_panic_cleans_live_owners(420,INTEGER_DIVISION_DEFER,true,0,false); exact selected C format, three deferred clauses including answer suffix",
+    "expected_exit": 1,
+    "expected_stderr_hex": "5b556e6361756768742050616e69635d2045303432303a206469766973696f6e206279207a65726f0a",
+    "backends": [
+      "vm",
+      "aot"
+    ]
+  },
+  "input": {
+    "original_prefix_exact": true,
+    "test_suffix_bytes": 275,
+    "test_suffix_sha256": "9621aab2035ac06e1aba3f41c106649834ce2e8afdfaa6d78d500e9e2838c6a9",
+    "full_source_bytes": 766,
+    "full_source_sha256": "03ccf60ad85879c1ca2735ba72dd90542c9fd48093adefef93c067dcd3542fe9",
+    "adapters": "Same-root explicit @test calls; original answer, checked(bool), readCleanupCount stay private. No export/native alias."
+  },
+  "normal_gate": {
+    "name": "test_source_product_integer_division_defer_vm_normal",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "executed": true,
+    "fresh_TUs_per_configuration": 1,
+    "configurations": [
+      "MSVC",
+      "Clang ASan+UBSan"
+    ],
+    "pipeline": "public SourceProduct Source/Closed Checked packets -> independent retained Closed packet -> producer/session destroyed -> verify/read/verify -> Lowered -> immutable VM Program -> 2 Instances"
+  },
+  "oracle": {
+    "Instances": 2,
+    "permissions_each": 12,
+    "permissions_before_NEW": "5 ledger fields + compiler/runtime attempts + runtime physical unchanged",
+    "canonical_I64_0": 2,
+    "fresh_Unit_cleanup0": 2,
+    "divide_failures": 4,
+    "failure_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+    "fault_detail": {
+      "code": 420,
+      "reserved": 0,
+      "index": 0,
+      "length": 0
+    },
+    "panic_message_value": "Unit all fields zero; intrinsic facts are allocation-free",
+    "message": "public xr_xir_panic_message_borrow caller scratch, has_code420,16B exact division by zero; scratch pointer is not retained",
+    "instance_state_after_panic": "READY",
+    "empty_take_result_and_copy_failure": "BAD_STATE; legitimate zero-empty whole output bytes preserved",
+    "failure_cleanup_22_Unit": 4,
+    "success_checked_true_42_cleanup_11_Unit": 4,
+    "total_Unit": 10,
+    "copied_panic_facts": 4,
+    "after_all_owners": "recheck exact420/Unit facts and regenerate16B scratch text; drop copies; verify empty copies and physical compiler/runtime blocks+bytes/table0",
+    "owned_STRING_message": "NOT_CLAIMED",
+    "costs": {
+      "scope": "Cold whole-normal same finite ledger including constructor; configurations independently measured",
+      "configurations": {
+        "msvc": {
+          "compiler_sites": 3981,
+          "runtime_sites": 162,
+          "allocated": 1100194,
+          "peak": 215655,
+          "work": 3042918
+        },
+        "asan": {
+          "compiler_sites": 3981,
+          "runtime_sites": 162,
+          "allocated": 1100194,
+          "peak": 215655,
+          "work": 3042918
+        }
+      }
+    }
+  },
+  "limits": {
+    "allocated": 67108864,
+    "live": 8388608,
+    "work": 128000000,
+    "polls": 4096,
+    "per_poll_budget": 1000000
+  },
+  "OPEN": [
+    "Exact766B public VM normal projection qualified in both configurations; remaining original responsibilities remain OPEN",
+    "Original2 class constructs/2 finalizes, reverse failure finalization, finalize1/reclaim1 per identity, no terminal events after retire",
+    "Old CORE_INTEGER_DIVMOD failure successor1 mapping",
+    "Original external VM/AOT exit1 and exact stderr",
+    "Native generated C and external ABI",
+    "All original source FI allocation ordinals, resource axes, cancellation and complete safety",
+    "OriginalSource108=88+20, allocation8,other26/160,shared7 denominators unchanged"
+  ],
+  "normal_qualification": {
+    "status": "PASS_INTEGER_DIVISION_DEFER_BUILD_NORMAL_ONLY",
+    "normal_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\integer-division-defer-normal-integrated-audit-r1\\audit-report-final.json",
+      "sha256": "056efe6f0be7cfc8b073a4f29d331c21ac865162b92795c1748a3cefc1375765",
+      "bytes": 35950
+    },
+    "actual215_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\integer-division-defer-normal-integrated-audit-r1\\actual215-successor-pointers-precommit-final.json",
+      "sha256": "8cddd960aca2739291d7d296bb0c4f7c1d02b2e37a3033fdcdd6644a2d02de6d",
+      "bytes": 6866
+    },
+    "actual_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\integer-division-defer-normal-integrated-audit-r1\\audit-terminal.json",
+      "sha256": "4b11bba2fd79098dba0555c18def1b53053ab5c91b78c0026bf0f969cf5db5d9",
+      "bytes": 4116
+    },
+    "configuration_results": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\result.json",
+          "sha256": "6e0e6329206929c160f9b0faa3a4d5961628c09b80f9ddfd86f6c133c9ec3603",
+          "bytes": 109641
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\Root-terminal.json",
+          "sha256": "635ca3db1435e05344af2bd0169960fa9feef643ed758928f7ec686122e1503d",
+          "bytes": 1102
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\selected.xml",
+          "sha256": "2f78bf04ec268a8f00fd24d4c57f252be65de5e8a03342123a75c4b8231d9afd",
+          "bytes": 5301
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\LastTest.log",
+          "sha256": "ae723270465bbdbd2bd921bba2c8925ef7c33ec7d853e62d2ba83a182efef55c",
+          "bytes": 6239
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "3473a6c8ce58319dbfb0af3e45eba5d30a511f5d7e35f3b82362d1452e3e1b19",
+          "bytes": 1345455
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\new-actual-compilation-binding.json",
+          "sha256": "2ebc3b85f17b064403bc2a6f51467e0d5b7a50d8dcffd6e15968fc18601f30fa",
+          "bytes": 47002
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\integer-division-defer-normal-measurements.json",
+          "sha256": "e5b659a9e0e1ce390f62815516cabb34dabb2751a570a1db0ee6f5d550bf0f7c",
+          "bytes": 4429
+        },
+        "registry264": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-msvc-r1\\registered-applicable-264.json",
+          "sha256": "16675cbb0fd6a8628a8cfd0b27c09969ffffe6ce09d5133b5604aed274393481",
+          "bytes": 218644
+        }
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\result.json",
+          "sha256": "3f3fb3b698027b058e0f856ed10a0d0321a82a99b620259764d7484505f7ab5c",
+          "bytes": 109622
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\Root-terminal.json",
+          "sha256": "1153f47d4143a4596f979bec0c200e7ebcf583a86c1678fa2f63f90046066953",
+          "bytes": 1101
+        },
+        "selected_XML": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\selected.xml",
+          "sha256": "c733eb85538d347dcc961bf70680945c9bbcdeee34833cdb419a0abd86a7faa6",
+          "bytes": 5301
+        },
+        "LastTest": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\LastTest.log",
+          "sha256": "bd6e63a12a42683510ad474c2ea88303acf9142211f30f2afe754439f62272c2",
+          "bytes": 6239
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\actual-compilation-binding.json",
+          "sha256": "6970de28fbc4b089d7e38b01fcc2582ff40274e9ba1dcf837bf1450ff2ef2a2a",
+          "bytes": 1400099
+        },
+        "new_actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\new-actual-compilation-binding.json",
+          "sha256": "ccbb598fe0dd734becc92d97837234fd4776ab960baa02a4260cc56dbefcb633",
+          "bytes": 48333
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\integer-division-defer-normal-measurements.json",
+          "sha256": "0df76679b6e96985211e245e1061c6bc89e2eb561d7e4f8d6985aedffea06480",
+          "bytes": 4429
+        },
+        "registry264": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\integer-division-defer-normal-qualification-asan-r1\\registered-applicable-264.json",
+          "sha256": "394a79454fa8f1e77a5732a398b276f4abd36346a4180ab13d10cb268d25e9a0",
+          "bytes": 264052
+        }
+      }
+    },
+    "registered264": "REGISTRATION_ONLY",
+    "new_TUs_per_configuration": 1,
+    "normal_tests_per_configuration": 1,
+    "original_candidate_preserved": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\integer-division-defer-candidate-r1\\new-files\\source_integer_division_defer_obligations.json",
+      "sha256": "e57fad9b064144496ff20c683e65491258050eb75fa3e466f2c69365457db9f1"
+    },
+    "owned_STRING_message": "NOT_CLAIMED; intrinsic Unit facts regenerate borrowed caller-scratch canonical16B text",
+    "FI_axes_native_original_stderr_class_identity_full_safety": "OPEN_NOT_RUN"
+  },
+  "product_executions": {
+    "configurations": [
+      "msvc",
+      "asan"
+    ],
+    "normal_per_configuration": 1,
+    "total_normal_processes": 2,
+    "FI_axes_native": "NOT_RUN"
+  }
+}

@@ -249,3 +249,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomi
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomic_source_families_native.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_assertion_message.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_division_defer.cmake")
