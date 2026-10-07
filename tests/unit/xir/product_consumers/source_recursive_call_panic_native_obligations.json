@@ -1,0 +1,342 @@
+{
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "public_contracts": {
+    "Checked_schema": 25,
+    "Checked_contract": 67,
+    "Value_ABI": 22,
+    "Call_ABI": 28,
+    "Program_ABI": 29
+  },
+  "preparation_worker_parent": "2055f9fe87e55f5c71380f96c9520295206606ba",
+  "accepted_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-Root-prep-r1\\accepted-contract.json",
+    "bytes": 2005,
+    "sha256": "41860d3c5bb86ad57d7d76e7fbc1804b9eeb0253283bcefdd9c80016b4670e3b"
+  },
+  "code_contract": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-packet-roles-agent-r1\\current67-recursive-call-panic-native1-contract-r3\\native-code-contract.json",
+    "bytes": 22583,
+    "sha256": "94b06736126495508315f317e6d11cde2a240a83143026f35dd77f61cc580f37"
+  },
+  "original_VM_consumer": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\test_source_product_call_error_panic_group5.c",
+    "bytes": 36583,
+    "sha256": "5873bb5d3f505a5cc54fb30c02122075d9cdc3a2092dc3c0f877259c50121a65",
+    "lines": [
+      230,
+      233,
+      318,
+      351,
+      474,
+      488,
+      491,
+      498,
+      526,
+      620,
+      676,
+      709
+    ]
+  },
+  "original_VM_map": {
+    "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\tests\\unit\\xir\\product_consumers\\source_call_error_panic_group5_obligations.json",
+    "bytes": 26502,
+    "sha256": "48fe97a33800455517b746257afbc65efe2b4ddc778009fd0a144a1f76117b34"
+  },
+  "legacy": {
+    "file": "tests/unit/program/test_xr_program_source_build.c",
+    "raw_bytes": 478590,
+    "raw_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+    "helper": "assert_builtin_panic_cleans_live_owners",
+    "helper_LF_bytes": 17010,
+    "helper_LF_sha256": "df351143f1b981056a6bbca7f820374133e9ae1bcc11f739ccac795b745a490a",
+    "helper_is_not_whole_file": true,
+    "wrapper_body_hash_domain": "Full TEST block LF through closing brace, without following line terminator"
+  },
+  "families": [
+    {
+      "id": "recursive_call_panic",
+      "original_bytes": 520,
+      "original_sha256": "35eddf2b44d062e8cd37506bbaa64cc6668d62b825fb255f7ee2acf6f990a701",
+      "test_suffix_bytes": 103,
+      "test_suffix_sha256": "4acf9099649d19907c1b05eb91c504dc870ce3e6b866c688bf3fb029df347318",
+      "full_input_bytes": 623,
+      "full_input_sha256": "668146c3a7024a1ddeb841ca30f23d5b436a8b7861128854bc21337e2b7e1300",
+      "existing_full_fixtures": {
+        "msvc": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-call-error-panic-group5\\recursive_call_panic\\root.xr",
+          "bytes": 623,
+          "sha256": "668146c3a7024a1ddeb841ca30f23d5b436a8b7861128854bc21337e2b7e1300"
+        },
+        "asan": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-call-error-panic-group5\\recursive_call_panic\\root.xr",
+          "bytes": 623,
+          "sha256": "668146c3a7024a1ddeb841ca30f23d5b436a8b7861128854bc21337e2b7e1300"
+        }
+      },
+      "scope": "Original depth3 quotient/relay mutual calls, no indirect/defer/cleanup counter/catch7 substitution.",
+      "executed": false
+    }
+  ],
+  "normal_gate": {
+    "names": [
+      "test_source_product_recursive_call_panic_native_normal"
+    ],
+    "executed": true,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "fresh_TUs_expected_only": 3,
+    "cold_independent_case_processes": true,
+    "oracle": {
+      "canonical_I64_zero": 2,
+      "Unit_success_Test": 4,
+      "permission_rejections_per_Instance": 12,
+      "two_Instances": true,
+      "copied_ordinary_panic_facts": 4,
+      "public_status": "XR_XIR_CALL_DIVIDE_BY_ZERO",
+      "fault_detail": 420,
+      "message_value": "UNIT with type/reserved/payload0",
+      "ordinary_value": "UNIT with type/reserved/payload0",
+      "fresh_caller_scratch_text": "division by zero",
+      "caller_scratch_capacity": 96,
+      "fresh_formatted_bytes": 16,
+      "owned_STRING_not_claimed": true,
+      "after_all_execution_and_compiler_owners": true,
+      "READY_after_ordinary_panic": true,
+      "success_value": 42,
+      "all_five_physical_values_final_zero": true
+    },
+    "costs": "NOT_MEASURED"
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "build_state": "NOT_BUILT",
+  "product_executions": 0,
+  "effect_contract": {
+    "four_artifact_stages": [
+      "Source Checked",
+      "retained Closed Checked",
+      "retained reread Checked",
+      "Lowered"
+    ],
+    "eight_roles": [
+      "entry",
+      "initializer",
+      "quotient",
+      "relay",
+      "checked",
+      "answer",
+      "failure",
+      "success"
+    ],
+    "expected_suspend_throws_per_role": "NONE/NONE; static source expectation until actual public query",
+    "actual_summary_required": true,
+    "free_summary_on_all_paths": true,
+    "no_no_suspend_annotation_or_added_promise": true
+  },
+  "native_contract": {
+    "template": "Accepted successful call2/native3 public Pipeline, owned emission and deep Program seal only; do not copy Source implementation.",
+    "seal": "Real xr_xir_compile_program_seal with proof identity/full bytes, layouts, deep public types/declarations, all callback parameter vectors/results/flags/cleanup_owner. Validate all entries use generated native callbacks; no VM compile/bind/fallback.",
+    "lease": "Static null code lease is static code lifetime, not dynamic DLL unload/deletion qualification.",
+    "emission": "Two simultaneous owned full-C emissions independently byte/SHA compared, then release repeat; generated TU must equal full payload plus exact symbol_c_sha footer. Recompute SHA from actual file prefix, not footer constant alone.",
+    "counts": "CGen function/proof/layout counts, payload bytes, dependencies, costs and Ninja actions must all be measured; no inherited VM/native fee or opcode count."
+  },
+  "permissions": {
+    "per_Instance": 12,
+    "two_Instances": 24,
+    "ordinary_start_rejections": [
+      "initializer",
+      "answer",
+      "checked(BOOL(false))",
+      "quotient(I64(3),I64(0))",
+      "relay(I64(3),I64(0))",
+      "checkPanicFailure",
+      "checkPanicSuccess"
+    ],
+    "Test_start_rejections": [
+      "initializer",
+      "answer",
+      "checked",
+      "quotient",
+      "relay"
+    ],
+    "every_rejection": "XR_XIR_CALL_BAD_ARGUMENT with five cumulative ledgers, allocation attempts and physical accounting unchanged; Instance remains NEW. start has no output argument; output preservation NOT_APPLICABLE_NO_OUTPUT_ARGUMENT."
+  },
+  "recursive_scope": "Original mutually recursive depth3; no tail-call optimization, constant-stack, large-depth or recursive-generic qualification claim.",
+  "original_VM_OPEN_snapshot": [
+    "old class identities/order/reclaim and CORE call/invoke successor counts",
+    "old exact external exit1/stderr on VM/native",
+    "owned Error payload aliases and cancellation beyond original bounded route",
+    "native whole generated C, fullFI/axes/safety and all8 allocation scenarios",
+    "physical deletion of old chain / Main integration"
+  ],
+  "OPEN": [
+    "old class identities/order/reclaim and CORE call/invoke successor counts",
+    "old exact external exit1/stderr on VM/native",
+    "owned Error payload aliases and cancellation beyond original bounded route",
+    "native whole generated C, fullFI/axes/safety and all8 allocation scenarios",
+    "physical deletion of old chain / Main integration"
+  ],
+  "additional_OPEN": [
+    "W1-W4/native/backend whole-family removal and safety",
+    "Value22/Call28/Program29 foreign/platform/ABI351 lifetime matrices",
+    "stdin/stderr/external exit and exact class finalization/reclaim/order/CORE counts",
+    "FI/three axes/cancellation/initialization/full safety beyond this bounded normal"
+  ],
+  "all_original_denominators": "108=88+20 /26/160/8/7 unchanged",
+  "legacy_denominators_retired": false,
+  "original_Source108_other26files160functions_8allocation_7shared": "All remain accounted; these bounded normal projections do not retire whole legacy tests",
+  "old_obligations_retired": 0,
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "full_native_mixed_matrix": "OPEN",
+  "ABI351_and_Value22_Call28_Program29": "RISK_OPEN",
+  "Main_semantic68_integration": "Semantic/Checked contract68 unqualified here; wire25 and producer25f remain fixed",
+  "physical_source_deletion": "OPEN",
+  "production_release": "NOT_CLAIMED",
+  "actual_costs": {
+    "msvc": {
+      "recursive_call_panic": {
+        "compiler_sites": 4248,
+        "runtime_sites": 132,
+        "allocated": 1296991,
+        "peak": 208946,
+        "work": 5369083
+      }
+    },
+    "asan": {
+      "recursive_call_panic": {
+        "compiler_sites": 4248,
+        "runtime_sites": 132,
+        "allocated": 1296991,
+        "peak": 208946,
+        "work": 5369083
+      }
+    }
+  },
+  "normal_qualification": {
+    "worker_qualification_parent": "2055f9fe87e55f5c71380f96c9520295206606ba",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "PASS_RECURSIVE_CALL_PANIC_NATIVE_BUILD_NORMAL_ONLY",
+    "actual_TUs_per_configuration": 246,
+    "new_TUs_per_configuration": 3,
+    "normal_tests_per_configuration": 1,
+    "registered_applicable294_ONLY": true,
+    "configurations": {
+      "msvc": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-msvc-r1\\result.json",
+          "sha256": "c94d4936982403e9f3af1dce25ee74b62d768a8f05d1b421a39ed91f0975bbf8",
+          "bytes": 154262
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-msvc-r1\\Root-terminal.json",
+          "sha256": "094f7cdfe83a8f0b05a3570c8e0b0a6ca78e8b4b2450bb8f85c5c02446b061bf",
+          "bytes": 878
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-msvc-r1\\recursive-call-panic-native1-normal-measurements.json",
+          "sha256": "2af8db1c358e50cb5b6356d3c21127649241fb743b84a8270e1b8a4fbddf84fa",
+          "bytes": 8082
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-msvc-r1\\emitter-build-measurements.json",
+          "sha256": "7b22e4d865ddcda48bac5d328148654a6aa73a422ddfed6d0aba22f58451ee36",
+          "bytes": 6411
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "cf10391ca78da2c7c1c44840e4ac816d1a53a04837a17ef11a4f582be07a5ecc",
+          "bytes": 2381167
+        },
+        "registered294": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-msvc-r1\\registered-applicable-294.json",
+          "sha256": "79ebc51fbe296bc541068a2ca2058c3c9fec59b05c42d06029f84adb0a28687a",
+          "bytes": 250977
+        }
+      },
+      "asan": {
+        "normal_results": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-asan-r1\\result.json",
+          "sha256": "d0f16361cfe34598bf535f405fa1754f504326b286a667036b5310b9e6bb9bbf",
+          "bytes": 147118
+        },
+        "normal_terminals": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-asan-r1\\Root-terminal.json",
+          "sha256": "9118f511f55001f4557bde7ed7bd79c0e56aa977e67e38a59ce0aac695a9b93d",
+          "bytes": 879
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-asan-r1\\recursive-call-panic-native1-normal-measurements.json",
+          "sha256": "62f4d034965f6c76a156b3e9d6014e936cae677a0599b54c1b52d70dfcbf23b2",
+          "bytes": 8082
+        },
+        "emitter_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-asan-r1\\emitter-build-measurements.json",
+          "sha256": "fc69051a08011e817f12b8bda0a712aa0c34e648c1c5ed8d5eb008c63ca99252",
+          "bytes": 6411
+        },
+        "configuration_bindings": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-asan-r1\\actual-compilation-binding.json",
+          "sha256": "cdd753c88b150c86d4e87a3ae210fbf7d69dd6d897e75d56e9e61408cd09608b",
+          "bytes": 2448605
+        },
+        "registered294": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-asan-r1\\registered-applicable-294.json",
+          "sha256": "f04244be9922acce14c8e82a039501f1aec1da7ed13fd7c215eeb06c5c554d0b",
+          "bytes": 301545
+        }
+      }
+    },
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-recursive-call-panic1-audit-prep-r1\\audit-report.json",
+      "bytes": 18878,
+      "sha256": "0180145829a46e790290899038754c1d924f8e794ba42635bedc69064ead24d9"
+    },
+    "independent_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-recursive-call-panic1-audit-prep-r1\\actual-audit-terminal.json",
+      "bytes": 1263,
+      "sha256": "d1d77eefa469cb0cf1eb5500d8732de77a74c7f07af94f03747b2a4236fe3b8d"
+    },
+    "actual246_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-recursive-call-panic1-audit-prep-r1\\actual246-successor-pointers-precommit-r1.json",
+      "bytes": 11230,
+      "sha256": "0ba37a45e2fdf84db215dc02365dffeb80f5463b748f0eb42ebbc5831b9e82a7"
+    },
+    "source_inputs_qualified": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-recursive-call-panic-native1-normal-msvc-r1\\source-inputs-after.json",
+      "bytes": 2708895,
+      "sha256": "b12a60ddaa328b9400f9b419d0cf6601ad9180e520baa9a53ac0cb8c096c4b90"
+    },
+    "joint_artifacts_qualified246": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\native-recursive-call-panic1-audit-prep-r1\\joint-artifacts-current246-canonical-r1.json",
+      "bytes": 298451,
+      "sha256": "95b13d744e608eb2b4368dc9901ead32f9e7728b635f18c984ebbdde33f18b2e"
+    },
+    "related_tests_per_configuration": 1,
+    "related_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\recursive-call-panic-native1-tool-prep-r1\\recursive-call-panic-native1-related-vm-one-actual-audit-r1\\related-normal1-supplement.json",
+      "bytes": 109381,
+      "sha256": "fa557024e5f46d2306fec7d9c7faa97aa57981e8cd4c3c8cecd34be848032d9c"
+    },
+    "related_audit_terminal": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-entry-roles-agent-r1\\recursive-call-panic-native1-tool-prep-r1\\recursive-call-panic-native1-related-vm-one-actual-audit-r1\\actual-audit-terminal.json",
+      "bytes": 3889,
+      "sha256": "527a51253ff3d30b900d9f25a27d0024527f6a465343c730b01621da5a5768f7"
+    },
+    "preparation_snapshot": {
+      "build_state": "NOT_BUILT",
+      "product_executions": 0,
+      "normal_gate.costs": "NOT_MEASURED",
+      "meaning": "Immutable preparation fields; current executed build/normal status and measured costs are established by this normal_qualification and its independent actual audits."
+    },
+    "boundary": "Normal1 and separate existing VM related1 only. Full623 unchanged; direct mutual quotient/relay two-I64 vectors, canonical2/Unit4/12 BAD_ARGUMENT refusals per Instance. Four UNIT420 facts survive all execution/compiler owners and are formatted with fresh96B caller scratch to16B. Eight-role public effects are queried at all four artifact stages; no defer, catch7, indirect promise, constant stack or depth_limit3 claim. Original OPEN responsibilities and denominators unchanged.",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN",
+    "full_safety": "OPEN",
+    "Main_integration": "OPEN",
+    "physical_source_deletion": "OPEN",
+    "old_obligations_retired": 0
+  }
+}
