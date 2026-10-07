@@ -6385,7 +6385,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-下表保留完整方法分母。当前冻结的 XIR 边界为 get/set/push 三原语加 map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear 十二个声明 recipe及reverse/unshift/pop/shift/resize，共 20 个 operation；32 个成员中其余 12 个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+下表保留完整32成员分母。截至本次容量合同冻结，实际治理已准入get/set/push、map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear、reverse/unshift/pop/shift/resize及entries/fill/concat，共23个operation；其余9个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
@@ -6408,6 +6408,14 @@ n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；
 只读声明族 `entries() -> Array<(i64, T)>` 现已准入：零显式／可选／默认／variadic／方法类型参数，receiver 表达式仅一次，形成拥有式 Array 逻辑快照 A。结果是独立拥有的 Array，长度 L 与快照一致，按递增 i64 索引产生 [(0,A[0]),...,(L-1,A[L-1])]；空数组返回拥有空 Array。每个 T 字段是普通拥有式逻辑副本，保内联值及 Nullable 层，复制在 class／同步身份处停止。不消费或改写 receiver，无 PLACE_WRITE；结果元素替换不改变源 Array 或旧别名，但同身份对象的修改仍按身份语义可见。只要求 Array 已有可复制／可保存能力，不额外要求 Equal、Compare、ToString、Sendable 或授予反射／构造权限；普通泛型定义处检查，Checked 特化后复验，const/read 参数与临时 Array 按 READ 权限合法。
 
 entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前21/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
+
+冻结容量声明族：只读属性 `capacity: i64`、`static withCapacity(capacity: i64) -> Array<T>`、`ref reserve(capacity: i64) -> Array<T>`。静态构造与reserve各有一个必需精确i64的READ实参，无可选、默认、variadic或方法类型参数；T只须满足既有Array可复制、可保存约束，不要求Default、Equal、Compare、ToString或Sendable。普通泛型定义处检查，Checked特化后复验；只有实际治理Array身份取得这些内建操作，词法影子、同名用户声明和描述查询不能扩大构造、可见性或写权限。
+
+capacity自身只读已认证Array的header、不分配，返回 `0≤len≤capacity≤INT64_MAX` 的容量；receiver求值、地点解析与必要持有按普通规则传播失败并消耗有限work，const/read与临时Array可读。withCapacity(n)在n实参仅一次求值后构造拥有式空Array，len=0且capacity≥n，不构造任何T或默认元素。reserve(n)的n是总容量绝对下界，不是追加数量：选择逻辑root/path仅一次，求n仅一次，再读取实参完成后的当前Array，准备len不变、元素及次序不变、capacity≥max(oldCapacity,n)的完整拥有候选与返回owner，最后仅一次授权PLACE_WRITE。n≤oldCapacity也不承诺零分配、零持有或物理不分离；const/read值receiver、临时值、无权字段不可调用reserve。
+
+普通Array复制保复制当时的容量及全部逻辑值；reserve的返回和发布receiver为独立逻辑副本，旧alias保旧容量/内容。普通set/push、跨域或nested路径的COW分离不得降低操作前的容量；len增长仍保持len≤capacity。reverse/unshift/pop/shift/resize/clear/entries/fill/concat各自已冻结的候选容量选择规则不因此改成保容量。复制仍在class/同步身份边界停止，Nullable、嵌套值及NUL字节保持。闲置容量不是已初始化元素，不遍历、retain或析构未初始化slot；零尺寸的已准入T也使用有限i64逻辑容量，不返回usize最大值，不开放新的普通泛型Unit或资源域。
+
+withCapacity/reserve的n<0在全部实参后以现有NUMERIC_RANGE/E0422拒绝；真实不可表示尺寸与有限live/requested/work不足沿LIMIT/预算失败，不clamp、不溢出相乘或加法。所有实际heap请求包括realloc按完整请求预收费，OOM保累计费用，重试不补额。准备/发布失败及提交前取消保全当前root/alias/元素身份并清临时owner；已完成实参副作用或发布后父表达式失败不回滚。内部无用户callback、新语言挂起或跨挂起loan，真实量子取消及费用照常。capacity内核qualification=allocation:no_heap,failures:limit,ownership:owned；withCapacity/reserve为allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺精确容量、底层地址或复杂度。本次只冻结合同，三个成员实施及完整资格PENDING，当前实际治理仍23/32。
 
 冻结只读声明族 `concat(...arrays: Array<T>) -> Array<T>`：一个可为空的尾部variadic参数、无可选/默认参数或方法类型参数，每个显式实参精确为接收者的Array<T>，参数模式READ。receiver表达式先且仅一次求值形成拥有快照，然后从左到右每个实参仅一次求值并分别持有快照；后续实参对源binding的重绑/写入不改变此前快照。全部实参成功后构造结果，顺序为receiver全部元素，随后各实参数组全部元素；零实参也返回独立拥有的逻辑副本。允许const/read receiver与临时Array，只要求已有Array可复制/可保存能力，不增加Equal、Compare、ToString、Sendable或反射/构造权限。普通泛型定义处检查，Checked特化后复验。
 
