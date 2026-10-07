@@ -1,0 +1,266 @@
+{
+  "schema": 1,
+  "status": "PASS_NATIVE_NORMAL_ONLY_FULL_ORIGINAL_RESPONSIBILITIES_OPEN",
+  "family": "assertion_message_native_owned_nonempty_STRING",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "Checked": {
+    "schema": 25,
+    "contract": 67
+  },
+  "ABI": {
+    "Value": 22,
+    "Call": 28,
+    "Program": 29
+  },
+  "original_shared_helper": {
+    "path": "tests/unit/program/test_xr_program_source_build.c",
+    "bytes": 17301,
+    "sha256": "3809a4cf991d428b26efee5248d8313b04ab80277a013459cbd69ff08d549c49",
+    "selected_branch": "ASSERTION_MESSAGE_CLEANUP; check_cleanup_count=true; closed_fixture0; suspended=false",
+    "digest_scope": "LITERAL_RAW_EXTRACTED_RANGE: existing bytes17301/SHA3809 bind source_file_raw bytes[356222:373523], not the complete source file. Original freeze markers retain trailing CR immediately before excluded LF_TEST; no normalization or hash replacement.",
+    "source_file_raw": {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "bytes": 478590,
+      "sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+      "domain": "Whole raw source file; fixed25f archive and worker byte-exact. CRLF remains raw."
+    },
+    "extracted_body": {
+      "source_path": "tests/unit/program/test_xr_program_source_build.c",
+      "bytes": 17301,
+      "sha256": "3809a4cf991d428b26efee5248d8313b04ab80277a013459cbd69ff08d549c49",
+      "byte_begin_inclusive": 356222,
+      "byte_end_exclusive": 373523,
+      "begin_marker_included": "static void assert_builtin_panic_cleans_live_owners(",
+      "end_marker_excluded": "\nTEST(source_owner_assertion_message_survives_defer_and_owner_cleanup)",
+      "normalization": "NONE. Literal raw range; not asserted to be a whitespace-trimmed standalone function body. Trailing CR is preserved.",
+      "CRLF_pairs": 289,
+      "ends_with_CR": true
+    }
+  },
+  "original_source": {
+    "bytes": 450,
+    "sha256": "688ce025202f0b9394e4a7fafc60ad2abaced2a09ca99f97b1b1001f5b6db717",
+    "representation": "LF complete original prefix"
+  },
+  "explicit_same_module_test_append": {
+    "bytes": 276,
+    "sha256": "fdd8fcb1e4e5ac3bf4ba6dc7b41fe70021483e40a140ed5efa8167a806e53e4b",
+    "text": "@test\nfn checkFreshCleanup() { assert(readCleanupCount() == 0) }\n@test\nfn checkAssertionFailure() { answer() }\n@test\nfn checkFailureCleanup() { assert(readCleanupCount() == 22) }\n@test\nfn checkSuccessCleanup() { assert(checked(true) == 42); assert(readCleanupCount() == 11) }\n"
+  },
+  "complete_source": {
+    "bytes": 726,
+    "sha256": "a83c3a0046e265f192b386b84ffc8a9998ea1046586d37e50f1aca4668820bbc",
+    "representation": "LF"
+  },
+  "syntax_and_authority": "Original private functions and class constructors remain unchanged. Four private same-module @test Unit bodies are explicitly appended; no export, adapter, host constructor or second execution path.",
+  "roles": {
+    "checkFreshCleanup": "Unit; cleanupCount0",
+    "checkAssertionFailure": "answer()->checked(false); CALL_ASSERTION19; PANIC_ASSERTION445; 14B assert message; READY",
+    "checkFailureCleanup": "Unit; deferred cleanupCount22",
+    "checkSuccessCleanup": "Unit; checked(true)==42; deferred cleanupCount11"
+  },
+  "types_effects_ownership": "Root mutable i64 slot; checked(bool)->i64; two Cell locals and owned STRING concat. Defer executes on false panic and true return. Poll borrows; call_result_copy independently retains each panic message. No additional constraints/visibility/construction/effect permissions.",
+  "normal_oracles": {
+    "source_checked_metadata": 1,
+    "closed_checked_metadata": 1,
+    "retained_reread_checked_metadata": 1,
+    "Lowered_metadata": 1,
+    "canonical_I64_zero": 2,
+    "Fresh_Unit": 2,
+    "FailureCleanup_Unit_22": 4,
+    "SuccessCleanup_Unit_42_then_11": 4,
+    "total_Unit": 10,
+    "owned_panic": 4,
+    "permissions_rejected_per_Instance": 12,
+    "ready_after_ordinary_panic": true,
+    "take_result_and_copy_failure_empty_outputs_unchanged": true,
+    "messages_after_all_execution_and_compiler_owners": "four independently owned exact14B assert message",
+    "final_compiler_runtime_blocks_bytes_and_table": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "instance_isolation_scope": "Two simultaneously existing Instances retain one Program. Second Fresh test observes original cleanupCount0 after first has cleanupCount11. This exact original root scalar only, not complete class identity or arbitrary moduleglobal isolation.",
+  "limits": {
+    "allocated": 67108864,
+    "live": 8388608,
+    "work": 128000000
+  },
+  "existing_fixture": {
+    "path": "generated/source-assertion-message/root.xr",
+    "bytes": 726,
+    "sha256": "a83c3a0046e265f192b386b84ffc8a9998ea1046586d37e50f1aca4668820bbc",
+    "producer": "tests/unit/xir/product_consumers/source_product_assertion_message.cmake",
+    "producer_sha256": "dd90e09d94300f626107d698a5b239b4c48a422df7eb6dc2ff2c53b3912ff05f",
+    "new_Source_generation": false
+  },
+  "qualified_VM_reference": {
+    "consumer": "tests/unit/xir/product_consumers/test_source_product_assertion_message.c",
+    "consumer_sha256": "52ac9c1e88c3f66efffd1cebcf3aa95948c25a3266a541676fe1c6a559cabad8",
+    "obligations": "tests/unit/xir/product_consumers/source_assertion_message_obligations.json",
+    "obligations_sha256": "9bd1d882ae89b0b1160b98deb27d48beb8a14e45dbcbe7d24422191d88b043a4",
+    "gate": "test_source_product_assertion_message_vm_normal",
+    "meaning": "Ancestor VM normal only; its costs/executions do not qualify this native candidate."
+  },
+  "native_projection_oracles": {
+    "owned_C_emissions": 2,
+    "same_complete_C_bytes": true,
+    "generated_TU": "Entire owned C payload plus exact SHA footer; independently hash actual prefix and footer.",
+    "correspondence": "Native callbacks; current Lowered proof/identity, per-function identities/parameter vectors/result types/layouts; independently validated and deep-cloned by public seal.",
+    "public_seal": true,
+    "VM_fallback": false,
+    "Instances": 2,
+    "permission_rejections_total": 24,
+    "canonical_I64_zero": 2,
+    "Unit": 10,
+    "owned_14B_panic_copies": 4,
+    "ready_after_ordinary_assertion": true,
+    "take_result_and_copy_failure": "BAD_STATE with legal zero EMPTY outputs fully byte unchanged; no nonempty sentinel assumption.",
+    "after_owner_release": "Four call_result_copy STRING messages checked only after both Instances, caller Program, producer/compiler resources die; then drop to physical0.",
+    "code_lease": "Static linked process-lifetime callbacks; NULL owner/release is not dynamic DLL unload or code-death proof.",
+    "class_lifecycle": "Construct/finalize/reclaim identity counts are not inferred from cleanupCount or physical0."
+  },
+  "normal_gate": {
+    "name": "test_source_product_assertion_message_native_normal",
+    "selected": 1,
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "executed": true
+  },
+  "build_shape": {
+    "emitter": "test_source_product_assertion_message_c_emitter",
+    "native": "test_source_product_assertion_message_native",
+    "macro": "XR_SOURCE_ASSERTION_MESSAGE_NATIVE",
+    "new_TUs_expected": 3,
+    "exe_links_expected": 2,
+    "custom_emitter_expected": 1,
+    "generated_C": "generated/source-assertion-message-native/program.c",
+    "emitter_CTest": false,
+    "source_fixture_unchanged": true,
+    "public_library": "xray_xir_source_product",
+    "Host_library": false
+  },
+  "runtime_status": "PASS_MSVC_AND_ASAN_UBSAN_NORMAL_ONLY",
+  "actual_costs": {
+    "msvc": {
+      "compiler_sites": 4115,
+      "runtime_sites": 206,
+      "allocated": 1265566,
+      "peak": 243079,
+      "work": 5137813
+    },
+    "asan": {
+      "compiler_sites": 4115,
+      "runtime_sites": 206,
+      "allocated": 1265566,
+      "peak": 243079,
+      "work": 5137813
+    }
+  },
+  "original_VM_OPEN_snapshot": [
+    "PASS_NORMAL_ONLY: complete726B=original450B plus explicit276B same-module test suffix admitted and executed through current public pipeline; MSVC and ASan each fresh1TU/normal1 passed. This closes only the previously pending exact input admission and declared normal oracles; remaining original responsibilities below stay OPEN.",
+    "Complete original uncaught stderr bytes, original E0001 representation and process exit1",
+    "Original ClassConstruct two, reverseFinalize two, peridentityFinalize/Reclaim once each; physical0 is not equivalent",
+    "Original retirement graph, code lease/drain and class identity lifecycle responsibilities",
+    "Native and full provider ABI/security, compiler/runtime full FI, all budget axes and cancellation",
+    "Initializer-message complete original52/325 remains blocked by current library mutable state admission"
+  ],
+  "OPEN": [
+    "Complete original uncaught stderr bytes, original E0001 representation and process exit1",
+    "Original ClassConstruct two, reverseFinalize two, peridentityFinalize/Reclaim once each; physical0 is not equivalent",
+    "Original retirement graph, code lease/drain and class identity lifecycle responsibilities",
+    "Native and full provider ABI/security, compiler/runtime full FI, all budget axes and cancellation",
+    "Initializer-message complete original52/325 remains blocked by current library mutable state admission"
+  ],
+  "native_extra_OPEN": [
+    "Full ABI351 W1-W4, dynamic DLL/code death and physical source deletion",
+    "Native callback proof/layout/runtime owned behavior for this exact family NOT_RUN",
+    "Complete provider/native/mixed and fault/resource/cancel/initializer matrix"
+  ],
+  "old_scope_note": "Native normal does not close original full-family/E0001/stderr/exit, class identity, retirement, provider ABI/security or initializer responsibilities.",
+  "FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_native_matrix": "NOT_RUN",
+  "W1_W4_ABI351": "NOT_RUN",
+  "source_physical_removal": "OPEN",
+  "dynamic_DLL_unload": "NOT_APPLICABLE_STATIC_LEASE",
+  "product_executions": 0,
+  "new_normal_qualification": {
+    "independent_audit": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\assertion-message-native-normal-audit-prep-r1\\audit-report.json",
+      "bytes": 14639,
+      "sha256": "91c36bec6c7b78e8c64636f67d4fc313d8bb4ff2459a32443c121ff643fc5041"
+    },
+    "actual226_successor_pointers": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-next-slice-agent-r1\\assertion-message-native-normal-audit-prep-r1\\actual226-successor-pointers-precommit-canonical-r2.json",
+      "bytes": 10276,
+      "sha256": "4856064bcb2d0feea4b04502db8ebdad523ce85418eeb1916844c9900885574f"
+    },
+    "configurations": {
+      "msvc": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-msvc-r1\\result.json",
+          "sha256": "ea353d9eca89737dc90a617f844b85c1ac30febeba8d8e31abdeaf3988a3b4ab",
+          "bytes": 154420
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-msvc-r1\\Root-terminal.json",
+          "sha256": "356b8e50664eb5ad7df05f1251a293d74227a802567f4f583ab1ca1eaa8fe5dc",
+          "bytes": 892
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-msvc-r1\\actual-compilation-binding.json",
+          "sha256": "e282828f7d351722f2e7fd7343382a51fa52c5ae42e71a68db98f2101086f953",
+          "bytes": 1776513
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-msvc-r1\\assertion-message-native-normal-measurements.json",
+          "sha256": "dd380e05bc3df8f8534747672de1065aab42f7b74e4948280815048463dcfdba",
+          "bytes": 5176
+        },
+        "generatedTU": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\generated\\source-assertion-message-native\\program.c",
+          "sha256": "5be70b435fbfebc470af992b18d2ce49cf2149b896e40a23c46d30f6266ec01d",
+          "bytes": 98733
+        }
+      },
+      "asan": {
+        "result": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-asan-r1\\result.json",
+          "sha256": "0d9c3573488390555edf7f8eaf375dc1adb0b050d43578edca948f13a542478e",
+          "bytes": 153194
+        },
+        "Root_terminal": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-asan-r1\\Root-terminal.json",
+          "sha256": "ccecbb603737bbdf2cf4d4f7b83b571421f7729cdb722119b7c808267c7a2b37",
+          "bytes": 891
+        },
+        "actual_binding": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-asan-r1\\actual-compilation-binding.json",
+          "sha256": "ff6d52c2f5b88922afe63776575284056ab5d322d39fe9f747be6e070e11892f",
+          "bytes": 1835767
+        },
+        "normal_measurements": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\assertion-message-native-normal-qualification-asan-r1\\assertion-message-native-normal-measurements.json",
+          "sha256": "8e89bc2c01f2b9ca501886649c456353111c52991b654ce9292159032ef360c7",
+          "bytes": 5176
+        },
+        "generatedTU": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\generated\\source-assertion-message-native\\program.c",
+          "sha256": "5be70b435fbfebc470af992b18d2ce49cf2149b896e40a23c46d30f6266ec01d",
+          "bytes": 98733
+        }
+      }
+    },
+    "tests_per_configuration": 1,
+    "new_translation_units": 3,
+    "actual_translation_units": 226,
+    "registered_applicable284": "REGISTRATION_ONLY",
+    "FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_native_matrix": "NOT_RUN"
+  }
+}
