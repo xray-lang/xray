@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "bytes": 709,
+  "sha256": "0dca64256f7a06180a6cd394289b93caa388f227cf66798af5e9fe14ce45517f",
+  "functions": 2,
+  "instructions": [
+    8,
+    1
+  ],
+  "types": [
+    "Array<i64>",
+    "Cell<Array<i64>>"
+  ],
+  "operands": [
+    0,
+    3,
+    4,
+    0
+  ],
+  "ordinary_truncations": 709,
+  "reframed_truncations": 645,
+  "digest_corruptions": 677,
+  "trailing_frames": 1,
+  "refusal_transitions_per_configuration": 4064,
+  "boundary": "Checked format and detached admission only; old decoder record caps, FI and loan semantics remain OPEN."
+}

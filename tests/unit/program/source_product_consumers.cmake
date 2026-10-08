@@ -367,3 +367,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_managed_escape.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_element_place.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_element_place_frames.cmake")

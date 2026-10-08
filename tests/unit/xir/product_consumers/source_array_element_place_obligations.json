@@ -110,5 +110,58 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "checked_element_frame_20261009_facet": {
+    "status": "PASS_CHECKED_FRAME_AND_DETACHED_OWNERS_WHOLE_LEGACY_OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67",
+    "evidence": "build-consumer-evidence/current67-array-element-place-frames-r1",
+    "legacy_structure": "test_array_element_place_structure in tests/unit/program/test_xr_program.c preserves full original artifact truncation loop,decoder max_records1 andcomplete writer allocation faults. Added current-format truncation evidence;old function not retired.",
+    "positive": "A public Built graph contains exact I64 42,literal Array<i64>[42],Cell<Array<i64>>,CELL_PLACE,zeroindex,UNIT ARRAY_SET groupedoperands,ARRAY_GET andexact returnedSSA. Real root module declaration,publicfunction identity andprivate Unit initializer make CELL_NEW admissible;metadata,decls andevery writer byte match independently encoded709-byte Checked packet.",
+    "ownership": "Stack Built names,source module,identities,declarations,types,blocks,instructions andoperands arepoisoned aftercheck returns. Separateheapwire isunchanged thenpoisoned/freed beforeownedartifact verification. Realoccupied artifact isreverified andcomplete independent writerbytes compared afterevery badinput dies. Actualobserver live/bytes baseline restored aftereveryrefusal andowner verification;finalowners,callerledger andobserver table physical0/0.",
+    "matrix": {
+      "packet_bytes": 709,
+      "ordinary_prefix_lengths": "Every0..708",
+      "reframed_prefix_lengths": "Every64..708,declaredbodylength rewritten LE andSHA256 recomputed overheader0..31/body64..end;deep decode rejects exactshortframes",
+      "digest_corruptions": "Everybyte32..708 flipped withoutresigning;hashorbody corruption failsbeforepublication",
+      "trailing": "One extrazero byte withupdated length/authentic digest;wholebody consumption refuses it",
+      "output_states": [
+        "empty",
+        "real occupied owner"
+      ],
+      "expected": "BAD_STRUCTURE1 for all4064transitions/config;outputpointer,inputbytes andphysicalstock preserved",
+      "transitions_per_configuration": 4064,
+      "total_transitions": 8128
+    },
+    "actual_evidence": {
+      "total_commands": 8,
+      "initial_positive_failures": 2,
+      "final_passes": 4,
+      "final_product_passes": 2,
+      "final_encoder_passes": 2,
+      "first": "Initial513-byte source-free fixture incorrectlyomitted mandatorydeclarations forCELL_NEW. TwoBuilt-positive assertions FAIL beforeformatloop;matrix andcleanup UNPROVEN. Bothinitial productbinaries,C/encoder/frame/manifest andrawoutputs preserved;this isfixtureincompleteness,notproducerfailure.",
+      "repair": "Added actualpublic declarations andprivateUnit initializer;independent wire updated to709 bytes. Scalar42,index0,store/read order andstrictrefusal oracle unchanged. Freshly rebuiltboth testTUs beforeallfinal executions. No alias,LOCAL_NEW fallback orproducer edit.",
+      "input_capture": "2666 inputs/PID;all8before==after SHA,size,mtime,includingexplicit3compiler/runtimeobserverheaders. Initialchangedpayloads/rawbinary boundtosavedversions;neutralSourceMirror resync timestamp differenceslimitedtoscope files. Mapannotatedafterexecution;savedactualruntimepreimage. No executionagainstnewannotation claimed.",
+      "build": "Twofreshfinal testTUs,4compileeventsincludinginitialfixture. C11/W4/WX;actualClangASan+UBSan flags;VALID Ninja deps. No sharedDriver orproductionTU/archive rebuilt.",
+      "production": "11archives/config exactSHA,size,mtime;6producer25f sourcefiles compared andactualobjectbodies matchedactualarchive members;10actual linkedarchives.",
+      "independent_frame_sha256": "0dca64256f7a06180a6cd394289b93caa388f227cf66798af5e9fe14ce45517f",
+      "protection": "11017initialtracked:11015nonowned exact,5newownedfiles,12historicaldirtypreserved.598protected594exact+4expectedNinja/CTest differences. FournewCTestlines/config removedrestorealloldrawregistry.",
+      "audit_history": "Firstpureaudit treated requiredsource/registration inputs only asrelativekeys;actualcapturealsoincludesabsolute aliases. Boundbyresolvedfileidentity,retainedoriginalauditscript/error;productnotrerun.",
+      "all_attempts": "actual-execution-attempts.xml;8actualcommands/2initialfixtureFAIL",
+      "final_receipts": "final/results.json"
+    },
+    "registration": "Oneproduct+oneindependentencodinggate/config,T120P1,no WILL_FAIL.",
+    "boundaries": [
+      "CurrentCheckedframe coverage isnotlegacyformat byte-compatibility orlegacydecoder recordcap equivalence.",
+      "Original max_records1,completewritercompilerFI andresourceaxes NOT_RUN;no gates softened.",
+      "No SourceProduct,Lowered,Program,VM/native/mixed,managedloans,oldexplicitowner ordescriptor production proof added bythisformat consumer.",
+      "WholelegacyOPEN/retired0;fullsafety/Mainintegration pending."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }
