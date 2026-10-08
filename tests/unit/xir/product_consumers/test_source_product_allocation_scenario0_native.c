@@ -58,6 +58,7 @@ typedef struct AllocationRun {
     uint8_t *input;
     size_t input_length;
     unsigned mixed_mode;
+    unsigned cancel_phase;
     bool mixed_sealed;
 } AllocationRun;
 
@@ -72,6 +73,23 @@ typedef struct AllocationMixedOwner {
 /* The test drives one Program's two instances serially; observation never allocates. */
 static AllocationMixedOwner *allocation_mixed_owner;
 static size_t allocation_mixed_native, allocation_mixed_vm, allocation_mixed_crossings, allocation_mixed_releases;
+static const XrXirProgramSpec *allocation_cancel_native_spec;
+static uint32_t allocation_cancel_test, allocation_cancel_exported;
+static size_t allocation_cancel_native_crossings;
+
+static XrXirAction allocation_cancel_native_resume(XrXirCallView *view) {
+    uint32_t function = xr_xir_call_current_entry(view->activation);
+    CHECK(allocation_cancel_native_spec && function < allocation_cancel_native_spec->entry_count);
+    const XrXirCallEntry *entry = &allocation_cancel_native_spec->entries[function];
+    CHECK(view->environment == entry->environment);
+    XrXirAction action = entry->resume(view);
+    if (function == allocation_cancel_test && action.kind == XR_XIR_ACTION_CALL && action.callee == allocation_cancel_exported)
+        ++allocation_cancel_native_crossings;
+    return action;
+}
+static size_t allocation_cancel_crossings(const AllocationRun *run) {
+    return run->mixed_mode ? allocation_mixed_crossings : allocation_cancel_native_crossings;
+}
 
 static bool allocation_mixed_is_native(const AllocationMixedOwner *owner, uint32_t function) {
     return (function % 2 == 0) == (owner->mode == 2);
@@ -346,6 +364,104 @@ static bool execute_instances(AllocationRun *run) {
     return true;
 }
 
+static bool allocation_cancel_request(AllocationRun *run, XrXirInstance *instance) {
+    XrCompileResourceStats before = {0}, after = {0};
+    OBSERVE(xr_compile_resources_stats(run->context.resources, &before) == XR_COMPILE_RESOURCE_OK);
+    size_t compiler = instance_compile_attempts, runtime = runtime_attempts;
+    size_t blocks = runtime_live, bytes = runtime_bytes, native = allocation_mixed_native, vm = allocation_mixed_vm;
+    size_t crossings = allocation_cancel_crossings(run);
+    OBSERVE(xr_xir_instance_cancel_current(instance) == XR_XIR_CALL_CANCEL_REQUESTED);
+    OBSERVE(xr_compile_resources_stats(run->context.resources, &after) == XR_COMPILE_RESOURCE_OK);
+    OBSERVE(before.allocation_count == after.allocation_count && before.allocated_bytes == after.allocated_bytes &&
+        before.live_bytes == after.live_bytes && before.peak_bytes == after.peak_bytes && before.work == after.work);
+    OBSERVE(compiler == instance_compile_attempts && runtime == runtime_attempts);
+    OBSERVE(blocks == runtime_live && bytes == runtime_bytes && native == allocation_mixed_native && vm == allocation_mixed_vm);
+    OBSERVE(crossings == allocation_cancel_crossings(run));
+    return true;
+}
+
+static bool execute_cancellation(AllocationRun *run) {
+    XrXirInstance *victim = run->instances[0], *sibling = run->instances[1];
+    run->operation = "cancel-boundary-prepare";
+    OBSERVE(victim && sibling && xr_xir_instance_state(victim) == XR_XIR_INSTANCE_NEW);
+    OBSERVE(xr_xir_instance_state(sibling) == XR_XIR_INSTANCE_NEW);
+    OBSERVE(xr_xir_instance_start(victim, run->roles.entry, NULL, 0) == XR_XIR_CALL_READY);
+    if (run->cancel_phase == 2) {
+        if (!finish(run, victim, XR_XIR_I64, 0)) return false;
+        OBSERVE(xr_xir_instance_state(victim) == XR_XIR_INSTANCE_READY);
+        OBSERVE(xr_xir_instance_start_test(victim, run->roles.test) == XR_XIR_CALL_READY);
+        size_t prefix_polls = 0;
+        while (!allocation_cancel_crossings(run)) {
+            OBSERVE(++prefix_polls <= 4096);
+            XrXirInstanceResult prefix = xr_xir_instance_poll_bounded(victim, 1);
+            OBSERVE(xr_xir_call_result_valid(&prefix.outcome) && prefix.outcome.status == XR_XIR_CALL_READY);
+        }
+        OBSERVE(allocation_cancel_crossings(run) == 1);
+        printf("source-allocation0-native cancel-call-observed polls=%zu test=%u exported=%u actions=1\n",
+            prefix_polls, run->roles.test, run->roles.exported);
+    }
+    run->operation = "cancel-request-and-drain";
+    if (!allocation_cancel_request(run, victim)) return false;
+    XrXirInstanceResult result = {0}; size_t drain = 0;
+    do {
+        OBSERVE(++drain <= 4096);
+        result = xr_xir_instance_poll_bounded(victim, 1);
+        OBSERVE(xr_xir_call_result_valid(&result.outcome));
+    } while (result.outcome.status == XR_XIR_CALL_READY);
+    OBSERVE(result.outcome.status == XR_XIR_CALL_CANCELLED && !result.outcome.wake);
+    OBSERVE(!result.outcome.value.type && !result.outcome.value.reserved && !result.outcome.value.payload);
+    OBSERVE(xr_xir_panic_empty(&result.outcome.panic));
+    XrXirValue sentinel = {0}, original = sentinel;
+    OBSERVE(xr_xir_instance_take_result(victim, &sentinel) == XR_XIR_CALL_BAD_STATE);
+    OBSERVE(!memcmp(&sentinel, &original, sizeof(sentinel)));
+    sentinel = (XrXirValue){XR_XIR_I64, 0, UINT64_C(0x12345678)}; original = sentinel;
+    XrXirCallStatus invalid_output = run->cancel_phase == 1 ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_BAD_ARGUMENT;
+    OBSERVE(xr_xir_instance_take_result(victim, &sentinel) == invalid_output);
+    OBSERVE(!memcmp(&sentinel, &original, sizeof(sentinel)));
+    if (run->cancel_phase == 1) {
+        run->operation = "cancelled-initialization-sticky";
+        OBSERVE(xr_xir_instance_state(victim) == XR_XIR_INSTANCE_FAILED);
+        size_t compiler = instance_compile_attempts, runtime = runtime_attempts;
+        size_t blocks = runtime_live, bytes = runtime_bytes;
+        for (unsigned repeat = 0; repeat < 2; ++repeat)
+            OBSERVE(xr_xir_instance_start(victim, run->roles.entry, NULL, 0) == XR_XIR_CALL_CANCELLED);
+        OBSERVE(xr_xir_instance_start_test(victim, run->roles.test) == XR_XIR_CALL_CANCELLED);
+        XrXirCallResult failure = {0};
+        OBSERVE(xr_xir_instance_copy_failure(victim, &failure) == XR_XIR_CALL_CANCELLED);
+        bool valid = xr_xir_call_result_valid(&failure) && failure.status == XR_XIR_CALL_CANCELLED &&
+            !failure.value.type && !failure.value.reserved && !failure.value.payload &&
+            !failure.wake && xr_xir_panic_empty(&failure.panic);
+        xr_xir_call_result_drop(&failure);
+        OBSERVE(valid && compiler == instance_compile_attempts && runtime == runtime_attempts);
+        OBSERVE(blocks == runtime_live && bytes == runtime_bytes && xr_xir_instance_state(victim) == XR_XIR_INSTANCE_FAILED);
+    } else {
+        run->operation = "cancelled-test-reusable";
+        OBSERVE(xr_xir_instance_state(victim) == XR_XIR_INSTANCE_READY);
+        OBSERVE(xr_xir_instance_start_test(victim, run->roles.test) == XR_XIR_CALL_READY);
+        if (!finish(run, victim, XR_XIR_UNIT, 0)) return false;
+        OBSERVE(xr_xir_instance_state(victim) == XR_XIR_INSTANCE_READY);
+    }
+    run->operation = "cancel-sibling-continues";
+    OBSERVE(xr_xir_instance_state(sibling) == XR_XIR_INSTANCE_NEW);
+    OBSERVE(xr_xir_instance_start(sibling, run->roles.entry, NULL, 0) == XR_XIR_CALL_READY);
+    if (!finish(run, sibling, XR_XIR_I64, 0)) return false;
+    for (unsigned repeat = 0; repeat < 2; ++repeat) {
+        OBSERVE(xr_xir_instance_start_test(sibling, run->roles.test) == XR_XIR_CALL_READY);
+        if (!finish(run, sibling, XR_XIR_UNIT, 0)) return false;
+    }
+    OBSERVE(xr_xir_instance_state(sibling) == XR_XIR_INSTANCE_READY);
+    if (run->mixed_mode) {
+        OBSERVE(allocation_mixed_owner && !allocation_mixed_releases && allocation_mixed_native && allocation_mixed_vm);
+        OBSERVE(allocation_mixed_crossings == (run->cancel_phase == 1 ? 2u : 4u));
+    }
+    if (run->cancel_phase == 2) OBSERVE(allocation_cancel_crossings(run) == 4);
+    printf("source-allocation0-native cancel-boundary=%s result=PASS victim=%s sibling=READY sibling-tests=2 "
+        "result-preserved=1 request-uncharged=1 drain=%zu original-call-actions=%zu full-cancel-prefixes=NOT_RUN\n",
+        run->cancel_phase == 1 ? "before-init" : "test-call", run->cancel_phase == 1 ? "FAILED_STICKY" : "READY_REUSED",
+        drain, allocation_cancel_crossings(run));
+    return true;
+}
+
 static bool release(AllocationRun *run) {
     bool complete = true;
     xr_xir_value_drop(&run->value);
@@ -552,6 +668,16 @@ static bool seal_native_instances(AllocationRun *run) {
     if (!generated_correspondence(run, spec)) return false;
     if (run->mixed_mode) {
         if (!seal_mixed_program(run, spec)) return false;
+    } else if (run->cancel_phase == 2) {
+        /* Seal copies this table; each backend environment remains static code. */
+        XrXirCallEntry observed[8];
+        OBSERVE(spec->entry_count == 8);
+        memcpy(observed, spec->entries, sizeof(observed));
+        for (unsigned i = 0; i < 8; ++i) observed[i].resume = allocation_cancel_native_resume;
+        allocation_cancel_native_spec = spec;
+        allocation_cancel_test = run->roles.test; allocation_cancel_exported = run->roles.exported;
+        XrXirProgramSpec observed_spec = *spec; observed_spec.entries = observed;
+        run->status = xr_xir_compile_program_seal(&run->context, &observed_spec, &run->program);
     } else run->status = xr_xir_compile_program_seal(&run->context, spec, &run->program);
     OBSERVE(run->status == XR_XIR_OK && run->program);
     xr_xir_compile_artifact_free(run->lowered); run->lowered = NULL;
@@ -572,15 +698,19 @@ static bool seal_native_instances(AllocationRun *run) {
 
 int main(int argc, char **argv) {
     const char *output = NULL;
-    unsigned mixed = 0;
+    unsigned mixed = 0, cancel = 0;
+    if (argc >= 4 && !strcmp(argv[argc - 1], "--cancel-init")) { cancel = 1; --argc; }
+    else if (argc >= 4 && !strcmp(argv[argc - 1], "--cancel-test")) { cancel = 2; --argc; }
     if (argc == 5 && !strcmp(argv[3], "--emit")) output = argv[4];
     else if (argc == 4 && native_spec() && !strcmp(argv[3], "--mixed-even")) mixed = 2;
     else if (argc == 4 && native_spec() && !strcmp(argv[3], "--mixed-odd")) mixed = 3;
     else if (argc != 3 || !native_spec()) return 2;
+    if (output && cancel) return 2;
     instance_compile_zero();
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
     AllocationRun run = {0};
     run.mixed_mode = mixed;
+    run.cancel_phase = cancel;
     run.context.limits = xr_xir_compile_default_limits(); run.operation = "finite-owner";
     XrCompileResourceLimits limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
     XrCompileResourceStatus owner = xr_compile_resources_new(&limits, &run.context.resources);
@@ -588,14 +718,15 @@ int main(int argc, char **argv) {
     if (passed) passed = xr_compile_resources_stats(run.context.resources, &run.baseline) == XR_COMPILE_RESOURCE_OK;
     if (passed) passed = original_literals(&run) && phase(&run, "owner-created") && produce(&run, argv[1], argv[2]);
     if (passed) passed = read_packets(&run, argv[2]) && detach_lower(&run) && emit_owned(&run);
-    if (passed) passed = output ? write_translation_unit(&run, output) : seal_native_instances(&run) && execute_instances(&run);
+    if (passed) passed = output ? write_translation_unit(&run, output) : seal_native_instances(&run) &&
+        (cancel ? execute_cancellation(&run) : execute_instances(&run));
     if (!passed) fprintf(stderr, "source-allocation0-native failure operation=%s owner-status=%u status=%u call-status=%u message=%s\n",
         run.operation, (unsigned)owner, (unsigned)run.status, (unsigned)run.call_status, run.diagnostic.source.message);
     bool released = release(&run);
     printf("source-allocation0-native mode=%s normal=%s compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64
-        " peak=%" PRIu64 " work=%" PRIu64 " callback-native=%u extern-exports=OPEN FI=NOT_RUN axes=NOT_RUN source-physical-removal=OPEN image-unload=NOT_APPLICABLE\n",
+        " peak=%" PRIu64 " work=%" PRIu64 " callback-native=%u cancel-boundary=%u extern-exports=OPEN FI=NOT_RUN axes=NOT_RUN source-physical-removal=OPEN image-unload=NOT_APPLICABLE\n",
         output ? "emit" : mixed == 2 ? "mixed-even" : mixed == 3 ? "mixed-odd" : "native",
         passed && released ? "PASS" : "FAIL", instance_compile_attempts,
-        runtime_attempts, run.final.allocated_bytes, run.final.peak_bytes, run.final.work, output ? 0u : 1u);
+        runtime_attempts, run.final.allocated_bytes, run.final.peak_bytes, run.final.work, output ? 0u : 1u, cancel);
     return passed && released ? 0 : 1;
 }

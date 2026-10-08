@@ -27,6 +27,20 @@ foreach(target IN ITEMS test_source_product_allocation_scenario0_c_emitter test_
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
+foreach(backend IN ITEMS native mixed-even mixed-odd)
+    set(source_allocation0_cancel_mode)
+    if(NOT backend STREQUAL "native")
+        set(source_allocation0_cancel_mode "--${backend}")
+    endif()
+    foreach(boundary IN ITEMS init test)
+        add_test(NAME test_source_product_allocation_scenario0_${backend}_cancel_${boundary}
+            COMMAND test_source_product_allocation_scenario0_native
+                "${source_allocation0_native_root}" "${source_allocation0_native_root}/root.xr"
+                ${source_allocation0_cancel_mode} "--cancel-${boundary}")
+        set_tests_properties(test_source_product_allocation_scenario0_${backend}_cancel_${boundary} PROPERTIES
+            TIMEOUT 120 PROCESSORS 1 LABELS "unit;xir;source-product;program-consumer;ownership;cancel-boundary")
+    endforeach()
+endforeach()
 add_test(NAME test_source_product_allocation_scenario0_native_normal
     COMMAND test_source_product_allocation_scenario0_native
         "${source_allocation0_native_root}" "${source_allocation0_native_root}/root.xr")

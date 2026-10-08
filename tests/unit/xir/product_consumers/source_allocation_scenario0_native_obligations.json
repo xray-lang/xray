@@ -271,5 +271,48 @@
     },
     "evidence": "build-consumer-evidence/current67-source0-mixed-normal-r1/",
     "remaining": "Native manifest, other allocation source families, full mixed FI/axes/cancellation/owned-output/partial-initialization failure, full safety and Main integration remain OPEN/NOT_RUN. Static C image is not an image unload test. Retirement0."
+  },
+  "cancel_boundary_facet": {
+    "status": "PASS_TWO_CANCELLATION_BOUNDARIES_ONLY",
+    "worker_parent": "d0549b9b0860f49b6a0aa25a770aa7e9e2b8a0b6",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29",
+    "before_init": "Start canonical entry on victim NEW Instance, request cancellation before any poll, then drain one bounded poll to CANCELLED. State becomes FAILED; two ordinary retries and one privileged test retry return CANCELLED without new allocations. Owned copy_failure preserves CANCELLED with empty value/wake/panic, then is dropped. Sibling is still NEW and independently runs canonical I64(0) and original checkAnswer Unit twice.",
+    "test_call": "First initialize victim normally. Start original checkAnswer and poll quantum1 until the actual test3->exported2 CALL action is observed, then cancel before continuing. Final observed prefix is2 polls for all three backend modes, drain3 polls. Instance remains READY; original test runs again successfully; sibling then independently runs canonical I64(0) and original test twice.",
+    "request_contract": "Cancel request returns CANCEL_REQUESTED and performs no callback or allocation. All5 compiler ledger fields, compiler/runtime allocation attempts, runtime physical blocks/bytes and actual call-action counters are unchanged across request. Cleanup work occurs in bounded poll, not in request.",
+    "output_contract": "After cancellation a valid empty output slot gets BAD_STATE and all bytes preserved. Nonempty I64 sentinel also stays unchanged; initialization FAILED returns BAD_STATE before output checking, while initialized call rejects nonempty slot as BAD_ARGUMENT. No cancellation value or panic is fabricated.",
+    "observation": "Mixed modes retain existing selected-backend observer. Native test-call case alone uses a fixed8-entry observer table that Program seal copies; actual generated callbacks receive the same authenticated view/environment and return their exact action. Native before-init does not enable this observer; its printed original-call-actions=0 is an inactive counter, not absence of sibling execution.",
+    "ownership": "Both Instances retain Program after caller drop. Mixed code owner survives victim cancellation and first Instance destruction while sibling still lives; final release exactly1 and complete compiler/runtime physical blocks/bytes/table0. Full cancellation prefix, arbitrary defer/owned-string and concurrent-instance claims are excluded.",
+    "executed": {
+      "final_processes": 18,
+      "cancellation_cases": 12,
+      "normal_controls": 6,
+      "configurations": [
+        "MSVC Release",
+        "Clang ASan+UBSan"
+      ],
+      "backends": [
+        "native",
+        "mixed-even",
+        "mixed-odd"
+      ],
+      "all_passed": true,
+      "runtime_sites": {
+        "normal": 36,
+        "before_init": 24,
+        "test_call": 30
+      },
+      "normal_compiler_counts": "Native2075, mixed2215 unchanged. These are observed counts, not fault coverage."
+    },
+    "first_reds": "first-run retained5 real MSVC processes:4PASS/1 observer FAIL caused by assuming a single poll reaches test CALL. second-run retained5:4PASS/1 observer FAIL because a nonempty result slot was incorrectly expected to receive BAD_STATE on an initialized cancelled call. Read-only current public implementation and prior generic tests establish empty-slot precondition; corrected checks distinguish both slots. Both are test assumptions, not production regressions. pre-label-run retains18PASS before making call-action label backend-neutral. Final18 results are the current source evidence; repetitions add no distinct boundary coverage.",
+    "build": "Final UTF8 Ninja build recompiles emitter/driver/generated whole-C in each configuration with strict C11/W4/WX; all3 Clang objects carry address+undefined flags. Generated payload SHA remains e5065b0642b7d5ef580eb7ebf1889cfa5d9e516df7b46a8df0d66d0527f7f04a. Actual objects/deps/10 public libraries and binaries recorded in build-binding.json.",
+    "registry": "Six new cancel tests (three backends x init/test), TIMEOUT120/PROCESSORS1. Original3 normal names/argv/properties remain exact. No full FI/axis/safety registration changed.",
+    "input_binding": "Final18 processes have exact before/after SHA/size/mtime captures per configuration. First two failed audits also have matching after snapshots and retained consumer source. prior-run-relocation.json resolves archived receipt paths to their preserved raw outputs. Runs use prior obligation map; this facet is post-run documentation.",
+    "protection": "598 historical protected metadata entries:594 unchanged; only2 build.ninja metadata regeneration and2 CTestTestfile registrations change. Fresh native artifacts are outside that historical set and separately bound. Production source, shared interfaces, original inputs and all existing obligations remain unchanged.",
+    "effective_inputs": {
+      "tests/unit/xir/product_consumers/test_source_product_allocation_scenario0_native.c": "a450bee85817171e321b81fbcec66ccd2ff1cb3b0bae4fd020a682deb14e8ac1",
+      "tests/unit/xir/product_consumers/source_product_allocation_scenario0_native.cmake": "a61d399674e2f6f597857aa17b0b3633dd4aeebe92c6cd121d4b774008a71212"
+    },
+    "evidence": "build-consumer-evidence/current67-source0-cancel-boundaries-r1/",
+    "remaining": "All cancellation prefixes, OOM/sticky allocation failures, partially initialized owned slots, owned results/defer cleanup, full FI/axes/default/safety/native manifest and Main integration remain OPEN/NOT_RUN. Other allocation sources and source108/additional families unchanged; retired0."
   }
 }
