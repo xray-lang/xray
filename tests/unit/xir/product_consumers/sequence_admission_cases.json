@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "case_count": 10,
+  "transitions_per_configuration": 40,
+  "positive_transitions": 4,
+  "rejection_transitions": 36,
+  "cases": [
+    {
+      "ordinal": 0,
+      "name": "string_length",
+      "expected_status": 0,
+      "bytes": 237,
+      "sha256": "ee8550c74374cd0352fc49d601588f484d738880e350c7a325b94046f9152419"
+    },
+    {
+      "ordinal": 1,
+      "name": "scalar_receiver",
+      "expected_status": 3,
+      "bytes": 237,
+      "sha256": "0bbbb10f61a2899e48e85cca8f48893f1c2abb08dcd9fdfc99a94149b40074ee"
+    },
+    {
+      "ordinal": 2,
+      "name": "boolean_result",
+      "expected_status": 3,
+      "bytes": 237,
+      "sha256": "39c4aacf6827026147a5b5b8c105f07d1ae07ea32561bf1052eded84ca5936f4"
+    },
+    {
+      "ordinal": 3,
+      "name": "unused_immediate",
+      "expected_status": 1,
+      "bytes": 237,
+      "sha256": "83d1d917b8ba087446c8dcab343983c5eded7cb901b490107303216d319340e8"
+    },
+    {
+      "ordinal": 4,
+      "name": "unknown_receiver",
+      "expected_status": 4,
+      "bytes": 237,
+      "sha256": "d0f802af2edc0f18439f32a7a14d57d4361b4277902557b0fdd1cd57dd69528b"
+    },
+    {
+      "ordinal": 5,
+      "name": "wrong_return_type",
+      "expected_status": 3,
+      "bytes": 237,
+      "sha256": "da5941917b2d376d8671d28a2ea36a723ec1b9b86394d392bb62b4a11f5e7650"
+    },
+    {
+      "ordinal": 6,
+      "name": "unused_second_argument",
+      "expected_status": 1,
+      "bytes": 237,
+      "sha256": "0682bbc88b9d17a5f074e6cf5ae52d2e43ffe1608c892567802c2159ae00290f"
+    },
+    {
+      "ordinal": 7,
+      "name": "unused_target",
+      "expected_status": 1,
+      "bytes": 237,
+      "sha256": "da2831554086e55145635e4a3d99522e35f792d952f769499cc02b2ff4f91d49"
+    },
+    {
+      "ordinal": 8,
+      "name": "unused_type_argument",
+      "expected_status": 1,
+      "bytes": 237,
+      "sha256": "f1bbf8743a5e1735d5a4f53b9140e7863ea883a62649ae73d3209c47b4d60306"
+    },
+    {
+      "ordinal": 9,
+      "name": "invalid_panic_target",
+      "expected_status": 1,
+      "bytes": 237,
+      "sha256": "73d542686f0849f6711fcf747c59b1c248012d4fd2bace4c2c07cf423e506cad"
+    }
+  ],
+  "boundary": "String receiver, I64 result and inactive fields only; old owner flags, consumed SSA after OWNER_DROP, BackendIR mutation, FI and whole qualification remain OPEN."
+}

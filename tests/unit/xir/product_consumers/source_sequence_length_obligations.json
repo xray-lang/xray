@@ -88,5 +88,27 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "checked_string_length_admission_20261009_facet": {
+    "status": "PASS_PREDICATE_COMPONENTS_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-sequence-admission-r1",
+    "legacy_components": "Original helper mutation1 scalar receiver and mutation2 Bool result; mutation4 inactive immediate predicate. Current Built and authenticated Checked read use different encodings and statuses from old Program load.",
+    "independent": "One parameter String function returns I64 STRING_LEN. Ten byte-exact independent packets, each retaining authentic framing and SHA256; no producer writer used to generate hostile inputs. Positive writer compared across the entire packet after borrowed input death.",
+    "cases": "Valid String length, scalar receiver BAD_TYPE3, Bool result BAD_TYPE3, unused immediate BAD_STRUCTURE1, unknown receiver BAD_VALUE4, wrong return type BAD_TYPE3, unused second argument/target/type argument and invalid panic target BAD_STRUCTURE1.",
+    "actual": "MSVC Release and Clang ASan+UBSan each40 transitions:10 cases x Built/wire x empty/real occupied owner;4 positive and36 exact refusals. Total80 transitions/8 positive/72 refusals. Six actual registered argv processes:2 admission,2 encoder checks,2 unchanged sequence VM controls,allPASS.",
+    "owner": "Input buffers and Built stack names/types/block/function/instructions are byte-checked, then poisoned and destroyed before published owner verification and full writer comparison. Every transition refunds actual compiler blocks/bytes to occupied owner baseline; final compiler physical0/0 and observer table0.",
+    "build": "One initial MSVC compile refused the test author's incorrect String identity4; authoritative public enum is String3. Initial C,encoder and packet fixtures plus failed log preserved; corrected only identity constants before any product execution. Final two fresh C units compiled with strict C11/W4/WX,Clang actual ASan+UBSan. Initial launcher quote failure entered no compiler. Existing VM control binary/object reused exactly; no new native or generated C compilation claimed.",
+    "inputs": "2691 inputs per actual product/control/encoder PID, including3 explicit observer headers; SHA/size/mtime exact before and after. Runtime uses previous map and trace bytes; saved preimages preserve that boundary before this annotation.",
+    "gates": [
+      "test_source_product_sequence_admission",
+      "source_product_sequence_admission_encoding"
+    ],
+    "remaining": "Old owner bit mutation3 and explicit dropped source/copy consumed SSA mutations5/6 have no identical representation in current public instruction. Old AOT in-place BackendIR immediate mutation, FI, axes, cancel, complete safety, Main integration and whole retirement remain OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }

@@ -128,6 +128,10 @@
       "lf_sha256": "80c6fafe1d7a6b05decd2e71ac1d4158fcba1d9f0e900831abade8260163bd60"
     },
     {
+      "path": "tests/unit/xir/product_consumers/sequence_admission_cases.json",
+      "lf_sha256": "23c5133dd296c81403e6e940267a8611e00adba348ddf65a07711ee4bb8483cd"
+    },
+    {
       "path": "tests/unit/xir/product_consumers/source_allocation_original_obligations.json",
       "lf_sha256": "ac7ab2c97ef9c561fcfe329cb4dd1a525de901cefca6bca0c9f52527be4fc051"
     },
@@ -409,7 +413,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_sequence_length_obligations.json",
-      "lf_sha256": "8a58b94b6851b8a9d0a27e08780232defe920fbe53a37ab1992269ff5a2d8921"
+      "lf_sha256": "7f4ad6d38ca9dfaa2c4a26d5148693807fb61f0bd813403e8c82383ba236be52"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_source_file_deletion_native_obligations.json",
