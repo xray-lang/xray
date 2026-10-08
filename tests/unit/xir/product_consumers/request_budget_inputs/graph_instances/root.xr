@@ -1,0 +1,4 @@
+import { importedIdentity } from "./library"
+fn localIdentity<T>(value: T) -> T { return value }
+fn answer() -> i64 { return importedIdentity<i64>(21) + localIdentity<i64>(21) }
+export fn consumerAnswer() -> i64 { return answer() }

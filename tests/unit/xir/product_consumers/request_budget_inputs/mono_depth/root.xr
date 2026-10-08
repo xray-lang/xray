@@ -1,0 +1,26 @@
+class C0<T> {
+  value: T
+  constructor(value: T) { this.value = value }
+  get() -> T {
+    var next = C1<T>(this.value)
+    return next.get()
+  }
+}
+class C1<T> {
+  value: T
+  constructor(value: T) { this.value = value }
+  get() -> T {
+    var next = C2<T>(this.value)
+    return next.get()
+  }
+}
+class C2<T> {
+  value: T
+  constructor(value: T) { this.value = value }
+  get() -> T { return this.value }
+}
+fn answer() -> i64 {
+  var root = C0<i64>(42)
+  return root.get()
+}
+export fn consumerAnswer() -> i64 { return answer() }

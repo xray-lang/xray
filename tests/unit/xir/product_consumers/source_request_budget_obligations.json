@@ -1,0 +1,310 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25 / semantic67 / Value22 / Call28 / Program29",
+  "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+  "scope": "Six of twenty nonfixture source responsibilities; source census stays 108 = 88 fixtures + 20 nonfixtures. Extra AOT/allocation/format/authority consumers stay outside this denominator.",
+  "retired": 0,
+  "status": "OPEN_INTERFACE_MAPPING_AND_NORMAL_INPUT_CONTROLS",
+  "normal_scope": "The sole suffix exports private answer to the existing detached public VM consumer. All source expressions independently return 42 without the old budget restriction. These probes do not execute any original failing budget request and are not replacement gates. No native, mixed, full FI, resource-axis or safety qualification is implied.",
+  "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+  "interface_evidence": {
+    "src/xir/xxir_source.h": {
+      "sha256": "05a0990fa23f043bb2f58d669ef3f2a03cf661c8fe440788e1324ca1a6805061",
+      "bytes": 1582
+    },
+    "src/xir/xxir_compile_context.h": {
+      "sha256": "acf27ce6cf7cd8874d35a6fe97646f4ecf414f850ee63d62589f10e47e715ade",
+      "bytes": 1015
+    },
+    "src/base/xcompile_resources.h": {
+      "sha256": "e4c57af086738868aaf23c57dede04ddcaaa11ad892cc73ef1d033743392894c",
+      "bytes": 4897
+    },
+    "src/xir/xxir_checked.h": {
+      "sha256": "8d1a9dc9186e8c55b0613d0d1f403f30e08b5ccd757546ea1e429beba4b6865a",
+      "bytes": 1023
+    },
+    "src/xir/xxir_specialize.c": {
+      "sha256": "4f0d1d21e4e9d949fbd9f010d8aba5116a0506c8f38df5e394cc715e9c1de4ce",
+      "bytes": 28481
+    },
+    "src/program/xr_xir_source_product.h": {
+      "sha256": "0cc4eaed4d297c99daab74596821d5b155f523e8eedca7918566ff7f0048ee69",
+      "bytes": 4631
+    },
+    "src/program/xr_xir_source_product.c": {
+      "sha256": "4c7053ff50564dac654c63e4fc98df85af2b05ecea9581fa4663951dbcd2231c",
+      "bytes": 19120
+    },
+    "src/toolchain/xcompiler_session.h": {
+      "sha256": "0f8477276d80a0df3331e3bc1f43082766fa885d83b490c188a1117a273bcc1c",
+      "bytes": 2707
+    },
+    "src/xir/xxir_program.h": {
+      "sha256": "b86e54bc23554a4e62f131aa31c5dd7f18834763fd558e9ad978eefadc991b10",
+      "bytes": 7631
+    }
+  },
+  "responsibilities": {
+    "module_count": {
+      "legacy_name": "source_owner_rejects_module_budget_before_analysis",
+      "body_lf_sha256": "d775c6da389759b4d19e7200fa900a5bf50311ff43669f681b7922a462bfdffb",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "original_budget_obligation": {
+        "request": {
+          "max_modules": 1
+        },
+        "status": "XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT",
+        "stage": "XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH",
+        "underlying_status": 2,
+        "messages": [],
+        "missing": "Per-request maximum module count before analysis; structural function limits and allocation limits do not preserve the exact module-count oracle."
+      },
+      "original_output_assertions": [
+        "product.artifact.bytes == NULL",
+        "product.program == NULL"
+      ],
+      "original_root_bytes": 82,
+      "original_root_sha256": "2ab69a152f50596b05c9e9b664cec25f496abdc6ca328bd77743560aea743bfd",
+      "probe_files": {
+        "root.xr": "53fbd696f5f358980b5c5bf67e735e4048e6cf77b720747570ff26fee6d3e58b",
+        "library.xr": "aaaef2574f26eafc702886813e0402be2db166fb2d304abba03fbfe05e3019d8"
+      },
+      "normal_probe": {
+        "test": "test_source_product_request_budget_input_module_count",
+        "expected_i64": 42,
+        "budget_request_applied": false,
+        "native": "NOT_RUN",
+        "mixed": "NOT_RUN"
+      },
+      "normal_result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN"
+    },
+    "invalid_request": {
+      "legacy_name": "source_owner_rejects_invalid_or_expanded_budget_request",
+      "body_lf_sha256": "1cfdd3a286ae34db78a71132e107279107b9084cea3f160e5bab0b90698a665b",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "original_budget_obligation": {
+        "request": {
+          "max_modules": "default+1",
+          "max_monomorphization_depth": "default+1",
+          "max_monomorphization_instances": "default+1",
+          "max_program_bytes": [
+            "default+1",
+            0
+          ]
+        },
+        "status": "XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT",
+        "stage": "NOT_ASSERTED",
+        "underlying_status": "NOT_ASSERTED",
+        "messages": [],
+        "missing": "Five separate invalid/expanded request controls. No claim that the new ledger or structural limits impose the old defaults as maximum legal request values."
+      },
+      "original_output_assertions": [
+        "product.artifact.bytes == NULL",
+        "product.program == NULL"
+      ],
+      "original_root_bytes": 33,
+      "original_root_sha256": "c34596e88735a795f07cba19f673f18fd8ccc237481f8c707fc363500c9f9705",
+      "probe_files": {
+        "root.xr": "1544b3ab66c4d58acd4976a7fee531820b01c23341710c6b0564708669a80040"
+      },
+      "normal_probe": {
+        "test": "test_source_product_request_budget_input_invalid_request",
+        "expected_i64": 42,
+        "budget_request_applied": false,
+        "native": "NOT_RUN",
+        "mixed": "NOT_RUN"
+      },
+      "normal_result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN"
+    },
+    "mono_depth": {
+      "legacy_name": "source_owner_reports_exact_monomorphization_depth_budget",
+      "body_lf_sha256": "055740b8b54e55ccc9c61714b9fabba4010389d93fcbe651741bb9192b3ac484",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "original_budget_obligation": {
+        "request": {
+          "max_monomorphization_depth": 1
+        },
+        "status": "XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT",
+        "stage": "XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION",
+        "underlying_status": "XR_ERR_ANALYZE_MONO_DEPTH",
+        "messages": [
+          "E0389",
+          "deeper than 1 levels"
+        ],
+        "missing": "Exact per-request generic nesting-depth limit and depth-specific diagnostic. Function capacity is not a nesting-depth limit."
+      },
+      "original_output_assertions": [
+        "product.artifact.bytes == NULL",
+        "product.program == NULL"
+      ],
+      "original_root_bytes": 473,
+      "original_root_sha256": "1c2cdfc3aa38242ae740429489431511bf0803a53ff5339742e3a99703c1765f",
+      "probe_files": {
+        "root.xr": "d4039414bf61a9f50052245bd2163f6325d84cb961bd2e60aec83111ce38cd1f"
+      },
+      "normal_probe": {
+        "test": "test_source_product_request_budget_input_mono_depth",
+        "expected_i64": 42,
+        "budget_request_applied": false,
+        "native": "NOT_RUN",
+        "mixed": "NOT_RUN"
+      },
+      "normal_result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN"
+    },
+    "mono_instances": {
+      "legacy_name": "source_owner_reports_exact_monomorphization_instance_budget",
+      "body_lf_sha256": "88b26daf7c9a5c982662f6fa6270fc593cbb73eeedd28d6527e8671c9515e0b0",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "original_budget_obligation": {
+        "request": {
+          "max_monomorphization_instances": 1
+        },
+        "status": "XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT",
+        "stage": "XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION",
+        "underlying_status": "XR_ERR_ANALYZE_MONO_BUDGET",
+        "messages": [
+          "E0388",
+          "budget of 1 generic instances"
+        ],
+        "missing": "Count generic instantiations separately from total functions, including nongeneric declarations and synthesized entries."
+      },
+      "original_output_assertions": [
+        "product.artifact.bytes == NULL",
+        "product.program == NULL"
+      ],
+      "original_root_bytes": 164,
+      "original_root_sha256": "cd75e79ab20b4080ed6863baf46503cd8b05500421e7a96ebb2e16157ae268f6",
+      "probe_files": {
+        "root.xr": "55eff981c364e1caa90890ee47a8e5db1bba1fe1350bc092d86f2c9e1392d218"
+      },
+      "normal_probe": {
+        "test": "test_source_product_request_budget_input_mono_instances",
+        "expected_i64": 42,
+        "budget_request_applied": false,
+        "native": "NOT_RUN",
+        "mixed": "NOT_RUN"
+      },
+      "normal_result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN"
+    },
+    "graph_instances": {
+      "legacy_name": "source_owner_applies_instance_budget_across_module_graph",
+      "body_lf_sha256": "8c1cb76a8ec730ebdee128289da4de673f98d6033b8f1d44f7f6d1a554b44fc5",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "original_budget_obligation": {
+        "request": {
+          "max_monomorphization_instances": 1
+        },
+        "status": "XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT",
+        "stage": "XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION",
+        "module_index": 1,
+        "underlying_status": "XR_ERR_ANALYZE_MONO_BUDGET",
+        "messages": [
+          "E0388"
+        ],
+        "missing": "A single exact generic-instance budget across imported and local declarations with original module-index diagnosis."
+      },
+      "original_output_assertions": [
+        "product.artifact.bytes == NULL",
+        "product.program == NULL"
+      ],
+      "original_root_bytes": 178,
+      "original_root_sha256": "b5fbe6c9f70fcdb7eec5570d05a8c49c53dfc555125b9a92298088ab7d1f7c4a",
+      "probe_files": {
+        "root.xr": "e62359ff367a62016b6d81bcd955208a3d1570e8bb54b4d2de9b724f6c1508e7",
+        "library.xr": "88a9fd46ad99dab74a39a93391401efc058d9c4d9fd2a8494745d1bc4e3ecd1c"
+      },
+      "normal_probe": {
+        "test": "test_source_product_request_budget_input_graph_instances",
+        "expected_i64": 42,
+        "budget_request_applied": false,
+        "native": "NOT_RUN",
+        "mixed": "NOT_RUN"
+      },
+      "normal_result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN"
+    },
+    "program_bytes": {
+      "legacy_name": "source_owner_rejects_program_bytes_over_request_budget",
+      "body_lf_sha256": "d73622b8b65dd7811172228716f9875bcc565e0ff07b3a47be015b84ba9e9680",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "original_budget_obligation": {
+        "request": {
+          "max_program_bytes": 1
+        },
+        "status": "XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT",
+        "stage": "XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE",
+        "underlying_status": ">1",
+        "messages": [
+          "Program size",
+          "limit 1 bytes"
+        ],
+        "missing": "Request-wide serialized Program size cap. Current emitted-C byte_limit and verify code_limit are explicit later operations, not an equivalent legacy Program-write request control."
+      },
+      "original_output_assertions": [
+        "product.artifact.bytes == NULL",
+        "product.program == NULL"
+      ],
+      "original_root_bytes": 33,
+      "original_root_sha256": "c34596e88735a795f07cba19f673f18fd8ccc237481f8c707fc363500c9f9705",
+      "probe_files": {
+        "root.xr": "1544b3ab66c4d58acd4976a7fee531820b01c23341710c6b0564708669a80040"
+      },
+      "normal_probe": {
+        "test": "test_source_product_request_budget_input_program_bytes",
+        "expected_i64": 42,
+        "budget_request_applied": false,
+        "native": "NOT_RUN",
+        "mixed": "NOT_RUN"
+      },
+      "normal_result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN"
+    }
+  },
+  "public_request_fields": [
+    "session",
+    "entry_path",
+    "authority",
+    "context",
+    "stdlib_path",
+    "lockfile",
+    "linkage_kind",
+    "libraries"
+  ],
+  "public_structural_limits": [
+    "functions",
+    "parameters",
+    "blocks",
+    "instructions",
+    "frame_bytes"
+  ],
+  "ledger_limits": [
+    "allocated_bytes",
+    "live_bytes",
+    "work"
+  ],
+  "specialization_boundary": "SourceProduct invokes xr_xir_compile_specialize on Checked and lowers only after specialization. xxir_specialize.c uses limits.functions as instance storage capacity and deducts parameters/blocks/instructions; that does not establish legacy generic-instance-only or recursion-depth equivalence.",
+  "resolution_needed": "Main must define reviewed replacements or approve explicit retirement representations for each old request control; this worker cannot add public fields or change production contracts. Retain all six originals and dependencies pending that decision and complete qualification.",
+  "observed_controls": {
+    "archive": "build-consumer-evidence/current67-request-budget-responsibilities-r1",
+    "normal_product_processes": 12,
+    "source_preservation_processes": 2,
+    "result": "ALL_PASS",
+    "fixed_oracle": "Two detached instances, each canonical initializer I64(0), each exported adapter I64(42) twice; private host entry rejected before initialization; final physical release.",
+    "build": "UTF-8 MSVC Ninja regeneration followed by no work to do in both existing trees; no C source changes and no new compilation. Existing two-TU probe and eleven public library hashes bound separately.",
+    "scope": "Original request restrictions were not applied. Six budget obligations remain OPEN, retired=0.",
+    "map_timing": "Run snapshots bind the pre-result map; these result notes were appended after execution, not rerun as a new product run.",
+    "native": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "compiler_FI": "NOT_RUN",
+    "runtime_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN"
+  }
+}

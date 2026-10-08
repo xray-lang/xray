@@ -283,3 +283,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_corou
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_source_file_deletion_native.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_source_file_deletion_vm.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_request_budget_inputs.cmake")
