@@ -333,3 +333,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomi
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_parent_source.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_channel_owner.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_process_lifecycle.cmake")

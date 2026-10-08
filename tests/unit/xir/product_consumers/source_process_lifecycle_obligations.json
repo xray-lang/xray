@@ -1,0 +1,563 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29/ABI351",
+  "result": "PASS_REAL_WINDOWS_PROCESS_LIFECYCLE_LEGACY_OPEN",
+  "retired": 0,
+  "legacy_status": "OPEN",
+  "replacement_gates": [],
+  "responsibility": "Real host process failure preservation in the full allocation runner;this new gate exercises its unchanged process_run/process_contract/stop_process helpers with an actual public SourceProduct owner.",
+  "input": {
+    "tests/unit/xir/product_consumers/parent_source/open_root_empty/root.xr": "3e512ebc299c7bd2bbab9aa9a7fd1f0f11831fa9f6887d3b520f0c81edf9e462"
+  },
+  "original_allocation_map_sha256": "b26251f44f993f92df14c9ceea5f37ca97bf3f95a7098e7311a7f6281e881662",
+  "original_allocation_map_preserved": {
+    "status": "SOURCE0_VM_FAULT_FACETS_IMPLEMENTED_TARGETED_VALIDATION_PASS_FULL_QUALIFICATION_OPEN",
+    "historical_proposal": {
+      "status": "CANDIDATE_STATIC_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+      "mapping_scope": "The original assertion/main mapping strings and review_revision below retain the initial static proposal. Their OPEN statuses and all eight original scenarios are unchanged; current bounded private results are separate below."
+    },
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "source_family": "tests/unit/program/test_xr_program_source_allocations.c",
+    "original_whole_file": {
+      "archive_bytes": 9562,
+      "archive_sha256": "6fa8b7fb17e51d584098709ac6ce01394172dfa0915e4c516bcdd7a0a29c7d62",
+      "worker_bytes": 9562,
+      "worker_sha256": "6fa8b7fb17e51d584098709ac6ce01394172dfa0915e4c516bcdd7a0a29c7d62",
+      "LF_equal": true
+    },
+    "original_run_body": {
+      "bytes": 5745,
+      "sha256": "b040bbb817bb2f13cb4e59493d966824dd9352ad7667d860022863fb9e385de1",
+      "REQUIRE_calls": 17
+    },
+    "original_main_body": {
+      "bytes": 624,
+      "sha256": "971925978b260afc6fc96ce66d526ddd23a759588f1a9d2455327d22abb65f93",
+      "REQUIRE_calls": 2
+    },
+    "original_scenarios": [
+      {
+        "scenario": 0,
+        "bytes": 119,
+        "sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+        "source": "fn answer() -> i64 { return 0 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      },
+      {
+        "scenario": 1,
+        "bytes": 305,
+        "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+        "source": "fn answer() -> i64 {\n const counter = Atomic(40)\n const alias = counter\n var (old, matched) = alias.compareExchange(40, 42)\n counter.store(42, Ordering.Release)\n counter.add(1)\n counter.sub(1)\n return counter.load()\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      },
+      {
+        "scenario": 2,
+        "bytes": 352,
+        "sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd",
+        "source": "fn answer() -> i64 {\n const flag = Atomic(false)\n const alias = flag\n var (old, matched) = alias.compareExchange(false, true)\n flag.store(true, Ordering.AcquireRelease)\n const before = flag.toggle(Ordering.Relaxed)\n if (matched && before) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      },
+      {
+        "scenario": 3,
+        "bytes": 483,
+        "sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+        "source": "fn identity(value: f64) -> f64 { return value }\nfn answer() -> i64 {\n const value = identity(1.5)\n const other = identity(2.25)\n const counter = Atomic(value)\n const old = counter.fetchAdd(other)\n var (before, matched) = counter.compareExchange(3.75, 1.5)\n counter.store(1.5, Ordering.Release)\n const text = counter.load().toString()\n if (old < other && len(text) == 3) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      },
+      {
+        "scenario": 4,
+        "bytes": 208,
+        "sha256": "14b80d72fa93d3c58fe6c4af421044fe81529b726a6d3c067f4bb6a85618f848",
+        "source": "type State = { token:i64, enabled:bool, nested:{ text:string }? }\nvar state:State?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      },
+      {
+        "scenario": 5,
+        "bytes": 377,
+        "sha256": "ba1de6818baaf15e872bfe1be06bd6f95793d053c39320c946c21dc95a867810",
+        "source": "type Child = { text:string }\ntype State = { token:i64, child:Child }\nfn answer() -> i64 {\n var child:Child={text:\"before\"}\n var state:State={child:child,token:7}\n var alias=state\n alias.token=42\n alias.child.text=\"after\"\n if (state.child.text == \"after\") { return state.token }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      },
+      {
+        "scenario": 6,
+        "bytes": 177,
+        "sha256": "2e8a3680cd3d51d65977a7ace39b2f27a479bf547946944630dc290c1e282fa4",
+        "source": "import { NetConn } from net\nvar connection:NetConn?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      },
+      {
+        "scenario": 7,
+        "bytes": 278,
+        "sha256": "2a9bfcbf2a340eb9dc70e30331753a2326263355154bafd2005eb5c0b3eca1df",
+        "source": "fn answer() -> i64 {\n var text = StringBuilder()\n text.append(\"first\").append(42)\n const snapshot = text.toString()\n text.clear().append(\"second\")\n assert(snapshot == \"first42\")\n return 42\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n"
+      }
+    ],
+    "selected_source": {
+      "scenario": 0,
+      "bytes": 119,
+      "sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+      "source": "fn answer() -> i64 { return 0 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "relation": "EXACT_ORIGINAL_NO_WRAPPER_NO_EXPORT_REWRITE"
+    },
+    "normal_fixed_oracles": {
+      "source_input": "Complete119B byte equality, not substring or observed copied expectation",
+      "SourceProduct_status": "XR_XIR_OK; stage/location/status/path diagnostics printed on real rejection",
+      "source_and_closed_packets": "Each public Checked reader admission succeeds; root answer private i64 return0/exported private i64 return42/checkAnswer private TEST Unit timeout0",
+      "root_source_path": "One source query path equals actual independently supplied fixture file after only slash normalization",
+      "test_metadata": "Exactly one test; name checkAnswer length11; roleTEST; timeout0; function refers to closed root original checkAnswer",
+      "checked_detachment": "Destroy session and SourceProduct; both Checked readers still verify; separate full closed packet remains independently readable/verifiable",
+      "Lowered": "Public lower and verify; root function IDs/roles and constant return oracles remain same; source/closedChecked/retained packet destroyed before seal",
+      "Program": "Public vm_program_take consumes and clears actual detached Lowered, then two independent Instances retain code after caller Program drop",
+      "Instance": "Each beginsNEW; public ordinary starts of private initializer/answer/exported/test and privileged test starts of answer/exported/initializer all BAD_ARGUMENT. All7 rejections together preserve compiler attempts and all5 compiler-ledger fields/runtime attempts+physical blocks/bytes/Instance NEW. Canonical entry returnsI640; original checkAnswer returnsUnit twice; final stateREADY.",
+      "result_ownership": "All taken values complete type/reserved/payload checked and dropped; common cleanup also owns any pending result",
+      "physical_release": "Actual finite compiler observer and runtime allocation/table counters; all owners destroyed before ledger live returns owner baseline, final release requires compiler0/0 +runtime0/0 +tableNULL/capacity0"
+    },
+    "limits": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000,
+      "model": "One explicit fresh shared finite compiler ledger; owner construction included. No budget reset or context replacement."
+    },
+    "measurement_semantics": {
+      "compiler_sites": "Actual owner+original-input preflight+session+SourceProduct+two readers+full closed writer+reread+lower+Program seal normal ordinal count; private r3 fresh MSVC and Clang ASan+UBSan each measured2036, not a completed sweep or original subject-only8-family FI denominator",
+      "runtime_sites": "Actual two Instances/new/entry/original test executions; private r3 fresh MSVC and Clang ASan+UBSan each measured32 across43 continuous call records; only six targeted sites per configuration executed, full32 NOT_RUN",
+      "stage_stats": "Print cumulative allocated/live/peak/work and actual allocator attempts at each named ownership boundary; not per-stage copied normal constants"
+    },
+    "original_assertion_responsibilities": [
+      {
+        "ordinal": 1,
+        "original_exact_assert": "scenario < XR_COUNTOF(sources)",
+        "domain": "scope",
+        "mapping": "All original eight source bodies are preserved; only source0 has a candidate. Seven others OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 2,
+        "original_exact_assert": "source_build_fixture_init(&fixture, source, NULL)",
+        "domain": "fixture construction",
+        "mapping": "Public finite owner/session/file identity and original119B preflight candidate; VM-backed old fixture retired. Actual run NOT_RUN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 3,
+        "original_exact_assert": "toml != NULL",
+        "domain": "native manifest parse",
+        "mapping": "Original164B TOML retained; native export plan integration OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 4,
+        "original_exact_assert": "plan && plan->valid",
+        "domain": "native plan admission",
+        "mapping": "Old valid plan/hidden/header/native ABI/external symbol metadata remain OPEN; no replacement claim.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 5,
+        "original_exact_assert": "live_count == 0u",
+        "domain": "pre-build physical zero",
+        "mapping": "Existing compiler observer checks initial physical0; candidate NOT_RUN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 6,
+        "original_exact_assert": "status == XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY",
+        "domain": "all injected statuses OOM",
+        "mapping": "Whole SourceProduct and downstream actual compiler FI OPEN; no injection or shortened denominator.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 7,
+        "original_exact_assert": "diagnostic.message[0] != '\\0'",
+        "domain": "nonempty OOM diagnostic",
+        "mapping": "Failure reporting retains stage/status/path/location; every injected OOM diagnostic check OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 8,
+        "original_exact_assert": "product.program == NULL && product.artifact.bytes == NULL",
+        "domain": "empty failed Program and artifact",
+        "mapping": "Opaque new product pointer failure preservation plus Program/artifact owner cleanup is proposed; actual injected failure/output-prefix proof OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 9,
+        "original_exact_assert": "product.exports == NULL && product.export_function_ids == NULL",
+        "domain": "empty failed export arrays",
+        "mapping": "Retired representation has no equivalent native export metadata query in SourceProduct; original responsibility OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 10,
+        "original_exact_assert": "product.tests == NULL && product.test_entry_count == 0u",
+        "domain": "empty failed tests",
+        "mapping": "New owned test query exists; public failure pointer preservation to be verified per actual ordinal. FI OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 11,
+        "original_exact_assert": "product.export_count == 0u && product.retained_function_count == 0u",
+        "domain": "empty failed counts",
+        "mapping": "Original retained/export counts retained; no false equalities from canonical/test roles. OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 12,
+        "original_exact_assert": "live_count == 0u",
+        "domain": "physical zero after each OOM",
+        "mapping": "Compiler observer finite owner and runtime physical/table observation prepared, not executed. All OOM ordinals OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 13,
+        "original_exact_assert": "status == XR_PROGRAM_SOURCE_BUILD_OK",
+        "domain": "normal Source success",
+        "mapping": "Exact original source0 public SourceProduct success fixed oracle prepared; normal NOT_RUN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 14,
+        "original_exact_assert": "product.export_count == 2u && product.test_entry_count == 1u",
+        "domain": "two exports and one test",
+        "mapping": "One original root @test exact role/name/function/timeout prepared; original two external native exports OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 15,
+        "original_exact_assert": "strcmp(product.exports[0].symbol, \"external_answer\") == 0",
+        "domain": "external_answer spelling",
+        "mapping": "Original external_answer/native hidden/header symbol ABI preserved164B. OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 16,
+        "original_exact_assert": "product.export_function_ids[0] < xr_validated_program_function_count(product.program)",
+        "domain": "export function valid ID",
+        "mapping": "Test current closed-ID bounds and root identity prepared; old export_function_ids and symbol correspondence OPEN.",
+        "status": "OPEN_NOT_VALIDATED"
+      },
+      {
+        "ordinal": 17,
+        "original_exact_assert": "live_count == 0u",
+        "domain": "final physical release",
+        "mapping": "Original lifecycle sourcefixture/plan/product all preserved; public source/session/Checked/Lowered/Program/Instance/value/resource cleanup candidate. Actual normal/FI release NOT_RUN.",
+        "status": "OPEN_NOT_VALIDATED"
+      }
+    ],
+    "original_main_responsibilities": [
+      {
+        "original_exact_assert": "count > 0u",
+        "status": "OPEN",
+        "reason": "Original per-source actual N>0 and second fresh normal exactN replay preserved; one current normal probe cannot replace eight-family full FI."
+      },
+      {
+        "original_exact_assert": "run_allocation_case(scenario, 0u) == count",
+        "status": "OPEN",
+        "reason": "Original per-source actual N>0 and second fresh normal exactN replay preserved; one current normal probe cannot replace eight-family full FI."
+      }
+    ],
+    "native_export_responsibilities": {
+      "bytes": 164,
+      "sha256": "cf1a1e14d20fafca09a649f47ddcba036ea57a27e5febfeb5184518c05c45ac7",
+      "body": "[[export.c]]\nxray = \"exported\"\nsymbol = \"external_answer\"\nabi = \"native\"\nvisibility = \"hidden\"\nheader = true\n[[export.c]]\nxray = \"answer\"\nsymbol = \"external_entry\"\n"
+    },
+    "native_export_status": "OPEN: external_answer/external_entry/native ABI/hidden/header/twoexport mapping not implemented or tested by this candidate. Original answer named entry differs from new canonical $entry; that authority change is explicit OPEN.",
+    "source_scenario4": "Original208B nullable State/root mutable state preserved unchanged; normal/FI/native OPEN",
+    "source_scenario7": "Original278B StringBuilder snapshot/clear/chain source preserved unchanged; normal/FI/native OPEN",
+    "fault_followup": [
+      "Record actual SourceProduct whole-run and subject-stage N per configuration from this exact source/producer; no old1932/FI6/WriterN10/N12 borrowing.",
+      "Fresh process/finite owner per ordinal, public output pointer initially empty or real occupied product; preserve pointer/complete packet prefix on failure; diagnosis stage identifies exact called/not-entered stage.",
+      "Sweep actual compiler sites with public cleanup and actual hit1/OOM/nonempty diagnostic as applicable; downstream success artifacts remain separately owned; include diagnostics retained snapshots/path cleanup.",
+      "Measure fresh normal A/L/W first, then exact/minus1 independently; report real first failing phase and complete output preservation; do not claim writer/runtime refusal when Source rejected earlier.",
+      "Independent runtime allocation sweep for sealed Program/Instances/result/drop and cleanup, then corresponding native current source projection if and when legacy export ABI responsibility has an admitted public replacement."
+    ],
+    "registration": {
+      "target": "test_source_product_allocation_scenario0",
+      "normal_CTest": "test_source_product_allocation_scenario0_normal",
+      "new_translation_units": 1,
+      "default_normal_tests": 1,
+      "TIMEOUT_seconds": 120,
+      "FI_registered": 2,
+      "axes_registered": 6,
+      "native_targets": 0,
+      "scope": "Separate Source0 consumer with two complete FI and six compiler-axis gates; no shared driver/inventory/status denominator edits"
+    },
+    "validation": {
+      "build": "APPLIED_TARGET_MSVC_AND_CLANG_ASAN_UBSAN_FRESH_1_TU_1_LINK_PASS; existing public archives reused, not rebuilt here",
+      "normal": "APPLIED_TARGET_1_PER_CONFIGURATION_PASS",
+      "compiler_FI": "APPLIED_TARGET_3_SELECTED_PER_CONFIGURATION_PASS; FULL_2036_NOT_RUN",
+      "runtime_FI": "APPLIED_TARGET_6_SELECTED_PER_CONFIGURATION_PASS; FULL_32_NOT_RUN",
+      "axes": "NOT_RUN",
+      "native": "NOT_RUN",
+      "full_safety": "NOT_RUN",
+      "original_8_scenarios": "OPEN_UNCHANGED"
+    },
+    "private_runtime_fault_facet": {
+      "source_sha256": "63955cafc841246ba148ed3ca0c7a864bd26f31665957e302d7c5a889c20963e",
+      "source_scope": "Existing Source0 consumer extended with ROOT FILE --runtime-fault R site; original119B input and entire20700B compiler-fault definition byte-exact. No new normal consumer, target, full-FI registration, quota or timeout change.",
+      "producer_scope": "Only25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29. Main semantic69 and candidate70 qualification NOT_RUN; integration-head rebind/fresh build/remeasurement required.",
+      "normal": "Both configurations:1/1; compiler2036/runtime32,43 continuous records, original42, two canonical I64(0), four Test Unit, seven permission rejections per Instance and final compiler/runtime blocks+bytes/table zero.",
+      "targeted_points": [
+        "site0: instance-new record15, first constructor",
+        "site6: instance-new record16, sibling constructor",
+        "site12: canonical-start record18, NEW",
+        "site18: original-test-start record26, READY repeat",
+        "site16: poll record23, ordinary Test READY",
+        "site31: poll record40, ordinary Test READY"
+      ],
+      "targeted_oracles": "Each configuration6/6: unique hit1, exact Call OOM6, continuous prefix ends at the failed record with downstream NOT_ENTERED, actual host output-slot preservation, uncharged cleanup and final compiler/runtime blocks+bytes/table zero. Constructor uses a valid NULL output and restores runtime physical stock; start preserves prior NEW/READY activation and epoch; ordinary poll checks actual borrowed OOM shape and READY take/copy BAD_STATE.",
+      "unverified": "Full32 runtime and2036 compiler FI; all three resource axes; initialization FAILED/sticky OOM (canonical initialization poll has no allocation); continued sibling execution after constructor failure (only pointer/NEW/Program/physical preservation checked); input-packet complete bytes UNSNAPSHOTTED_OPEN; seven other original sources; native/mixed; cancellation; owned STRING/partial initialization/reverse cleanup; full default/applicable safety and Main integration.",
+      "actual_tools": "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-consumer-evidence/current67-source0-runtime-fi-private-normal-r1/actual-tools.json",
+      "actual_tools_sha256": "96b35a4dc7b58a517e3ac20c76453070670e28c12ff58c368c1e95801138dbf6",
+      "readme": "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-consumer-evidence/current67-source0-runtime-fi-private-normal-r1/README-cn.txt",
+      "raw_results": "Each configuration directory retains normal.xml/normal.LastTest.log and smoke.xml/Testing/Temporary/LastTest.log; complete actual commands and terminal exit0 receipts are in actual-tools.json.",
+      "retirement": "Original whole-file/run/main hashes, eight scenario bodies,17 run assertions and2 main assertions unchanged; no original responsibility retired or removed, all OPEN statuses retained. Full FI/heavy qualification requires Main queue window."
+    },
+    "applied_target_validation": {
+      "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+      "qualified_contract": "Checked25/semantic67/Value22/Call28/Program29; not Main69 or candidate70",
+      "build": "MSVC Release/MT and Clang Debug/MD ASan+UBSan each rebuilt the existing Source0 target: one compile, one link; new objects each159 actual Ninja dependencies",
+      "normal": "Each configuration1/1; fresh N2036/R32 and43 continuous runtime-call records",
+      "compiler_selected_sites": [
+        0,
+        1,
+        2035
+      ],
+      "runtime_selected_sites": [
+        0,
+        6,
+        12,
+        18,
+        16,
+        31
+      ],
+      "argument_rejections": "Each configuration13/13 invalid runtime-fault arguments return2 without pipeline output",
+      "related_regression": "Each configuration2/2: existing Source0 native normal and source-file-deletion VM normal; their artifacts and public libraries are unchanged",
+      "binding": "Fault argv N/R are read from that exact configuration's fresh normal.xml; CLI syntax checks alone do not authenticate a denominator",
+      "actual_tools": "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-consumer-evidence/current67-source0-runtime-fi-applied-r1/actual-tools.json",
+      "full_qualification": "OPEN: complete compiler/runtime FI, resource axes, input packet bytes, initialization FAILED, continued sibling execution, other seven sources, native/mixed facet, cancellation, full safety and Main integration; retired0"
+    },
+    "review_revision": {
+      "prior_r1_manifest_sha256": "3499cd26344c1ea739fdb712f19402f126dc7bfd2917149917c9bc312710644e",
+      "finding": "Missing explicit ordinary initializer refusal",
+      "fix": "Add initializer ordinary BAD_ARGUMENT, freeze both allocation domains and all public ledger stats around complete permission-refusal prefix; no source/budget/API change",
+      "scope": "STATIC_ONLY_NOT_BUILT_NOT_RUN"
+    },
+    "allocation_fault_shard_facet": {
+      "status": "IMPLEMENTED_NOT_FULLY_QUALIFIED",
+      "source_sha256": "41846d5c8fcf3b322e388f200169d42e806201ec92e0de20d8278d108bd56524",
+      "registration_sha256": "a68ce5176185c622ab2bf84e2c19d907f2b03f8290807b331c205505aad19f37",
+      "runner_sha256": "27b305dd16e118ba70ef098d219c8c5d4d4c26e3c4cd82db888df77146961ab6",
+      "producer": "25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29 only; Main integration requires a fresh producer-bound rebuild and census.",
+      "source_preservation": "Original119B source,20700B compiler FI,4680B runtime/normal,77 observations and old CLI remain byte-exact. Only a new faithful strided wrapper and strict new selector dispatch are appended.",
+      "owners": "Each ordinal calls the original run with a newly created finite compiler owner. Before resetting host observations, actual compiler/runtime blocks and bytes plus runtime table must be zero, both fault switches disabled and runtime tracing inactive; no resource ledger is reset or reused.",
+      "fresh_build": "MSVC Release/MT and Clang Debug/MD ASan+UBSan each compiled one C TU and linked one EXE. Each new object has159 actual Ninja dependencies, VALID. Existing10 public libraries per configuration and3 ASan support runtimes retained their original bytes and mtimes.",
+      "normal": "One actual CTest normal per configuration: N2036,R32,43 continuous unfaulted records and final five physical zeros.",
+      "light_shards": "Each configuration: compiler first0,last2035,paired0/1018; runtime first0,last31,paired0/16. Total12 actual shard processes:8 single-point FOCUSED plus4 partial two-point SHARD. Strict replay validates every per-ordinal trace and permitted OOM diagnostic; this is not complete coverage.",
+      "argument_rejections": "Each configuration34 malformed new selector cases: missing/extra args, negative/plus/whitespace/nondecimal, empty, zero count, index out of range and SIZE_MAX/overflow reject with exit2 and empty stdout/stderr before pipeline entry;68 total.",
+      "complete_gate_registration": [
+        {
+          "CTest": "test_source_product_allocation_scenario0_compiler",
+          "kind": "compiler",
+          "TIMEOUT": 600,
+          "PROCESSORS": 8,
+          "RUN_SERIAL": true,
+          "jobs": 8,
+          "status": "NOT_RUN"
+        },
+        {
+          "CTest": "test_source_product_allocation_scenario0_runtime",
+          "kind": "runtime",
+          "TIMEOUT": 600,
+          "PROCESSORS": 8,
+          "RUN_SERIAL": true,
+          "jobs": 8,
+          "status": "NOT_RUN"
+        }
+      ],
+      "complete_runner_plan": "570s process deadline begins before input capture. Two independent fresh normal processes plus one normal inside each of8 shard processes must agree on N/R/43; exact ordinal union must cover every measured site once. Each process retains raw stdout/stderr, PID, status, timeout, commands and hashes. No full coverage or timing result is claimed before the queued real gates run.",
+      "parser_checks": "Normal/compiler stderr must be empty; runtime stderr must consist only of original finite OOM diagnostics in exact per-ordinal order. Runtime records must be continuous per fault run, with one last hit whose stage/status/site window match the corresponding summary; additional sanitizer output is rejected.",
+      "evidence": "build-consumer-evidence/current67-source0-full-fi-applied-r1/",
+      "retirement": "0. All original legacy obligations and OPEN statuses retained; no old target, format or build dependency deleted.",
+      "remaining": "Complete2036 compiler and32 runtime ordinals, allocated/live/work axes, complete input-packet preservation, initialization FAILED/sticky OOM, sibling continuation, other7 original sources, native/mixed/owned string/partial initialization/reverse cleanup, complete default and applicable safety, Main producer rebind and integration remain OPEN. No completed capability or release is claimed."
+    },
+    "compiler_axis_facet": {
+      "process_review": "Independent pure review:11 FakePopen and9 fake-main cases pass, including wait/kill/reap errors, no launch after first failure, normal measurement drift, capture failure/input drift and FAIL receipts. Product execution NOT_RUN.",
+      "status": "IMPLEMENTED_REGISTERED_NOT_FULLY_QUALIFIED",
+      "source_sha256": "18347ab2c0ebc2c7248740d917cba80b08608a67ecf4b00cf94009a72f804a19",
+      "registration_sha256": "8af032c51b989995d465dbeac362fd22c7d71bf31d80ea475682036ea44caf15",
+      "runner_sha256": "679c491f1a5b27ab594007000566c8f9b313669f12a3aac5eab99a084dfd8746",
+      "fault_helper_sha256": "27b305dd16e118ba70ef098d219c8c5d4d4c26e3c4cd82db888df77146961ab6",
+      "producer": "Only25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29. Main integration requires an authorized producer, fresh build and remeasurement.",
+      "preservation": "Original119B source,77 observations,20700B compiler FI,4680B runtime/normal body,353B compiler selector and48-line2700B faithful shard wrapper are byte-exact. Original normal and two complete FI registrations are unchanged byte-for-byte; no legacy target or dependency is deleted.",
+      "measurement": "Each axis/cut runs two independent same-argv normal processes before its boundary. Both must agree on N/R/43 and actual allocated/peak/work totals. The same binary, fixture paths and unchanged argv namespace supply TOTAL; no historical or cross-namespace total is borrowed.",
+      "budgets": "Original allocated67108864/live8388608/work128000000 remain. Exact changes only the selected cap to that gate fresh normal TOTAL; minus1 uses TOTAL-1. API budget statuses are independently mapped owner2/input6/session2/XIR6; runtime Call OOM6/LIMIT5 cannot qualify as compiler BUDGET.",
+      "oracles": "Continuous original public-call prefix, no cumulative charge refund or charge between calls, unchanged full compiler ledger during runtime calls, unchanged nonselected finite limits, unique first refusal, exact-domain status, actual occupied output-slot preservation, owned diagnostic where applicable, uncharged diagnostic free with restored physical stock, no downstream entry, final five physical zeros and uncharged cleanup. Complete input-packet bytes remain UNSNAPSHOTTED_OPEN.",
+      "fresh_build": "Both current existing targets were rebuilt for C183: one compile and one link each, MSVC Release/MT and Clang Debug/MD ASan+UBSan. After registration reconfigure, both target checks report no work to do. Each object still has159 actual VALID Ninja dependencies;20 public libraries and3 sanitizer support files are unchanged.",
+      "actual_light_validation": {
+        "CTest_normal": "One per configuration,43 unfaulted records,N2036/R32,A615349/peak179234/W691687; original119B input and final five physical zeros.",
+        "direct_normal": "One per configuration with OS-backslash argv,43 records,N2036/R32,A615349/peak179234/W691659. The28 work difference from CTest forward-slash argv is recorded; its cause is unproven.",
+        "paired_shards": "Four actual partial shard processes total: compiler0/1018 and runtime0/16 in each configuration;8 fault ordinals. Exact domain OOM, output preservation, uncharged cleanup and five physical zeros. This is not complete FI.",
+        "invalid_axis_CLI": "18 per configuration,36 total; exit2, no timeout and empty stdout/stderr before pipeline entry."
+      },
+      "registration": [
+        {
+          "CTest": "test_source_product_allocation_scenario0_compiler_axis_allocated_exact",
+          "axis": "allocated",
+          "cut": "exact",
+          "TIMEOUT": 120,
+          "PROCESSORS": 1,
+          "RUN_SERIAL": true,
+          "status": "NOT_RUN"
+        },
+        {
+          "CTest": "test_source_product_allocation_scenario0_compiler_axis_allocated_minus1",
+          "axis": "allocated",
+          "cut": "minus1",
+          "TIMEOUT": 120,
+          "PROCESSORS": 1,
+          "RUN_SERIAL": true,
+          "status": "NOT_RUN"
+        },
+        {
+          "CTest": "test_source_product_allocation_scenario0_compiler_axis_live_exact",
+          "axis": "live",
+          "cut": "exact",
+          "TIMEOUT": 120,
+          "PROCESSORS": 1,
+          "RUN_SERIAL": true,
+          "status": "NOT_RUN"
+        },
+        {
+          "CTest": "test_source_product_allocation_scenario0_compiler_axis_live_minus1",
+          "axis": "live",
+          "cut": "minus1",
+          "TIMEOUT": 120,
+          "PROCESSORS": 1,
+          "RUN_SERIAL": true,
+          "status": "NOT_RUN"
+        },
+        {
+          "CTest": "test_source_product_allocation_scenario0_compiler_axis_work_exact",
+          "axis": "work",
+          "cut": "exact",
+          "TIMEOUT": 120,
+          "PROCESSORS": 1,
+          "RUN_SERIAL": true,
+          "status": "NOT_RUN"
+        },
+        {
+          "CTest": "test_source_product_allocation_scenario0_compiler_axis_work_minus1",
+          "axis": "work",
+          "cut": "minus1",
+          "TIMEOUT": 120,
+          "PROCESSORS": 1,
+          "RUN_SERIAL": true,
+          "status": "NOT_RUN"
+        }
+      ],
+      "actual_discovery": "Both configurations expose all six axes and preserve normal/two FI/native commands and properties. P1 is explicit in generated CTest files; JSON omits this default.",
+      "parser_review": "Independent pure parsing accepts11 legitimate synthetic cases and rejects16 related malformed cases. Three initially false passes were corrected: final cumulative refunds, nonselected cap overflow and runtime compiler-ledger live/valid changes. This is parser evidence, not a product-axis run.",
+      "process_plan": "110s product-process deadline begins before input capture and is shared by two normals plus one axis. Raw PID receipt is written immediately after spawn. Timeout is recorded before kill; exceptional or unobserved termination cannot pass. Reaping is bounded to the original start+118s. Raw outputs, process receipts, captured inputs and first failures are retained. Capture Git, traversal and hashing rely on the outer CTest120 timeout; no internally bounded end-to-end capture claim is made.",
+      "evidence": "build-consumer-evidence/current67-source0-compiler-axes-rebased-applied-r1/; independent registration, light and pure-parser audits in adjacent directories.",
+      "retirement": "0. All original eight scenarios,17 run assertions,2 main assertions and native exports retain their original OPEN statuses.",
+      "remaining": "All12 real axis gates and complete2036 compiler/32 runtime sweeps require Main queue windows and remain NOT_RUN. Other7 original sources, whole input-packet bytes, initialization FAILED/sticky OOM, sibling continuation, native/mixed, owned string/partial initialization/reverse cleanup, complete default/applicable safety, Main producer rebind and integration remain OPEN."
+    },
+    "fault_runner_process_facet": {
+      "status": "IMPLEMENTED_TARGETED_PROCESS_VALIDATION_PASS_COMPLETE_GATES_NOT_RUN",
+      "parent_commit": "657fcb5e8911a99d88a82f968485c3205623cd07",
+      "effective_scripts": {
+        "source_product_consumer_allocation_faults.py": "466aa936887913f0f268cf9981a3884935590d2651bbfd4ccff93ec006e81176",
+        "source_product_consumer_allocation_axes.py": "e4b0d2b7224f3b4337a9fcd657a6ec297b897b751bc63849a2b1142f18a9a71d"
+      },
+      "prior_hashes": "The earlier shard and compiler-axis facets retain their original batch hash snapshots27b/679; the effective_scripts above identify this current process/capture revision.",
+      "producer": "Only25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29. Main rebind and qualification NOT_RUN.",
+      "unchanged_consumer": "C18347ab2c0ebc2c7248740d917cba80b08608a67ecf4b00cf94009a72f804a19 and registration8af032c51b989995d465dbeac362fd22c7d71bf31d80ea475682036ea44caf15 remain byte-exact. No C, quota, fixture, ordinary output, fault ordinal, test registration or original obligation changes.",
+      "preservation": "All12 original FI helper parser/loading/self-test functions and all9 non-main axis functions remain text-exact after newline normalization. Original compiler/runtime sharded coverage and all43 normal observations are unchanged.",
+      "execution": "PID receipts precede waiting. Timeout is marked before kill, exit observation is bounded, and wait/kill/reap/launch errors cannot pass even if reap returns0. A first normal failure stops further normals and shards. Every submitted future is observed; individual failures retain original PID/raw receipts and typed traceback, known partial results, after-capture attempt and a final FAIL. Failed record writes cannot turn the gate into PASS.",
+      "original_complete_gate": "FI registration remains TIMEOUT600/PROCESSORS8/RUN_SERIAL/jobs8. The shared product deadline remains570 seconds and reap is bounded to start+578. Both original front normals plus the normal inside each of8 fresh shard processes must verify:10 normals, measured N/R/43, all8 shard results and exact full ordinal union. Partial coverage cannot pass.",
+      "axis_gate": "All six axis/cut gates retain TIMEOUT120/PROCESSORS1/RUN_SERIAL. The product deadline remains110 and reap start+118; fresh same-argv totals, exact-domain BUDGET, all ledger/diagnostic/output/physical assertions and all12 real gates NOT_RUN are unchanged.",
+      "capture": "One actual Git ls-files call with10s timeout replaces two unbounded calls without removing inputs. Failures preserve argv/cwd/returncode/timed_out and partial stdout/stderr as raw-byte hex. Each existing input additionally captures bytes/mtime_ns; metadata-only or SHA/key drift rejects. File traversal and hashing still depend on the outer CTest timeout; no internal end-to-end total bound is claimed.",
+      "actual_validation": {
+        "build_check": "Both existing Source0 targets checked under UTF-8 MSVC environment: no work to do. C183 and both prior freshly compiled EXE/object artifacts are unchanged.",
+        "processes": "Six actual OS processes total: one direct normal and compiler0/1018 plus runtime0/16 paired partial shards per configuration. All six normal censuses verify N2036/R32/43; eight fault ordinals have unique domain OOM, output preservation, uncharged cleanup and final five physical zeros. Actual PID/entered/termination-observed and no timeout/errors are recorded.",
+        "normal_totals": "Both direct OS-argv normals retain allocated615349/peak179234/work691659. This is the same OS-backslash namespace; CTest W691687 remains separate.",
+        "inputs": "Each configuration2347 actual inputs includes the current466 helper; before/after SHA and size/mtime metadata are identical. Earlier private9d key-domain comparison explicitly simulated the old helper __file__ and is not current producer qualification."
+      },
+      "pure_review": "Independent pure FI review:11 FakePopen,25 main,5 Git capture cases,12 previous raw replays and original self-test. Axis review retains11 FakePopen,9 prior main,7 extra error paths and11 accept/16 reject parser cases. All pass. Four9d main first-red cases and harness errors are retained; these are not real full-FI or axis runs.",
+      "historical_artifact_correction": "Two earlier patch receipts used LF-normalized text hashes for actual CRLF patch files. Actual runtime-binding.patch SHA5b6b7a116bb9241b9dca80cdb10d7a9dee1d416cd77b35b61e5155bd1dce3641, compiler-axis-rebased.patch SHA0a43510280f664c7691e62baecfa5710cee36453002c9b5b899ceb5fcf4bba1e. Original artifacts remain preserved; actual C183 and submitted27b/679 hashes were independently correct and are unaffected.",
+      "evidence": "build-consumer-evidence/current67-source0-fi-process-reaping-applied-r1/; independent final-scoped-review.json under adjacent fi-process-reaping-audit-r1.",
+      "retirement": "0. Original108-source and additional migration denominators plus all original allocation scenario/assertion/native OPEN statuses are unchanged.",
+      "remaining": "Full2036 compiler/32runtime ordinal gates, real12 axes, other7 allocation sources, complete input packet preservation, initialization failure/sticky OOM/sibling continuation, native/mixed/owned string/partial initialization/reverse cleanup, default and applicable safety, producer rebind and Main integration remain NOT_RUN or OPEN."
+    },
+    "input_packet_preservation_facet": {
+      "status": "IMPLEMENTED_SELECTED_NORMAL_AND_OOM_VALIDATION_ONLY",
+      "worker_parent": "f69d96209662b77e4576765f73eb9df3396fb4d0",
+      "producer": "25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29",
+      "scope": "Every actual source, closed and retained Checked reader now snapshots and compares every input byte immediately across that public call, including error returns. This does not snapshot all artifact graphs or claim later owner lifetime coverage.",
+      "observer": "One static 65536-byte test-only scratch array. No allocator call, compiler/runtime ordinal or product ledger charge is introduced. Oversized, empty or missing input fails the observer; this capacity is not a language or production packet limit. Each process invokes these readers serially.",
+      "normal": "Three full snapshots: source3049 bytes, closed4721 bytes, retained4721 bytes in the recorded OS-backslash namespace. Both configurations retain compiler2036/runtime32/43 call records and allocated615349/peak179234/work691659.",
+      "selected_compiler": "Per configuration actual failure ordinals0,988,1067,1277,2035: owner failure records NOT_REACHED; source/closed/retained first-reader OOM7 retains complete input; final Program-take failure retains all three earlier snapshots. Normal and fault outputs, cleanup charges and all five physical-zero fields remain enforced.",
+      "selected_runtime": "Per configuration actual shard0/16 covers runtime ordinals0 and16, each after three successful packet reads. All original runtime status, raw stderr, output sentinel and physical release checks remain.",
+      "actual_processes": "Fourteen initial real product processes plus two final-parser real source-reader shard988/2036 processes. The latter each repeats ordinal988 already covered by the direct selected case; no extra distinct ordinal is claimed. All product runs use the newly compiled C; no real axis run occurred.",
+      "parser": "Normal requires exactly source/closed/retained. Each fault block requires exactly the reached reader prefix with original domain status, complete widths matching its own normal, preserved=1 and summary counts; pre-reader failures say NOT_REACHED. Axes bind reader records to their called API records and same-argv normal. Old UNSNAPSHOTTED_OPEN summaries cannot pass this parser.",
+      "pure_validation": "Original parser self-test7 accepted/26 rejected including new packet damage cases. Pure synthetic axis parser14 accepted/47 rejected including all three reader BUDGET statuses; earlier14 real raw streams reparsed by the final width-binding revision. These are not product axis runs.",
+      "input_binding": "Initial14 processes captured the earlier packet-parser revision; final2 captured the width-binding refinement. Both before/after snapshots are exact. Runs retain prior map07b; this newly appended facet is documentation after execution.",
+      "fresh_build": "UTF-8 Ninja MSVC Release and Clang ASan+UBSan each compiled the modified consumer C and linked its executable. The public archives, generated C/native target, shared interfaces and CMake registration are unchanged.",
+      "protected": "598 previously protected entries checked: only the authorized SourceMirror consumer C and its two objects/two executables changed. The other593 retain exact SHA256/size/mtime. Worker changes are exactly the two runners, consumer C and this appended map;12 historical generated files remain unchanged.",
+      "effective_inputs": {
+        "scripts/source_product_consumer_allocation_faults.py": "3dc80cddc4fc487a840c6fa9ccf5d0c8453be59da3f14af3ddf09414e0f24e92",
+        "scripts/source_product_consumer_allocation_axes.py": "f985f8105fa003cb735a71c5449d329737a40887d624bb2f57aafb67ca17e4fc",
+        "tests/unit/xir/product_consumers/test_source_product_allocation_scenario0.c": "01de08143ee86d3ebf27c774933a0115fcde54420e65a455e6fb6f35d577ad61"
+      },
+      "evidence": "build-consumer-evidence/current67-source0-packet-preservation-r1/",
+      "remaining": "Complete2036 compiler/32runtime sweeps and all12 actual resource axes require a new Main window. Full safety, native/mixed packet mutation qualification, other7 sources, initialization/sticky failure/sibling continuation and all prior OPEN duties remain. No consumer is retired."
+    }
+  },
+  "registration": {
+    "test": "source_product_process_lifecycle",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "matrix": [
+    "normal:actual product released,physicalzero,return0,process_contractPASS",
+    "nonzero:actual product released,physicalzero,return23,process_contractFAIL preserved",
+    "timeout:actual product verified thenheld,flushedstdout/stderr;3second deadline,actualkill/reap,process_contractFAIL preserved;no productcleanup claim"
+  ],
+  "boundaries": [
+    "Host fixture is handwritten portable C;no generated native runtime execution.",
+    "The dedicated timeout is intentional;all original FI and resource-axis timeouts,budgets,jobs,ordinals and registrations stay unchanged.",
+    "Actual timeout/kill/reap success and normal/nonzero failure receipts only. OS wait/reap error,thread executor/capture/write failure paths remainunverified onrealWindows.",
+    "Forced process death provides OS termination evidence,not compiler/runtime owner destruction or sanitizer shutdown qualification.",
+    "OriginalSource108=88fixtures+20other;extra26files160functions/shared7;wholelegacyOPEN;retired0."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-process-lifecycle-r1",
+    "receipts": "results.json",
+    "registered_commands": 2,
+    "actual_child_processes": 6,
+    "normal_child_process_contracts": "2PASS",
+    "nonzero_child_process_contracts": "2FAIL preserved,actual23",
+    "timeout_child_process_contracts": "2FAIL preserved,actualtimed_out andWindowskillreturn1",
+    "terminal_observation": "All6PIDs independently queried via OpenProcess:ERROR_INVALID_PARAMETER87,PIDabsent. process_run separately observedwaitcompletion andreturncode.",
+    "readiness": "All6children compiled and publiclyverifiedrealSourceProduct afterSessiondeath;flushedstdout/stderrbeforebranch. Actual physicalstock61blocks/9500bytes at readiness. No nested children spawned bytheCfixture.",
+    "normal_cleanup": "4normal/nonzerochildren releasedProduct andexternalledger,thenphys0/0. TimeoutchildrenwerekilledwhileholdingProduct;no destructor,physicalcleanup,orASanshutdownqualificationclaimed.",
+    "inputs": {
+      "msvc": 2565,
+      "asan": 2565,
+      "comparison": "SHA,size,mtime before==after"
+    },
+    "fresh_build": "OneCconsumerTU/configactuallycompiledandlinked;C11/W4/WX/ClangASan+UBSan;VALIDNinjadeps. Bothfirstbuildsandfirstexecutionspassed.",
+    "production": "10actualpubliclinkedlibraries/configrawSHA,size,mtimeexact;6productionobjectarchivemembersmatched;producer25fsourcebound.",
+    "protection": "10920tracked pre-snapshot:10919nonownedexact;12historicalgenerateddirtyfilespreserved;598protected594exact+4expectedCMakechanges.",
+    "existing_runner": "Originalallocation_faults/allocation_axes unchanged;thisnewgateimportstherealprocess_run/process_contract/stop_process andusesrealWindowsprocesses. Oldallocationmapdeepidentical.",
+    "postrun_annotation": "Resultannotationaddedafterexecution;executioninputsbindsavedpreannotationmap;noannotationrerunclaimed.",
+    "reap_error": "NOT_RUN",
+    "thread_executor_error": "NOT_RUN",
+    "input_capture_error": "NOT_RUN",
+    "receipt_write_error": "NOT_RUN",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
