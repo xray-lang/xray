@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "root_integer_control",
+      "owner": 3,
+      "slot_type": 2,
+      "type": 2,
+      "bytes": 1271,
+      "sha256": "8d77852af802bdf4d0340e86d618c7a0709b8a70d236b6670b74c6c4851cbc7d",
+      "original_positive_expected": "XR_XIR_OK",
+      "execution_scope": "root control"
+    },
+    {
+      "name": "root_string_control",
+      "owner": 3,
+      "slot_type": 3,
+      "type": 3,
+      "bytes": 1267,
+      "sha256": "cf20d88d5e9dfa75eafba5cbd25f1ae847dfe48efe0d3c62f4bd1042c5478411",
+      "original_positive_expected": "XR_XIR_OK",
+      "execution_scope": "root control"
+    },
+    {
+      "name": "original_base_integer_shape",
+      "owner": 0,
+      "slot_type": 2,
+      "type": 2,
+      "bytes": 1271,
+      "sha256": "91c63c6394dedb544210b62b8cf518aae9cecef78c4fe0f24ea25c48db710c9e",
+      "original_positive_expected": "XR_XIR_OK",
+      "execution_scope": "original ownership shape admission only"
+    },
+    {
+      "name": "original_base_string_shape",
+      "owner": 0,
+      "slot_type": 3,
+      "type": 0,
+      "bytes": 1267,
+      "sha256": "7ebc74c55d87c2dfeffb00dd9375edea466a98586682ee6a61450dc70d250534",
+      "original_positive_expected": "XR_XIR_OK",
+      "execution_scope": "original ownership shape admission only"
+    }
+  ],
+  "execution_oracle": {
+    "instances": 2,
+    "repeats": 24,
+    "integer_results": [
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64
+    ],
+    "text_output": [
+      "module-owned-text\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n",
+      "changed\n"
+    ]
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "ORIGINAL_SHAPES_OPEN_ROOT_CONTROLS_VERIFIED",
+  "result": "FAIL_ORIGINAL_ADMISSION_ROOT_CONTROLS_PASS",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "legacy_line": 169,
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "assertion_sites": 94,
+      "loop_sites": 10,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:xr_program_module_native_fixture_write scenarios0/1 and xr_program_module_state_fixture_write_mode",
+  "original_oracles": {
+    "repeats": 24,
+    "instances": 2,
+    "integer_result": "41 + repeat, through64",
+    "text_output": "module-owned-text newline first, changed newline for23 later calls",
+    "storage": "Mutable slot in base dependency; entry in main accesses it across the diamond"
+  },
+  "original_shapes": "Independently translate the original base ownership, initializer and entry access into current Checked operations. Keep positive admission expectation. This is not a byte copy of the old format. String original entry returns Unit and prints, as in old native scenario1.",
+  "controls": "Separate root-owned packets exercise implemented same-owner mutable state. They do not stand in for the original dependency-owned state. String control additionally returns the pre-replacement owned value to test escape after all owners die.",
+  "current_contract": "Spec17.8 restricts module var to root and slot operations to declaring module. Original positive cross-module mutable semantics require Main adjudication; an admission failure is retained as OPEN rather than relabeled a negative test.",
+  "oracle": {
+    "compiler": "Heap Checked input poisoned and freed before exact rewrite, then Checked freed before Lowered verification; generated C twice identical and compiled digest matched",
+    "execution": "Two instances,24 interleaved calls each, initialize once in dependency order, each keeps its own scalar/string state",
+    "output": "Typed provider verifies original string bytes, public renderer emits exact complete lines, reentrant entry is BUSY",
+    "ownership": "Drop caller Program before starts;48 results per control survive both Instances, Program/code and Lowered destruction; copy/drop each owned value afterward; all physical counters and runtime table return zero",
+    "native": "VM, actual native, native initializers with VM entry, and inverse each independently checked"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_slot_state_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_state_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_state_native-inits",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_state_vm-inits",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_state_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Original dependency-owned mutable state and cross-module slot access",
+    "Original initialization traps and duplicate/unpublished slot cases2-4",
+    "Owned class lifecycle and reverse slot release scenarios5-13",
+    "Original state descriptor ABI rejection and execution leases",
+    "Full allocation failure scans",
+    "SourceProduct graph producer",
+    "Full FI",
+    "Resource axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-slot-state-r1",
+  "retired": 0,
+  "replacement_gates": [],
+  "program_entry": "Current Program requires a distinct zero-argument I64 entry. Exported operation4 carries the original scalar/Unit result or explicit string escape control; a zero-returning I64 program entry5 supplies the canonical root. Host state tests invoke export4. This adapter is part of the fixture, not a production compatibility path.",
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "root_control_calls": 768,
+    "retained_scalar_results": 384,
+    "retained_string_results": 384,
+    "typed_output_groups": 384,
+    "output_bytes": 3232,
+    "private_entry_rejections": 3072,
+    "initializer_completions": 128,
+    "lifecycle_events": 320,
+    "slot_publications": 32,
+    "slot_releases": 32,
+    "original_positive_admission_attempts": 16,
+    "original_actual": "All16 BAD_STRUCTURE versus expectedOK; gate exits1 and remainsFAIL",
+    "first_build": "Both FAIL at string control read: incorrect non-I64 Program root entry in fixture. First source/binaries/logs preserved.",
+    "diagnostic_build": "MSVC confirmed whole-module BAD_TYPE; no runtime executed",
+    "corrected_r3": "Canonical I64 root entry plus exported state operation built both; first8 runtime processes failed at test observer missing SLOT_PUBLISHED, raw receipts preserved.",
+    "corrected_r4": "Both rebuilt after exact slot event observer and active-instance release fix. All root control traces and physical release pass;8 process exit1 from original shapes;2 encoding PASS.",
+    "physical": "compiler=0/0 runtime=0/0 table=0; code release1 per control; strings remain readable/copyable after all executable owners die",
+    "newest_evidence": "corrected-r4/results.json"
+  },
+  "postrun_note": "Result annotation appended after final runtime execution; no final-map rerun claimed."
+}
