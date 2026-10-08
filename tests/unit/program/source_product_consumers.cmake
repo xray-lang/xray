@@ -301,3 +301,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_modul
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_execution.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_output_failure.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_suspension.cmake")

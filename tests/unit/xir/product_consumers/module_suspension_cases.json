@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "bytes": 1226,
+  "sha256": "c64ab3bcb4a60d1f9adbbc877af94680e03b0d88dbf4b89583099edf7922b0e4",
+  "stdout_hex": "310a320a330a340a",
+  "cases": [
+    {
+      "name": "resume_both",
+      "action": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "cancel_peer_resume",
+      "action": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "destroy_peer_resume",
+      "action": [
+        2,
+        0
+      ]
+    }
+  ]
+}

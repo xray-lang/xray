@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "result": "PASS_FOCUSED_BOTH_CONFIGURATIONS",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_instance.c",
+      "legacy_line": 102,
+      "body_lf_sha256": "6668ca83f758cbe4c127827867b7d9686ce8fb99fcbde0828c86fcf39ecf78cf",
+      "assertion_sites": 58,
+      "loop_sites": 6,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:xr_program_module_output_fixture_write_with_suspension",
+  "original_facet": "The left initializer suspends after numbered output 1\\n2\\n, before it becomes ready or later modules execute. Normal resumption continues 3\\n4\\n once.",
+  "representation_boundary": "Current public Instance uses exclusive driving and epoch/wake authority; old multiple execution handles and INITIALIZING waiter semantics remain OPEN.",
+  "cancellation_boundary": "This packet has no cleanup helper. Cancel/destroy verifies current state/lifetime protocol only. The old explicit cancellation successor printed another 2\\n and published cancellation; that original output/cleanup responsibility remains OPEN and is NOT claimed equivalent.",
+  "oracle": {
+    "actions": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    "action_names": [
+      "resume",
+      "cancel",
+      "destroy"
+    ],
+    "pending_output_hex": "310a320a",
+    "normal_output_hex": "310a320a330a340a",
+    "pending_lifecycle": 3,
+    "normal_lifecycle": 8,
+    "entry": 4,
+    "result": 42,
+    "wait": "YIELD; reserved/after_ms/subject/generation/ticket all zero; bad epoch and wake rejected with complete sentinel preserved; valid request remains published.",
+    "state": "INITIALIZING while suspended; matching wake resumes; cancellation while initializing is FAILED/CANCELLED and allocation-free sticky on three restarts."
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_suspension_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_suspension_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_suspension_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_suspension_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_suspension_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "ownership": "Heap input destroyed before Checked reverify/write; Checked destroyed before Lowered verification; Program caller reference dropped before starts; canceled failure and successful scalars checked after both instances/code/Lowered owners die.",
+  "evidence": "build-consumer-evidence/current67-module-suspension-r1",
+  "remaining": [
+    "Old cancellation successor output 2\\n and output refusal during cancellation",
+    "old initialization waiter/lease/concurrency semantics",
+    "stateful cleanup and owned errors/panics",
+    "SourceProduct graph",
+    "complete cancellation prefix scan",
+    "full FI",
+    "resource axes",
+    "full safety",
+    "Main integration"
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "first_build": "PASS",
+    "first_execution": "PASS",
+    "pending_yield_requests": 48,
+    "bad_epoch_wake_rejections": 192,
+    "cancelled_initializers": 8,
+    "allocation_free_cancelled_retries": 24,
+    "destroyed_suspended_instances": 8,
+    "retained_cancelled_failures": 8,
+    "retained_scalar_results": 128,
+    "physical": "compiler=0/0 runtime=0/0 table=0"
+  },
+  "postrun_note": "Result annotation appended after execution; no final-map rerun claimed."
+}
