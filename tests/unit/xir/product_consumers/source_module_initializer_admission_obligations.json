@@ -1,0 +1,360 @@
+{
+  "schema": 1,
+  "status": "OPEN_SOURCE_ADMISSION_PREREQUISITES",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "worker_parent": "ab076f870f1b9af4913b4c452bce04fffa30c933",
+  "original_helper": "tests/unit/program/test_xr_program_source_build.c:assert_module_initializer_failure",
+  "original_helper_body_lf_sha256": "73f503c8022d7be80768a48f5972b9069666aa6aa6f9a4efc328ca7cd884ce2b",
+  "source_preservation": "Decode the exact original C literals, preserve the sole snprintf %s substitution and each original branch. No root adapter, flattened import, renamed symbol or moved module variable. This extraction does not claim execution of the old C helper.",
+  "originals": {
+    "error": {
+      "legacy_name": "source_owner_module_initializer_error_cleans_owned_state",
+      "wrapper_body_lf_sha256": "a072af02d1b6fe2ebfe2a34fe069d1824c7464433f41d7205dbe0f32218c018b",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "files": {
+        "root.xr": "07d40100aab9dad1b2e1158214d20e1d1bfe89146fca668e7fe0f842a717b02e",
+        "library.xr": "bec93d87385f7e8e5f0fa2773e01f2a0cb2aa3006bb9c171b990c36450656914"
+      },
+      "original_native_expectation": {
+        "id": "module_initializer_error",
+        "expected_exit": 1,
+        "expected_stderr_hex": "5b556e636175676874204572726f725d20496e69744661696c7572652e52656a656374656428372c20226661696c656420696e697422290a",
+        "labels": [
+          "module-graph",
+          "error",
+          "defer",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "positive_admission_gate": "test_source_product_module_initializer_admission_error",
+      "actual": [
+        {
+          "configuration": "msvc",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_error status=1 stage=1 source-status=1 module=1 line=3 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\error\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/msvc-test_source_product_module_initializer_admission_error.json",
+          "stdout_sha256": "a996d0d6f3ea4a4aa85f57ea76ef3b6c5fffded89f1f5addec04d0fa95eee2e1",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        },
+        {
+          "configuration": "asan",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_error status=1 stage=1 source-status=1 module=1 line=3 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\error\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/asan-test_source_product_module_initializer_admission_error.json",
+          "stdout_sha256": "a996d0d6f3ea4a4aa85f57ea76ef3b6c5fffded89f1f5addec04d0fa95eee2e1",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        }
+      ]
+    },
+    "panic": {
+      "legacy_name": "source_owner_module_initializer_panic_cleans_owned_state",
+      "wrapper_body_lf_sha256": "e97be9c49b516e3c539ee26220e701e7238b46499552b973d1e870929db7bc4c",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "files": {
+        "root.xr": "07d40100aab9dad1b2e1158214d20e1d1bfe89146fca668e7fe0f842a717b02e",
+        "library.xr": "f075ab0b27faa7ef718b9a578095d218dc9c677bbb8b6eb4125d4699f39c042f"
+      },
+      "original_native_expectation": {
+        "id": "module_initializer_panic",
+        "expected_exit": 1,
+        "labels": [
+          "module-graph",
+          "panic",
+          "defer",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        },
+        "expected_stderr_hex": "5b556e6361756768742050616e69635d2045303030313a20756e6361756768742070616e69630a"
+      },
+      "positive_admission_gate": "test_source_product_module_initializer_admission_panic",
+      "actual": [
+        {
+          "configuration": "msvc",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_panic status=1 stage=1 source-status=1 module=1 line=3 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\panic\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/msvc-test_source_product_module_initializer_admission_panic.json",
+          "stdout_sha256": "5bece31af08ccc5a4b049129d047107c72932b686308536039828c98a273354d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        },
+        {
+          "configuration": "asan",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_panic status=1 stage=1 source-status=1 module=1 line=3 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\panic\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/asan-test_source_product_module_initializer_admission_panic.json",
+          "stdout_sha256": "5bece31af08ccc5a4b049129d047107c72932b686308536039828c98a273354d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        }
+      ]
+    },
+    "panic_message": {
+      "legacy_name": "source_owner_module_initializer_panic_message_retains_failed_instance",
+      "wrapper_body_lf_sha256": "b0052cdae204d70238dfbc4d25eadc36d754b261b61fc008101df0db7bee8fc4",
+      "status": "OPEN",
+      "replacement_gates": [],
+      "files": {
+        "root.xr": "07d40100aab9dad1b2e1158214d20e1d1bfe89146fca668e7fe0f842a717b02e",
+        "library.xr": "aff226397310a2b1df44fe64091667e749292aa6c1ccaf6833a2d7a09307b46f"
+      },
+      "original_native_expectation": {
+        "id": "module_initializer_panic_message",
+        "expected_exit": 1,
+        "labels": [
+          "string",
+          "module-graph",
+          "panic",
+          "defer",
+          "cleanup",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        },
+        "expected_stderr_hex": "5b556e6361756768742050616e69635d2045303030313a206661696c656420696e69740a"
+      },
+      "positive_admission_gate": "test_source_product_module_initializer_admission_panic_message",
+      "actual": [
+        {
+          "configuration": "msvc",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_panic_message status=1 stage=1 source-status=1 module=1 line=3 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\panic_message\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/msvc-test_source_product_module_initializer_admission_panic_message.json",
+          "stdout_sha256": "6dca934935a7d8bd3119ddb02e7e50ebb8b4cb0cc37e9255d40a91b213daa8fa",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        },
+        {
+          "configuration": "asan",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_panic_message status=1 stage=1 source-status=1 module=1 line=3 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\panic_message\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/asan-test_source_product_module_initializer_admission_panic_message.json",
+          "stdout_sha256": "6dca934935a7d8bd3119ddb02e7e50ebb8b4cb0cc37e9255d40a91b213daa8fa",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        }
+      ]
+    }
+  },
+  "minimal_controls": {
+    "imported_scalar_slot": {
+      "role": "Independent positive compilation control; no original source replacement",
+      "files": {
+        "root.xr": "e7784a6556af77446975e13fbd9da3d5e4103085a0a3148f0f5b4a2b699604b9",
+        "library.xr": "84f173fbd569f49121c63fc7e8e8dab5c6d40f90310e51e8b2a465efae1b5d4c"
+      },
+      "expected_probe_exit": 0,
+      "actual": [
+        {
+          "configuration": "msvc",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_imported_scalar_slot status=1 stage=1 source-status=1 module=1 line=1 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\imported_scalar_slot\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/msvc-test_source_product_module_initializer_admission_imported_scalar_slot.json",
+          "stdout_sha256": "cb270f09f61b3b0c796bc0a17e0689715b350ad67dc43a2c1d084c9684d80cd1",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        },
+        {
+          "configuration": "asan",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_imported_scalar_slot status=1 stage=1 source-status=1 module=1 line=1 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\imported_scalar_slot\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/asan-test_source_product_module_initializer_admission_imported_scalar_slot.json",
+          "stdout_sha256": "cb270f09f61b3b0c796bc0a17e0689715b350ad67dc43a2c1d084c9684d80cd1",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        }
+      ]
+    },
+    "imported_class_slot": {
+      "role": "Independent positive compilation control; no original source replacement",
+      "files": {
+        "root.xr": "e7784a6556af77446975e13fbd9da3d5e4103085a0a3148f0f5b4a2b699604b9",
+        "library.xr": "8113ff0def8fc8671bb0e6653ef6c5d480c41a8003c7ce12c9aee539b88509e1"
+      },
+      "expected_probe_exit": 0,
+      "actual": [
+        {
+          "configuration": "msvc",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_imported_class_slot status=1 stage=1 source-status=1 module=1 line=2 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\imported_class_slot\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/msvc-test_source_product_module_initializer_admission_imported_class_slot.json",
+          "stdout_sha256": "78bac539b04d8b69612f43d574e6a4293676ffd4d277d17f7665b69e63816433",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        },
+        {
+          "configuration": "asan",
+          "result": "FAIL",
+          "returncode": 1,
+          "diagnostic": [
+            "source-admission case=initializer_imported_class_slot status=1 stage=1 source-status=1 module=1 line=2 column=5 xir-status=0 function=0 block=0 instruction=0 reason=0 message=library mutable or exported state is not admitted",
+            "source-path E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\module_initializer_admission\\imported_class_slot\\library.xr"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/asan-test_source_product_module_initializer_admission_imported_class_slot.json",
+          "stdout_sha256": "78bac539b04d8b69612f43d574e6a4293676ffd4d277d17f7665b69e63816433",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": null
+        }
+      ]
+    },
+    "imported_local_class": {
+      "role": "Independent positive compilation control; no original source replacement",
+      "files": {
+        "root.xr": "e7784a6556af77446975e13fbd9da3d5e4103085a0a3148f0f5b4a2b699604b9",
+        "library.xr": "ebef0edc4e8e0c5decbfc9cdd831dc53f223853fbed7e90c380ec7e76f795c77"
+      },
+      "expected_probe_exit": 0,
+      "actual": [
+        {
+          "configuration": "msvc",
+          "result": "PASS",
+          "returncode": 0,
+          "diagnostic": [
+            "source-admission case=initializer_imported_local_class status=0 functions=6 modules=2 entry=5"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/msvc-test_source_product_module_initializer_admission_imported_local_class.json",
+          "stdout_sha256": "a8aa3f42d48aeb8408c853d3f1b6459672b5fdbed36c0ecf5d6bffd69964b9a7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\consumer-initializer-admission\\imported_local_class.c",
+            "bytes": 29381,
+            "sha256": "2d1f29c9f83dcb461aa22d271e4bd8ba133521b33263b68b8ff0d3a469d38994"
+          }
+        },
+        {
+          "configuration": "asan",
+          "result": "PASS",
+          "returncode": 0,
+          "diagnostic": [
+            "source-admission case=initializer_imported_local_class status=0 functions=6 modules=2 entry=5"
+          ],
+          "physical_zero_reported": true,
+          "receipt": "build-consumer-evidence/current67-module-initializer-admission-r1/asan-test_source_product_module_initializer_admission_imported_local_class.json",
+          "stdout_sha256": "a8aa3f42d48aeb8408c853d3f1b6459672b5fdbed36c0ecf5d6bffd69964b9a7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "emitted_C": {
+            "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\consumer-initializer-admission\\imported_local_class.c",
+            "bytes": 29381,
+            "sha256": "2d1f29c9f83dcb461aa22d271e4bd8ba133521b33263b68b8ff0d3a469d38994"
+          }
+        }
+      ]
+    }
+  },
+  "scope": "Three original positive compilation requirements preceding runtime initialization failure, plus two smaller positive reproductions and one imported local-owner control. None is a negative compiler test.",
+  "compiler_expectation": "SourceProduct success, detached Closed Checked read and verification, independent Lowered and byte-identical real C emission, then physical zero. C is emitted but not compiled or executed by this admission probe.",
+  "runtime_oracles": {
+    "two_instances": 2,
+    "repeats_per_instance": 3,
+    "error": "InitFailure.Rejected variant 0: code=7, owned UTF-8 message failed init (11 bytes); no panic value.",
+    "panic": "PanicInfo code 1, no typed business error; no trap.",
+    "panic_message": "PanicInfo code 1 and owned UTF-8 failed init (11 bytes).",
+    "sticky_failure": "No new initializer work or lifecycle events on repeated calls after initial failure.",
+    "class_cleanup": "Two constructions, two reverse-order finalizations, exactly one finalize and reclaim per object; initializer local Cell(2) defer assigns value=3 before disposal, module Cell(1) is cleaned after failure.",
+    "escaped_failure_observation": "Original assert_failure_observation_retirement helper remains a separate required owner/lifetime proof.",
+    "native": "Original independent expected exit/stderr for each fixture; actual compiled native and mixed remain required."
+  },
+  "remaining": [
+    "All original runtime oracle fields above",
+    "Exact failure observation retirement",
+    "Full compiler/runtime FI, resource axes and cancellation",
+    "Actual native/mixed execution and complete safety",
+    "Main integration and current-baseline qualification"
+  ],
+  "retired": 0,
+  "production_finding": {
+    "file": "src/xir/xxir_source.c",
+    "line": 2247,
+    "sha256": "52258010440971dbc1d3d1ef495bb55e82ea639dc36f674c1c163f29abc8ecc7",
+    "message": "library mutable or exported state is not admitted",
+    "status": "XR_XIR_BAD_STRUCTURE",
+    "stage": "XR_XIR_SOURCE_PRODUCT_CHECK",
+    "source_module": 1,
+    "original_location": "library.xr:3:5",
+    "minimal_scalar_location": "library.xr:1:5",
+    "minimal_class_location": "library.xr:2:5",
+    "inference": "The first rejection is the explicit non-root mutable-state admission restriction. Function-local class construction projects successfully in the imported library. This does not establish correctness after that restriction is lifted; later initializer, enum, panic and cleanup stages remain unexecuted."
+  },
+  "failure_observation_retirement": {
+    "body_lf_sha256": "7945a583c1ab1c5c16be79443f43a0928f9bf971f530c715e14a9b2aa79c40af",
+    "old_obligations": "For error or message-bearing panic, owned outcome plus borrowed frame pin two leases; drain cannot retire. Borrowed message remains 11-byte failed init. Freeing frame leaves one lease and retirement remains rejected. Owned message survives, disposing it drops final lease and allows retirement. Message-free panic has no dynamic-value leases.",
+    "status": "OPEN_NEEDS_PUBLIC_OWNER_EQUIVALENCE_NO_LEGACY_API_RESTORATION"
+  },
+  "validation": {
+    "evidence": "build-consumer-evidence/current67-module-initializer-admission-r1",
+    "product_processes": 12,
+    "positive_admission_pass": 2,
+    "positive_admission_fail": 10,
+    "source_preservation_processes": 2,
+    "original_runtime": "NOT_RUN",
+    "build": "Both UTF-8 MSVC environment Ninja checks regenerate CMake then no work to do; existing probe binary/one TU and linked public libraries are bound, not recompiled.",
+    "map_timing": "Original product runs bind the initial map and validator. Result notes and direct wrapper-body check are appended afterward; final static validation is separate, no product rerun claimed.",
+    "native_compilation": "NOT_RUN",
+    "native_execution": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN"
+  }
+}

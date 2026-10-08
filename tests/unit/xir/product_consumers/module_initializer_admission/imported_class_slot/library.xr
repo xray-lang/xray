@@ -1,0 +1,3 @@
+class Cell { value: i64; constructor(value: i64) { this.value = value } }
+var state = Cell(1)
+export fn read() -> i64 { return state.value }

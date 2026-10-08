@@ -1,0 +1,10 @@
+enum InitFailure { Rejected { code: i64, message: string } }
+class Cell { value: i64; constructor(value: i64) { this.value = value } }
+var state = Cell(1)
+fn initialize(ok: bool) -> i64 {
+  var local = Cell(2)
+  defer { local.value = 3 }
+  if (!ok) { throw InitFailure.Rejected { code: 7, message: "failed init" } }
+  return local.value
+}
+initialize(false)

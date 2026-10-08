@@ -1,0 +1,2 @@
+import { read } from "./library"
+fn answer() -> i64 { return read() }
