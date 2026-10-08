@@ -1,0 +1,4 @@
+final class Root { value: i64; text: string; constructor(value: i64, text: string) { this.value = value; this.text = text } }
+fn answer() -> i64 { const value = Root(40, "x"); const alias = value; alias.value += 2; assert(value.text == "x"); return value.value }
+export fn consumerAnswer() -> i64 { return answer() }
+fn main() -> i64 { return 0 }

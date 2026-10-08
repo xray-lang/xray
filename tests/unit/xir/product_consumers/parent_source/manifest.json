@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "open_root_empty",
+      "expected": 0,
+      "fields": 0,
+      "final": 0,
+      "control": 1,
+      "sha256": "3e512ebc299c7bd2bbab9aa9a7fd1f0f11831fa9f6887d3b520f0c81edf9e462",
+      "runtime_expected": 42
+    },
+    {
+      "name": "open_root_fields",
+      "expected": 0,
+      "fields": 2,
+      "final": 0,
+      "control": 1,
+      "sha256": "1d96481cada757452b5e31f32bfe88774428ac05043175813ff3b076a19b2dab",
+      "runtime_expected": 42
+    },
+    {
+      "name": "final_root_fields",
+      "expected": 0,
+      "fields": 2,
+      "final": 1,
+      "control": 1,
+      "sha256": "887ab8cc0c5c584781102aec0e2f7e0679c677eded2b23ce94c6dcab39ae6d1f",
+      "runtime_expected": 42
+    },
+    {
+      "name": "parent_chain_fields",
+      "expected": 0,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "e3da628467fd38d8e05a5598f610c82d05fd551d3ea957ac908d9d1959791eed",
+      "runtime_expected": 42
+    },
+    {
+      "name": "parent_chain_empty",
+      "expected": 0,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "0a7b347dfb9eb01293a7d7160259ae1ebde9f8c4fab5f12288ccd4412d588e5a",
+      "runtime_expected": 42
+    },
+    {
+      "name": "self_parent",
+      "expected": 3,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "26415e7e338b6b5c989ab6ae4bc0c9763d1ee87f9905025272aded0a9ce51415",
+      "runtime_expected": null
+    },
+    {
+      "name": "cycle",
+      "expected": 3,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "9049cea00db176a1a25e9cef87da1f3344147a861f9dfa972f94a3539abeedd9",
+      "runtime_expected": null
+    },
+    {
+      "name": "scalar_parent",
+      "expected": 1,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "6f1ffc5ea4773df949584d8693a9bb8ff70d5cfe8b7674e73b3c639e25c5622e",
+      "runtime_expected": null
+    },
+    {
+      "name": "record_parent",
+      "expected": 3,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "56cb586a4a642a26f768314b65fef330e8dd71c2650ee50a1138f10abddc4fed",
+      "runtime_expected": null
+    },
+    {
+      "name": "final_parent",
+      "expected": 3,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "8760546a3b0905f6f7e463bcd2c33191a64702b9c48a97cab261398890d7dcc4",
+      "runtime_expected": null
+    },
+    {
+      "name": "missing_parent",
+      "expected": 3,
+      "fields": 0,
+      "final": 0,
+      "control": 0,
+      "sha256": "476028f1927136775796fc3ef6899fbafb2f777f58f5406fd9b64e019b3e087d",
+      "runtime_expected": null
+    }
+  ],
+  "runtime_cases": [
+    "open_root_empty",
+    "open_root_fields"
+  ],
+  "boundary": "Source witnesses of legacy CoreIR parent-graph duties,not literal old fixtures. Five positive expectations remainOK;blanket unsupported inheritance masks five negative reasons;the scalar keyword case fails parsing and does not prove nominal-parent checking. Root class controls and final flag do not prove parent behavior. No retirement."
+}

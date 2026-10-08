@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_parent_types",
+      "legacy_path": "tests/unit/program/xr_program_parent_type_checks.inc.c",
+      "legacy_line": 41,
+      "body_lf_sha256": "115b028b887ae4fffc52ffe5b4cc6bba335e9cf325b6cd892adf9037ffeabd47",
+      "assertion_sites": 17,
+      "loop_sites": 3,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_parent_type_cycle_wire_and_allocations",
+      "legacy_path": "tests/unit/program/xr_program_parent_type_checks.inc.c",
+      "legacy_line": 129,
+      "body_lf_sha256": "422657280dcb2a74cd9d169f3c71ad29bbd482f9446acfd43a3a0510f3e8a0fa",
+      "assertion_sites": 10,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_parent_type_requires_nominal_target_wire",
+      "legacy_path": "tests/unit/program/xr_program_parent_type_checks.inc.c",
+      "legacy_line": 175,
+      "body_lf_sha256": "a56c722015ea74425d730cd8187f9fd6ca23e61b98e0b5c6088bcaaa69a6d541",
+      "assertion_sites": 8,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL_LEGAL_PARENT_SOURCE_ADMISSION_ROOT_CONTROLS_PASS",
+  "original_mapping": [
+    {
+      "legacy": "test_parent_types",
+      "current_facet": "Source three-level parent chain with Base0fields,MiddleI64,LeafString witnesses the old flattened field-prefix shape;open/final root controls are separate.",
+      "remaining": "Original key-sort/equal-byte reorder,canonical IDs32..34,flat field-prefix bad-type and missing-field mutations,all original negative reasons and real parent storage remainOPEN.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_parent_type_cycle_wire_and_allocations",
+      "current_facet": "Empty three-level parent chain remains positive;Source cycle remains a negative reason separate from unsupported inheritance.",
+      "remaining": "No parent field exists in current public descriptor;old valid-digest wire cycle,exact nominal graph check and fail-each-allocation constructor/writer loop1..<256 remainOPEN.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_parent_type_requires_nominal_target_wire",
+      "current_facet": "Struct-as-parent Source witness is masked by unsupported inheritance;direct extends i64 fails the Identifier grammar before semantic checking.",
+      "remaining": "Old mixed class/reference-record valid packet and wire mutation are not the same as Source structs;early unsupported-inheritance rejection does not prove target-kind validation.",
+      "status": "OPEN"
+    }
+  ],
+  "original_constructor_variants": [
+    "self parent",
+    "scalar parent",
+    "child missing inherited field prefix",
+    "unresolved parent900",
+    "record-reference parent",
+    "three-node cycle"
+  ],
+  "original_wire_variants": [
+    "self parent32",
+    "scalar parentI64",
+    "inherited field prefixBool mismatch",
+    "empty-chain cycle",
+    "non-nominal record parent"
+  ],
+  "matrix": "11Source cases:3root controls+2legalparentchains+6negativewitnesses;2root runtime cases x VM/native/mixed-even/mixed-odd.",
+  "current_source_contract": "spec section5.3 supports class extends and constructor super rules;source_class_declare rejects any super_name/super_module withBAD_TYPE;xxir_nominal.h has no parent field and describes open root classes only.",
+  "boundary": [
+    "Source witnesses,not literal oldCoreIR inputs or frozen representation retirement.",
+    "Five negative statuses caused by blanket unsupported inheritance are masked duties;scalar_parent is a keyword parse rejection,not nominal-parent validation. No original negative reason is qualified by these failures.",
+    "Parent chain declaration checks use unused declarations;no derived construction,upcast,fieldprefix layout,dispatch,super,orcopy proved.",
+    "Root controls retain exact42 and realpipeline/doubleInstance/cleanup checks;they do not replace inheritance.",
+    "Source108=88fixtures+20other;additional26files160functions/shared7unchanged;3wholeparentfunctionsOPEN;retired0."
+  ],
+  "tests": [
+    "test_source_product_parent_source",
+    "source_product_parent_source_inputs",
+    "test_source_product_parent_open_root_empty_{vm,native,mixed_even,mixed_odd}",
+    "test_source_product_parent_open_root_fields_{vm,native,mixed_even,mixed_odd}"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "parser_boundary": "ClassDecl extends requires Identifier TypeArgs;the i64 keyword is not an Identifier. First candidate expectedBAD_TYPE3 incorrectly;correct independent parser expectationBAD_STRUCTURE1. The old valid-CoreIR scalar-parent negative staysOPEN.",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-parent-source-r1",
+    "final_receipts": "run-r2/results.json",
+    "registered_processes": 20,
+    "runtime_pass": 16,
+    "inputs_pass": 2,
+    "source_fail": 2,
+    "source_cases": 22,
+    "root_positive_pass": 6,
+    "legal_parent_positive_fail": 4,
+    "masked_negative_status_matches": 10,
+    "keyword_parser_rejects": 2,
+    "diagnostic": "class execution currently requires a root declaration without inheritance",
+    "root_runtime": {
+      "instances": 32,
+      "fixed_results_42": 64,
+      "canonical_zero_results": 32,
+      "producer_program_drop_before_calls": true,
+      "backends": [
+        "VM",
+        "real generated C native",
+        "mixed-even",
+        "mixed-odd"
+      ]
+    },
+    "root_shape": "Open Root empty:0fields/final0;Open Root populated:I64,String/final0;Final Root populated:I64,String/final1.Each has1CLASS_NEW and independent owned Checked/Lowered after SourceProduct/session death.",
+    "physical": "Compiler/runtime physical0/0 for all complete final cases;actual owner/table destruction,not only ledger live.",
+    "build": "8uniqueconsumer TUs freshly compiled/config including2real generatedC payloads;1admissionTU/config rebuilt after grammar-based expectation correction. C11/W4/WX and ASan+UBSan apply to nativepayloads;VALID Ninja header dependencies verified.",
+    "input_capture": {
+      "msvc": 2561,
+      "asan": 2561,
+      "extra_build_files_each": 21,
+      "comparison": "SHA,size,mtime before==after"
+    },
+    "production": "10linked public libraries/config exactpre-snapshot;runtime_host11th SHA equals prior sealed archive and4actual objects bound,not a598metadata pre-snapshot claim;Source/SourceProduct/Checked/verify/specialize/CGen/VM members raw-match archives;producer25f source compared.",
+    "protection": "10898tracked before:10897nonownedexact;12historicalgenerateddirty preserved;598protected=594exact+4expectedNinja/CTest metadata changes.",
+    "first_history": "First20processes kept:16runtimePASS/2inputsPASS/2SourceFAIL. The first Source consumer had3mismatches/config:2legalparent chains plus wrongexpectedBAD_TYPE3 for extends i64. Grammar requiresIdentifier;actualparseBAD_STRUCTURE1. Corrected candidate status without changing Source bytes or oldCoreIR requirement,rebuiltadmission,reread20actualregisteredcommands.First runner wrongly required emptystderr;firstauditor stopped with missingrecords. Their versions andfirstscope/binaries/objects/rawreceipts are preserved. first-source-reparsed.json is historical reparse only.",
+    "postrun_annotation": "Map annotated after runs;final receipts bind pre-annotation map,no newmap rerun claimed.",
+    "retired": 0
+  }
+}

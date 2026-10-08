@@ -1,0 +1,4 @@
+class Root extends i64 {}
+fn answer() -> i64 { return 42 }
+export fn consumerAnswer() -> i64 { return answer() }
+fn main() -> i64 { return 0 }

@@ -1,0 +1,6 @@
+class Base {}
+class Middle extends Base { value: i64 = 40 }
+class Leaf extends Middle { text: string = "x" }
+fn answer() -> i64 { return 42 }
+export fn consumerAnswer() -> i64 { return answer() }
+fn main() -> i64 { return 0 }
