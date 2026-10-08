@@ -1,0 +1,392 @@
+{
+  "status": "NORMAL_PROJECTION_PARTIAL_PASS_WITH_ORIGINAL_POSITIVE_FAILURES",
+  "worker_parent": "45f05fee9f12789c24d26f9e47af6d24d0207c95",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "original_file": {
+    "path": "tests\\unit\\program\\test_xr_program_source_allocations.c",
+    "bytes": 9562,
+    "sha256": "6fa8b7fb17e51d584098709ac6ce01394172dfa0915e4c516bcdd7a0a29c7d62"
+  },
+  "original_denominator": "All8 exact allocation inputs. The original17 run assertions and2 main assertions, native manifest and whole-domain faults remain independent OPEN responsibilities; no responsibility or old consumer was deleted.",
+  "pipeline": "Finite shared compiler owner -> exact original source preflight -> SourceProduct -> source/closed Checked readers -> retained independent Closed packet -> destroy session/product -> reverify both Checked owners and reread -> Lowered verify -> destroy all Checked/packet owners -> Program take -> two Instances -> drop caller Program -> canonical I64(0) and original checkAnswer Unit twice per Instance -> physical release.",
+  "independent_expectation": "Source declarations answer/exported remain private I64(), checkAnswer is private TEST Unit() with timeout0; original checkAnswer asserts exported()==42. Only canonical entry and original test execute. Original private answer bodies are compiled but not executed by this normal projection.",
+  "observer": "Existing compiler and runtime physical allocation observers, one finite64MiB allocated/8MiB live/128M work owner, no injected faults. Seven private ordinary/test entry refusals per Instance preserve attempts and NEW state. Ledger returns owner baseline before release and compiler blocks/bytes plus runtime blocks/bytes/table all zero afterwards.",
+  "cases": [
+    {
+      "scenario": 0,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario0\\root.xr",
+        "bytes": 119,
+        "sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774"
+      },
+      "original_bytes": 119,
+      "original_sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "PASS",
+          "summary": "allocation-original normal=PASS scenario=0 compiler-sites=2037 runtime-sites=32 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": ""
+        },
+        "asan": {
+          "positive_gate": "PASS",
+          "summary": "allocation-original normal=PASS scenario=0 compiler-sites=2037 runtime-sites=32 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": ""
+        }
+      }
+    },
+    {
+      "scenario": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario1\\root.xr",
+        "bytes": 305,
+        "sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c"
+      },
+      "original_bytes": 305,
+      "original_sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "PASS",
+          "summary": "allocation-original normal=PASS scenario=1 compiler-sites=2666 runtime-sites=32 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": ""
+        },
+        "asan": {
+          "positive_gate": "PASS",
+          "summary": "allocation-original normal=PASS scenario=1 compiler-sites=2666 runtime-sites=32 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": ""
+        }
+      }
+    },
+    {
+      "scenario": 2,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario2\\root.xr",
+        "bytes": 352,
+        "sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd"
+      },
+      "original_bytes": 352,
+      "original_sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=2 compiler-sites=406 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=2 stage=SourceProduct status=3 source-stage=1 source-status=3 line=1 column=4 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\allocation_original\\scenario2\\root.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=constructed XIR failed checking at function 2 block 0 instruction 12\n"
+        },
+        "asan": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=2 compiler-sites=406 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=2 stage=SourceProduct status=3 source-stage=1 source-status=3 line=1 column=4 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\allocation_original\\scenario2\\root.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=constructed XIR failed checking at function 2 block 0 instruction 12\n"
+        }
+      }
+    },
+    {
+      "scenario": 3,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario3\\root.xr",
+        "bytes": 483,
+        "sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540"
+      },
+      "original_bytes": 483,
+      "original_sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "PASS",
+          "summary": "allocation-original normal=PASS scenario=3 compiler-sites=2821 runtime-sites=32 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": ""
+        },
+        "asan": {
+          "positive_gate": "PASS",
+          "summary": "allocation-original normal=PASS scenario=3 compiler-sites=2821 runtime-sites=32 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": ""
+        }
+      }
+    },
+    {
+      "scenario": 4,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario4\\root.xr",
+        "bytes": 208,
+        "sha256": "14b80d72fa93d3c58fe6c4af421044fe81529b726a6d3c067f4bb6a85618f848"
+      },
+      "original_bytes": 208,
+      "original_sha256": "14b80d72fa93d3c58fe6c4af421044fe81529b726a6d3c067f4bb6a85618f848",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=4 compiler-sites=66 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=4 stage=SourceProduct status=3 source-stage=1 source-status=3 line=0 column=0 xir-status=0 reason=0 source-path=NONE product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=type declaration is not admitted by XIR (kind 14)\n"
+        },
+        "asan": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=4 compiler-sites=66 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=4 stage=SourceProduct status=3 source-stage=1 source-status=3 line=0 column=0 xir-status=0 reason=0 source-path=NONE product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=type declaration is not admitted by XIR (kind 14)\n"
+        }
+      }
+    },
+    {
+      "scenario": 5,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario5\\root.xr",
+        "bytes": 377,
+        "sha256": "ba1de6818baaf15e872bfe1be06bd6f95793d053c39320c946c21dc95a867810"
+      },
+      "original_bytes": 377,
+      "original_sha256": "ba1de6818baaf15e872bfe1be06bd6f95793d053c39320c946c21dc95a867810",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=5 compiler-sites=77 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=5 stage=SourceProduct status=3 source-stage=1 source-status=3 line=3 column=4 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\allocation_original\\scenario5\\root.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=type declaration is not admitted by XIR (kind 14)\n"
+        },
+        "asan": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=5 compiler-sites=77 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=5 stage=SourceProduct status=3 source-stage=1 source-status=3 line=3 column=4 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\allocation_original\\scenario5\\root.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=type declaration is not admitted by XIR (kind 14)\n"
+        }
+      }
+    },
+    {
+      "scenario": 6,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario6\\root.xr",
+        "bytes": 177,
+        "sha256": "2e8a3680cd3d51d65977a7ace39b2f27a479bf547946944630dc290c1e282fa4"
+      },
+      "original_bytes": 177,
+      "original_sha256": "2e8a3680cd3d51d65977a7ace39b2f27a479bf547946944630dc290c1e282fa4",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=6 compiler-sites=166 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=6 stage=SourceProduct status=3 source-stage=1 source-status=3 line=258 column=20 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\stdlib\\net\\net.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=name does not resolve to an admitted nominal type\n"
+        },
+        "asan": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=6 compiler-sites=166 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=6 stage=SourceProduct status=3 source-stage=1 source-status=3 line=258 column=20 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\stdlib\\net\\net.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=name does not resolve to an admitted nominal type\n"
+        }
+      }
+    },
+    {
+      "scenario": 7,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original\\scenario7\\root.xr",
+        "bytes": 278,
+        "sha256": "2a9bfcbf2a340eb9dc70e30331753a2326263355154bafd2005eb5c0b3eca1df"
+      },
+      "original_bytes": 278,
+      "original_sha256": "2a9bfcbf2a340eb9dc70e30331753a2326263355154bafd2005eb5c0b3eca1df",
+      "configurations": {
+        "msvc": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=7 compiler-sites=74 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=7 stage=SourceProduct status=1 source-stage=1 source-status=1 line=2 column=0 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\allocation_original\\scenario7\\root.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=built-in construction is not implemented in XIR\n"
+        },
+        "asan": {
+          "positive_gate": "FAIL",
+          "summary": "allocation-original normal=FAIL scenario=7 compiler-sites=74 runtime-sites=0 external-manifest=NOT_APPLIED answer-execution=NOT_RUN FI=NOT_RUN native=NOT_RUN mixed=NOT_RUN",
+          "diagnostic": "allocation-original check line=101 stage=SourceProduct condition=run->status == XR_XIR_OK && run->product\nallocation-original failure scenario=7 stage=SourceProduct status=1 source-stage=1 source-status=1 line=2 column=0 xir-status=0 reason=0 source-path=E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\allocation_original\\scenario7\\root.xr product-xir=0 function=0 block=0 instruction=0 product-reason=0 message=built-in construction is not implemented in XIR\n"
+        }
+      }
+    }
+  ],
+  "real_results": {
+    "final_normal_processes": 16,
+    "pass_count": 6,
+    "fail_count": 10,
+    "per_configuration_pass": [
+      0,
+      1,
+      3
+    ],
+    "per_configuration_fail": [
+      2,
+      4,
+      5,
+      6,
+      7
+    ],
+    "first_run": "Same16 results before diagnostic-path refinement retained in first-run; not counted as additional distinct cases.",
+    "sanitizer": "Clang address+undefined applied to actual new consumer object; no sanitizer diagnostics in recorded runs. Not full safety qualification.",
+    "prior_runs": "First16 processes before diagnostic refinement and another16 before header-comment refinement are retained in first-run and diagnostic-run. Historical receipt output paths have explicit relocation records. Final16 determines current source qualification; no distinct scenario count is inflated."
+  },
+  "scenario2_contract_conflict": {
+    "status": "OPEN_REQUIRES_MAIN_ADJUDICATION_NOT_BOOL_FEATURE_ABSENCE",
+    "original": "store(true, Ordering.AcquireRelease) remains byte-exact in scenario2; original success gate remains FAIL.",
+    "spec": {
+      "path": "build-consumer-evidence\\current67-baseline-r2\\source\\spec\\source\\sections\\011-10-concurrency-and-coroutines.md",
+      "bytes": 76231,
+      "sha256": "81e8f98752a00890d2a128abc4dc788b2e2e8dee38e8daee61ff6cf71be33d5a"
+    },
+    "rule": "Frozen table permits only Relaxed/Release/SeqCst for store; statically invalid order is rejected by Checked. Original legacy success expectation conflicts with this current rule.",
+    "diagnostic_variants": "Independent minimal invalid bool store is rejected in both configurations. Legal Release store and a separate original-body variant changing only that order plus an exported adapter execute to I64(42) in both configurations. These do not replace or retire the original responsibility."
+  },
+  "blockers": {
+    "scenario4_5": "Anonymous record nominal kind14 rejected; independent minimal record declaration also rejected.",
+    "scenario6": "NetConn fixture resolves the real stdlib/net/net.xr; first failure at line258 column20: name does not resolve to an admitted nominal type. Independent NetConn import fixture reproduces it.",
+    "scenario7": "StringBuilder construction unimplemented at original line2; constructor-only independent input reproduces it."
+  },
+  "diagnostic_variants": [
+    {
+      "configuration": "msvc",
+      "case": "bool_original_legal_order",
+      "exit": 0,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\bool_original_legal_order\\root.xr",
+        "bytes": 399,
+        "sha256": "2d2d07bf52c40ec1e8bc98b1f37dc209be3e816de4f5ad4174f79490d2138463"
+      },
+      "stderr": ""
+    },
+    {
+      "configuration": "msvc",
+      "case": "bool_store_invalid",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\bool_store_invalid\\root.xr",
+        "bytes": 159,
+        "sha256": "5cff2886f5150e5a52cbf55add59af0b7633c68895aa0bd808e6db9ce4858468"
+      },
+      "stderr": "source status=3 stage=1 line=1: constructed XIR failed checking at function 2 block 0 instruction 5\n486: run.status == XR_XIR_OK\n"
+    },
+    {
+      "configuration": "msvc",
+      "case": "bool_store_release",
+      "exit": 0,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\bool_store_release\\root.xr",
+        "bytes": 183,
+        "sha256": "2305f309dfaee2862da38affb1abff34853b6e4e1e4ed9fc630af44a2dfb024d"
+      },
+      "stderr": ""
+    },
+    {
+      "configuration": "msvc",
+      "case": "net_import",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\net_import\\root.xr",
+        "bytes": 144,
+        "sha256": "ffefc296eab9a4560e75d981f0cc9b370a0840e7708d123f8a15c8c456431d76"
+      },
+      "stderr": "source status=3 stage=1 line=258: name does not resolve to an admitted nominal type\n486: run.status == XR_XIR_OK\n"
+    },
+    {
+      "configuration": "msvc",
+      "case": "record_type",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\record_type\\root.xr",
+        "bytes": 136,
+        "sha256": "8c8f28d9c28b3a2bad59df75bbf24a2747157f5d73f14f9bf33cc785a7273c5d"
+      },
+      "stderr": "source status=3 stage=1 line=0: type declaration is not admitted by XIR (kind 14)\n486: run.status == XR_XIR_OK\n"
+    },
+    {
+      "configuration": "msvc",
+      "case": "string_builder_constructor",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\string_builder_constructor\\root.xr",
+        "bytes": 118,
+        "sha256": "c8c8944b01bea5cc435c3b76c8933387cd392e289360d7d244503ca998d6fb83"
+      },
+      "stderr": "source status=1 stage=1 line=2: built-in construction is not implemented in XIR\n486: run.status == XR_XIR_OK\n"
+    },
+    {
+      "configuration": "asan",
+      "case": "bool_original_legal_order",
+      "exit": 0,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\bool_original_legal_order\\root.xr",
+        "bytes": 399,
+        "sha256": "2d2d07bf52c40ec1e8bc98b1f37dc209be3e816de4f5ad4174f79490d2138463"
+      },
+      "stderr": ""
+    },
+    {
+      "configuration": "asan",
+      "case": "bool_store_invalid",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\bool_store_invalid\\root.xr",
+        "bytes": 159,
+        "sha256": "5cff2886f5150e5a52cbf55add59af0b7633c68895aa0bd808e6db9ce4858468"
+      },
+      "stderr": "source status=3 stage=1 line=1: constructed XIR failed checking at function 2 block 0 instruction 5\n486: run.status == XR_XIR_OK\n"
+    },
+    {
+      "configuration": "asan",
+      "case": "bool_store_release",
+      "exit": 0,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\bool_store_release\\root.xr",
+        "bytes": 183,
+        "sha256": "2305f309dfaee2862da38affb1abff34853b6e4e1e4ed9fc630af44a2dfb024d"
+      },
+      "stderr": ""
+    },
+    {
+      "configuration": "asan",
+      "case": "net_import",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\net_import\\root.xr",
+        "bytes": 144,
+        "sha256": "ffefc296eab9a4560e75d981f0cc9b370a0840e7708d123f8a15c8c456431d76"
+      },
+      "stderr": "source status=3 stage=1 line=258: name does not resolve to an admitted nominal type\n486: run.status == XR_XIR_OK\n"
+    },
+    {
+      "configuration": "asan",
+      "case": "record_type",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\record_type\\root.xr",
+        "bytes": 136,
+        "sha256": "8c8f28d9c28b3a2bad59df75bbf24a2747157f5d73f14f9bf33cc785a7273c5d"
+      },
+      "stderr": "source status=3 stage=1 line=0: type declaration is not admitted by XIR (kind 14)\n486: run.status == XR_XIR_OK\n"
+    },
+    {
+      "configuration": "asan",
+      "case": "string_builder_constructor",
+      "exit": 1,
+      "input": {
+        "path": "tests\\unit\\xir\\product_consumers\\allocation_original_repro\\string_builder_constructor\\root.xr",
+        "bytes": 118,
+        "sha256": "c8c8944b01bea5cc435c3b76c8933387cd392e289360d7d244503ca998d6fb83"
+      },
+      "stderr": "source status=1 stage=1 line=2: built-in construction is not implemented in XIR\n486: run.status == XR_XIR_OK\n"
+    }
+  ],
+  "registration": {
+    "target": "test_source_product_allocation_original",
+    "normal_names": "test_source_product_allocation_original_0_normal through _7_normal",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "input_check": "source_product_allocation_original_inputs, TIMEOUT30; independently decodes original C source array and checks all8 fixture bytes and compiled header"
+  },
+  "input_binding": "Final normal16 and diagnostic12 each have exact before/after input captures, kept separately. The final normal batch uses the final header, C and CMake; final source-preservation CTests execute the final script in both builds. Responsibility map content is subsequently updated; no post-map product rerun is claimed.",
+  "evidence": "build-consumer-evidence/current67-allocation-original-family-r1/",
+  "remaining": [
+    "external_answer/external_entry native manifest with visibility/header projection and2 original exports",
+    "whole compiler/runtime FI and per-scenario denominators",
+    "allocated/live/work exact-minus1 axes",
+    "actual original answer execution/native/mixed",
+    "input packet mutation and all failure-path/lifetime/owned-result/cancellation responsibilities beyond this normal projection",
+    "full default/safety and Main integration",
+    "source108 and other AOT/format/authority/shared consumer families"
+  ],
+  "retired": 0,
+  "build_binding": "Each final object built from authorized SourceMirror; actual Ninja dependencies VALID and include exact fixture header. Each links10 unchanged public libraries. Existing generic diagnostic probe and its physical libraries are unchanged; its final build check is no work to do. Full details in build-binding.json.",
+  "protection": "598 prior protected entries: only two build.ninja and two tests/unit/CTestTestfile.cmake changed with the new target/test registration. Other594 exact SHA/size/mtime, including prior executables/objects and public libraries, remain unchanged.",
+  "effective_inputs": {
+    "scripts/source_product_consumer_allocation_original.py": "c4e32e14eb2f29dd21a73202a0a01f7b5a16e0caee256484066010a6d8214d32",
+    "tests/unit/xir/product_consumers/test_source_product_allocation_original.c": "b2ab0e7f720f51e560085522a8b90efee730f8e018c0a8d25d63bcc1bd71b495",
+    "tests/unit/xir/product_consumers/allocation_original_sources.h": "39ea54c679ac04f258f484b36034b82e72393f4a97d85048a985ba7490ca1c14",
+    "tests/unit/xir/product_consumers/source_product_allocation_original.cmake": "26930e65f4e212e858b224bfdc0cd6054e28a3d282828e9fb7b1f0012825cfda",
+    "tests/unit/program/source_product_consumers.cmake": "d380359e5db352bb898c15e087f761f7d956be2d170e5e66888701a2940340b9"
+  }
+}

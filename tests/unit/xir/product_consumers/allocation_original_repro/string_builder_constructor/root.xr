@@ -1,0 +1,5 @@
+fn answer() -> i64 {
+ const text = StringBuilder()
+ return 42
+}
+export fn consumerAnswer() -> i64 { return answer() }

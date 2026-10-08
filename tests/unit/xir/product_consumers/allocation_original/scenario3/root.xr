@@ -1,0 +1,15 @@
+fn identity(value: f64) -> f64 { return value }
+fn answer() -> i64 {
+ const value = identity(1.5)
+ const other = identity(2.25)
+ const counter = Atomic(value)
+ const old = counter.fetchAdd(other)
+ var (before, matched) = counter.compareExchange(3.75, 1.5)
+ counter.store(1.5, Ordering.Release)
+ const text = counter.load().toString()
+ if (old < other && len(text) == 3) { return 42 }
+ return 0
+}
+fn exported() -> i64 { return 42 }
+@test
+fn checkAnswer() { assert(exported() == 42) }

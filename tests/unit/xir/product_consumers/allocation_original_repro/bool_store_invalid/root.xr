@@ -1,0 +1,6 @@
+fn answer() -> i64 {
+ const flag = Atomic(false)
+ flag.store(true, Ordering.AcquireRelease)
+ return 42
+}
+export fn consumerAnswer() -> i64 { return answer() }

@@ -1,0 +1,4 @@
+import { NetConn } from net
+var connection:NetConn?=null
+fn answer() -> i64 { return 42 }
+export fn consumerAnswer() -> i64 { return answer() }

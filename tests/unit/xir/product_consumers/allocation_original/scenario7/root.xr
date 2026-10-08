@@ -1,0 +1,11 @@
+fn answer() -> i64 {
+ var text = StringBuilder()
+ text.append("first").append(42)
+ const snapshot = text.toString()
+ text.clear().append("second")
+ assert(snapshot == "first42")
+ return 42
+}
+fn exported() -> i64 { return 42 }
+@test
+fn checkAnswer() { assert(exported() == 42) }

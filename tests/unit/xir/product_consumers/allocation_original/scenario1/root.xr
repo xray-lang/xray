@@ -1,0 +1,12 @@
+fn answer() -> i64 {
+ const counter = Atomic(40)
+ const alias = counter
+ var (old, matched) = alias.compareExchange(40, 42)
+ counter.store(42, Ordering.Release)
+ counter.add(1)
+ counter.sub(1)
+ return counter.load()
+}
+fn exported() -> i64 { return 42 }
+@test
+fn checkAnswer() { assert(exported() == 42) }

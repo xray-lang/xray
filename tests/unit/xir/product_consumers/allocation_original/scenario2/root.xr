@@ -1,0 +1,12 @@
+fn answer() -> i64 {
+ const flag = Atomic(false)
+ const alias = flag
+ var (old, matched) = alias.compareExchange(false, true)
+ flag.store(true, Ordering.AcquireRelease)
+ const before = flag.toggle(Ordering.Relaxed)
+ if (matched && before) { return 42 }
+ return 0
+}
+fn exported() -> i64 { return 42 }
+@test
+fn checkAnswer() { assert(exported() == 42) }

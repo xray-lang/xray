@@ -1,0 +1,6 @@
+type State = { token:i64, enabled:bool, nested:{ text:string }? }
+var state:State?=null
+fn answer() -> i64 { return 42 }
+fn exported() -> i64 { return 42 }
+@test
+fn checkAnswer() { assert(exported() == 42) }
