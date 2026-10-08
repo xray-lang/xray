@@ -388,5 +388,89 @@
       "Original explicit owner bits,full multi-count allocationfaults/rollback/recovery,axes,cancel,safety andMain qualification remainOPEN.",
       "Owned results here are I64 scalars andfault records with Unit messages;heapArray/String escape qualification remains separate."
     ]
+  },
+  "public_source_refusal_ownership_20261009_facet": {
+    "status": "PASS_PUBLIC_SOURCE_REFUSAL_OWNERSHIP_ONLY",
+    "whole_replacement": "OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67/Value22/Call28/Program29/ABI351",
+    "evidence": "build-consumer-evidence/current67-array-source-refusal-ownership-r1",
+    "test": "test_source_product_array_source_refusals",
+    "registration": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    "consumer": "Independent target using public SourceProduct/Session/Checked APIs;existing finite compiler physical observer only,no old Program/BackendIR/evaluator.",
+    "cases": [
+      {
+        "name": "default_string",
+        "original": "tests/fixtures/xir_array_generated/reject-default-string.xr",
+        "original_native_sha256": "3e7ab8f9f62f4edda8edbb41868f31fd3bd4bfe3c5b17f9f0e9284504d8facb4",
+        "fixture": "tests/unit/xir/product_consumers/array_source_refusals/default_string/main.xr",
+        "required_status": "BAD_TYPE3",
+        "required_stage": "SOURCE_PRODUCT_CHECK1",
+        "required_line": 1,
+        "required_message_contains": "no admitted default initializer"
+      },
+      {
+        "name": "default_bool",
+        "original": "tests/fixtures/xir_array_generated/reject-default-bool.xr",
+        "original_native_sha256": "6fec5d4a138e3c0911cde0a75d3e49ab9b3d6934c6781692aa5843a09e5790d3",
+        "fixture": "tests/unit/xir/product_consumers/array_source_refusals/default_bool/main.xr",
+        "required_status": "BAD_TYPE3",
+        "required_stage": "SOURCE_PRODUCT_CHECK1",
+        "required_line": 1,
+        "required_message_contains": null
+      },
+      {
+        "name": "read_push",
+        "original": "tests/fixtures/xir_array_generated/reject-read-push.xr",
+        "original_native_sha256": "0764b911dd181d75360da314dae617a55faf99731b708e8ce73b6fa9fc2f921c",
+        "fixture": "tests/unit/xir/product_consumers/array_source_refusals/read_push/main.xr",
+        "required_status": "BAD_TYPE3",
+        "required_stage": "SOURCE_PRODUCT_CHECK1",
+        "required_line": 1,
+        "required_message_contains": "mutable"
+      },
+      {
+        "name": "move_copyable",
+        "original": "tests/fixtures/xir_array_generated/reject-move-copyable.xr",
+        "original_native_sha256": "880fe30274949d79bdb3c1488909ed4896933d659f8be0a55a5eed63f85fd441",
+        "fixture": "tests/unit/xir/product_consumers/array_source_refusals/move_copyable/main.xr",
+        "required_status": "BAD_TYPE3",
+        "required_stage": "SOURCE_PRODUCT_CHECK1",
+        "required_line": 1,
+        "required_message_contains": "parameter contract"
+      }
+    ],
+    "positive": "Byte-preserved public defaultCount Array<u8> fixture. Verify root/export/i64 count/U8 zero/ARRAY_REPEAT and ARRAY_LEN through public Checked metadata. Retain original facts and complete Closed packet writer bytes through every refusal and reverify the actual product.",
+    "transitions": "Final2actualcommands:4 semantic and4 occupied-output transitions plus4 escaped semantic failures and8 occupied-diagnostic guard calls per configuration. Combined16 BAD_TYPE3 Source refusals,8 early BAD_STRUCTURE1 occupied-output refusals,16 diagnostic guard refusals;40 total. Initial2commands also PASS with same40refusals,8escaped diagnostics.",
+    "guard_distinction": "Occupied output fails at INPUT with no source diagnostic/path/snapshot and no allocation,work or stock change;this isnot a semantic Array refusal. Occupied diagnostic guards use NULL request and preserve the entire old record and either empty or actual verified output without allocation or work.",
+    "ownership": "Every Session freed and request,authority,root/file buffers poisoned before inspection. Four diagnostics/config retain independent semantic paths and whole copied records. Product,Checked,packet and caller ledger reference dropped before escaped diagnostics reinspection. Actual retained diagnostics keep ledger alive;only final diagnostic release proves compiler physical0/0. Free-cleared diagnostics can be freed again.",
+    "diagnostic_expectations": "Status,stage,module0,line1,path and required original message fragments checked independently. Full original in-memory records compared after owner death;printed full messages and columns are observed facts,not newly invented legacy exact-message oracles.",
+    "budgets": "New normal owner probe uses finite64MiB allocated/16MiB live/128M work,matching the existing public occupied-output guard. This is not full legacy compiler budget or FI/axes qualification;all original gates and limits unchanged.",
+    "actual_processes": 4,
+    "initial_passes": 2,
+    "final_passes": 2,
+    "final_escaped_diagnostics": 8,
+    "total_actual_escaped_diagnostics": 16,
+    "total_actual_refusals": 80,
+    "input_capture": "Final2 PIDs each2644inputs before==after SHA,size,mtime including explicit compiler observer header. Initial2 PIDs each2643 generic captures preserved;observer header independently bound to initial598protected metadata frames. All raw receipts/output remain. Both maps appended after execution;preannotation bytes retained,no new-map rerun.",
+    "fresh_build": "Exactly one fresh C11/W4/WX consumer TU/config,actual Clang ASan/UBSan and VALID Ninja dependencies. Production library SHA,size,mtime unchanged;10+ actual linked archives and6 actual production object member bodies/config bound.",
+    "direct_producer_dependency_counts": {
+      "msvc": 33,
+      "asan": 33
+    },
+    "protection": "10991tracked initial:10988nonowned exact and7new scoped files.598protected:594exact+4expected Ninja/CTest changes;remove2newCTest lines/config restores all prior raw registry bytes.12historical dirty files preserved.",
+    "audit_history": "Two pure audit errors retained:escaped substring included summary,and generic capture wrongly assumed compiler observer test header present. Final explicit input capture andrerun complete;initial2product PASS unchanged. No production or C oracle fix was required.",
+    "legacy_mapping": "Current String-default unavailability andBoolcount Source refusals plus diagnostic lifecycle exercised publicly. Read-push source uses Array<i64>;it isnot legacy Array<String> read/move metadata or old owner bits. Current move-string parameter rejection isnot complete old builder admission equivalence. Full old admission functions remain OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "VM_native_mixed": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }
