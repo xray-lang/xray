@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "legacy_line": 169,
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "assertion_sites": 94,
+      "loop_sites": 10,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "status": "ORIGINAL_SHAPES_OPEN_ROOT_FAILURE_CONTROLS_VERIFIED",
+  "result": "FAIL_ORIGINAL_ADMISSION_ROOT_CONTROLS_PASS",
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h scenarios2/3, fault1 unpublished scalar and fault2 duplicate string",
+  "original_oracles": {
+    "repeats": 24,
+    "instances": 2,
+    "trap_codes": [
+      8,
+      9
+    ],
+    "text_output": "",
+    "state": "sticky initialization failure"
+  },
+  "original_shapes": "Preserve base-owned mutable slots and cross-module state operations as expected-positive admission. Root controls are separate packets and cannot replace those original obligations.",
+  "controls": "Root-owned unpublished scalar and duplicate owned string initializations; independently expect BAD_STATE rather than arbitrary non-success. Original numeric legacy trap identity is not claimed equivalent.",
+  "oracle": {
+    "admission": "Independent complete Checked packets, copied input poisoned and freed before exact rewrite; Checked dies before Lowered verification",
+    "execution": "Two independent Instances; 24 failure observations each; first failure cannot change peer NEW state; no entry or output; no root READY; 23 retries each produce no allocation or resume",
+    "lifecycle": "Missing publication: four initializer returns, seven module events, zero slot events. Duplicate publication: three initializer returns, seven module events, one publication then one release per instance before poll failure returns",
+    "ownership": "Caller Program dropped before starts; copied failures survive both Instances, Program/code and Lowered; exact physical/compiler counters zero",
+    "native": "VM, real native, alternating native-even/VM-odd entries and inverse; each asserts independent oracle"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_slot_failure_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_failure_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_failure_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_failure_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slot_failure_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Original library mutable and cross-module state representation adjudication",
+    "Legacy trap8/9 identity equivalence",
+    "Explicit CORE_TRAP scenario4",
+    "Owned class lifecycle scenarios5-13",
+    "Full FI2036/32",
+    "Two-configuration12resource axes",
+    "Full safety",
+    "SourceProduct graph producer",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-slot-failure-r1",
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "failure_observations": 768,
+    "sticky_retries_without_allocations_or_resumes": 736,
+    "copy_failure_calls": 768,
+    "retained_failures_after_owners_die": 32,
+    "module_events": 224,
+    "initializer_returns": 112,
+    "slot_publications": 16,
+    "slot_releases": 16,
+    "entry_calls": 0,
+    "output_groups": 0,
+    "original_positive_admissions": 16,
+    "original_actual": "All16 BAD_STRUCTURE vs expectedOK; eight exit1 retained; no WILL_FAIL",
+    "physical": "compiler0/0 runtime0/0 table0 each process;2 independent Instances per control;code release1 per control",
+    "fresh_build": "Both configurations passed first build;emitter+consumer+two actual generated C units per configuration",
+    "evidence": "entry-observer-r2/results.json; entry-observer-r2/actual-process-results.xml",
+    "first_execution": "All root controls PASS;8 original-shape product FAIL plus2encodingPASS. Initial source and binaries retained in initial-artifacts.",
+    "final_execution": "Added per-function resume counters to prove both entry functions never begin and peer has no resumes. Both configurations rebuilt four TUs;repeated10processes have same result;final counts above refer only to this run."
+  },
+  "contract_basis": {
+    "current_module_state": "spec section17.8: root-only mutable state, authentic owner, initialization gate, failure sticky, reverse cleanup",
+    "missing_publication": "xxir_instance.c initialization_resume checks published_counts before module READY and returns FAULT; xxir_call.c accept_action maps empty FAULT to BAD_STATE",
+    "duplicate_publication": "xxir_instance.c slot_write rejects already published slot with BAD_STATE; expected one publication and one release, never overwrite",
+    "boundary": "Status mapping is a current-producer control oracle, not a decision equating former trap8/9 with BAD_STATE. Main retains representation/semantic adjudication."
+  },
+  "postrun_note": "Result annotations added after the real commands; captured inputs were the pre-annotation map and no final-map rerun is claimed."
+}
