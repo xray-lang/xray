@@ -54,11 +54,35 @@ typedef struct AllocationRun {
     XrXirCallStatus call_status;
     uint8_t *input;
     size_t input_length;
+    size_t packet_reads;
+    bool packet_input_failed;
 } AllocationRun;
 
 #define OBSERVE(condition) do { if (!(condition)) { \
     fprintf(stderr, "source-allocation0 check line=%d operation=%s condition=%s\n", \
         __LINE__, run->operation, #condition); return false; } } while (0)
+
+/* Fixed observer storage cannot introduce or hide product allocation ordinals. */
+static uint8_t allocation_packet_snapshot[65536];
+static XrXirStatus allocation_checked_read(AllocationRun *run, const uint8_t *bytes,
+    size_t length, XrXirArtifact **output, const char *role) {
+    ++run->packet_reads;
+    bool bounded = bytes && length && length <= sizeof(allocation_packet_snapshot);
+    XrXirStatus status = XR_XIR_BAD_STRUCTURE;
+    bool preserved = false;
+    if (bounded) {
+        memcpy(allocation_packet_snapshot, bytes, length);
+        status = xr_xir_compile_checked_read(&run->context, bytes, length, output, &run->xir);
+        preserved = !memcmp(allocation_packet_snapshot, bytes, length);
+    }
+    if (!preserved) run->packet_input_failed = true;
+    printf("source-allocation0 packet-input role=%s bytes=%zu status=%u preserved=%u\n",
+        role, length, (unsigned)status, (unsigned)preserved);
+    return status;
+}
+static const char *allocation_packet_state(const AllocationRun *run) {
+    return run->packet_input_failed ? "FAIL" : run->packet_reads ? "PRESERVED" : "NOT_REACHED";
+}
 
 
 /* Runtime observation borrows only host output slots and never allocates. */
@@ -344,8 +368,7 @@ static bool read_packets(AllocationRun *run, const char *file) {
     run->status = xr_xir_compile_source_product_packet(run->product, XR_XIR_SOURCE_PRODUCT_SOURCE, &source);
     OBSERVE(run->status == XR_XIR_OK && source.bytes && source.length);
     allocation_runtime_begin(run, "source-Checked-reader", ALLOCATION_RUNTIME_XIR, &run->source_checked, sizeof(run->source_checked));
-    run->status = xr_xir_compile_checked_read(&run->context, source.bytes, source.length,
-        &run->source_checked, &run->xir);
+    run->status = allocation_checked_read(run, source.bytes, source.length, &run->source_checked, "source");
     if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
     if (!inspect_module(run, run->source_checked, XR_XIR_CHECKED, &source_roles)) return false;
@@ -354,8 +377,7 @@ static bool read_packets(AllocationRun *run, const char *file) {
     run->status = xr_xir_compile_source_product_packet(run->product, XR_XIR_SOURCE_PRODUCT_CLOSED, &closed);
     OBSERVE(run->status == XR_XIR_OK && closed.bytes && closed.length);
     allocation_runtime_begin(run, "closed-Checked-reader", ALLOCATION_RUNTIME_XIR, &run->closed_checked, sizeof(run->closed_checked));
-    run->status = xr_xir_compile_checked_read(&run->context, closed.bytes, closed.length,
-        &run->closed_checked, &run->xir);
+    run->status = allocation_checked_read(run, closed.bytes, closed.length, &run->closed_checked, "closed");
     if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
     if (!inspect_module(run, run->closed_checked, XR_XIR_CHECKED, &run->roles)) return false;
@@ -383,8 +405,7 @@ static bool detach_lower(AllocationRun *run) {
     OBSERVE(run->status == XR_XIR_OK);
     XrXirArtifact *reread = NULL;
     allocation_runtime_begin(run, "retained-Checked-reread", ALLOCATION_RUNTIME_XIR, &reread, sizeof(reread));
-    run->status = xr_xir_compile_checked_read(&run->context, run->retained.bytes,
-        run->retained.length, &reread, &run->xir);
+    run->status = allocation_checked_read(run, run->retained.bytes, run->retained.length, &reread, "retained");
     if (!allocation_runtime_end(run, (int)run->status)) { xr_xir_compile_artifact_free(reread); return false; }
     if (run->status != XR_XIR_OK) { xr_xir_compile_artifact_free(reread); return false; }
     allocation_runtime_begin(run, "retained-Checked-verify", ALLOCATION_RUNTIME_XIR, NULL, 0);
@@ -729,20 +750,21 @@ static int allocation_compiler_axis_finish(AllocationRun *run, bool passed, bool
     uint64_t actual = allocation_compiler_axis_value(&run->final);
     bool expected = axis->below ? !passed && axis->failed &&
         allocation_runtime.records == axis->failure_record + 1 : passed && !axis->failed && actual == axis->total;
-    bool valid = expected && axis->ok && allocation_runtime.ok && released && cleanup;
+    bool valid = expected && axis->ok && allocation_runtime.ok && released && cleanup && !run->packet_input_failed;
     printf("source-allocation0 compiler-axis=%s axis=%u cut=%s normal-total=%" PRIu64
         " limit=%" PRIu64 " actual=%" PRIu64 " records=%zu first-rejection=%s record=%zu "
         "failure-applicable=%u status=%d output-preserved=%u rollback=%u diagnostic-valid=%u cleanup-uncharged=%u "
         "compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64 " peak=%" PRIu64 " work=%" PRIu64
         " compiler-physical=%zu/%zu runtime-physical=%zu/%zu table=%zu "
-        "input-packet-bytes=UNSNAPSHOTTED_OPEN full-eight-source-FI=NOT_RUN native=NOT_RUN\n",
+        "input-packet-bytes=%s packet-reads=%zu full-eight-source-FI=NOT_RUN native=NOT_RUN\n",
         valid ? "PASS" : "FAIL", axis->kind, axis->below ? "minus1" : "exact", axis->total,
         axis->total - (axis->below ? 1u : 0u), actual, allocation_runtime.records,
         axis->failed ? axis->failure_stage : "NOT_APPLICABLE", axis->failure_record, (unsigned)axis->failed,
         axis->failure_status, (unsigned)axis->output_preserved, (unsigned)axis->rollback,
         (unsigned)axis->diagnostic_ok, (unsigned)cleanup, instance_compile_attempts, runtime_attempts,
         run->final.allocated_bytes, run->final.peak_bytes, run->final.work, instance_compile_live,
-        instance_compile_bytes, runtime_live, runtime_bytes, runtime_owned_capacity);
+        instance_compile_bytes, runtime_live, runtime_bytes, runtime_owned_capacity,
+        allocation_packet_state(run), run->packet_reads);
     if (axis->failed) puts("source-allocation0 compiler-axis-downstream=NOT_ENTERED");
     return valid ? 0 : 1;
 }
@@ -910,14 +932,14 @@ static bool allocation_fault_packets(AllocationFault *fault, const char *file) {
     run->status = xr_xir_compile_source_product_packet(run->product, XR_XIR_SOURCE_PRODUCT_SOURCE, &source);
     OBSERVE(run->status == XR_XIR_OK && source.bytes && source.length);
     allocation_fault_begin(fault, ALLOCATION_FAULT_SOURCE_READ, &run->source_checked, sizeof(run->source_checked), NULL, 0);
-    run->status = xr_xir_compile_checked_read(&run->context, source.bytes, source.length, &run->source_checked, &run->xir);
+    run->status = allocation_checked_read(run, source.bytes, source.length, &run->source_checked, "source");
     if (!allocation_fault_end(fault, (int)run->status)) return false;
     if (!inspect_module(run, run->source_checked, XR_XIR_CHECKED, &source_roles)) return false;
     if (!phase(run, "source-Checked-reader")) return false;
     run->status = xr_xir_compile_source_product_packet(run->product, XR_XIR_SOURCE_PRODUCT_CLOSED, &closed);
     OBSERVE(run->status == XR_XIR_OK && closed.bytes && closed.length);
     allocation_fault_begin(fault, ALLOCATION_FAULT_CLOSED_READ, &run->closed_checked, sizeof(run->closed_checked), NULL, 0);
-    run->status = xr_xir_compile_checked_read(&run->context, closed.bytes, closed.length, &run->closed_checked, &run->xir);
+    run->status = allocation_checked_read(run, closed.bytes, closed.length, &run->closed_checked, "closed");
     if (!allocation_fault_end(fault, (int)run->status)) return false;
     if (!inspect_module(run, run->closed_checked, XR_XIR_CHECKED, &run->roles) || !inspect_product(run, file)) return false;
     allocation_fault_begin(fault, ALLOCATION_FAULT_RETAIN, &run->retained, sizeof(run->retained), NULL, 0);
@@ -941,7 +963,7 @@ static bool allocation_fault_detach(AllocationFault *fault) {
     if (!allocation_fault_verify(fault, ALLOCATION_FAULT_SOURCE_VERIFY, run->source_checked) ||
         !allocation_fault_verify(fault, ALLOCATION_FAULT_CLOSED_VERIFY, run->closed_checked)) return false;
     allocation_fault_begin(fault, ALLOCATION_FAULT_REREAD, &fault->reread, sizeof(fault->reread), NULL, 0);
-    run->status = xr_xir_compile_checked_read(&run->context, run->retained.bytes, run->retained.length, &fault->reread, &run->xir);
+    run->status = allocation_checked_read(run, run->retained.bytes, run->retained.length, &fault->reread, "retained");
     if (!allocation_fault_end(fault, (int)run->status)) return false;
     if (!allocation_fault_verify(fault, ALLOCATION_FAULT_REREAD_VERIFY, fault->reread)) return false;
     xr_xir_compile_artifact_free(fault->reread); fault->reread = NULL;
@@ -1035,18 +1057,18 @@ static int allocation_fault_run(const char *root, const char *file, size_t norma
         cleanup_before.ledger.allocated_bytes, fault.run.final.allocated_bytes, cleanup_before.ledger.live_bytes,
         fault.run.final.live_bytes, cleanup_before.ledger.peak_bytes, fault.run.final.peak_bytes,
         cleanup_before.ledger.work, fault.run.final.work, (unsigned)cleanup_uncharged);
-    bool passed = expected && released && cleanup_uncharged && fault.accounting_ok;
+    bool passed = expected && released && cleanup_uncharged && fault.accounting_ok && !fault.run.packet_input_failed;
     printf("source-allocation0 compiler-fault=%s frozen-N=%zu fault-site=%zu hit-transitions=%zu failure-stage=%s "
         "actual-status=%d expected-oom=%d output-preserved=%u diagnostic-match=%u cleanup-uncharged=%u "
         "compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64 " peak=%" PRIu64 " work=%" PRIu64
         " compiler-physical=%zu/%zu runtime-physical=%zu/%zu table=%zu "
-        "input-packet-bytes=UNSNAPSHOTTED_OPEN full-eight-source-FI=NOT_RUN runtime-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n",
+        "input-packet-bytes=%s packet-reads=%zu full-eight-source-FI=NOT_RUN runtime-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n",
         passed ? "PASS" : "FAIL", normal_sites, site, fault.hits, allocation_fault_name(fault.current),
         fault.calls[fault.current].status, allocation_fault_oom(fault.current),
         (unsigned)fault.calls[fault.current].output_preserved, (unsigned)fault.diagnostic_ok,
         (unsigned)cleanup_uncharged, instance_compile_attempts, runtime_attempts, fault.run.final.allocated_bytes,
         fault.run.final.peak_bytes, fault.run.final.work, instance_compile_live, instance_compile_bytes,
-        runtime_live, runtime_bytes, runtime_owned_capacity);
+        runtime_live, runtime_bytes, runtime_owned_capacity, allocation_packet_state(&fault.run), fault.run.packet_reads);
     return passed ? 0 : 1;
 }
 static bool allocation_fault_number(const char *text, size_t *output) {
@@ -1101,24 +1123,26 @@ static int allocation_runtime_run(const char *root, const char *file, size_t nor
         cleanup_before.ledger.allocated_bytes == run.final.allocated_bytes &&
         cleanup_before.ledger.peak_bytes == run.final.peak_bytes && cleanup_before.ledger.work == run.final.work;
     if (allocation_runtime.injecting) {
-        bool fault_passed = expected && released && cleanup_uncharged && allocation_runtime.ok;
+        bool fault_passed = expected && released && cleanup_uncharged && allocation_runtime.ok && !run.packet_input_failed;
         printf("source-allocation0 runtime-fault=%s frozen-R=%zu fault-site=%zu hit-windows=%zu failure-stage=%s "
             "record=%zu downstream=NOT_ENTERED status=%d expected-oom=%d output-preserved=%u borrowed-oom-shape=%u cleanup-uncharged=%u "
             "compiler-sites=%zu runtime-sites=%zu compiler-physical=%zu/%zu runtime-physical=%zu/%zu table=%zu "
-            "input-packet-bytes=UNSNAPSHOTTED_OPEN full-eight-source-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n",
+            "input-packet-bytes=%s packet-reads=%zu full-eight-source-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n",
             fault_passed ? "PASS" : "FAIL", normal_sites, site, allocation_runtime.hits, allocation_runtime.call.name,
             allocation_runtime.call.record, allocation_runtime.call.status, allocation_runtime_oom(allocation_runtime.call.domain),
             (unsigned)allocation_runtime.call.output_preserved, (unsigned)allocation_runtime.call.borrowed_oom_shape,
             (unsigned)cleanup_uncharged, instance_compile_attempts,
-            runtime_attempts, instance_compile_live, instance_compile_bytes, runtime_live, runtime_bytes, runtime_owned_capacity);
+            runtime_attempts, instance_compile_live, instance_compile_bytes, runtime_live, runtime_bytes, runtime_owned_capacity,
+            allocation_packet_state(&run), run.packet_reads);
         return fault_passed ? 0 : 1;
     }
     if (allocation_compiler_axis.active)
         return allocation_compiler_axis_finish(&run, passed, released, cleanup_uncharged);
+    passed = passed && !run.packet_input_failed && run.packet_reads == 3;
     printf("source-allocation0 normal=%s compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64
-        " peak=%" PRIu64 " work=%" PRIu64 " full-eight-source-FI=NOT_RUN native=NOT_RUN\n",
+        " peak=%" PRIu64 " work=%" PRIu64 " input-packet-bytes=%s packet-reads=%zu full-eight-source-FI=NOT_RUN native=NOT_RUN\n",
         passed && released && cleanup_uncharged && allocation_runtime.ok ? "PASS" : "FAIL", instance_compile_attempts, runtime_attempts,
-        run.final.allocated_bytes, run.final.peak_bytes, run.final.work);
+        run.final.allocated_bytes, run.final.peak_bytes, run.final.work, allocation_packet_state(&run), run.packet_reads);
     return passed && released && cleanup_uncharged && allocation_runtime.ok ? 0 : 1;
 }
 

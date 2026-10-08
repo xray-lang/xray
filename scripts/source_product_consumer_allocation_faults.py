@@ -25,6 +25,12 @@ COMPILER_OOM.update({"owner-new": 3, "original-input": 7, "session-new": 3})
 RUNTIME_OOM = COMPILER_OOM | {name: 6 for name in (
     "instance-new", "canonical-start", "original-test-start", "poll")}
 SOURCE_FAMILIES = ("src", "include", "cmake", "stdlib", "spec", "xisa", "tools")
+PACKET_STAGES = ("source-Checked-reader", "closed-Checked-reader", "retained-Checked-reread")
+PACKET_ROLES = ("source", "closed", "retained")
+COMPILER_STAGES = ("owner-new", "original-input", "session-new", "source-product",
+                   "source-Checked-reader", "closed-Checked-reader", "closed-Checked-retained",
+                   "detached-source-verify", "detached-closed-verify", "retained-Checked-reread",
+                   "retained-Checked-verify", "Lowered", "Lowered-verify", "VM-Program-take")
 
 
 def rows(output: str, tag: str) -> list[dict[str, str]]:
@@ -66,6 +72,32 @@ def releases(output: str) -> list[dict[str, str]]:
     return result
 
 
+def packet_statuses(stage: str, status: int) -> list[int]:
+    if stage not in COMPILER_STAGES:
+        if stage not in RUNTIME_OOM:
+            raise ValueError("unknown packet observation boundary")
+        return [0, 0, 0]
+    at = COMPILER_STAGES.index(stage)
+    return [status if name == stage else 0 for name in PACKET_STAGES
+            if COMPILER_STAGES.index(name) <= at]
+
+
+def packet_contract(output: str, summary: dict[str, str], statuses: list[int],
+                    reference: list[dict[str, str]] | None = None) -> None:
+    records = rows(output, "packet-input ")
+    if (len(records) != len(statuses) or unsigned(summary["packet-reads"]) != len(statuses)
+            or summary.get("input-packet-bytes") != ("PRESERVED" if statuses else "NOT_REACHED")):
+        raise ValueError("packet preservation summary does not match the reached readers")
+    for index, (record, status) in enumerate(zip(records, statuses)):
+        if (record.get("role") != PACKET_ROLES[index] or record.get("preserved") != "1"
+                or not 0 < unsigned(record["bytes"]) <= 65536 or unsigned(record["status"]) != status):
+            raise ValueError("complete packet bytes, reader order or actual status was not preserved")
+        if reference is not None and record["bytes"] != reference[index]["bytes"]:
+            raise ValueError("packet width differs from the unfaulted original input")
+    if len(records) == 3 and records[1]["bytes"] != records[2]["bytes"]:
+        raise ValueError("the retained Closed packet changed length")
+
+
 def normal_contract(output: str) -> tuple[int, int, int]:
     normal = rows(output, "normal=")
     if len(normal) != 1 or normal[0].get("normal") != "PASS":
@@ -80,6 +112,7 @@ def normal_contract(output: str) -> tuple[int, int, int]:
         unsigned(row[field])
     end = output.index(PREFIX + "normal=")
     before = output[:end]
+    packet_contract(before, row, [0, 0, 0])
     trace = rows(before, "runtime-call ")
     if (len(trace) != 43 or [unsigned(call["record"]) for call in trace] != list(range(43))
             or any(call.get("hit") != "0" or unsigned(call["status"]) not in (0, 1) for call in trace)):
@@ -101,8 +134,7 @@ def fault_contract(row: dict[str, str], kind: str, site: int, normal: tuple[int,
     actual = "actual-status" if kind == "compiler" else "status"
     if expected is None or unsigned(row[actual]) != expected or unsigned(row["expected-oom"]) != expected:
         raise ValueError("fault returned a different domain status")
-    if (row.get("input-packet-bytes") != "UNSNAPSHOTTED_OPEN"
-            or any(row.get(k) != "NOT_RUN" for k in ("full-eight-source-FI", "axes", "native"))):
+    if any(row.get(k) != "NOT_RUN" for k in ("full-eight-source-FI", "axes", "native")):
         raise ValueError("fault widened an original OPEN boundary")
     unsigned(row["compiler-sites"]); unsigned(row["runtime-sites"])
     if kind == "compiler":
@@ -254,6 +286,14 @@ def shard_contract(output: str, kind: str, index: int, jobs: int,
         if unsigned(ordinal["ordinal"]) != site:
             raise ValueError("ordinal sequence does not equal its exact range")
         fault_contract(fault, kind, site, normal); covered.append(site)
+    tail = output.split(PREFIX + "normal=", 1)[1].split("\n", 1)[1]
+    chunks = tail.split(PREFIX + "fault-ordinal ")
+    if len(chunks) != expected_count + 1 or rows(chunks[-1], "packet-input "):
+        raise ValueError("packet records have no matching original fault ordinal")
+    for chunk, fault in zip(chunks, faults):
+        status = unsigned(fault["actual-status" if kind == "compiler" else "status"])
+        reference = rows(output.split(PREFIX + "normal=", 1)[0], "packet-input ")
+        packet_contract(chunk, fault, packet_statuses(fault["failure-stage"], status), reference)
     if len(releases(output)) != expected_count + 1:
         raise ValueError("each original normal/fault did not release its own owners")
     if kind == "compiler":
@@ -460,11 +500,13 @@ def finish_report(report: dict, run: Path, helpers) -> None:
 
 
 def self_test() -> None:
+    packets = "".join(PREFIX + f"packet-input role={role} bytes=10 status=0 preserved=1\n"
+                      for role in PACKET_ROLES)
     def sample(index: int, jobs: int) -> str:
-        normal = "".join(PREFIX + f"runtime-call record={i} status=0 hit=0\n" for i in range(43))
+        normal = packets + "".join(PREFIX + f"runtime-call record={i} status=0 hit=0\n" for i in range(43))
         release = PREFIX + "release compiler=0/0 runtime=0/0 table=0 result=PASS\n"
         normal += release + PREFIX + ("normal=PASS compiler-sites=2 runtime-sites=3 allocated=10 peak=10 work=10 "
-                                     "full-eight-source-FI=NOT_RUN native=NOT_RUN\n")
+                                     "input-packet-bytes=PRESERVED packet-reads=3 full-eight-source-FI=NOT_RUN native=NOT_RUN\n")
         covered = 0
         for site in range(index, 2, jobs):
             normal += PREFIX + ("compiler-cleanup had-owner=0 valid-before=0 sites-before=1 sites-after=1 "
@@ -474,7 +516,7 @@ def self_test() -> None:
             normal += release + PREFIX + (f"compiler-fault=PASS frozen-N=2 fault-site={site} hit-transitions=1 "
                 "failure-stage=owner-new actual-status=3 expected-oom=3 output-preserved=1 diagnostic-match=1 "
                 "cleanup-uncharged=1 compiler-sites=1 runtime-sites=0 allocated=0 peak=0 work=0 "
-                "compiler-physical=0/0 runtime-physical=0/0 table=0 input-packet-bytes=UNSNAPSHOTTED_OPEN "
+                "compiler-physical=0/0 runtime-physical=0/0 table=0 input-packet-bytes=NOT_REACHED packet-reads=0 "
                 "full-eight-source-FI=NOT_RUN runtime-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n")
             normal += PREFIX + (f"fault-ordinal kind=compiler ordinal={site} frozen-N=2 frozen-R=3 "
                 f"shard={index} shards={jobs} compiler-physical=0/0 runtime-physical=0/0 table=0\n")
@@ -493,16 +535,21 @@ def self_test() -> None:
     bad_outputs = [good + summary, good.replace(ordinal, "", 1), good.replace("covered=2", "covered=1"),
                    good.replace("frozen-R=3", "frozen-R=4"), good.replace("compiler-physical=0/0", "compiler-physical=1/0", 1),
                    good.replace("table=0", "table=1", 1), good.replace("compiler-fault=PASS", "compiler-fault=FAIL", 1),
-                   good.replace("hit-transitions=1", "hit-transitions=2", 1), good.replace("actual-status=3", "actual-status=7", 1)]
+                   good.replace("hit-transitions=1", "hit-transitions=2", 1), good.replace("actual-status=3", "actual-status=7", 1),
+                   good.replace("preserved=1", "preserved=0", 1), good.replace("packet-reads=3", "packet-reads=2", 1),
+                   good.replace("role=closed", "role=source", 1), good.replace("bytes=10", "bytes=65537", 1),
+                   good.replace("input-packet-bytes=PRESERVED", "input-packet-bytes=UNSNAPSHOTTED_OPEN", 1),
+                   good.replace(packets, packets + packets, 1), good + packets]
     runtime = sample(3, 4).split(PREFIX + "fault-summary ")[0]
     for site in (0, 2):
+        runtime += packets
         runtime += PREFIX + (f"runtime-call record=0 stage=poll repeat=0 site-begin=0 site-end={site + 1} "
                              "status=6 expected-oom=6 hit=1\n")
         runtime += PREFIX + "release compiler=0/0 runtime=0/0 table=0 result=PASS\n"
         runtime += PREFIX + (f"runtime-fault=PASS frozen-R=3 fault-site={site} hit-windows=1 failure-stage=poll "
             "record=0 downstream=NOT_ENTERED status=6 expected-oom=6 output-preserved=1 borrowed-oom-shape=1 "
             "cleanup-uncharged=1 compiler-sites=2 runtime-sites=1 compiler-physical=0/0 runtime-physical=0/0 "
-            "table=0 input-packet-bytes=UNSNAPSHOTTED_OPEN full-eight-source-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n")
+            "table=0 input-packet-bytes=PRESERVED packet-reads=3 full-eight-source-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n")
         runtime += PREFIX + (f"fault-ordinal kind=runtime ordinal={site} frozen-N=2 frozen-R=3 "
             "shard=0 shards=2 compiler-physical=0/0 runtime-physical=0/0 table=0\n")
     runtime += PREFIX + ("fault-summary kind=runtime frozen-N=2 frozen-R=3 normal-records=43 shard=0 shards=2 "

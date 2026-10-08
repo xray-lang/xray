@@ -65,7 +65,7 @@ def axis_contract(output: str, axis: str, cut: str, normal_output: str, helpers)
     row = rows[0]; helpers.zero_physical(row)
     expected_fields = {"compiler-axis": "PASS", "axis": str(KINDS[axis]), "cut": cut,
                        "normal-total": str(total), "limit": str(limit), "cleanup-uncharged": "1",
-                       "input-packet-bytes": "UNSNAPSHOTTED_OPEN", "full-eight-source-FI": "NOT_RUN",
+                       "full-eight-source-FI": "NOT_RUN",
                        "native": "NOT_RUN"}
     if any(row.get(k) != v for k, v in expected_fields.items()):
         raise ValueError("axis result is not bound to its fresh normal, cut and OPEN boundary")
@@ -160,6 +160,9 @@ def axis_contract(output: str, axis: str, cut: str, normal_output: str, helpers)
                 or rollback.get("runtime-before") != rollback.get("runtime-after")
                 or rollback.get("table-before") != rollback.get("table-after")):
             raise ValueError("minus1 diagnostic free charged resources or failed physical rollback")
+    helpers.packet_contract(output, row, [helpers.unsigned(call["status"]) for call in calls
+                                         if call["stage"] in helpers.PACKET_STAGES],
+                            helpers.rows(normal_output, "packet-input "))
     return {"normal": normal, "axis": axis, "cut": cut, "total": total, "limit": limit,
             "actual": actual, "records": count, "first_refusal": None if rejected is None else rejected["stage"]}
 

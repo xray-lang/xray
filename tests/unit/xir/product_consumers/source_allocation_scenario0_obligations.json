@@ -459,5 +459,28 @@
     "evidence": "build-consumer-evidence/current67-source0-fi-process-reaping-applied-r1/; independent final-scoped-review.json under adjacent fi-process-reaping-audit-r1.",
     "retirement": "0. Original108-source and additional migration denominators plus all original allocation scenario/assertion/native OPEN statuses are unchanged.",
     "remaining": "Full2036 compiler/32runtime ordinal gates, real12 axes, other7 allocation sources, complete input packet preservation, initialization failure/sticky OOM/sibling continuation, native/mixed/owned string/partial initialization/reverse cleanup, default and applicable safety, producer rebind and Main integration remain NOT_RUN or OPEN."
+  },
+  "input_packet_preservation_facet": {
+    "status": "IMPLEMENTED_SELECTED_NORMAL_AND_OOM_VALIDATION_ONLY",
+    "worker_parent": "f69d96209662b77e4576765f73eb9df3396fb4d0",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29",
+    "scope": "Every actual source, closed and retained Checked reader now snapshots and compares every input byte immediately across that public call, including error returns. This does not snapshot all artifact graphs or claim later owner lifetime coverage.",
+    "observer": "One static 65536-byte test-only scratch array. No allocator call, compiler/runtime ordinal or product ledger charge is introduced. Oversized, empty or missing input fails the observer; this capacity is not a language or production packet limit. Each process invokes these readers serially.",
+    "normal": "Three full snapshots: source3049 bytes, closed4721 bytes, retained4721 bytes in the recorded OS-backslash namespace. Both configurations retain compiler2036/runtime32/43 call records and allocated615349/peak179234/work691659.",
+    "selected_compiler": "Per configuration actual failure ordinals0,988,1067,1277,2035: owner failure records NOT_REACHED; source/closed/retained first-reader OOM7 retains complete input; final Program-take failure retains all three earlier snapshots. Normal and fault outputs, cleanup charges and all five physical-zero fields remain enforced.",
+    "selected_runtime": "Per configuration actual shard0/16 covers runtime ordinals0 and16, each after three successful packet reads. All original runtime status, raw stderr, output sentinel and physical release checks remain.",
+    "actual_processes": "Fourteen initial real product processes plus two final-parser real source-reader shard988/2036 processes. The latter each repeats ordinal988 already covered by the direct selected case; no extra distinct ordinal is claimed. All product runs use the newly compiled C; no real axis run occurred.",
+    "parser": "Normal requires exactly source/closed/retained. Each fault block requires exactly the reached reader prefix with original domain status, complete widths matching its own normal, preserved=1 and summary counts; pre-reader failures say NOT_REACHED. Axes bind reader records to their called API records and same-argv normal. Old UNSNAPSHOTTED_OPEN summaries cannot pass this parser.",
+    "pure_validation": "Original parser self-test7 accepted/26 rejected including new packet damage cases. Pure synthetic axis parser14 accepted/47 rejected including all three reader BUDGET statuses; earlier14 real raw streams reparsed by the final width-binding revision. These are not product axis runs.",
+    "input_binding": "Initial14 processes captured the earlier packet-parser revision; final2 captured the width-binding refinement. Both before/after snapshots are exact. Runs retain prior map07b; this newly appended facet is documentation after execution.",
+    "fresh_build": "UTF-8 Ninja MSVC Release and Clang ASan+UBSan each compiled the modified consumer C and linked its executable. The public archives, generated C/native target, shared interfaces and CMake registration are unchanged.",
+    "protected": "598 previously protected entries checked: only the authorized SourceMirror consumer C and its two objects/two executables changed. The other593 retain exact SHA256/size/mtime. Worker changes are exactly the two runners, consumer C and this appended map;12 historical generated files remain unchanged.",
+    "effective_inputs": {
+      "scripts/source_product_consumer_allocation_faults.py": "3dc80cddc4fc487a840c6fa9ccf5d0c8453be59da3f14af3ddf09414e0f24e92",
+      "scripts/source_product_consumer_allocation_axes.py": "f985f8105fa003cb735a71c5449d329737a40887d624bb2f57aafb67ca17e4fc",
+      "tests/unit/xir/product_consumers/test_source_product_allocation_scenario0.c": "01de08143ee86d3ebf27c774933a0115fcde54420e65a455e6fb6f35d577ad61"
+    },
+    "evidence": "build-consumer-evidence/current67-source0-packet-preservation-r1/",
+    "remaining": "Complete2036 compiler/32runtime sweeps and all12 actual resource axes require a new Main window. Full safety, native/mixed packet mutation qualification, other7 sources, initialization/sticky failure/sibling continuation and all prior OPEN duties remain. No consumer is retired."
   }
 }
