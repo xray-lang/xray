@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 44,
     "source_without_digest_reference": 64,
-    "other_with_digest_reference": 38,
-    "other_without_digest_reference": 122,
-    "digest_reference_values": 110,
+    "other_with_digest_reference": 40,
+    "other_without_digest_reference": 120,
+    "digest_reference_values": 112,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -406,6 +406,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
       "lf_sha256": "a38e3dd22275813aded523a804d976209a0676fd5f8afbcbb150a9be3a89d114"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_sequence_length_obligations.json",
+      "lf_sha256": "8a58b94b6851b8a9d0a27e08780232defe920fbe53a37ab1992269ff5a2d8921"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_source_file_deletion_native_obligations.json",
@@ -3090,7 +3094,13 @@
       "body_lf_sha256": "5cc3b360b269062f8c003b85ed09ad2f78297025ff42b2697f2d5c46238ea639",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_sequence_length_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -3830,7 +3840,13 @@
       "body_lf_sha256": "e5b58f3a8f032d776bec0451b0b64afca353718624cd382f554a22d41d8ab2c4",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_sequence_length_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",

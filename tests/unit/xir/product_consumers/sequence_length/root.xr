@@ -1,0 +1,8 @@
+fn copied() -> string {
+  var copy: string = ""
+  { const source = "Aé世😀é"; copy = source }
+  return copy
+}
+fn answer() -> i64 { return len(copied()) }
+export fn sequenceCopy() -> string { return copied() }
+export fn consumerAnswer() -> i64 { return answer() }

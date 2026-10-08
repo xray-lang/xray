@@ -381,3 +381,5 @@ endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_element_admission.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_empty_aggregate.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_sequence_length.cmake")

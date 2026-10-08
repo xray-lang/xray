@@ -26,6 +26,7 @@
 #include "array_managed_escape_shape.h"
 #include "array_element_place_shape.h"
 #include "empty_aggregate_shape.h"
+#include "sequence_length_shape.h"
 
 static const SourceProductConsumerFixture *consumer_fixture;
 #define XR_CONSUMER_NAME (consumer_fixture->name)
@@ -262,6 +263,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
         array_managed_escape_shape(module) : UINT32_MAX;
     if (!strcmp(XR_CONSUMER_NAME, "array_element_place")) array_element_place_shape(module, run.array_entries);
     if (!strcmp(XR_CONSUMER_NAME, "empty_aggregate")) empty_aggregate_shape(module);
+    if (!strcmp(XR_CONSUMER_NAME, "sequence_length")) run.parameterized_answer = sequence_length_shape(module);
     /* Subsequent reads and execution own all data after the parse session dies. */
     xr_compile_session_free(session);
     session = NULL;
@@ -362,8 +364,13 @@ static XrXirValue execute(XrXirInstance *instance, uint32_t entry, unsigned expe
 #include "source_product_consumer_array_escape.inc.c"
 #include "source_product_consumer_managed_escape.inc.c"
 #include "source_product_consumer_element_place.inc.c"
+#include "source_product_consumer_sequence_length.inc.c"
 
 static void normal(Consumer *run) {
+    if (!strcmp(XR_CONSUMER_NAME, "sequence_length")) {
+        consumer_sequence_normal(run);
+        return;
+    }
     if (!strcmp(XR_CONSUMER_NAME, "array_element_place")) {
         consumer_element_place_normal(run);
         return;

@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_sequence_length",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 7097,
+      "body_lf_sha256": "5cc3b360b269062f8c003b85ed09ad2f78297025ff42b2697f2d5c46238ea639",
+      "assertion_sites": 7,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_sequence_length",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2899,
+      "body_lf_sha256": "e5b58f3a8f032d776bec0451b0b64afca353718624cd382f554a22d41d8ab2c4",
+      "assertion_sites": 8,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "legacy_fixture": {
+    "path": "tests/unit/program/xr_program_sequence_length_fixture.h",
+    "lf_sha256": "0dce3b61380324b0de670ae694b944f9d066031352aca420e4d488715d1a99d7",
+    "text_hex": "41c3a9e4b896f09f988065cc81",
+    "text_sha256": "5590a2ea8574e9cee9388a5607e39478b2b4c4abc6c55ec8b4f5c2993bdd8dda",
+    "bytes": 13,
+    "scalars": 6,
+    "whole_scope": "Ownercopy/drop thenSEQUENCE_LENGTH;oldmutations1..6 andAOTscalar_count/immediate mutation."
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "fixture": {
+    "path": "tests/unit/xir/product_consumers/sequence_length/root.xr",
+    "sha256": "651b694dd3f3b70783215e765f7f0d47252a18c1591e2e5f10530761a74da0df",
+    "translation": "OriginalUTF8 literalbyteexact. No originalSourcefixtureexists;logicalSource reconstruction assigns Stringcopy outsideinner source lexicalscope;len(copied()) exact6. Sourceautomaticownership differsoldexplicitOWNER_COPY/OWNER_DROPencoding. Copydestination isexplicitly initialized byemptyStringliteral before assignment;no implicitStringdefaultadmissionclaimed."
+  },
+  "required_shape": "One original13-byteCONST_STRING inprivatecopied;privateanswerI64 hasSTRING_LEN onrealString CALLcopied andexactreturnedSSA;rootexportednoargsequenceCopyreturnsString.",
+  "pipeline": "Public SourceProduct/Checked/ownedpacket death/specialized reverify/Lowered/Program/Instance;VM/actualnative/twomixedfixed6andStringbytes.",
+  "result": "NOT_RUN",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "OriginalexplicitOWNER_DROP ordering/consumedSSA,ownerbits,mutation1..6andoldAOTin-placeBackendIRmutationnotcoveredbythisSourceprojection.",
+    "CurrentimmutableStringcopiesandhostescapeproveindependentownershipafterInstance/programdeath;lexicalscopealoneisnotphysicalStringdomainrelease.",
+    "Fullfaultscan/axes/cancel/safety/integrationandretirementremainOPEN."
+  ],
+  "unicode_length_and_escape_20261009_facet": {
+    "status": "PASS_ORIGINAL_BYTES_SIX_SCALARS_STRING_ESCAPE_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-sequence-length-r1",
+    "shape": "Oneexact13byteUnicodeCONST_STRING inprivatecopied;rootsequenceCopyexport0paramsString;privateanswercontainsSTRING_LEN onrealCALLcopiedandreturnsitsI64SSA. Destinationinitializedbyexplicitemptyliteral;sourceinnerlexicalscopeendsbeforecopyreturn.",
+    "original_expected": "UTF8hex41c3a9e4b896f09f988065cc81,13bytes/6Unicode scalars;combiningmark countsseparately,supplementaryscalaronce. No normalization orbytecountoracle substitution.",
+    "generated_payload_sha256": {
+      "msvc": "f04bd5f428433d69f28610c89d587bac7df1c5f6246e3ed8501364450fddfa45",
+      "asan": "f04bd5f428433d69f28610c89d587bac7df1c5f6246e3ed8501364450fddfa45"
+    },
+    "runtime": "Eachbackend/configretains2InstancesanddropscallerProgramreference afterSource/Session/readerdeath. Privateanswerstart rejectswithoutallocation/init,canonicalentry0,then4exactI64length6calls+4rootexportStringresults. Occupiedtakesentinel remainsbyteexact/noallocation. AfterbothInstancesdead,fourStringsandtheirfourindependentcopiesretainexact13bytes/6scalarsthroughoriginalStringdrop;compilerarenaalreadyrefundstobaselinebeforeStringdrop;runtimephysical/tableandcompilerfinal0/0.",
+    "results": {
+      "final_backend_commands": 8,
+      "final_owned_commands": 2,
+      "scalar_length6_results": 32,
+      "owned_strings": 32,
+      "copied_strings": 32,
+      "instances": 16,
+      "actual_attempts": 18,
+      "initial_product_failures": 4,
+      "final_passes": 12
+    },
+    "first_red": "InitialSourceintroduceduninitializedStringvardestination;25fexplicitlyhasnoadmittedStringdefault,actualBAD_TYPE3stage1line2message typehasnoadmitteddefaultinitializer. OriginalCoreIRfixturehasnoimplicitdefaultrequirement. PreserveinitialSource/map/traceand6strictPIDreceipts;fourpositiveFAILwithactualphysicalzeros. Replaceonlynewdestinationdeclarationwith explicitemptyStringliteral;exactoriginal13UTF8bytes/scopeassignment and6oracleunchanged. ExternalSourceisreadatruntime,soC/EXEunchangedandnoCfreshrebuildclaimforthisSource-onlyrepair;finalVM/ownedfreshprocessesPASS.",
+    "input_guards": "All18actualprocessesSHA,size,mtimebefore==after:initial/finalSource12each2686inputs including3observerheaders;native/mixed6each2687includesactualgeneratedC. FirstchangedSource/map/trace retainedrawpreimages;annotationsafterexecution,finalmap/tracepreimagespreserved.",
+    "build": "Tenfreshtranslationunitsacross2cfg:driver,newVMwrapper,owned,newnativewrapper,actualgeneratedC. StrictC11/W4/WX,ClangactualASan+UBSan,NinjaVALIDdependencies. OldemptyaggregateVMwrapperobject reusedexactandbinaryrelinkednewdriver. Two build-timeSourceemitinvocationsretainedseparatelyfromregisteredPIDreceipts.",
+    "registration": "21newtests/config:normal5T120P1,compiler4T600P8/jobs8/COST300/RUN_SERIAL,axes4T120P1/RUN_SERIAL,runtime4/cancel4T120P1.32heavyrowsNOT_RUN.",
+    "remaining": "ExplicitoldOWNER_COPY/OWNER_DROP/consumedSSAordering,oldbuilderownerbitandmutations1..6,oldAOTin-placeBackendIRimmediatefault,wholeFI/axes/cancel/safety/Mainintegrationandretirement remainOPEN. LexicalinnerSourceexitdoesnotclaimphysicalStringdomainfreedwhilecopyalive.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
