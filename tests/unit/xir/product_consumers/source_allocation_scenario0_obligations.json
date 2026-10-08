@@ -299,8 +299,19 @@
     "qualified_contract": "Checked25/semantic67/Value22/Call28/Program29; not Main69 or candidate70",
     "build": "MSVC Release/MT and Clang Debug/MD ASan+UBSan each rebuilt the existing Source0 target: one compile, one link; new objects each159 actual Ninja dependencies",
     "normal": "Each configuration1/1; fresh N2036/R32 and43 continuous runtime-call records",
-    "compiler_selected_sites": [0, 1, 2035],
-    "runtime_selected_sites": [0, 6, 12, 18, 16, 31],
+    "compiler_selected_sites": [
+      0,
+      1,
+      2035
+    ],
+    "runtime_selected_sites": [
+      0,
+      6,
+      12,
+      18,
+      16,
+      31
+    ],
     "argument_rejections": "Each configuration13/13 invalid runtime-fault arguments return2 without pipeline output",
     "related_regression": "Each configuration2/2: existing Source0 native normal and source-file-deletion VM normal; their artifacts and public libraries are unchanged",
     "binding": "Fault argv N/R are read from that exact configuration's fresh normal.xml; CLI syntax checks alone do not authenticate a denominator",
@@ -482,5 +493,36 @@
     },
     "evidence": "build-consumer-evidence/current67-source0-packet-preservation-r1/",
     "remaining": "Complete2036 compiler/32runtime sweeps and all12 actual resource axes require a new Main window. Full safety, native/mixed packet mutation qualification, other7 sources, initialization/sticky failure/sibling continuation and all prior OPEN duties remain. No consumer is retired."
+  },
+  "full_qualification_preflight_20261009_facet": {
+    "status": "PREFLIGHT_ONLY_FULL_GATES_NOT_RUN",
+    "worker_parent": "4e88c48576caac4f5f03e9efc2639ebb6e2c48e3",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67/Value22/Call28/Program29",
+    "build": "Both existing Source0 targets checked inUTF-8 MSVC environment;Ninja no work to do. Exact C/object/EXE metadata unchanged;this isnot fresh compilation.",
+    "actual_validation": "Two actual processes use exact current CTest registered normal argv. Both prove normal compiler2036/runtime32/43 records,three full packet input snapshots,cleanup charges andphysical zeros underthe existing parser. They do not exercise any injected fault or resource axis.",
+    "normal_input_count": 2620,
+    "input_preservation": "Before/after SHA,size,mtime exact perconfiguration. Six actual producer object bodies match linked archive members;real flags/deps preserved andSource input LF-bound to25f. All598protected unchanged.",
+    "inventory": "A separate actual Python -B inventory check validates the retained source108=88fixtures+20other and26files160functions/shared7 census. This ispure generator/fixture consistency,not product execution.",
+    "queue_plan": {
+      "file": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-full-qualification-preflight-r1\\heavy-plan.json",
+      "sha256": "296b13cc5a7eaebef6673dd8df35b8b1d256f5ccab983932c064ecf078ab9f4c",
+      "gates": 16,
+      "compiler_runtime_gates": 4,
+      "axes": 12,
+      "compiler_points_per_configuration": 2036,
+      "runtime_points_per_configuration": 32,
+      "full_FI": "TIMEOUT600/PROCESSORS8/RUN_SERIAL/jobs8",
+      "axis": "TIMEOUT120/PROCESSORS1/RUN_SERIAL",
+      "execution": "NOT_RUN",
+      "authorization": "WAITING_FOR_NEW_MAIN_WINDOW",
+      "description": "Each row stores its exact existing registered argv,properties,input scope andan anchoredCTest-j1 command. No gate isreduced,no old window isreused andnone ofthese16heavy commands executed."
+    },
+    "evidence": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-full-qualification-preflight-r1",
+    "annotation": "This field wasappended afterexecution. Executions captured previous map bytes;preannotation exactimage saved. No newmaprun claimed.",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "completion": "Whole allocation/source responsibilities remainOPEN. No deletion or retirement.",
+    "retired": 0
   }
 }
