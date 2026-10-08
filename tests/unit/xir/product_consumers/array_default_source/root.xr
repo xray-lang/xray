@@ -1,0 +1,6 @@
+export fn defaultCount(count: i64) -> i64 {
+  const values = Array<u8>(count)
+  return len(values)
+}
+fn answer() -> i64 { return defaultCount(3) }
+export fn consumerAnswer() -> i64 { return answer() }

@@ -21,6 +21,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "../xir_instance_compile_observer.h"
 #include "../xir_runtime_allocations.h"
+#include "array_default_source_shape.h"
 
 static const SourceProductConsumerFixture *consumer_fixture;
 #define XR_CONSUMER_NAME (consumer_fixture->name)
@@ -34,7 +35,7 @@ typedef struct Consumer {
     XrCompileResourceStats baseline, stats;
     XrXirProgram *program;
     XrXirStatus status;
-    uint32_t entry, answer, private_answer, state_probe;
+    uint32_t entry, answer, private_answer, state_probe, parameterized_answer;
     size_t attempts;
 } Consumer;
 
@@ -250,6 +251,8 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     }
     if (!strcmp(XR_CONSUMER_NAME, "narrow_array")) consumer_stateful_shape(module, &run);
     closed_shape(module, run.private_answer);
+    run.parameterized_answer = !strcmp(XR_CONSUMER_NAME, "array_default_source") ?
+        array_default_source_shape(module) : UINT32_MAX;
     /* Subsequent reads and execution own all data after the parse session dies. */
     xr_compile_session_free(session);
     session = NULL;
@@ -342,8 +345,13 @@ static XrXirValue execute(XrXirInstance *instance, uint32_t entry, unsigned expe
 
 #include "source_product_consumer_output.inc.c"
 #include "source_product_consumer_stateful.inc.c"
+#include "source_product_consumer_array_default.inc.c"
 
 static void normal(Consumer *run) {
+    if (!strcmp(XR_CONSUMER_NAME, "array_default_source")) {
+        consumer_array_default_normal(run);
+        return;
+    }
     ConsumerOutput outputs[2] = {0};
     XrXirOutputSink sinks[2] = {0};
     XrXirInstance *instances[2] = {0};

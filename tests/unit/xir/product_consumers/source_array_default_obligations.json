@@ -321,5 +321,72 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "public_source_execution_20261009_facet": {
+    "status": "PASS_PUBLIC_DEFAULT_EXECUTION_LEGACY_OPEN",
+    "whole_replacement": "OPEN",
+    "evidence": "build-consumer-evidence/current67-array-default-public-execution-r1",
+    "fixture": "tests/unit/xir/product_consumers/array_default_source/root.xr",
+    "fixture_sha256": "fc44dcb7eede1c66739e2266c1b8c63d791feec579dd2cbb0331709d5126c55c",
+    "public_function": "export defaultCount(i64)->i64; Array<u8> andlen",
+    "counts": [
+      "3",
+      "0",
+      "-1",
+      "INT64_MIN",
+      "INT64_MAX",
+      "4"
+    ],
+    "current_expected": [
+      "RETURNED1/value3",
+      "RETURNED1/value0",
+      "NUMERIC_RANGE14/panic422",
+      "NUMERIC_RANGE14/panic422",
+      "LIMIT5",
+      "RETURNED1/value4"
+    ],
+    "legacy_expected": "Original negative panic452 andmaximumOOM remain separate OPEN obligations.",
+    "driver": "Two retained Instances; Source/Session/Closed owners dead before execution; caller Program dropped before calls;canonical0/private-entry refusal;12 independent original count outcomes;owned scalar andpanic results survive Instance/Program death;final value/fault owner drops prove runtime0/0.",
+    "metadata": "Count operand0,owned Array<u8>,CONST_INT U8 zero SSA,one repeat/length,exported root identity. Dedicated owner test kills Source owners/paths before Checked verify/rewrite preservation;Checked dead before Lowered verify.",
+    "shared_driver_changes": "One optional parameterized entry field,default-specific metadata lookup andnormal dispatch;existing normal branches preserved.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "actual_evidence": {
+      "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-array-default-public-execution-r1",
+      "final_receipts": "final-processes.json",
+      "all_attempts": "actual-attempts.xml",
+      "attempts": 26,
+      "initial_test_failures": 4,
+      "final_passes": 14,
+      "public_backends": 8,
+      "owned_metadata": 2,
+      "unchanged_managed_controls": 4,
+      "parameterized_outcomes": 96,
+      "owned_return_scalars": 48,
+      "copied_fault_records": 48,
+      "panic_shape": "NUMERIC_RANGE code422 andempty Unit message; fixed typed record fields checked after Instance/Program death. No heap String panic owner proven.",
+      "initial_failures": "Two BAD_STATE assertions incorrectly used nonempty output; correct public occupied-output refusal is BAD_ARGUMENT. Two assertions incorrectly required numeric-range panic message to be String. All source/executable/input/output versions saved; initial ASSERT exits do not prove cleanup. Producer source and six input outcome oracles unchanged.",
+      "recovery": "Same two Instances each execute3,0,-1,INT64_MIN,INT64_MAX,4; final4 succeeds after negative range andbounded limit outcomes.",
+      "ownership": "Source/Session/Closed owners andcaller Program dead before calls; return scalars/fault records validated after Instances freed; final runtime0/0 andcompiler0/0 after caller ledger/observer destruction.",
+      "input_capture": "2632 actual inputs per process;SHA,size,mtime before==after; overwritten source/executable/registration preimages preserved; postexecution map annotation saved separately.",
+      "build": "16 actual test compile events:12 finalfresh units across two configurations,including shared driver,new wrappers/owned source,real default C andmanaged control C. C11/W4/WX andactualClang ASan/UBSan;VALID Ninja dependencies. Production libraries unchanged;6 archive object member bindings/config.",
+      "generated_c_sha256": "4a9f1a61750b6e245f889a89558aab3688053ca737807ffe94f4e74da71805c3",
+      "metadata": "Default U8 zero/count SSA verified from public module; detached Checked reverify andcomplete packet preservation;Checkedfree precedes Lowered reverify. Packet preservation isnot independent newwire encoding.",
+      "registration": "New compiler gate uses existing generic fault runner actual --binary/--mode/--jobs8/--evidence grammar,T600/P8/RUN_SERIAL. Axes --axes T120/P1/RUN_SERIAL,runtime --runtime,cancel --cancel. Old invalid template commands preserved in input preimages; unchanged actual normal argv rebound after registration repair. Heavy gatesNOT_RUN.",
+      "heavy_scope": "Generic runtime/cancel registrations cover fixed consumerAnswer count3; original multi-count fault/rollback obligations remainOPEN. No fullFIfamily claim.",
+      "protection": "10985 originaltracked;10982 nonownedexact;12 historicaldirty preserved.598 protected:594exact+4 expectedNinja/CTest changes;removeonly42 newCTest lines/config restoresold rawregistry.",
+      "annotation": "After actual processes;preannotation bytes preserved;no map rerun claimed.",
+      "retired": 0
+    },
+    "legacy_gaps": [
+      "Original negative panic452 versuscurrent422 andINT64_MAX OOM versusbounded LIMIT require authorized contract disposition.",
+      "Original per-return context.allocations=0 isnot implied byfinal runtimezero after all Instance/result owner drops.",
+      "Original explicit owner bits,full multi-count allocationfaults/rollback/recovery,axes,cancel,safety andMain qualification remainOPEN.",
+      "Owned results here are I64 scalars andfault records with Unit messages;heapArray/String escape qualification remains separate."
+    ]
   }
 }
