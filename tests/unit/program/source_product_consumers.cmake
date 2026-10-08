@@ -289,3 +289,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_reque
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_initializer_admission.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_checked_hostile_frame.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_f64_transport.cmake")

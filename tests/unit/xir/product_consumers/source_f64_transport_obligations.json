@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "path": "tests/unit/program/test_xr_program.c",
+    "function": "test_f64_constant_bits_and_wire",
+    "body_lf_sha256": "9ef2126049b004d7ef1d7fd1e22eb724749ef0692f1e9b47de190c8c1cd35ff7",
+    "status": "OPEN",
+    "replacement_gates": []
+  },
+  "original_bits": 10,
+  "independent_packet": "f64_transport_fixture.h",
+  "encoder": "scripts/source_product_consumer_f64_transport.py",
+  "model": "Complete independent one-module Checked program with exported caller(f64)->f64, private carrier(f64)->f64, canonical entry()->I64(0), initializer()->Unit, explicit declarations. CALL then COPY/RETURN preserve argument. Private direct start must fail; exported caller is the authorized start.",
+  "oracle": "Every original uint64 pattern is injected as an exact F64 argument and returned without numeric operations, including signed zero and signed/payload/signaling NaNs. Two instances, two repetitions, all ten patterns: 40 calls per process. Saved outcomes outlive both instances and last code lease; copied/dropped as intrinsic scalar values.",
+  "modes": [
+    "vm",
+    "native",
+    "native-to-vm",
+    "vm-to-native"
+  ],
+  "native": "Real emitted four-entry C table. Each execution re-emits exact payload SHA and seals with actual Lowered proof/declarations; no hand-implemented native backend.",
+  "mixed": "Both directions choose different actual backends for caller and carrier; observation delegates unchanged authenticated views and backend actions, counts exact forty caller-to-carrier actions.",
+  "ownership": "Program caller reference dropped before calls; code lease retained by two instances, freed exactly once after the last instance. Compiler and runtime physical observers must both reach zero.",
+  "remaining": [
+    "Original noncanonical NaN constant-admission conflict remains OPEN; runtime transport is distinct from constant encoding.",
+    "Original constant pool reverse-order determinism, duplicate/sorting/type/kind wire mutation review.",
+    "Original verifier/writer exhaustive FI; three axes; full safety; Main integration.",
+    "SourceProduct/ordinary source carrier coverage is not claimed by this source-free Checked test."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "retired": 0,
+  "result": "PASS_BOTH_CONFIGURATIONS_FOUR_RUNTIME_MODES_ONLY",
+  "qualification": {
+    "archive": "build-consumer-evidence/current67-f64-transport-r1",
+    "product_processes": 8,
+    "registered_static_processes": 2,
+    "postedit_static_processes": 2,
+    "successful_calls": 320,
+    "private_entry_rejections": 320,
+    "results_verified_after_owners_destroyed": 320,
+    "generated_C_instrumented": true,
+    "fresh_units_per_configuration": 3,
+    "final_compiler_physical": "0/0",
+    "final_runtime_physical": "0/0",
+    "first_failures": [
+      "MSVC link failed because the initial declaration-free model emits only callbacks, not ProgramSpec.",
+      "Eight initial processes rejected declaration-free Program seal before any runtime call; explicit canonical entry/initializer/declarations and exported caller corrected the model."
+    ],
+    "boundary": "First failure evidence is retained. Product runs bind the pre-result map and generator docstring; a subsequent docstring-only correction passed both registered static encoders. No full product rerun is claimed after those edits.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN"
+  }
+}
