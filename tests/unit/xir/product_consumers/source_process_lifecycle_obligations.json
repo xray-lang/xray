@@ -593,5 +593,47 @@
     "annotation": "Added after actual run;run inputs bind saved preannotation map;no annotation rerun claimed",
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN"
+  },
+  "native_reap_error_qualification": {
+    "result": "PASS_REAL_WINDOWS_INVALID_HANDLE_FAULT",
+    "scope": "Real Windows invalid-handle fault injection into a dedicated actual child process;not a manufactured OSError or fake Popen. First failed receipt remains unobserved,then an independently owned process handle recovers the child.",
+    "matrix": "Two real allocation runners times two configurations;four new native handle-error children plus twelve ordinary/timeout regression children.",
+    "injection": "After the actual child flushes verified SourceProduct readiness and stderr,the test closes only its original Popen handle. CPython calls native WaitForSingleObject and TerminateProcess with that now invalid handle.",
+    "expected": "Actual WinError6 in firstwait,kill,andboundedreap;runner returncodeNone,termination_observedFalse,process_contractFAIL retained. Independent handle observes WAIT_TIMEOUT258 (stillalive),then performs real kill/wait and closes its handle.",
+    "preservation": "Failed JSON receipt and raw outputs must be identical before/after external recovery;external recovery cannot retroactively qualify runner termination.",
+    "boundaries": [
+      "Windows CPython handle-error injection only;no uncontrolled OS failure diagnosis or other wait/reap errors qualified.",
+      "Killing the held real SourceProduct does not prove product destructors,physical cleanup or ASan shutdown.",
+      "Original source0/fullFI/resource-axis helpers,ordinals,budgets,registrations and producer remain unchanged."
+    ],
+    "thread_executor_error": "NOT_RUN",
+    "input_capture_error": "NOT_RUN",
+    "receipt_write_error": "NOT_RUN",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "evidence": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-process-reap-error-r1",
+    "final_receipts": "run-r2/results.json",
+    "registered_commands": 2,
+    "final_real_child_processes": 16,
+    "native_error_children": 4,
+    "original_failure": "All4: actual WinError6 from first wait,kill,and bounded reap. Real PID and flushed stdout/stderr retained;returncode None,termination_observed false,process_contract FAIL.",
+    "external_recovery": "Separate owned handle observed WAIT_TIMEOUT258 (child still alive),then actual kill/wait returned1. Recovery handle closed,PID independently absent. Original failed JSON and raw outputs remained identical before/after recovery.",
+    "ordinary_regression": "4normal PASS;4nonzero FAIL preserved;4timeout FAIL preserved. 8ordinary children final physical0/0;8killed children do not claim destructor or sanitizer shutdown.",
+    "inputs": {
+      "msvc": 2566,
+      "asan": 2566,
+      "preservation": "SHA,size,mtime before==after;input capture includes exact native fault helper"
+    },
+    "first_failure": "Initial recovery handle had synchronization/termination rights but lacked query-exit-code rights. Native termination succeeded,but GetExitCodeProcess returned WinError5;first run remained FAIL and emitted CPython finalizer errors. Both configurations16first children and first helper/raw/receipts retained;4firsterror PIDs independently confirmed terminal before retry.",
+    "fixture_fix": "Recovery handle owns SYNCHRONIZE,PROCESS_TERMINATE,andPROCESS_QUERY_LIMITED_INFORMATION (0x00101001). Entire16child suite reran with newly captured fixed inputs;firstfailure is not a producer regression.",
+    "first_failure_source": "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getexitcodeprocess",
+    "build": "Both no-work checks;0fresh TUs. Previous fresh C11/W4/WX andClangASan+UBSan consumer binary/object/headers/10archives/6actualmembers exact.",
+    "protection": "10924tracked snapshot:10922nonowned exact;598protected all exact;12historicaldirty preserved. Original fault/axes runners unchanged.",
+    "historical_facets": "Original6child and12child qualifications retained verbatim;their NOT_RUN reap-error statements describe those earlier executions.",
+    "annotation": "Added after final actual execution;receipts bind saved preannotation map;no annotation rerun claimed.",
+    "other_reap_error_causes": "NOT_RUN"
   }
 }

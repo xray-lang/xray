@@ -114,6 +114,26 @@ def main():
             row['failure_receipt'] = fi.process_failure(command, label, run, error, helpers)
             report['issues'].append(label + ': ' + repr(error))
         helpers.write(run/'result.json', report)
+    if os.name == 'nt':
+        reap_spec = importlib.util.spec_from_file_location('native_reap_error', args.input_root/'scripts/source_product_consumer_process_reap_error.py')
+        reap_probe = importlib.util.module_from_spec(reap_spec)
+        reap_spec.loader.exec_module(reap_probe)
+        for helper_name, runner in (('faults', fi), ('axes', axes)):
+            label = helper_name + '-reap-error'
+            command = [str(args.binary), str(args.root), str(args.stdlib), 'timeout']
+            row = {'helper': helper_name, 'mode': 'reap-error', 'status': 'RUNNING'}
+            report['processes'].append(row)
+            try:
+                row.update(reap_probe.exercise(runner, helpers, command, label, run, args.input_root))
+                row['terminal_observation'] = windows_terminal(row['receipt']['pid'])
+                row['status'] = 'PASS'
+            except Exception as error:
+                row['status'] = 'FAIL'
+                row['error'] = repr(error)
+                row['failure_receipt'] = fi.process_failure(command, label, run, error, helpers)
+                report['issues'].append(label + ': ' + repr(error))
+            helpers.write(run/'result.json', report)
+        report['reap_error'] = 'PASS_NATIVE_INVALID_HANDLE_FAULT' if all(x['status']=='PASS' for x in report['processes'] if x['mode']=='reap-error') else 'FAIL'
     try:
         after = fi.capture_inputs(args, helpers)
         helpers.write(run/'inputs-after.json', after)
@@ -123,7 +143,7 @@ def main():
         report['issues'].append('input preservation: ' + repr(error))
     report.update(status='FAIL' if report['issues'] else 'PASS', inputs=len(before['files']),
                   finished_at=datetime.now(timezone.utc).isoformat(), parent_pid=os.getpid(),
-                  boundary='Host process runner qualification only. Timeout child held a verified public SourceProduct;kill/reap does not prove product cleanup,FI coverage or sanitizer shutdown. Reap-error remains unverified.')
+                  boundary='Host process runner qualification only. Timeout children hold verified public SourceProducts. Native Windows handle-error injection closes one child handle,retains first failures,and uses a separate owned handle for recovery. Kill/reap does not prove product cleanup,FI coverage or sanitizer shutdown. Other OS error causes remain unverified.')
     helpers.write(run/'result.json', report)
     print(json.dumps(report, ensure_ascii=False))
     if report['status'] != 'PASS':
