@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "result": "PASS_FOCUSED_BOTH_CONFIGURATIONS",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_instance.c",
+      "legacy_line": 102,
+      "body_lf_sha256": "6668ca83f758cbe4c127827867b7d9686ce8fb99fcbde0828c86fcf39ecf78cf",
+      "assertion_sites": 58,
+      "loop_sites": 6,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:xr_program_module_output_fixture_write_with_suspension",
+  "original_facet": "Non-suspending output provider rejection (capture.refuse mode 2/3), fixed empty prefix on first rejection, three subsequent executions retain failure without further output. Original normal output is 1\\n2\\n3\\n4\\n.",
+  "representation_boundary": "Legacy provider trap7 maps to public XR_XIR_CALL_OUTPUT_ERROR. Current exclusive instance driving rejects provider reentrant starts with BUSY; this does not replace legacy simultaneous execution handles or concurrent initialization races.",
+  "oracle": {
+    "numbered_stdout_hex": "310a320a330a340a",
+    "refuse_at": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "entry": 4,
+    "entry_result": 42,
+    "repeats": 4,
+    "output_error": 13,
+    "failed_lifecycle": "(refuse_at-1) BEGIN/READY pairs followed by one BEGIN, no later initializer or entry",
+    "sticky": "Repeated start+poll return OUTPUT_ERROR without allocation attempts, new output, lifecycle events or completed entries."
+  },
+  "ownership": "Input copied then poisoned/freed before reverify+exact packet write; Checked freed before Lowered verification; caller Program dropped before starts; failures and scalar results survive both instances and code lease destruction.",
+  "candidate_gates": [
+    {
+      "name": "source_product_module_output_failure_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_output_failure_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_output_failure_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_output_failure_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_output_failure_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "evidence": "build-consumer-evidence/current67-module-output-failure-r1",
+  "remaining": [
+    "Original source initializer error/panic/message admission failures remain FAIL",
+    "old module-state allocation and reclaim ordering",
+    "initializer error/panic payload ownership",
+    "suspension and cancellation",
+    "legacy provider/schema mismatches",
+    "shared concurrent execution handles/races",
+    "SourceProduct graph producer",
+    "full FI",
+    "resource axes",
+    "full safety",
+    "Main integration"
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "first_build": "PASS",
+    "first_execution": "PASS",
+    "first_initialization_failures": 24,
+    "allocation_free_sticky_retries": 72,
+    "successful_calls": 96,
+    "retained_failure_copies_after_owner_death": 24,
+    "retained_scalars_after_owner_death": 96,
+    "typed_groups_and_reentrant_start_rejections": 128,
+    "lifecycle_callbacks": 232,
+    "physical": "compiler=0/0 runtime=0/0 table=0"
+  },
+  "postrun_note": "Result annotation after execution; no final-map rerun claimed."
+}

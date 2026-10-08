@@ -299,3 +299,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_nomin
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_graph.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_execution.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_output_failure.cmake")

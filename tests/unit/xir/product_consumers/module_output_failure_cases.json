@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "bytes": 1186,
+  "sha256": "9ec5a07dbd5465bfe7f323277c8d6770a4a8d36ae092041765ba896aefa33338",
+  "stdout_hex": "310a320a330a340a",
+  "cases": [
+    {
+      "name": "both_normal",
+      "refuse_at": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "first_refused_peer_normal",
+      "refuse_at": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "later_refused_peer_first",
+      "refuse_at": [
+        2,
+        1
+      ]
+    }
+  ]
+}
