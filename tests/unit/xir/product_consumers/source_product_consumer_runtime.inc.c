@@ -169,7 +169,72 @@ static void initializer_cancel_prefixes(const Consumer *run) {
     printf("initializer-cancel-summary prefixes=%zu covered=%zu runtime-physical=0/0\n", ticks, ticks);
 }
 
+static void consumer_stateful_cancel_drain(XrXirInstance *instance) {
+    CHECK(xr_xir_instance_cancel_current(instance) == XR_XIR_CALL_CANCEL_REQUESTED);
+    size_t drain = 0;
+    XrXirCallStatus status;
+    do {
+        CHECK(++drain < 4096);
+        status = xr_xir_instance_poll_bounded(instance, 1).outcome.status;
+    } while (status == XR_XIR_CALL_READY);
+    CHECK(status == XR_XIR_CALL_CANCELLED);
+    consumer_stateful_no_value(instance);
+}
+
+static void consumer_stateful_cancel_prefixes(unsigned mode, size_t selected) {
+    CHECK(consumer_stateful_case());
+    Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
+    CHECK(run.status == XR_XIR_OK && run.state_probe != UINT32_MAX);
+    ConsumerOutput output = {0};
+    XrXirOutputSink sink = {0};
+    XrXirInstance *instance = initialized(&run, &output, &sink);
+    size_t ticks = 0;
+    CHECK(runtime_drive(instance, run.answer, &ticks) == XR_XIR_CALL_RETURNED && ticks > 25);
+    fixed_result(instance, 42);
+    CHECK(consumer_stateful_visits(instance, run.state_probe) == 3);
+    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    CHECK(!runtime_live && !runtime_bytes && !runtime_owned_capacity);
+    CHECK(selected == SIZE_MAX || selected < ticks);
+    size_t begin = selected == SIZE_MAX ? 0 : selected;
+    size_t end = selected == SIZE_MAX ? ticks : selected + 1;
+    for (size_t prefix = begin; prefix < end; ++prefix) {
+        instance = initialized(&run, &output, &sink);
+        CHECK(xr_xir_instance_start(instance, run.answer, NULL, 0) == XR_XIR_CALL_READY);
+        ConsumerCursor cursor = {0};
+        for (size_t tick = 0; tick < prefix; ++tick)
+            CHECK(consumer_advance(instance, &cursor, 1) == XR_XIR_CALL_READY && !cursor.pending);
+        consumer_stateful_cancel_drain(instance);
+        /* The checked call graph includes one initial root resume and each child exit. */
+        int64_t expected = (int64_t)((prefix >= 7) + (prefix >= 16) + (prefix >= 25));
+        consumer_stateful_cancel_finish(instance, &run, prefix, expected);
+        consumer_output_complete(&output);
+    }
+    release(&run);
+    CHECK(!runtime_owned_capacity);
+    puts("narrow-cancel-cold-initialization=OPEN initializer-prefix-membership=OPEN");
+    printf("narrow-cancel-summary mode=%u scope=%s prefixes=%zu covered=%zu selected=%zu physical=0/0 table=0\n",
+        mode, selected == SIZE_MAX ? "FULL" : "FOCUSED", ticks, end - begin, selected);
+}
+
+static bool consumer_stateful_prefix_number(const char *text, size_t *value) {
+    if (!text || !*text) return false;
+    size_t number = 0;
+    for (const unsigned char *p = (const unsigned char *)text; *p; ++p) {
+        if (*p < '0' || *p > '9') return false;
+        unsigned digit = *p - '0';
+        if (number > (SIZE_MAX - digit) / 10) return false;
+        number = number * 10 + digit;
+    }
+    if (number == SIZE_MAX) return false;
+    *value = number;
+    return true;
+}
+
 static void cancel_prefixes(unsigned mode) {
+    if (consumer_stateful_case()) {
+        consumer_stateful_cancel_prefixes(mode, SIZE_MAX);
+        return;
+    }
     CHECK(!consumer_stateful_case());
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
     CHECK(run.status == XR_XIR_OK);

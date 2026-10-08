@@ -10,3 +10,4 @@ fn answer() -> i64 {
   return bytes[2] as i64
 }
 export fn consumerAnswer() -> i64 { return answer() }
+export fn consumerVisits() -> i64 { return visits }

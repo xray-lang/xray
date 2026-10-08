@@ -34,9 +34,11 @@ typedef struct Consumer {
     XrCompileResourceStats baseline, stats;
     XrXirProgram *program;
     XrXirStatus status;
-    uint32_t entry, answer, private_answer;
+    uint32_t entry, answer, private_answer, state_probe;
     size_t attempts;
 } Consumer;
+
+static void consumer_stateful_shape(const XrXirModule *module, const Consumer *run);
 
 typedef struct MixedOwner {
     XrXirArtifact *lowered;
@@ -123,6 +125,7 @@ static XrXirStatus seal(Consumer *run, XrXirSourceProduct *product, XrXirArtifac
     if (status != XR_XIR_OK)
         goto failed;
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->lowered);
+    if (!strcmp(XR_CONSUMER_NAME, "narrow_array")) consumer_stateful_shape(module, run);
     XrXirProgramProof proof = xr_xir_compile_program_proof(owner->lowered);
     CHECK(module->function_count == product_consumer_program.entry_count);
     CHECK(proof.length == product_consumer_program.proof.length);
@@ -145,6 +148,8 @@ static XrXirStatus seal(Consumer *run, XrXirSourceProduct *product, XrXirArtifac
                 goto failed;
             ++vm;
         }
+        if (!strcmp(XR_CONSUMER_NAME, "narrow_array"))
+            CHECK(!owner->entries[f].flags && !owner->entries[f].cleanup_owner);
     }
     CHECK(native && vm);
     XrXirProgramSpec spec = product_consumer_program;
@@ -214,7 +219,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     if (run.status != XR_XIR_OK)
         goto release;
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
-    run.answer = run.private_answer = UINT32_MAX;
+    run.answer = run.private_answer = run.state_probe = UINT32_MAX;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *fn = &module->functions[f];
         const char name[] = "consumerAnswer";
@@ -223,6 +228,13 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
             CHECK(module->declarations->functions[f].exported &&
                 module->declarations->functions[f].module == module->declarations->root_module);
             run.answer = f;
+        }
+        if (!strcmp(XR_CONSUMER_NAME, "narrow_array") &&
+            fn->name_length == 14 && !memcmp(fn->name, "consumerVisits", 14)) {
+            CHECK(run.state_probe == UINT32_MAX && !fn->parameter_count && fn->result == XR_XIR_I64);
+            CHECK(module->declarations->functions[f].exported &&
+                module->declarations->functions[f].module == module->declarations->root_module);
+            run.state_probe = f;
         }
         if (fn->name_length == 6 && !memcmp(fn->name, "answer", 6)) {
             CHECK(run.private_answer == UINT32_MAX && !module->declarations->functions[f].exported);
@@ -236,6 +248,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     } else {
         CHECK(run.answer != UINT32_MAX && run.private_answer != UINT32_MAX);
     }
+    if (!strcmp(XR_CONSUMER_NAME, "narrow_array")) consumer_stateful_shape(module, &run);
     closed_shape(module, run.private_answer);
     /* Subsequent reads and execution own all data after the parse session dies. */
     xr_compile_session_free(session);
@@ -409,10 +422,17 @@ static void compiler_shard(unsigned mode, size_t shard, size_t shards) {
 int xr_source_product_consumer_main(const SourceProductConsumerFixture *fixture, int argc, char **argv) {
     CHECK(fixture && !consumer_fixture && fixture->name && fixture->root && fixture->file);
     consumer_fixture = fixture;
+    if (argc >= 3 && !strcmp(argv[2], "--cancel-prefix") && argc != 4) return 2;
     CHECK(argc >= 2 && argc <= 5);
     unsigned mode = (unsigned)strtoul(argv[1], NULL, 10);
     CHECK(mode <= 3);
     CHECK(!mode || fixture->native_program);
+    if (argc == 4 && !strcmp(argv[2], "--cancel-prefix")) {
+        size_t prefix = 0;
+        if (!consumer_stateful_case() || !consumer_stateful_prefix_number(argv[3], &prefix)) return 2;
+        consumer_stateful_cancel_prefixes(mode, prefix);
+        return 0;
+    }
     if (argc == 3 && !strcmp(argv[2], "--axes")) {
         compiler_axes(mode);
         return 0;

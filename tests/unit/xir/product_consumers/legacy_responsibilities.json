@@ -1674,12 +1674,19 @@
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/narrow_array/root.xr",
-        "sha256": "49ff3b08987fff6bbd1d988497e27fa064642ec1889509fd76d0832728cd3908",
+        "sha256": "f2a61c8bb059cc08a2539039a8b258916ae4ac19b9008f1eba61d8442b0c41ae",
         "original_prefix_sha256": "028a1edf4d0961858449f6d34f838d29ab37106c38c6fbddedf0a1e8f406ed3b",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
         "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "state_probe": {
+          "entry": "consumerVisits",
+          "adapter": "export fn consumerVisits() -> i64 { return visits }\n",
+          "bytes": 52,
+          "sha256": "bb1cd517c04fff4f5ad948d3e009dfc7048c83876b104aaa0272cf4bc8110567",
+          "scope": "An ordinary exported no-argument i64 reader of the owning module visits slot; it grants no private host entry or direct slot access."
+        },
         "invocation_policy": {
           "first_result_per_instance": 42,
           "successful_calls_per_instance": 1,
@@ -1726,8 +1733,8 @@
           "verification": "Actual instance/init/first answer allocation ordinals retain the original first-call 42 oracle, sticky initialization failure and final physical release."
         },
         "cancellation": {
-          "status": "OPEN",
-          "verification": "Every active cancellation prefix must preserve the original partial visits state. The repeatable-fixture cancellation oracle is inapplicable; these gates are not registered until an independent state oracle is implemented."
+          "status": "IMPLEMENTED_NOT_QUALIFIED",
+          "verification": "Every warm active prefix is checked against the independent public quantum-one contract: visits=(prefix>=7)+(prefix>=16)+(prefix>=25), guarded by the original Checked call/store graph. The legal reader observes the exact state after cancellation. Continuing the untouched answer returns 42 only at state zero; otherwise it asserts after three further visits. Copied assertion owners survive a new call and Instance destruction, then drop before physical zero. Focused prefixes do not replace the complete four-backend cancellation gates."
         },
         "full_safety": {
           "status": "PENDING_FULL_QUALIFICATION",
@@ -1750,15 +1757,17 @@
         "test_source_product_narrow_array_runtime_0",
         "test_source_product_narrow_array_runtime_1",
         "test_source_product_narrow_array_runtime_2",
-        "test_source_product_narrow_array_runtime_3"
-      ],
-      "pending_replacement_gates": [
+        "test_source_product_narrow_array_runtime_3",
         "test_source_product_narrow_array_cancel_0",
         "test_source_product_narrow_array_cancel_1",
         "test_source_product_narrow_array_cancel_2",
         "test_source_product_narrow_array_cancel_3"
       ],
       "additional_legacy_obligations": {
+        "cold_initialization_cancellation": {
+          "status": "OPEN",
+          "note": "Warm cancellation initializes the canonical entry first; it does not prove every cold initializer prefix or initialization-failure stickiness."
+        },
         "initializer_prefix_membership": {
           "status": "OPEN",
           "note": "The original preliminary initializer-prefix membership checks remain a separate responsibility."

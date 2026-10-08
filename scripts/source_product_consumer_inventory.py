@@ -332,9 +332,10 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
             for filename, content in additional_files.items():
                 files[fixture.parent / filename] = content
             adapter = b"" if selected == "canonical_initializer" else b"export fn consumerAnswer() -> i64 { return answer() }\n"
-            files[fixture] = data + adapter
+            probe = b"export fn consumerVisits() -> i64 { return visits }\n" if selected == "narrow_array" else b""
+            files[fixture] = data + adapter + probe
             current["initial_projection"] = {"fixture": fixture.relative_to(ROOT).as_posix(),
-                "sha256": digest(data + adapter), "original_prefix_sha256": digest(data),
+                "sha256": digest(data + adapter + probe), "original_prefix_sha256": digest(data),
                 "entry_adapter": adapter.decode(), "entry": "consumerAnswer", "expected_i64": multi_safepoint_oracle(body, literals, case["fixture"]) if selected == "multi_safepoint" else (case["fixture"]["expected_exit"] if case["fixture"] else 42),
                 "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."}
             if numeric_metadata is not None:
@@ -432,16 +433,16 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                     "original_native_host_wait_representation": {"status": "OPEN",
                         "note": "The three original generated-C substrings must be mapped to the real emitted TIMER action, common host readiness and cancellation; no old BackendIR spelling or helper is restored."}}
             if selected == "narrow_array":
-                current["candidate_replacement_gates"] = [gate for gate in current["candidate_replacement_gates"]
-                    if not re.fullmatch(rf"{prefix}_cancel_[0-3]", gate)]
-                current["pending_replacement_gates"] = [f"{prefix}_cancel_{mode}" for mode in range(4)]
+                current["initial_projection"]["state_probe"] = {"entry": "consumerVisits",
+                    "adapter": probe.decode(), "bytes": len(probe), "sha256": digest(probe),
+                    "scope": "An ordinary exported no-argument i64 reader of the owning module visits slot; it grants no private host entry or direct slot access."}
                 current["initial_projection"]["invocation_policy"] = {
                     "first_result_per_instance": 42, "successful_calls_per_instance": 1,
                     "second_call_status": "XR_XIR_CALL_ASSERTION",
                     "second_call_panic": "XR_XIR_PANIC_ASSERTION",
                     "note": "The original visits slot remains mutable; a second call increments it again and fails the original ordered-element assertion. No reset or source alteration is allowed."}
-                current["projected_obligations"]["cancellation"] = {"status": "OPEN",
-                    "verification": "Every active cancellation prefix must preserve the original partial visits state. The repeatable-fixture cancellation oracle is inapplicable; these gates are not registered until an independent state oracle is implemented."}
+                current["projected_obligations"]["cancellation"] = {"status": "IMPLEMENTED_NOT_QUALIFIED",
+                    "verification": "Every warm active prefix is checked against the independent public quantum-one contract: visits=(prefix>=7)+(prefix>=16)+(prefix>=25), guarded by the original Checked call/store graph. The legal reader observes the exact state after cancellation. Continuing the untouched answer returns 42 only at state zero; otherwise it asserts after three further visits. Copied assertion owners survive a new call and Instance destruction, then drop before physical zero. Focused prefixes do not replace the complete four-backend cancellation gates."}
                 current["projected_obligations"]["runtime_failures"]["verification"] = (
                     "Actual instance/init/first answer allocation ordinals retain the original first-call 42 oracle, sticky initialization failure and final physical release.")
             if selected in ("generics", "callables", "single_module", "two_modules", "text_program",
@@ -504,6 +505,8 @@ def inventory() -> tuple[dict, dict[Path, bytes]]:
                         "note": "The original requires at least four legacy INTEGER_CONVERT operations. Independent 255 results preserve the semantic oracle; the new Checked representation count still needs a reviewed mapping."}}
             elif selected == "narrow_array":
                 current["additional_legacy_obligations"] = {
+                    "cold_initialization_cancellation": {"status": "OPEN",
+                        "note": "Warm cancellation initializes the canonical entry first; it does not prove every cold initializer prefix or initialization-failure stickiness."},
                     "initializer_prefix_membership": {"status": "OPEN",
                         "note": "The original preliminary initializer-prefix membership checks remain a separate responsibility."},
                     "element_evaluation_precedes_allocation": {"status": "OPEN",
