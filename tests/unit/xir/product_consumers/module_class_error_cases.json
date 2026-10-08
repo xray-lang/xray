@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "root_return",
+      "owner": 3,
+      "delayed": false,
+      "throws": false,
+      "bytes": 2427,
+      "sha256": "42acb8aa6b9e76a51716f1b83ae4fe88e08728e7ec28355854d99831f163d968",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "root_delayed_return",
+      "owner": 3,
+      "delayed": true,
+      "throws": false,
+      "bytes": 2467,
+      "sha256": "7cf71d26194c6ce5f4e2478c15cb2262a6a8a13b41230d93502b878c45195cda",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "root_class_throw",
+      "owner": 3,
+      "delayed": false,
+      "throws": true,
+      "bytes": 2427,
+      "sha256": "bbf7d40c52a5a57a2f8297d6604bda4290e0ea0f341f49fe0ff753553642911b",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "root_delayed_class_throw",
+      "owner": 3,
+      "delayed": true,
+      "throws": true,
+      "bytes": 2467,
+      "sha256": "75ef24c1d5db48a831a2d06d2e943e2ab365e6ecd64f4c9509d5d7c9aab13681",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "original_base_class_throw",
+      "owner": 0,
+      "delayed": false,
+      "throws": true,
+      "bytes": 2427,
+      "sha256": "84a50ab6729baea24201042400315ec9ca3c50ce78ab9406587cedccac8263e0",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "original_base_delayed_class_throw",
+      "owner": 0,
+      "delayed": true,
+      "throws": true,
+      "bytes": 2467,
+      "sha256": "a8f5fad6d73cc6fa59233200e1f7f26ab44282d59c640186e2cb19c3d00c1644",
+      "expected": "XR_XIR_OK"
+    }
+  ],
+  "oracle": {
+    "original_scenarios": [
+      9,
+      11
+    ],
+    "declared_slots": 4,
+    "published_slots": 3,
+    "publication_order": [
+      1,
+      0,
+      3
+    ],
+    "thrown_object": "third construction, slot3, field x",
+    "delayed": "suspension before any class creation",
+    "expected_admission": "XR_XIR_OK for all6",
+    "controls": "root return controls test admission only; partial publication is not runtime-success evidence"
+  }
+}

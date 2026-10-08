@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "legacy_line": 169,
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "assertion_sites": 94,
+      "loop_sites": 10,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL_ORIGINAL_CLASS_ERROR_ADMISSION",
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:finish4 and delayed finish4; native scenarios9,11",
+  "original_expectation": {
+    "admission": "positive",
+    "outcome": "ERROR with third class object and field x; stable identity over24repeats for twoInstances",
+    "publication_order": [
+      1,
+      0,
+      3
+    ],
+    "reclaim_order": "second,first,then third after error owner dies",
+    "delay": "scenario11 yields before allocation/publication",
+    "allocation_ordinals": {
+      "scenario9": 9,
+      "scenario11": 9,
+      "new_scan": "NOT_RUN",
+      "oracle": "Injected failure at each1..9; zero live, attempted==failure, constructed==finalized==reclaimed; repeated execution preserves trap4 without reallocation."
+    }
+  },
+  "matrix": "6 positive independently encoded Checked packets:root return and delayed return controls;root class throw and delayed class throw isolation;original base class throw and delayed class throw. Each read with empty and occupied output, input poisoned/freed, untouched existing owner reverified, real compiler physical balance checked. Return controls establish admission only, not partial-init runtime success.",
+  "expected": "All12 reads expectedXR_XIR_OK; original class is not changed to enum/Error wrapper and failures remain failures.",
+  "production_boundary": "Current constraint proof accepts Error carrier or enum for Error marker; raw class publication requires Main policy/implementation adjudication. Base module mutable class slots independently violate library slot requirements. No producer change.",
+  "candidate_gates": [
+    {
+      "name": "test_source_product_module_class_error",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_error_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Class error policy and original base admission adjudication",
+    "SourceProduct full graph",
+    "VM/native/mixed thrown class execution",
+    "TwoInstance sticky failure identity and class escape/reclaim order",
+    "Original full allocation denominator and new denominator",
+    "Full2036/32FI",
+    "Two-configuration12axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-class-error-r1",
+  "spec_binding": {
+    "path": "spec/source/sections/009-8-error-handling.md",
+    "sections": [
+      "8.1.1",
+      "8.1.4"
+    ],
+    "facts": "throw actual values must be enum variants; Error holds enum only. Current root class rejection agrees with current spec; old producer class error responsibility needs explicit retirement/semantic adjudication, not an automatic production bug claim."
+  },
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "actual_processes": 4,
+    "encoding_pass": 2,
+    "product_fail": 2,
+    "positive_reads": 24,
+    "return_control_reads_pass": 8,
+    "root_class_throw_reads_bad_type": 8,
+    "original_base_throw_reads_bad_structure": 8,
+    "root_diagnostics": "function3/block0/instruction18 immediate or19 delayed;BAD_TYPE3",
+    "base_diagnostics": "BAD_STRUCTURE1 before function diagnostic location",
+    "physical": "each attempt refunds compiler allocation; input poisoned/freed; occupied owner unchanged and verified; final compiler0/0 table0 each configuration",
+    "fresh_build": "one consumer TU/config; production admission/declarations archives exact reused inputs, not fresh reader or fresh native",
+    "runtime_execution": "NOT_RUN: no class-error program was admitted; return controls only read/rewrite/verify",
+    "first_build": "MSVC missing type_is_class declaration; attempted class header still lacks declaration and both configs failed; corrected direct xxir_types.h include. Sources and logs preserved; final builds PASS."
+  },
+  "postrun_note": "Only result/spec annotations after actual product/encoding execution. Captured map was pre-annotation; no final-map rerun claimed."
+}
