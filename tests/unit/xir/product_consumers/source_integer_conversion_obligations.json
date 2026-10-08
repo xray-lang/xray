@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "test_exact_integer_conversion_admission",
+    "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+    "legacy_line": 6887,
+    "body_lf_sha256": "5bf4d9f52a0579aa198ee6d6ebbb0753b96af326b7995d866fb432ac6b2a1bdb",
+    "assertion_sites": 9,
+    "loop_sites": 3,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+  },
+  "legacy_fixture": "tests/unit/program/xr_program_integer_fixture.h",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_CURRENT_INTEGER_CONVERSION_ADMISSION_FACET_LEGACY_OPEN",
+  "tests": [
+    "test_source_product_integer_conversion_admission",
+    "source_product_integer_conversions_encoding"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "matrix": "All8signed/unsigned integer sources times8destinations=64functions.8Built+8independentwire inputs,empty+occupied output=32actualtransitions/config.",
+  "original_mapping": [
+    {
+      "original": "64admitted integer conversion functions and pair lookup",
+      "current": "Complete ordered64-function owned Checked table;each parameter,result,CONVERT_NUMBER andreturn operand checked;public type query confirms all integer values nonowned;exact independently encoded full packet after input death.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Boolean operand rejects",
+      "current": "Original first i8->i8 pair receives Bool;Built andChecked require BAD_TYPE3 with output preserved.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Boolean result rejects",
+      "current": "Original first i8->i8 conversion andfunction result become Bool;Built andChecked require BAD_TYPE3.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Constructor owner bit and hostile encoded owner bit reject",
+      "current": "New integer ownership derives from type;all64source/result types must report nonowned. No current perinstruction owner bit exists.",
+      "remaining": "Legacy ownership-bit constructor/wire mutation has no direct encoding;Main equivalence disposition required;OPEN."
+    },
+    {
+      "original": "Immediate U32 presence tag rejects even value0",
+      "current": "Current CONVERT_NUMBER inactive immediate must be0;actual nonzero value andunused args/targets/type_arguments reject BAD_STRUCTURE1.",
+      "remaining": "Old explicit presence tag with payload0 cannot be encoded in current fixed instruction;not claimed equivalent;OPEN."
+    }
+  ],
+  "ownership": "Borrowed parameter,instruction,function snapshots andname contents are compared. Allborrowed names,parameters,blocks,instructions,functions andmodule are thenpoisoned before returning. Wireheap compared,poisoned andfreed before owned inspection. Occupiedrealowner retains exact original bytes afterevery invocation. Everyinvocationrefunds physicalstock;final owner/resourceledger/observer death reaches0/0.",
+  "boundaries": [
+    "Built/Checked admission only. Current CONVERT_NUMBER also admits floating-point values;the original integer-only64pair matrix is preserved without redefining that newer broader opcode.",
+    "Original full function remainsOPEN because explicit owner/immediate-tag duties have no direct representation andMain/global qualifications are incomplete.",
+    "No SourceProduct,specialization,Lowered,Program,Instance,VM/native/mixed or runtime numeric result claims.",
+    "Source108=88fixtures+20other,other26files/160functions,shared7 unchanged;retired0."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-integer-conversions-r1",
+    "receipts": "results.json",
+    "processes": 4,
+    "admission_passed": 2,
+    "encoding_passed": 2,
+    "integer_pairs_per_table": 64,
+    "transitions_per_configuration": 32,
+    "total_transitions": 64,
+    "admissions": 8,
+    "exact_rejections": 56,
+    "mismatches": 0,
+    "input_capture": {
+      "msvc": 2709,
+      "asan": 2709,
+      "comparison": "SHA,size,mtime before==after;final actual nonmap inputs rebound"
+    },
+    "physical": "Every invocation restores actual liveblocks/bytes;final matrices0/0 after artifact,finiteledger andobserver table death.",
+    "fresh_build": "One new consumerTU/config compiled with C11/W4/WX;Clang ASan+UBSan andVALIDheaderdeps verified. No production TU rebuilt.",
+    "production_reuse": "10linked libraries/config rawSHA,size,mtime unchanged;4linked actualproduction objectbodies match admission/declarations archive members;producer25f source comparison.",
+    "first_build": "Newtarget collision andincorrectly renamed sourcefilename stopped configure;newCstaticassert thencaught incorrect scalar typeID mapping. All3newfixture failures retained,product executionNOT_RUN. Corrected build-r4 andfirst actual execution passedboth configs.",
+    "audit_correction": "Original donor audit substring matched existing integer Source tests;replaced with exactnewtest names andproved fulloldCTest registry byte-identical. No registration or test expectation changed.",
+    "protection": "10927tracked pre-snapshot:10926nonowned exact;12historicaldirty generated preserved.598protected:594exact+4expected Ninja/CTest metadata changes.",
+    "original_input": "Unchanged complete64-pair legacyfixture andunchangedtest_exact_integer_conversion_admission body. WholefunctionOPEN,retired0.",
+    "boundary": "Admission only. No SourceProduct,Program,Instance,VM/native/mixed runtime conversion or fullFI/axis/safety/Main qualification by these newgates.",
+    "annotation": "Added after actual execution;capturedpreannotationmap saved;no mapannotation rerun claimed."
+  }
+}

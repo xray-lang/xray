@@ -1,0 +1,514 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "pairs": [
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_i8_i8"
+    },
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_i8_u8"
+    },
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_i8_i16"
+    },
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_i8_u16"
+    },
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_i8_i32"
+    },
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_i8_u32"
+    },
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_i8_i64"
+    },
+    {
+      "source": "i8",
+      "source_type": 5,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_i8_u64"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_u8_i8"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_u8_u8"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_u8_i16"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_u8_u16"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_u8_i32"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_u8_u32"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_u8_i64"
+    },
+    {
+      "source": "u8",
+      "source_type": 8,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_u8_u64"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_i16_i8"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_i16_u8"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_i16_i16"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_i16_u16"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_i16_i32"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_i16_u32"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_i16_i64"
+    },
+    {
+      "source": "i16",
+      "source_type": 6,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_i16_u64"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_u16_i8"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_u16_u8"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_u16_i16"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_u16_u16"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_u16_i32"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_u16_u32"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_u16_i64"
+    },
+    {
+      "source": "u16",
+      "source_type": 9,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_u16_u64"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_i32_i8"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_i32_u8"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_i32_i16"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_i32_u16"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_i32_i32"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_i32_u32"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_i32_i64"
+    },
+    {
+      "source": "i32",
+      "source_type": 7,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_i32_u64"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_u32_i8"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_u32_u8"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_u32_i16"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_u32_u16"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_u32_i32"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_u32_u32"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_u32_i64"
+    },
+    {
+      "source": "u32",
+      "source_type": 10,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_u32_u64"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_i64_i8"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_i64_u8"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_i64_i16"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_i64_u16"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_i64_i32"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_i64_u32"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_i64_i64"
+    },
+    {
+      "source": "i64",
+      "source_type": 2,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_i64_u64"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "i8",
+      "target_type": 5,
+      "name": "conv_u64_i8"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "u8",
+      "target_type": 8,
+      "name": "conv_u64_u8"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "i16",
+      "target_type": 6,
+      "name": "conv_u64_i16"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "u16",
+      "target_type": 9,
+      "name": "conv_u64_u16"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "i32",
+      "target_type": 7,
+      "name": "conv_u64_i32"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "u32",
+      "target_type": 10,
+      "name": "conv_u64_u32"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "i64",
+      "target_type": 2,
+      "name": "conv_u64_i64"
+    },
+    {
+      "source": "u64",
+      "source_type": 11,
+      "target": "u64",
+      "target_type": 11,
+      "name": "conv_u64_u64"
+    }
+  ],
+  "cases": [
+    {
+      "name": "matrix",
+      "mutation": 0,
+      "expected": 0,
+      "bytes": 8772,
+      "sha256": "d3b2ca26dfd0e2044b09e37e0be18f75f15a05542ca5b451bd964846e2c1e20e"
+    },
+    {
+      "name": "boolean_operand",
+      "mutation": 1,
+      "expected": 3,
+      "bytes": 8772,
+      "sha256": "2a39962fea4554775e876d7e7926940004fa0aa910a1e23d083f586a0ad28fbc"
+    },
+    {
+      "name": "boolean_result",
+      "mutation": 2,
+      "expected": 3,
+      "bytes": 8772,
+      "sha256": "6db46d4d6133cc8e66758fefa11680b45cc577242fcf91b25d70cf94c39e3262"
+    },
+    {
+      "name": "nonzero_immediate",
+      "mutation": 3,
+      "expected": 1,
+      "bytes": 8772,
+      "sha256": "2dc7651ba9d2494f746f95019fb7646bb78eb52307ccf4b8aa605e0034c51e15"
+    },
+    {
+      "name": "unused_second_argument",
+      "mutation": 4,
+      "expected": 1,
+      "bytes": 8772,
+      "sha256": "c3d755457e1bdfef2e0e262cdb456137060312b0fcbef5fa5e55a0223f91380a"
+    },
+    {
+      "name": "unused_target",
+      "mutation": 5,
+      "expected": 1,
+      "bytes": 8772,
+      "sha256": "a745398e18d6ffccfe4f4faf0c20b81e46e476fd384181b2d86e0ac7a5499117"
+    },
+    {
+      "name": "inactive_type_argument",
+      "mutation": 6,
+      "expected": 1,
+      "bytes": 8772,
+      "sha256": "b4606b719fc9e5c946b4309d4cf49e61e714b3e9e3c0b561f305c473eea96827"
+    },
+    {
+      "name": "wrong_return_type",
+      "mutation": 7,
+      "expected": 3,
+      "bytes": 8772,
+      "sha256": "b4ae83a93a1f60d928e390a2cc046586b1e32ca6a143481e5c75bd39665269fc"
+    }
+  ],
+  "matrix": "64original integer type pairs;8Built+8wire inputs;empty+occupied output=32transitions/config",
+  "boundary": "Built/Checked admission,owned snapshots and physical release. Old explicit owner bit and immediate presence tag lack current fields;wholelegacy staysOPEN. No SourceProduct,Lowered,Program or runtime execution claimed."
+}
