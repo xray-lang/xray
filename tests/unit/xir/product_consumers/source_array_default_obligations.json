@@ -197,5 +197,129 @@
       "annotation": "After actual execution;preannotation map captured andsaved;no annotation rerun claimed.",
       "retired": 0
     }
+  },
+  "existing_source_admission_20261009_facet": {
+    "status": "PASS_EXISTING_SOURCE_ADMISSION_ONLY",
+    "whole_replacement": "OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "evidence": "build-consumer-evidence/current67-array-source-admission-existing-r1",
+    "consumer": "tests/unit/xir/test_xir_array_generated_source.c",
+    "registered_test": "test_xir_array_generated_admission",
+    "command": "Existing binary --admission",
+    "registration": {
+      "TIMEOUT": 300,
+      "PROCESSORS": 1
+    },
+    "build": "UTF8 build checks in both configurations report no work to do; cached source/object/binary exact. No compilation in this batch.",
+    "sanitizers": "Existing Clang consumer compile command has actual address+undefined instrumentation; actual execution has empty stderr. MSVC and Clang dependency sets both VALID157.",
+    "processes": [
+      {
+        "configuration": "msvc",
+        "status": "PASS",
+        "receipt": "msvc-admission.json",
+        "inputs": 2801
+      },
+      {
+        "configuration": "asan",
+        "status": "PASS",
+        "receipt": "asan-admission.json",
+        "inputs": 2801
+      }
+    ],
+    "input_binding": {
+      "per_process": {
+        "msvc": 2801,
+        "asan": 2801
+      },
+      "checks": "SHA,size,mtime before==after for actual argv, binary, object,157project dependency files, all fixture sources and linked libraries",
+      "direct_producer_dependencies": 154,
+      "archive_members": "6 actual producer object bodies matched linked archive members per configuration",
+      "production_libraries": "All preserved SHA,size,mtime",
+      "tracked": 10985,
+      "protected": 598
+    },
+    "source_refusals": {
+      "count_per_configuration": 4,
+      "total": 8,
+      "status": "BAD_TYPE3; null product; Source CHECK stage; line1",
+      "cases": [
+        {
+          "file": "reject-default-string.xr",
+          "source": "export fn invalid(count:i64)->i64 { var values=Array<string>(count); return len(values) }",
+          "diagnostic_contains": "no admitted default initializer",
+          "legacy_relation": "Current Source rejection for an unavailable String default initializer now actually exercised; previous String/U8 explicit-fill mismatch remains a distinct admission facet."
+        },
+        {
+          "file": "reject-default-bool.xr",
+          "source": "export fn invalid(count:bool)->i64 { var values=Array<u8>(count); return len(values) }",
+          "legacy_relation": "Current Source Bool count refusal; independent Built/Checked Bool count evidence remains separate."
+        },
+        {
+          "file": "reject-read-push.xr",
+          "diagnostic_contains": "mutable"
+        },
+        {
+          "file": "reject-move-copyable.xr",
+          "diagnostic_contains": "parameter contract"
+        }
+      ],
+      "cleanup": "Each invocation frees diagnostic, session and finite compiler owner; runtime blocks/bytes checked zero, caller ledger checked baseline before final release, compiler blocks/bytes checked zero and observer freed."
+    },
+    "lowered_attacks": {
+      "count_per_configuration": 20,
+      "total": 40,
+      "default_specific": [
+        {
+          "entry": "ARRAY_DEFAULT",
+          "op": "XR_XIR_ARRAY_LEN",
+          "mutation": 6,
+          "expected": "XR_XIR_BAD_TYPE",
+          "reason": "length scalar receiver"
+        },
+        {
+          "entry": "ARRAY_DEFAULT",
+          "op": "XR_XIR_ARRAY_LEN",
+          "mutation": 4,
+          "expected": "XR_XIR_BAD_TYPE",
+          "reason": "length missing value"
+        },
+        {
+          "entry": "ARRAY_DEFAULT",
+          "op": "XR_XIR_ARRAY_REPEAT",
+          "mutation": 13,
+          "expected": "XR_XIR_BAD_TYPE",
+          "reason": "default count bool"
+        },
+        {
+          "entry": "ARRAY_DEFAULT",
+          "op": "XR_XIR_ARRAY_REPEAT",
+          "mutation": 11,
+          "expected": "XR_XIR_BAD_STRUCTURE",
+          "reason": "default spurious type argument"
+        },
+        {
+          "entry": "ARRAY_DEFAULT",
+          "op": "XR_XIR_ARRAY_REPEAT",
+          "mutation": 2,
+          "expected": "XR_XIR_BAD_TYPE",
+          "reason": "default owner result"
+        }
+      ],
+      "all_details": "admission-obligations.json",
+      "checks": "Fresh Source product and Closed reader; lower and initial verify; exact expected public verify rejection; restore saved instruction and parameter then verify owner again; drop Lowered/Checked/Product and physically free ledger/observer each case."
+    },
+    "boundaries": [
+      "Existing test includes implementation and internal owner headers. It is not a independently buildable public migration consumer.",
+      "Passed Source refusal is current public SourceProduct behavior; entire old fixture/admission function remains OPEN. No old explicit result_ownership field invented.",
+      "No diagnostic escape after Session/input death or occupied Source output refusal is added by this existing helper. Separate full public ownership qualification remains required.",
+      "Graph attacks mutate a fresh owned Lowered artifact. They do not represent all independently encoded Built/Checked corruption obligations.",
+      "No VM/native/mixed execution, fullFI, resource axes, cancellation, safety or Main integration ran. Prior runtime panic452/422, OOM/LIMIT andper-return allocation gaps preserved."
+    ],
+    "annotation": "Facet added after actual process execution; saved preannotation bytes retain input bindings; map not retroactively executed.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }
