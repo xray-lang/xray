@@ -1,0 +1,892 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "replacement_gates": [],
+  "retired": 0,
+  "result": "FAIL_ORIGINAL_REMAINING_SOURCE_ADMISSION",
+  "families": {
+    "tuple_array": {
+      "legacy": {
+        "name": "source_owner_tuple_array_elements",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 4122,
+        "body_lf_sha256": "fc162d7d932b9644ada7da795f4829f56d58266d1f9705e764437f51258e67eb",
+        "assertion_sites": 3,
+        "loop_sites": 0,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "tuple_array_elements",
+          "expected_exit": 42,
+          "labels": [
+            "array",
+            "tuple",
+            "ownership"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "source": {
+            "bytes": 245,
+            "sha256": "61e2df9e1f5e3a45869756c373c8978a102a8072fb41455495aea6f05defe8b0"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/tuple_array/root.xr",
+          "sha256": "c5b270510a924c1df8bd40c32c928bb8fdf92ada0293fab4582ec848a366853b",
+          "original_prefix_sha256": "61e2df9e1f5e3a45869756c373c8978a102a8072fb41455495aea6f05defe8b0",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "probe_target": "test_source_product_probe"
+        }
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_tuple_array_vm",
+        "test_source_product_tuple_array_native",
+        "test_source_product_tuple_array_mixed_even",
+        "test_source_product_tuple_array_mixed_odd",
+        "test_source_product_tuple_array_owned",
+        "test_source_product_tuple_array_axes_0",
+        "test_source_product_tuple_array_runtime_0",
+        "test_source_product_tuple_array_cancel_0",
+        "test_source_product_tuple_array_compiler_0",
+        "test_source_product_tuple_array_axes_1",
+        "test_source_product_tuple_array_runtime_1",
+        "test_source_product_tuple_array_cancel_1",
+        "test_source_product_tuple_array_compiler_1",
+        "test_source_product_tuple_array_axes_2",
+        "test_source_product_tuple_array_runtime_2",
+        "test_source_product_tuple_array_cancel_2",
+        "test_source_product_tuple_array_compiler_2",
+        "test_source_product_tuple_array_axes_3",
+        "test_source_product_tuple_array_runtime_3",
+        "test_source_product_tuple_array_cancel_3",
+        "test_source_product_tuple_array_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 1,
+        "stage": 1,
+        "line": 3,
+        "column": 0,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\fixtures\\tuple_array\\root.xr",
+        "message": "built-in construction is not implemented in XIR"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Original StringBuilder construction at line3 is the first rejection. Tuple element and duplication behavior was not reached; do not infer its admission from this error.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    },
+    "tuple_repeated": {
+      "legacy": {
+        "name": "source_owner_repeated_tuple_elements",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 4152,
+        "body_lf_sha256": "aef15df3a7edaf42930f4ed131132e24f3f832f286bb5b1be3dfa5cf15e23c23",
+        "assertion_sites": 4,
+        "loop_sites": 0,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "repeated_tuple_elements",
+          "expected_exit": 42,
+          "labels": [
+            "tuple",
+            "ownership",
+            "string"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "source": {
+            "bytes": 256,
+            "sha256": "be09016b2eb69fd4f42c674d7033b00e2135ac3eb90d329781307638e6ddb93b"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/tuple_repeated/root.xr",
+          "sha256": "65e40cc5680d1142362190583756c4a7a6163587702ea954a3439d3b5a668f26",
+          "original_prefix_sha256": "be09016b2eb69fd4f42c674d7033b00e2135ac3eb90d329781307638e6ddb93b",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "probe_target": "test_source_product_probe"
+        }
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_tuple_repeated_vm",
+        "test_source_product_tuple_repeated_native",
+        "test_source_product_tuple_repeated_mixed_even",
+        "test_source_product_tuple_repeated_mixed_odd",
+        "test_source_product_tuple_repeated_owned",
+        "test_source_product_tuple_repeated_axes_0",
+        "test_source_product_tuple_repeated_runtime_0",
+        "test_source_product_tuple_repeated_cancel_0",
+        "test_source_product_tuple_repeated_compiler_0",
+        "test_source_product_tuple_repeated_axes_1",
+        "test_source_product_tuple_repeated_runtime_1",
+        "test_source_product_tuple_repeated_cancel_1",
+        "test_source_product_tuple_repeated_compiler_1",
+        "test_source_product_tuple_repeated_axes_2",
+        "test_source_product_tuple_repeated_runtime_2",
+        "test_source_product_tuple_repeated_cancel_2",
+        "test_source_product_tuple_repeated_compiler_2",
+        "test_source_product_tuple_repeated_axes_3",
+        "test_source_product_tuple_repeated_runtime_3",
+        "test_source_product_tuple_repeated_cancel_3",
+        "test_source_product_tuple_repeated_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 1,
+        "stage": 1,
+        "line": 3,
+        "column": 0,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\fixtures\\tuple_repeated\\root.xr",
+        "message": "built-in construction is not implemented in XIR"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Original StringBuilder construction at line3 is the first rejection. Tuple element and duplication behavior was not reached; do not infer its admission from this error.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    },
+    "byte_comparison": {
+      "legacy": {
+        "name": "source_owner_byte_comparison",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 4183,
+        "body_lf_sha256": "42b735c9803bcc213b87f2c983bc232b426f7d23f0addc775689bd15d17a753f",
+        "assertion_sites": 3,
+        "loop_sites": 0,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "byte_comparison",
+          "expected_exit": 42,
+          "labels": [
+            "crypto",
+            "array",
+            "ownership"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "source": {
+            "bytes": 600,
+            "sha256": "b420c7045c5270973e8ba9f04edfb1bec9be5b68ca41cfe3238de121b7e5a21b"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/byte_comparison/root.xr",
+          "sha256": "19355cd9955a110342a4984124535756090f5722ad73615b8884d3929640c66d",
+          "original_prefix_sha256": "b420c7045c5270973e8ba9f04edfb1bec9be5b68ca41cfe3238de121b7e5a21b",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "probe_target": "test_source_product_probe"
+        },
+        "pending_admission": "The original crypto import is rejected at the assigned production baseline with name does not resolve to an admitted nominal type. Preserve every empty, alias, equal, differing-value and differing-length assertion and its positive 42 oracle."
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_byte_comparison_vm",
+        "test_source_product_byte_comparison_native",
+        "test_source_product_byte_comparison_mixed_even",
+        "test_source_product_byte_comparison_mixed_odd",
+        "test_source_product_byte_comparison_owned",
+        "test_source_product_byte_comparison_axes_0",
+        "test_source_product_byte_comparison_runtime_0",
+        "test_source_product_byte_comparison_cancel_0",
+        "test_source_product_byte_comparison_compiler_0",
+        "test_source_product_byte_comparison_axes_1",
+        "test_source_product_byte_comparison_runtime_1",
+        "test_source_product_byte_comparison_cancel_1",
+        "test_source_product_byte_comparison_compiler_1",
+        "test_source_product_byte_comparison_axes_2",
+        "test_source_product_byte_comparison_runtime_2",
+        "test_source_product_byte_comparison_cancel_2",
+        "test_source_product_byte_comparison_compiler_2",
+        "test_source_product_byte_comparison_axes_3",
+        "test_source_product_byte_comparison_runtime_3",
+        "test_source_product_byte_comparison_cancel_3",
+        "test_source_product_byte_comparison_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 3,
+        "stage": 1,
+        "line": 111,
+        "column": 18,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\stdlib\\crypto\\crypto.xr",
+        "message": "name does not resolve to an admitted nominal type"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Original crypto import reaches stdlib/crypto/crypto.xr line111 and rejects nominal type resolution. This is the historical source gap freshly reproduced, not proof about OpenSSL availability or timing-safe execution.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    },
+    "string_slice": {
+      "legacy": {
+        "name": "source_owner_string_slice_scalar_range",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 4294,
+        "body_lf_sha256": "c35bb706351ba8186cf778734fc03380a83a848798265dc78c6531d60fc56139",
+        "assertion_sites": 3,
+        "loop_sites": 0,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "string_slice",
+          "expected_exit": 42,
+          "labels": [
+            "string",
+            "ownership",
+            "panic"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "source": {
+            "bytes": 163,
+            "sha256": "a8c61d6d10d62369c3bae023a6d6586056b6576ff3cf4f2db478a02d131b37d9"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/string_slice/root.xr",
+          "sha256": "a5359a83e3b1dcce7612addaba5ec0f95ac52ccdc67daccff146284be4b92b66",
+          "original_prefix_sha256": "a8c61d6d10d62369c3bae023a6d6586056b6576ff3cf4f2db478a02d131b37d9",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "probe_target": "test_source_product_probe"
+        }
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_string_slice_vm",
+        "test_source_product_string_slice_native",
+        "test_source_product_string_slice_mixed_even",
+        "test_source_product_string_slice_mixed_odd",
+        "test_source_product_string_slice_owned",
+        "test_source_product_string_slice_axes_0",
+        "test_source_product_string_slice_runtime_0",
+        "test_source_product_string_slice_cancel_0",
+        "test_source_product_string_slice_compiler_0",
+        "test_source_product_string_slice_axes_1",
+        "test_source_product_string_slice_runtime_1",
+        "test_source_product_string_slice_cancel_1",
+        "test_source_product_string_slice_compiler_1",
+        "test_source_product_string_slice_axes_2",
+        "test_source_product_string_slice_runtime_2",
+        "test_source_product_string_slice_cancel_2",
+        "test_source_product_string_slice_compiler_2",
+        "test_source_product_string_slice_axes_3",
+        "test_source_product_string_slice_runtime_3",
+        "test_source_product_string_slice_cancel_3",
+        "test_source_product_string_slice_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 3,
+        "stage": 1,
+        "line": 3,
+        "column": 12,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\fixtures\\string_slice\\root.xr",
+        "message": "string member has no admitted value-operation contract"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Earliest exact original Source rejection retained. Original type/call/range/ownership assertions are not replaced by this rejection evidence.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    },
+    "two_modules": {
+      "legacy": {
+        "name": "source_owner_two_module_graph_is_deterministic",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 1614,
+        "body_lf_sha256": "e49e24b5172187bf1e1a456ea70a975e4f05c989dc9bbd41a89dbdb550fafe7e",
+        "assertion_sites": 21,
+        "loop_sites": 1,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": null,
+        "static_input_literals": {
+          "library_source": {
+            "bytes": 224,
+            "sha256": "a5de40cec575e4452a43492662ff8c5db9174feb8ed3384f724d914cedb21c94"
+          },
+          "entry_source": {
+            "bytes": 106,
+            "sha256": "ef0526622ec84e47c1ae7b298eab7a3990d59770089ac4e737eb0c38ebe61b39"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/two_modules/root.xr",
+          "sha256": "9d73c0d71becfcd55a188efc84f573fcdb91eb954b67c84a433f0e5f92db7db0",
+          "original_prefix_sha256": "ef0526622ec84e47c1ae7b298eab7a3990d59770089ac4e737eb0c38ebe61b39",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "additional_files": {
+            "library.xr": {
+              "bytes": 224,
+              "sha256": "a5de40cec575e4452a43492662ff8c5db9174feb8ed3384f724d914cedb21c94"
+            }
+          },
+          "probe_target": "test_source_product_probe",
+          "detached_probe_target": "test_source_product_detachment"
+        },
+        "pending_admission": "Exact original library var offset is currently rejected by the root-only mutable module-slot boundary; retain its positive 42 oracle and all original graph assertions."
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_two_modules_vm",
+        "test_source_product_two_modules_native",
+        "test_source_product_two_modules_mixed_even",
+        "test_source_product_two_modules_mixed_odd",
+        "test_source_product_two_modules_owned",
+        "test_source_product_two_modules_axes_0",
+        "test_source_product_two_modules_runtime_0",
+        "test_source_product_two_modules_cancel_0",
+        "test_source_product_two_modules_compiler_0",
+        "test_source_product_two_modules_axes_1",
+        "test_source_product_two_modules_runtime_1",
+        "test_source_product_two_modules_cancel_1",
+        "test_source_product_two_modules_compiler_1",
+        "test_source_product_two_modules_axes_2",
+        "test_source_product_two_modules_runtime_2",
+        "test_source_product_two_modules_cancel_2",
+        "test_source_product_two_modules_compiler_2",
+        "test_source_product_two_modules_axes_3",
+        "test_source_product_two_modules_runtime_3",
+        "test_source_product_two_modules_cancel_3",
+        "test_source_product_two_modules_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 1,
+        "stage": 1,
+        "line": 3,
+        "column": 5,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\fixtures\\two_modules\\library.xr",
+        "message": "library mutable or exported state is not admitted"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Original library mutable offset remains unchanged; library state boundary rejects it. Graph determinism, dependency/init identities and stateful execution remain OPEN.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    },
+    "generic_constraint_methods": {
+      "legacy": {
+        "name": "source_owner_generic_constraint_methods_have_exact_concrete_targets",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 2269,
+        "body_lf_sha256": "ee42f0f1a0708cd1e089722268e458c1d26303e63232246ae9b029552af63881",
+        "assertion_sites": 172,
+        "loop_sites": 18,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "generic_constraint_method",
+          "expected_exit": 42,
+          "labels": [
+            "generic",
+            "constraint",
+            "method",
+            "call",
+            "value-representation"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "library_source": {
+            "bytes": 877,
+            "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+          },
+          "facade_source": {
+            "bytes": 136,
+            "sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+          },
+          "entry_source": {
+            "bytes": 913,
+            "sha256": "c29e7b72b153a21a5e88be8e23937d4b2b04ede0e694d10c51f63ea20a83610f"
+          },
+          "namespace_entry_source": {
+            "bytes": 388,
+            "sha256": "b5a66ef5bc4fbd3833a10c5a4bc28039730ecdc8807ae1d7ad2cdec99b5aa9c0"
+          },
+          "class_carrier_library_source": {
+            "bytes": 55,
+            "sha256": "a69548330f9ccf3c3b32ff771eb09c44f2a05d07c3bca54ce824d06b4aa1de62"
+          },
+          "class_carrier_facade_source": {
+            "bytes": 35,
+            "sha256": "374c17f61ce0c48b2ff3f2fe258008bd02143294088e353ef9a4cbd9e51c2868"
+          },
+          "class_carrier_entry_source": {
+            "bytes": 473,
+            "sha256": "899d0269d8555380e7be6824498d80215a9b77dfc2ddfa0f73342c31af864a7e"
+          },
+          "negative_library_source": {
+            "bytes": 230,
+            "sha256": "cdcfd74697f21a18c4e52ced7778dcc857bf3e2b17282113f8471acc75f0da64"
+          },
+          "negative_entry_source": {
+            "bytes": 188,
+            "sha256": "5319a4707967b8be285de4734debe7e20761b57e3217b9ab41df24b1fabd9bce"
+          },
+          "negative_facade_source": {
+            "bytes": 55,
+            "sha256": "ac2ca187b03927d22774e73852a53804364520a11918d86537b54e41b2257e2c"
+          },
+          "negative_method_library_source": {
+            "bytes": 187,
+            "sha256": "fddba5cabdc32219fc65ca05bc87cd8c5d89a7f92b22d2f289d80aa81d001159"
+          },
+          "negative_method_facade_source": {
+            "bytes": 55,
+            "sha256": "a18a158dac075db47d6675b866611463f547564434997256b97ee17269baf0cc"
+          },
+          "negative_method_entry_source": {
+            "bytes": 184,
+            "sha256": "f7823fe7f218ce43216ba6bc016d8ff8e7b450a537165be49772b4ba157113dc"
+          },
+          "uninferred_method_entry_source": {
+            "bytes": 119,
+            "sha256": "0de189b3c013137d2eafba65511ec944b42ec330bef30a0497cb71b9c740e727"
+          },
+          "private_name_entry_source": {
+            "bytes": 71,
+            "sha256": "342daf0870ebcff0237fe45a6d83d4f12b3d5e92de15f8b7e4875d372ca3748d"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/root.xr",
+          "sha256": "04dd4f7c82e0b7fd1a610363a1ac66cd57f60248a63282c3c7b00341b5ad341a",
+          "original_prefix_sha256": "c29e7b72b153a21a5e88be8e23937d4b2b04ede0e694d10c51f63ea20a83610f",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "additional_files": {
+            "library.xr": {
+              "bytes": 877,
+              "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+            },
+            "facade.xr": {
+              "bytes": 136,
+              "sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+            }
+          },
+          "probe_target": "test_source_product_probe"
+        },
+        "pending_admission": "The exact original root/library/facade input is rejected at the assigned production baseline with import requires an exported declaration. All original positive and negative variant literals remain in the responsibility census; the positive 42 oracle is not a rejection test."
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_generic_constraint_methods_vm",
+        "test_source_product_generic_constraint_methods_native",
+        "test_source_product_generic_constraint_methods_mixed_even",
+        "test_source_product_generic_constraint_methods_mixed_odd",
+        "test_source_product_generic_constraint_methods_owned",
+        "test_source_product_generic_constraint_methods_axes_0",
+        "test_source_product_generic_constraint_methods_runtime_0",
+        "test_source_product_generic_constraint_methods_cancel_0",
+        "test_source_product_generic_constraint_methods_compiler_0",
+        "test_source_product_generic_constraint_methods_axes_1",
+        "test_source_product_generic_constraint_methods_runtime_1",
+        "test_source_product_generic_constraint_methods_cancel_1",
+        "test_source_product_generic_constraint_methods_compiler_1",
+        "test_source_product_generic_constraint_methods_axes_2",
+        "test_source_product_generic_constraint_methods_runtime_2",
+        "test_source_product_generic_constraint_methods_cancel_2",
+        "test_source_product_generic_constraint_methods_compiler_2",
+        "test_source_product_generic_constraint_methods_axes_3",
+        "test_source_product_generic_constraint_methods_runtime_3",
+        "test_source_product_generic_constraint_methods_cancel_3",
+        "test_source_product_generic_constraint_methods_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 1,
+        "stage": 1,
+        "line": 1,
+        "column": 1,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\fixtures\\generic_constraint_methods\\root.xr",
+        "message": "import requires an exported declaration"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Original root import is rejected before exact constraint-call targets are admitted. All original positive and negative variant literals and172 assertion sites remain OPEN.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    },
+    "generic_scalar_class": {
+      "legacy": {
+        "name": "source_owner_generic_scalar_class_specializations_are_exact_class_references",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 3248,
+        "body_lf_sha256": "983fe1e3329142a2ea183bdf72793cb0b64d2b417e21a45b1b46342c61d93a62",
+        "assertion_sites": 48,
+        "loop_sites": 8,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "generic_scalar_class",
+          "expected_exit": 42,
+          "labels": [
+            "module-graph",
+            "namespace",
+            "reexport",
+            "generic",
+            "class",
+            "ownership",
+            "value-representation"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "library_source": {
+            "bytes": 117,
+            "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+          },
+          "facade_source": {
+            "bytes": 162,
+            "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+          },
+          "entry_source": {
+            "bytes": 507,
+            "sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
+          "sha256": "ff5223a13033b1db8483424b750b06f050ff661beb1dd3f4913ead753e731775",
+          "original_prefix_sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "additional_files": {
+            "library.xr": {
+              "bytes": 117,
+              "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+            },
+            "facade.xr": {
+              "bytes": 162,
+              "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+            }
+          },
+          "probe_target": "test_source_product_probe"
+        },
+        "pending_admission": "The exact original facade re-export is rejected at the assigned production baseline with statement syntax is not implemented in XIR (node 90). Root, library and facade bytes, the positive 42 oracle and all nominal-identity assertions remain OPEN."
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_generic_scalar_class_vm",
+        "test_source_product_generic_scalar_class_native",
+        "test_source_product_generic_scalar_class_mixed_even",
+        "test_source_product_generic_scalar_class_mixed_odd",
+        "test_source_product_generic_scalar_class_owned",
+        "test_source_product_generic_scalar_class_axes_0",
+        "test_source_product_generic_scalar_class_runtime_0",
+        "test_source_product_generic_scalar_class_cancel_0",
+        "test_source_product_generic_scalar_class_compiler_0",
+        "test_source_product_generic_scalar_class_axes_1",
+        "test_source_product_generic_scalar_class_runtime_1",
+        "test_source_product_generic_scalar_class_cancel_1",
+        "test_source_product_generic_scalar_class_compiler_1",
+        "test_source_product_generic_scalar_class_axes_2",
+        "test_source_product_generic_scalar_class_runtime_2",
+        "test_source_product_generic_scalar_class_cancel_2",
+        "test_source_product_generic_scalar_class_compiler_2",
+        "test_source_product_generic_scalar_class_axes_3",
+        "test_source_product_generic_scalar_class_runtime_3",
+        "test_source_product_generic_scalar_class_cancel_3",
+        "test_source_product_generic_scalar_class_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 1,
+        "stage": 1,
+        "line": 1,
+        "column": 0,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\fixtures\\generic_scalar_class\\facade.xr",
+        "message": "statement syntax is not implemented in XIR (node 90)"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Earliest exact original Source rejection retained. Original type/call/range/ownership assertions are not replaced by this rejection evidence.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    },
+    "generic_nested_class": {
+      "legacy": {
+        "name": "source_owner_generic_nested_class_types_are_exact",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 3551,
+        "body_lf_sha256": "e7f695fe94570458fdc2f183c8b5e46e76c05a4b66c60fb0be5467b22336336c",
+        "assertion_sites": 27,
+        "loop_sites": 9,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "generic_nested_class",
+          "expected_exit": 42,
+          "labels": [
+            "class",
+            "ownership",
+            "alias"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "direct_managed_struct_source": {
+            "bytes": 194,
+            "sha256": "5612783f1d6a45f02bb902c4e8dc7fe17e38d4113d36c433d76fc0d8ff0cf280"
+          },
+          "nested_managed_struct_source": {
+            "bytes": 195,
+            "sha256": "03dd40453d92355a2e172430a6a7d348e5eaa76613cc1b1e2e764a37ebc061f2"
+          },
+          "library_source": {
+            "bytes": 171,
+            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          },
+          "facade_source": {
+            "bytes": 171,
+            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          },
+          "entry_source": {
+            "bytes": 568,
+            "sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0"
+          }
+        },
+        "initial_projection": {
+          "fixture": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
+          "sha256": "d3e9d0571d73d98c8eef95495f23b6c99cd47fc8abeed9c74a800987755ecf52",
+          "original_prefix_sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0",
+          "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+          "entry": "consumerAnswer",
+          "expected_i64": 42,
+          "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+          "additional_files": {
+            "library.xr": {
+              "bytes": 171,
+              "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+            },
+            "facade.xr": {
+              "bytes": 171,
+              "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+            }
+          },
+          "probe_target": "test_source_product_probe"
+        },
+        "pending_admission": "The exact original root/library/facade positive source is rejected at the assigned production baseline with constructor parameter contract is not admitted. Preserve its 42 oracle, all three distinct nominal declaration scopes, original managed-struct negative literals and whole legacy type/ownership assertions."
+      },
+      "independent_i64": 42,
+      "whole_function": "OPEN",
+      "replacement_gates": [],
+      "tests": [
+        "test_source_product_generic_nested_class_vm",
+        "test_source_product_generic_nested_class_native",
+        "test_source_product_generic_nested_class_mixed_even",
+        "test_source_product_generic_nested_class_mixed_odd",
+        "test_source_product_generic_nested_class_owned",
+        "test_source_product_generic_nested_class_axes_0",
+        "test_source_product_generic_nested_class_runtime_0",
+        "test_source_product_generic_nested_class_cancel_0",
+        "test_source_product_generic_nested_class_compiler_0",
+        "test_source_product_generic_nested_class_axes_1",
+        "test_source_product_generic_nested_class_runtime_1",
+        "test_source_product_generic_nested_class_cancel_1",
+        "test_source_product_generic_nested_class_compiler_1",
+        "test_source_product_generic_nested_class_axes_2",
+        "test_source_product_generic_nested_class_runtime_2",
+        "test_source_product_generic_nested_class_cancel_2",
+        "test_source_product_generic_nested_class_compiler_2",
+        "test_source_product_generic_nested_class_axes_3",
+        "test_source_product_generic_nested_class_runtime_3",
+        "test_source_product_generic_nested_class_cancel_3",
+        "test_source_product_generic_nested_class_compiler_3"
+      ],
+      "registration": "Positive/owned T120 P1; axes T120 P1 RUN_SERIAL; compiler T600 P8/jobs8. Every positive requires success0; no WILL_FAIL.",
+      "actual_diagnostic": {
+        "status": 3,
+        "stage": 1,
+        "line": 9,
+        "column": 3,
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\fixtures\\generic_nested_class\\root.xr",
+        "message": "constructor parameter contract is not admitted"
+      },
+      "qualification": {
+        "vm": "FAIL Source admission; required positive0 and return42 retained, compiler/runtime physical0 after caller ledger drop",
+        "owned": "FAIL required positive0; no partial product, exact diagnostic object/path/message after Session/Product/borrowed paths/request/authority death, then compiler0/0/table0",
+        "native": "NOT_RUN: Source rejects before emission; no C or binary built, native build not attempted",
+        "mixed_even": "NOT_RUN: native binary not built",
+        "mixed_odd": "NOT_RUN: native binary not built",
+        "full_compiler_FI": "NOT_RUN: coordinated window required; original all-ordinal obligations preserved",
+        "resource_axes": "NOT_RUN: coordinated window required; exact/minus1 obligations preserved",
+        "runtime_FI": "NOT_RUN: all actual allocation ordinals and sticky initialization failure still required",
+        "cancel": "NOT_RUN: all real active prefixes still required"
+      },
+      "first_blocker": "Earliest exact original Source rejection retained. Original type/call/range/ownership assertions are not replaced by this rejection evidence.",
+      "legacy_snapshot_note": "Legacy row is a byte-preserved original census snapshot. These new concrete candidate registrations are recorded here; no whole replacement gate is approved and no legacy function is retired."
+    }
+  },
+  "common_obligations": {
+    "original_input": "All fifteen original fixture files unchanged; original root prefixes and existing export adapters preserved.",
+    "independent_execution": "Private answer authority rejection, canonical0 and two answer42 results per independent Instance through VM/native/both mixed modes; Program caller ownership dropped before execution; actual C repeated emissions and proof/SHA exact.",
+    "owned_admission": "Positive SourceProduct verify and closed Checked read. Session/Product/root/file/request/authority death precedes exact diagnostic preservation or detached Checked verify/lower/Lowered verify. Failure remains exit1, required positive0. Compiler owners and observer table are freed physically.",
+    "whole_function": "Original graph/type/call/operation-count/signedness/representation and negative variant assertions remain OPEN; fixed42 and new registrations do not substitute for whole legacy functions."
+  },
+  "boundaries": [
+    "Registration is not execution or qualification. Failure is preserved as failure; unbuilt native modes and heavy gates remain NOT_RUN.",
+    "No original source rewrite or control substitute, imported library state workaround, compatibility API or producer update.",
+    "Full fault denominators, budgets, cancellation, applicable safety gates and Main revalidation remain required before any legacy retirement.",
+    "32actualdirect registered command processes, not a CTest run. Evidence audit PASS preserves every product positive as FAIL; no WILL_FAIL or rejection-to-success conversion.",
+    "All32currentprocesses prove final compiler physical release;16VM requests also check runtime_live/bytes0 without entering runtime,16owned probes check observer table0. Diagnostic caller ledger remains live until diagnostic disposal; no escaped-diagnostic-after-ledger-drop claim.",
+    "CMake custom emission depends on all original fixture modules; byte-comparison also depends on existing stdlib source files. No actual C emission, host compilation or backend execution for these eight failing originals occurred.",
+    "Whole108=88fixtures+20other, extra26files160functions/shared7 remain unchanged; retired0. Full2036compiler/32runtimeFI,12resourceaxes,fullsafety/Main/newproducer qualification remain NOT_RUN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "evidence": {
+    "directory": "build-consumer-evidence/current67-remaining-source-r1",
+    "results": "results.json",
+    "audit": "final-audit.json",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "original_fixture_files": 15,
+    "families": 8,
+    "registered": 336,
+    "executed": 32,
+    "failed_original_positive_commands": 32,
+    "native_not_run": 48,
+    "heavy_not_run": 256,
+    "fresh_consumer_TUs": 18,
+    "shared_driver": "Exact unchanged object reuse",
+    "inputs_per_process": 2739,
+    "production": "No production TU/archive rebuilt. Linked production archive bytes/size/mtime preserved;6actualSource/admission/declaration objectbody/archive matches/configuration.",
+    "annotation": "Execution captured pre-annotation SHA256 321b77212505d7dbf7d44b612625a27440c4d1fa2ff21b6e20ffe0313f8d72f4. Map annotated afterward; no new-map execution claimed."
+  }
+}
