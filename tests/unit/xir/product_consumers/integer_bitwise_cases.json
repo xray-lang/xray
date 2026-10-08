@@ -1,0 +1,416 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "functions": [
+    {
+      "name": "and_i8",
+      "type": 5,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_i8",
+      "type": 5,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_i8",
+      "type": 5,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_i8",
+      "type": 5,
+      "operation": 53,
+      "complement": true,
+      "mask": -1
+    },
+    {
+      "name": "shl_i8",
+      "type": 5,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_i8",
+      "type": 5,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "and_u8",
+      "type": 8,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_u8",
+      "type": 8,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_u8",
+      "type": 8,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_u8",
+      "type": 8,
+      "operation": 53,
+      "complement": true,
+      "mask": 255
+    },
+    {
+      "name": "shl_u8",
+      "type": 8,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_u8",
+      "type": 8,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "and_i16",
+      "type": 6,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_i16",
+      "type": 6,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_i16",
+      "type": 6,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_i16",
+      "type": 6,
+      "operation": 53,
+      "complement": true,
+      "mask": -1
+    },
+    {
+      "name": "shl_i16",
+      "type": 6,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_i16",
+      "type": 6,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "and_u16",
+      "type": 9,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_u16",
+      "type": 9,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_u16",
+      "type": 9,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_u16",
+      "type": 9,
+      "operation": 53,
+      "complement": true,
+      "mask": 65535
+    },
+    {
+      "name": "shl_u16",
+      "type": 9,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_u16",
+      "type": 9,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "and_i32",
+      "type": 7,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_i32",
+      "type": 7,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_i32",
+      "type": 7,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_i32",
+      "type": 7,
+      "operation": 53,
+      "complement": true,
+      "mask": -1
+    },
+    {
+      "name": "shl_i32",
+      "type": 7,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_i32",
+      "type": 7,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "and_u32",
+      "type": 10,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_u32",
+      "type": 10,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_u32",
+      "type": 10,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_u32",
+      "type": 10,
+      "operation": 53,
+      "complement": true,
+      "mask": 4294967295
+    },
+    {
+      "name": "shl_u32",
+      "type": 10,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_u32",
+      "type": 10,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "and_i64",
+      "type": 2,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_i64",
+      "type": 2,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_i64",
+      "type": 2,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_i64",
+      "type": 2,
+      "operation": 53,
+      "complement": true,
+      "mask": -1
+    },
+    {
+      "name": "shl_i64",
+      "type": 2,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_i64",
+      "type": 2,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "and_u64",
+      "type": 11,
+      "operation": 51,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "or_u64",
+      "type": 11,
+      "operation": 52,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "xor_u64",
+      "type": 11,
+      "operation": 53,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "not_u64",
+      "type": 11,
+      "operation": 53,
+      "complement": true,
+      "mask": -1
+    },
+    {
+      "name": "shl_u64",
+      "type": 11,
+      "operation": 54,
+      "complement": false,
+      "mask": 0
+    },
+    {
+      "name": "shr_u64",
+      "type": 11,
+      "operation": 55,
+      "complement": false,
+      "mask": 0
+    }
+  ],
+  "cases": [
+    {
+      "name": "matrix",
+      "mutation": 0,
+      "expected": 0,
+      "bytes": 6880,
+      "sha256": "8feaca8b32156c2831135af70650b85cb37918ba9b38ad97b7fc11d5f08ac7ef"
+    },
+    {
+      "name": "boolean_lhs",
+      "mutation": 1,
+      "expected": 3,
+      "bytes": 6880,
+      "sha256": "41fd26984d7c3fc21d7dd9e600e83b85748404d302f3d9923fbe16cfab50ede7"
+    },
+    {
+      "name": "boolean_rhs",
+      "mutation": 2,
+      "expected": 3,
+      "bytes": 6880,
+      "sha256": "50658a0957de77f3e19774a7d4359b082e485c8f3d3611685d6ba67877edb22b"
+    },
+    {
+      "name": "boolean_result",
+      "mutation": 3,
+      "expected": 3,
+      "bytes": 6880,
+      "sha256": "4fb276d09b9a10ecb1e0ac0aadebe0859b44576d91e03a3fcad91dde02299f36"
+    },
+    {
+      "name": "inactive_selector",
+      "mutation": 4,
+      "expected": 1,
+      "bytes": 6880,
+      "sha256": "5bdfa78331d4130abf4694f722469ead17d22e9eefdca9e5590148c9a78799b1"
+    },
+    {
+      "name": "complement_mask_boolean",
+      "mutation": 5,
+      "expected": 3,
+      "bytes": 6880,
+      "sha256": "9a3d1a21578c41962fbbeb35f1f7cc673dc2410c8855f8365e17aadcf971576d"
+    },
+    {
+      "name": "missing_rhs_value",
+      "mutation": 6,
+      "expected": 4,
+      "bytes": 6880,
+      "sha256": "b9a8dcc9e675f657c823ca15cc269c15b7a092785b6146afb8a0bbe041f0c323"
+    },
+    {
+      "name": "wrong_return_type",
+      "mutation": 7,
+      "expected": 3,
+      "bytes": 6880,
+      "sha256": "f3eff653589ee9c4ed12321cfbb512dad8f924c6b6d5525083272d6f3b186d12"
+    },
+    {
+      "name": "inactive_type_argument",
+      "mutation": 8,
+      "expected": 1,
+      "bytes": 6880,
+      "sha256": "6b5cb186df77870534c30977e1f1a32ce5beb944e0613cde762bda3ad615dfc2"
+    },
+    {
+      "name": "unused_target",
+      "mutation": 9,
+      "expected": 1,
+      "bytes": 6880,
+      "sha256": "f6c8f843b9e4e05b6a1002ec5d7edb6b13d06ae6f816de6fd65ef5b01901ada0"
+    }
+  ],
+  "matrix": "All48original bitwise signatures;10Built+10wire inputs;empty+occupied output=40transitions/config",
+  "boundary": "Admission and detached ownership only. Complement is mask XOR as emitted by Source. Old owner bit,selector andarity fields have no identical encoding;wholelegacyOPEN. Runtime bit values are not qualified."
+}
