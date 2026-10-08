@@ -60,6 +60,141 @@ typedef struct AllocationRun {
     fprintf(stderr, "source-allocation0 check line=%d operation=%s condition=%s\n", \
         __LINE__, run->operation, #condition); return false; } } while (0)
 
+
+/* Runtime observation borrows only host output slots and never allocates. */
+typedef enum AllocationRuntimeDomain {
+    ALLOCATION_RUNTIME_OWNER, ALLOCATION_RUNTIME_INPUT, ALLOCATION_RUNTIME_SESSION,
+    ALLOCATION_RUNTIME_XIR, ALLOCATION_RUNTIME_NEW, ALLOCATION_RUNTIME_START,
+    ALLOCATION_RUNTIME_POLL, ALLOCATION_RUNTIME_TAKE, ALLOCATION_RUNTIME_VOID
+} AllocationRuntimeDomain;
+typedef struct AllocationRuntimeSample {
+    XrCompileResourceStats ledger;
+    size_t sites, blocks, bytes, table, compiler_sites, compiler_blocks, compiler_bytes;
+    bool valid;
+} AllocationRuntimeSample;
+typedef struct AllocationRuntimeCall {
+    AllocationRuntimeSample before, after;
+    const char *name;
+    const void *outputs[2];
+    size_t widths[2];
+    unsigned char original[2][sizeof(XrXirInstanceResult) + sizeof(XrXirCheckedPacket)];
+    AllocationRuntimeDomain domain;
+    XrXirInstanceState state_before, state_after;
+    unsigned instance, repeat;
+    uint64_t epoch;
+    bool instance_before, instance_after, borrowed_oom_shape;
+    size_t record;
+    int status;
+    bool hit, output_preserved, physical_preserved, diagnostic_match;
+} AllocationRuntimeCall;
+typedef struct AllocationRuntimeFault {
+    AllocationRuntimeCall call;
+    size_t normal_sites, site, boundary, records, hits, failure_record;
+    uint64_t epochs[2], expected_epochs[2];
+    unsigned instance, repeat;
+    bool active, injecting, ok, stopped;
+} AllocationRuntimeFault;
+static AllocationRuntimeFault allocation_runtime;
+
+static AllocationRuntimeSample allocation_runtime_sample(AllocationRun *run) {
+    AllocationRuntimeSample sample = {0};
+    sample.sites = runtime_attempts; sample.blocks = runtime_live; sample.bytes = runtime_bytes;
+    sample.table = runtime_owned_capacity; sample.compiler_sites = instance_compile_attempts;
+    sample.compiler_blocks = instance_compile_live; sample.compiler_bytes = instance_compile_bytes;
+    if (run->context.resources) {
+        sample.valid = xr_compile_resources_stats(run->context.resources, &sample.ledger) == XR_COMPILE_RESOURCE_OK;
+        if (!sample.valid || sample.ledger.live_bytes != sample.compiler_bytes ||
+            sample.ledger.allocated_bytes > UINT64_C(67108864) || sample.ledger.peak_bytes > UINT64_C(8388608) ||
+            sample.ledger.work > UINT64_C(128000000)) allocation_runtime.ok = false;
+    } else if (sample.compiler_blocks || sample.compiler_bytes) allocation_runtime.ok = false;
+    return sample;
+}
+static bool allocation_runtime_compile_same(const AllocationRuntimeSample *a, const AllocationRuntimeSample *b) {
+    return a->compiler_sites == b->compiler_sites && a->compiler_blocks == b->compiler_blocks &&
+        a->compiler_bytes == b->compiler_bytes && a->valid == b->valid &&
+        a->ledger.allocation_count == b->ledger.allocation_count && a->ledger.allocated_bytes == b->ledger.allocated_bytes &&
+        a->ledger.live_bytes == b->ledger.live_bytes && a->ledger.peak_bytes == b->ledger.peak_bytes &&
+        a->ledger.work == b->ledger.work;
+}
+static int allocation_runtime_oom(AllocationRuntimeDomain domain) {
+    if (domain == ALLOCATION_RUNTIME_OWNER) return (int)XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
+    if (domain == ALLOCATION_RUNTIME_INPUT) return (int)XR_OS_IO_OUT_OF_MEMORY;
+    if (domain == ALLOCATION_RUNTIME_SESSION) return (int)XR_COMPILER_SESSION_OUT_OF_MEMORY;
+    if (domain >= ALLOCATION_RUNTIME_NEW && domain <= ALLOCATION_RUNTIME_TAKE) return (int)XR_XIR_CALL_OOM;
+    return (int)XR_XIR_OUT_OF_MEMORY;
+}
+static void allocation_runtime_output(unsigned index, const void *output, size_t width) {
+    if (!allocation_runtime.active) return;
+    AllocationRuntimeCall *call = &allocation_runtime.call;
+    call->outputs[index] = output; call->widths[index] = width;
+    if (width > sizeof(call->original[index]) || (width && !output)) allocation_runtime.ok = false;
+    else if (width) memcpy(call->original[index], output, width);
+}
+static void allocation_runtime_begin(AllocationRun *run, const char *name, AllocationRuntimeDomain domain,
+                                     const void *output, size_t width) {
+    if (!allocation_runtime.active) return;
+    if (allocation_runtime.stopped || runtime_attempts != allocation_runtime.boundary) allocation_runtime.ok = false;
+    AllocationRuntimeCall *call = &allocation_runtime.call;
+    *call = (AllocationRuntimeCall){0};
+    call->name = name; call->domain = domain; call->record = allocation_runtime.records++;
+    call->instance = allocation_runtime.instance; call->repeat = allocation_runtime.repeat;
+    call->before = allocation_runtime_sample(run);
+    call->instance_before = call->instance < 2 && run->instances[call->instance];
+    if (call->instance_before) call->state_before = xr_xir_instance_state(run->instances[call->instance]);
+    allocation_runtime_output(0, output, width);
+}
+static bool allocation_runtime_end(AllocationRun *run, int status) {
+    if (!allocation_runtime.active) return true;
+    AllocationRuntimeCall *call = &allocation_runtime.call;
+    call->status = status; call->after = allocation_runtime_sample(run);
+    allocation_runtime.boundary = call->after.sites;
+    if (call->after.sites < call->before.sites) allocation_runtime.ok = false;
+    call->hit = allocation_runtime.injecting && call->before.sites <= allocation_runtime.site &&
+        allocation_runtime.site < call->after.sites;
+    call->output_preserved = true;
+    for (unsigned i = 0; i < 2; ++i)
+        if (call->widths[i] && memcmp(call->original[i], call->outputs[i], call->widths[i])) call->output_preserved = false;
+    call->physical_preserved = call->before.blocks == call->after.blocks && call->before.bytes == call->after.bytes &&
+        call->before.table == call->after.table;
+    call->instance_after = call->instance < 2 && run->instances[call->instance];
+    if (call->instance_after) call->state_after = xr_xir_instance_state(run->instances[call->instance]);
+    call->diagnostic_match = true;
+    if (call->hit && call->domain == ALLOCATION_RUNTIME_XIR && strcmp(call->name, "VM-Program-take"))
+        call->diagnostic_match = !strcmp(call->name, "source-product") ?
+            run->diagnostic.status == XR_XIR_OUT_OF_MEMORY : run->xir.status == XR_XIR_OUT_OF_MEMORY;
+    if (call->hit) {
+        ++allocation_runtime.hits; allocation_runtime.failure_record = call->record; allocation_runtime.stopped = true;
+        if (status != allocation_runtime_oom(call->domain) || !call->output_preserved || !call->diagnostic_match ||
+            (call->domain == ALLOCATION_RUNTIME_POLL && !call->borrowed_oom_shape))
+            allocation_runtime.ok = false;
+        if (call->domain >= ALLOCATION_RUNTIME_NEW && call->domain <= ALLOCATION_RUNTIME_TAKE &&
+            !allocation_runtime_compile_same(&call->before, &call->after)) allocation_runtime.ok = false;
+        if ((call->domain == ALLOCATION_RUNTIME_NEW || call->domain == ALLOCATION_RUNTIME_START) &&
+            !call->physical_preserved) allocation_runtime.ok = false;
+        if (call->domain == ALLOCATION_RUNTIME_START && call->state_before != call->state_after)
+            allocation_runtime.ok = false;
+    }
+    printf("source-allocation0 runtime-call record=%zu stage=%s instance=%u repeat=%u status=%d expected-oom=%d "
+        "site-begin=%zu site-end=%zu hit=%u output-preserved=%u physical-preserved=%u diagnostic-match=%u "
+        "instance-present=%u/%u state-before=%u state-after=%u epoch=%" PRIu64 " output-bytes=%zu/%zu "
+        "compiler-physical=%zu/%zu runtime-physical=%zu/%zu table=%zu\n",
+        call->record, call->name, call->instance, call->repeat, status, allocation_runtime_oom(call->domain),
+        call->before.sites, call->after.sites, (unsigned)call->hit, (unsigned)call->output_preserved,
+        (unsigned)call->physical_preserved, (unsigned)call->diagnostic_match,
+        (unsigned)call->instance_before, (unsigned)call->instance_after, (unsigned)call->state_before,
+        (unsigned)call->state_after, call->epoch, call->widths[0], call->widths[1],
+        call->after.compiler_blocks, call->after.compiler_bytes,
+        call->after.blocks, call->after.bytes, call->after.table);
+    if ((call->domain == ALLOCATION_RUNTIME_TAKE || call->domain == ALLOCATION_RUNTIME_VOID) &&
+        call->before.sites != call->after.sites) allocation_runtime.ok = false;
+    int expected = call->domain == ALLOCATION_RUNTIME_TAKE ? (int)XR_XIR_CALL_RETURNED : 0;
+    bool success = status == expected || (call->domain == ALLOCATION_RUNTIME_POLL && status == XR_XIR_CALL_RETURNED);
+    if (success && !call->hit && call->domain == ALLOCATION_RUNTIME_START)
+        allocation_runtime.expected_epochs[call->instance] = allocation_runtime.epochs[call->instance] + 1;
+    if (!success && !call->hit) { allocation_runtime.ok = false; allocation_runtime.stopped = true; }
+    return success && !call->hit && allocation_runtime.ok;
+}
+
 static bool phase(AllocationRun *run, const char *name) {
     XrCompileResourceStats stats = {0};
     run->operation = name;
@@ -158,20 +293,28 @@ static bool inspect_product(AllocationRun *run, const char *file) {
 static bool produce(AllocationRun *run, const char *root, const char *file) {
     XrOsIoPolicy policy = xr_compile_io_policy(run->context.resources);
     run->operation = "original-input";
+    allocation_runtime_begin(run, "original-input", ALLOCATION_RUNTIME_INPUT, &run->input, sizeof(run->input));
+    allocation_runtime_output(1, &run->input_length, sizeof(run->input_length));
     XrOsIoStatus io = xr_os_io_read_regular_file(&policy, file, sizeof(original_source) - 1,
         &run->input, &run->input_length);
+    if (!allocation_runtime_end(run, (int)io)) return false;
     if (io != XR_OS_IO_OK) fprintf(stderr, "source-allocation0 input io-status=%u\n", (unsigned)io);
     OBSERVE(io == XR_OS_IO_OK && run->input_length == sizeof(original_source) - 1);
     OBSERVE(!memcmp(run->input, original_source, run->input_length));
     xr_compile_resources_free(run->input); run->input = NULL;
     if (!phase(run, "original-input-verified")) return false;
     run->operation = "session";
-    OBSERVE(xr_compile_session_new(run->context.resources, &run->session) == XR_COMPILER_SESSION_OK);
+    allocation_runtime_begin(run, "session-new", ALLOCATION_RUNTIME_SESSION, &run->session, sizeof(run->session));
+    XrCompilerSessionStatus session = xr_compile_session_new(run->context.resources, &run->session);
+    if (!allocation_runtime_end(run, (int)session)) return false;
+    OBSERVE(session == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
     XrXirSourceProductRequest request = {{run->session, file, &authority, &run->context,
         NULL, NULL, XR_XIR_PROGRAM, NULL}, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     run->operation = "source-product";
+    allocation_runtime_begin(run, "source-product", ALLOCATION_RUNTIME_XIR, &run->product, sizeof(run->product));
     run->status = xr_xir_compile_source_product_build(&request, &run->product, &run->diagnostic);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK && run->product);
     return phase(run, "source-product-complete");
 }
@@ -182,20 +325,26 @@ static bool read_packets(AllocationRun *run, const char *file) {
     run->operation = "source-packet";
     run->status = xr_xir_compile_source_product_packet(run->product, XR_XIR_SOURCE_PRODUCT_SOURCE, &source);
     OBSERVE(run->status == XR_XIR_OK && source.bytes && source.length);
+    allocation_runtime_begin(run, "source-Checked-reader", ALLOCATION_RUNTIME_XIR, &run->source_checked, sizeof(run->source_checked));
     run->status = xr_xir_compile_checked_read(&run->context, source.bytes, source.length,
         &run->source_checked, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
     if (!inspect_module(run, run->source_checked, XR_XIR_CHECKED, &source_roles)) return false;
     if (!phase(run, "source-Checked-reader")) return false;
     run->operation = "closed-packet";
     run->status = xr_xir_compile_source_product_packet(run->product, XR_XIR_SOURCE_PRODUCT_CLOSED, &closed);
     OBSERVE(run->status == XR_XIR_OK && closed.bytes && closed.length);
+    allocation_runtime_begin(run, "closed-Checked-reader", ALLOCATION_RUNTIME_XIR, &run->closed_checked, sizeof(run->closed_checked));
     run->status = xr_xir_compile_checked_read(&run->context, closed.bytes, closed.length,
         &run->closed_checked, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
     if (!inspect_module(run, run->closed_checked, XR_XIR_CHECKED, &run->roles)) return false;
     if (!inspect_product(run, file)) return false;
+    allocation_runtime_begin(run, "closed-Checked-retained", ALLOCATION_RUNTIME_XIR, &run->retained, sizeof(run->retained));
     run->status = xr_xir_compile_checked_write(run->closed_checked, &run->retained, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK && run->retained.length == closed.length);
     OBSERVE(run->retained.bytes != closed.bytes && !memcmp(run->retained.bytes, closed.bytes, closed.length));
     return phase(run, "closed-Checked-retained");
@@ -206,27 +355,39 @@ static bool detach_lower(AllocationRun *run) {
     xr_xir_compile_source_product_free(run->product); run->product = NULL;
     xr_xir_compile_source_product_diagnostic_free(&run->diagnostic);
     if (!phase(run, "producers-destroyed")) return false;
+    allocation_runtime_begin(run, "detached-source-verify", ALLOCATION_RUNTIME_XIR, NULL, 0);
     run->status = xr_xir_compile_artifact_verify(run->source_checked, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
+    allocation_runtime_begin(run, "detached-closed-verify", ALLOCATION_RUNTIME_XIR, NULL, 0);
     run->status = xr_xir_compile_artifact_verify(run->closed_checked, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
     XrXirArtifact *reread = NULL;
+    allocation_runtime_begin(run, "retained-Checked-reread", ALLOCATION_RUNTIME_XIR, &reread, sizeof(reread));
     run->status = xr_xir_compile_checked_read(&run->context, run->retained.bytes,
         run->retained.length, &reread, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) { xr_xir_compile_artifact_free(reread); return false; }
     if (run->status != XR_XIR_OK) { xr_xir_compile_artifact_free(reread); return false; }
+    allocation_runtime_begin(run, "retained-Checked-verify", ALLOCATION_RUNTIME_XIR, NULL, 0);
     run->status = xr_xir_compile_artifact_verify(reread, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) { xr_xir_compile_artifact_free(reread); return false; }
     xr_xir_compile_artifact_free(reread);
     OBSERVE(run->status == XR_XIR_OK);
     run->operation = "Lowered";
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    allocation_runtime_begin(run, "Lowered", ALLOCATION_RUNTIME_XIR, &run->lowered, sizeof(run->lowered));
     run->status = xr_xir_compile_lower(run->closed_checked, &target, &run->lowered, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
     AllocationRoles lowered_roles;
     if (!inspect_module(run, run->lowered, XR_XIR_LOWERED, &lowered_roles)) return false;
     OBSERVE(run->roles.entry == lowered_roles.entry && run->roles.initializer == lowered_roles.initializer);
     OBSERVE(run->roles.answer == lowered_roles.answer && run->roles.exported == lowered_roles.exported &&
         run->roles.test == lowered_roles.test);
+    allocation_runtime_begin(run, "Lowered-verify", ALLOCATION_RUNTIME_XIR, NULL, 0);
     run->status = xr_xir_compile_artifact_verify(run->lowered, &run->xir);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&run->retained);
     xr_xir_compile_artifact_free(run->source_checked); run->source_checked = NULL;
@@ -236,14 +397,22 @@ static bool detach_lower(AllocationRun *run) {
 
 static bool seal_instances(AllocationRun *run) {
     run->operation = "VM-Program-take";
+    allocation_runtime_begin(run, "VM-Program-take", ALLOCATION_RUNTIME_XIR, &run->program, sizeof(run->program));
+    allocation_runtime_output(1, &run->lowered, sizeof(run->lowered));
     run->status = xr_xir_compile_vm_program_take(&run->lowered, &run->program);
+    if (!allocation_runtime_end(run, (int)run->status)) return false;
     OBSERVE(run->status == XR_XIR_OK && !run->lowered && run->program);
     if (!phase(run, "Program-sealed")) return false;
     XrXirInstanceConfig config = {0};
+    allocation_runtime_begin(run, "instance-config", ALLOCATION_RUNTIME_VOID, NULL, 0);
     run->call_status = xr_xir_instance_config_init(&config, sizeof(config));
+    if (!allocation_runtime_end(run, (int)run->call_status)) return false;
     OBSERVE(run->call_status == XR_XIR_CALL_READY);
     for (unsigned i = 0; i < 2; ++i) {
+        allocation_runtime.instance = i; allocation_runtime.repeat = UINT32_MAX;
+        allocation_runtime_begin(run, "instance-new", ALLOCATION_RUNTIME_NEW, &run->instances[i], sizeof(run->instances[i]));
         run->call_status = xr_xir_instance_new(run->program, &config, &run->instances[i]);
+        if (!allocation_runtime_end(run, (int)run->call_status)) return false;
         OBSERVE(run->call_status == XR_XIR_CALL_READY && run->instances[i]);
     }
     OBSERVE(run->instances[0] != run->instances[1]);
@@ -256,14 +425,29 @@ static bool finish(AllocationRun *run, XrXirInstance *instance, XrXirType type, 
     size_t polls = 0;
     do {
         OBSERVE(++polls <= 4096);
+        allocation_runtime_begin(run, "poll", ALLOCATION_RUNTIME_POLL, &run->value, sizeof(run->value));
         result = xr_xir_instance_poll_bounded(instance, UINT64_C(1000000));
+        if (allocation_runtime.active) {
+            allocation_runtime.call.epoch = result.epoch;
+            allocation_runtime.call.borrowed_oom_shape = xr_xir_call_result_valid(&result.outcome) &&
+                result.outcome.status == XR_XIR_CALL_OOM && !result.outcome.wake && !result.outcome.value.type &&
+                !result.outcome.value.reserved && !result.outcome.value.payload && xr_xir_panic_empty(&result.outcome.panic);
+            if (result.epoch != allocation_runtime.expected_epochs[allocation_runtime.instance]) allocation_runtime.ok = false;
+        }
+        run->call_status = result.outcome.status;
+        if (!allocation_runtime_end(run, (int)result.outcome.status)) return false;
+        if (allocation_runtime.active) allocation_runtime.epochs[allocation_runtime.instance] = result.epoch;
     } while (result.outcome.status == XR_XIR_CALL_READY);
     run->call_status = result.outcome.status;
     OBSERVE(run->call_status == XR_XIR_CALL_RETURNED);
+    allocation_runtime_begin(run, "take-result", ALLOCATION_RUNTIME_TAKE, &run->value, sizeof(run->value));
     run->call_status = xr_xir_instance_take_result(instance, &run->value);
+    if (!allocation_runtime_end(run, (int)run->call_status)) return false;
     OBSERVE(run->call_status == XR_XIR_CALL_RETURNED);
     bool same = run->value.type == (uint32_t)type && !run->value.reserved && (int64_t)run->value.payload == payload;
+    allocation_runtime_begin(run, "value-drop", ALLOCATION_RUNTIME_VOID, NULL, 0);
     xr_xir_value_drop(&run->value);
+    if (!allocation_runtime_end(run, 0)) return false;
     OBSERVE(same && !run->value.type && !run->value.reserved && !run->value.payload);
     return true;
 }
@@ -271,7 +455,9 @@ static bool finish(AllocationRun *run, XrXirInstance *instance, XrXirType type, 
 static bool execute_instances(AllocationRun *run) {
     for (unsigned i = 0; i < 2; ++i) {
         XrXirInstance *instance = run->instances[i];
+        allocation_runtime.instance = i; allocation_runtime.repeat = UINT32_MAX;
         run->operation = "private-entry-authority";
+        allocation_runtime_begin(run, "private-entry-authority", ALLOCATION_RUNTIME_VOID, NULL, 0);
         size_t attempts = runtime_attempts, compiler_attempts = instance_compile_attempts;
         size_t blocks = runtime_live, bytes = runtime_bytes;
         XrCompileResourceStats before = {0}, after = {0};
@@ -288,13 +474,19 @@ static bool execute_instances(AllocationRun *run) {
         OBSERVE(before.live_bytes == after.live_bytes && before.peak_bytes == after.peak_bytes && before.work == after.work);
         OBSERVE(instance_compile_attempts == compiler_attempts && runtime_attempts == attempts);
         OBSERVE(runtime_live == blocks && runtime_bytes == bytes && xr_xir_instance_state(instance) == XR_XIR_INSTANCE_NEW);
+        if (!allocation_runtime_end(run, 0)) return false;
         run->operation = "canonical-entry";
+        allocation_runtime_begin(run, "canonical-start", ALLOCATION_RUNTIME_START, NULL, 0);
         run->call_status = xr_xir_instance_start(instance, run->roles.entry, NULL, 0);
+        if (!allocation_runtime_end(run, (int)run->call_status)) return false;
         OBSERVE(run->call_status == XR_XIR_CALL_READY);
         if (!finish(run, instance, XR_XIR_I64, 0)) return false;
         for (unsigned repeat = 0; repeat < 2; ++repeat) {
             run->operation = "original-checkAnswer";
+            allocation_runtime.repeat = repeat;
+            allocation_runtime_begin(run, "original-test-start", ALLOCATION_RUNTIME_START, NULL, 0);
             run->call_status = xr_xir_instance_start_test(instance, run->roles.test);
+            if (!allocation_runtime_end(run, (int)run->call_status)) return false;
             OBSERVE(run->call_status == XR_XIR_CALL_READY);
             if (!finish(run, instance, XR_XIR_UNIT, 0)) return false;
             printf("source-allocation0 instance=%u repeat=%u original-checkAnswer=Unit exported-fixed-oracle=42\n",
@@ -336,6 +528,60 @@ static bool release(AllocationRun *run) {
         instance_compile_live, instance_compile_bytes, runtime_live, runtime_bytes,
         runtime_owned_capacity, complete ? "PASS" : "FAIL");
     return complete;
+}
+
+
+static bool allocation_runtime_failure_state(AllocationRun *run) {
+    AllocationRuntimeCall *call = &allocation_runtime.call;
+    if (call->domain < ALLOCATION_RUNTIME_NEW || call->domain > ALLOCATION_RUNTIME_TAKE) return true;
+    if (call->instance >= 2) return false;
+    XrXirInstance *instance = run->instances[call->instance];
+    if (call->domain == ALLOCATION_RUNTIME_NEW) {
+        if (instance || !run->program) return false;
+        for (unsigned i = 0; i < call->instance; ++i)
+            if (!run->instances[i] || xr_xir_instance_state(run->instances[i]) != XR_XIR_INSTANCE_NEW) return false;
+        return true;
+    }
+    if (!instance) return false;
+    AllocationRuntimeSample before = allocation_runtime_sample(run);
+    bool valid = true;
+    if (call->domain == ALLOCATION_RUNTIME_START) {
+        XrXirInstanceResult previous = xr_xir_instance_poll_bounded(instance, 1);
+        XrXirCallStatus expected = call->state_before == XR_XIR_INSTANCE_NEW ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_CONSUMED;
+        valid = (call->state_before == XR_XIR_INSTANCE_NEW || call->state_before == XR_XIR_INSTANCE_READY) &&
+            previous.outcome.status == expected && previous.epoch == allocation_runtime.epochs[call->instance] &&
+            !previous.outcome.wake && !previous.outcome.value.type && !previous.outcome.value.reserved &&
+            !previous.outcome.value.payload && xr_xir_panic_empty(&previous.outcome.panic) &&
+            xr_xir_instance_state(instance) == call->state_before;
+    } else if (call->domain == ALLOCATION_RUNTIME_POLL) {
+        XrXirValue output = {0}, original = output;
+        XrXirCallResult failure = {0}, empty = failure;
+        XrXirCallStatus taken = xr_xir_instance_take_result(instance, &output);
+        XrXirCallStatus copied = xr_xir_instance_copy_failure(instance, &failure);
+        valid = taken == XR_XIR_CALL_BAD_STATE && !memcmp(&output, &original, sizeof(output));
+        if (call->state_after == XR_XIR_INSTANCE_FAILED) {
+            valid = valid && call->state_before == XR_XIR_INSTANCE_INITIALIZING && copied == XR_XIR_CALL_OOM &&
+                failure.status == XR_XIR_CALL_OOM && !failure.wake && !failure.value.type &&
+                !failure.value.reserved && !failure.value.payload && xr_xir_panic_empty(&failure.panic) &&
+                xr_xir_instance_start(instance, run->roles.entry, NULL, 0) == XR_XIR_CALL_OOM;
+            XrXirInstanceResult repeated = xr_xir_instance_poll_bounded(instance, 1);
+            valid = valid && repeated.outcome.status == XR_XIR_CALL_OOM && repeated.epoch == call->epoch &&
+                !repeated.outcome.wake && !repeated.outcome.value.type && !repeated.outcome.value.reserved &&
+                !repeated.outcome.value.payload && xr_xir_panic_empty(&repeated.outcome.panic);
+        } else {
+            valid = valid && call->state_after == XR_XIR_INSTANCE_READY &&
+                (call->state_before == XR_XIR_INSTANCE_INITIALIZING || call->state_before == XR_XIR_INSTANCE_READY) &&
+                copied == XR_XIR_CALL_BAD_STATE && !memcmp(&failure, &empty, sizeof(failure));
+        }
+        xr_xir_call_result_drop(&failure); xr_xir_value_drop(&output);
+        valid = valid && xr_xir_instance_state(instance) == call->state_after;
+    } else valid = false;
+    AllocationRuntimeSample after = allocation_runtime_sample(run);
+    valid = valid && allocation_runtime_compile_same(&before, &after) && before.sites == after.sites &&
+        before.blocks == after.blocks && before.bytes == after.bytes && before.table == after.table;
+    printf("source-allocation0 runtime-failure-state stage=%s instance=%u state=%u verified=%u probe-sites=%zu/%zu\n",
+        call->name, call->instance, (unsigned)call->state_after, (unsigned)valid, before.sites, after.sites);
+    return valid;
 }
 
 typedef enum AllocationFaultStage {
@@ -634,25 +880,23 @@ static bool allocation_fault_number(const char *text, size_t *output) {
     return true;
 }
 
-int main(int argc, char **argv) {
-    if (argc == 6 && !strcmp(argv[3], "--compiler-fault")) {
-        size_t normal_sites = 0, site = 0;
-        if (!allocation_fault_number(argv[4], &normal_sites) || !normal_sites ||
-            !allocation_fault_number(argv[5], &site) || site >= normal_sites) return 2;
-        return allocation_fault_run(argv[1], argv[2], normal_sites, site);
-    }
-    if (argc != 3) return 2;
+static int allocation_runtime_run(const char *root, const char *file, size_t normal_sites, size_t site) {
     instance_compile_zero();
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
     AllocationRun run = {0};
+    allocation_runtime = (AllocationRuntimeFault){.normal_sites = normal_sites, .site = site,
+        .instance = UINT32_MAX, .repeat = UINT32_MAX, .active = true, .injecting = site != SIZE_MAX, .ok = true};
+    CHECK(!runtime_attempts && runtime_fail_at == SIZE_MAX);
+    runtime_fail_at = site;
     run.context.limits = xr_xir_compile_default_limits();
     run.operation = "finite-owner";
     XrCompileResourceLimits limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
+    allocation_runtime_begin(&run, "owner-new", ALLOCATION_RUNTIME_OWNER, &run.context.resources, sizeof(run.context.resources));
     XrCompileResourceStatus owner = xr_compile_resources_new(&limits, &run.context.resources);
-    bool passed = owner == XR_COMPILE_RESOURCE_OK;
+    bool passed = allocation_runtime_end(&run, (int)owner) && owner == XR_COMPILE_RESOURCE_OK;
     if (passed) passed = xr_compile_resources_stats(run.context.resources, &run.baseline) == XR_COMPILE_RESOURCE_OK;
-    if (passed) passed = phase(&run, "owner-created") && produce(&run, argv[1], argv[2]);
-    if (passed) passed = read_packets(&run, argv[2]) && detach_lower(&run) && seal_instances(&run) && execute_instances(&run);
+    if (passed) passed = phase(&run, "owner-created") && produce(&run, root, file);
+    if (passed) passed = read_packets(&run, file) && detach_lower(&run) && seal_instances(&run) && execute_instances(&run);
     if (!passed) fprintf(stderr, "source-allocation0 failure operation=%s owner-status=%u status=%u "
         "source-stage=%u source-status=%u module=%u line=%d column=%d xir-status=%u "
         "function=%u block=%u instruction=%u reason=%u call-status=%u message=%s\n", run.operation,
@@ -660,10 +904,51 @@ int main(int argc, char **argv) {
         (unsigned)run.diagnostic.source.status, run.diagnostic.source.module, run.diagnostic.source.line,
         run.diagnostic.source.column, (unsigned)run.xir.status, run.xir.function, run.xir.block,
         run.xir.instruction, (unsigned)run.xir.reason, (unsigned)run.call_status, run.diagnostic.source.message);
+    bool expected = !passed && allocation_runtime.stopped && allocation_runtime.hits == 1 &&
+        allocation_runtime.records == allocation_runtime.failure_record + 1 && allocation_runtime.ok;
+    if (allocation_runtime.injecting && expected) expected = allocation_runtime_failure_state(&run);
+    AllocationRuntimeSample cleanup_before = allocation_runtime_sample(&run);
+    runtime_fail_at = SIZE_MAX;
+    allocation_runtime.active = false;
     bool released = release(&run);
+    bool cleanup_uncharged = cleanup_before.sites == runtime_attempts &&
+        cleanup_before.compiler_sites == instance_compile_attempts &&
+        cleanup_before.ledger.allocation_count == run.final.allocation_count &&
+        cleanup_before.ledger.allocated_bytes == run.final.allocated_bytes &&
+        cleanup_before.ledger.peak_bytes == run.final.peak_bytes && cleanup_before.ledger.work == run.final.work;
+    if (allocation_runtime.injecting) {
+        bool fault_passed = expected && released && cleanup_uncharged && allocation_runtime.ok;
+        printf("source-allocation0 runtime-fault=%s frozen-R=%zu fault-site=%zu hit-windows=%zu failure-stage=%s "
+            "record=%zu downstream=NOT_ENTERED status=%d expected-oom=%d output-preserved=%u borrowed-oom-shape=%u cleanup-uncharged=%u "
+            "compiler-sites=%zu runtime-sites=%zu compiler-physical=%zu/%zu runtime-physical=%zu/%zu table=%zu "
+            "input-packet-bytes=UNSNAPSHOTTED_OPEN full-eight-source-FI=NOT_RUN axes=NOT_RUN native=NOT_RUN\n",
+            fault_passed ? "PASS" : "FAIL", normal_sites, site, allocation_runtime.hits, allocation_runtime.call.name,
+            allocation_runtime.call.record, allocation_runtime.call.status, allocation_runtime_oom(allocation_runtime.call.domain),
+            (unsigned)allocation_runtime.call.output_preserved, (unsigned)allocation_runtime.call.borrowed_oom_shape,
+            (unsigned)cleanup_uncharged, instance_compile_attempts,
+            runtime_attempts, instance_compile_live, instance_compile_bytes, runtime_live, runtime_bytes, runtime_owned_capacity);
+        return fault_passed ? 0 : 1;
+    }
     printf("source-allocation0 normal=%s compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64
         " peak=%" PRIu64 " work=%" PRIu64 " full-eight-source-FI=NOT_RUN native=NOT_RUN\n",
-        passed && released ? "PASS" : "FAIL", instance_compile_attempts, runtime_attempts,
+        passed && released && cleanup_uncharged && allocation_runtime.ok ? "PASS" : "FAIL", instance_compile_attempts, runtime_attempts,
         run.final.allocated_bytes, run.final.peak_bytes, run.final.work);
-    return passed && released ? 0 : 1;
+    return passed && released && cleanup_uncharged && allocation_runtime.ok ? 0 : 1;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 6 && !strcmp(argv[3], "--compiler-fault")) {
+        size_t normal_sites = 0, site = 0;
+        if (!allocation_fault_number(argv[4], &normal_sites) || !normal_sites ||
+            !allocation_fault_number(argv[5], &site) || site >= normal_sites) return 2;
+        return allocation_fault_run(argv[1], argv[2], normal_sites, site);
+    }
+    if (argc == 6 && !strcmp(argv[3], "--runtime-fault")) {
+        size_t normal_sites = 0, site = 0;
+        if (!allocation_fault_number(argv[4], &normal_sites) || !normal_sites ||
+            !allocation_fault_number(argv[5], &site) || site >= normal_sites) return 2;
+        return allocation_runtime_run(argv[1], argv[2], normal_sites, site);
+    }
+    if (argc != 3) return 2;
+    return allocation_runtime_run(argv[1], argv[2], 0, SIZE_MAX);
 }

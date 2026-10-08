@@ -1,5 +1,9 @@
 {
-  "status": "CANDIDATE_STATIC_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+  "status": "SOURCE0_VM_FAULT_FACETS_IMPLEMENTED_TARGETED_VALIDATION_PASS_FULL_QUALIFICATION_OPEN",
+  "historical_proposal": {
+    "status": "CANDIDATE_STATIC_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+    "mapping_scope": "The original assertion/main mapping strings and review_revision below retain the initial static proposal. Their OPEN statuses and all eight original scenarios are unchanged; current bounded private results are separate below."
+  },
   "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
   "source_family": "tests/unit/program/test_xr_program_source_allocations.c",
   "original_whole_file": {
@@ -96,8 +100,8 @@
     "model": "One explicit fresh shared finite compiler ledger; owner construction included. No budget reset or context replacement."
   },
   "measurement_semantics": {
-    "compiler_sites": "Actual owner+original-input preflight+session+SourceProduct+two readers+full closed writer+reread+lower+Program seal normal ordinal count; UNMEASURED_NOT_RUN; not original subject-only8-family FI denominator",
-    "runtime_sites": "Actual two Instances/new/entry/original test executions; UNMEASURED_NOT_RUN; neither native nor an injected sweep",
+    "compiler_sites": "Actual owner+original-input preflight+session+SourceProduct+two readers+full closed writer+reread+lower+Program seal normal ordinal count; private r3 fresh MSVC and Clang ASan+UBSan each measured2036, not a completed sweep or original subject-only8-family FI denominator",
+    "runtime_sites": "Actual two Instances/new/entry/original test executions; private r3 fresh MSVC and Clang ASan+UBSan each measured32 across43 continuous call records; only six targeted sites per configuration executed, full32 NOT_RUN",
     "stage_stats": "Print cumulative allocated/live/peak/work and actual allocator attempts at each named ownership boundary; not per-stage copied normal constants"
   },
   "original_assertion_responsibilities": [
@@ -260,14 +264,48 @@
     "scope": "Only separate source consumer; no shared driver/inventory/status denominator edits"
   },
   "validation": {
-    "build": "NOT_RUN",
-    "normal": "NOT_RUN",
-    "compiler_FI": "NOT_RUN",
-    "runtime_FI": "NOT_RUN",
+    "build": "APPLIED_TARGET_MSVC_AND_CLANG_ASAN_UBSAN_FRESH_1_TU_1_LINK_PASS; existing public archives reused, not rebuilt here",
+    "normal": "APPLIED_TARGET_1_PER_CONFIGURATION_PASS",
+    "compiler_FI": "APPLIED_TARGET_3_SELECTED_PER_CONFIGURATION_PASS; FULL_2036_NOT_RUN",
+    "runtime_FI": "APPLIED_TARGET_6_SELECTED_PER_CONFIGURATION_PASS; FULL_32_NOT_RUN",
     "axes": "NOT_RUN",
     "native": "NOT_RUN",
     "full_safety": "NOT_RUN",
     "original_8_scenarios": "OPEN_UNCHANGED"
+  },
+  "private_runtime_fault_facet": {
+    "source_sha256": "63955cafc841246ba148ed3ca0c7a864bd26f31665957e302d7c5a889c20963e",
+    "source_scope": "Existing Source0 consumer extended with ROOT FILE --runtime-fault R site; original119B input and entire20700B compiler-fault definition byte-exact. No new normal consumer, target, full-FI registration, quota or timeout change.",
+    "producer_scope": "Only25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29. Main semantic69 and candidate70 qualification NOT_RUN; integration-head rebind/fresh build/remeasurement required.",
+    "normal": "Both configurations:1/1; compiler2036/runtime32,43 continuous records, original42, two canonical I64(0), four Test Unit, seven permission rejections per Instance and final compiler/runtime blocks+bytes/table zero.",
+    "targeted_points": [
+      "site0: instance-new record15, first constructor",
+      "site6: instance-new record16, sibling constructor",
+      "site12: canonical-start record18, NEW",
+      "site18: original-test-start record26, READY repeat",
+      "site16: poll record23, ordinary Test READY",
+      "site31: poll record40, ordinary Test READY"
+    ],
+    "targeted_oracles": "Each configuration6/6: unique hit1, exact Call OOM6, continuous prefix ends at the failed record with downstream NOT_ENTERED, actual host output-slot preservation, uncharged cleanup and final compiler/runtime blocks+bytes/table zero. Constructor uses a valid NULL output and restores runtime physical stock; start preserves prior NEW/READY activation and epoch; ordinary poll checks actual borrowed OOM shape and READY take/copy BAD_STATE.",
+    "unverified": "Full32 runtime and2036 compiler FI; all three resource axes; initialization FAILED/sticky OOM (canonical initialization poll has no allocation); continued sibling execution after constructor failure (only pointer/NEW/Program/physical preservation checked); input-packet complete bytes UNSNAPSHOTTED_OPEN; seven other original sources; native/mixed; cancellation; owned STRING/partial initialization/reverse cleanup; full default/applicable safety and Main integration.",
+    "actual_tools": "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-consumer-evidence/current67-source0-runtime-fi-private-normal-r1/actual-tools.json",
+    "actual_tools_sha256": "96b35a4dc7b58a517e3ac20c76453070670e28c12ff58c368c1e95801138dbf6",
+    "readme": "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-consumer-evidence/current67-source0-runtime-fi-private-normal-r1/README-cn.txt",
+    "raw_results": "Each configuration directory retains normal.xml/normal.LastTest.log and smoke.xml/Testing/Temporary/LastTest.log; complete actual commands and terminal exit0 receipts are in actual-tools.json.",
+    "retirement": "Original whole-file/run/main hashes, eight scenario bodies,17 run assertions and2 main assertions unchanged; no original responsibility retired or removed, all OPEN statuses retained. Full FI/heavy qualification requires Main queue window."
+  },
+  "applied_target_validation": {
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "qualified_contract": "Checked25/semantic67/Value22/Call28/Program29; not Main69 or candidate70",
+    "build": "MSVC Release/MT and Clang Debug/MD ASan+UBSan each rebuilt the existing Source0 target: one compile, one link; new objects each159 actual Ninja dependencies",
+    "normal": "Each configuration1/1; fresh N2036/R32 and43 continuous runtime-call records",
+    "compiler_selected_sites": [0, 1, 2035],
+    "runtime_selected_sites": [0, 6, 12, 18, 16, 31],
+    "argument_rejections": "Each configuration13/13 invalid runtime-fault arguments return2 without pipeline output",
+    "related_regression": "Each configuration2/2: existing Source0 native normal and source-file-deletion VM normal; their artifacts and public libraries are unchanged",
+    "binding": "Fault argv N/R are read from that exact configuration's fresh normal.xml; CLI syntax checks alone do not authenticate a denominator",
+    "actual_tools": "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-consumer-evidence/current67-source0-runtime-fi-applied-r1/actual-tools.json",
+    "full_qualification": "OPEN: complete compiler/runtime FI, resource axes, input packet bytes, initialization FAILED, continued sibling execution, other seven sources, native/mixed facet, cancellation, full safety and Main integration; retired0"
   },
   "review_revision": {
     "prior_r1_manifest_sha256": "3499cd26344c1ea739fdb712f19402f126dc7bfd2917149917c9bc312710644e",
