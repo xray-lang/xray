@@ -1,0 +1,26 @@
+fn appendManaged(unused: i64) -> i64 {
+  const value = "a\0b"
+  var values: Array<string> = []
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  assert(len(value) == 3)
+  assert(values[0] == "a\0b")
+  assert(values[1] == "a\0b")
+  assert(values[2] == "a\0b")
+  assert(values[3] == "a\0b")
+  assert(values[4] == "a\0b")
+  assert(values[5] == "a\0b")
+  assert(values[6] == "a\0b")
+  assert(values[7] == "a\0b")
+  assert(values[8] == "a\0b")
+  return len(values)
+}
+fn answer() -> i64 { return appendManaged(42) }
+export fn consumerAnswer() -> i64 { return answer() }

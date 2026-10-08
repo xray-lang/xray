@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "test_array_append_admission",
+    "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+    "legacy_line": 6980,
+    "body_lf_sha256": "73d6cd094e2b1dce590ba090ccd3e273d45c8c4bb5865567215766f7d01edd63",
+    "assertion_sites": 7,
+    "loop_sites": 1,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_MANAGED_ARRAY_APPEND_EXECUTION_FACET_LEGACY_OPEN",
+  "fixture": "tests/unit/xir/product_consumers/array_append_managed/root.xr",
+  "fixture_sha256": "96687e34a62955db941de5c52d59f3717a6df4a4841d378193e0024ea4b61b5e",
+  "independent_expected": 9,
+  "original_mapping": "Original managed mutation100 keeps its unused i64 parameter,input42,constant three-byte a/NUL/b,empty Array<string>,nine appends andlength. Public Source push/len uses ordinary READ values;no fake explicit owner bit ormove parameter encoding. Private answer/export adapter drives the shared consumer. Added value-length3 andnine exact element assertions extend the runtime oracle;old fixture unchanged.",
+  "old_native_oracle": {
+    "path": "tests/unit/aot/test_xr_program_aot.c",
+    "function": "write_array_append_allocation_fixture",
+    "managed": true,
+    "mutation": 100,
+    "argument": 42,
+    "result": 9,
+    "full_allocation_scan": "Original fail_at1..<128 untilattempts<fail_at;not executed in this batch."
+  },
+  "tests": [
+    "test_source_product_array_append_managed_vm",
+    "test_source_product_array_append_managed_native",
+    "test_source_product_array_append_managed_mixed_even",
+    "test_source_product_array_append_managed_mixed_odd",
+    "test_source_product_array_append_managed_owned"
+  ],
+  "registration": {
+    "normal": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1
+    },
+    "compiler_full": {
+      "TIMEOUT": 600,
+      "PROCESSORS": 8,
+      "jobs": 8
+    },
+    "axes": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": true
+    },
+    "runtime_cancel": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1
+    }
+  },
+  "ownership": "Public SourceProduct verify/closedChecked read;dedicated owner checks one appendManaged i64 parameter/result,empty Array<string>,nine pushes ofone CONST_STRING literal with exact a/NUL/b bytes through distinct CELL_PLACE projections ofone CELL. Source owners andpaths die before Checked reverify andexact preserved packet;Checked dies before Lowered reverify. Shared driver checks two retainedInstances,four fixed9answers,canonical0,privateentry refusal andphysical release.",
+  "boundaries": [
+    "Candidate until actual execution. Must use real emitted C withsame payload SHA andstrict sanitizer compile flags.",
+    "Source packet before/after comparison is ownership preservation,not independent wire generation. Scalar independent wire gate stays separate.",
+    "Managed String positive does not replace original read/move String negative mutations4/5;old explicit ownercopy/drop metadata isnot encoded.",
+    "Full runtime allocation scan,OOM recovery,cancel,axes,compiler full scans andsafety remain NOT_RUN.",
+    "Actual physical0 after owner destruction doesnot byitself prove oldAOT per-return context.allocations=0.",
+    "Source108=88fixtures+20other;other26files160functions/shared7 unchanged;wholeOPEN,replacement_gates[],retired0."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-array-append-managed-r1",
+    "receipts": "results.json",
+    "actual_commands": 10,
+    "final_registered_pass": 10,
+    "first_build": "PASS_BOTH_CONFIGURATIONS",
+    "first_execution": "PASS_ALL10COMMANDS",
+    "fresh_build": "8 actual compile events/final fresh objects:VM wrapper,owned consumer,native wrapper andrealgeneratedC perconfiguration. C11/W4/WX,ASan+UBSan andVALID Ninja deps. Shared driver object exact reused.",
+    "production_reuse": "10+ real linked archives/config exactSHA,size,mtime;6 actual production object bodies matchedarchive members;no production TU/archive rebuilt.",
+    "generated_C_payload_sha256": {
+      "msvc": "02780a3efb5f3800c1e2f2994966acb1c262b32818eb29d021b458cacc5e4d8c",
+      "asan": "02780a3efb5f3800c1e2f2994966acb1c262b32818eb29d021b458cacc5e4d8c"
+    },
+    "execution": "8 backend commands:VM/native/mixed_even/mixed_odd across2configurations;16actualInstances,32independentfixed9results,16canonical0results. Each call checkslen3 andall9elements equal a/NUL/b. Source owners/closed/generated text die beforeexecution;callerProgram drops aftertwoInstances retain. Privateanswer NEW start rejectswithoutallocation;values/Instancesdrop;actualcompiler/runtimeobservers0/0.",
+    "owned": "Both finalowned gates verify9pushes fromone CONST_STRING containingexact3bytes a/NUL/b throughdistinctCELL_PLACE projections ofoneCELL initializedfromanemptyArray<string>. Sourceowners/request/authority/pathsdead beforeCheckedmetadata/literal/exactpreservedpacketreinspection;CheckedfreedbeforeLoweredverify;callerledger/observer0/0.",
+    "input_capture": {
+      "count": 2757,
+      "processes": 10,
+      "preservation": "EveryactualPID inputcapturebefore==afterSHA,size,mtime. Postexecutionmap preimagepreserved;noannotationrerunclaimed."
+    },
+    "protection": "10974tracked pre-snapshot:10973nonowned exact;12historicaldirtygeneratedpreserved.598protected:594exact+4expectedNinja/CTestchanges;oldrawregistryrestoredbyremovingonly42addedlines/config.",
+    "registration": "42rows=10PASS+32heavyNOT_RUN;noWILL_FAIL. T120/P1normal/runtime/cancel;axes additionallyRUN_SERIAL;compilerT600/P8/jobs8.",
+    "boundary": "Managedpositivefacet only. OldStringread/move negatives,explicitowner/copy/dropmetadata,fullfaultscan/OOMrecovery/axes/cancel/safety/Main andoldAOTper-returncontextallocationstock responsibilities remainOPEN.",
+    "annotation": "Addedafteractualexecution;preannotationmap saved;not executed withnewannotation.",
+    "retired": 0
+  }
+}
