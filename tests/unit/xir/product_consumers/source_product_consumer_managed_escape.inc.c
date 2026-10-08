@@ -29,6 +29,42 @@ static void consumer_managed_array(const XrXirValue *array, XrXirValue *first) {
     }
 }
 
+static void consumer_managed_cow(const XrXirValue *original, const XrXirValue *peer, unsigned repeat, unsigned instance) {
+    const char expected[] = {'z', 0, 'q'};
+    size_t live = runtime_live, bytes = runtime_bytes;
+    XrXirValue copy = {0}, replacement = {0}, escaped = {0}; XrXirDomain *domain = NULL;
+    CHECK(xr_xir_value_copy(original, &copy) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK && domain);
+    CHECK(xr_xir_string_new(domain, expected, sizeof(expected), &replacement) == XR_XIR_VALUE_OK);
+    XrXirValueAdmission admission = {xr_xir_value_arena(&copy), domain, NULL, NULL, 10000, 65536};
+    XrXirValuePlace place = {copy.type, &copy.payload}; XrXirFaultDetail fault = {0};
+    CHECK(xr_xir_array_set(&place, 0, &replacement, &admission, &fault) == XR_XIR_VALUE_OK && xr_xir_fault_empty(fault));
+    xr_xir_value_drop(&replacement); CHECK(!replacement.type && !replacement.reserved && !replacement.payload);
+    xr_xir_domain_drop(domain); admission.domain = NULL;
+    CHECK(xr_xir_value_valid(&copy) && !copy.reserved); int64_t length = -1;
+    CHECK(xr_xir_array_len(&copy, &admission, &length) == XR_XIR_VALUE_OK && length == 9);
+    for (int64_t index = 0; index < 9; ++index) {
+        XrXirValue element = {0};
+        CHECK(xr_xir_array_get(&copy, index, &admission, &element, &fault) == XR_XIR_VALUE_OK && xr_xir_fault_empty(fault));
+        if (!index) {
+            const char *view = NULL; size_t element_bytes = 0;
+            CHECK(element.type == XR_XIR_STRING && !element.reserved && xr_xir_value_valid(&element));
+            CHECK(xr_xir_string_view(&element, &view, &element_bytes) && element_bytes == sizeof(expected) && !memcmp(view, expected, sizeof(expected)));
+            CHECK(xr_xir_value_copy(&element, &escaped) == XR_XIR_VALUE_OK);
+        } else consumer_managed_string(&element);
+        xr_xir_value_drop(&element);
+    }
+    consumer_managed_array(original, NULL); consumer_managed_array(peer, NULL);
+    xr_xir_value_drop(&copy); CHECK(!copy.type && !copy.reserved && !copy.payload);
+    const char *view = NULL; size_t length_bytes = 0;
+    CHECK(escaped.type == XR_XIR_STRING && !escaped.reserved && xr_xir_value_valid(&escaped));
+    CHECK(xr_xir_string_view(&escaped, &view, &length_bytes) && length_bytes == sizeof(expected) && !memcmp(view, expected, sizeof(expected)));
+    xr_xir_value_drop(&escaped); CHECK(!escaped.type && !escaped.reserved && !escaped.payload);
+    CHECK(runtime_live == live && runtime_bytes == bytes);
+    printf("managed-cow instance=%u repeat=%u replacement=z-NUL-q original=a-NUL-b peer=a-NUL-b domain-reference-dead=1 replacement-reference-dead=1 escaped-after-mutated-array=1 physical-refund=1 result=PASS\n",
+        instance, repeat);
+}
+
 static void consumer_managed_escape_normal(Consumer *run) {
     XrXirInstance *instances[2] = {0}; ConsumerOutput outputs[2] = {0}; XrXirOutputSink sinks[2] = {0};
     XrXirValue retained[2][2] = {0}, strings[2][2] = {0};
@@ -62,6 +98,8 @@ static void consumer_managed_escape_normal(Consumer *run) {
     }
     for (unsigned i = 0; i < 2; ++i) CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     CHECK(runtime_live && runtime_bytes && stats(run).live_bytes > run->baseline.live_bytes);
+    for (unsigned repeat = 0; repeat < 2; ++repeat) for (unsigned i = 0; i < 2; ++i)
+        consumer_managed_cow(&retained[repeat][i], &retained[repeat][1 - i], repeat, i);
     for (unsigned repeat = 0; repeat < 2; ++repeat) for (unsigned i = 0; i < 2; ++i) {
         consumer_managed_array(&retained[repeat][i], &strings[repeat][i]);
         XrXirValue copy = {0}; CHECK(xr_xir_value_copy(&retained[repeat][i], &copy) == XR_XIR_VALUE_OK);

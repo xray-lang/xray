@@ -21,6 +21,33 @@ static void consumer_array_zeros(const XrXirValue *array, int64_t count) {
     }
 }
 
+static void consumer_array_cow(const XrXirValue *original, const XrXirValue *peer, int64_t count, unsigned instance) {
+    CHECK(count > 0 && count <= 4);
+    size_t live = runtime_live, bytes = runtime_bytes;
+    XrXirValue copy = {0}; XrXirDomain *domain = NULL;
+    CHECK(xr_xir_value_copy(original, &copy) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK && domain);
+    XrXirValueAdmission admission = {xr_xir_value_arena(&copy), domain, NULL, NULL, 10000, 65536};
+    XrXirValuePlace place = {copy.type, &copy.payload};
+    XrXirValue replacement = {XR_XIR_U8, 0, 7}; XrXirFaultDetail fault = {0};
+    CHECK(xr_xir_array_set(&place, 0, &replacement, &admission, &fault) == XR_XIR_VALUE_OK && xr_xir_fault_empty(fault));
+    xr_xir_domain_drop(domain); admission.domain = NULL;
+    CHECK(xr_xir_value_valid(&copy) && !copy.reserved);
+    int64_t length = -1;
+    CHECK(xr_xir_array_len(&copy, &admission, &length) == XR_XIR_VALUE_OK && length == count);
+    for (int64_t index = 0; index < count; ++index) {
+        XrXirValue element = {0};
+        CHECK(xr_xir_array_get(&copy, index, &admission, &element, &fault) == XR_XIR_VALUE_OK && xr_xir_fault_empty(fault));
+        CHECK(element.type == XR_XIR_U8 && !element.reserved && element.payload == (index ? 0 : 7));
+        xr_xir_value_drop(&element);
+    }
+    consumer_array_zeros(original, count); consumer_array_zeros(peer, count);
+    xr_xir_value_drop(&copy); CHECK(!copy.type && !copy.reserved && !copy.payload);
+    CHECK(runtime_live == live && runtime_bytes == bytes);
+    printf("array-cow instance=%u count=%lld replacement=7 original=zero peer=zero domain-reference-dead=1 physical-refund=1 result=PASS\n",
+        instance, (long long)count);
+}
+
 static void consumer_array_escape_normal(Consumer *run) {
     const int64_t counts[6] = {3, 0, -1, INT64_MIN, INT64_MAX, 4};
     const XrXirCallStatus expected[6] = {XR_XIR_CALL_RETURNED, XR_XIR_CALL_RETURNED,
@@ -68,6 +95,8 @@ static void consumer_array_escape_normal(Consumer *run) {
     }
     for (unsigned i = 0; i < 2; ++i) CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
     CHECK(runtime_live && runtime_bytes && stats(run).live_bytes > run->baseline.live_bytes);
+    for (unsigned c = 0; c < 6; ++c) if (expected[c] == XR_XIR_CALL_RETURNED && counts[c])
+        for (unsigned i = 0; i < 2; ++i) consumer_array_cow(&retained[c][i], &retained[c][1 - i], counts[c], i);
     for (unsigned c = 0; c < 6; ++c) for (unsigned i = 0; i < 2; ++i) {
         if (expected[c] == XR_XIR_CALL_RETURNED) {
             consumer_array_zeros(&retained[c][i], counts[c]);

@@ -543,5 +543,42 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "public_array_cow_isolation_20261009_facet": {
+    "status": "PASS_PUBLIC_COW_MUTATION_FACET_WHOLE_LEGACY_OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67/Value22/Call28/Program29",
+    "evidence": "build-consumer-evidence/current67-array-cow-isolation-r1",
+    "scope": "Existing Source heap Array return consumers; no Source fixture, backend selection, public interface, production or registration change.",
+    "execution": "Eight actual VM/native/mixed_even/mixed_odd commands per family across MSVC Release and Clang ASan/UBSan. Source owners and caller Program reference are already released; both Instances are freed before public copy/set/read/drop.",
+    "independent_oracle": "For both Instances at counts3 and4, public value_copy then array_set index0 to typedU8 payload7. Every other copied element remains typedU8 zero. Public full Array reads verify the original and the other Instance result remain entirely zero. The two empty results retain the prior copy/read/drop proof; no empty mutation success is claimed.",
+    "ownership": "Caller mutation Domain reference is dropped before reading the changed copy. Final copied Array drop restores physical blocks and bytes to its immediately preceding live-original baseline.",
+    "preserved_obligations": "The complete pre-existing runtime fragment is byte-for-byte preserved after removing the new helper and invocation. Original outputs, private-entry guards, canonical entry, owner death, copy/drop, faults, escaped Strings and final runtime/compiler physical0/0 assertions remain in force.",
+    "actual_evidence": {
+      "commands_per_family": 8,
+      "mutations_per_family": 32,
+      "total_commands": 16,
+      "total_mutations": 64,
+      "managed_strings_after_changed_array_drop": 0,
+      "product_execution_failures": 0,
+      "input_capture": "2654 inputs per actual PID; all sixteen before/after SHA256,size,mtime snapshots equal, including three explicit compiler/runtime observer headers. Map annotation occurs afterward; both raw executed preimages retained.",
+      "fresh_build": "Six fresh final translation units: shared driver and two real generated-C units per configuration; all four wrapper units per configuration reuse exact source/object bytes and metadata. Ten compile attempts include one failed MSVC driver attempt, three initial ASan compiles and six final successful compiles.",
+      "initial_failure": "The new managed helper initially shadowed local length and MSVC /W4 /WX rejected C4456. Renamed the local variable before any actual execution. Initial raw build logs and test payloads retained; both configurations rebuilt; no producer edit or relaxed warnings.",
+      "production": "All eleven production libraries/configuration exact SHA256,size,mtime; six producer25f source files independently compared and compiled object bodies matched actual archive members. Ten linked archives per native family captured. No production rebuild.",
+      "protection": "11010 tracked initial;11006 nonowned files exact. All598 protected metadata records exact; all42 registry rows/configuration and raw CTest registration bytes exact. Twelve historical dirty generated files preserved.",
+      "generated_C": "Both family payloads and actual raw generated-C hashes match their previous actual sources in both configurations.",
+      "receipts": "results.json and actual-execution-attempts.xml"
+    },
+    "boundaries": [
+      "This is independent public value mutation after execution owner death; it does not assert Source-level mutation syntax, hidden owner bits, reentrancy, nested Array alias paths or original per-return allocator semantics.",
+      "Whole legacy negative/default, read/move metadata and mutation100 owner admission obligations remain OPEN.",
+      "Full compiler/runtime fault injection, resource axes, cancellation, full safety, Main integration and retirement are NOT_RUN."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }
