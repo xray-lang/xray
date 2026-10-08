@@ -1,0 +1,15 @@
+fn appendNine(value: i64) -> i64 {
+  var values: Array<i64> = []
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  values.push(value)
+  return len(values)
+}
+fn answer() -> i64 { return appendNine(42) }
+export fn consumerAnswer() -> i64 { return answer() }

@@ -351,3 +351,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_gener
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_remaining_source.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_append_admission.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_append_source.cmake")

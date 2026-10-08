@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "test_array_append_admission",
+    "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+    "legacy_line": 6980,
+    "body_lf_sha256": "73d6cd094e2b1dce590ba090ccd3e273d45c8c4bb5865567215766f7d01edd63",
+    "assertion_sites": 7,
+    "loop_sites": 1,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_SCALAR_ARRAY_APPEND_EXECUTION_FACET_LEGACY_OPEN",
+  "fixture": "tests/unit/xir/product_consumers/array_append_source/root.xr",
+  "fixture_sha256": "89b5a8bdfd8083edc3d7953ec05e2b0761bcc20759c6cea7287982e82b1d8a5c",
+  "independent_expected": 9,
+  "original_mapping": "Original scalar fixture retains i64 parameter,value42,empty Array,writable local and nine appends,then length. The Source projection uses current public push/len names and adds private answer plus export adapter for the ordinary consumer driver. New projection;original legacy source/fixture remains unchanged.",
+  "old_native_oracle": {
+    "path": "tests/unit/aot/test_xr_program_aot.c",
+    "function": "write_array_append_fixture",
+    "argument": 42,
+    "result": 9,
+    "contexts": 2,
+    "allocations_after_return": 0
+  },
+  "tests": [
+    "test_source_product_array_append_source_vm",
+    "test_source_product_array_append_source_native",
+    "test_source_product_array_append_source_mixed_even",
+    "test_source_product_array_append_source_mixed_odd",
+    "test_source_product_array_append_source_owned"
+  ],
+  "registration": {
+    "normal": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1
+    },
+    "compiler_full": {
+      "TIMEOUT": 600,
+      "PROCESSORS": 8,
+      "jobs": 8
+    },
+    "axes": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": true
+    },
+    "runtime_cancel": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1
+    }
+  },
+  "ownership": "Public SourceProduct verify/closed Checked read;dedicated owner verifies one appendNine i64 parameter/result,one empty ARRAY_NEW,nine ARRAY_PUSH of the unchanged scalar parameter andone ARRAY_LEN. Session/Product/request/authority/path death before Checked reverify/exact preserved packet,then Lowered after Checked death. Shared real driver creates two Instances,drops caller Program,checks private entry rejection without allocations,canonical0 and four fixed9results,drops values andInstances before caller compiler ledger/observer release.",
+  "boundaries": [
+    "Normal candidate only until actual execution. Generated C must be real SourceProduct output with exact payload SHA andstrict sanitizer-provider compile flags.",
+    "Source closed packet preservation is a before/after ownership comparison;independent wire admission stays in the previous separate append gate.",
+    "Original read/move String negatives,explicit owner/copy/drop semantics,managed String mutation100 andfull runtime allocation refusal/resumption duties remain OPEN.",
+    "Runtime allocator observer includes real free stock but no assertion that every Array storage block is zero before Instance destruction;old AOT context allocations after each individual return stays OPEN.",
+    "Source108=88fixtures+20other;other26files160functions/shared7 unchanged;no legacy retirement."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-array-append-execution-r1",
+    "receipts": "results.json",
+    "actual_commands": 12,
+    "final_registered_pass": 10,
+    "initial_owned_fail": 2,
+    "first_red": "Two actual FAIL caused by incorrect test requirement that every CELL_PLACE receiver uses one identical SSA id. Correct Source creates distinct projections of one retained CELL. First source,binaries,objects,inputs,outputs preserved;not a producer regression.",
+    "fresh_build": "10 compile events:initial2TUs +corrected owner1 +native wrapper/realC2 per configuration;8 final fresh objects. C11/W4/WX,ASan+UBSan and VALID deps. Shared driver object exact reused.",
+    "production_reuse": "10+ real linked archives/config exact SHA,size,mtime;6 actual production object bodies matched archive members;no production TU/archive rebuilt.",
+    "generated_C_payload_sha256": {
+      "msvc": "770fbe385c6fecbd231e0a46e3771a817c0ac0ad4d776da02df73c2edca4c96a",
+      "asan": "770fbe385c6fecbd231e0a46e3771a817c0ac0ad4d776da02df73c2edca4c96a"
+    },
+    "execution": "8 backend commands:VM/native/mixed_even/mixed_odd across2 configurations;16 actualInstances,32 independent fixed9results,16 canonical0results. SourceProduct/Session/closed artifacts/generated text dead before execution;caller Program dropped aftertwoInstances retain. Private answer NEW start rejected without allocation;values andInstances dropped;actual compiler/runtime observers reach0/0.",
+    "owned": "2 final owner gates verify9 parameter appends throughdistinct CELL_PLACE projections ofone CELL initialized fromthe sameempty ARRAY_NEW. Source owners/request/authority/paths poisoned before Checked metadata andexact preserved packet reinspection;Checked freedbefore Lowered verification;callerledger andobserver0/0.",
+    "input_capture": {
+      "count": 2751,
+      "processes": 12,
+      "preservation": "Everyactual PID capture before==after SHA,size,mtime. First failing owner source/exe/object rawpreimages saved;earliest passing VM captures retained pre-correction owner sibling source. No rerun claimedfor postexecution map annotation."
+    },
+    "protection": "10969 tracked pre-snapshot:10968 nonowned exact;12 historicaldirty generated preserved.598 protected:594 exact+4 expected Ninja/CTest changes;old registry raw bytes restored byremovingonly42addedlines/config.",
+    "registration": "42rows=10finalPASS+32heavyNOT_RUN. NoWILL_FAIL. T120/P1normal/runtime/cancel;axes additionallyRUN_SERIAL;compilerT600/P8/jobs8.",
+    "audit_history": "First audit required binding overwritten initial owner executable andbothrelative/absolute owner source capture keys tosavedpreimages. Initial audit script retained;no productresult changed.",
+    "annotation": "Added afteractualexecution;preannotationmapsnapshot preserved;no newmapexecution claimed.",
+    "retired": 0
+  }
+}
