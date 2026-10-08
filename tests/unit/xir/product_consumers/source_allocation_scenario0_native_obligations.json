@@ -203,5 +203,73 @@
     "source_physical_removal": "OPEN",
     "full_native_matrix": "NOT_RUN",
     "migration": "OPEN"
+  },
+  "mixed_normal_facet": {
+    "status": "PASS_SOURCE0_BOTH_MIXED_NORMAL_PROJECTIONS_ONLY",
+    "worker_parent": "e29602fb394bde24cd5d860803f6ba6bd6d348fd",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29",
+    "original_inputs": "Original119B source and164B manifest remain exact. answer/exported remain private; external native manifest is still not applied.",
+    "pipeline": "Detached Checked->Lowered->two deterministic real C emissions->compiled correspondence->mixed ProgramSpec with generated native entries and complementary public VM bindings. One code lease owns Lowered and all arrays on the same finite compiler ledger.",
+    "partitions": {
+      "even": "4 even native IDs/4 odd VM IDs; original test3->exported2 CALL is VM-to-native.",
+      "odd": "4 odd native IDs/4 even VM IDs; original test3->exported2 CALL is native-to-VM."
+    },
+    "observer": "No-allocation resume observer forwards the same authenticated CallView/environment to the actual selected backend and returns its exact action; original release callbacks/state/flags remain intact. Counts actual test->exported CALL actions. Instances run serially, not a concurrency claim.",
+    "execution": "6 final real processes: native/even/odd in each of MSVC Release and Clang ASan+UBSan. Each process executes two independent Instances, canonical I64(0) twice and original checkAnswer Unit twice per Instance. Existing7 private start/start_test refusals, all5 ledger fields and allocator/physical counters are still checked per Instance.",
+    "actual_per_instance": {
+      "even": {
+        "native_resumes": 13,
+        "vm_resumes": 17,
+        "test_crossings": 2
+      },
+      "odd": {
+        "native_resumes": 17,
+        "vm_resumes": 13,
+        "test_crossings": 2
+      }
+    },
+    "code_lifetime": "Code owner remains live with release count0 after caller Program drop, during both Instances and after first Instance free while sibling exists. Last Instance free releases it exactly once; final compiler/runtime blocks+bytes and tracker table all0.",
+    "measured_normal": {
+      "native": [
+        2075,
+        36,
+        710217,
+        179234,
+        1755324
+      ],
+      "mixed_even": [
+        2215,
+        36,
+        720345,
+        179234,
+        1791864
+      ],
+      "mixed_odd": [
+        2215,
+        36,
+        720345,
+        179234,
+        1791868
+      ],
+      "columns": [
+        "compiler_sites",
+        "runtime_sites",
+        "allocated",
+        "peak",
+        "work"
+      ],
+      "boundary": "Normal observations only, not swept FI or calibrated axes."
+    },
+    "build": "Each configuration freshly compiles emitter, native driver and emitted whole-C: all3 actual TUs strict C11/UTF8/W4/WX; Clang ASan+UBSan flags verified on all3. Real generated39771B payload SHAe5065b0642b7d5ef580eb7ebf1889cfa5d9e516df7b46a8df0d66d0527f7f04a matches footer and runtime re-emission. Two build emitter executions are separate from6 product normal processes.",
+    "registration": "Native normal unchanged; two mixed normal tests use same binary/root/file with --mixed-even/--mixed-odd. TIMEOUT120/PROCESSORS1. No FI/axis registration changed.",
+    "input_binding": "Before/after snapshots for all3 processes per configuration match SHA/size/mtime. Those runs use the prior map; this new facet is post-run reporting. build-binding.json records actual3 objects, VALID dependencies, generated TU and10 public libraries per configuration.",
+    "protection": "Of598 historical metadata entries,594 unchanged;2 build.ninja have identical bytes but new mtime,2 CTestTestfile change for registration. This set excludes freshly rebuilt native artifacts, which have separate current build binding. No other preservation claim is made for missing baseline artifacts.",
+    "manifest_boundary": "Current SourceRequest/SourceProductRequest have no native export manifest/plan field; current public session header has no plan setter; SourceProduct queries expose no external-export table. Headers and SHA preserved in manifest-interface-gap.json. external_answer/external_entry/header/visibility remain OPEN.",
+    "effective_inputs": {
+      "tests/unit/xir/product_consumers/test_source_product_allocation_scenario0_native.c": "46ebd4940de8d80c98741126b614a6e6e6516e5610a8c1a0fd4fc79ed3605952",
+      "tests/unit/xir/product_consumers/source_product_allocation_scenario0_native.cmake": "7ad6526d15a1b20d3e86a376cee9cfa59733fcdd77487b20f9b40aafc9f0d1ff"
+    },
+    "evidence": "build-consumer-evidence/current67-source0-mixed-normal-r1/",
+    "remaining": "Native manifest, other allocation source families, full mixed FI/axes/cancellation/owned-output/partial-initialization failure, full safety and Main integration remain OPEN/NOT_RUN. Static C image is not an image unload test. Retirement0."
   }
 }

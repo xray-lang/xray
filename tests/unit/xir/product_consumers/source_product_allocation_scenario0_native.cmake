@@ -32,3 +32,10 @@ add_test(NAME test_source_product_allocation_scenario0_native_normal
         "${source_allocation0_native_root}" "${source_allocation0_native_root}/root.xr")
 set_tests_properties(test_source_product_allocation_scenario0_native_normal PROPERTIES
     TIMEOUT 120 PROCESSORS 1 LABELS "unit;xir;source-product;program-consumer;ownership;native-projection")
+foreach(partition IN ITEMS even odd)
+    add_test(NAME test_source_product_allocation_scenario0_mixed_${partition}_normal
+        COMMAND test_source_product_allocation_scenario0_native
+            "${source_allocation0_native_root}" "${source_allocation0_native_root}/root.xr" "--mixed-${partition}")
+    set_tests_properties(test_source_product_allocation_scenario0_mixed_${partition}_normal PROPERTIES
+        TIMEOUT 120 PROCESSORS 1 LABELS "unit;xir;source-product;program-consumer;ownership;mixed-projection")
+endforeach()

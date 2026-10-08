@@ -15,6 +15,7 @@
 #include "toolchain/xcompiler_session.h"
 #include "os/os_fs.h"
 #include "base/xsha256.h"
+#include "xir/xxir_vm.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,7 +57,51 @@ typedef struct AllocationRun {
     XrXirCallStatus call_status;
     uint8_t *input;
     size_t input_length;
+    unsigned mixed_mode;
+    bool mixed_sealed;
 } AllocationRun;
+
+typedef struct AllocationMixedOwner {
+    XrXirArtifact *lowered;
+    XrXirCallEntry *actual, *entries;
+    XrXirVmBinding *bindings;
+    uint32_t count, test, exported;
+    unsigned mode;
+} AllocationMixedOwner;
+
+/* The test drives one Program's two instances serially; observation never allocates. */
+static AllocationMixedOwner *allocation_mixed_owner;
+static size_t allocation_mixed_native, allocation_mixed_vm, allocation_mixed_crossings, allocation_mixed_releases;
+
+static bool allocation_mixed_is_native(const AllocationMixedOwner *owner, uint32_t function) {
+    return (function % 2 == 0) == (owner->mode == 2);
+}
+static XrXirAction allocation_mixed_resume(XrXirCallView *view) {
+    AllocationMixedOwner *owner = allocation_mixed_owner;
+    uint32_t function = xr_xir_call_current_entry(view->activation);
+    CHECK(owner && function < owner->count);
+    const XrXirCallEntry *actual = &owner->actual[function];
+    CHECK(view->environment == actual->environment);
+    if (allocation_mixed_is_native(owner, function)) ++allocation_mixed_native;
+    else ++allocation_mixed_vm;
+    /* Preserve the authenticated view and return the backend's exact action. */
+    XrXirAction action = actual->resume(view);
+    if (function == owner->test && action.kind == XR_XIR_ACTION_CALL && action.callee == owner->exported) {
+        CHECK(allocation_mixed_is_native(owner, function) != allocation_mixed_is_native(owner, action.callee));
+        ++allocation_mixed_crossings;
+    }
+    return action;
+}
+static void allocation_mixed_free(void *pointer) {
+    AllocationMixedOwner *owner = pointer;
+    if (allocation_mixed_owner == owner) allocation_mixed_owner = NULL;
+    xr_xir_compile_artifact_free(owner->lowered);
+    xr_compile_resources_free(owner->bindings);
+    xr_compile_resources_free(owner->entries);
+    xr_compile_resources_free(owner->actual);
+    xr_compile_resources_free(owner);
+    ++allocation_mixed_releases;
+}
 
 #define OBSERVE(condition) do { if (!(condition)) { \
     fprintf(stderr, "source-allocation0-native check line=%d operation=%s condition=%s\n", \
@@ -255,6 +300,8 @@ static bool finish(AllocationRun *run, XrXirInstance *instance, XrXirType type, 
 
 static bool execute_instances(AllocationRun *run) {
     for (unsigned i = 0; i < 2; ++i) {
+        size_t native_before = allocation_mixed_native, vm_before = allocation_mixed_vm;
+        size_t crossings_before = allocation_mixed_crossings;
         XrXirInstance *instance = run->instances[i];
         run->operation = "private-entry-authority";
         size_t attempts = runtime_attempts, compiler_attempts = instance_compile_attempts;
@@ -287,6 +334,14 @@ static bool execute_instances(AllocationRun *run) {
                 i, repeat);
         }
         OBSERVE(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY);
+        if (run->mixed_mode) {
+            OBSERVE(allocation_mixed_owner && !allocation_mixed_releases);
+            OBSERVE(allocation_mixed_native > native_before && allocation_mixed_vm > vm_before);
+            OBSERVE(allocation_mixed_crossings - crossings_before == 2);
+            printf("source-allocation0-native mixed-executed mode=%u instance=%u native-resumes=%zu vm-resumes=%zu test-crossings=%zu\n",
+                run->mixed_mode, i, allocation_mixed_native - native_before, allocation_mixed_vm - vm_before,
+                allocation_mixed_crossings - crossings_before);
+        }
     }
     return true;
 }
@@ -301,6 +356,7 @@ static bool release(AllocationRun *run) {
         XrXirCallStatus status = xr_xir_instance_free(run->instances[i]);
         if (status == XR_XIR_CALL_BUSY) complete = false;
         else { run->instances[i] = NULL; if (status != XR_XIR_CALL_READY) complete = false; }
+        if (run->mixed_sealed && i == 0 && run->instances[1] && allocation_mixed_releases) complete = false;
     }
     xr_xir_compile_program_drop(run->program); run->program = NULL;
     xr_xir_compile_artifact_free(run->lowered); run->lowered = NULL;
@@ -320,6 +376,9 @@ static bool release(AllocationRun *run) {
     }
     if (instance_compile_live || instance_compile_bytes || runtime_live || runtime_bytes ||
         runtime_owned || runtime_owned_capacity) complete = false;
+    if (run->mixed_sealed && (allocation_mixed_owner || allocation_mixed_releases != 1)) complete = false;
+    if (run->mixed_mode) printf("source-allocation0-native mixed-code-release count=%zu owner-live=%u\n",
+        allocation_mixed_releases, (unsigned)(allocation_mixed_owner != NULL));
     printf("source-allocation0-native release compiler=%zu/%zu runtime=%zu/%zu table=%zu result=%s\n",
         instance_compile_live, instance_compile_bytes, runtime_live, runtime_bytes,
         runtime_owned_capacity, complete ? "PASS" : "FAIL");
@@ -437,11 +496,63 @@ static bool generated_correspondence(AllocationRun *run, const XrXirProgramSpec 
     return true;
 }
 
+static XrXirStatus allocation_mixed_allocate(AllocationRun *run, size_t count, size_t size, void **output) {
+    XrCompileResourceStatus status = xr_compile_resources_calloc(run->context.resources, count, size, output);
+    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+}
+static bool seal_mixed_program(AllocationRun *run, const XrXirProgramSpec *native) {
+    const XrXirModule *module = xr_xir_compile_artifact_module(run->lowered);
+    OBSERVE(module && module->function_count == native->entry_count && !allocation_mixed_owner);
+    OBSERVE(run->roles.test % 2 != run->roles.exported % 2);
+    AllocationMixedOwner *owner = NULL;
+    run->status = allocation_mixed_allocate(run, 1, sizeof(*owner), (void **)&owner);
+    if (run->status != XR_XIR_OK) return false;
+    owner->count = module->function_count; owner->mode = run->mixed_mode;
+    owner->test = run->roles.test; owner->exported = run->roles.exported;
+    owner->lowered = run->lowered; run->lowered = NULL;
+    run->status = allocation_mixed_allocate(run, owner->count, sizeof(*owner->entries), (void **)&owner->entries);
+    if (run->status != XR_XIR_OK) goto failed;
+    run->status = allocation_mixed_allocate(run, owner->count, sizeof(*owner->actual), (void **)&owner->actual);
+    if (run->status != XR_XIR_OK) goto failed;
+    run->status = allocation_mixed_allocate(run, owner->count, sizeof(*owner->bindings), (void **)&owner->bindings);
+    if (run->status != XR_XIR_OK) goto failed;
+    unsigned native_count = 0, vm_count = 0;
+    for (uint32_t f = 0; f < owner->count; ++f) {
+        if (allocation_mixed_is_native(owner, f)) { owner->actual[f] = native->entries[f]; ++native_count; }
+        else {
+            run->status = xr_xir_compile_vm_bind(owner->lowered, f, &owner->bindings[f], &owner->actual[f]);
+            if (run->status != XR_XIR_OK) goto failed;
+            ++vm_count;
+        }
+        owner->entries[f] = owner->actual[f];
+        owner->entries[f].resume = allocation_mixed_resume;
+    }
+    XrXirProgramSpec spec = *native;
+    spec.entries = owner->entries;
+    spec.declarations = module->declarations;
+    spec.types = module->types;
+    spec.proof = xr_xir_compile_program_proof(owner->lowered);
+    spec.code = (XrXirCodeLease){owner, allocation_mixed_free};
+    run->status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
+    if (run->status != XR_XIR_OK) goto failed;
+    allocation_mixed_owner = owner; run->mixed_sealed = true;
+    printf("source-allocation0-native mixed-bound mode=%u native=%u vm=%u test=%u exported=%u direction=%s\n",
+        run->mixed_mode, native_count, vm_count, owner->test, owner->exported,
+        allocation_mixed_is_native(owner, owner->test) ? "native-to-VM" : "VM-to-native");
+    return true;
+failed:
+    allocation_mixed_free(owner);
+    return false;
+}
+
 static bool seal_native_instances(AllocationRun *run) {
     run->operation = "native-Program-seal";
     const XrXirProgramSpec *spec = native_spec();
     if (!generated_correspondence(run, spec)) return false;
-    run->status = xr_xir_compile_program_seal(&run->context, spec, &run->program);
+    if (run->mixed_mode) {
+        if (!seal_mixed_program(run, spec)) return false;
+    } else run->status = xr_xir_compile_program_seal(&run->context, spec, &run->program);
     OBSERVE(run->status == XR_XIR_OK && run->program);
     xr_xir_compile_artifact_free(run->lowered); run->lowered = NULL;
     xr_xir_compile_c_source_free(&run->emitted);
@@ -455,16 +566,21 @@ static bool seal_native_instances(AllocationRun *run) {
     }
     OBSERVE(run->instances[0] != run->instances[1]);
     xr_xir_compile_program_drop(run->program); run->program = NULL;
+    if (run->mixed_mode) OBSERVE(allocation_mixed_owner && !allocation_mixed_releases);
     return phase(run, "native-Program-caller-dropped-two-instances-retain");
 }
 
 int main(int argc, char **argv) {
     const char *output = NULL;
+    unsigned mixed = 0;
     if (argc == 5 && !strcmp(argv[3], "--emit")) output = argv[4];
+    else if (argc == 4 && native_spec() && !strcmp(argv[3], "--mixed-even")) mixed = 2;
+    else if (argc == 4 && native_spec() && !strcmp(argv[3], "--mixed-odd")) mixed = 3;
     else if (argc != 3 || !native_spec()) return 2;
     instance_compile_zero();
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
     AllocationRun run = {0};
+    run.mixed_mode = mixed;
     run.context.limits = xr_xir_compile_default_limits(); run.operation = "finite-owner";
     XrCompileResourceLimits limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
     XrCompileResourceStatus owner = xr_compile_resources_new(&limits, &run.context.resources);
@@ -478,7 +594,8 @@ int main(int argc, char **argv) {
     bool released = release(&run);
     printf("source-allocation0-native mode=%s normal=%s compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64
         " peak=%" PRIu64 " work=%" PRIu64 " callback-native=%u extern-exports=OPEN FI=NOT_RUN axes=NOT_RUN source-physical-removal=OPEN image-unload=NOT_APPLICABLE\n",
-        output ? "emit" : "native", passed && released ? "PASS" : "FAIL", instance_compile_attempts,
+        output ? "emit" : mixed == 2 ? "mixed-even" : mixed == 3 ? "mixed-odd" : "native",
+        passed && released ? "PASS" : "FAIL", instance_compile_attempts,
         runtime_attempts, run.final.allocated_bytes, run.final.peak_bytes, run.final.work, output ? 0u : 1u);
     return passed && released ? 0 : 1;
 }
