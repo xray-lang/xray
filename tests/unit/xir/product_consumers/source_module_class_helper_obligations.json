@@ -1,0 +1,137 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "legacy_line": 169,
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "assertion_sites": 94,
+      "loop_sites": 10,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "status": "OPEN",
+  "result": "ROOT_HELPER_CONTROLS_PASS_ORIGINAL_BASE_POSITIVES_FAIL",
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:xr_program_module_cleanup_fixture_write finish3; native scenario8",
+  "original": {
+    "owner": "base",
+    "mutable": true,
+    "objects": 4,
+    "publication": [
+      1,
+      0,
+      3,
+      2
+    ],
+    "helper": "private consume(class move) creates/drops string x, drops class parameter, returns Unit;called once per published object",
+    "repeats": 24,
+    "instances": 2,
+    "allocation_fault_ordinals": 16
+  },
+  "representation": "Append root helper graph3 and original base helper graph4 to prior class packets; first3 packet SHA remain identical. Original base helper retains expected-positive admission. Root graph uses current owned call argument lifetime and automatic frame cleanup, not an assertion that legacy affine move/drop timing is reproduced.",
+  "oracle": {
+    "helper": "Exactly4 helper returns perInstance with4 distinct class arguments matching public slot_read identities in publication order;no later calls across24repeats;exactly2 runtime allocations per invocation for string object and byte buffer. Bound helper release callback delegates unchanged view to actual release, verifies live blocks decrease by2 with no new allocation and class remains physically live.",
+    "mixed": "Root initializer3 is VM and helper9 native in alternating-native;inverse in alternating-vm;actual backend choice asserted and actual compiled payload SHA matched",
+    "lifecycle": "Both release-all and class-escape policies retain original class-state checks:fields x,stable identities,reverse2,3,0,1 allocation-record release,independentInstances,owned class then field after owners die",
+    "producer": "Checked exact independent read/rewrite,inputpoison/free,specialize/reverify,Lowered verify after producer death,actualEmitC"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_class_state_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Original base mutable/non-Sendable class admission adjudication",
+    "Legacy affine move/explicit local-drop timing equivalence",
+    "Old lifecycle ABI and generation/lease drain semantics",
+    "Original16allocationordinals/newgraphFI denominator",
+    "Full SourceProduct graph",
+    "Class scenarios6,9-13",
+    "Full2036/32FI",
+    "Two-configuration12axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-class-helper-r1",
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "modes": [
+      "VM",
+      "native",
+      "VM initializer/native helper",
+      "native initializer/VM helper"
+    ],
+    "fresh_build": "5TUs/config: emitter,consumer,three actual EmitC payloads",
+    "registered_processes": 10,
+    "encoding_pass": 2,
+    "runtime_fail": 8,
+    "root_helper_executions": 16,
+    "main_calls": 768,
+    "inspection_calls": 3072,
+    "helper_calls": 128,
+    "helper_argument_identities": 128,
+    "temporary_physical_allocations": 256,
+    "temporary_physical_releases": 256,
+    "classes": 128,
+    "initializer_returns": 128,
+    "module_events": 256,
+    "publications": 128,
+    "slot_releases": 128,
+    "escaped_classes": 16,
+    "escaped_fields": 16,
+    "original_helper_positive_admissions": 8,
+    "other_prior_base_positive_admissions": 8,
+    "original_actual": "BAD_STRUCTURE1 versus expectedOK0;strict exit1 for all8 runtime processes;WILL_FAILfalse",
+    "all_three_root_graphs": "48 graph/policy executions;2304 main calls;9216 inspection calls;384 classes;not added to previous historic totals",
+    "physical": "Final compiler0/0 runtime0/0 table0 in each process",
+    "evidence": "release-observer-r3/results.json and actual-process-results.xml"
+  },
+  "first_red": [
+    {
+      "evidence": "results.json and first-run-artifacts",
+      "cause": "Test oracle incorrectly expected1 allocation per string; actual string_allocate separately allocates object and byte buffer. All8 runtime processes stopped at this assertion;2encodingPASS."
+    },
+    {
+      "evidence": "allocation-oracle-r2/results.json and artifacts",
+      "cause": "Test release observer incorrectly queried active entry during release. Bound helper callback now uses its known entry identity and preserves actual environment. All8 runtime processes stopped;2encodingPASS."
+    }
+  ],
+  "postrun_note": "Result annotations only after final real execution; captured input maps precede these annotations. No final-map rerun claimed. First3 packet SHA remain unchanged."
+}

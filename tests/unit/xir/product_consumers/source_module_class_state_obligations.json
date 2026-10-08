@@ -139,5 +139,13 @@
     "first_execution": "root-controls-r2 all32 root executions PASS,8 original-positive admission failures retained. Added explicit specialize/reverify and rebuilt both configurations for final specialization-r3; counts only final run.",
     "evidence": "specialization-r3/results.json and actual-process-results.xml"
   },
-  "postrun_note": "Only result annotations appended after final runtime commands; captured map is the pre-annotation version. No final-map rerun claimed."
+  "postrun_note": "Only result annotations appended after final runtime commands; captured map is the pre-annotation version. No final-map rerun claimed.",
+  "extensions": [
+    {
+      "facet": "Private class helper calls, native scenario8",
+      "map": "source_module_class_helper_obligations.json",
+      "evidence": "build-consumer-evidence/current67-module-class-helper-r1",
+      "status": "OPEN; previous scenario5 execution records above remain historical and unchanged"
+    }
+  ]
 }

@@ -31,19 +31,22 @@ _Static_assert(XR_XIR_VALUE_ABI_VERSION == 22 && XR_XIR_CALL_ABI_VERSION == 28 &
 _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_I64 == 2 && XR_XIR_CONST_INT == 2 && XR_XIR_RETURN == 33,
     "Independent module execution model");
 _Static_assert(XR_XIR_CLASS_NEW == 118 && XR_XIR_CLASS_SET == 120 && XR_XIR_COPY == 18, "Independent class operations");
+_Static_assert(XR_XIR_CALL == 28, "Independent private helper call");
 _Static_assert(XR_XIR_SLOT_LOAD == 4 && XR_XIR_SLOT_INIT == 5 && XR_XIR_SLOT_STORE == 6 &&
     XR_XIR_CONST_STRING == 3 && XR_XIR_PRINT == 24 && XR_XIR_ADD_INT == 25, "Independent slot operations");
 
 #if defined(XR_MODULE_NATIVE)
 extern const XrXirCallEntry source_module_class_state_0_entries[9], source_module_class_state_1_entries[9];
+extern const XrXirCallEntry source_module_class_state_3_entries[10];
+extern const char source_module_class_state_3_sha[65];
 extern const char source_module_class_state_0_sha[65], source_module_class_state_1_sha[65];
 static const XrXirCallEntry *native_entries(unsigned graph) {
-    const XrXirCallEntry *entries[] = {source_module_class_state_0_entries, source_module_class_state_1_entries};
-    CHECK(graph < 2); return entries[graph];
+    const XrXirCallEntry *entries[] = {source_module_class_state_0_entries, source_module_class_state_1_entries, NULL, source_module_class_state_3_entries};
+    CHECK(graph < 4 && graph != 2); return entries[graph];
 }
 static const char *native_digest(unsigned graph) {
-    const char *digests[] = {source_module_class_state_0_sha, source_module_class_state_1_sha};
-    CHECK(graph < 2); return digests[graph];
+    const char *digests[] = {source_module_class_state_0_sha, source_module_class_state_1_sha, NULL, source_module_class_state_3_sha};
+    CHECK(graph < 4 && graph != 2); return digests[graph];
 }
 #else
 static const XrXirCallEntry *native_entries(unsigned graph) { (void)graph; return NULL; }
@@ -51,15 +54,19 @@ static const XrXirCallEntry *native_entries(unsigned graph) { (void)graph; retur
 
 typedef struct ModuleCodeOwner {
     XrXirArtifact *lowered;
-    XrXirCallEntry actual[9], observed[9];
-    XrXirVmBinding bindings[9];
-    bool native[9];
+    XrXirCallEntry actual[10], observed[10];
+    XrXirVmBinding bindings[10];
+    bool native[10]; unsigned count;
 } ModuleCodeOwner;
 static ModuleCodeOwner *active_owner;
 static unsigned active_instance, releases, active_policy;
-static unsigned lifecycle_count[2], published[2], released_slots[2], returns[2][9];
+static unsigned lifecycle_count[2], published[2], released_slots[2], returns[2][10];
 static uint32_t init_trace[2][4], init_count[2];
 static size_t resumed[2];
+static bool helper_active[2];
+static unsigned helper_releases[2];
+static size_t helper_attempts[2], helper_allocations;
+static uintptr_t helper_arguments[2][4];
 static uintptr_t objects[2][4], fields[2][4];
 static const unsigned publication_order[] = {1, 0, 3, 2}, release_order[] = {2, 3, 0, 1};
 
@@ -76,15 +83,46 @@ static bool physically_live(uintptr_t address) {
 }
 static XrXirAction observed_resume(XrXirCallView *view) {
     uint32_t id = xr_xir_call_current_entry(view->activation);
-    CHECK(active_owner && id < 9 && active_instance < 2);
+    CHECK(active_owner && id < active_owner->count && active_instance < 2);
     const XrXirCallEntry *entry = &active_owner->actual[id]; CHECK(view->environment == entry->environment);
+    if (id == 9 && !helper_active[active_instance]) {
+        CHECK(view->argument_count == 1 && view->arguments && returns[active_instance][9] < 4);
+        const XrXirValue *argument = view->arguments;
+        CHECK(argument->type == 256 && !argument->reserved && xr_xir_value_valid(argument));
+        unsigned index = returns[active_instance][9]; XrXirValue slot = {0};
+        CHECK(published[active_instance] == index + 1);
+        CHECK(xr_xir_instance_slot_read(view, publication_order[index], &slot) == XR_XIR_CALL_READY);
+        CHECK(slot.type == argument->type && slot.payload == argument->payload);
+        helper_arguments[active_instance][index] = value_address(argument); xr_xir_value_drop(&slot);
+        helper_active[active_instance] = true; helper_attempts[active_instance] = runtime_attempts;
+    }
     ++resumed[active_owner->native[id] ? 1 : 0];
     XrXirAction action = entry->resume(view);
     if (action.kind == XR_XIR_ACTION_RETURN) {
+        if (id == 9) {
+            CHECK(helper_active[active_instance] && runtime_attempts - helper_attempts[active_instance] == 2);
+            CHECK(physically_live(helper_arguments[active_instance][returns[active_instance][9]]));
+            helper_active[active_instance] = false; helper_allocations += 2;
+        }
         ++returns[active_instance][id];
         if (id < 4) { CHECK(init_count[active_instance] < 4); init_trace[active_instance][init_count[active_instance]++] = id; }
     }
     return action;
+}
+/* The string owns two physical blocks; its frame releases both before the caller resumes. */
+static void observed_helper_release(XrXirCallView *view, XrXirCallStatus reason) {
+    const uint32_t id = 9;
+    CHECK(active_owner && id < active_owner->count && active_instance < 2);
+    const XrXirCallEntry *entry = &active_owner->actual[id];
+    CHECK(view->environment == entry->environment && entry->release);
+    size_t live = runtime_live, attempts = runtime_attempts;
+    entry->release(view, reason);
+    if (id == 9) {
+        CHECK(!helper_active[active_instance] && returns[active_instance][9] == helper_releases[active_instance] + 1);
+        CHECK(live >= 2 && runtime_live == live - 2 && runtime_attempts == attempts);
+        CHECK(physically_live(helper_arguments[active_instance][helper_releases[active_instance]]));
+        ++helper_releases[active_instance];
+    }
 }
 static void observe_lifecycle(void *context, XrXirLifecycleEvent event, uint32_t index) {
     unsigned instance = *(const unsigned *)context; CHECK(instance < 2 && instance == active_instance);
@@ -131,11 +169,12 @@ static XrXirArtifact *read_lower(const XrXirCompileContext *context, unsigned gr
     CHECK(packet.length == test->length && !memcmp(packet.bytes, test->bytes, test->length));
     xr_xir_compile_checked_packet_free(&packet);
     const XrXirModule *module = xr_xir_compile_artifact_module(checked);
-    CHECK(module && module->function_count == 9 && module->declarations);
+    CHECK(module && module->function_count == test->functions && module->declarations);
     CHECK(module->declarations->module_count == 4 && module->declarations->entry_function == 4);
-    for (unsigned i = 0; i < 9; ++i) {
-        CHECK(!module->functions[i].parameter_count);
-        CHECK(module->functions[i].result == (i < 4 ? XR_XIR_UNIT : i == 4 ? XR_XIR_I64 : (XrXirType)256));
+    for (unsigned i = 0; i < test->functions; ++i) {
+        CHECK(module->functions[i].parameter_count == (i == 9 ? 1u : 0u));
+        if (i == 9) CHECK(module->functions[i].parameters[0] == 256);
+        CHECK(module->functions[i].result == (i < 4 || i == 9 ? XR_XIR_UNIT : i == 4 ? XR_XIR_I64 : (XrXirType)256));
     }
     CHECK(module->declarations->slot_count == 4 && xr_xir_type_is_class(module->types, (XrXirType)256));
     for (unsigned i = 0; i < 4; ++i) CHECK(module->declarations->slots[i].module == 3 &&
@@ -181,7 +220,7 @@ static XrXirOutputStatus forbidden_output(void *context, const XrXirOutputGroup 
 
 static unsigned original_shapes(const XrXirCompileContext *context) {
     unsigned mismatches = 0;
-    for (unsigned i = 2; i < 3; ++i) {
+    for (unsigned i = 2; i < 5; i += 2) {
         const ModuleClassStateCase *test = &module_class_state_cases[i];
         size_t live = instance_compile_live, bytes = instance_compile_bytes;
         uint8_t *input = xr_malloc(test->length); CHECK(input); memcpy(input, test->bytes, test->length);
@@ -210,22 +249,25 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
     memset(returns, 0, sizeof(returns)); memset(init_count, 0, sizeof(init_count));
     memset(resumed, 0, sizeof(resumed)); memset(lifecycle_count, 0, sizeof(lifecycle_count));
     memset(objects, 0, sizeof(objects)); memset(fields, 0, sizeof(fields));
-    releases = 0; active_policy = policy;
+    releases = 0; active_policy = policy; helper_allocations = 0;
+    memset(helper_releases, 0, sizeof(helper_releases)); memset(helper_active, 0, sizeof(helper_active)); memset(helper_arguments, 0, sizeof(helper_arguments));
     memset(published, 0, sizeof(published)); memset(released_slots, 0, sizeof(released_slots));
     ModuleCodeOwner *owner = NULL;
     CHECK(xr_compile_resources_calloc(context->resources, 1, sizeof(*owner), (void **)&owner) == XR_COMPILE_RESOURCE_OK);
-    owner->lowered = lowered;
-    for (uint32_t f = 0; f < 9; ++f) {
-        owner->native[f] = mode == 1 || (mode == 2 && !(f % 2)) || (mode == 3 && f % 2);
+    owner->lowered = lowered; owner->count = module_class_state_cases[graph].functions;
+    for (uint32_t f = 0; f < owner->count; ++f) {
+        owner->native[f] = mode == 1 || (mode == 2 && (!(f % 2) || f == 9)) || (mode == 3 && f % 2 && f != 9);
         if (owner->native[f]) owner->actual[f] = native[f];
         else CHECK(xr_xir_compile_vm_bind(lowered, f, &owner->bindings[f], &owner->actual[f]) == XR_XIR_OK);
-        CHECK(!owner->actual[f].parameter_count && owner->actual[f].result ==
-            (f < 4 ? XR_XIR_UNIT : f == 4 ? XR_XIR_I64 : (XrXirType)256));
+        CHECK(owner->actual[f].parameter_count == (f == 9 ? 1u : 0u) && owner->actual[f].result ==
+            (f < 4 || f == 9 ? XR_XIR_UNIT : f == 4 ? XR_XIR_I64 : (XrXirType)256));
         owner->observed[f] = owner->actual[f]; owner->observed[f].resume = observed_resume;
+        if (f == 9) owner->observed[f].release = observed_helper_release;
     }
+    if (graph == 3 && mode >= 2) CHECK(owner->native[3] != owner->native[9]);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
-        owner->observed, 9, module->declarations, {owner, release_code}, module->types, xr_xir_compile_program_proof(lowered)};
+        owner->observed, owner->count, module->declarations, {owner, release_code}, module->types, xr_xir_compile_program_proof(lowered)};
     XrXirProgram *program = NULL; CHECK(xr_xir_compile_program_seal(context, &spec, &program) == XR_XIR_OK); active_owner = owner;
     XrXirInstanceConfig config = {0}; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirInstance *instances[2] = {NULL, NULL}; unsigned ids[] = {0, 1}; config.trace = observe_lifecycle;
@@ -248,6 +290,9 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
             if (policy && repeat == 23 && slot == 2) CHECK(xr_xir_value_copy(&value, &escaped[i]) == XR_XIR_VALUE_OK);
             xr_xir_value_drop(&field); xr_xir_value_drop(&value);
         }
+        CHECK(!helper_active[i] && returns[i][9] == (graph == 3 ? 4u : 0u));
+        CHECK(helper_releases[i] == returns[i][9]);
+        if (graph == 3) for (unsigned j = 0; j < 4; ++j) CHECK(helper_arguments[i][j] == objects[i][publication_order[j]]);
         CHECK(lifecycle_count[i] == 8 && init_count[i] == 4 && published[i] == 4 && !released_slots[i]);
         for (unsigned j = 0; j < 4; ++j) CHECK(init_trace[i][j] == j && returns[i][j] == 1);
         for (unsigned j = 4; j < 9; ++j) CHECK(returns[i][j] == repeat + 1);
@@ -260,6 +305,8 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
         if (!i) for (unsigned j = 0; j < 4; ++j) CHECK(physically_live(objects[1][j]) && physically_live(fields[1][j]));
     }
     CHECK(releases == 1 && !active_owner);
+    CHECK(helper_allocations == (graph == 3 ? 16u : 0u));
+    printf("module-class-helper graph=%u mode=%u policy=%u calls=%zu temporary-allocations=%zu argument-identities=verified result=PASS\n", graph, mode, policy, (size_t)(returns[0][9] + returns[1][9]), helper_allocations);
     if (mode == 0) CHECK(resumed[0] && !resumed[1]);
     else if (mode == 1) CHECK(resumed[1] && !resumed[0]); else CHECK(resumed[0] && resumed[1]);
     for (unsigned i = 0; i < 2; ++i) if (policy) {
@@ -286,7 +333,8 @@ int main(int argc, char **argv) {
     XrCompileResourceLimits limits = {67108864, 8388608, 128000000};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     unsigned mismatches = emit ? 0 : original_shapes(&context);
-    for (unsigned graph = 0; graph < 2; ++graph) {
+    for (unsigned graph = 0; graph < 4; ++graph) {
+        if (graph == 2) continue;
         XrXirArtifact *lowered = read_lower(&context, graph);
         XrXirCSource source = {0}; char digest[65]; emit_source(lowered, graph, &source, digest);
         if (emit) {

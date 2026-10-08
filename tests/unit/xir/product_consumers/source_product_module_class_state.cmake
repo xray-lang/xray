@@ -1,7 +1,7 @@
 set(module_class_state_dir "${CMAKE_CURRENT_LIST_DIR}")
 set(module_class_state_generated "${CMAKE_BINARY_DIR}/generated/module-class-state")
 set(module_class_state_sources)
-foreach(graph RANGE 0 1)
+foreach(graph IN ITEMS 0 1 3)
     list(APPEND module_class_state_sources "${module_class_state_generated}/graph${graph}.c")
 endforeach()
 add_executable(test_source_product_module_class_state_emitter "${module_class_state_dir}/test_source_product_module_class_state.c")
