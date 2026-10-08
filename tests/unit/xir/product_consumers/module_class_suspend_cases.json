@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "root_partial_publication",
+      "owner": 3,
+      "mutable": true,
+      "field": "x",
+      "bytes": 2467,
+      "sha256": "de73fb2172b269cdc56c109a11621bfab6756c1b97bd5cee2292bbdce617977b",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "original_base_partial_publication",
+      "owner": 0,
+      "mutable": true,
+      "field": "x",
+      "bytes": 2467,
+      "sha256": "6c4a80cb3fde3a8026d5b3b7df16043ae401913655005fbfb9e3b1302bf7c5ea",
+      "expected": "XR_XIR_OK"
+    }
+  ],
+  "oracle": {
+    "instances": 2,
+    "repeats": 24,
+    "declared_slots": 4,
+    "published_slots": 3,
+    "publication_order": [
+      1,
+      0,
+      3
+    ],
+    "release_order": [
+      3,
+      0,
+      1
+    ],
+    "unpublished": 2,
+    "original_resume": "RETURNED",
+    "actions": [
+      "resume both",
+      "cancel first, resume peer",
+      "destroy first, resume peer"
+    ]
+  }
+}

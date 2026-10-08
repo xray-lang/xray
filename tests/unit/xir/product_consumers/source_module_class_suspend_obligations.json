@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "legacy_line": 169,
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "assertion_sites": 94,
+      "loop_sites": 10,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "status": "ORIGINAL_BASE_AND_PARTIAL_RESUME_OPEN_CANCELLATION_RELEASE_VERIFIED",
+  "result": "FAIL_ORIGINAL_ADMISSION_AND_RESUME_ORACLE",
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:xr_program_module_cleanup_fixture_write finish2; native scenario7",
+  "original": {
+    "declared_slots": 4,
+    "published_slots": 3,
+    "publication_order": [
+      1,
+      0,
+      3
+    ],
+    "release_order": [
+      3,
+      0,
+      1
+    ],
+    "objects": 3,
+    "field": "x",
+    "owner": "base",
+    "mutable": true,
+    "suspend": "after third field replacement",
+    "resume_expected": "XR_BACKEND_EXECUTION_RETURN with trap0,24repeats perInstance",
+    "cancel_destroy": "Legacy canceled/destroyed execution invalidates initialization; new execution observes trap4 sticky",
+    "instances": 2,
+    "repeats": 24
+  },
+  "representation": "Keep original base mutable graph as expected-positive Checked admission. Separate root graph changes declaring module explicitly, retaining all4 declared slots,3 publications and original successful-resume expectation. Never fill the fourth slot or relabel expected success as BAD_STATE to pass.",
+  "current_source_boundary": "xxir_instance.c initialization_resume requires published_counts==module_slots before MODULE_READY. Old fixture declares4,publishes3 then returns after yield. This is a semantic difference requiring Main adjudication, not proof by itself of a current implementation bug.",
+  "oracle": {
+    "compiler": "Independent complete Checked, input poison/free before exact rewrite, explicit specialize/reverify, destroy producers before verifying downstream; actual deterministic C with compiled digest",
+    "suspension": "Authenticate existing CallView inside real resume observer, read/copy/drop three published slots only for identity/field observation; unpublished slot2 read rejects and preserves sentinel. All temporary observer values dropped before accepting suspension.",
+    "wait": "Full WaitRequest shape, bad epoch/wake and unchanged sentinel, BUSY host entry, repeated pending poll with no allocation or resume",
+    "resume": "Original RETURNED expectation stays fixed; actual mismatch counted on every repeat and returned as exit1. Diagnostic collection may verify cleanup on actual BAD_STATE but never calls that original responsibility PASS.",
+    "cancel": "Current cancel_requested\u2192CANCELLED, sticky23retries without allocation/resume, borrowed failure copied before owners die. Legacy trap4 numeric identity remains unmapped.",
+    "destroy": "free suspended Instance consumes pointer and releases only its3 published classes; independent peer remains suspended/live",
+    "physical": "At each slotrelease verify actual allocator live records in reverse order3,0,1,unreleased class/string allocations stay live. Output forbidden, entry never resumes on failure. After code/Program/Lowered death copied failures copy/drop; final compiler/runtimephysical0 and table0",
+    "native": "VM, actual native, even-native/odd-VM and inverse"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_class_suspend_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_suspend_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_suspend_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_suspend_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_suspend_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Base mutable/non-Sendable class representation",
+    "Partial publication successful-return semantic adjudication",
+    "Old trap4 versus current cancellation status",
+    "Original affine/copy/local drop timing/lifecycle event ABI/lease drain",
+    "Old scenario7 original9 runtimeallocationfault ordinals; new denominator not scanned",
+    "Other class scenarios6,8-13 including helper/error/panic",
+    "Full SourceProduct graph",
+    "Full FI2036/32",
+    "Two-configuration12axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-class-suspend-r1",
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "scenarios": 24,
+    "pending_instances": 48,
+    "classes": 144,
+    "slot_publications": 144,
+    "slot_releases": 144,
+    "actual_resumed_initializers": 32,
+    "resume_observations": 768,
+    "resume_actual": "All768 BAD_STATE9 versus fixed original expectedRETURNED1;32 initial failures followed by736 sticky retries",
+    "cancelled_instances": 8,
+    "cancel_observations": 192,
+    "cancel_actual": "CANCELLED4;8 initial cancellations then184 sticky retries",
+    "destroyed_suspended_instances": 8,
+    "total_observations": 960,
+    "total_sticky_retries_without_allocations_or_resumes": 920,
+    "wait_invalid_epoch_wake_checks": 192,
+    "stale_wake_rejections_after_terminal": 960,
+    "retained_failures_after_all_owners_die": 40,
+    "original_positive_admissions": 8,
+    "original_actual": "All8 BAD_STRUCTURE1 vs expectedOK0",
+    "gate_result": "8runtime processes each exit1 with97 mismatches;2encodingPASS;no WILL_FAIL",
+    "physical": "Class and string addresses observed through authenticated public slot_read before suspension, no temporary observer owner retained. Each release checks real allocator records, finalcompiler/runtime0/0 table0.",
+    "fresh_build": "Both passed first build,3freshTUs/config:emitter,consumer,actualgeneratedC",
+    "evidence": "results.json; actual-process-results.xml"
+  },
+  "postrun_note": "Only result annotations appended after real execution. Captured map is the prior version; no final-map rerun claimed."
+}
