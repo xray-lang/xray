@@ -379,3 +379,5 @@ foreach(action IN ITEMS check self-test)
 endforeach()
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_element_admission.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_empty_aggregate.cmake")

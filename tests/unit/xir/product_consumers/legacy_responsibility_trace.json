@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 44,
     "source_without_digest_reference": 64,
-    "other_with_digest_reference": 37,
-    "other_without_digest_reference": 123,
-    "digest_reference_values": 109,
+    "other_with_digest_reference": 38,
+    "other_without_digest_reference": 122,
+    "digest_reference_values": 110,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -250,6 +250,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_driver_rejection_cleanup_obligations.json",
       "lf_sha256": "842e0fcd55a1b2974b0e1f0f12cf894393c1242cbf12e1c873b019fb330307f2"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_empty_aggregate_obligations.json",
+      "lf_sha256": "00d08b31277d35fc747684bb6e98d7115e5df7a7ec0c4e1dfa49293797b09d44"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_f64_source_transport_obligations.json",
@@ -3636,7 +3640,13 @@
       "body_lf_sha256": "994d267a878f3b7237726ee7fbb136d812d0d3d6afd8aab56a62949ec094cdd3",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_empty_aggregate_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",

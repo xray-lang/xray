@@ -25,6 +25,7 @@
 #include "array_default_escape_shape.h"
 #include "array_managed_escape_shape.h"
 #include "array_element_place_shape.h"
+#include "empty_aggregate_shape.h"
 
 static const SourceProductConsumerFixture *consumer_fixture;
 #define XR_CONSUMER_NAME (consumer_fixture->name)
@@ -260,6 +261,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
         array_default_escape_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_managed_escape") ?
         array_managed_escape_shape(module) : UINT32_MAX;
     if (!strcmp(XR_CONSUMER_NAME, "array_element_place")) array_element_place_shape(module, run.array_entries);
+    if (!strcmp(XR_CONSUMER_NAME, "empty_aggregate")) empty_aggregate_shape(module);
     /* Subsequent reads and execution own all data after the parse session dies. */
     xr_compile_session_free(session);
     session = NULL;
@@ -267,6 +269,10 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     if (run.status != XR_XIR_OK)
         goto release;
     CHECK(!strstr(generated.text, "TargetPlan"));
+    if (!strcmp(XR_CONSUMER_NAME, "empty_aggregate")) {
+        CHECK(strstr(generated.text, "xr_xir_struct_new(") && strstr(generated.text, "NULL, 0u, xr_xir_call_admission(view), &value)"));
+        CHECK(!strstr(generated.text, "{\n};"));
+    }
     XrXirCSource repeated = {0};
     run.status = xr_xir_compile_source_product_emit(product, "product_consumer", UINT64_C(16777216), &repeated);
     if (run.status == XR_XIR_OK)

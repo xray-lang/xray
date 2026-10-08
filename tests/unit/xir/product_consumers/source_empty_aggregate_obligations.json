@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "test_empty_aggregate_has_portable_private_c_storage",
+    "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+    "legacy_line": 1511,
+    "body_lf_sha256": "994d267a878f3b7237726ee7fbb136d812d0d3d6afd8aab56a62949ec094cdd3",
+    "assertion_sites": 5,
+    "loop_sites": 0,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+  },
+  "legacy_builder": {
+    "path": "tests/unit/aot/test_xr_program_aot.c",
+    "function": "build_empty_aggregate_program",
+    "function_lf_sha256": "4daa5d471d194abc552d00aa775baf9a8d9417ec7717832c15d02439c3e0507f",
+    "field_count": 0,
+    "constant_i64": 42,
+    "legacy_private_C_assertions": [
+      "uint8_t xr_unit",
+      "xr_unit = UINT8_C(0)",
+      "no empty private C struct"
+    ]
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "fixture": {
+    "path": "tests/unit/xir/product_consumers/empty_aggregate/root.xr",
+    "sha256": "1f178a365f4738b14b8b1a0db7ca0733ee2a5f39f569b8c09354116d2786a97d",
+    "translation": "No original Source fixture exists. Logical reconstruction of original zero-field AGGREGATE_CONSTRUCT and independently fixed42 as a private Empty nominal struct and private answer;exportedconsumerAnswer is the existing host adapter. No claim of legacy wire/type-ID/name equivalence."
+  },
+  "required_shape": "One realzero-field STRUCT_NEW in privateI64 answer,Empty nominalstruct withzero fields/arguments/parameters,andexactCONST_INT42 returnedSSA. Actualgenerated C invokesxr_xir_struct_new withNULL and0 fields,no emptyCstruct;strictrealprovider compilation required.",
+  "pipeline": "Public SourceProduct/Checked/ownedpacket death/specialized reverify/Lowered/Program/Instance; VM/actualnative/two mixed partitions eachfixed42.",
+  "tests": [
+    "test_source_product_empty_aggregate_vm",
+    "test_source_product_empty_aggregate_native",
+    "test_source_product_empty_aggregate_mixed_even",
+    "test_source_product_empty_aggregate_mixed_odd",
+    "test_source_product_empty_aggregate_owned"
+  ],
+  "result": "NOT_RUN",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "Old private C storage spellings andold descriptorlayout are not currentnominal runtimeC representation. PortableC11 proof must useactualoutput andproviders;do not inventcompatibility fields.",
+    "Complete originalAOT/context budgets/faults/safety/integration andwholeconsumerretirement remainOPEN."
+  ],
+  "source_empty_storage_20261009_facet": {
+    "status": "PASS_SOURCE_VM_REAL_NATIVE_MIXED_AND_DETACHED_PACKET_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-empty-aggregate-r1",
+    "shape": "Public Checked retains exactlyone actualzero-fieldSTRUCT_NEW inprivate answer withEmpty nominalstruct,noparameters/fields/typearguments,andreturn exactI6442constantSSA. This islogicaltranslation fromthe originalbuilt fixture,not preservedoriginalSourcebytes.",
+    "real_C": "Actualgeneratedbody containsxr_xir_struct_new(type,NULL,0u,admission,&value),has noemptyprivateCstructorGNUstatementexpression,andisstrictlyC11compiledwithMSVC andClang. Actualpayloadhash matchescompilednativebinding;we do not fabricateoldxr_unitspelling.",
+    "generated_payload_sha256": {
+      "msvc": "3e26158ec3e1e9f3fa580b0affe5e756536eb5f0763487da8185d1e183258900",
+      "asan": "3e26158ec3e1e9f3fa580b0affe5e756536eb5f0763487da8185d1e183258900"
+    },
+    "backend_results": {
+      "backends": [
+        "VM",
+        "native",
+        "mixed_even",
+        "mixed_odd"
+      ],
+      "configurations": 2,
+      "final_backend_commands": 8,
+      "final_owned_commands": 2,
+      "independent_fixed42_calls": 32,
+      "instances": 16
+    },
+    "ownership": "Common driver destroys SourceProduct/Session/independentreader beforeexecution,retains2Instances then dropscallerProgramreference,checksprivateauthority andcanonicalinit,executesfour independentlyfixed42 calls/command,then physicallyreleasesInstances andcompiler/runtime domains. Separateowner retainscompletewriterpacket,poisons request/authority/pathbuffers andkillsSourceProduct/Session,thenverifiesmetadata andwriterbytes,lowers andreverifiesafterChecked dies;four actualownercommands includefinal2afteroutputfix.",
+    "actual_execution": {
+      "registered_product_processes": 20,
+      "all_returncode0": true,
+      "initial_source_commands": 6,
+      "first_native_owned_commands": 8,
+      "final_native_mixed_commands": 6,
+      "controls": 2,
+      "first_runner_false_FAIL": 4,
+      "false_FAIL_reason": "Pure receiptparser demanded VMphysical outputonstderr;actualVMnormal writesstdout andreturns0. first-run-source.py andresults-source.json retained;results-source-reparsed.json explicitlyPURE_RAW_REPARSE_NOT_NEW_EXECUTION.",
+      "banner_fix": "Copiednewowner banner wronglysaid6indicesalthoughcodealreadycheckedEmptyzero-fields42. Correctedsummaryonly;initialrawC/binary/objectretained,2ownerTUsfreshrebuilt and2newownedprocessesPASS.",
+      "input_guards": "All20processesbefore==afterSHA,size,mtime;initial6+firstnative8 have2673+6=2679inputs including3explicitobserverheaders. Final6native/mixed additionallybindactualgeneratedCbefore/after=2680inputs;first6nativecannotclaimthatadditionalguard. Map/traceannotationfollowsruntime;exactpreimagesretained."
+    },
+    "build": "Twelve successfulCcompileevents across2cfg:driver,newVMwrapper,owned(initial+bannerfix),newnativewrapper andactualgeneratedC. Ten finaldistinctfreshTUs,strictC11/W4/WX,actualClangASan+UBSan. OriginalArrayVMcontrolwrapperobjectexactreuse,relinkednewdriver. Two build-timeSourceemitterinvocations appearbuildlogs;theyarenot countedasregisteredruntimePIDqualification.",
+    "registration": "21newCTestrows/config:5normal/ownedT120P1;compilerT600P8jobs8COST300RUN_SERIAL;axes--axesT120P1RUN_SERIAL;runtime--runtime/cancel--cancelT120P1.32heavyrowsacross2cfgNOT_RUN.",
+    "boundary": "OldinlineaggregateprivateCstoragefieldandoldCoreIRtypeidentity differfromcurrentownednominalruntime;thisbatchproveslogicalemptyconstruction,actualstandardCexecutionanddetachedowners,notoldrepresentationidentityorfullqualification.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
