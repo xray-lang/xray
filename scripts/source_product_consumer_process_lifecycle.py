@@ -134,6 +134,25 @@ def main():
                 report['issues'].append(label + ': ' + repr(error))
             helpers.write(run/'result.json', report)
         report['reap_error'] = 'PASS_NATIVE_INVALID_HANDLE_FAULT' if all(x['status']=='PASS' for x in report['processes'] if x['mode']=='reap-error') else 'FAIL'
+        write_spec = importlib.util.spec_from_file_location('native_write_error', args.input_root/'scripts/source_product_consumer_process_write_error.py')
+        write_probe = importlib.util.module_from_spec(write_spec)
+        write_spec.loader.exec_module(write_probe)
+        for helper_name, phase in ((h, p) for h in ('faults', 'axes') for p in ('pid-write', 'final-write')):
+            runner = fi if helper_name == 'faults' else axes
+            label = helper_name + '-' + phase
+            command = [str(args.binary), str(args.root), str(args.stdlib), 'timeout' if phase=='pid-write' else 'normal']
+            row = {'helper': helper_name, 'mode': phase, 'status': 'RUNNING'}
+            report['processes'].append(row)
+            try:
+                row.update(write_probe.exercise(runner, fi, helpers, command, label, phase, run, args.input_root, windows_terminal))
+                row['status'] = 'PASS'
+            except Exception as error:
+                row['status'] = 'FAIL'
+                row['error'] = repr(error)
+                row['failure_receipt'] = fi.process_failure(command, label, run, error, helpers)
+                report['issues'].append(label + ': ' + repr(error))
+            helpers.write(run/'result.json', report)
+        report['receipt_write_error'] = 'PASS_NATIVE_SHARING_FAULT' if all(x['status']=='PASS' for x in report['processes'] if x['mode'] in ('pid-write','final-write')) else 'FAIL'
     try:
         after = fi.capture_inputs(args, helpers)
         helpers.write(run/'inputs-after.json', after)

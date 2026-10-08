@@ -215,6 +215,15 @@ def stop_process(process, deadline: float) -> tuple[int | None, list[str]]:
     return code, errors
 
 
+def process_receipt_write(path: Path, result: dict, helpers) -> None:
+    try:
+        helpers.write(path, result)
+    except Exception as error:
+        result["receipt_write_error"] = str(error)
+        error.process_receipt = dict(result)
+        raise
+
+
 def process_run(command: list[str], label: str, run: Path, deadline: float, helpers, cwd: Path) -> dict:
     stdout = run / (label + ".stdout.raw"); stderr = run / (label + ".stderr.raw")
     started = time.monotonic()
@@ -228,7 +237,7 @@ def process_run(command: list[str], label: str, run: Path, deadline: float, help
               "reap_grace_seconds": 8,
               "reap_deadline_seconds": max(0.0, deadline + 8 - started)}
     with stdout.open("wb") as out, stderr.open("wb") as err:
-        helpers.write(run / (label + ".json"), result)
+        process_receipt_write(run / (label + ".json"), result, helpers)
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             result["timed_out"] = True
@@ -238,7 +247,7 @@ def process_run(command: list[str], label: str, run: Path, deadline: float, help
                 process = subprocess.Popen(command, cwd=cwd, stdout=out, stderr=err)
                 result.update(pid=process.pid, entered=True)
                 # Keep the actual PID receipt even if waiting or reaping fails.
-                helpers.write(run / (label + ".json"), result)
+                process_receipt_write(run / (label + ".json"), result, helpers)
                 try:
                     result["returncode"] = process.wait(timeout=max(0.0, deadline - time.monotonic()))
                 except subprocess.TimeoutExpired as error:
@@ -254,13 +263,14 @@ def process_run(command: list[str], label: str, run: Path, deadline: float, help
                 result["termination_observed"] = result["entered"] and result["returncode"] is not None
     result.update(elapsed_seconds=time.monotonic() - started,
                   stdout_sha256=helpers.digest(stdout), stderr_sha256=helpers.digest(stderr))
-    helpers.write(run / (label + ".json"), result)
+    process_receipt_write(run / (label + ".json"), result, helpers)
     return result
 
 
 def process_contract(process: dict) -> None:
     if (process["returncode"] != 0 or process["timed_out"] or not process["termination_observed"]
-            or process["launch_error"] or process["execution_error"] or process["termination_errors"]):
+            or process["launch_error"] or process["execution_error"] or process["termination_errors"]
+            or process.get("receipt_write_error")):
         raise ValueError("process failed, timed out or has unobserved termination; raw first failure retained")
 
 
@@ -301,7 +311,7 @@ def main() -> None:
             if values is not None and actual != values:
                 raise ValueError("two same-argv fresh normals disagree on compiler totals or denominators")
             normal_output, values = output, actual; process["measurements"] = actual
-            original.write(run / (label + ".json"), process)
+            process_receipt_write(run / (label + ".json"), process, original)
             normals.append(process)
         except Exception as error:
             normals.append(faults.process_failure(base, label, run, error, original))
@@ -316,7 +326,7 @@ def main() -> None:
             result = axis_contract(output, args.axis, args.cut, normal_output, faults)
             axis_stderr_contract(Path(process["stderr"]).read_bytes(), output, args.cut, faults)
             process["axis_result"] = result
-            original.write(run / "axis.json", process)
+            process_receipt_write(run / "axis.json", process, original)
         except Exception as error:
             faults.process_failure(command, "axis", run, error, original)
             issues.append(str(error))

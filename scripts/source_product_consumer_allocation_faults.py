@@ -420,6 +420,15 @@ def stop_process(process, deadline: float) -> tuple[int | None, list[str]]:
     return code, errors
 
 
+def process_receipt_write(path: Path, result: dict, helpers) -> None:
+    try:
+        helpers.write(path, result)
+    except Exception as error:
+        result["receipt_write_error"] = str(error)
+        error.process_receipt = dict(result)
+        raise
+
+
 def process_run(command: list[str], label: str, run: Path, deadline: float, helpers, cwd: Path) -> dict:
     stdout = run / (label + ".stdout.raw"); stderr = run / (label + ".stderr.raw")
     started = time.monotonic()
@@ -433,7 +442,7 @@ def process_run(command: list[str], label: str, run: Path, deadline: float, help
               "reap_grace_seconds": 8,
               "reap_deadline_seconds": max(0.0, deadline + 8 - started)}
     with stdout.open("wb") as out, stderr.open("wb") as err:
-        helpers.write(run / (label + ".json"), result)
+        process_receipt_write(run / (label + ".json"), result, helpers)
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             result["timed_out"] = True
@@ -443,7 +452,7 @@ def process_run(command: list[str], label: str, run: Path, deadline: float, help
                 process = subprocess.Popen(command, cwd=cwd, stdout=out, stderr=err)
                 result.update(pid=process.pid, entered=True)
                 # Keep the actual PID receipt even if waiting or reaping fails.
-                helpers.write(run / (label + ".json"), result)
+                process_receipt_write(run / (label + ".json"), result, helpers)
                 try:
                     result["returncode"] = process.wait(timeout=max(0.0, deadline - time.monotonic()))
                 except subprocess.TimeoutExpired as error:
@@ -459,13 +468,14 @@ def process_run(command: list[str], label: str, run: Path, deadline: float, help
                 result["termination_observed"] = result["entered"] and result["returncode"] is not None
     result.update(elapsed_seconds=time.monotonic() - started,
                   stdout_sha256=helpers.digest(stdout), stderr_sha256=helpers.digest(stderr))
-    helpers.write(run / (label + ".json"), result)
+    process_receipt_write(run / (label + ".json"), result, helpers)
     return result
 
 
 def process_contract(process: dict) -> None:
     if (process["returncode"] != 0 or process["timed_out"] or not process["termination_observed"]
-            or process["launch_error"] or process["execution_error"] or process["termination_errors"]):
+            or process["launch_error"] or process["execution_error"] or process["termination_errors"]
+            or process.get("receipt_write_error")):
         raise ValueError("process failed, timed out or has unobserved termination; raw first failure retained")
 
 
@@ -482,6 +492,10 @@ def process_failure(command: list[str], label: str, run: Path, error: Exception,
                 result.update(known)
     except Exception as receipt_error:
         result["receipt_read_error"] = str(receipt_error)
+    live_receipt = getattr(error, "process_receipt", None)
+    if isinstance(live_receipt, dict):
+        result.update(live_receipt)
+        result["receipt_recovery"] = "LIVE_EXCEPTION_CONTEXT"
     result["parse_issue"] = "runner exception: " + str(error)
     result["runner_exception"] = {"type": type(error).__name__, "message": str(error),
                                   "traceback": traceback.format_exc()}
@@ -644,7 +658,7 @@ def main() -> None:
                 census = actual
             elif actual != census:
                 raise ValueError("two fresh original normals disagree on N/R/records")
-            helpers.write(run / (label + ".json"), result)
+            process_receipt_write(run / (label + ".json"), result, helpers)
             normal_results.append(result)
         except Exception as error:
             normal_results.append(process_failure(base, label, run, error, helpers))
@@ -663,7 +677,7 @@ def main() -> None:
             stderr_contract(Path(result["stderr"]).read_bytes(), args.kind, output)
             result["ordinals"] = ordinals
             result["normal_census"] = normal_contract(output)
-            helpers.write(run / (label + ".json"), result)
+            process_receipt_write(run / (label + ".json"), result, helpers)
         except Exception as error:
             result = process_failure(command, label, run, error, helpers)
             result["shard"] = index

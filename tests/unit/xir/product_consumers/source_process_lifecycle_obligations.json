@@ -635,5 +635,41 @@
     "historical_facets": "Original6child and12child qualifications retained verbatim;their NOT_RUN reap-error statements describe those earlier executions.",
     "annotation": "Added after final actual execution;receipts bind saved preannotation map;no annotation rerun claimed.",
     "other_reap_error_causes": "NOT_RUN"
+  },
+  "receipt_write_error_qualification": {
+    "result": "PASS_REAL_WINDOWS_RECEIPT_WRITE_RECOVERY",
+    "scope": "Actual Windows sharing violation on the dedicated receipt JSON after real product readiness. PID receipt and final receipt writes are separately denied;filesystem write delegates to the original writer.",
+    "expected": "Actual native CreateFile write rejected32;Python PermissionError;preserve latest actual PID,observed termination,returncode andraw output hashes in alternative failure record. Final write failure after exit0 must remain FAIL.",
+    "matrix": "Two original runners times2phases times2configurations:8write-error children;16ordinary/native-reap regression children.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "evidence": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-process-write-error-r1",
+    "final_receipts": "run-r3/results.json",
+    "registered_commands": 2,
+    "final_real_children": 24,
+    "write_denial_children": 8,
+    "actual_fault": "Owned receipt file opened with read-only sharing;native write CreateFileW rejected WinError32 and original Python writer raised PermissionError errno13. No manufactured write exception.",
+    "first_failure": "Original runners lost4actual PIDs on denied PID receipt writes and4actual exit0/terminal outcomes on denied final writes,using stale disk receipt data. Both configurations24first children/raw/helper source/receipts retained;all8actual write-error PIDs independently confirmed terminal.",
+    "fix": "process_receipt_write attaches latest live receipt to actual write exception. process_failure merges that live context after stale disk receipt and labels LIVE_EXCEPTION_CONTEXT. process_contract rejects receipt_write_error even when actual child exit0.",
+    "actual_recovery": "All8 preserve actual PID,entered,observed terminal state andraw hashes.4PID-write children terminate1 via originalfinally kill/reap;4final-write children actually finish0 andphys0/0 but their process contract remainsFAIL. Blocked oldJSON remains unchanged andalternative runner-error.json retains currentactual outcome.",
+    "regression": "Final24children:4normalPASS,4nonzeroFAIL,4timeoutFAIL,4nativehandleerrorFAIL,8writefailureFAILpreserved;all24PIDsterminal;12ordinaryphysical0/0.12killedowners do notclaim productcleanup.",
+    "inputs": {
+      "msvc": 2567,
+      "asan": 2567,
+      "preservation": "SHA,size,mtime before==after"
+    },
+    "build": "Both no-work checks,0freshTUs;priorfreshC11/W4/WX andClangASan+UBSan object/binary/header/10archives/6actualmember bindings exact.",
+    "protection": "10925tracked pre-snapshot:10921nonowned unchanged;598protected exact;12historicaldirty generated preserved.",
+    "policy": "WholemoduleAST equivalent after restoring only receipt helper wrappers,live exception recovery,and receipt error guard. FullFI570/600/P8/jobs8,axes110/120/P1/RUN_SERIAL,reaping grace8 andoriginalordinal/physical/parser contracts unchanged.",
+    "intermediate_run": "run-r2 passed24children after core fix;subsequent normal/shard/axis enriched receipt writes also routed through same recovery helper,then run-r3 reran24children under fresh captures.",
+    "main_enriched_branches": "Wrapper callsites audited. Full Source0 normal/shards/axisCLI execution NOT_RUN;host fixture does not claim their originalnormalcensus or fault coverage.",
+    "parser_self_test": "PASS_PARSER_ONLY;not a product run",
+    "historical_facets": "Earlier original-helper-unchanged claims and write-error NOT_RUN states retain their historical meaning;new facet describes updated helpers.",
+    "annotation": "Actual final run binds saved preannotation map;annotation added afterexecution andnot rerun.",
+    "input_capture_error": "NOT_RUN",
+    "thread_executor_error": "NOT_RUN"
   }
 }
