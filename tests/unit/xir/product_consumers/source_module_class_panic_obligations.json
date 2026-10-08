@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "legacy_line": 169,
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "assertion_sites": 94,
+      "loop_sites": 10,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "status": "OPEN",
+  "result": "FAIL_ORIGINAL_BASE_AND_ABSENT_MESSAGE_REPRESENTATION",
+  "replacement_gates": [],
+  "retired": 0,
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:finish5, delayed finish5, message finish5; native scenarios10/12/13",
+  "original": {
+    "instances": 2,
+    "repeats": 24,
+    "objects": 3,
+    "publication_order": [
+      1,
+      0,
+      3
+    ],
+    "release_order": [
+      3,
+      0,
+      1
+    ],
+    "expected": "assertion panic; panic presence true; old code1; message absent for10/12, message x for13",
+    "delay": "scenario12 yields before any class allocation/publication",
+    "allocation_ordinals": {
+      "10": 9,
+      "12": 9,
+      "13": 11
+    }
+  },
+  "representation": "Root controls isolate class panic cleanup; original base mutable class inputs retain positive admission. Current assertion carries owned string even when empty, and named assertion code445 instead of old code1. Named assertion identity is mapped; old absent-message versus present-empty is explicitly compared and remains OPEN, not silently equated.",
+  "oracle": {
+    "pipeline": "independent Checked read/rewrite, inputpoison/free, specialize/reverify, Checked owner death, Lowered verify, actual EmitC",
+    "slots": "at genuine assertion action read all3 public slots through authenticated CallView, verify x, capture physical identity, drop observer copies; unpublished slot2 BAD_STATE preserves sentinel; actual reverse release frees each class/field while panic message lives",
+    "failure": "ASSERTION445 details/scalars/bytes; entry never resumes;24poll/start/copy observations/Instance;23sticky retries no allocation or resume; failure message stable perInstance and distinct acrossInstances",
+    "delayed": "YIELD beforepublication;all wait fields, badwake/sentinel checks;correct resume and stale wake refusal",
+    "escape": "Copy failure then free bothInstances,Program,Lowered,codeowner; copy panic after owner death; copy message,drop panic,check string contents,drop string physicalfree;peer message survives independently"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_class_panic_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_panic_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_panic_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_panic_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_panic_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Original base class admission adjudication",
+    "Absent message versus empty owned message semantic adjudication",
+    "Legacy lifecycle ABI/lease drain and explicit local-drop timing",
+    "SourceProduct full graph",
+    "Original29allocation ordinals and actual new graph FI denominators",
+    "Full2036/32FI",
+    "Two-configuration12axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-class-panic-r1",
+  "spec_binding": {
+    "path": "spec/source/sections/014-13-built-in-functions.md",
+    "facts": "assert default msg is empty string; failure preserves exact evaluated bytes and length. Current present-empty assertion message agrees with spec; old absent flag needs explicit migration/retirement adjudication, not a production bug claim."
+  },
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "modes": [
+      "VM",
+      "native",
+      "alternating-native",
+      "alternating-vm"
+    ],
+    "registered_processes": 10,
+    "encoding_pass": 2,
+    "runtime_fail": 8,
+    "graphs_executed": 24,
+    "instances": 48,
+    "class_objects": 144,
+    "initializer_returns": 144,
+    "module_events": 336,
+    "publications": 144,
+    "reverse_slot_releases": 144,
+    "failure_observations": 1152,
+    "sticky_noalloc_noresume_retries": 1104,
+    "retained_panics_after_owners_dead": 48,
+    "escaped_messages_after_panics_dead": 48,
+    "message_x_observations_pass": 384,
+    "legacy_absent_message_comparisons_fail": 768,
+    "original_base_positive_admissions_fail": 24,
+    "delayed_pending_instances": 16,
+    "badwake_rejections": 64,
+    "stale_wake_rejections": 384,
+    "output_calls": 0,
+    "physical": "All144 classes and fields reclaimed in reverse3,0,1; message carriers survive independently; final compiler0/0 runtime0/0 table0 perprocess",
+    "fresh_build": "5TUs/config: emitter,consumer,three real EmitC payloads; ASAN+UBSAN flags on all5 in sanitizer configuration",
+    "first_build": "PASS both configurations",
+    "first_runtime": "All observations complete; strict exit1=3 original admissions+96 absent-message comparisons perprocess. No test-observer correction or rerun."
+  },
+  "postrun_note": "Result and spec annotations appended after final real runtime/encoding commands; pre-annotation maps were captured. No final-map rerun claimed."
+}

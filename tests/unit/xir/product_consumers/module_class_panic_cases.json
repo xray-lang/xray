@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "root_assertion",
+      "owner": 3,
+      "delayed": false,
+      "message": false,
+      "bytes": 2551,
+      "sha256": "c6844a58518483031deb2956de11dea9170ff81cd9aaa7e969ebb2a041ebb983",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "root_delayed_assertion",
+      "owner": 3,
+      "delayed": true,
+      "message": false,
+      "bytes": 2591,
+      "sha256": "bd838a0af300ee4d38a773a2ad18e52920e747aacb205f7a3e947f7883e30723",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "root_assertion_message",
+      "owner": 3,
+      "delayed": false,
+      "message": true,
+      "bytes": 2552,
+      "sha256": "104c66cf18dad2bc2b3fec31a92384182fe0bb86f0458af702ec89bb7c8dc002",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "original_base_assertion",
+      "owner": 0,
+      "delayed": false,
+      "message": false,
+      "bytes": 2551,
+      "sha256": "772e79e2d098f1537feafec53e1125a2a25d8ce4e10f6f53a14f89a69a588f78",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "original_base_delayed_assertion",
+      "owner": 0,
+      "delayed": true,
+      "message": false,
+      "bytes": 2591,
+      "sha256": "e48fced1ccbe884cac74a2bb63ba49a622fae19fe16d72a831abe7940fe06de2",
+      "expected": "XR_XIR_OK"
+    },
+    {
+      "name": "original_base_assertion_message",
+      "owner": 0,
+      "delayed": false,
+      "message": true,
+      "bytes": 2552,
+      "sha256": "366709e12639ece953413282cfa2f64e29f239271de47c5a7d9a6d6a545958f4",
+      "expected": "XR_XIR_OK"
+    }
+  ],
+  "oracle": {
+    "original_scenarios": [
+      10,
+      12,
+      13
+    ],
+    "instances": 2,
+    "repeats": 24,
+    "declared_slots": 4,
+    "published_slots": 3,
+    "publication_order": [
+      1,
+      0,
+      3
+    ],
+    "release_order": [
+      3,
+      0,
+      1
+    ],
+    "delayed": "yield before construction",
+    "original_message_presence": [
+      false,
+      false,
+      true
+    ],
+    "message_bytes": [
+      "",
+      "",
+      "x"
+    ],
+    "current_assertion_code": 445,
+    "original_assertion_code": 1
+  }
+}
