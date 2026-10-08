@@ -1,0 +1,153 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "IMPLEMENTED_FAIL_OPEN",
+  "result": "FAIL",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_instance.c",
+      "legacy_line": 102,
+      "body_lf_sha256": "6668ca83f758cbe4c127827867b7d9686ce8fb99fcbde0828c86fcf39ecf78cf",
+      "assertion_sites": 58,
+      "loop_sites": 6,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "original_facet": "Suspended left initializer cancellation successor prints 2\\n; normal resume prints the remaining 3\\n4\\n; refusal during cancellation preserves prior prefix and reports provider failure.",
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:xr_program_module_output_fixture_write_with_suspension",
+  "current_representation": "Explicit owned Cell<Bool> captures normal-resumption completion. A real registered cleanup helper reads it: false prints 2; true returns without output. Helper identity cleanup_owner=2 ties it to left initializer1. This is a current Checked fixture, not a legacy evaluator or production compatibility path.",
+  "oracle": {
+    "actions": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    "names": [
+      "resume",
+      "cancel",
+      "destroy",
+      "cancel_output_refusal",
+      "destroy_output_refusal"
+    ],
+    "normal_output_hex": "310a320a330a340a",
+    "cancel_output_hex": "310a320a320a",
+    "refused_output_hex": "310a320a",
+    "cancel_status": "XR_XIR_CALL_CANCELLED",
+    "refused_status": "XR_XIR_CALL_OUTPUT_ERROR",
+    "cleanup_calls_per_instance": 1,
+    "cleanup_return": "one except refused output, which never returns normally"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_cancel_cleanup_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_cancel_cleanup_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_cancel_cleanup_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_cancel_cleanup_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_cancel_cleanup_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "ownership": "Real Cell allocation retained across suspension and cleanup. Both instances own real code lease after caller Program drop; copied failure/scalar outcomes survive final owner destruction; compiler/runtime physical allocations and observer tables must return to zero.",
+  "representation_boundary": "Old explicit cancel successor is replaced only at the observable output/state/cleanup duty by registered cleanup and captured completion state. Old concurrent execution handles, INITIALIZING waiter leases and numeric descriptor traps are not claimed unchanged.",
+  "remaining": [
+    "Producer destructor must report cleanup output failure; regression currently FAIL",
+    "Original shared initialization race/lease semantics",
+    "explicit begin_drain before cancellation variants",
+    "SourceProduct graph producer",
+    "all cleanup registration/prefix allocation failures",
+    "stateful class/error/panic cleanup duties",
+    "full FI",
+    "resource axes",
+    "full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-cancel-cleanup-r1",
+  "retired": 0,
+  "replacement_gates": [],
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "first_build": "PASS",
+    "first_execution": "FAIL in all eight runtime processes at destructor status assertion; two encoding processes PASS",
+    "diagnostic_execution": "Eight runtime FAIL with exit1 after final physical release; two encoding PASS",
+    "passed_scenarios_per_runtime_process": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "failed_scenarios_per_runtime_process": [
+      4
+    ],
+    "pending_yield_requests": 80,
+    "bad_epoch_wake_rejections": 320,
+    "explicit_cancelled_initializers": 16,
+    "allocation_free_failed_retries": 48,
+    "destroyed_suspended_instances": 16,
+    "retained_failure_copies": 16,
+    "retained_scalar_results": 192,
+    "actual_cleanup_calls": 80,
+    "actual_cleanup_normal_returns": 64,
+    "physical": "compiler=0/0 runtime=0/0 table=0 in every diagnostic runtime process",
+    "newest_evidence": "diagnostic-r2/results.json"
+  },
+  "defect": {
+    "trigger": "Directly free suspended initializer while its registered cleanup PRINT provider refuses the complete group.",
+    "contract": "src/xir/xxir_program.h:95: consumes except BUSY and reports failed language cleanup.",
+    "expected": "XR_XIR_CALL_OUTPUT_ERROR (13)",
+    "actual": "XR_XIR_CALL_READY (0)",
+    "output_hex": "310a320a",
+    "same_provider_control": "Explicit cancel then poll preserves OUTPUT_ERROR and initializer sticky failure.",
+    "production_cause_inference": "instance_free first drains through task_executor_free; its completion_status ignores an ordinary root failure. Subsequent call_free sees no frames and returns READY, losing the cleanup output failure.",
+    "production_edited": false,
+    "strict_gate": "WILL_FAIL remains false; final runtime exit remains 1. Failure collection allows observing all owner destruction without redefining the oracle."
+  },
+  "postrun_note": "Only this result annotation was appended after diagnostic execution; no final-map rerun claimed. First source, binaries and raw failures remain in first-execution-artifacts and parent evidence."
+}

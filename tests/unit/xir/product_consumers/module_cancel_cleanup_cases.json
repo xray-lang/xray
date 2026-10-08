@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "bytes": 1830,
+  "sha256": "fe75c373ff42b9d67811da7fd1b218e2c981866d8975c5866d29d532381d785e",
+  "normal_stdout_hex": "310a320a330a340a",
+  "cancel_stdout_hex": "310a320a320a",
+  "refused_stdout_hex": "310a320a",
+  "cases": [
+    {
+      "name": "resume",
+      "action": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "cancel",
+      "action": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "destroy",
+      "action": [
+        2,
+        0
+      ]
+    },
+    {
+      "name": "cancel_output_refusal",
+      "action": [
+        3,
+        0
+      ]
+    },
+    {
+      "name": "destroy_output_refusal",
+      "action": [
+        4,
+        0
+      ]
+    }
+  ]
+}
