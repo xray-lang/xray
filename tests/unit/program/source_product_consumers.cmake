@@ -331,3 +331,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_atomic_types.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_parent_source.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_channel_owner.cmake")
