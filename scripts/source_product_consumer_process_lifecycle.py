@@ -153,6 +153,23 @@ def main():
                 report['issues'].append(label + ': ' + repr(error))
             helpers.write(run/'result.json', report)
         report['receipt_write_error'] = 'PASS_NATIVE_SHARING_FAULT' if all(x['status']=='PASS' for x in report['processes'] if x['mode'] in ('pid-write','final-write')) else 'FAIL'
+        capture_spec = importlib.util.spec_from_file_location('native_capture_error', args.input_root/'scripts/source_product_consumer_process_capture_error.py')
+        capture_probe = importlib.util.module_from_spec(capture_spec)
+        capture_spec.loader.exec_module(capture_probe)
+        report['capture_errors'] = []
+        for helper_name in ('faults', 'axes'):
+            row = {'helper': helper_name, 'status': 'RUNNING'}
+            report['capture_errors'].append(row)
+            try:
+                normal = next(x for x in report['processes'] if x['helper']==helper_name and x['mode']=='normal')
+                row.update(capture_probe.exercise(args, fi, axes, helpers, helper_name, normal, run, windows_terminal))
+                row['status'] = 'PASS'
+            except Exception as error:
+                row['status'] = 'FAIL'
+                row['error'] = repr(error)
+                report['issues'].append(helper_name + ' input capture: ' + repr(error))
+            helpers.write(run/'result.json', report)
+        report['input_capture_error'] = 'PASS_NATIVE_INPUT_SHARING_FAULT' if all(x['status']=='PASS' for x in report['capture_errors']) else 'FAIL'
     try:
         after = fi.capture_inputs(args, helpers)
         helpers.write(run/'inputs-after.json', after)

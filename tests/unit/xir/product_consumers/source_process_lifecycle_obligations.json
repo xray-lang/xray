@@ -671,5 +671,38 @@
     "annotation": "Actual final run binds saved preannotation map;annotation added afterexecution andnot rerun.",
     "input_capture_error": "NOT_RUN",
     "thread_executor_error": "NOT_RUN"
+  },
+  "input_capture_error_qualification": {
+    "result": "PASS_REAL_WINDOWS_INPUT_CAPTURE_FAILURE",
+    "scope": "Real Windows input sharing violations. Original allocation CLI initial capture refuses before product launch;original capture APIs refuse after an actual verified and released host product.",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "initial_cli": "Both original allocation runners times2configs:4actual Python CLI children exit1,report FAIL / INPUT_CAPTURE / product_execution NOT_RUN,retain the actual PermissionError13 message,and create only result.json with no normal/shard/axis receipts.",
+    "after_capture": "Both capture APIs times2configs:4actual PermissionError13 reads after previous actual normal C children built and verified a public SourceProduct,freed Session and Product,and measured physical0/0. The dedicated host failure report retains original product PID/exit0/raw hashes and INPUT_CAPTURE_FAILED.",
+    "native_fault": "Each of8real reads independently denied by actual CreateFileW sharing violation32. Dedicated existing consumer source opened with no sharing;original filesystem and capture code unchanged. Owned handles always closed;source SHA/size/mtime unchanged.",
+    "regression": "24actual C children retain4normalPASS,4nonzeroFAIL,4timeoutFAIL,4nativehandleFAIL,8receiptwriteFAIL. All24C and4CLI PIDs independently terminal;12ordinary physical0/0;12killed owners do not claim product cleanup.",
+    "first_failure": "Original CLI correctly refused actual denied reads. Newprobe literal Windows path assertion missed repr-escaped exception paths and failed both configs. First24C+4CLI sources/raw/inputs/receipts retained. Correcting only the assertion to repr(path) plus errno13 allowed full rerun-r2 to pass.",
+    "inputs": {
+      "msvc": 2568,
+      "asan": 2568,
+      "preservation": "SHA,size,mtime before==after;restored snapshots match before"
+    },
+    "build": "Both no-work checks;0freshTUs. Previous fresh C11/W4/WX/ASan+UBSan binary/object/header/10archives/6actualmembers exact.",
+    "policy": "Allocation runners,parsers,resource policies,and registry unchanged bytes;existing lifecycle AST unchanged after removing only new probe block. FullFI600/P8/jobs8 andaxes120/P1/RUN_SERIAL preserved.",
+    "protection": "10926tracked pre-snapshot;10924nonowned unchanged;598protected exact;12historicaldirty generated preserved.",
+    "evidence": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-process-capture-error-r1",
+    "final_receipts": "run-r2/results.json",
+    "registered_commands": 2,
+    "actual_C_children": 24,
+    "actual_initial_CLI_children": 4,
+    "actual_input_read_denials": 8,
+    "original_after_capture_cli": "NOT_RUN;direct API after dedicated host product does not qualify full Source0 FI/axis after-capture branches",
+    "thread_executor_error": "NOT_RUN",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "historical_facets": "All earlier facets retained verbatim;their capture-error NOT_RUN describes previous executions.",
+    "annotation": "Added after finalexecution;captured preannotation map preserved,without an annotation rerun."
   }
 }
