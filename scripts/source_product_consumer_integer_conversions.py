@@ -57,7 +57,7 @@ def artifacts():
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('mode',choices=('write','check'));args=parser.parse_args()
     header,manifest=artifacts()
-    for path,value in {DIR/'integer_conversion_cases.h':header,DIR/'integer_conversion_cases.json':json.dumps(manifest,indent=2)+'\n'}.items():
+    for path,value in {DIR/'integer_conversion_cases.inc.c':header,DIR/'integer_conversion_cases.json':json.dumps(manifest,indent=2)+'\n'}.items():
         if args.mode=='write':path.write_text(value,encoding='utf8',newline='\n')
         elif path.read_text(encoding='utf8')!=value:raise ValueError(f'independent integer conversion input differs: {path}')
     print('Integer conversions:64pairs;8Built/8wire inputs;32transitions;legacy owner/immediate tag duties OPEN')

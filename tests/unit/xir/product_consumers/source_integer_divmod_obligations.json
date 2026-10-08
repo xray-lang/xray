@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "test_exact_integer_divmod_admission",
+    "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+    "legacy_line": 6929,
+    "body_lf_sha256": "d67902fcbdef2e933267a39cee1a26ba543e91cc1266dee972fc64dbcf589ace",
+    "assertion_sites": 7,
+    "loop_sites": 3,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+  },
+  "legacy_fixture": "tests/unit/program/xr_program_integer_fixture.h",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_CURRENT_INTEGER_DIVMOD_ADMISSION_FACET_LEGACY_OPEN",
+  "tests": [
+    "test_source_product_integer_divmod_admission",
+    "source_product_integer_divmod_encoding"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "matrix": "All8signed/unsigned integer types times2quotient/remainder operations=16functions.10Built+10independentwire inputs,empty+occupied output=40transitions/config.",
+  "original_mapping": [
+    {
+      "original": "Complete16quotient/remainder signatures;operation selector andtype lookup",
+      "current": "All16owned Checked functions retain two exact parameters,result anddistinct DIV_INT/REM_INT opcodes;return references computed SSA value2. Inputdeath,reverify,exact independently encoded packet andtype-derived nonownership.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Boolean left operand rejects",
+      "current": "First i8 division parameter0 becomesBool;Built andChecked requireBAD_TYPE3.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Boolean right operand rejects",
+      "current": "First i8 division parameter1 becomesBool;Built andChecked requireBAD_TYPE3.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Boolean result rejects",
+      "current": "First i8 division operation andfunction result becomeBool;Built andChecked requireBAD_TYPE3.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Invalid immediate operation selector2 rejects",
+      "current": "New opcodes independently identify DIV_INT/REM_INT;their inactive immediate2 rejectsBAD_STRUCTURE1.",
+      "remaining": "Original selection tag0/1/2 has no currentfield;Main equivalence disposition required;OPEN."
+    },
+    {
+      "original": "Missing explicit PanicInfo function ABI rejects",
+      "current": "Newpublic function has no panic_type/effect_mask;default propagation isimplicit. Invalid oneblock panic target1 rejectsBAD_STRUCTURE1.",
+      "remaining": "A bad handler target is not equivalent to missing requiredPanicInfo ABI. Originalnegative andruntime panic responsibilities stayOPEN."
+    },
+    {
+      "original": "Only one binary operand rejects",
+      "current": "Newfixedargs tuple has no operandcount field;unavailable RHS valueUINT32_MAX requiresBAD_VALUE4.",
+      "remaining": "Invalid SSA value is a currentfacet,not exact legacy arity-field defense;OPEN."
+    },
+    {
+      "original": "Explicit owner bit mutation rejects",
+      "current": "All16primitive result types reportnonowned throughpublic type query.",
+      "remaining": "No perinstruction ownershipbit innewformat;oldhostile mutation remainsOPEN."
+    }
+  ],
+  "ownership": "Borrowed module,parameter/block/instruction/function snapshots andname contents are compared;allborrowedstorage thenpoisoned before returning. Wireheap input compared,poisoned andfreed before ownedinspection. Occupiedrealowner exactbytes preservedaftereveryinvocation;actualphysicalstock refundedaftereachcall andfinal owners/ledger/observer destroyed.",
+  "boundaries": [
+    "Built/Checked admission only;no SourceProduct,specialization,Lowered,Program,VM/native/mixed,actual quotient/remainder values orPanicInfo runtime delivery qualified.",
+    "Allold6constructor mutations plus hostileowner-bit obligation retained. Distinct current inactivefields are never relabeled full oldnegative coverage.",
+    "OriginalwholefunctionOPEN,replacement_gates[],retired0. Source108=88fixtures+20other,other26files/160functions/shared7 unchanged.",
+    "Previous conversion corpus renamed byte-for-byte from2297-line .h to .inc.c forC coding limits;all64conversion signatures revalidated. No encodingbytes,expectedstatuses or registeredbudgets changed."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-integer-divmod-r1",
+    "receipts": "results.json",
+    "registered_commands": 8,
+    "divmod_admission_passed": 2,
+    "divmod_encoding_passed": 2,
+    "conversion_admission_passed": 2,
+    "conversion_encoding_passed": 2,
+    "divmod_functions_per_table": 16,
+    "conversion_pairs_per_table": 64,
+    "total_transitions": 144,
+    "divmod_transitions_per_configuration": 40,
+    "conversion_transitions_per_configuration": 32,
+    "admissions": 16,
+    "exact_rejections": 128,
+    "mismatches": 0,
+    "input_capture": {
+      "msvc_divmod": 2715,
+      "msvc_conversions": 2715,
+      "asan_divmod": 2715,
+      "asan_conversions": 2715,
+      "preservation": "SHA,size,mtime before==after;final actual nonmap inputs rebound"
+    },
+    "physical": "Both families refund actualstock afterevery invocation;complete artifact/resource ledger/observer destruction reaches0/0 inall4matrices.",
+    "fresh_build": "FirstbuildPASS both configurations;divmod andconversion consumers freshlycompiled perconfiguration=4C11/W4/WX TUs,ClangASan+UBSan flags andVALIDNinja deps.",
+    "production_reuse": "10actuallinked libraries/config preserved SHA,size,mtime;4actualproduction objectbodies matched their admission/declarations archive members;no productionTUrebuilt.",
+    "protection": "10933tracked pre-snapshot:10929nonowned exact;12historicaldirtygenerated preserved.598protected:594exact+4expected Ninja/CTestmetadata changes;oldCTest registry byteidenticalafterremoving only4newlines.",
+    "corpus_rename": "Previous2297-line .h raw corpus moved to .inc.c,rawSHA f643d5afc06a22a2a7fe6dff6bb4da29c870635af2024836e094f2f0de89aea3 unchanged;oldencoding expectations,manifest,map,registration unchanged. Bothactualconversionmatrices rerun successfully withnewinclude.",
+    "original_input": "Originalwholeverifierfunction and16signature fixture retained byte-for-byte. Legacy6mutation responsibilities plusowner-bit kept;panicABI/ownerbit/selector/arity gaps remainOPEN.",
+    "boundary": "Admission only. No actualquotient/remainder result,panicdelivery,SourceProduct/Program/VM/native/mixed or fullFI/axes/safety/Main claim.",
+    "annotation": "Addedafteractualexecution;preannotationmap captured andsaved;no annotationrerun claimed.",
+    "retired": 0
+  }
+}

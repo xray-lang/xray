@@ -17,7 +17,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_program_compile_owner.h"
-#include "integer_conversion_cases.h"
+#include "integer_conversion_cases.inc.c"
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 25u && XR_XIR_CHECKED_CONTRACT == 67u, "Actual Checked identity");
 _Static_assert(XR_XIR_I8 == 5 && XR_XIR_U8 == 8 && XR_XIR_I16 == 6 && XR_XIR_U16 == 9 &&
     XR_XIR_I32 == 7 && XR_XIR_U32 == 10 && XR_XIR_I64 == 2 && XR_XIR_U64 == 11 &&

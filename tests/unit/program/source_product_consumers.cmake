@@ -337,3 +337,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_chann
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_process_lifecycle.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_conversions.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_divmod_admission.cmake")

@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "functions": [
+    {
+      "name": "div_i8",
+      "type": 5,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_i8",
+      "type": 5,
+      "remainder": 1,
+      "operation": 46
+    },
+    {
+      "name": "div_u8",
+      "type": 8,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_u8",
+      "type": 8,
+      "remainder": 1,
+      "operation": 46
+    },
+    {
+      "name": "div_i16",
+      "type": 6,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_i16",
+      "type": 6,
+      "remainder": 1,
+      "operation": 46
+    },
+    {
+      "name": "div_u16",
+      "type": 9,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_u16",
+      "type": 9,
+      "remainder": 1,
+      "operation": 46
+    },
+    {
+      "name": "div_i32",
+      "type": 7,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_i32",
+      "type": 7,
+      "remainder": 1,
+      "operation": 46
+    },
+    {
+      "name": "div_u32",
+      "type": 10,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_u32",
+      "type": 10,
+      "remainder": 1,
+      "operation": 46
+    },
+    {
+      "name": "div_i64",
+      "type": 2,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_i64",
+      "type": 2,
+      "remainder": 1,
+      "operation": 46
+    },
+    {
+      "name": "div_u64",
+      "type": 11,
+      "remainder": 0,
+      "operation": 45
+    },
+    {
+      "name": "rem_u64",
+      "type": 11,
+      "remainder": 1,
+      "operation": 46
+    }
+  ],
+  "cases": [
+    {
+      "name": "matrix",
+      "mutation": 0,
+      "expected": 0,
+      "bytes": 2256,
+      "sha256": "22fe8d5f8c7cd1f5ec6eb1603a8a63920988652a0519ab3e7fa7efb64e5a4bcb"
+    },
+    {
+      "name": "boolean_lhs",
+      "mutation": 1,
+      "expected": 3,
+      "bytes": 2256,
+      "sha256": "45ad4dd7b919ed2f8429889323ea830018a81d1bc30ea230853e44b25a1f2158"
+    },
+    {
+      "name": "boolean_rhs",
+      "mutation": 2,
+      "expected": 3,
+      "bytes": 2256,
+      "sha256": "4c4d4f6fe3493c4baad29d3f7d8019e17acd4fab197c1849f7a7517bbc9e084e"
+    },
+    {
+      "name": "boolean_result",
+      "mutation": 3,
+      "expected": 3,
+      "bytes": 2256,
+      "sha256": "bfef57b922f425bc613cbe70361dcf36cf32e5ea79667bf57a179c691960f4bd"
+    },
+    {
+      "name": "inactive_selector",
+      "mutation": 4,
+      "expected": 1,
+      "bytes": 2256,
+      "sha256": "190fe8a2633b6e7806f3b219fb5316e8f336d37430a4731a61ad5c7676dec151"
+    },
+    {
+      "name": "invalid_panic_target",
+      "mutation": 5,
+      "expected": 1,
+      "bytes": 2256,
+      "sha256": "37a9bca1e2153927ad06c2a5827d907b78fe63fee8b91774e0c055adf016a7ce"
+    },
+    {
+      "name": "missing_rhs_value",
+      "mutation": 6,
+      "expected": 4,
+      "bytes": 2256,
+      "sha256": "53d70ef35e7e5bd9540cfde9c3c04708758db5ad2598671a75667533d5f09006"
+    },
+    {
+      "name": "wrong_return_type",
+      "mutation": 7,
+      "expected": 3,
+      "bytes": 2256,
+      "sha256": "65abfc96803addf05e2cbbf6615ea719656edfbc69236ef1d80b79402c7cf333"
+    },
+    {
+      "name": "inactive_type_argument",
+      "mutation": 8,
+      "expected": 1,
+      "bytes": 2256,
+      "sha256": "28f72b4f23214dab9170a5a1f53338bf43b385232c2e838d10717d01d22374bc"
+    },
+    {
+      "name": "unused_target",
+      "mutation": 9,
+      "expected": 1,
+      "bytes": 2256,
+      "sha256": "9e6a01426212d18fbdeb5c5142c11fe7b91f76202b67454bbbd011741b71d059"
+    }
+  ],
+  "matrix": "All16original quotient/remainder signatures;10Built+10wire inputs;empty+occupied output=40transitions/config",
+  "boundary": "Admission and detached ownership only. Old panic ABI,owner bit,operation selector andarity fields have no identical encoding. WholelegacyOPEN;no runtime arithmetic or panics proved."
+}
