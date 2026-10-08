@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "result": "PASS_FOCUSED_BOTH_CONFIGURATIONS",
+  "legacy": [
+    {
+      "name": "test_module_slots_invalid_construction",
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "legacy_line": 25,
+      "body_lf_sha256": "f094d872deb91b225cc726b4a4e84f064cee88cea66d1f4c31b32864e22dca95",
+      "assertion_sites": 2,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_slot_identity",
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "legacy_line": 76,
+      "body_lf_sha256": "eb2ae4b19bf130c319b50f2f95d926378f38463a7643d8e558d1cc827ef2202d",
+      "assertion_sites": 5,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_slots_construction",
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "legacy_line": 108,
+      "body_lf_sha256": "f0a836a5c3c8a77dbe94eec5494a8e9d8b268bbdc0d16752f61698c8b0aab616",
+      "assertion_sites": 12,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_slots_hostile_wire",
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "legacy_line": 163,
+      "body_lf_sha256": "43c96494e01716ef80de5f8048ec7cfc2728f30a89c5d0d048659b0aaf709f50",
+      "assertion_sites": 7,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "cases": "22 complete independently encoded packets: eight positive controls and fourteen rejects; each with NULL and occupied output",
+  "positive_controls": [
+    "Eight dense immutable scalar/string slots across base/left/right/main",
+    "Root mutable slot",
+    "Bool slot",
+    "Unit slot",
+    "Singleton Tuple<I64> slot with owned descriptor pool",
+    "Reordered dense slot ordinals preserved byte-exactly",
+    "No-slot declaration table",
+    "Root mutable Unit slot"
+  ],
+  "rejects": [
+    "out-of-range/maximum owner",
+    "non-Boolean mutability2/maximum",
+    "mutable library slot",
+    "reserved type4",
+    "unknown type127/255",
+    "constructed ID with no pool",
+    "open type parameter",
+    "constructed ID outside existing pool",
+    "Cell slot",
+    "missing/foreign initializer"
+  ],
+  "oracle": "Exact slot owner/type/mutability/ordinal and Tuple field metadata; canonical write is the entire original input after caller input poison/free. Failed admission preserves NULL or occupied caller owner and refunds all physical compiler allocations.",
+  "original_mapping": [
+    {
+      "legacy": "invalid_construction ordinal0/1; hostile_wire ordinal0/4",
+      "status": "OPEN",
+      "boundary": "Current dense slot ordinal has no opaque declaration key. Empty/duplicate legacy key rejection is not represented by owner-bound tests."
+    },
+    {
+      "legacy": "invalid_construction ordinal2; hostile_wire ordinal1",
+      "status": "CURRENT_UNIT_POSITIVE_ORIGINAL_REPRESENTATION_OPEN",
+      "boundary": "Current spec 17.28 explicitly gives Unit a real module slot and publication identity; original void-negative bytes are not recycled as a positive input."
+    },
+    {
+      "legacy": "invalid_construction ordinal3/4; hostile_wire ordinal2/3",
+      "status": "TYPE_BOUND_FACET",
+      "boundary": "Current independent unknown/reserved IDs replace only unknown type rejection; legacy11 is now U64 and must not be rejected by numeric coincidence."
+    },
+    {
+      "legacy": "invalid_construction ordinal5; hostile_wire ordinal5",
+      "status": "MUTABILITY_FACET",
+      "boundary": "Current mutable is canonical0/1; value2 and maximum rejected."
+    },
+    {
+      "legacy": "invalid_construction ordinal6",
+      "status": "INITIALIZER_FACET",
+      "boundary": "Real slot module must own valid initializer."
+    },
+    {
+      "legacy": "invalid_construction ordinal7/8/9",
+      "status": "OPEN",
+      "boundary": "Host pointer absence, old inconsistent slot list and old per-module resource cap need separate construction/budget mapping. Current zero-slot table is a legitimate control."
+    },
+    {
+      "legacy": "test_module_slot_identity",
+      "status": "OPEN",
+      "boundary": "Old keyed permutation normalization does not apply to dense ordered current ordinals. Current changed type/mutability/order produces distinct complete inputs, each admitted control rewrites exactly."
+    },
+    {
+      "legacy": "test_module_slots_construction",
+      "status": "METADATA_COPY_FACET",
+      "boundary": "Current Tuple<I64> covers an owned aggregate type descriptor; old keyed per-module layout and mutable library slots remain distinct duties."
+    }
+  ],
+  "candidate_gates": [
+    {
+      "name": "test_source_product_module_slots",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_slots_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Original keyed declaration identity and canonical reorder",
+    "Direct construction pointer and old slot-count budget cases",
+    "Executable slot initialization/publication/read/store and failure unwind",
+    "SourceProduct slot producer",
+    "VM/native/mixed and owned runtime slot state",
+    "Full FI",
+    "Resource axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-slot-wire-r1",
+  "retired": 0,
+  "replacement_gates": [],
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 2,
+    "encoding_processes": 2,
+    "reads_per_configuration": 44,
+    "accepted_per_configuration": 16,
+    "rejected_per_configuration": 28,
+    "first_build": "FAIL both configurations: signed enum versus unsigned golden type comparison; first source and logs preserved",
+    "corrected_build": "PASS both after explicit uint32_t comparison cast; warnings-as-errors unchanged",
+    "first_execution": "PASS both",
+    "physical": "compiler=0/0 observer table=0; refund to pre-read live/bytes after each occupied/NULL attempt",
+    "scope": "Checked reader/verifier/writer only; no Lowered/Program/VM/native/runtime execution claim"
+  },
+  "postrun_note": "Result annotation appended after execution; no final-map rerun claimed."
+}

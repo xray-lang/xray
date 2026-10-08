@@ -305,3 +305,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_modul
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_suspension.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_cancel_cleanup.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_slots.cmake")

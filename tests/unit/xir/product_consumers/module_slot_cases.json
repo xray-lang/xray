@@ -1,0 +1,1176 @@
+{
+  "schema": 1,
+  "controls": 8,
+  "rejects": 14,
+  "cases": [
+    {
+      "name": "immutable_slots",
+      "expected": "XR_XIR_OK",
+      "bytes": 946,
+      "sha256": "b61a30e609ce888c1ee02bedca760f030f798bd73f75fd831b5dd8668f516228",
+      "slots": [
+        [
+          0,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "root_mutable",
+      "expected": "XR_XIR_OK",
+      "bytes": 946,
+      "sha256": "db437bf7e4fbe030195f933aec95f2cb5c0be828024ec327d8d7a2ef56f147a7",
+      "slots": [
+        [
+          0,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          1
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "bool_slot",
+      "expected": "XR_XIR_OK",
+      "bytes": 946,
+      "sha256": "b38cc780af545fd80abceb62319c67806744314b890807a338f42df873a673ac",
+      "slots": [
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "unit_slot",
+      "expected": "XR_XIR_OK",
+      "bytes": 946,
+      "sha256": "d2ee51ba3641505f8102b0fcf28743002e00d8f9645ea2ef3cb52ff8396c63ff",
+      "slots": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "tuple_slot",
+      "expected": "XR_XIR_OK",
+      "bytes": 962,
+      "sha256": "da1e714e31cb68d1ee5240d3aceb7c6120d7f6faa89245641f83b96a135a69c9",
+      "slots": [
+        [
+          0,
+          256,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 6
+    },
+    {
+      "name": "reordered_dense_slots",
+      "expected": "XR_XIR_OK",
+      "bytes": 946,
+      "sha256": "89570f44fdff4dda926c9151ce777397dc5fdf7a1667786778724a5939e56998",
+      "slots": [
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          0,
+          2,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "no_slots",
+      "expected": "XR_XIR_OK",
+      "bytes": 850,
+      "sha256": "84188c44261180ac05fa0b53d003c4d75c49105f92e5500225fe45466ef5f7c9",
+      "slots": [],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "root_mutable_unit",
+      "expected": "XR_XIR_OK",
+      "bytes": 946,
+      "sha256": "14bcdb02560328bdc43798b207cf08e537deebdc0d6e9803ccc3b67f0efbbeb7",
+      "slots": [
+        [
+          0,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          0,
+          1
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "owner_out_of_range",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 946,
+      "sha256": "1285f00a5601fd163c7490dfb7b37cd8791199adb2af805f04d54aa044ce67c0",
+      "slots": [
+        [
+          4,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "owner_maximum",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 946,
+      "sha256": "d468b51c037d0252c7405f007f4a39071a67d66bb0b778e91de4367af9f23cd3",
+      "slots": [
+        [
+          4294967295,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "mutability_two",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 946,
+      "sha256": "f5610375625b8eb7a9a08fcc6d4be3a216b56251f88c45886d6b6fb7593ab192",
+      "slots": [
+        [
+          0,
+          2,
+          2
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "mutability_maximum",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 946,
+      "sha256": "75e5447deb2cadd76b0eba20b08541ae3fd661074ff51dd65efbe4a6a7223c7d",
+      "slots": [
+        [
+          0,
+          2,
+          4294967295
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "library_mutable",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 946,
+      "sha256": "44af4e144b69e8994d9e3418438598364c345aa9b9454d186874294bafdde7d8",
+      "slots": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "reserved_type_four",
+      "expected": "XR_XIR_BAD_TYPE",
+      "bytes": 946,
+      "sha256": "404f714497d55d5e9ddd46415f17790f602e1847911cda24033b0e2e963bbe92",
+      "slots": [
+        [
+          0,
+          4,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "unknown_type_127",
+      "expected": "XR_XIR_BAD_TYPE",
+      "bytes": 946,
+      "sha256": "23bf604b21a8a25ae9a6caeb2762bfdaf5c255e3b3d6b4dbd75e36bfd09f68a7",
+      "slots": [
+        [
+          0,
+          127,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "unknown_type_255",
+      "expected": "XR_XIR_BAD_TYPE",
+      "bytes": 946,
+      "sha256": "21912440357266e1649a6df71d0acbfbd8f3e52ab6d2050a0ff5a6b8f10733fd",
+      "slots": [
+        [
+          0,
+          255,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "missing_constructed_pool",
+      "expected": "XR_XIR_BAD_TYPE",
+      "bytes": 946,
+      "sha256": "9cbfb969a52c80c84d3b14d37be1ed9ca6d69752a4701b7c5566d1a281300dd8",
+      "slots": [
+        [
+          0,
+          256,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "open_type_parameter",
+      "expected": "XR_XIR_BAD_TYPE",
+      "bytes": 946,
+      "sha256": "5698b4af28f98eabcaef0be08503ed9cc5167c200e28ce09d669172d6405e171",
+      "slots": [
+        [
+          0,
+          65536,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "constructed_out_of_range",
+      "expected": "XR_XIR_BAD_TYPE",
+      "bytes": 962,
+      "sha256": "29e463752cd2308f3b225000b8806cbe297a0cd26be75dc1cd177ff08de2e1dd",
+      "slots": [
+        [
+          0,
+          257,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 6
+    },
+    {
+      "name": "cell_slot",
+      "expected": "XR_XIR_BAD_TYPE",
+      "bytes": 958,
+      "sha256": "a3a6f25d332666a5c4262ce25fd2549df7bb444dde6f088644a0678f23372ad9",
+      "slots": [
+        [
+          0,
+          256,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 3
+    },
+    {
+      "name": "missing_initializer",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 946,
+      "sha256": "6e07b1b15aaf50c11f045c852e20f9e55602cff578991076ada7dedcfc7b1493",
+      "slots": [
+        [
+          0,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        4294967295,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    },
+    {
+      "name": "foreign_initializer",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 946,
+      "sha256": "ff9cf0d6f3c63ebf0ee9315fa81012fd96b15d2aa141f37877e353c40aaeecef",
+      "slots": [
+        [
+          0,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          2,
+          0
+        ],
+        [
+          1,
+          3,
+          0
+        ],
+        [
+          2,
+          2,
+          0
+        ],
+        [
+          2,
+          3,
+          0
+        ],
+        [
+          3,
+          2,
+          0
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "initializers": [
+        1,
+        1,
+        2,
+        3
+      ],
+      "type_kind": 0
+    }
+  ]
+}
