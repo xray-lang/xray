@@ -1,0 +1,6 @@
+var notifications: Channel<string>? = null
+fn answer() -> i64 {
+ assert(notifications == null)
+ return 0
+}
+export fn consumerAnswer() -> i64 { return answer() }

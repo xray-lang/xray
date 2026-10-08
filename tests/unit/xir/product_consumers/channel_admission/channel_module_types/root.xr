@@ -1,0 +1,9 @@
+type Subscription = { label: string, notifications: Channel<i64> }
+var subscriptions: Array<Subscription> = []
+var notifications: Channel<string>? = null
+fn answer() -> i64 {
+ assert(len(subscriptions) == 0)
+ assert(notifications == null)
+ return len(subscriptions)
+}
+export fn consumerAnswer() -> i64 { return answer() }

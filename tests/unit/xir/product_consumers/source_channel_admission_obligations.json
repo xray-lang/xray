@@ -1,0 +1,247 @@
+{
+  "schema": 1,
+  "status": "OPEN_PRODUCTION_DEPENDENCIES_REPRODUCED",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "worker_parent": "75dffa8be3a733b14bdf85072fd303e47cf511f3",
+  "cases": [
+    {
+      "name": "channel_handles",
+      "responsibility": "ORIGINAL_SOURCE_POSITIVE",
+      "legacy_name": "source_owner_channel_handles_execute",
+      "legacy_body_lf_sha256": "6bac9a64bea41b4dc83fdc0c423003d01fec8bd965bacd36d9f4a97b143884db",
+      "fixture": "tests/unit/xir/product_consumers/channel_admission/channel_handles/root.xr",
+      "fixture_sha256": "0a411e41caa340ebbe965bf1f258b4685bb02f4b091a4c4bb17ecbfeabca4fd1",
+      "original_bytes": 124,
+      "original_sha256": "17f9785641266ab0cf67727b96addec103e17f24d8fd190573efacc32e260207",
+      "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "expected_i64": 42,
+      "expected_probe_exit": 0,
+      "status": "OPEN_PRODUCTION_ADMISSION_FAILURE",
+      "actual": [
+        {
+          "configuration": "msvc",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=1 stage=1 line=2: built-in construction is not implemented in XIR",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/msvc-channel_handles.json",
+          "stderr_sha256": "c2b435afea70941ae326c8fe5996dc802e8faa4e9e230e4a9f5789ff70ebe826",
+          "binary_sha256": "1a21a116ebdfb3f1aae84b63ad95f388d57f8b978d1e4dc524e0fa7084e3f840"
+        },
+        {
+          "configuration": "asan",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=1 stage=1 line=2: built-in construction is not implemented in XIR",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/asan-channel_handles.json",
+          "stderr_sha256": "c2b435afea70941ae326c8fe5996dc802e8faa4e9e230e4a9f5789ff70ebe826",
+          "binary_sha256": "99ec9ff5936535ebc9bbb3b2987ffb8434eb5354111648f3a6c0f3c1deb3076a"
+        }
+      ]
+    },
+    {
+      "name": "channel_module_types",
+      "responsibility": "ORIGINAL_SOURCE_POSITIVE",
+      "legacy_name": "source_owner_channel_module_storage_has_exact_types",
+      "legacy_body_lf_sha256": "bd00baf9aab1f44b146e4bae51d060665de042263ca256e4bbf723aea6e69641",
+      "fixture": "tests/unit/xir/product_consumers/channel_admission/channel_module_types/root.xr",
+      "fixture_sha256": "7311d03201c5d2d3f2851b34bf35a94bce372dca686ae6c8ad470fec7e3ece22",
+      "original_bytes": 268,
+      "original_sha256": "377a43046530d436b03c7a8d66207345a7bb73cee70373ac5164a5caff29c015",
+      "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "expected_i64": 0,
+      "expected_probe_exit": 0,
+      "status": "OPEN_PRODUCTION_ADMISSION_FAILURE",
+      "actual": [
+        {
+          "configuration": "msvc",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=3 stage=1 line=2: type declaration is not admitted by XIR (kind 14)",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/msvc-channel_module_types.json",
+          "stderr_sha256": "e4ac69fe733782f7973ace4073d84b794f66656ecf24ded1cb0e763defe7880c",
+          "binary_sha256": "1a21a116ebdfb3f1aae84b63ad95f388d57f8b978d1e4dc524e0fa7084e3f840"
+        },
+        {
+          "configuration": "asan",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=3 stage=1 line=2: type declaration is not admitted by XIR (kind 14)",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/asan-channel_module_types.json",
+          "stderr_sha256": "e4ac69fe733782f7973ace4073d84b794f66656ecf24ded1cb0e763defe7880c",
+          "binary_sha256": "99ec9ff5936535ebc9bbb3b2987ffb8434eb5354111648f3a6c0f3c1deb3076a"
+        }
+      ]
+    },
+    {
+      "name": "channel_constructor_minimal",
+      "responsibility": "INDEPENDENT_MINIMAL_PRODUCTION_REPRODUCTION",
+      "legacy_name": null,
+      "legacy_body_lf_sha256": null,
+      "fixture": "tests/unit/xir/product_consumers/channel_admission/channel_constructor_minimal/root.xr",
+      "fixture_sha256": "adec2c9dda12160deb17e65383bbd24c2e10f0c55f48cda1acd575e2ac49b7ff",
+      "original_bytes": 70,
+      "original_sha256": "6947ac482ce5dca591697308663091ae7071db5d80fda86e9d6e423532d4e931",
+      "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "expected_i64": 42,
+      "expected_probe_exit": 0,
+      "status": "OPEN_PRODUCTION_ADMISSION_FAILURE",
+      "actual": [
+        {
+          "configuration": "msvc",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=1 stage=1 line=2: built-in construction is not implemented in XIR",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/msvc-channel_constructor_minimal.json",
+          "stderr_sha256": "c2b435afea70941ae326c8fe5996dc802e8faa4e9e230e4a9f5789ff70ebe826",
+          "binary_sha256": "1a21a116ebdfb3f1aae84b63ad95f388d57f8b978d1e4dc524e0fa7084e3f840"
+        },
+        {
+          "configuration": "asan",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=1 stage=1 line=2: built-in construction is not implemented in XIR",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/asan-channel_constructor_minimal.json",
+          "stderr_sha256": "c2b435afea70941ae326c8fe5996dc802e8faa4e9e230e4a9f5789ff70ebe826",
+          "binary_sha256": "99ec9ff5936535ebc9bbb3b2987ffb8434eb5354111648f3a6c0f3c1deb3076a"
+        }
+      ]
+    },
+    {
+      "name": "channel_nullable_minimal",
+      "responsibility": "INDEPENDENT_MINIMAL_PRODUCTION_REPRODUCTION",
+      "legacy_name": null,
+      "legacy_body_lf_sha256": null,
+      "fixture": "tests/unit/xir/product_consumers/channel_admission/channel_nullable_minimal/root.xr",
+      "fixture_sha256": "25c6877bb53e669206c730e442ad36458b6fcbe52eeb88bf943a16ff505279ae",
+      "original_bytes": 107,
+      "original_sha256": "272fff17ce7a21d9429c1fb4c23062fab8fbd0cbe0a35750590e53db15e7c57b",
+      "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "expected_i64": 0,
+      "expected_probe_exit": 0,
+      "status": "OPEN_PRODUCTION_ADMISSION_FAILURE",
+      "actual": [
+        {
+          "configuration": "msvc",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=3 stage=1 line=1: name does not resolve to an admitted nominal type",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/msvc-channel_nullable_minimal.json",
+          "stderr_sha256": "c581fa47b6788c1ebd4d7335608db31e5de6c75f2622c4b1b66864ef50df354f",
+          "binary_sha256": "1a21a116ebdfb3f1aae84b63ad95f388d57f8b978d1e4dc524e0fa7084e3f840"
+        },
+        {
+          "configuration": "asan",
+          "actual_exit": 1,
+          "source_diagnostic": "source status=3 stage=1 line=1: name does not resolve to an admitted nominal type",
+          "positive_expectation_met": false,
+          "receipt": "build-consumer-evidence/current67-channel-original-probe-r1/asan-channel_nullable_minimal.json",
+          "stderr_sha256": "c581fa47b6788c1ebd4d7335608db31e5de6c75f2622c4b1b66864ef50df354f",
+          "binary_sha256": "99ec9ff5936535ebc9bbb3b2987ffb8434eb5354111648f3a6c0f3c1deb3076a"
+        }
+      ]
+    }
+  ],
+  "independent_contract": {
+    "channel": "The fixed producer spec section 2.4.5 admits Channel<T> and its constructor; section 15 lists Channel in the prelude. The original language-result expectations remain 42 and 0.",
+    "module": "The original module fixture also requires exact structural records and module-local nullable Channel storage. Its first kind14 refusal does not establish whether Channel itself is supported. The nullable-only reproduction independently fails nominal admission.",
+    "alias": "The original copy(channel) text is preserved. Construction fails before alias/member evaluation; this run proves no alias, copy spelling, isClosed or release behavior. No positive is converted to an accepted rejection."
+  },
+  "production_findings": [
+    {
+      "responsibility": "Channel construction",
+      "minimal": "channel_constructor_minimal",
+      "source": "src/xir/xxir_source.c:1474 -> src/xir/xxir_source_array.inc.c:124",
+      "observation": "Unbound non-Atomic construction reaches the Array-only construction guard. Both providers report BAD_STRUCTURE1 at CHECK1."
+    },
+    {
+      "responsibility": "Channel type admission",
+      "minimal": "channel_nullable_minimal",
+      "source": "src/xir/xxir_source.c:597",
+      "observation": "Nullable recursively checks Channel<string>; both providers report BAD_TYPE3 with a nominal admission diagnostic. This is independent of anonymous record admission."
+    },
+    {
+      "responsibility": "Exact structural record admission",
+      "minimal": "channel_module_types",
+      "source": "src/xir/xxir_source.c:597",
+      "observation": "The original module case first refuses kind14 at line2. An older Source4/5 reproduction already covers this dependency; no claim that fixing it alone completes this fixture."
+    }
+  ],
+  "source_references": [
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "sha256": "679a08936c9c9f577eba1b4f0a6878488b70544509163114083b30150a625539"
+    },
+    {
+      "path": "spec/source/sections/016-15-standard-library.md",
+      "sha256": "656169c1649ca99e637592c298d6e53230557f6b6d18da0573f50b08996ae369"
+    },
+    {
+      "path": "stdlib/types/channel.xr",
+      "sha256": "b81402be390f345fe707e5189e2cd1e41796a90f74a546522c9787eb08f10c44"
+    },
+    {
+      "path": "src/xir/xxir_source.c",
+      "sha256": "52258010440971dbc1d3d1ef495bb55e82ea639dc36f674c1c163f29abc8ecc7"
+    },
+    {
+      "path": "src/xir/xxir_source_array.inc.c",
+      "sha256": "c186ce0068c6ad3ba561ee10861be41756f6d35b0465735ad0a4d3abb495e1ab"
+    }
+  ],
+  "build": {
+    "targets": [
+      "test_source_product_probe"
+    ],
+    "configurations": [
+      "MSVC Release UTF8 Ninja",
+      "Clang ASan+UBSan Debug Ninja"
+    ],
+    "fresh_each": "one probe C translation unit and executable link; shared driver and libraries reused unchanged",
+    "binding": "build-consumer-evidence/current67-channel-original-probe-r1/actual-probe-build-binding.json",
+    "protected_metadata": "598 protected inputs/artifacts unchanged in bytes, SHA256 and mtime"
+  },
+  "validation": {
+    "actual_positive_failures": 8,
+    "normal_control_processes": 2,
+    "control": "The same binaries execute a direct answer42 in two detached instances with four fixed results and final physical release. Both exit0.",
+    "failure_lifetimes": "The generic probe exits at its success assertion after Source refusal. Final physical release is not reported on these failed-positive paths; no failed-case leak freedom is claimed.",
+    "normal_control_evidence": "build-consumer-evidence/current67-channel-original-probe-r1/control-results.json",
+    "fixture_location": "The actual runs use byte-exact copies under the evidence directory. Committed fixture paths are new replay inputs, not an assertion that they were executed from the tracked path."
+  },
+  "replay": {
+    "target": "test_source_product_probe",
+    "argv": [
+      "BINARY",
+      "CASE_NAME",
+      "DIRECTORY_OF_FIXTURE",
+      "FIXTURE_FILE",
+      "EXPECTED_I64",
+      "0"
+    ],
+    "expected_exit": 0,
+    "deadline_seconds": 60,
+    "processors": 1,
+    "serial": true,
+    "note": "A nonzero result remains a failed positive. These candidates are not registered as expected-failure or passing retirement gates."
+  },
+  "remaining": [
+    "Channel typed Checked/Lowered/VM/real native/mixed",
+    "original alias and isClosed semantics",
+    "module record and nullable storage",
+    "two-instance and owned result obligations for these cases",
+    "compiler/runtime full faults and resource axes",
+    "cancellation and physical release",
+    "full applicable safety and integration-head qualification"
+  ],
+  "unchanged_denominators": {
+    "source": 108,
+    "source_fixtures": 88,
+    "source_non_fixture": 20,
+    "other_consumer_files": 26,
+    "other_function_rows": 160,
+    "shared_emission_owner_consumers": 7,
+    "retired": 0
+  },
+  "retirement": "No legacy consumer, helper, dependency or registration is removed."
+}
