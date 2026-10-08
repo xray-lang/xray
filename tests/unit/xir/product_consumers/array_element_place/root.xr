@@ -1,0 +1,8 @@
+export fn place0() -> i64 { var values: Array<i64> = [42]; values[0] = 42; return values[0] }
+export fn place1() -> i64 { var values: Array<i64> = [42]; values[1] = 42; return values[1] }
+export fn place2() -> i64 { var values: Array<i64> = [42]; values[-1] = 42; return values[-1] }
+export fn place3() -> i64 { var values: Array<i64> = [42]; values[9223372036854775807] = 42; return values[9223372036854775807] }
+export fn place4() -> i64 { var values: Array<i64> = [42]; values[-9223372036854775808] = 42; return values[-9223372036854775808] }
+export fn place5() -> i64 { var values: Array<i64> = []; values[0] = 42; return values[0] }
+fn answer() -> i64 { return place0() }
+export fn consumerAnswer() -> i64 { return answer() }

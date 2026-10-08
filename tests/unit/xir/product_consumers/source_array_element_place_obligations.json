@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "legacy": {
+    "file": "tests/unit/aot/test_xr_program_aot.c",
+    "function": "write_element_place_fixture",
+    "body_LF_sha256": "4c3f2f870c1ed60a22c5f23637b580d4d9564d5cd6ae5b690075d8026dd95a80",
+    "fixture": "tests/unit/program/xr_program_array_fixture.h",
+    "scalar_mutations": [
+      0,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "scalar_indices": [
+      "0",
+      "1",
+      "-1",
+      "INT64_MAX",
+      "INT64_MIN",
+      "0"
+    ],
+    "lengths": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "positive_i64": 42,
+    "bounds_code": 430,
+    "old_outcome": 3,
+    "old_descriptor_native_kind": 7,
+    "release": "context.allocations0 before destroy;descriptor step and drop",
+    "managed_scenarios": [
+      0,
+      2,
+      3,
+      5,
+      8
+    ],
+    "managed_expected": 3
+  },
+  "fixture": "tests/unit/xir/product_consumers/array_element_place/root.xr",
+  "fixture_sha256": "e09516a716c558c22e78df7e4fc4a8cb15996ef970f3c8784ba3d225f010d9a4",
+  "mapping": "Six scalar cases preserve original literal Array<i64>[42] or empty Array,exact indices,store42 before load andpositive42. New Source functions export each case;private answer/canonical adapter retained. Current BOUNDS15 representation checked against independent panic430/index/length,not compared only between backends.",
+  "boundaries": [
+    "Whole scalar/managed generator and verifier functions OPEN;managed loan scenarios and explicit legacy owner admission remain separate.",
+    "Old descriptor schema9/direct descriptor step/drop andper-return contextallocations0 are not recreated by public Instance execution.",
+    "Complete FI,axes,cancel,full safety,Main integration andretirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "public_scalar_element_place_20261009_facet": {
+    "status": "PASS_SCALAR_EXECUTION_AND_DETACHED_OWNERS_WHOLE_LEGACY_OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "evidence": "build-consumer-evidence/current67-array-element-place-r1",
+    "source": "Six exported zero-argument functions preserve scalar mutation0/10/11/12/13/14:literal Array<i64>[42] or empty Array,store42,load same index. Original indices0,1,-1,MAX,MIN,0;length1 except empty0. Private answer andfixed consumerAnswer42 adapter retain canonical0 andprivate-entry refusal.",
+    "metadata": "Every public root function has exactly one typed ARRAY_NEW,one UNIT ARRAY_SET,one I64 ARRAY_GET andexact returnSSA. Operand groups retain fill42/store42/index;CELL_PLACE store andget receiver shareexact root. Source emitter group fields are public Checked args andoperand table;no internalvaluecast orinventedowner bit.",
+    "ownership": "Two independent owner commands retain Closed Checked andfull writerpacket,kill SourceProduct/Session/request/authority/path buffers,thenverify andcomparecompletepacket. Checked dies beforeverified Lowered. Eight actual VM/native/mixed commands eachretain two Instances then dropcaller Program reference;all Source owners already dead beforeexecution.",
+    "independent_oracle": "Seven calls perInstance:original six cases thenrepeat positive0. Positive RETURNED1/I64(42);five failure BOUNDS15/panic430 withvalid exactindex andlength. Empty take isBAD_STATE;occupiedI64sentinel BAD_ARGUMENT preservesbytes/noalloc. Copy ten outcome records/command,freebothInstances,thenrevalidate exactbounds/facts anddrop all;final runtime/compiler physical0/0. Current status15 differs old result.kind3/descriptor.kind7;facts separatelychecked.",
+    "actual_evidence": {
+      "total_commands": 20,
+      "initial_test_oracle_failures": 4,
+      "final_commands": 14,
+      "backend_passes": 8,
+      "owned_passes": 2,
+      "controls": 6,
+      "new_source_call_outcomes": 112,
+      "new_returned42": 32,
+      "new_bounds_outcomes": 80,
+      "detached_bounds_records": 80,
+      "all_attempts": "actual-execution-attempts.xml",
+      "first_receipts": "results-source.json;four strict failure receipts with cleanup UNPROVEN",
+      "final_receipts": [
+        "final/results-source.json",
+        "final/results-native.json"
+      ],
+      "initial_build_failure": "Both compilers rejected newtest nonexistent XrXirPanicInfo type. Changed solely to actual public XrXirPanicPayload;raw initial code/logs preserved before first execution.",
+      "initial_execution_failure": "New metadata oracle assumed ARRAY_GET receives CELL_READ. Actual25f source_array_receiver intentionally retains CELL_PLACE forplainindex. Four VM/owned processes failed same assertion;rawshape/binaries/inputs/outputs preserved;assertion corrected to exactCELL_PLACE sharingstore root,then both affectedTUs/config freshly rebuilt. No Source fixture/oracleindex/panic change;no production fix orwarning bypass.",
+      "input_capture": "2661 actualinputs/PID;all20before==after SHA,size,mtime including explicit3observerheaders. Firstshape/binary changedinputs bound tosaved rawversions;othercurrentinputs exact. Mapannotation afterward;executed originalmapSHA/size/mtime andrawpreimage retained.",
+      "build": "12 fresh final translation units across2configurations:driver,VMwrapper,owned,nativewrapper,newrealC,olddefault-escape controlrealC.18 totalcompile attempts/16successful include2initialtypefailures andheadercorrectionrecompiles. C11/W4/WX;actualASan+UBSan flags andVALID Ninja dependencies. Oldcontrol wrapper source/object exactreuse.",
+      "generated_C_payload_sha256": {
+        "msvc": "cdb86bf2d80fea4951ca43dd8479c27b396c966a36898a85da5610f15598e66c",
+        "asan": "cdb86bf2d80fea4951ca43dd8479c27b396c966a36898a85da5610f15598e66c"
+      },
+      "control_C": "ExactrawSource generatedC matchespreviousCOW default control;payload0b2a710e04bff4d3f8e5b421f204de394c4fa17b3e64e5456ec7ffd812c38095.",
+      "production": "11 archives/config exact SHA,size,mtime;6producer25f Sourcefiles independentlycompared,actualcompiledobject bodies matchedactualarchive members;10actual linkedarchives. No productionTU/archive rebuilt.",
+      "protection": "11010initialtracked/11008nonowned exact;7newownedfiles and2narrowexistingedits.12historicaldirtypreserved.598protected594exact+4expectedNinja/CTest metadatachanges;remove42newregistrationlines/config restoresallpriorrawCTest."
+    },
+    "registration": "21newrows/config:5normal/ownedT120P1;4compilerT600P8jobs8/COST300/RUN_SERIAL usinggenericfaults.py;axes--axesT120P1RUN_SERIAL;runtime--runtime/cancel--cancelT120P1.32heavyrowsacross2cfgNOT_RUN. Genericruntime/cancel useconsumerAnswer42;theydo notproveall6case faultrollback/cancel.",
+    "remaining": [
+      "Managed loan scenarios0/2/3/5/8,explicitowner/copy/admissionmutations1..9 andnestedloanremainOPEN.",
+      "Old descriptor schema9/direct initialize/step/drop,exact oldoutcomeencoding andcontext.allocations0 aftereachreturnbeforecontextdestroy are notclaimed equivalent.",
+      "Complete compiler/runtimeFI,resourceaxes,cancel,fullsafety,Mainintegration andoldconsumerretirement remainOPEN."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}

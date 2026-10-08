@@ -24,6 +24,7 @@
 #include "array_default_source_shape.h"
 #include "array_default_escape_shape.h"
 #include "array_managed_escape_shape.h"
+#include "array_element_place_shape.h"
 
 static const SourceProductConsumerFixture *consumer_fixture;
 #define XR_CONSUMER_NAME (consumer_fixture->name)
@@ -38,6 +39,7 @@ typedef struct Consumer {
     XrXirProgram *program;
     XrXirStatus status;
     uint32_t entry, answer, private_answer, state_probe, parameterized_answer;
+    uint32_t array_entries[6];
     size_t attempts;
 } Consumer;
 
@@ -257,6 +259,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
         array_default_source_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_default_escape") ?
         array_default_escape_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_managed_escape") ?
         array_managed_escape_shape(module) : UINT32_MAX;
+    if (!strcmp(XR_CONSUMER_NAME, "array_element_place")) array_element_place_shape(module, run.array_entries);
     /* Subsequent reads and execution own all data after the parse session dies. */
     xr_compile_session_free(session);
     session = NULL;
@@ -352,8 +355,13 @@ static XrXirValue execute(XrXirInstance *instance, uint32_t entry, unsigned expe
 #include "source_product_consumer_array_default.inc.c"
 #include "source_product_consumer_array_escape.inc.c"
 #include "source_product_consumer_managed_escape.inc.c"
+#include "source_product_consumer_element_place.inc.c"
 
 static void normal(Consumer *run) {
+    if (!strcmp(XR_CONSUMER_NAME, "array_element_place")) {
+        consumer_element_place_normal(run);
+        return;
+    }
     if (!strcmp(XR_CONSUMER_NAME, "array_managed_escape")) {
         consumer_managed_escape_normal(run);
         return;
