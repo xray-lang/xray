@@ -432,5 +432,32 @@
     "evidence": "build-consumer-evidence/current67-source0-compiler-axes-rebased-applied-r1/; independent registration, light and pure-parser audits in adjacent directories.",
     "retirement": "0. All original eight scenarios,17 run assertions,2 main assertions and native exports retain their original OPEN statuses.",
     "remaining": "All12 real axis gates and complete2036 compiler/32 runtime sweeps require Main queue windows and remain NOT_RUN. Other7 original sources, whole input-packet bytes, initialization FAILED/sticky OOM, sibling continuation, native/mixed, owned string/partial initialization/reverse cleanup, complete default/applicable safety, Main producer rebind and integration remain OPEN."
+  },
+  "fault_runner_process_facet": {
+    "status": "IMPLEMENTED_TARGETED_PROCESS_VALIDATION_PASS_COMPLETE_GATES_NOT_RUN",
+    "parent_commit": "657fcb5e8911a99d88a82f968485c3205623cd07",
+    "effective_scripts": {
+      "source_product_consumer_allocation_faults.py": "466aa936887913f0f268cf9981a3884935590d2651bbfd4ccff93ec006e81176",
+      "source_product_consumer_allocation_axes.py": "e4b0d2b7224f3b4337a9fcd657a6ec297b897b751bc63849a2b1142f18a9a71d"
+    },
+    "prior_hashes": "The earlier shard and compiler-axis facets retain their original batch hash snapshots27b/679; the effective_scripts above identify this current process/capture revision.",
+    "producer": "Only25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29. Main rebind and qualification NOT_RUN.",
+    "unchanged_consumer": "C18347ab2c0ebc2c7248740d917cba80b08608a67ecf4b00cf94009a72f804a19 and registration8af032c51b989995d465dbeac362fd22c7d71bf31d80ea475682036ea44caf15 remain byte-exact. No C, quota, fixture, ordinary output, fault ordinal, test registration or original obligation changes.",
+    "preservation": "All12 original FI helper parser/loading/self-test functions and all9 non-main axis functions remain text-exact after newline normalization. Original compiler/runtime sharded coverage and all43 normal observations are unchanged.",
+    "execution": "PID receipts precede waiting. Timeout is marked before kill, exit observation is bounded, and wait/kill/reap/launch errors cannot pass even if reap returns0. A first normal failure stops further normals and shards. Every submitted future is observed; individual failures retain original PID/raw receipts and typed traceback, known partial results, after-capture attempt and a final FAIL. Failed record writes cannot turn the gate into PASS.",
+    "original_complete_gate": "FI registration remains TIMEOUT600/PROCESSORS8/RUN_SERIAL/jobs8. The shared product deadline remains570 seconds and reap is bounded to start+578. Both original front normals plus the normal inside each of8 fresh shard processes must verify:10 normals, measured N/R/43, all8 shard results and exact full ordinal union. Partial coverage cannot pass.",
+    "axis_gate": "All six axis/cut gates retain TIMEOUT120/PROCESSORS1/RUN_SERIAL. The product deadline remains110 and reap start+118; fresh same-argv totals, exact-domain BUDGET, all ledger/diagnostic/output/physical assertions and all12 real gates NOT_RUN are unchanged.",
+    "capture": "One actual Git ls-files call with10s timeout replaces two unbounded calls without removing inputs. Failures preserve argv/cwd/returncode/timed_out and partial stdout/stderr as raw-byte hex. Each existing input additionally captures bytes/mtime_ns; metadata-only or SHA/key drift rejects. File traversal and hashing still depend on the outer CTest timeout; no internal end-to-end total bound is claimed.",
+    "actual_validation": {
+      "build_check": "Both existing Source0 targets checked under UTF-8 MSVC environment: no work to do. C183 and both prior freshly compiled EXE/object artifacts are unchanged.",
+      "processes": "Six actual OS processes total: one direct normal and compiler0/1018 plus runtime0/16 paired partial shards per configuration. All six normal censuses verify N2036/R32/43; eight fault ordinals have unique domain OOM, output preservation, uncharged cleanup and final five physical zeros. Actual PID/entered/termination-observed and no timeout/errors are recorded.",
+      "normal_totals": "Both direct OS-argv normals retain allocated615349/peak179234/work691659. This is the same OS-backslash namespace; CTest W691687 remains separate.",
+      "inputs": "Each configuration2347 actual inputs includes the current466 helper; before/after SHA and size/mtime metadata are identical. Earlier private9d key-domain comparison explicitly simulated the old helper __file__ and is not current producer qualification."
+    },
+    "pure_review": "Independent pure FI review:11 FakePopen,25 main,5 Git capture cases,12 previous raw replays and original self-test. Axis review retains11 FakePopen,9 prior main,7 extra error paths and11 accept/16 reject parser cases. All pass. Four9d main first-red cases and harness errors are retained; these are not real full-FI or axis runs.",
+    "historical_artifact_correction": "Two earlier patch receipts used LF-normalized text hashes for actual CRLF patch files. Actual runtime-binding.patch SHA5b6b7a116bb9241b9dca80cdb10d7a9dee1d416cd77b35b61e5155bd1dce3641, compiler-axis-rebased.patch SHA0a43510280f664c7691e62baecfa5710cee36453002c9b5b899ceb5fcf4bba1e. Original artifacts remain preserved; actual C183 and submitted27b/679 hashes were independently correct and are unaffected.",
+    "evidence": "build-consumer-evidence/current67-source0-fi-process-reaping-applied-r1/; independent final-scoped-review.json under adjacent fi-process-reaping-audit-r1.",
+    "retirement": "0. Original108-source and additional migration denominators plus all original allocation scenario/assertion/native OPEN statuses are unchanged.",
+    "remaining": "Full2036 compiler/32runtime ordinal gates, real12 axes, other7 allocation sources, complete input packet preservation, initialization failure/sticky OOM/sibling continuation, native/mixed/owned string/partial initialization/reverse cleanup, default and applicable safety, producer rebind and Main integration remain NOT_RUN or OPEN."
   }
 }

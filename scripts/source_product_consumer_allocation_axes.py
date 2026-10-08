@@ -275,17 +275,18 @@ def main() -> None:
     run.mkdir(parents=True, exist_ok=False)
     start = time.monotonic(); deadline = start + 110
     issues, normals, result, normal_output, values = [], [], None, None, None
+    capture_errors = []
     try:
         before = capture(args, faults, original); original.write(run / "inputs-before.json", before)
-    except (ValueError, OSError, AttributeError) as error:
-        original.write(run / "result.json", {"status": "FAIL", "stage": "INPUT_CAPTURE", "issues": [str(error)],
-                                            "product_execution": "NOT_RUN"})
+    except Exception as error:
+        faults.finish_report({"status": "FAIL", "stage": "INPUT_CAPTURE", "issues": [str(error)],
+                              "product_execution": "NOT_RUN", "git_capture_error": getattr(error, "evidence", None)}, run, original)
         raise SystemExit(1) from error
     base = before["argv_namespace"]
     for index in range(2):
+        label = "normal-" + str(index)
         try:
-            process = process_run(base, "normal-" + str(index), run, deadline, original, args.input_root)
-            normals.append(process)
+            process = process_run(base, label, run, deadline, original, args.input_root)
             process_contract(process)
             output = Path(process["stdout"]).read_text(encoding="utf-8")
             faults.stderr_contract(Path(process["stderr"]).read_bytes(), "normal", output)
@@ -293,16 +294,14 @@ def main() -> None:
             if values is not None and actual != values:
                 raise ValueError("two same-argv fresh normals disagree on compiler totals or denominators")
             normal_output, values = output, actual; process["measurements"] = actual
-        except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
+            original.write(run / (label + ".json"), process)
+            normals.append(process)
+        except Exception as error:
+            normals.append(faults.process_failure(base, label, run, error, original))
             issues.append("normal " + str(index) + ": " + str(error))
-            if normals and normals[-1]["label"] == "normal-" + str(index):
-                normals[-1]["parse_issue"] = str(error)
-                original.write(run / (normals[-1]["label"] + ".json"), normals[-1])
             break
-        original.write(run / (process["label"] + ".json"), process)
     if not issues and values is not None:
         command = base + ["--compiler-axis", args.axis, args.cut, str(values["totals"][args.axis])]
-        process = None
         try:
             process = process_run(command, "axis", run, deadline, original, args.input_root)
             process_contract(process)
@@ -310,27 +309,25 @@ def main() -> None:
             result = axis_contract(output, args.axis, args.cut, normal_output, faults)
             axis_stderr_contract(Path(process["stderr"]).read_bytes(), output, args.cut, faults)
             process["axis_result"] = result
-        except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
-            issues.append(str(error))
-            if process is not None:
-                process["parse_issue"] = str(error)
-        if process is not None:
             original.write(run / "axis.json", process)
+        except Exception as error:
+            faults.process_failure(command, "axis", run, error, original)
+            issues.append(str(error))
     try:
         after = capture(args, faults, original); original.write(run / "inputs-after.json", after)
         if before != after:
             issues.append("actual captured inputs, argv namespace or producer changed")
-    except (ValueError, OSError, AttributeError) as error:
+    except Exception as error:
         issues.append("after input capture failed: " + str(error))
+        capture_errors.append(getattr(error, "evidence", {"error": str(error)}))
     report = {"status": "FAIL" if issues else "PASS", "scope": "SOURCE0_ONE_COMPILER_RESOURCE_BOUNDARY",
               "axis": args.axis, "cut": args.cut, "argv_namespace": base, "issues": issues,
               "measurements": values, "axis_result": result, "evidence": str(run),
+              "input_capture_errors": capture_errors,
               "normal_processes_planned": 2, "normal_processes_verified": sum("measurements" in r for r in normals),
               "process_deadline_seconds": 110, "elapsed_seconds": time.monotonic() - start,
               "qualification_boundary": "Only this measured Source0 axis/cut; complete FI, other sources, native, full safety and Main qualification remain OPEN."}
-    original.write(run / "result.json", report); print(json.dumps(report, ensure_ascii=False))
-    if issues:
-        raise SystemExit(1)
+    faults.finish_report(report, run, original)
 
 
 if __name__ == "__main__":
