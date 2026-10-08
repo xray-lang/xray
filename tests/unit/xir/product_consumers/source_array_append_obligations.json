@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "test_array_append_admission",
+    "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+    "legacy_line": 6980,
+    "body_lf_sha256": "73d6cd094e2b1dce590ba090ccd3e273d45c8c4bb5865567215766f7d01edd63",
+    "assertion_sites": 7,
+    "loop_sites": 1,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+  },
+  "legacy_fixture": "tests/unit/program/xr_program_array_append_fixture.h",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_CURRENT_ARRAY_APPEND_ADMISSION_FACET_LEGACY_OPEN",
+  "tests": [
+    "test_source_product_array_append_admission",
+    "source_product_array_append_encoding"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "matrix": "Original scalar parameter, empty Array, writable local place, nine appends, length and return SSA preserved.10Built+10independentwire inputs;empty+occupied output=40transitions/config.",
+  "original_mapping": [
+    {
+      "original": "Scalar positive contains nine Array append operations through a local place; verifier accepts",
+      "current": "Checked has Array<i64>, i64 parameter, ARRAY_NEW, LOCAL_NEW and nine ARRAY_PUSH instructions with exact receiver/value SSA. Full detached metadata and independent writer bytes checked.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Mutation1 changes Array element to Bool while argument stays i64; semantic rejection",
+      "current": "Both public entrances require BAD_TYPE3.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Mutation2 appends through the ordinary Array value instead of writable place; semantic rejection",
+      "current": "First ARRAY_PUSH receiver references ARRAY_NEW value1 instead of LOCAL_NEW place2; both entrances require BAD_VALUE4.",
+      "status": "PASS_CURRENT_FACET"
+    },
+    {
+      "original": "Mutation3 append claims an i64 result; old builder rejects INVALID_INPUT before write",
+      "current": "Current Built and independent Checked ARRAY_PUSH result type i64 require BAD_TYPE3.",
+      "remaining": "Distinct current checking stage and status; original legacy builder/write early-refusal obligation OPEN."
+    },
+    {
+      "original": "Mutation4 String read parameter appended without an owned transfer; semantic rejection",
+      "current": "No read/move parameter mode or explicit owner bit in current XrXirFunction. No fabricated equivalent mutation.",
+      "remaining": "Original String read negative OPEN; not rewritten or executed as a positive."
+    },
+    {
+      "original": "Mutation5 String move parameter appended nine times; semantic rejection",
+      "current": "No read/move parameter mode or explicit owner bit in current XrXirFunction. No fabricated equivalent mutation.",
+      "remaining": "Original repeated move negative OPEN; no retirement."
+    }
+  ],
+  "extra_current_facets": [
+    "Bool argument against i64 element and Bool ARRAY_LEN result require BAD_TYPE3.",
+    "Missing element SSA requires BAD_VALUE4.",
+    "Inactive immediate, successor target and type argument require BAD_STRUCTURE1."
+  ],
+  "ownership": "Borrowed Built fields and names compared, then poisoned. Independent heap wire compared, poisoned and freed. Owned metadata and packet bytes checked afterward; real occupied artifact preserved and reverified per transition. Actual compiler stock refunded each call; final artifact, caller ledger and observer physically freed.",
+  "boundaries": [
+    "Admission only; no SourceProduct, specialization, Lowered, Program, VM/native/mixed or runtime length-nine result proved.",
+    "Original explicit owner-drop, affine/copy contracts, read/move parameter modes and managed String mutation100 with embedded NUL, nine owner copies and runtime cleanup remain OPEN.",
+    "Original whole function OPEN, replacement_gates[], retired0. Source108=88fixtures+20other;other26files160functions/shared7 unchanged."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-array-append-admission-r1",
+    "receipts": "results.json",
+    "registered_commands": 4,
+    "admission_passed": 2,
+    "encoding_passed": 2,
+    "appends_per_function": 9,
+    "total_transitions": 80,
+    "transitions_per_configuration": 40,
+    "admissions": 8,
+    "exact_rejections": 72,
+    "mismatches": 0,
+    "input_capture": {
+      "counts": {
+        "msvc": 2746,
+        "asan": 2746
+      },
+      "preservation": "Actual SHA,size,mtime before==after;final nonmap inputs rebound"
+    },
+    "physical": "Actual stock refund after each invocation;artifacts,caller ledger and observer destroyed0/0 in both configurations.",
+    "fresh_build": "First build PASS both configurations;one fresh C11/W4/WX consumer TU per configuration;Clang ASan+UBSan flags andVALID Ninja dependencies.",
+    "production_reuse": "10 actual linked libraries/config preserved SHA,size,mtime;4 actual production object bodies matched archive members;no production TU rebuilt.",
+    "protection": "10963 tracked pre-snapshot:10962 nonowned exact;12 historical dirty generated files preserved.598 protected:594 exact+4 expected Ninja/CTest metadata changes;old registry raw bytes restored by removing only4 new lines/config.",
+    "original_input": "Original whole function and scalar/managed String fixture preserved;all5 constructor mutations mapped. Original early builder failure,read/move String negatives,owner bits and managed String mutation100 remain OPEN.",
+    "boundary": "Admission only;runtime length nine,SourceProduct,Lowered,Program,VM/native/mixed andfull FI/axes/safety/Main NOT_RUN.",
+    "annotation": "Added after actual execution;preannotation map captured andsaved;no annotation rerun claimed.",
+    "retired": 0
+  }
+}

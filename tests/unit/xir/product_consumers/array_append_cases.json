@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "functions": 1,
+  "appends_per_function": 9,
+  "cases": [
+    {
+      "name": "nine_appends",
+      "mutation": 0,
+      "expected": 0,
+      "bytes": 687,
+      "sha256": "7964c44c982410dc86e8b2c8005ead329984fda94ce2d73ee315a1f556ee7208"
+    },
+    {
+      "name": "boolean_element",
+      "mutation": 1,
+      "expected": 3,
+      "bytes": 687,
+      "sha256": "bdd016a32eba5f807534a3dcca3fed84f6c6401b0e0381bedb6fde8078639786"
+    },
+    {
+      "name": "value_receiver",
+      "mutation": 2,
+      "expected": 4,
+      "bytes": 687,
+      "sha256": "d4faa42e6bb3be4339848fa338a60d692bb7d51f804df5672e84ee34b7fa8478"
+    },
+    {
+      "name": "scalar_push_result",
+      "mutation": 3,
+      "expected": 3,
+      "bytes": 687,
+      "sha256": "3608245dd57209c871ac42aabd5737bfe5658465ae2908409c9dfae8c386946c"
+    },
+    {
+      "name": "boolean_argument",
+      "mutation": 4,
+      "expected": 3,
+      "bytes": 687,
+      "sha256": "6aba87790710fb22236af559a6d72bbeaf5a01200455b6d01e21133211dd812a"
+    },
+    {
+      "name": "missing_value",
+      "mutation": 5,
+      "expected": 4,
+      "bytes": 687,
+      "sha256": "92ac16e341c02154765bcc1ecce2dcfcb87b543f96a1ebd690f3e61356b0a268"
+    },
+    {
+      "name": "inactive_immediate",
+      "mutation": 6,
+      "expected": 1,
+      "bytes": 687,
+      "sha256": "41b7774a96216bab07f9650b954d59ffebd3f0859c9c556240e2936c262aa93a"
+    },
+    {
+      "name": "unused_target",
+      "mutation": 7,
+      "expected": 1,
+      "bytes": 687,
+      "sha256": "9c0cb101437a8f3f996b97c25223ff5687cb9ecb44ac6bd72a742b5f61a5fb95"
+    },
+    {
+      "name": "unused_type_argument",
+      "mutation": 8,
+      "expected": 1,
+      "bytes": 687,
+      "sha256": "6f14748019a4447b7edf97c3c1170f47aff1fbe4424a87feba8c76c279032986"
+    },
+    {
+      "name": "wrong_length_result",
+      "mutation": 9,
+      "expected": 3,
+      "bytes": 687,
+      "sha256": "e6041240feee7403d716ecc4e529abf9844d05d341182279fe7c775ac0f59cd8"
+    }
+  ],
+  "boundary": "Admission only. Original explicit owner bits and read/move parameter modes have no identical current encoding. Managed String fixture and runtime length nine stay OPEN."
+}

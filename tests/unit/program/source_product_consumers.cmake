@@ -349,3 +349,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_rejec
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_generic_value_struct.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_remaining_source.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_append_admission.cmake")
