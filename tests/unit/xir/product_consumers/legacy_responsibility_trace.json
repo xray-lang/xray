@@ -1,0 +1,4169 @@
+{
+  "schema": 1,
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "inventory_lf_sha256": "9a79e0d0344a20b0d0360f386e28807bdaf1747e0900542ddc91463eb8268b87",
+  "completion": "OPEN",
+  "retired": 0,
+  "reference_policy": "References prove exact body identity only, not assertion coverage, equivalence, execution, current producer qualification or deletion permission. No digest reference does not prove that a replacement is absent; alternative mapping formats and prose are not interpreted.",
+  "denominators": {
+    "source": 108,
+    "source_fixtures": 88,
+    "source_non_fixtures": 20,
+    "other_files": 26,
+    "other_functions": 160,
+    "allocation_scenarios": 8,
+    "shared_emission_owner_consumers": 7
+  },
+  "reference_counts": {
+    "source_with_digest_reference": 44,
+    "source_without_digest_reference": 64,
+    "other_with_digest_reference": 36,
+    "other_without_digest_reference": 124,
+    "digest_reference_values": 108,
+    "source_inventory_projections": 42
+  },
+  "mapping_inputs": [
+    {
+      "path": "tests/unit/xir/product_consumers/array_append_cases.json",
+      "lf_sha256": "ca1670092465e43fb92a9242cfbc9b243ee7024555474da3bed48bd8cd7b3515"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/array_default_cases.json",
+      "lf_sha256": "9799b723c2f99804f79ebc48764f1de565cb6996a71ce094e7eaf205f0b5918e"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/array_types_cases.json",
+      "lf_sha256": "3588b7976f52a55b4c380fffe28adc877553493354f07f7ed8eba00de1ba658a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/atomic_types_cases.json",
+      "lf_sha256": "40f0c664a9af8627b3f8f7b2058dc5b5318e54bb5f6d33f9310cda7592a04cae"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/checked_f64_wire_cases.json",
+      "lf_sha256": "4180b65c49b6bada27b4879d7e077a4cb9f5cdccc4f8ad897ecbaf2aff4d2617"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/checked_semantic_scalar_cases.json",
+      "lf_sha256": "3b955531dea3be90c5e03f612c04ace936b9326b44418369d3ac700e851e4189"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/element_place_frame.json",
+      "lf_sha256": "2ac14712bd9cf6d1ae22a67a9170529494facc6847e03b0a3297a1b20f34219e"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/integer_bitwise_cases.json",
+      "lf_sha256": "5900373b463e8e8ab05d6614c5d8a48d60a7c7cc0dbd3283197f9bb8a19a81f0"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/integer_conversion_cases.json",
+      "lf_sha256": "7cfd80cb39908bbebe2b2ce562982f5d45e38938f71e21eaae2f5ff0d83d3ddc"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/integer_divmod_cases.json",
+      "lf_sha256": "08293770bce1ef00564cd33fc2876015ba1a747717fa71589837a08afd33646a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_cancel_cleanup_cases.json",
+      "lf_sha256": "3aa7daae44227de00068fa11ef94d0db0b26cfa81ae21aa4659f625247cad492"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_class_error_cases.json",
+      "lf_sha256": "d4f1c2be433db8aeba81f21a9289a66bd70f3e402bd37c3cc2edba50535c6de7"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_class_panic_cases.json",
+      "lf_sha256": "c484c9a36b007b6ccfa4c80f77333b0602815961d40538eb92677e0e4417fb91"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_class_state_cases.json",
+      "lf_sha256": "04962245b824afe02a276cdbaecc96742bffbfed8c32c8294b4426b3ac05084a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_class_suspend_cases.json",
+      "lf_sha256": "1d43a189cd427e4a10e3e2e8e1587bb851b0732a53ed9ae929d2ccfb81c923fa"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_execution_cases.json",
+      "lf_sha256": "a8139779b133e2cb323f1b3b3e468b1587174ea80d31f317118d4f852d077400"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_graph_cases.json",
+      "lf_sha256": "ea2b3551a8e971ed05e66bf0c93345e6893e0bfd9be37c1fe18243b5e584a258"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_operation_cases.json",
+      "lf_sha256": "6469c33ba5afb220edf030b772cca5aa07e878271aa249117d978eff7fc4f333"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_output_failure_cases.json",
+      "lf_sha256": "c9777ac00e532ae760e0920f30ee96bf234345b7dee49e59f8495d1a48eaefaf"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_place_cases.json",
+      "lf_sha256": "04838fb0b8aa029e8ab5ae0fe65eaf3f013d3761e3daf89972b108d1e5674181"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_slot_cases.json",
+      "lf_sha256": "c42ea4f7f0a5077503ad6708602643c03a9945bf8d40e9f09c74177a9be78a64"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_slot_failure_cases.json",
+      "lf_sha256": "f3cfe2b3f01961655d7e04dde5b991647e53028aa50369ca5be3f6f1bcbcea8f"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_slot_state_cases.json",
+      "lf_sha256": "4d5e850c4be3faaa92c3294e96bcffca215ba8466bfb69decab66edf3c312959"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/module_suspension_cases.json",
+      "lf_sha256": "f2655f4a84dda9e270e975da004c3a7d519854ee5444d552acf6c11df618781a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/nominal_name_cases.json",
+      "lf_sha256": "80c6fafe1d7a6b05decd2e71ac1d4158fcba1d9f0e900831abade8260163bd60"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_allocation_original_obligations.json",
+      "lf_sha256": "ac7ab2c97ef9c561fcfe329cb4dd1a525de901cefca6bca0c9f52527be4fc051"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_allocation_scenario0_native_obligations.json",
+      "lf_sha256": "160169eab2d11bcdc83690c444227b26cc35b16a51010a7eafa92634577a836a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_allocation_scenario0_obligations.json",
+      "lf_sha256": "0e2a0ada2f22f7333a6537a5d2d349fa630819cbbdc8d4803d032c47783a79d4"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_array_append_execution_obligations.json",
+      "lf_sha256": "d7088868823920fa0ffe7755205ac77ee924834ad05c49f426abf5a87b7f54f6"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_array_append_managed_obligations.json",
+      "lf_sha256": "04c2dc6ee3a15956c37887ebd7f37a9e59377015194d0fc763c3f27062cac3e6"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_array_append_obligations.json",
+      "lf_sha256": "338ad65c61e3271afa98c531282d58d5959d7f4a96bd7b5342682c2437b81dd3"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_array_default_obligations.json",
+      "lf_sha256": "b0e823238616f5cf3b106e68a45d47c0d3bfb9a3dc5b83833d050e4d9e816a35"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_array_element_place_obligations.json",
+      "lf_sha256": "0457e9ca0f92ebb5da144b195826ec15892814ba530775298adef6854418c722"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_array_types_obligations.json",
+      "lf_sha256": "90aef2ca698fe943ef8380baf38960a11f597605f281a9a921a2ce64d9f3dea8"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_assertion_message_native_obligations.json",
+      "lf_sha256": "be4afd25d1ed8763cd44e557778a051cdc4fb55ac5d9f1db6b7feaac09aa02c8"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_assertion_message_obligations.json",
+      "lf_sha256": "9bd1d882ae89b0b1160b98deb27d48beb8a14e45dbcbe7d24422191d88b043a4"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_atomic_i64_cas_native_obligations.json",
+      "lf_sha256": "faeff3cde0da2ebb0cc2b5ade795f0b7bf2394ce5bafbad2b723c13498550edc"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_atomic_i64_cas_oracles_obligations.json",
+      "lf_sha256": "90536845fb5f5ba318583df6c03397e5d2a55e1abbab9fbd507c864999c08999"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_atomic_ordering_oracles_obligations.json",
+      "lf_sha256": "6f83717acddc04b40119fc68a5664638e7225e4f7c04cac3a047de801934ef94"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_atomic_source_families_native_obligations.json",
+      "lf_sha256": "f3b1d5c74ee4c4a692bc35c0e5f2872860768ea7d228e20bc46d12a5cefbcffd"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_atomic_source_families_obligations.json",
+      "lf_sha256": "45994f2889cb9932d3c46173393daf0a181524c84a0a1fb6a71703faa7919e4f"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_atomic_types_obligations.json",
+      "lf_sha256": "a53824231477e458b5a0e23142f45386ec2ab538bf16a50e314f50911cfa8fc7"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
+      "lf_sha256": "75de3f4c3a7e681b4de7221c9cb221538f2441312c19c7bafee02ee204139875"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_call_error_panic_group5_obligations.json",
+      "lf_sha256": "48fe97a33800455517b746257afbc65efe2b4ddc778009fd0a144a1f76117b34"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_call_panic_group2_native_obligations.json",
+      "lf_sha256": "0f695271bc71a40ac32f33ace6d179ccbe30c7385c3395a94c5f5fc06182a2c6"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_channel_admission_obligations.json",
+      "lf_sha256": "fc5e3e0abba09ba21678fbaf0707e5ca881f90c03f1a6f7c241dbfbc85ad96ce"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_channel_owner_obligations.json",
+      "lf_sha256": "842ab2e87b0666c7c476c12753192b90d9b4788f7ebb22c7e3a87f6472b03ad1"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_checked_f64_wire_obligations.json",
+      "lf_sha256": "28e7170942bc7f9c0ac58cae0052ca60c949e84e78e0d947cb6108400d8266f3"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_checked_hostile_frame_obligations.json",
+      "lf_sha256": "ea0e045d3cd14b4997b97e15eceb7f1e6c5caa9854755cc5f5ad40493bfdffff"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_coroutine_invoke_group2_native_obligations.json",
+      "lf_sha256": "a2d7ef7e42f1db306304fcbef0818af12b20014839d7a43b9652d4d0c552d40a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_coroutine_panic_group2_native_obligations.json",
+      "lf_sha256": "dd9139d152fafc15b6732a10cb9af0a07da062270adf1cd733e58c21fec6a88e"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_coroutine_panic_group4_obligations.json",
+      "lf_sha256": "e6da168cb09a471b2b86f9494d371872e6af51f40250f51e89d948a89d70e676"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_default_assertion_group2_native_obligations.json",
+      "lf_sha256": "8c9987318594c8067e3669e968890a49b3956780436f0f8c94c877dee73312b3"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_default_assertion_group2_obligations.json",
+      "lf_sha256": "bedbbad38d36ad69680056e9773d407fa040db5840d3d66ccadc0b1f212a3f60"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_driver_build_guards_obligations.json",
+      "lf_sha256": "5978217de9cab64111f78b765a91c5d969411a55245def437f49105c2003af8e"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_driver_rejection_cleanup_obligations.json",
+      "lf_sha256": "842e0fcd55a1b2974b0e1f0f12cf894393c1242cbf12e1c873b019fb330307f2"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_f64_source_transport_obligations.json",
+      "lf_sha256": "017771e181a15b43b66c6c337af788f289af61c837f14c32f4d5d0dd1fdcd33e"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_f64_transport_obligations.json",
+      "lf_sha256": "9acac68698be1ab36959972ae59c91c69c45bed92cbf5eef52c233b8fffe7145"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_generic_value_struct_obligations.json",
+      "lf_sha256": "c956807dbcbd8c46b20d08320e4dd2ced458afb4193bf31564c34690543d0e68"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_imported_enum_catch_native_obligations.json",
+      "lf_sha256": "ee92ea2a846845c54d1f32efb0f812d7ba20410111c24edeb3a151ab8dbd9b72"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_imported_enum_catch_obligations.json",
+      "lf_sha256": "3b014b1c56732121f0457b27998d1bfda87aacf0c311b71f348edee608adc3c0"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_bitwise_obligations.json",
+      "lf_sha256": "e537ff1b463bc5d7666e53dd0e6fbf22fec94dadf930095311422e3e4780b3de"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_conversion_obligations.json",
+      "lf_sha256": "764c9d60f6ecf384b58ad9c286ee3c22b02597b6237f1d3934b2c2dc439e34ed"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_division_defer_obligations.json",
+      "lf_sha256": "6d90f118d991f8aff0042cf0dca9c2602548c475417530892aa329ea5d367e1d"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_divmod_obligations.json",
+      "lf_sha256": "e2c02055e908c8f91c16bbd060b803d7ccad5cc172eb29f6a75bb585aede0063"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_intrinsic_panic_group3_native_obligations.json",
+      "lf_sha256": "146bf398f9c7442a0274210ba4f9a3e4721861af000a884d7d0e96c3e9badbf2"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_width_obligations.json",
+      "lf_sha256": "2b093fd1929869828815de4413562ec2216f39a46340b699d6a03967edb5032e"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_cancel_cleanup_obligations.json",
+      "lf_sha256": "d0e7ea39d5e9139e73441a03863993730b3a1feaaf7e6984fcae00d4698be665"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_class_error_obligations.json",
+      "lf_sha256": "60d9a45490fafb27ecdd8e4d0f202b2e2b14e22779b272779f1f06087fb79525"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_class_helper_obligations.json",
+      "lf_sha256": "4ff1b22167e566db8662b4b5dd9ac7b4d1a988b7c972cb4032ba1c700d4ecd3e"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_class_panic_obligations.json",
+      "lf_sha256": "772a0b5c533ee9233bb2d06bee0331b3433aebffc248b627ffbb993423f032aa"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_class_state_obligations.json",
+      "lf_sha256": "b5ceaac77ee05768814647a899861b00ece420d01c37a0d5b8188c7d520077a8"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_class_suspend_obligations.json",
+      "lf_sha256": "3bd48e3d423d78d489ec35714debf23b33d96c2cabe2a41d15075b9d92e0a031"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_execution_obligations.json",
+      "lf_sha256": "fb7c24ca3946512d3668eaa03c4566f4db62bedce5da44c343dbcd9953bbfec8"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_graph_obligations.json",
+      "lf_sha256": "6d120f78cde13aa8921b7b5dc4b55ddb6d291dfe3fa7ef2111f946d2e11a0e23"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_initializer_admission_obligations.json",
+      "lf_sha256": "64c704cefa39a562f953424dcc55e8dba44ee6c5be13c21494a52b76017a8156"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_operation_obligations.json",
+      "lf_sha256": "e02a7aadc695e7d17a69f431a1de113e71f92c8011cf0bb6078c50daa6762b96"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_output_failure_obligations.json",
+      "lf_sha256": "bd01dfa7c39288d09b1b880648e8a145e30613c5d4347a47e9a0f66759c0a37a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_place_obligations.json",
+      "lf_sha256": "acb7c08d60861123e109730186ceb155c0e75ce3f10eeed3fc744382e8aaa732"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_ref_source_obligations.json",
+      "lf_sha256": "24cd30faa18bbdfe39166df9a0c04b6201c08295521c5f0d25f3473fbd99fb58"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_slot_failure_obligations.json",
+      "lf_sha256": "c773fad0591b2c120dbe9acf9de185a8c55802508f34c88f56523336b675a0dc"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_slot_obligations.json",
+      "lf_sha256": "52fcf178909d659c5df660466cd961900b6c03b19fb7e1e32fde449d844c285d"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_slot_state_obligations.json",
+      "lf_sha256": "909977d186da127dbfb6960b7a93c9dfa060be870c0205f0196fc1361d1f620b"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_stop_obligations.json",
+      "lf_sha256": "5bf4dd6f6a082de05b9373a34a0894a6626f3250139d19b7bb787fd26d7b304b"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_module_suspension_obligations.json",
+      "lf_sha256": "32d80caf8a338c8ba2d69f7ee1aa57ab2102c02f090468de829094dbb21413a3"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_nominal_name_obligations.json",
+      "lf_sha256": "5943aca57ba92031059923ace6198dd33cbaed4ecf4dfb53a194dd469d749f17"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_panic_only_defer_group2_native_obligations.json",
+      "lf_sha256": "8080854878ca1dbd8a609473b838001caea4976e69f06d525f86fd3a4abd69c6"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_parent_obligations.json",
+      "lf_sha256": "70b4d7a931cb6a65d2981b45b1c2bde2de9329945003ae40c71d9b862d39f6f4"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_process_lifecycle_obligations.json",
+      "lf_sha256": "db9bb3c2e6beb2ee037dae9f6241c191267c08a8673babe72cc3eea21101a697"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_product_packet_roles_map.json",
+      "lf_sha256": "4622dcd0a11f3fd7ec85a87e04e847c2ff1f6859d51b065f5379bf90b4ee7802"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_recursive_call_panic_native_obligations.json",
+      "lf_sha256": "611e49b64afdc6902982b346478e0cef7182768f4fcc402fe421d15fd0dfb558"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_rejections_occupied_obligations.json",
+      "lf_sha256": "4c9bf4428a3bcdc1a27a14e938dbcbec8c3503ea2793afcfe919adb57f8fd495"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+      "lf_sha256": "720928f9f057ffdb6924508590471ed902a04e527356dc17f08668e967f027a4"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
+      "lf_sha256": "a38e3dd22275813aded523a804d976209a0676fd5f8afbcbb150a9be3a89d114"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_source_file_deletion_native_obligations.json",
+      "lf_sha256": "0e0696e21b658f55860e6e4eaf817344e55072f9b0f0bd5761b2bb18d7710291"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_source_file_deletion_vm_obligations.json",
+      "lf_sha256": "3c30c5f2edb2c755c441fbc2b8349aa5953c07691a45fda63fd3c4c628edc2e0"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_typed_invoke_group4_native_obligations.json",
+      "lf_sha256": "bf840936e8a3699a62b1fae6988b4106fe8a9c794146705295de2fb0f7aa43dd"
+    }
+  ],
+  "source": [
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_array_append_preserves_class_identity",
+      "body_lf_sha256": "df13fef04310a02d4f6d1e25fc2da6513d7aa3abda65e5002afa4ac83e76cc35",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
+        "sha256": "cfd8d10d0016f8c0cb44f7a8f3dfcff74979cb0e9dda1ca04f5112fec281aace",
+        "original_prefix_sha256": "b94624ef455386b578870e986c84bedd687c24f4fc455d64fb8f6ade05d2a832",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_tuple_array_elements",
+      "body_lf_sha256": "fc162d7d932b9644ada7da795f4829f56d58266d1f9705e764437f51258e67eb",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/tuple_array/root.xr",
+        "sha256": "c5b270510a924c1df8bd40c32c928bb8fdf92ada0293fab4582ec848a366853b",
+        "original_prefix_sha256": "61e2df9e1f5e3a45869756c373c8978a102a8072fb41455495aea6f05defe8b0",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/tuple_array/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_static_method_declarations",
+      "body_lf_sha256": "9c7b0b96ff91abe8827af09d69e163eb203cba35559acfc1c6b24cc25900dce2",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/static_methods/root.xr",
+        "sha256": "f7192f6c9d1a6a6403fe142383c9302520840abaa2ccdaf3e6556959796c5fcd",
+        "original_prefix_sha256": "77396ef78a3b53c970c1940b9417801391ade4b4ca12dd5c6ae2688eea982cf5",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_repeated_tuple_elements",
+      "body_lf_sha256": "aef15df3a7edaf42930f4ed131132e24f3f832f286bb5b1be3dfa5cf15e23c23",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/tuple_repeated/root.xr",
+        "sha256": "65e40cc5680d1142362190583756c4a7a6163587702ea954a3439d3b5a668f26",
+        "original_prefix_sha256": "be09016b2eb69fd4f42c674d7033b00e2135ac3eb90d329781307638e6ddb93b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/tuple_repeated/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_array_invoke_runs_conditional_defer",
+      "body_lf_sha256": "6229206681c56a91a962f9ee21dde09587371d8e475a471d3663cd9d3d330784",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_array_error_invoke",
+      "body_lf_sha256": "bb6487c16138dd87704a32331e33b40d2b14188bace422415d63a83db6e43c65",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_byte_comparison",
+      "body_lf_sha256": "42b735c9803bcc213b87f2c983bc232b426f7d23f0addc775689bd15d17a753f",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/byte_comparison/root.xr",
+        "sha256": "19355cd9955a110342a4984124535756090f5722ad73615b8884d3929640c66d",
+        "original_prefix_sha256": "b420c7045c5270973e8ba9f04edfb1bec9be5b68ca41cfe3238de121b7e5a21b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/byte_comparison/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_string_builder_snapshot",
+      "body_lf_sha256": "e85d22a465f78167aa46f98b0de5e805cb35893ac2347c6cf727e411c052d795",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_prelude_enum_catch_preserves_declaration_identity",
+      "body_lf_sha256": "a6be103ee8a9bebd9e069a794d96c59399c717dd660f791dff02fcae19e9ed0b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_imported_enum_catch_preserves_declaration_identity",
+      "body_lf_sha256": "8fcb2e271b062c0eb789399bff6d20cac71d26313584af13767ca25f1418b8c6",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_imported_enum_catch_native_obligations.json",
+          "pointer": "/legacy/wrapper_LF_no_terminal_newline/sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_imported_enum_catch_obligations.json",
+          "pointer": "/legacy_source/wrapper_LF_no_terminal_newline_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_explicit_bool_conditions_execute",
+      "body_lf_sha256": "17c1df6d33dc29e408cf1db3fdb33f76aa44609c33a14c4902103be4b3aa6308",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/bool_conditions/root.xr",
+        "sha256": "bdc9cb53993fc822e72661dc04beb3c0d274294328e157f8b3d6e6b91755a265",
+        "original_prefix_sha256": "506c7ded5d09cb0597eef032f8f2d0dfe401c8c015d61e85145d368ceda2cee4",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_bare_nullable_condition_has_no_product",
+      "body_lf_sha256": "54339acee67b18e9f756fd6ed21f1182e2c3dcbfb00c1f34863adec49c01ff8e",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/bare_nullable/main.xr",
+        "sha256": "f646347acc7d2c421f3f68e585f38dcd7535e97d4cb8652de6f12e10768a15e1",
+        "input_bytes": 109,
+        "entry_adapter": null,
+        "stage": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "status": "XR_XIR_BAD_TYPE",
+        "message": "if requires bool",
+        "module": 0,
+        "line": 1,
+        "column": "NOT_REQUIRED_BY_ORIGINAL_TEST",
+        "scope": "Exact negative source input; reject before any executable product or backend projection."
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_rejections_occupied_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_channel_handles_execute",
+      "body_lf_sha256": "6bac9a64bea41b4dc83fdc0c423003d01fec8bd965bacd36d9f4a97b143884db",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_admission_obligations.json",
+          "pointer": "/cases/0/legacy_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_owner_obligations.json",
+          "pointer": "/legacy_sources/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_owner_obligations.json",
+          "pointer": "/preserved_first_probe/cases/0/legacy_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_channel_module_storage_has_exact_types",
+      "body_lf_sha256": "bd00baf9aab1f44b146e4bae51d060665de042263ca256e4bbf723aea6e69641",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_admission_obligations.json",
+          "pointer": "/cases/1/legacy_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_owner_obligations.json",
+          "pointer": "/legacy_sources/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_owner_obligations.json",
+          "pointer": "/preserved_first_probe/cases/1/legacy_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_atomic_ordering_preserves_exact_controls",
+      "body_lf_sha256": "db4a3005dcd0706cc9d163b47b5efa91c03c8647c0022e70818a935b94e79116",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_atomic_ordering_oracles_obligations.json",
+          "pointer": "/original_test_body/sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_rejects_invalid_manifest_roots_without_partial_product",
+      "body_lf_sha256": "376d019f21611a0654cdab6bf5c8b253039856aa223ba3ddc4b0e81fe950aac3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_manifest_exports_retain_exact_detached_roots",
+      "body_lf_sha256": "0d25a3152c788152c0b7e69305596a90f47911832a152a9423fe5758a010f0d0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_test_discovery_detaches_metadata_and_exact_ids",
+      "body_lf_sha256": "52b6c0b271121d46ff5271a5363e1ab4017624a08cd84fea568958d9bd9ad487",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_retained_roots_share_one_detached_program_and_instance",
+      "body_lf_sha256": "3d2da25fb36e9dd4244797195f8212170d7ab1551793767275e2adc2586a26e4",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_rejects_invalid_retained_root_identity_without_partial_product",
+      "body_lf_sha256": "42c1a1a28806b0032f03ba23b0cba593140395c947276faae649f80fd1f8efce",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_value_struct_string_copy_preserves_original",
+      "body_lf_sha256": "0c5d541130f5a4a105ce87bbf9ec02f1dcbf3fbab344a69c0f32b164f287f4c1",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/struct_string/root.xr",
+        "sha256": "0010dd4a64c28880f52bb252d20c0ccbc6bda7fc6d98d203a9b9e273e4277a3a",
+        "original_prefix_sha256": "95e9fecbbd07c03c8a1199c3ec7d8ead25dd832f7b8618b9fb869a8fd298b7e7",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_sealed_coroutine_invoke_runs_defer_after_suspension",
+      "body_lf_sha256": "2fb0abccc54de2d646e1de6dcbfcf96739cccbc2bd4afee8e638b8762067e99f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_coroutine_panic_group4_obligations.json",
+          "pointer": "/fixtures/0/legacy_generator/wrapper_LF_no_terminal_newline_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_indirect_coroutine_invoke_runs_defer_after_suspension",
+      "body_lf_sha256": "9de3542ca58fbee57104c585883101ad8244844b5e1d79bb572767279be20118",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_coroutine_panic_group4_obligations.json",
+          "pointer": "/fixtures/1/legacy_generator/wrapper_LF_no_terminal_newline_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_sealed_coroutine_panic_runs_defer_after_suspension",
+      "body_lf_sha256": "bcccfd6064edf303c9724d3ed5d706e193a6ff587d8e376042621e556759535a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_coroutine_panic_group4_obligations.json",
+          "pointer": "/fixtures/2/legacy_generator/wrapper_LF_no_terminal_newline_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_indirect_coroutine_panic_runs_defer_after_suspension",
+      "body_lf_sha256": "ab8592f057dc893834107a491c1db74ee721f702428c287b9f1b3e10f1f2afae",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_coroutine_panic_group4_obligations.json",
+          "pointer": "/fixtures/3/legacy_generator/wrapper_LF_no_terminal_newline_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_sealed_panic_only_call_runs_defer",
+      "body_lf_sha256": "11d7118f4b2f37d20872ed74cdfb22d441426d668d985056d12f299dc03bc850",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
+          "pointer": "/fixtures/4/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_panic_only_defer_group2_native_obligations.json",
+          "pointer": "/families/0/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_indirect_panic_only_call_runs_defer",
+      "body_lf_sha256": "5340ef0d36fe8aa413275fd5dcb583c76bd30436d040cd9b8fe90f076c150278",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
+          "pointer": "/fixtures/5/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_panic_only_defer_group2_native_obligations.json",
+          "pointer": "/families/1/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_witness_panic_only_call_runs_defer",
+      "body_lf_sha256": "7cbea76455a515ac9240d03853c082f808576b99e6d212197cc01668042f4430",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_sealed_invoke_runs_conditional_defer",
+      "body_lf_sha256": "3011c9eed18ee8489fbb06ba05fb89c4d7e8f35292a3d86c18e085cc88533904",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_call_error_panic_group5_obligations.json",
+          "pointer": "/fixtures/2/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_indirect_invoke_runs_conditional_defer",
+      "body_lf_sha256": "3c4406c7f53c5f541dc9e5734178fc723f5fedf5fae24e08f9931271a2eb77e5",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_call_error_panic_group5_obligations.json",
+          "pointer": "/fixtures/3/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_witness_invoke_runs_conditional_defer",
+      "body_lf_sha256": "414e6d3b8cdc3df84c31bb5a5edbbd9eda3a2d1c7b538fc4e79206daba202c3f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_sealed_invoke_separates_error_and_panic",
+      "body_lf_sha256": "669e944fa2ca6687dd68effacd8cfdea744539b4adfe1ba8f3400a0735d342f2",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_call_error_panic_group5_obligations.json",
+          "pointer": "/fixtures/0/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_indirect_invoke_separates_error_and_panic",
+      "body_lf_sha256": "80fc3006c847adde859c5df3c0e5cdc61063918c1218262a24c29a6dc85c272f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_call_error_panic_group5_obligations.json",
+          "pointer": "/fixtures/1/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_witness_invoke_separates_error_and_panic",
+      "body_lf_sha256": "2de3ef0cb5d11cf7a27e1b44752c08f0b5b4db4d4203f73a7fe89d68ffc52658",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_recursive_calls_share_closed_panic_contract",
+      "body_lf_sha256": "3a195232bafb1d70c283a34a5f5227e4f3b5af16d5b15350e88433cf8f3594ca",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_call_error_panic_group5_obligations.json",
+          "pointer": "/fixtures/4/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_sealed_call_propagates_panic_and_cleans_owners",
+      "body_lf_sha256": "d00f1c203fd45ac2d383ebaba662aabe88429724e6793506b361a28dcd7eadf2",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
+          "pointer": "/fixtures/2/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_call_panic_group2_native_obligations.json",
+          "pointer": "/families/0/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_indirect_call_propagates_panic_and_cleans_owners",
+      "body_lf_sha256": "3c18c2e0b8abf1bd8867178770c121b24f562384bcfe1d74a2ca17d91b12fbac",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
+          "pointer": "/fixtures/3/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_call_panic_group2_native_obligations.json",
+          "pointer": "/families/1/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_witness_call_propagates_panic_and_cleans_owners",
+      "body_lf_sha256": "327bdb9e117a2bb66cc34dd89bea947ab0c3f42d361f6179f3cc599baf97acba",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_assertion_runs_conditional_defer",
+      "body_lf_sha256": "834af9e1860d5685991a1e95f3ebf92cad266b93a907f9f7edd8a2b8bb3ca13f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_default_assertion_group2_obligations.json",
+          "pointer": "/families/1/original_wrapper_LF_no_terminal_newline/sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_integer_division_runs_conditional_defer",
+      "body_lf_sha256": "91f6e144df92d87eb2400dacd85aa08e39204950be85d2eceb9b95eec08028b7",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_division_defer_obligations.json",
+          "pointer": "/legacy/wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_intrinsic_panic_group3_native_obligations.json",
+          "pointer": "/families/2/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_integer_remainder_zero_cleans_live_owners",
+      "body_lf_sha256": "f505f069268a37c602ad39c3dafb3d160d6ab9a83f120fe00bbdfc4177fa868e",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
+          "pointer": "/fixtures/0/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_intrinsic_panic_group3_native_obligations.json",
+          "pointer": "/families/1/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_integer_division_zero_cleans_live_owners",
+      "body_lf_sha256": "cd768aa5c611c44bad334611a60f55f92d1305514c8ab2039d4966fc0d3b4d51",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
+          "pointer": "/fixtures/1/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_intrinsic_panic_group3_native_obligations.json",
+          "pointer": "/families/0/legacy_wrapper_body_LF_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_array_index_reads_and_replaces_elements",
+      "body_lf_sha256": "8d453681ad890ad67b4b57ac6fa3b2c93ae2ab137d2e14eaa7c8409f71a67ae7",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/array_places/root.xr",
+        "sha256": "9f0f1e7373d56953b7b81727c9e418c5ff10b21bca8713edf389f75c18456666",
+        "original_prefix_sha256": "8e39317c2bf2607e71c7ed6f15b40073e8ff8956cfeb3e99ad852619f33ef673",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_narrow_array_elements_precede_allocation",
+      "body_lf_sha256": "b1c70cc5eabf14806846a203edd69a7e5d38965f1a097840cbc2183e767f01e1",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/narrow_array/root.xr",
+        "sha256": "f2a61c8bb059cc08a2539039a8b258916ae4ac19b9008f1eba61d8442b0c41ae",
+        "original_prefix_sha256": "028a1edf4d0961858449f6d34f838d29ab37106c38c6fbddedf0a1e8f406ed3b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "state_probe": {
+          "entry": "consumerVisits",
+          "adapter": "export fn consumerVisits() -> i64 { return visits }\n",
+          "bytes": 52,
+          "sha256": "bb1cd517c04fff4f5ad948d3e009dfc7048c83876b104aaa0272cf4bc8110567",
+          "scope": "An ordinary exported no-argument i64 reader of the owning module visits slot; it grants no private host entry or direct slot access."
+        },
+        "invocation_policy": {
+          "first_result_per_instance": 42,
+          "successful_calls_per_instance": 1,
+          "second_call_status": "XR_XIR_CALL_ASSERTION",
+          "second_call_panic": "XR_XIR_PANIC_ASSERTION",
+          "note": "The original visits slot remains mutable; a second call increments it again and fails the original ordered-element assertion. No reset or source alteration is allowed."
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_array_default_runs_conditional_defer",
+      "body_lf_sha256": "5c444afd5507d2ccd30727e865f008fcecb2a91c158536fce93bcd15180557bd",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_string_slice_runs_conditional_defer",
+      "body_lf_sha256": "f41405b48a75783ae277a1168af821cca3cc8a830e657ef5cb4625d545f14353",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_array_runtime_length",
+      "body_lf_sha256": "56baf747bb1146cd8ed62daf3d4d683e8a85f4566610139b836ec67b855742b2",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/array_runtime_length/root.xr",
+        "sha256": "09e03a8908825d0c6e6766047c396f57f6068577cf79e479bcd2122a716e8bb8",
+        "original_prefix_sha256": "e5739834b2ef5f35cd54b981f2ff3c90061ad4ae0b8216d5b3d5aa6bc9ad2c2d",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_string_slice_scalar_range",
+      "body_lf_sha256": "c35bb706351ba8186cf778734fc03380a83a848798265dc78c6531d60fc56139",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/string_slice/root.xr",
+        "sha256": "a5359a83e3b1dcce7612addaba5ec0f95ac52ccdc67daccff146284be4b92b66",
+        "original_prefix_sha256": "a8c61d6d10d62369c3bae023a6d6586056b6576ff3cf4f2db478a02d131b37d9",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/string_slice/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_integer_bitwise_exact_width",
+      "body_lf_sha256": "bd73bdc3f9313721791a773ccc89de3170e792c2557dcaf307a3eb211736118a",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_width/root.xr",
+        "sha256": "95096bcb6b01a457fa0d84c104b025df582e089cf88cf83ef26aca9542c39883",
+        "original_prefix_sha256": "4c638414f024aac9ee61f7687656837d276c294a5ec2b7e1f037c4c8cbb19e14",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_width_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_integer_division_and_remainder_preserve_value_rules",
+      "body_lf_sha256": "11cbead819dd2a5672b146f67bca66e13e56a2b2cd8dec74c4fdaa005725cb78",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_division/root.xr",
+        "sha256": "6266d1efbae095eb9988e9a18d5ea51251d9a1ed70b9bb6247df63101328ae73",
+        "original_prefix_sha256": "d19b7af194ec24d30da3998326e2c5cf11e5ac83b926f82b9a59fd4066eae1dc",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 0,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_source_constructor": {
+          "bytes": 1951,
+          "sha256": "d19b7af194ec24d30da3998326e2c5cf11e5ac83b926f82b9a59fd4066eae1dc",
+          "constructor_lf_sha256": "03b47b3861901127816d416b0a5133518fee42196cc8884f4e65c5e517c7305e",
+          "types": [
+            "i8",
+            "i16",
+            "i32",
+            "i64",
+            "u8",
+            "u16",
+            "u32",
+            "u64"
+          ],
+          "functions": 17,
+          "checks": 20,
+          "failure_codes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ],
+          "original_buffer_capacity": 16384
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_integer_comparisons_preserve_signedness_and_order",
+      "body_lf_sha256": "3bdcd56b92e51cf9a2c51d53a8d4bfd135b3572e5430c0409133af7aa1e143ce",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_comparisons/root.xr",
+        "sha256": "19e398b2ef4af2e9d874d3e4f60141de6275cc203144042417879452d3f67dac",
+        "original_prefix_sha256": "1cbd6ac4006bcddb69b7d134796cb18bc3a39f2e9366edbf872e89d997c8fd0f",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 0,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_source_constructor": {
+          "bytes": 9753,
+          "sha256": "1cbd6ac4006bcddb69b7d134796cb18bc3a39f2e9366edbf872e89d997c8fd0f",
+          "constructor_lf_sha256": "38194c5b4feae0c997681897ed578d174b5c63a089fb8eff678f4b0701bf8f43",
+          "types": [
+            "i8",
+            "u8",
+            "i16",
+            "u16",
+            "i32",
+            "u32",
+            "i64",
+            "u64"
+          ],
+          "functions": 51,
+          "checks": 148,
+          "failure_codes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "original_buffer_capacity": 32768
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_integer_wrapping_arithmetic_uses_shared_primitives",
+      "body_lf_sha256": "a699e5afde5d8fec5200b0206a78557321c5003ed8b35a5cc0919f30c30e812f",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_arithmetic/root.xr",
+        "sha256": "024d75e808e3daa92e304bbac83d785dd109743597310b1cb95102bec025d004",
+        "original_prefix_sha256": "c0de6c81380613c86f18cea91f65b2be0d02cdcae0891571ee8f6d4ef6de0d5a",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 0,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_source_constructor": {
+          "bytes": 2719,
+          "sha256": "c0de6c81380613c86f18cea91f65b2be0d02cdcae0891571ee8f6d4ef6de0d5a",
+          "constructor_lf_sha256": "61ae4ebb232fb857796b4ba7a29a7be4208a5f3cc3f8deebabaab43b50eca167",
+          "types": [
+            "i8",
+            "u8",
+            "i16",
+            "u16",
+            "i32",
+            "u32",
+            "i64",
+            "u64"
+          ],
+          "functions": 26,
+          "checks": 25,
+          "failure_codes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "original_buffer_capacity": 16384
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_exact_integer_constants_and_conversions",
+      "body_lf_sha256": "0e32ea27cf5301134572d622d92ef017206fdb70fdfa3480484191de4dfaec07",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/integer_conversions/root.xr",
+        "sha256": "7f9bf4a5d20b3cb7cee5b096ebad9e20181084cb041fc96372d54d1cba9c7f36",
+        "original_prefix_sha256": "0a84cfabba66654078cc533176d0bf995a5a15a771f01a66e30cb33615834065",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 255,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_error_defer_output_preserves_failure_and_owners",
+      "body_lf_sha256": "3c5e2dc9dcb171a9ce46bf2d6a4b9b5f5633ca04d45b7d3eb438971685679d78",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_panic_defer_output_preserves_failure_and_owners",
+      "body_lf_sha256": "9da722e7d37d6644758cfeeac430de8a7d4e76889cbb2706f991c06d4e3c9fe0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_initializer_error_cleans_owned_state",
+      "body_lf_sha256": "a072af02d1b6fe2ebfe2a34fe069d1824c7464433f41d7205dbe0f32218c018b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_initializer_admission_obligations.json",
+          "pointer": "/originals/error/wrapper_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_initializer_panic_cleans_owned_state",
+      "body_lf_sha256": "e97be9c49b516e3c539ee26220e701e7238b46499552b973d1e870929db7bc4c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_initializer_admission_obligations.json",
+          "pointer": "/originals/panic/wrapper_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_report_has_instance_state_and_ordered_text",
+      "body_lf_sha256": "e3cd1e70040cb1a141e77c321c00e5a136c4e1896e62c8ed6b17236c67b93d17",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_report_extension_reuses_shared_state",
+      "body_lf_sha256": "4e8b7fd6b56189d9d0fac35f44b6c615411b961daa34398b3ef37c84b74f40b3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_single_module_is_deterministic_and_detached",
+      "body_lf_sha256": "d26002711dba165152f9f4204b44e6e04134fa1c5c3e28f14bda1ea2cc1a6349",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/single_module/root.xr",
+        "sha256": "b6399ad088d49af5540f8a64ee0d7df9501b157aef89833a0e84a918e3f74f77",
+        "original_prefix_sha256": "d04c110eeccc73bf8494f4039f0cb68dbae7e5222c051f9d0f85507984e92478",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_two_module_graph_is_deterministic",
+      "body_lf_sha256": "e49e24b5172187bf1e1a456ea70a975e4f05c989dc9bbd41a89dbdb550fafe7e",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/two_modules/root.xr",
+        "sha256": "9d73c0d71becfcd55a188efc84f573fcdb91eb954b67c84a433f0e5f92db7db0",
+        "original_prefix_sha256": "ef0526622ec84e47c1ae7b298eab7a3990d59770089ac4e737eb0c38ebe61b39",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 224,
+            "sha256": "a5de40cec575e4452a43492662ff8c5db9174feb8ed3384f724d914cedb21c94"
+          }
+        },
+        "probe_target": "test_source_product_probe",
+        "detached_probe_target": "test_source_product_detachment"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/two_modules/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_cross_module_instance_method_preserves_receiver_across_suspend",
+      "body_lf_sha256": "cb3b350ac67ee9aa7964cf9b758b37b5b040613b16ea52c3ff469a1b272fba3d",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend/root.xr",
+        "sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+        "original_prefix_sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 185,
+            "sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+          }
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors",
+      "body_lf_sha256": "4bd32742053948de0a879e34a8a6315341eb7e39b316fae978d3007c069e5a07",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/cross_module_coroutine/root.xr",
+        "sha256": "f09043352aa77c9b481644aac8ea14e41524e5df803bbbf7168a089ca1c6f105",
+        "original_prefix_sha256": "148e682a65b9188de5e5fcf723e593230b965e8b840858a285ea96acf7d09300",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 7,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 84,
+            "sha256": "58c3b56414f36dfcba1092ac787cf6966874b5a2523c1f79ba3c8e1a6eb667bf"
+          }
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors",
+      "body_lf_sha256": "2d13357e099ef0b0554840a14d48d8d8e30b192304e587f06200d4661052ae24",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/cross_module_static_coroutine/root.xr",
+        "sha256": "9580be783d4c99e2d278ad3fc079e80a127ea3f87d866b8f82ffc4652a680af2",
+        "original_prefix_sha256": "7c3097081a355e364004dfe0b45237e01fc46aa3a16b3f6b35e285050a5646da",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 7,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 115,
+            "sha256": "4375fae674a2d0dd0e042a3e09830030ebbb1a13775377117fc928267428ed45"
+          }
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_function_parameter_callable_has_one_program_and_private_executors",
+      "body_lf_sha256": "195af94c52b83ed30c1613a775073129cc97fe903a587309b61b869b35e4842b",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/callables/root.xr",
+        "sha256": "4d5b4ca98d30707d5a2d8a6951c94f7c366a34aa19b45e8302df42647b0c8649",
+        "original_prefix_sha256": "7c084b3f7188b1522c3041c335144e163e60d9c9d42e481c2672c3788dd05955",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 48,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_generic_specializations_are_exact_program_functions",
+      "body_lf_sha256": "f5d7907420da927c5a85c421a177d98571697a929f87f30f3b5a8ac98c320f08",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generics/root.xr",
+        "sha256": "3b53d9178c3566fa90912e18bcfd75f0546a98e4e5b274437a050e6ce854c8ec",
+        "original_prefix_sha256": "7d836b59945fea659d82065a7c87f91ddf5e64e9ee5f5b806e67ab49d0a08070",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_generic_constraint_methods_have_exact_concrete_targets",
+      "body_lf_sha256": "ee42f0f1a0708cd1e089722268e458c1d26303e63232246ae9b029552af63881",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/root.xr",
+        "sha256": "04dd4f7c82e0b7fd1a610363a1ac66cd57f60248a63282c3c7b00341b5ad341a",
+        "original_prefix_sha256": "c29e7b72b153a21a5e88be8e23937d4b2b04ede0e694d10c51f63ea20a83610f",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 877,
+            "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+          },
+          "facade.xr": {
+            "bytes": 136,
+            "sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/generic_constraint_methods/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates",
+      "body_lf_sha256": "a49569e21d93f6f24e31a26a901698d8942774eea3abd5957fa8a86877ff2b61",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/root.xr",
+        "sha256": "7294a9ded3d1e555713afc934da5e919f908736ef7205c9669665e6e7d3aeb79",
+        "original_prefix_sha256": "34cd2ecad81517cdfa0651fbf4feb35dc274a3cf98ade6e93ea7dd35622ca9c9",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 152,
+            "sha256": "96036b42ffd1073661ae462cc7ccd57d88bccb788ed6b2ac29128978a01b9a75"
+          },
+          "facade.xr": {
+            "bytes": 132,
+            "sha256": "cd05da74d8ed285d4d55be89e745ea05a36ec50f26a3422655eaaea81e92d2be"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_generic_value_struct_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_generic_scalar_class_specializations_are_exact_class_references",
+      "body_lf_sha256": "983fe1e3329142a2ea183bdf72793cb0b64d2b417e21a45b1b46342c61d93a62",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
+        "sha256": "ff5223a13033b1db8483424b750b06f050ff661beb1dd3f4913ead753e731775",
+        "original_prefix_sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 117,
+            "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+          },
+          "facade.xr": {
+            "bytes": 162,
+            "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/generic_scalar_class/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_folds_constructor_literal_and_reordered_stores",
+      "body_lf_sha256": "94ac28da956a960ff8b7a09eb6eb9f6802df8405c8b9a7c31a2d6f010ed5c4e7",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+        "sha256": "bd0860a1bed34d55530c87913ff78e25bc5c78fb6fefcc4a3cf6926d8ede4a62",
+        "original_prefix_sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 1006,
+        "scope": "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_generic_nested_class_types_are_exact",
+      "body_lf_sha256": "e7f695fe94570458fdc2f183c8b5e46e76c05a4b66c60fb0be5467b22336336c",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
+        "sha256": "d3e9d0571d73d98c8eef95495f23b6c99cd47fc8abeed9c74a800987755ecf52",
+        "original_prefix_sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+        "additional_files": {
+          "library.xr": {
+            "bytes": 171,
+            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          },
+          "facade.xr": {
+            "bytes": 171,
+            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          }
+        },
+        "probe_target": "test_source_product_probe"
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_remaining_source_obligations.json",
+          "pointer": "/families/generic_nested_class/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_recursive_class_type_reservation_is_cycle_safe",
+      "body_lf_sha256": "022917b1d6ae038b8c5e0cfcffd919a44ed48a3e4e583624bd184921ea84652e",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/recursive_class_graph/root.xr",
+        "sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+        "original_prefix_sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+        "expected_classes": 1,
+        "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_mutual_class_type_reservation_is_cycle_safe",
+      "body_lf_sha256": "9f4f082ede634b82bbc526687a6e199f1be3d4a9d4dea394b988ab4c5070808f",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/mutual_class_graph/root.xr",
+        "sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+        "original_prefix_sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+        "expected_classes": 2,
+        "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_deep_class_chain_has_no_nominal_recursion_limit",
+      "body_lf_sha256": "a65970b48714cdc17dc794b01493bed2a9da711d92859efee756ad89467b0fb8",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/deep_class_graph/root.xr",
+        "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+        "original_prefix_sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+        "expected_classes": 80,
+        "scope": "Exact original descending C79-to-C0 structural-only input, without an adapter or invented runtime result. All eighty owned class identities, seventy-nine Nullable edges and one terminal i64 field are inspected after producers die; eighty classes do not prove unbounded depth.",
+        "original_source_constructor": {
+          "bytes": 5937,
+          "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+          "constructor_lf_sha256": "ddda906cdbea2304a78887456677c04ad6c157b3aa50dea22a1fce20982a5b34",
+          "classes": 80,
+          "nullable_links": 79,
+          "terminal_i64_fields": 1,
+          "declaration_order": [
+            79,
+            78,
+            77,
+            76,
+            75,
+            74,
+            73,
+            72,
+            71,
+            70,
+            69,
+            68,
+            67,
+            66,
+            65,
+            64,
+            63,
+            62,
+            61,
+            60,
+            59,
+            58,
+            57,
+            56,
+            55,
+            54,
+            53,
+            52,
+            51,
+            50,
+            49,
+            48,
+            47,
+            46,
+            45,
+            44,
+            43,
+            42,
+            41,
+            40,
+            39,
+            38,
+            37,
+            36,
+            35,
+            34,
+            33,
+            32,
+            31,
+            30,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            23,
+            22,
+            21,
+            20,
+            19,
+            18,
+            17,
+            16,
+            15,
+            14,
+            13,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3,
+            2,
+            1,
+            0
+          ],
+          "original_buffer_capacity": 32768
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_class_alias_escape_projects_one_share",
+      "body_lf_sha256": "ac1c4e8abfaa33664a7ccb70b5b470688b3c8e1ffff082eb9bb5b275058187f3",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
+        "sha256": "54bbca567d79c1fb30ef7809d4c3fa889d6e96a8c904dfe227f94ed60aebcc57",
+        "original_prefix_sha256": "2b6f5d470dc865e6c7966c7421d0bc450a37a242a3fc64d3f1a47a4b72cb0569",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_class_field_self_assignment_shares_before_exchange",
+      "body_lf_sha256": "6441319d71fa1c0abeede3b5d5b8fa72960386c63435ab402cce433b956a64b0",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
+        "sha256": "3073b990a3c383d03a98cab1e26f8d671e6a247f3d45e8c5bda004f284eac6aa",
+        "original_prefix_sha256": "bbbe864d45bd3a03c958a68cd2c05493c0311d746c2fd72d7d0da61f46aeaa8c",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_class_alias_borrows_coalesce_without_share",
+      "body_lf_sha256": "ce5d4af761403bfd1e714e79bb439ffb10c3d66e4321ba70414e5fd1d651556d",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
+        "sha256": "8d48f5a353f491869c55422447c1b0f243c7b2dab3e2701f4b91fe2a13bbe514",
+        "original_prefix_sha256": "f186dab919dda2f76fe70e4ce2293acb91c4a2d0d19367b6f66fbcbdd8ce2e02",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_class_alias_final_transfer_coalesces_to_move",
+      "body_lf_sha256": "6c98c8beaf8d474c36d43203b99563e02b802518943bf49f63187b82c285fb3e",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+        "sha256": "a115d26f0d793c37d1e141b9a9c719de8238a346905143e39e9b6c4c052de39b",
+        "original_prefix_sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_function_parameter_suspending_callable_has_one_program",
+      "body_lf_sha256": "11a08a49b0f53a375c026b4121275afec1ccb3eba1cddfbe1a89e1289d6620c0",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/parameter_coroutine/root.xr",
+        "sha256": "521442df28da3d3838de58028fa3b479ec533ef843371775585c85c27c18c91d",
+        "original_prefix_sha256": "89b66b75c2644c5d0065e7a6ca9183cc34a07519357d707f2e947105d781bc42",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_process_provider_uses_generated_bindings_across_private_executors",
+      "body_lf_sha256": "91e0ab705c6e53dd55738c49fe20d72271a963070257a3620a91e391552f2cfd",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_text_program_is_exact_across_private_executors",
+      "body_lf_sha256": "a51d513bd14fa0da7128d03055c8cd413236dae17844f4718ae0e1cddc7ec898",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/text_program/root.xr",
+        "sha256": "b3615737744acf066c4ef57068dc08dd57df337012ca2871701acb77c28360d7",
+        "original_prefix_sha256": "1ae3daa6c0b67ad1082faa37c276eb731e1025158a1a216bab6dbf60dc4bf713",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 7,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "output_golden": {
+          "bytes": 48,
+          "sha256": "68ffccaa7e0c8e9f5640afa524275c1770a04dbcbe9a211a4511a9128546ffa0",
+          "hex": "68656c6c6f2c20776f726c640a616e737765723d3432207472756520780a636f646520332078787820796573206e6f0a",
+          "groups_per_call": 3
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_clock_provider_is_exact_across_private_executors",
+      "body_lf_sha256": "8687ead238e63eb2385abc74ba5905b0d5bb069c4f1d140756d58a5f2a3aac00",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_provider_refusal_runs_nested_explicit_trap_cleanup",
+      "body_lf_sha256": "d64408a2c61ed4f268eb7c3a125f6f766e029b62237fbb00d5479fef208fe4ea",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_child_coroutine_provider_failure_composes_static_cleanup",
+      "body_lf_sha256": "873677e0613c4fb1aeeb6aed4e633a046436c917877008562e275da67360e324",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_shared_branching_cleanup_projects_private_cancel_graph",
+      "body_lf_sha256": "889f455ca4eb721e4a6abcbeaf6e3ecf2958f8404246c1167090898a0fdfcb78",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_nested_cleanup_projects_reason_chain",
+      "body_lf_sha256": "58289992acc8e896c3de1bcd4123839e886b4b94f1516f9a62e732ae51643371",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_pipe_provider_and_fieldwise_constructor_are_canonical",
+      "body_lf_sha256": "28bcfc647c8bd58ecd811e57934d42d5d5e3b7aefe9cc88daab0da4bd0502281",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_pipe_failed_close_consumes_endpoints_once",
+      "body_lf_sha256": "fb4823667e8f6a98be6818df618d0eee6f126ef296ab7375f412584ecd508a3f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_pipe_uncaught_error_runs_cleanup",
+      "body_lf_sha256": "718a215f8c356ac7b01a5ebda55990a4b0e110fe1bafedfcab268cdd6aefee33",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_assertion_cleans_live_owners_before_panic",
+      "body_lf_sha256": "eccc23d49b95f82f7639d0729f5febe7b978401de183e0bb6a87177660aa1e50",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_default_assertion_group2_obligations.json",
+          "pointer": "/families/0/original_wrapper_LF_no_terminal_newline/sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_lowers_defer_panic_cleanup_across_private_executors",
+      "body_lf_sha256": "0468ca535c4be41dfa9c28822d54731c81d3be8d2746ec75f23afaff63fd401f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel",
+      "body_lf_sha256": "be01ac21c6ce3809a46bc37806d73ee36793fedb1c10d6e5aa030571ac9a9f39",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_runs_each_dense_coroutine_state_across_private_executors",
+      "body_lf_sha256": "04033176e47b2b2517be7d115601f056aa029fa9378f3ef1afa4040d35004cab",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/multi_safepoint/root.xr",
+        "sha256": "896bf5280b1e4e132fac8be41d2851052f3b2f3713ed274e4b60c3575befc6df",
+        "original_prefix_sha256": "f5b21267d455abce479d4b3cbc369819e3cc0c94d14482c28a712626c58706bd",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 42,
+        "scope": "Exact original source and independent VM/native assertion value 42 through the exported adapter. Original native harness success exit 227 is retained separately and is not a language return value.",
+        "legacy_native_harness_exit": 227
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_keeps_related_ref_parameter_places_stable_across_child_suspension",
+      "body_lf_sha256": "47182a5449aa86c92b9cde55909cceb9fd857cd1a15af2a4c23f93b9f56100ca",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_keeps_read_existential_root_across_child_suspension",
+      "body_lf_sha256": "15cc0f11e9ae1589c2fd64a795869b6ba7f6b3163083084b73fcc0e00d8a7b7c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_cross_module_coroutine_transfers_affine_resource_result",
+      "body_lf_sha256": "8d59424f661edc2f292fdee5a290580af61987fee159ca9f79528fa3a121df15",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_time_sleep_has_typed_suspension_request",
+      "body_lf_sha256": "15fa93fc7c29d0e3e4761e1bfec410c7ebc13e5d4ea0d32b3822e036ab89ea49",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/time_sleep/root.xr",
+        "sha256": "3091ad3db264c762b322b5961cb33023f112e713a667820d91ec26a06523ec0e",
+        "original_prefix_sha256": "639055c196ca2c31d6759655da59d155c48e5607a20157a338a75b4ac0c4e63b",
+        "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+        "entry": "consumerAnswer",
+        "expected_i64": 239,
+        "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+        "original_file": {
+          "path": "tests/unit/xir/product_consumers/fixtures/time_sleep/original.xr",
+          "bytes": 62,
+          "sha256": "639055c196ca2c31d6759655da59d155c48e5607a20157a338a75b4ac0c4e63b"
+        },
+        "stdlib_provider": {
+          "path": "stdlib/time/time.xr",
+          "identity": "stdlib-module-v1:module=4:time:path=12:time/time.xr",
+          "scope": "Actual producer-owned stdlib directory, file source path and owning query identity; no synthetic module or embedded fallback proof."
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_initializer_is_a_canonical_entry",
+      "body_lf_sha256": "ee182be4c3f19f8f10711d989755a6ece783da73a9d47db35990f3eda2dae432",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/canonical_initializer/root.xr",
+        "sha256": "d6b664f92f5dc7325fe6b8e8fea21b65914c78f5d6878c5d735e77f903e005ac",
+        "original_prefix_sha256": "d6b664f92f5dc7325fe6b8e8fea21b65914c78f5d6878c5d735e77f903e005ac",
+        "entry_adapter": null,
+        "entry": "canonical root entry",
+        "expected_i64": 0,
+        "scope": "Exact original structural-only module initializer source, without an adapter. Added independent execution proof is one typed i64 output 42/newline per Instance, including repeated canonical entry calls; the entry protocol returns zero.",
+        "output_golden": {
+          "bytes": 3,
+          "sha256": "084c799cd551dd1d8d5c5f9a5d593b2e931f5e36122ee5c793c1d08a19839cc0",
+          "hex": "34320a",
+          "groups_per_instance": 1
+        }
+      },
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_rejects_non_authoritative_entry_identity",
+      "body_lf_sha256": "ebfd779aa0ebd6282b70499fa1b8a8bf3e56f50fe6d81042bc926d7a815227e4",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_rejects_module_budget_before_analysis",
+      "body_lf_sha256": "d775c6da389759b4d19e7200fa900a5bf50311ff43669f681b7922a462bfdffb",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
+          "pointer": "/responsibilities/module_count/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_rejects_invalid_or_expanded_budget_request",
+      "body_lf_sha256": "1cfdd3a286ae34db78a71132e107279107b9084cea3f160e5bab0b90698a665b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
+          "pointer": "/responsibilities/invalid_request/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_reports_exact_monomorphization_depth_budget",
+      "body_lf_sha256": "055740b8b54e55ccc9c61714b9fabba4010389d93fcbe651741bb9192b3ac484",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
+          "pointer": "/responsibilities/mono_depth/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_reports_exact_monomorphization_instance_budget",
+      "body_lf_sha256": "88b26daf7c9a5c982662f6fa6270fc593cbb73eeedd28d6527e8671c9515e0b0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
+          "pointer": "/responsibilities/mono_instances/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_applies_instance_budget_across_module_graph",
+      "body_lf_sha256": "8c1cb76a8ec730ebdee128289da4de673f98d6033b8f1d44f7f6d1a554b44fc5",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
+          "pointer": "/responsibilities/graph_instances/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_rejects_program_bytes_over_request_budget",
+      "body_lf_sha256": "d73622b8b65dd7811172228716f9875bcc565e0ff07b3a47be015b84ba9e9680",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_request_budget_obligations.json",
+          "pointer": "/responsibilities/program_bytes/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_reports_structured_analysis_failure",
+      "body_lf_sha256": "c6a117dcb83ae6d22651cdf70787e83d7a9b227c09597726b2d38c4014793300",
+      "status": "OPEN",
+      "inventory_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/missing_name/main.xr",
+        "sha256": "9f18e6111b1f759a8b7d4099b765479367defe4a8d264eab972ef73796a520ce",
+        "input_bytes": 38,
+        "entry_adapter": null,
+        "stage": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "status": "XR_XIR_BAD_VALUE",
+        "message": "name is not an initialized value",
+        "module": 0,
+        "line": 1,
+        "column": 29,
+        "scope": "Exact negative source input; reject before any executable product or backend projection."
+      },
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_rejections_occupied_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_assertion_message_survives_defer_and_owner_cleanup",
+      "body_lf_sha256": "b9ee49503d1232161f074d89bb8408a7273fabf11a46905777bc1995bf8fe182",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_assertion_message_obligations.json",
+          "pointer": "/original_wrapper_body_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "source_owner_module_initializer_panic_message_retains_failed_instance",
+      "body_lf_sha256": "b0052cdae204d70238dfbc4d25eadc36d754b261b61fc008101df0db7bee8fc4",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_initializer_admission_obligations.json",
+          "pointer": "/originals/panic_message/wrapper_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    }
+  ],
+  "other_functions": [
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_determinism_roundtrip_and_identity",
+      "body_lf_sha256": "67da580064b6f5e8b9bd3d3011255f5a393e5d0f2fda0bfeda86311647a15682",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_hostile_structure_and_budget",
+      "body_lf_sha256": "c5a4362105630286000265ba0ef5db7f64776ca6ea0d7724b56ffa4025c26d31",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_checked_hostile_frame_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_semantic_profile_and_invalid_core_ir",
+      "body_lf_sha256": "81206040782dfcd79ea4748bb7ffcaeb20d4d245088aebf19e00696dd0aa3919",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_provider_semantics_are_program_identity",
+      "body_lf_sha256": "105c784f181f003f211789c5cd41e3f8e217547d36063e4a4973ca21edf55df3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_partial_core_ir_construction",
+      "body_lf_sha256": "3e4639ac45483ce765305fa764d6f28115d2e903f512f5af4e6347437b3d1a2b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_constructor_allocation_failures",
+      "body_lf_sha256": "893dbc3b920c0249511b6e6fcdff378d33648fe466862f62a3414cfe62bb1547",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_module_initialization_hostile_wire",
+      "body_lf_sha256": "114c7453839f670b7d82b62a03ecf33d0bd67e58dddf343f415e8d146092508a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_graph_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_module_initialization_construction",
+      "body_lf_sha256": "8f6a13d25ffcf7d382251e434258e46fe7fd0a1d6613cba72d05f23fbc74e6c0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_execution_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_graph_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_retained_function_identity_publication",
+      "body_lf_sha256": "57bd120393c5238d2f4722ad92eb6b6649492186d4f4a2daef81b5625c45f7e7",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_array_element_place_structure",
+      "body_lf_sha256": "e599f8efcb269c52f9b97ab8ceff0957cc600ff038f0ca666dea9940e822aa9f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "test_f64_constant_bits_and_wire",
+      "body_lf_sha256": "9ef2126049b004d7ef1d7fd1e22eb724749ef0692f1e9b47de190c8c1cd35ff7",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_checked_f64_wire_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_f64_source_transport_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_f64_transport_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "name": "main",
+      "body_lf_sha256": "e490dcc974f89aaebc03c7c0fa5a4426812135ca7e062b00a501789c6fdcf6d7",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "name": "test_declared_semantics_and_owned_storage",
+      "body_lf_sha256": "40965df2cee709e9efa66b348804cde5b78cf4652998e75033d7db0811692697",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "name": "test_hostile_logical_contracts",
+      "body_lf_sha256": "c4494c53298742420af6b223cae9c34ca828c17f8b1cab85fdc026a3326a8132",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "name": "main",
+      "body_lf_sha256": "c2564e7ea0b819dbbbf1c4d25bf900e872d3292e1d817245ca4cc1c745afea32",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "name": "run_allocation_case",
+      "body_lf_sha256": "1dc3da4130659785402b173253aafbe15b6b89901675e3062a466aa08657ecdf",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "name": "main",
+      "body_lf_sha256": "f380f9a58eb791aa37ef81798e5ac6283190a49dc22341f03bbf821135ff57cc",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_skip_instruction",
+      "body_lf_sha256": "05b17f1d03881763226d19ecf80ef28db2eaf2b4b15df6fb41940fcb9ed6e2f0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_parameter_modes_and_value_categories",
+      "body_lf_sha256": "5335c1a75a81deba354c814f9b27a511607ccfb6e5c87ea2b1f77bbd2863bff1",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_target_profile_queries_are_exact_logical_scalars",
+      "body_lf_sha256": "8d93f31d9d507c7bd3c3d2f02d18fc9e0e7d28a2d845a820d817fe0b38547e1c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_aggregate_variant_operations",
+      "body_lf_sha256": "d732cbcb25fc38f006aa77b08b963043b8094f3919f829b06c1d607585d9743f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_class_alias_mutation_and_lifecycle",
+      "body_lf_sha256": "28f21a5c3573a9de1cee72109151d79a21b0feb860ec6b3e48f79e7b5c53f5d0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_class_trivial_field_load_is_snapshot",
+      "body_lf_sha256": "c73c46d3673115d49e2c10b16f4aecddc8f9b3a3c67d8c92432efe22166d42c2",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_copy_forbidden_class_can_share_but_not_clone",
+      "body_lf_sha256": "628dba6f9ec6d9216d90263e2d6b1cbcf4ecdebe0b196895478407eab93ce717",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_affine_class_exchange_commit_interval",
+      "body_lf_sha256": "7d39e4335b67fdb6938ae49c3268766cc282de8694387c787455927cc2696a9d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_detached_aggregate_shared_carrier_dispose",
+      "body_lf_sha256": "c256e17cb46cd4d76f7231f0a4dadf220a88d4214c841cd6e5f4bdf2cc8b570d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_class_clone_transaction_and_teardown_origin",
+      "body_lf_sha256": "ed79d6210b2a4723d7578ed1882941defa9ea99b83556e64b9e613f0190ae037",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_value_struct_immutable_string_fields",
+      "body_lf_sha256": "4557197e2b120dbeea6ab474c9ebd812b09aa247bbaed17cb3745283dad63a5f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_dynamic_type_graph_rejection",
+      "body_lf_sha256": "3ea2a77f0d7e191ffc8807a2114144e7ceb58b99d430f4442c18509fa1e1bb79",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_scalar_operations",
+      "body_lf_sha256": "0992391bd4113e2500308b9787f43c51dfa1b26c9562169a4ee48470606dc85f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_control_and_profile",
+      "body_lf_sha256": "1c2e845672d16c8d2d24ad8badc1628cb39c4c76e6c99b6e6d161cef3bddfb22",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_direct_call",
+      "body_lf_sha256": "da3e34c4cea933b8f5609046db85e240c08452cc967c38a06f73c027f99e039c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_owner_and_local_place_operations",
+      "body_lf_sha256": "b38610eb319428747d4a79292bf17d12f181770b19c48548f8805ede260cbbf0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_aggregate_place_projection",
+      "body_lf_sha256": "e43f86b4594f29c03e4e8ec6beb9c3e363a2215a0fe52463132ba38653ba0a6a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_affine_owner_domain",
+      "body_lf_sha256": "71099bc9e52beb1748f1c2b72e20de3d1ceeb7e015fbef9ee5bf4f0c7e0b90f3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_optional_owner_contract",
+      "body_lf_sha256": "649a46c3d528b9852246f625ff111a633198ce252057bf55fd90c934095e8ac1",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_terminal_operations",
+      "body_lf_sha256": "4fba70d07578be4ac181fdedd58e0d71bc611f56dac2fb251f2f06295d0c03fa",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_sealed_invoke_and_cleanup_cfg",
+      "body_lf_sha256": "84ae7636956f3062b8b593fe47d7b459191e1bab3f99da73fcd789dfc175fb81",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_typed_panic_invoke_and_cleanup_cfg",
+      "body_lf_sha256": "56d44a8746b47d95f846e217c604a3b08e83148df1491283f7e25372abf56b73",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_negative_diagnostics_and_budget",
+      "body_lf_sha256": "368836fe5077a3ca06c20ca676283c18004834472fc1f35127050bc5cdb760c4",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_evaluator_traps_and_budget",
+      "body_lf_sha256": "6a25fea0b1ec373eb61390248fe24a6210e693ed0f046b4584a6b4a5fda4c150",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_typed_random_and_linear_work",
+      "body_lf_sha256": "1f723361346acb72fdf3d92a234533b8cb67c189217c50183090a4a7c4cba4b0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_immutable_view_root_tables",
+      "body_lf_sha256": "df9ecdb2a4e5ee68e069aa9c01d408cba95c26ae4d80c7838646b5ee2985a86d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_callable_interface_conformance_tables",
+      "body_lf_sha256": "39a5d3185fee56409e43d539dd39c2259d5dc0accd303cdf2e038cd503425f11",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_class_reference_interface_conformance",
+      "body_lf_sha256": "cadc61b643a7d16e5d3fe92b06dfa4a7582cabfa4442f887d44a38a62f269f81",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_projected_class_share_roots",
+      "body_lf_sha256": "4611f5ee83fbd5d64aa67634e1a4a6428effc4c87483d4b1e32cb31d62b93d1c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_existential_clone_safe_subset",
+      "body_lf_sha256": "475bdd59b487922242eaa345662cf91d6d52e8dfdbe166893dbff0ce26d52ed2",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_witness_receiver_capability_and_interface_identity",
+      "body_lf_sha256": "3071645f02a874543194e9abd78a606b8d16d2a45928bb47309a79fa1cb64226",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_existential_ref_non_escape_admission",
+      "body_lf_sha256": "ef714fe50b62f1e80ca3b02a362e8ed1b685108518b31ca129972a4779fff602",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_existential_pack_test_project",
+      "body_lf_sha256": "be19a0813ffe70659d53f980c252674e6e29a4a5c7232bc336f6b933ff3317cf",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_callable_pack_and_indirect_calls",
+      "body_lf_sha256": "ec5e351ad2b4910e445b50044b52f915efe9acd5fccaa77357a034b5965b6adb",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_coroutine_state_and_exact_liveness",
+      "body_lf_sha256": "f2ae03d529703b2b4b417c803ecdec95a415216b5dedca20ddfdf854a3dd93da",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_coroutine_typed_outcome_contract",
+      "body_lf_sha256": "b86bcad551ccfa7a46016bc1c4f575f2ce4b1e4a11f93193e6df99fd89f6c22d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_indirect_coroutine_call_contract",
+      "body_lf_sha256": "4c8cccc000cbd898164860ef641fe2172b6d57d203e62eed4615f47d945e1318",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_coroutine_cancel_cleanup_requires_exact_owner_transfer",
+      "body_lf_sha256": "19a09760f4870c09324b8b7a67368747e67850fa520b56522864645601b12183",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_coroutine_related_field_refs_require_one_live_storage_root",
+      "body_lf_sha256": "74cab6a92a1a5c5826f941e723177f784bcda2771511806ffa7bced4504dc0d0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_coroutine_child_trap_requires_recoverable_cleanup_inputs",
+      "body_lf_sha256": "f064d1e776de5f42db5cced329b3b1eaa6d8383ca72b2883b438f59bf642780c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_cleanup_reason_graph_checks_all_exits_and_keeps_body_cycles",
+      "body_lf_sha256": "283687f272754e40705c5298d001644d11a2ebf4df716be5109ede4a50a715bc",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_cleanup_reason_graph_rejects_foreign_and_unknown_targets_before_walk",
+      "body_lf_sha256": "c611c3785498fa212e4449ae7438ce1d719553afb09eafec205257966c1b2b85",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_cleanup_reason_graph_cannot_suspend",
+      "body_lf_sha256": "e66bed2c456a2e20129dab44e0006fa1a5b04204117348eb58fbf09274bb9d2c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_condition_assert_panic_cleanup_cfg",
+      "body_lf_sha256": "3feb56b120d8c66b3805055505eee76a78075a10cc99860b16187f15b7b42e19",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_existential_owned_read_reborrow",
+      "body_lf_sha256": "6f362922fce5494cda6473cd12da11d67ffd0bedfaa331aa76058c4ced1e65d4",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_provider_output_semantics",
+      "body_lf_sha256": "d6e6d7f258584e0d39d8069d1f19d09d355a06b8f3df2274b914d8d21effe20d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_output_trap_ownership",
+      "body_lf_sha256": "e9a8af596c7a17ffb5a90816f26dcebcbfae526105faf6f3b400da6f5f0a5554",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_text_semantics",
+      "body_lf_sha256": "248f07d49667e71657c70705a19d53c9d37da37de3a806d98aeb94b0430215d3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_provider_trap_continuation_semantics",
+      "body_lf_sha256": "19d718277dd1b9360d3237d679230bce4ed32f7625e0925f499ec83b3c34954c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_inactive_operation_fails_closed_before_semantics",
+      "body_lf_sha256": "d8731e9cb55b5c8e063eb40f6ff132af23d71ec8882b2780bd0426d9bc144b3a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_aggregate_construct_owner_transfers",
+      "body_lf_sha256": "813d05d6b3f9ad4bf1caf36893e8b9c58fd9e93419d828e31450ba93b941ca6c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_exact_integer_conversion_admission",
+      "body_lf_sha256": "5bf4d9f52a0579aa198ee6d6ebbb0753b96af326b7995d866fb432ac6b2a1bdb",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_conversion_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_exact_integer_divmod_admission",
+      "body_lf_sha256": "d67902fcbdef2e933267a39cee1a26ba543e91cc1266dee972fc64dbcf589ace",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_divmod_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_string_slice_admission",
+      "body_lf_sha256": "9ee5c46b013b078ca77d301dbb175068ffcb798fbbc1fa51f116f1c6bfc28416",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_array_append_admission",
+      "body_lf_sha256": "73d6cd094e2b1dce590ba090ccd3e273d45c8c4bb5865567215766f7d01edd63",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_append_execution_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_append_managed_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_append_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_array_default_admission",
+      "body_lf_sha256": "b325d05e95c1503a2fe69cd2e9fba2eaba842130a74c33f8030d39bc3e4c379d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_default_obligations.json",
+          "pointer": "/public_admission_20261009_facet/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_exact_integer_bitwise_admission",
+      "body_lf_sha256": "442fdee3aaa3a41a80dc970a6bb499dd13f12f927da318d6c9cb72e963beca5f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_bitwise_obligations.json",
+          "pointer": "/legacy_function/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_panic_point_continuation_admission",
+      "body_lf_sha256": "3de93a6bcd28a6c6c85db7d92fcc9c44fbe75e23f93eaa26acce74af9f81ec95",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_sequence_length",
+      "body_lf_sha256": "5cc3b360b269062f8c003b85ed09ad2f78297025ff42b2697f2d5c46238ea639",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_array_values",
+      "body_lf_sha256": "cc85af38685530a1ff2e25f4582c9a2a9b8fcc9b3c4eff14afe7053e8001ccf9",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_array_element_place_admission",
+      "body_lf_sha256": "38344c2eeabf083de6dedadb6c9b6b7fc242ec52b0be1f59b328e29d0059d86d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_atomic_operation_admission",
+      "body_lf_sha256": "c7e09f2f02dbb05f0c7f3c23696ab4483474b3c6543bf94c78c9a438d932ad1c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_assert_message_contract",
+      "body_lf_sha256": "1c21ea3a20e9b4f5a6f7de346fbfcbd16993e97c52a344fdcff88c312de95e67",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_channel_operation_admission",
+      "body_lf_sha256": "24b2d6d0e12dfa0a11a431d0f76084408184158cfb1420ca0680026dc713bb4f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "test_string_builder_contracts",
+      "body_lf_sha256": "6b1ed857382e29ee92acdc6d52469e6b3ad437268eb2209cbc9ab810300599ae",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "name": "main",
+      "body_lf_sha256": "127958e30bd8b0c4a81a9b29e5bb3263b956256513f4861654c34c7bb64684d8",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "name": "test_array_type_roundtrip",
+      "body_lf_sha256": "eba59ab1041733599637afaab5893ab522a98386030726e69aceaf98bb02c9cb",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_types_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "name": "test_array_type_invalid_construction",
+      "body_lf_sha256": "6e00e51e75ef4910adabd8c135c32cc50f6f3c6d7f112897a2342dee374b5864",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_types_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "name": "test_array_type_hostile_wire",
+      "body_lf_sha256": "88317def29ff30317ac5864b993c83c22d40ca0202244aec972a1067b1f40caa",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_types_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "name": "test_array_type_allocation_failures",
+      "body_lf_sha256": "5dfd0aa6b5ab0a7ef19c96d16ec8f2fdf12d57fb371e8abc12232135dd4b14ce",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_types_obligations.json",
+          "pointer": "/legacy/3/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "name": "test_atomic_type_roundtrip",
+      "body_lf_sha256": "42069726d4dd98fd893f2aa2144132f6cff07ae3bb30efa3853274783fd794ea",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_atomic_types_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "name": "test_atomic_type_invalid_construction",
+      "body_lf_sha256": "e82e1893c53c8d762151dde222ae8750f2e68cb8136bd6703d8e43a956f91b1b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_atomic_types_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "name": "test_atomic_type_hostile_wire",
+      "body_lf_sha256": "e30910e3e91f0e4b42e1d9435fb040a333841a34e7306d933c3e5aceea89ffc3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_atomic_types_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "name": "test_atomic_type_allocation_failures",
+      "body_lf_sha256": "665b5570ec6bcf5ad383e35842e71a965888e4106dc733dd13fa7f07ba4562bb",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_atomic_types_obligations.json",
+          "pointer": "/legacy/3/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_channel_type_checks.inc.c",
+      "name": "test_channel_types",
+      "body_lf_sha256": "d2a00ed3ecc00871bedbb770b54d51a1cd81bf71db464849f904d3e95d19c60f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_owner_obligations.json",
+          "pointer": "/legacy_type_functions/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_channel_type_checks.inc.c",
+      "name": "test_channel_type_allocation_failures",
+      "body_lf_sha256": "b14fd1daa198155f945b88a76d87163da9237f72abbff9904745bb29ed44415b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_channel_owner_obligations.json",
+          "pointer": "/legacy_type_functions/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_display_name_checks.inc.c",
+      "name": "test_display_names_roundtrip_and_wire",
+      "body_lf_sha256": "2ef2bdb6e870208ca16a9607cf3a0507581db0455c706681bb7c60cc33ae9c2c",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_nominal_name_obligations.json",
+          "pointer": "/legacy_functions/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_display_name_checks.inc.c",
+      "name": "test_display_names_invalid_construction",
+      "body_lf_sha256": "fe59d6f838926442a37981858f9821f9c16e0714806639cb5b5cb1770ef9294a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_nominal_name_obligations.json",
+          "pointer": "/legacy_functions/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_display_name_checks.inc.c",
+      "name": "test_display_names_are_not_type_identity",
+      "body_lf_sha256": "effb2d9b48fe08392288d829ee33913c5689ae7b1c3f328eace27a3d49acbcc8",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_nominal_name_obligations.json",
+          "pointer": "/legacy_functions/2/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_module_hostile_indices",
+      "body_lf_sha256": "cd6f6f38c47a816fbb9b4edf210160e91bcde9145d0819598b987e044f461229",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_operation_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_module_operation_admission",
+      "body_lf_sha256": "22a110a77c73f36d8d07b2c3f1fdb0e2abfd44029c18ad8822e83868e66b709d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_operation_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_module_const_place_survives_branch",
+      "body_lf_sha256": "066cab5790243e68934d9b48b0ad807ead6b8f00c2c9eb34e57ad92910f9c15f",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_place_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_module_place_ref_call_admission",
+      "body_lf_sha256": "e6941558aa35fd21ba9f325caed982896b95dc23dd529e5c90a925ceb5f2ae39",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_place_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_ref_source_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_module_place_ref_interface_admission",
+      "body_lf_sha256": "cc0748223b0a357bfebbdf6a8f696e195ccad3c45ffb4f0abc605871ef488b96",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_place_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_ref_source_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_cross_block_module_array_borrow",
+      "body_lf_sha256": "6a71fe6226eb0eb10e6b5574c7f53e9f159f6909bf899103de41e2d598fa5932",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_module_borrow_after_exchange",
+      "body_lf_sha256": "19671cc049aa5f1a761b014904844807e7da705cd887de011677e3b6de0c75d5",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "name": "test_projected_borrow_after_parent_exchange",
+      "body_lf_sha256": "5d2633f1193dd083c8fe8ef54db04242b3e6b68721774593c3c5e6b81e0e9331",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "name": "test_module_slots_invalid_construction",
+      "body_lf_sha256": "f094d872deb91b225cc726b4a4e84f064cee88cea66d1f4c31b32864e22dca95",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_slot_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "name": "test_module_slot_identity",
+      "body_lf_sha256": "eb2ae4b19bf130c319b50f2f95d926378f38463a7643d8e558d1cc827ef2202d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_slot_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "name": "test_module_slots_construction",
+      "body_lf_sha256": "f0a836a5c3c8a77dbe94eec5494a8e9d8b268bbdc0d16752f61698c8b0aab616",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_slot_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "name": "test_module_slots_hostile_wire",
+      "body_lf_sha256": "43c96494e01716ef80de5f8048ec7cfc2728f30a89c5d0d048659b0aaf709f50",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_slot_obligations.json",
+          "pointer": "/legacy/3/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_parent_type_checks.inc.c",
+      "name": "test_parent_types",
+      "body_lf_sha256": "115b028b887ae4fffc52ffe5b4cc6bba335e9cf325b6cd892adf9037ffeabd47",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_parent_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_parent_type_checks.inc.c",
+      "name": "test_parent_type_cycle_wire_and_allocations",
+      "body_lf_sha256": "422657280dcb2a74cd9d169f3c71ad29bbd482f9446acfd43a3a0510f3e8a0fa",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_parent_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_parent_type_checks.inc.c",
+      "name": "test_parent_type_requires_nominal_target_wire",
+      "body_lf_sha256": "a56c722015ea74425d730cd8187f9fd6ca23e61b98e0b5c6088bcaaa69a6d541",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_parent_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "name": "test_record_type_roundtrip",
+      "body_lf_sha256": "58b747953e1640f5e6ff279e832dfa58d8f0e23774e17033c64db4e9627b6d53",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "name": "test_record_type_invalid_and_hostile",
+      "body_lf_sha256": "5936240bd1a4aa29974ea8c3222d6fc33bba01951c734f049c1a672e4b252b44",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "name": "test_record_type_allocation_failures",
+      "body_lf_sha256": "2474ca95d5ebe482286a2d6e5c6d648bfe2502243777e645710bbf143d578c44",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "name": "test_resource_type_admission",
+      "body_lf_sha256": "e2f34af99cd4559d936728d89b759af59610bf746e4ba2346a65040244b15240",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "name": "test_resource_type_allocation_failures",
+      "body_lf_sha256": "4369591ca585087fe7a19d63232a6e8896a14c0810a641954f3cc4cc12aa4c2d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/program/xr_program_vm_fixture_writer.c",
+      "name": "main",
+      "body_lf_sha256": "1a22a039186517437294939806f4ccf0b56b8cf3d8fe310204e4c928eba29733",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_direct_program_lifetime_and_emission",
+      "body_lf_sha256": "32aa2e9468982493ab369293a823fb5f4335b453c7411dd5d6bc0031d5eb6689",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_coroutine_private_state_machine_lowering",
+      "body_lf_sha256": "5c9f47b792fdac09ea44a9cfe6d6f46d65e880758889c5396a1c4fcee9d54985",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_resource_storage_admission",
+      "body_lf_sha256": "aa38c1e4cabf8054339ba90f2ef236209213403f3fb481a0c4bc66fb8d791ec1",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_coroutine_self_loop_parallel_edges_lowering",
+      "body_lf_sha256": "a31a8b914b3b9530ecae14d2f129f7d8de1f389b740706e77c5e37c559ab8b8b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_coroutine_owner_cancel_cleanup_lowering",
+      "body_lf_sha256": "9441d6485865e76a04d10de402db20a74b6412791cc216af3e8f2cb9931c5d27",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_affine_copy_lowering",
+      "body_lf_sha256": "63ac4bce10b7a2a760649547110bc10fb107aa59db27355f4faf50632cd06237",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_empty_aggregate_has_portable_private_c_storage",
+      "body_lf_sha256": "994d267a878f3b7237726ee7fbb136d812d0d3d6afd8aab56a62949ec094cdd3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_sealed_invoke_typed_error_cleanup_lowering",
+      "body_lf_sha256": "d52e65c275f7f6f303a5eaad2d7ef3401dcbedcffde28da161cd73c4373d9630",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_sealed_invoke_trap_continuation_lowering_and_mutation",
+      "body_lf_sha256": "07ae6b8df66a7940e17b47561d2142cc9cf28bb1d923ee099427bacf017f630a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_typed_panic_cleanup_lowering",
+      "body_lf_sha256": "1644eaec07bb7e543c9ccb4600fdde1e8f0b3cb9991ca40d09da073d0eaeeee0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_existential_pack_test_project_lowering",
+      "body_lf_sha256": "bc5802eb5609d5a72f315e3fd90162e8268db6cef85b35ddf3a73b4bebf5048e",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_callable_pack_and_indirect_call_lowering",
+      "body_lf_sha256": "489e31a4ef7d5554d3a939cf3c5a1228b96adb5143e1f6569ae1001a82ef79ac",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_reference_vm_aot_identity",
+      "body_lf_sha256": "47f3ba23c20e8d02063c48b885afe8b7816c8e492c865ac32eff4671bc8ab7de",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_foreign_profile_and_program_binding_mutation",
+      "body_lf_sha256": "288c4558a67fecbd66ccee14c21ecafd238f8b89f43cfcba4d88b2a4c98591fe",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_provider_call_lowering_and_mutation",
+      "body_lf_sha256": "98456cc5d8025b68872f8bbc43ad99ea0639e77de0d68002bbe9d746fc63103d",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_condition_assert_panic_cleanup_lowering",
+      "body_lf_sha256": "7c9268fd2f44def13c98b4e512c506841cb2eb6ef1a231f0e535a3eda79066d8",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_provider_trap_continuation_lowering_and_mutation",
+      "body_lf_sha256": "d423ea7820cafa66b018643b27825cce914a919df799bc165516fa1dff1f1d08",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_cleanup_graph_exit_mutations",
+      "body_lf_sha256": "682646bab802d1d82ef4f2531f3725dd2e2b9391bfcbb155f8e9c2d692117403",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_cleanup_graph_storage_mutations",
+      "body_lf_sha256": "f22b7c8f893c1e9b453e5308dae588cb9634e624e00fc3b4d4b818384d1525b3",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_cleanup_graph_suspension_rejected",
+      "body_lf_sha256": "2826bb3ed9c949cfc3eb1abe95bee9eca4bfcb8caf5b7f87eef84d62272b04ae",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_cleanup_graph_owner_edges",
+      "body_lf_sha256": "da3586cf73222d761ca558eca0d602801a3201d7270fd6d84b5d39a93614e08a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_cleanup_reason_graph_lowering_and_mutation",
+      "body_lf_sha256": "3147d85a26f23d1a5bece7176d5dd34386ec804605cfcac2c59a9ea4125bbdfb",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_coroutine_backend_trap_payload_mutations",
+      "body_lf_sha256": "73dd2023afa0d9db6b4f77bc38ec5e1e156dfd7160efe33c4bff3c9a4dec8773",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_coroutine_backend_trap_target_mutations",
+      "body_lf_sha256": "9a1db1857ef32ee72629f80c9aeb640f8db6555adda17b00c528b48ee544e2c8",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_coroutine_trap_continuation_lowering_and_mutation",
+      "body_lf_sha256": "e099c73c48fc5aec0f740d973987c2342101a2235c3cb4ba78d910acd551915b",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_witness_invoke_trap_continuation_lowering_and_mutation",
+      "body_lf_sha256": "084fbebbc855df49e3e732e68376d5a67a98a9a415ebccf6302e56dd611774a1",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_callable_invoke_trap_continuation_lowering_and_mutation",
+      "body_lf_sha256": "c58727ab0ff736b930fe217d87b434a6bcebe89adeff3da6396f85c4d13e0fac",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_provider_output_lowering_and_mutation",
+      "body_lf_sha256": "85f5043fc5f53acd63f7d6665ec187b82e996ebec441af534f661a7190246cff",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_array_values",
+      "body_lf_sha256": "daa6daa3a4db42dd67caaaa52881d5206190816af3d27824d1b3555fd7ac4615",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_sequence_length",
+      "body_lf_sha256": "e5b58f3a8f032d776bec0451b0b64afca353718624cd382f554a22d41d8ab2c4",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_text_lowering_and_mutation",
+      "body_lf_sha256": "18ebac3c1fa5539cfd897036d4f6fb37a2d97c62a4ced3f73f2ddbb8506d2ce8",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_existential_owned_read_reborrow_lowering",
+      "body_lf_sha256": "5b9066bce2ce13d676be63481cac1cdf1abca1ac8d218cee5d1a9ca0ece4341a",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_pipe_provider_lowering",
+      "body_lf_sha256": "e05152c31aba7b18252efa4a5d06aa8718bc9a0caa069a0d3080504a433d16bf",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_class_reference_semantics_lowering_and_events",
+      "body_lf_sha256": "905ee9f642cee9300700f7c046aacf197f3b57db218cae4367c1a6c054f284ea",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_module_operations_have_typed_native_storage",
+      "body_lf_sha256": "fb7d651941dbeeb44e74f27b1d88b8a7d6575ccd561f5bb422d4783cebcfcec2",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_native_c_export_binding",
+      "body_lf_sha256": "5759028e5cc4c94587dbdf4fdc33e13abf55ed1c7421ab581d3bde733097f6b0",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_channel_storage_lowering",
+      "body_lf_sha256": "29e7fc96e020e7a69d8f00c8cd48b4a0a00a0e1218a8158f42c87d6ad9ef85ea",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "test_atomic_storage_lowering",
+      "body_lf_sha256": "7e43f074ffd491331654dc97140c27cc9a323f8a4f51a42a010253b8b22807b4",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "main",
+      "body_lf_sha256": "dcf24c369761b3f6dc297665819280e20a1e53729fe179893a20c4c777d15718",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "name": "test_class_ref_coroutine_frame_root",
+      "body_lf_sha256": "cf0b862ebdd1fea5a00367cf37e52d8f1f860a550a27757236f6fc02aca70724",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "name": "main",
+      "body_lf_sha256": "10a7ae46dcfd399ca80218396531f229d3db17142a33bfa07fad03cc832dad75",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": []
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_instance.c",
+      "name": "main",
+      "body_lf_sha256": "6668ca83f758cbe4c127827867b7d9686ce8fb99fcbde0828c86fcf39ecf78cf",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_cancel_cleanup_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_output_failure_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_stop_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_suspension_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    },
+    {
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "name": "main",
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "status": "OPEN",
+      "inventory_projection": null,
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_class_error_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_class_helper_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_class_panic_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_class_state_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_class_suspend_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_slot_failure_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_module_slot_state_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
+    }
+  ],
+  "other_files": [
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_process_provider.inc.c",
+      "lf_sha256": "2c3adc65756abcad6790abd475a8a71535bfa153d1623a29f850129949948b0e",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "lf_sha256": "9c958fbd4d79092dffd23e432db5ea9b8d0bfac0fdc5e732422779971b2cbd55",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "lf_sha256": "98fa4020c292966e10b18dd2f952f29e36452d325d5acd94a8bdfe3e5113a857",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "lf_sha256": "590c1e444d0cb58828f8a4c2b90ea8a9730947ade66250a6d1137848292e173e",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "lf_sha256": "d0f91b3cf896953bb227f097cca71fad5632dcc5498831bdc379f3ddf5d0fc28",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_channel_type_checks.inc.c",
+      "lf_sha256": "4a724b5873752a0774ca73806ae29851624b0d7c0393d526d32c630480d0343e",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_display_name_checks.inc.c",
+      "lf_sha256": "bf41548a1d4639173df9af3ce181c7ea591020c38b7918432c81680eccd66235",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_integer_bitwise_cases.inc.c",
+      "lf_sha256": "1255a048ffdbf627a7e27fd8a26578ab66ca897e07ec912effb126dccc2bd93f",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_integer_conversion_cases.inc.c",
+      "lf_sha256": "a15b02a921b0eef43c2d566e1bf7fefee30ebac2890ffd6270fd600d141896cf",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_integer_divmod_cases.inc.c",
+      "lf_sha256": "cba1e0cb5e6e10f4f9c42cbc3242574f00af469a2412b9cfb9d35e7246844b58",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "lf_sha256": "2e44190bafd86cc66cd28f630737dc90e61726d58ecd6df02b9d000159c7124c",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "lf_sha256": "cb50092d9aeddbece74a6f3ebce0fc68e72b72a835e56208913e8e696f102601",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_cleanup_checks.inc.c",
+      "lf_sha256": "1df958bdd5f9e49d9174e49b0873877aad9fa038ecb4d1809f5f5d44600eba30",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_parent_type_checks.inc.c",
+      "lf_sha256": "6332fd60f02c06f650cf099ce5202a5f1e4395b1021614be73800df7d882b0e1",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "lf_sha256": "c5bef9ae435af4870c87834b6b146236dd3bc92cb245232bbae1888dda8dbd47",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "lf_sha256": "ca18b6ec67d2964205e80329990c35cc0a496dcef75c620a70a906cbe9fad6de",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "lf_sha256": "302d24ee1cb49da79c9712f667d69a5adb128ded05001d7d2e8eae3aaea9773b",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_vm_fixture_writer.c",
+      "lf_sha256": "9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_xi_prefix_checks.inc.c",
+      "lf_sha256": "66eb1e3e6cdfe9049fbe81edb43099c19d760f633ed832701120045a1206242f",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "lf_sha256": "d2f76b9963c3afe8973baf2562f3195ea7c01f47ef0c84f47d97dd82b1486529",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "lf_sha256": "5f93bcd76755439c2c9d11cfbf2a53cdd3af5895029d1fa902ca930b0ee66209",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_module_instance.c",
+      "lf_sha256": "d85f986e7f020685dbd67b3089019d8fe08bac5de8ea48190d83069b4e837d32",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "lf_sha256": "efd9e34f2c5854b1138a73d3caa91f107fdc40150baf904ffe60c054238d749f",
+      "status": "OPEN"
+    }
+  ],
+  "allocation_scenarios": [
+    {
+      "ordinal": 0,
+      "input_bytes": 119,
+      "input_sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "input_bytes": 305,
+      "input_sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "input_bytes": 352,
+      "input_sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "input_bytes": 483,
+      "input_sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "input_bytes": 208,
+      "input_sha256": "14b80d72fa93d3c58fe6c4af421044fe81529b726a6d3c067f4bb6a85618f848",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "input_bytes": 377,
+      "input_sha256": "ba1de6818baaf15e872bfe1be06bd6f95793d053c39320c946c21dc95a867810",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "input_bytes": 177,
+      "input_sha256": "2e8a3680cd3d51d65977a7ace39b2f27a479bf547946944630dc290c1e282fa4",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 7,
+      "input_bytes": 278,
+      "input_sha256": "2a9bfcbf2a340eb9dc70e30331753a2326263355154bafd2005eb5c0b3eca1df",
+      "status": "OPEN"
+    }
+  ],
+  "shared_emission_owner_consumers": {
+    "tests/unit/aot/test_xr_program_aot.c": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+    "tests/unit/aot/xr_program_allocation_fixture_writer.c": "5c52a451119319e4464039afcf85d05bc3587ccda2d9708fb7f58e5e129eef80",
+    "tests/unit/aot/xr_program_coroutine_graph_fixture_writer.c": "7599cd3a85be6c8eb09d37807872199ead57807d5ec48ff394f12aa95fe2ab48",
+    "tests/unit/aot/xr_typed_provider_native_writer.c": "3288b646b0d96db962cb04845d97fccdaf9ea773e8760a1a37df48721198dfc5",
+    "tests/unit/ir/test_xi_pipeline.c": "8d393b84e537225f8da8b5e59b87f28ca85d784d1bc7545138856441a7a31352",
+    "tests/unit/ir/test_xr_program_imported_callable.c": "dd877e3261806d2c218f085692114ca7538b247716531cdfb406dce9eb198361",
+    "tests/unit/program/test_xr_program_source_build.c": "0418b77da68445daf0da7b26e2916719274737afa4d2f9e3870c70e467eeded8"
+  },
+  "shared_emission_owner_policy": "Read only: shared with active IR/provider consumers outside this lane."
+}

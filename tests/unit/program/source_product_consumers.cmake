@@ -369,3 +369,11 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_element_place.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_element_place_frames.cmake")
+
+foreach(action IN ITEMS check self-test)
+    add_test(NAME source_product_consumer_responsibility_trace_${action}
+        COMMAND ${XRAY_PYTHON} -B -X utf8
+            "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_responsibility_trace.py" ${action})
+    set_tests_properties(source_product_consumer_responsibility_trace_${action}
+        PROPERTIES TIMEOUT 30 LABELS "unit;xir;source-product;program-consumer;inventory")
+endforeach()
