@@ -1,0 +1,175 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "source_owner_integer_bitwise_exact_width",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 4025,
+    "body_lf_sha256": "bd73bdc3f9313721791a773ccc89de3170e792c2557dcaf307a3eb211736118a",
+    "assertion_sites": 3,
+    "loop_sites": 0,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "integer_bitwise",
+      "expected_exit": 42,
+      "labels": [
+        "integer",
+        "ownership",
+        "panic"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "source": {
+        "bytes": 514,
+        "sha256": "4c638414f024aac9ee61f7687656837d276c294a5ec2b7e1f037c4c8cbb19e14"
+      }
+    },
+    "initial_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/integer_width/root.xr",
+      "sha256": "95096bcb6b01a457fa0d84c104b025df582e089cf88cf83ef26aca9542c39883",
+      "original_prefix_sha256": "4c638414f024aac9ee61f7687656837d276c294a5ec2b7e1f037c4c8cbb19e14",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "probe_target": "test_source_product_probe"
+    }
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL_ORIGINAL_SOURCE_WIDTH_POSITIVE_CONTROL_PASS",
+  "fixture": {
+    "path": "tests/unit/xir/product_consumers/fixtures/integer_width/root.xr",
+    "sha256": "95096bcb6b01a457fa0d84c104b025df582e089cf88cf83ef26aca9542c39883",
+    "original_bytes": 514,
+    "original_sha256": "4c638414f024aac9ee61f7687656837d276c294a5ec2b7e1f037c4c8cbb19e14",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "expected_i64": 42
+  },
+  "tests": [
+    "test_source_product_integer_width_vm",
+    "test_source_product_integer_width_native",
+    "test_source_product_integer_width_mixed_even",
+    "test_source_product_integer_width_mixed_odd",
+    "test_source_product_integer_width_explicit_literal_vm",
+    "test_source_product_integer_width_explicit_literal_native",
+    "test_source_product_integer_width_explicit_literal_mixed_even",
+    "test_source_product_integer_width_explicit_literal_mixed_odd",
+    "test_source_product_integer_width_original_owned",
+    "test_source_product_integer_width_explicit_literal_owned"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "original_mapping": [
+    {
+      "original": "Sourcebuild withhostedtargetsemantic profile succeeds",
+      "current": "PublicSourceProduct buildwithactual Script authority,finite compiler ledger,x86_64 andValue22;closed Checkedread+reverify;Source\u2192closed specialization beforeexecution.",
+      "status": "FAIL_REQUIRED_ORIGINAL_SOURCE_ADMISSION_EXECUTION_NOT_ENTERED"
+    },
+    {
+      "original": "Detached VM program returns42",
+      "current": "Original source withprivateanswer andonlyexportadapter;SourceSession/Product/closed/Cresultdead beforeexecution. Two realInstances retainProgram aftercaller drop;canonicalentry0 andtworepeated42calls/Instance;privateanswerauthorityrejected withoutallocation.",
+      "status": "FAIL_REQUIRED_ORIGINAL_SOURCE_ADMISSION_EXECUTION_NOT_ENTERED"
+    },
+    {
+      "original": "AOTfixture backend contract withfixed42",
+      "current": "Actualpublic C emission isdeterministic;fullgenerated TU compiledC11/W4/WX underMSVC orClangASanUBSan. GeneratednativeProgramSpec seal+execution andtwo mixed parityprojections independentlyrequire42.",
+      "status": "FAIL_REQUIRED_ORIGINAL_SOURCE_ADMISSION_EXECUTION_NOT_ENTERED"
+    }
+  ],
+  "assertions": [
+    "i8 arithmetic rightshift -128>>7=-1",
+    "u8 logical rightshift255>>7=1 andwidthmasked leftshift255<<65=254",
+    "i16 OR(-256,42)=-214",
+    "u32 XOR(4294967295,42)=4294967253",
+    "i32 complement0=-1",
+    "u64 leftshift1<<65=2 and1<<64=1",
+    "i64 rightshift-2 by-1=-1 andby64=-2",
+    "u8 AND255,42 casti64=42"
+  ],
+  "ownership": "Existing read-only Source consumer driver frees Session/Product andownedclosed/C artifacts before normalexecution;twoInstances retainProgram thencaller Programdrops. Eachowned scalarresult dropped;privateentry rejects beforeinitialization withoutallocation. Compileractualstockobserver andruntime live/bytes checkedatfinalrelease.",
+  "boundaries": [
+    "Originalwholefunction andsource108 censusremainOPEN;old fixture/nativebackend identities notrelabeled sameobject.",
+    "Newnormalgates coveroriginalsource valuebehavior throughpublicpipelines;not all48lowlevel bitwise signatures oralloperandboundaryvalues.",
+    "Original full FI/resource-axis/cancellation/safety/Main qualification notrun. No legacypayloaddependencyremoved.",
+    "Existingread-only runtimeobserver frees its backingtablewhenlastrealruntimeblockdies;normaldriver checksruntime_live/byteszero. No newinstrumentation or independent table0printf insharednormaldriver."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "first_build": {
+    "original": "FAIL_BOTH_CONFIGURATIONS",
+    "stage": "Source CHECK1",
+    "status": "BAD_TYPE3",
+    "line": 11,
+    "message": "equality requires the same declared operand type",
+    "native": "NOT_BUILT",
+    "physical": "Initialshared driver exitsbeforefinalledgerrelease;not claimed physicalzero."
+  },
+  "control": {
+    "fixture": "tests/unit/xir/product_consumers/integer_width_explicit_literal/root.xr",
+    "only_change": "Five equality RHS literal annotations: -214asi16,4294967253asu32,-1asi32,-1asi64,-2asi64. Shift counts andallotheroriginalsource/expected42 retained.",
+    "original": "Originalbytefixture andpositive4backendgates retained;notreplaced orchangedtoexpectedfailure.",
+    "evidence": "PASS_MSVC_AND_CLANG_ASAN_UBSAN_VM_NATIVE_MIXED_EVEN_MIXED_ODD",
+    "boundary": "Controlisnotoriginalqualification;originalOPEN.",
+    "first_candidate": "Oneu32annotationstillFAILEDsameSourceBAD_TYPE3atline11;all4ownedprobesFAILEDpositivebutreleasedphysical0/0. Thisdisprovesinitialu32-firstcauseguess.",
+    "second_candidate": "Twoannotationsadvancefirstrejectiontoline13i32complementcomparison;all4ownedr3probesretainphysical0/0."
+  },
+  "owned_admission": {
+    "positive_required": 0,
+    "original": "FAIL_POSITIVE_BAD_TYPE3_LINE11_CLEANUP_PHYSICAL0/0_TABLE0",
+    "control": "PASS_PRODUCT_VERIFY_DETACHED_CHECKED_LOWERED_PHYSICAL0/0_TABLE0",
+    "behavior": "AlwaysrequiresSourceProductOK;failureprintsactualstatusandreturns1afteractualdiagnostic/session/product/ledger/observerdestroy. SuccessreadsownedclosedCheckedanddetachedLoweredwithreverify."
+  },
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-integer-width-execution-r1",
+    "receipts": "results.json",
+    "registered_rows": 20,
+    "actual_final_processes": 14,
+    "passed": 10,
+    "failed_original_positive": 4,
+    "not_run_original_native_mixed": 6,
+    "actual_inputs_per_binary_config": 2726,
+    "preservation": "8binary/config captures actualSHA,size,mtimebefore==after;generatedCbefore==after;preannotationmap saved.",
+    "control_execution": {
+      "normal_runs": 8,
+      "backend_modes": [
+        "VM",
+        "compiled-C-native",
+        "mixed-even",
+        "mixed-odd"
+      ],
+      "two_instances_per_run": 2,
+      "repeated_answer_calls_per_instance": 2,
+      "total_expected_i64_42": 32,
+      "total_canonical_i64_0": 16,
+      "permissions": "PrivateanswerrejectedonNEWbeforeallocation;separateexportadapter executes aftercanonicalrootinitialization.",
+      "ownership": "Session/Product/ownedclosed/Cdead beforeinstanceexecution;callerProgramdroppedaftertwoInstancesretain. ResultsdropandInstancesfree;compilerphysical0/0 andruntime_live/bytes0 enforcedbyexistingdriver. Runtimeobserverbackingfreeauditedbutnoseparate table0output."
+    },
+    "native": "FullgeneratedCTUcompiledwithC11/W4/WX underbothconfigs;ClangactualASan+UBSan flags;generatedpayloadSHAidentical andtrailerhashrecomputed. DeterministicSourceProductemitrecheckedatruntime. Mixedproofbytes/identityexact,eachparityactuallyhasnative+VMentries.",
+    "original_failure": "BothVMpositivesandbothownedadmissionpositivesFAILEDrequired0atSourceBAD_TYPE3/stageCHECK1/line11. NooriginalruntimebitvaluesorAOTqualified. Ownedhelperdiagnostic/session/product/ledger/observerdestroyandphysical0/0/table0verified. Originalgenericfailureexitsbeforeledgerrelease;itscleanupUNPROVEN.",
+    "first_red": "OriginalfirstbuildCemissionFAILline11inbothconfigs;firstwrappercompiledbutnativeNOTBUILT. One-u32-annotationcontrolstillFAILline11;two-annotationcontrolFAILline13;five-annotationcontrolPASSnativebuild. Alllogs/sourcepreimages/8earlierrealownedfailedprobesretained.",
+    "fresh_build": "12actualCcompileevents acrossfirst/r2/r4 logs;10finalfreshconsumerobjects acrossconfigs (originalwrapperhadearliercompile too);4finalstrictgeneratednativeTUs=2wrappers+2payloads. Existingcommondriverobjectexactreused;productionarchivesunchanged,no productionTUrebuilt.",
+    "protection": "10945tracked preimage:10944nonowned exact;12historicaldirtypreserved.598protected:594exact+4expectedNinja/CTestchanges;eacholdCTestregistryrawexactafterremoving20newregistrationlines.",
+    "audit_corrections": [
+      "Readactualcompile_commands owner/outputafter2read-onlypreparationerrors.",
+      "FirstfinalrunnerassumedCTestJSONcommandpresentforunbuiltnative;retainedfirstactualoriginalVMfailure;correctedNOT_RUNhandling,r2finalruncompleted.",
+      "Firstauditorhardcodedadapterlength50;replacedbyexactadapterliteral-length,matchingoriginal514Bprefix."
+    ],
+    "annotation": "Evidencecommentaddedafteractualruns;preannotationmapcapturedandsaved;notrerunnewmap.",
+    "boundary": "Onlyexplicit-typecontrolexecutes;originalwholefunctionOPEN. All48signatureadmission matrix wasaseparatepreviousbatch;not claimedfull48runtimecoverage. FullFI/axes/cancel/safety/Main NOT_RUN.",
+    "retired": 0
+  }
+}
