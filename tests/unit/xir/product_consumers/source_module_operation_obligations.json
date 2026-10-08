@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_module_hostile_indices",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 11,
+      "body_lf_sha256": "cd6f6f38c47a816fbb9b4edf210160e91bcde9145d0819598b987e044f461229",
+      "assertion_sites": 3,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_operation_admission",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 31,
+      "body_lf_sha256": "22a110a77c73f36d8d07b2c3f1fdb0e2abfd44029c18ad8822e83868e66b709d",
+      "assertion_sites": 7,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL_ORIGINAL_MUTABLE_BASE_POSITIVES_OTHER_EXPECTATIONS_PASS",
+  "matrix": "20 independent Checked inputs:7 positive obligations including original base mutable init/store and base const init;13 exact BAD_STRUCTURE/BAD_TYPE rejects. Empty/occupied output each;input poison/free;existing owner preserved and reverifies;all compiler physical allocations refunded.",
+  "original_mapping": [
+    {
+      "legacy": "operation mutation0",
+      "facet": "original_base_mutable_init positive;root_mutable_init is separate control",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation1",
+      "facet": "foreign_initializer authority; original base mutable admission remains separately OPEN",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation2",
+      "facet": "load_type_mismatch independently tests declared result versus slot type; current init has no typed place carrier",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation3",
+      "facet": "init_value_mismatch plus root_bool_init valid-value control",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation4",
+      "facet": "original_base_const_init positive;root_const_init separate control",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation5",
+      "facet": "base_const_store and root_const_store reject",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation6",
+      "facet": "original_base_mutable_store positive;root_mutable_store is admission-only control, not runtime initialization",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation7/8;hostile owner4,slot2,foreign owner1",
+      "facet": "slot_missing_owner,one-past-end/u32max/negative,foreign initializer/load/store;dense packet rejects are not old writer unresolved-key diagnostics",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation9",
+      "facet": "Old PLACE_TAKE from module slot has no direct operation in this packet vocabulary;not translated to SLOT_LOAD",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation10",
+      "facet": "Local-place initialization illegality requires separate lexical-place representation mapping",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "operation mutation11",
+      "facet": "Legacy explicit missing TRAP effect mask has no corresponding current per-function mask;not replaced by another flag",
+      "status": "OPEN"
+    }
+  ],
+  "oracle": "Expectations fixed before product execution:0OK,1BAD_STRUCTURE,3BAD_TYPE. Positive original shapes never rewritten as rejects. Current slot visibility is owner-only; initializer identity required for INIT;STORE needs root mutable;typed operand/result exact.",
+  "candidate_gates": [
+    {
+      "name": "test_source_product_module_operation",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_operation_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Original base mutable positive admission adjudication",
+    "Legacy opaque declaration keys and writer unresolved diagnostics",
+    "Typed-place/take/local/effect-mask representation duties",
+    "Borrow/ref-call and cross-block obligations remain in original census",
+    "Full SourceProduct execution and actual allocation/axes qualifications",
+    "Full2036/32FI",
+    "Two-configuration12axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-operation-r1",
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "actual_processes": 4,
+    "encoding_pass": 2,
+    "product_fail": 2,
+    "reads": 80,
+    "accepted_positive_reads": 20,
+    "exact_negative_reads": 52,
+    "original_positive_mismatches": 8,
+    "original_actual": "base mutable INIT/STORE each empty+occupied => BAD_STRUCTURE1 versus expectedOK0 in bothconfigs;original const INIT passes",
+    "physical": "input poison/free, occupied owner preserved and reverifies, all attempt allocations refunded, final compiler0/0 table0",
+    "fresh_build": "one consumer TU/config; production reader/verifier/constraint archives reused exactly, not freshly compiled",
+    "first_build": "PASS both configurations",
+    "first_execution": "Complete40rows/config;each actual exit1 with4original-positive mismatches;no observer correction or rerun",
+    "runtime": "NOT_RUN;admission-only consumer does not claim initialization/execution or generated native qualification"
+  },
+  "postrun_note": "Only result annotations after actual product and encoding commands; captured map predates annotations. No final-map rerun claimed."
+}
