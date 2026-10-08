@@ -96,6 +96,22 @@ typedef struct AllocationRuntimeFault {
 } AllocationRuntimeFault;
 static AllocationRuntimeFault allocation_runtime;
 
+/* Compiler caps share the workload without treating runtime OOM as budget refusal. */
+typedef struct AllocationCompilerAxis {
+    XrCompileResourceLimits limits;
+    AllocationRuntimeSample boundary;
+    uint64_t total;
+    unsigned kind;
+    size_t failure_record;
+    const char *failure_stage;
+    int failure_status;
+    bool active, below, ok, failed, output_preserved, rollback, diagnostic_ok;
+} AllocationCompilerAxis;
+static AllocationCompilerAxis allocation_compiler_axis;
+static void allocation_compiler_axis_begin(AllocationRun *run);
+static bool allocation_compiler_axis_end(AllocationRun *run, int status);
+static int allocation_compiler_axis_finish(AllocationRun *run, bool passed, bool released, bool cleanup);
+
 static AllocationRuntimeSample allocation_runtime_sample(AllocationRun *run) {
     AllocationRuntimeSample sample = {0};
     sample.sites = runtime_attempts; sample.blocks = runtime_live; sample.bytes = runtime_bytes;
@@ -142,6 +158,7 @@ static void allocation_runtime_begin(AllocationRun *run, const char *name, Alloc
     call->instance_before = call->instance < 2 && run->instances[call->instance];
     if (call->instance_before) call->state_before = xr_xir_instance_state(run->instances[call->instance]);
     allocation_runtime_output(0, output, width);
+    if (allocation_compiler_axis.active) allocation_compiler_axis_begin(run);
 }
 static bool allocation_runtime_end(AllocationRun *run, int status) {
     if (!allocation_runtime.active) return true;
@@ -159,6 +176,7 @@ static bool allocation_runtime_end(AllocationRun *run, int status) {
     call->instance_after = call->instance < 2 && run->instances[call->instance];
     if (call->instance_after) call->state_after = xr_xir_instance_state(run->instances[call->instance]);
     call->diagnostic_match = true;
+    if (allocation_compiler_axis.active && !allocation_compiler_axis_end(run, status)) return false;
     if (call->hit && call->domain == ALLOCATION_RUNTIME_XIR && strcmp(call->name, "VM-Program-take"))
         call->diagnostic_match = !strcmp(call->name, "source-product") ?
             run->diagnostic.status == XR_XIR_OUT_OF_MEMORY : run->xir.status == XR_XIR_OUT_OF_MEMORY;
@@ -584,6 +602,171 @@ static bool allocation_runtime_failure_state(AllocationRun *run) {
     return valid;
 }
 
+
+static bool allocation_compiler_axis_cumulative_same(const AllocationRuntimeSample *a, const AllocationRuntimeSample *b) {
+    return a->compiler_sites == b->compiler_sites &&
+        a->ledger.allocation_count == b->ledger.allocation_count &&
+        a->ledger.allocated_bytes == b->ledger.allocated_bytes &&
+        a->ledger.peak_bytes == b->ledger.peak_bytes && a->ledger.work == b->ledger.work;
+}
+static uint64_t allocation_compiler_axis_value(const XrCompileResourceStats *stats) {
+    if (!allocation_compiler_axis.kind) return stats->allocated_bytes;
+    return allocation_compiler_axis.kind == 1 ? stats->peak_bytes : stats->work;
+}
+static int allocation_compiler_axis_budget(AllocationRuntimeDomain domain) {
+    if (domain == ALLOCATION_RUNTIME_OWNER) return (int)XR_COMPILE_RESOURCE_BUDGET;
+    if (domain == ALLOCATION_RUNTIME_INPUT) return (int)XR_OS_IO_BUDGET;
+    if (domain == ALLOCATION_RUNTIME_SESSION) return (int)XR_COMPILER_SESSION_BUDGET;
+    return domain == ALLOCATION_RUNTIME_XIR ? (int)XR_XIR_BUDGET : -1;
+}
+static void allocation_compiler_axis_begin(AllocationRun *run) {
+    AllocationRuntimeCall *call = &allocation_runtime.call;
+    if (allocation_compiler_axis.failed ||
+        !allocation_compiler_axis_cumulative_same(&allocation_compiler_axis.boundary, &call->before))
+        allocation_compiler_axis.ok = false;
+    if (call->domain == ALLOCATION_RUNTIME_XIR &&
+        strcmp(call->name, "source-product") && strcmp(call->name, "VM-Program-take"))
+        run->xir = (XrXirDiagnostic){XR_XIR_BAD_STRUCTURE, 17, 18, 19, XR_XIR_DIAGNOSTIC_NONE};
+}
+static bool allocation_compiler_axis_diagnostic(const AllocationRun *run) {
+    const AllocationRuntimeCall *call = &allocation_runtime.call;
+    bool applies = call->domain == ALLOCATION_RUNTIME_XIR && strcmp(call->name, "VM-Program-take");
+    bool valid = true;
+    if (applies && !strcmp(call->name, "source-product")) {
+        const XrXirSourceProductDiagnostic *d = &run->diagnostic;
+        valid = d->status == XR_XIR_BUDGET && d->stage >= XR_XIR_SOURCE_PRODUCT_CHECK &&
+            d->stage <= XR_XIR_SOURCE_PRODUCT_FACTS && memchr(d->source.message, 0, sizeof(d->source.message));
+        if (d->stage == XR_XIR_SOURCE_PRODUCT_CHECK) valid = valid && d->source.status == XR_XIR_BUDGET;
+        else if (d->stage != XR_XIR_SOURCE_PRODUCT_FACTS)
+            valid = valid && d->xir.status == XR_XIR_BUDGET && d->xir.reason == XR_XIR_DIAGNOSTIC_NONE;
+        printf("source-allocation0 compiler-axis-diagnostic stage=%s applicable=1 valid=%u product-stage=%u "
+            "product-status=%u source-status=%u xir-status=%u snapshot=%u source-path=%u "
+            "source-module=%u line=%d column=%d function=%u block=%u instruction=%u reason=%u\n",
+            call->name, (unsigned)valid, (unsigned)d->stage, (unsigned)d->status, (unsigned)d->source.status,
+            (unsigned)d->xir.status, (unsigned)(d->snapshot != NULL), (unsigned)(d->source_path != NULL),
+            d->source.module, d->source.line, d->source.column, d->xir.function, d->xir.block,
+            d->xir.instruction, (unsigned)d->xir.reason);
+    } else {
+        if (applies) valid = run->xir.status == XR_XIR_BUDGET && run->xir.reason == XR_XIR_DIAGNOSTIC_NONE;
+        printf("source-allocation0 compiler-axis-diagnostic stage=%s applicable=%u valid=%u "
+            "status=%u function=%u block=%u instruction=%u reason=%u\n",
+            call->name, (unsigned)applies, (unsigned)valid, (unsigned)run->xir.status,
+            run->xir.function, run->xir.block, run->xir.instruction, (unsigned)run->xir.reason);
+    }
+    return valid;
+}
+static bool allocation_compiler_axis_rollback(AllocationRun *run) {
+    AllocationRuntimeCall *call = &allocation_runtime.call;
+    AllocationRuntimeSample before_free = allocation_runtime_sample(run);
+    /* A rejected product may retain its owned diagnostic until explicit free. */
+    if (!strcmp(call->name, "source-product"))
+        xr_xir_compile_source_product_diagnostic_free(&run->diagnostic);
+    AllocationRuntimeSample after_free = allocation_runtime_sample(run);
+    bool uncharged = allocation_compiler_axis_cumulative_same(&before_free, &after_free) &&
+        before_free.sites == after_free.sites;
+    bool stock = call->before.compiler_blocks == after_free.compiler_blocks &&
+        call->before.compiler_bytes == after_free.compiler_bytes &&
+        call->before.valid == after_free.valid && call->before.ledger.live_bytes == after_free.ledger.live_bytes &&
+        call->before.blocks == after_free.blocks && call->before.bytes == after_free.bytes &&
+        call->before.table == after_free.table;
+    printf("source-allocation0 compiler-axis-rollback stage=%s diagnostic-free-uncharged=%u stock-preserved=%u "
+        "compiler-before=%zu/%zu compiler-api-after=%zu/%zu compiler-after=%zu/%zu "
+        "runtime-before=%zu/%zu runtime-after=%zu/%zu table-before=%zu table-after=%zu\n",
+        call->name, (unsigned)uncharged, (unsigned)stock, call->before.compiler_blocks, call->before.compiler_bytes,
+        call->after.compiler_blocks, call->after.compiler_bytes, after_free.compiler_blocks, after_free.compiler_bytes,
+        call->before.blocks, call->before.bytes, after_free.blocks, after_free.bytes,
+        call->before.table, after_free.table);
+    return uncharged && stock;
+}
+static void allocation_compiler_axis_report(const AllocationRuntimeCall *call, int budget) {
+    printf("source-allocation0 compiler-axis-call record=%zu stage=%s domain=%u status=%d expected-budget=%d "
+        "compiler-site-begin=%zu compiler-site-end=%zu runtime-site-begin=%zu runtime-site-end=%zu "
+        "output-preserved=%u output-bytes=%zu/%zu valid-before=%u valid-after=%u "
+        "count-before=%" PRIu64 " count-after=%" PRIu64 " allocated-before=%" PRIu64 " allocated-after=%" PRIu64
+        " live-before=%" PRIu64 " live-after=%" PRIu64 " peak-before=%" PRIu64 " peak-after=%" PRIu64
+        " work-before=%" PRIu64 " work-after=%" PRIu64 " compiler-physical=%zu/%zu runtime-physical=%zu/%zu table=%zu\n",
+        call->record, call->name, (unsigned)call->domain, call->status, budget,
+        call->before.compiler_sites, call->after.compiler_sites, call->before.sites, call->after.sites,
+        (unsigned)call->output_preserved, call->widths[0], call->widths[1],
+        (unsigned)call->before.valid, (unsigned)call->after.valid,
+        call->before.ledger.allocation_count, call->after.ledger.allocation_count,
+        call->before.ledger.allocated_bytes, call->after.ledger.allocated_bytes,
+        call->before.ledger.live_bytes, call->after.ledger.live_bytes,
+        call->before.ledger.peak_bytes, call->after.ledger.peak_bytes,
+        call->before.ledger.work, call->after.ledger.work, call->after.compiler_blocks, call->after.compiler_bytes,
+        call->after.blocks, call->after.bytes, call->after.table);
+}
+static bool allocation_compiler_axis_end(AllocationRun *run, int status) {
+    AllocationRuntimeCall *call = &allocation_runtime.call;
+    AllocationCompilerAxis *axis = &allocation_compiler_axis;
+    const XrCompileResourceStats *before = &call->before.ledger, *after = &call->after.ledger;
+    bool cumulative = after->allocation_count >= before->allocation_count &&
+        after->allocated_bytes >= before->allocated_bytes && after->peak_bytes >= before->peak_bytes &&
+        after->work >= before->work && call->after.compiler_sites >= call->before.compiler_sites;
+    bool bounded = after->allocated_bytes <= axis->limits.allocated_bytes &&
+        after->live_bytes <= axis->limits.live_bytes && after->peak_bytes <= axis->limits.live_bytes &&
+        after->work <= axis->limits.work;
+    if (!cumulative || !bounded || instance_compile_injected || instance_compile_fail_at != SIZE_MAX ||
+        runtime_fail_at != SIZE_MAX) axis->ok = false;
+    int budget = allocation_compiler_axis_budget(call->domain);
+    allocation_compiler_axis_report(call, budget);
+    axis->boundary = call->after;
+    if (budget >= 0 && status == budget) {
+        axis->failed = true; axis->failure_record = call->record; axis->failure_stage = call->name;
+        axis->failure_status = status; axis->output_preserved = call->output_preserved;
+        axis->diagnostic_ok = allocation_compiler_axis_diagnostic(run);
+        axis->rollback = allocation_compiler_axis_rollback(run);
+        axis->ok = axis->ok && axis->below && axis->output_preserved && axis->diagnostic_ok && axis->rollback;
+        allocation_runtime.stopped = true;
+        return false;
+    }
+    if (call->domain >= ALLOCATION_RUNTIME_NEW &&
+        !allocation_runtime_compile_same(&call->before, &call->after)) axis->ok = false;
+    return axis->ok;
+}
+static int allocation_compiler_axis_finish(AllocationRun *run, bool passed, bool released, bool cleanup) {
+    AllocationCompilerAxis *axis = &allocation_compiler_axis;
+    uint64_t actual = allocation_compiler_axis_value(&run->final);
+    bool expected = axis->below ? !passed && axis->failed &&
+        allocation_runtime.records == axis->failure_record + 1 : passed && !axis->failed && actual == axis->total;
+    bool valid = expected && axis->ok && allocation_runtime.ok && released && cleanup;
+    printf("source-allocation0 compiler-axis=%s axis=%u cut=%s normal-total=%" PRIu64
+        " limit=%" PRIu64 " actual=%" PRIu64 " records=%zu first-rejection=%s record=%zu "
+        "failure-applicable=%u status=%d output-preserved=%u rollback=%u diagnostic-valid=%u cleanup-uncharged=%u "
+        "compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64 " peak=%" PRIu64 " work=%" PRIu64
+        " compiler-physical=%zu/%zu runtime-physical=%zu/%zu table=%zu "
+        "input-packet-bytes=UNSNAPSHOTTED_OPEN full-eight-source-FI=NOT_RUN native=NOT_RUN\n",
+        valid ? "PASS" : "FAIL", axis->kind, axis->below ? "minus1" : "exact", axis->total,
+        axis->total - (axis->below ? 1u : 0u), actual, allocation_runtime.records,
+        axis->failed ? axis->failure_stage : "NOT_APPLICABLE", axis->failure_record, (unsigned)axis->failed,
+        axis->failure_status, (unsigned)axis->output_preserved, (unsigned)axis->rollback,
+        (unsigned)axis->diagnostic_ok, (unsigned)cleanup, instance_compile_attempts, runtime_attempts,
+        run->final.allocated_bytes, run->final.peak_bytes, run->final.work, instance_compile_live,
+        instance_compile_bytes, runtime_live, runtime_bytes, runtime_owned_capacity);
+    if (axis->failed) puts("source-allocation0 compiler-axis-downstream=NOT_ENTERED");
+    return valid ? 0 : 1;
+}
+static bool allocation_compiler_axis_caps(const char *name, const char *cut, size_t total) {
+    if (!total) return false;
+    bool below = !strcmp(cut, "minus1");
+    if (!below && strcmp(cut, "exact")) return false;
+    unsigned kind;
+    if (!strcmp(name, "allocated")) kind = 0;
+    else if (!strcmp(name, "live")) kind = 1;
+    else if (!strcmp(name, "work")) kind = 2;
+    else return false;
+    XrCompileResourceLimits limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
+    uint64_t maximum = !kind ? limits.allocated_bytes : kind == 1 ? limits.live_bytes : limits.work;
+    if ((uint64_t)total > maximum) return false;
+    uint64_t cap = (uint64_t)total - (below ? 1u : 0u);
+    if (!kind) limits.allocated_bytes = cap;
+    else if (kind == 1) limits.live_bytes = cap;
+    else limits.work = cap;
+    allocation_compiler_axis = (AllocationCompilerAxis){.limits = limits, .total = (uint64_t)total,
+        .kind = kind, .active = true, .below = below, .ok = true};
+    return true;
+}
+
 typedef enum AllocationFaultStage {
     ALLOCATION_FAULT_OWNER, ALLOCATION_FAULT_INPUT, ALLOCATION_FAULT_SESSION,
     ALLOCATION_FAULT_PRODUCT, ALLOCATION_FAULT_SOURCE_READ, ALLOCATION_FAULT_CLOSED_READ,
@@ -891,6 +1074,7 @@ static int allocation_runtime_run(const char *root, const char *file, size_t nor
     run.context.limits = xr_xir_compile_default_limits();
     run.operation = "finite-owner";
     XrCompileResourceLimits limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
+    if (allocation_compiler_axis.active) limits = allocation_compiler_axis.limits;
     allocation_runtime_begin(&run, "owner-new", ALLOCATION_RUNTIME_OWNER, &run.context.resources, sizeof(run.context.resources));
     XrCompileResourceStatus owner = xr_compile_resources_new(&limits, &run.context.resources);
     bool passed = allocation_runtime_end(&run, (int)owner) && owner == XR_COMPILE_RESOURCE_OK;
@@ -929,6 +1113,8 @@ static int allocation_runtime_run(const char *root, const char *file, size_t nor
             runtime_attempts, instance_compile_live, instance_compile_bytes, runtime_live, runtime_bytes, runtime_owned_capacity);
         return fault_passed ? 0 : 1;
     }
+    if (allocation_compiler_axis.active)
+        return allocation_compiler_axis_finish(&run, passed, released, cleanup_uncharged);
     printf("source-allocation0 normal=%s compiler-sites=%zu runtime-sites=%zu allocated=%" PRIu64
         " peak=%" PRIu64 " work=%" PRIu64 " full-eight-source-FI=NOT_RUN native=NOT_RUN\n",
         passed && released && cleanup_uncharged && allocation_runtime.ok ? "PASS" : "FAIL", instance_compile_attempts, runtime_attempts,
@@ -996,6 +1182,12 @@ int main(int argc, char **argv) {
         if (!allocation_fault_number(argv[4], &normal_sites) || !normal_sites ||
             !allocation_fault_number(argv[5], &site) || site >= normal_sites) return 2;
         return allocation_runtime_run(argv[1], argv[2], normal_sites, site);
+    }
+    if (argc == 7 && !strcmp(argv[3], "--compiler-axis")) {
+        size_t total = 0;
+        if (!allocation_fault_number(argv[6], &total) ||
+            !allocation_compiler_axis_caps(argv[4], argv[5], total)) return 2;
+        return allocation_runtime_run(argv[1], argv[2], 0, SIZE_MAX);
     }
     if (argc != 3) return 2;
     return allocation_runtime_run(argv[1], argv[2], 0, SIZE_MAX);
