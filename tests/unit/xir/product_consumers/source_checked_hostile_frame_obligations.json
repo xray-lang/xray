@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67",
+  "legacy": {
+    "path": "tests/unit/program/test_xr_program.c",
+    "name": "test_hostile_structure_and_budget",
+    "body_lf_sha256": "c5a4362105630286000265ba0ef5db7f64776ca6ea0d7724b56ffa4025c26d31",
+    "status": "OPEN",
+    "replacement_gates": [],
+    "whole_file_status": "OPEN"
+  },
+  "new_gate": "test_source_product_checked_hostile_frame",
+  "independent_packet": {
+    "path": "tests/unit/xir/product_consumers/semantic67_named/semantic67_core.inc.c",
+    "array": "named_packet_67_0",
+    "bytes": 224,
+    "sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784",
+    "origin": "Existing complete independent named semantic67 encoder golden; not generated from the current production writer.",
+    "oracle": "One Checked function main()->i64, CONST_INT i64(42), RETURN; reverify and serialize exactly to this golden after every hostile read."
+  },
+  "matrix": {
+    "truncated_prefixes": 224,
+    "one_bit_per_byte_mutations": 224,
+    "mutation_policy": "XOR 1 at each byte 0..223 without repairing the digest; this tests framing/integrity, not semantic field rejection after rehash.",
+    "other_cases": [
+      "one appended byte",
+      "NULL input at full claimed length",
+      "all-eight payload-length bytes set to 0xff"
+    ],
+    "output_states": [
+      "NULL",
+      "real pre-existing owned Checked artifact"
+    ],
+    "read_count": 902,
+    "expected": "BAD_STAGE for stage bytes 16..19; all remaining cases BAD_STRUCTURE. No generic nonzero acceptance.",
+    "allocations": "Every failed read preserves allocation_count, allocated_bytes, live_bytes, peak_bytes, physical blocks/bytes and allocator attempts. Work may be charged and is not asserted zero.",
+    "input": "Caller-owned exact-length heap prefix buffer, with one poison byte for length0, copied once per case and compared after each read. Prefix buffers are outside compiler ledger accounting and freed explicitly. ASan instruments both consumer and reader.",
+    "owner": "The actual occupied owner remains the same pointer and immediately reverifies and rewrites to the complete independent golden. Verification/writing lies outside the no-allocation rejection interval."
+  },
+  "legacy_mapping": {
+    "bad_magic": "Covered as current Checked framing rejection, not the removed Program magic/status enum.",
+    "unsupported_version": "Current schema/semantic identities and reserved bytes fail closed; old schema/feature identities remain separately mapped below.",
+    "truncation": "All 224 prefixes of the independent current packet, including header/body boundary and final-byte truncation.",
+    "builtin_rows_20x4": "OPEN: new scalar/type representation has no old four-byte builtin identity/kind/ownership row table; byte/digest rejection is not equivalent to all 80 semantic mutations.",
+    "import_stable_id_and_flags": "OPEN: no new semantic import identity/flag mutation in this consumer.",
+    "unsupported_feature_id": "OPEN: old feature directory is not a current Checked framing field; requires reviewed retirement representation or an equivalent authority gate.",
+    "noncanonical_first_section_relative_offset": "OPEN: old section directory representation is absent; current payload-length rejection is not its full replacement.",
+    "max_bytes_request": "OPEN: old per-decode byte cap has no direct public read argument; allocated/live/work qualification is distinct and remains unrun."
+  },
+  "budgets": {
+    "allocated_bytes": 67108864,
+    "live_bytes": 8388608,
+    "work": 128000000
+  },
+  "required_remaining": [
+    "Whole original function obligation mapping and qualification",
+    "All compiler FI and resource axes",
+    "Complete safety and Main integration",
+    "Other 26-file/160-function format/authority/AOT census; source 108 unchanged"
+  ],
+  "retired": 0,
+  "result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN_CURRENT_FRAMING_ONLY",
+  "producer_reader_evidence": {
+    "path": "src/xir/xxir_checked.c",
+    "sha256": "8506dcdd592ea682cf09920de13c8332849a6957cbf7adcc8c229a80c6a57f92",
+    "boundary": "Framing, payload extent, stage and SHA256 identity are checked before artifact allocation; no new semantic traversal claim for unrepaired corrupt bodies."
+  },
+  "normal_qualification": {
+    "archive": "build-consumer-evidence/current67-checked-hostile-frame-r1",
+    "product_processes": 2,
+    "rejected_reads_per_process": 902,
+    "total_rejected_reads": 1804,
+    "positive_owned_packet_reads_per_process": 1,
+    "fresh_consumer_TUs": 2,
+    "reader": "The current public Checked reader object is byte-identical to a member of the actual linked admission archive, which matches the prebuild protected bytes/mtime. All ten public libraries match that snapshot. Reader compile commands and VALID dependencies confirm ASan/UBSan configuration; only the consumer TU was freshly compiled.",
+    "observed_per_configuration": {
+      "allocated_bytes": 356761,
+      "peak_bytes": 748,
+      "work": 858804,
+      "peak_physical_blocks": 7,
+      "observer_peak_capacity": 512
+    },
+    "registration": "TIMEOUT120 / PROCESSORS1 / no WILL_FAIL",
+    "legacy_function": "OPEN",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "map_timing": "Product input snapshots bind the initial map. These result notes are appended after execution and are not a new product run."
+  }
+}

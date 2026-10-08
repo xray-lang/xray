@@ -287,3 +287,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_sourc
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_request_budget_inputs.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_initializer_admission.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_checked_hostile_frame.cmake")
