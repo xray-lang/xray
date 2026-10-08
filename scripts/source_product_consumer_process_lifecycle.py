@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Exercise real process receipts with normal, nonzero and forced termination."""
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser
 from datetime import datetime, timezone
 import ctypes
 import hashlib
@@ -53,6 +53,9 @@ def main():
     fi = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fi)
     helpers = fi.load_helpers(args.input_root)
+    axes_spec = importlib.util.spec_from_file_location('allocation_axes', args.input_root/'scripts/source_product_consumer_allocation_axes.py')
+    axes = importlib.util.module_from_spec(axes_spec)
+    axes_spec.loader.exec_module(axes)
     before = fi.capture_inputs(args, helpers)
     helpers.write(run/'inputs-before.json', before)
     report = {'status': 'RUNNING', 'processes': [], 'issues': [], 'evidence': str(run),
@@ -60,13 +63,20 @@ def main():
               'reap_error': 'NOT_RUN', 'compiler_cleanup_after_kill': 'NOT_PROVEN',
               'Main': 'NOT_RUN', 'retired': 0}
     helpers.write(run/'result.json', report)
-    for mode in ('normal', 'nonzero', 'timeout'):
+    for helper_name, mode in ((name, mode) for name in ('faults', 'axes') for mode in ('normal', 'nonzero', 'timeout')):
+        runner = fi if helper_name == 'faults' else axes
         command = [str(args.binary), str(args.root), str(args.stdlib), mode]
-        row = {'mode': mode, 'status': 'RUNNING'}
+        label = helper_name + '-' + mode
+        row = {'helper': helper_name, 'mode': mode, 'status': 'RUNNING'}
         report['processes'].append(row)
         try:
-            receipt = fi.process_run(command, mode, run, time.monotonic() + (3 if mode == 'timeout' else 20), helpers, args.input_root)
+            budget = 3 if mode == 'timeout' else 20
+            receipt = runner.process_run(command, label, run, time.monotonic() + budget, helpers, args.input_root)
             row['receipt'] = receipt
+            if (receipt['budget_clock_origin'] != 'process_run entry' or receipt['reap_grace_seconds'] != 8
+                    or not 0 < receipt['wait_budget_seconds'] <= budget
+                    or abs(receipt['reap_deadline_seconds'] - receipt['wait_budget_seconds'] - 8) > 0.000001):
+                raise ValueError('receipt does not describe the actual invocation deadline and reaping grace')
             out = Path(receipt['stdout']).read_text(encoding='utf8')
             err = Path(receipt['stderr']).read_text(encoding='utf8')
             for stream in ('stdout', 'stderr'):
@@ -89,7 +99,7 @@ def main():
                 if len(out.splitlines()) != 3 or 'compiler physical blocks/bytes=0/0; peak=' not in out or f'process-lifecycle released=1 mode={mode} physical=0/0' not in out:
                     raise ValueError('ordinary owner destruction did not complete')
             try:
-                fi.process_contract(receipt)
+                runner.process_contract(receipt)
                 row['process_contract'] = 'PASS'
             except ValueError as error:
                 row['process_contract'] = 'FAIL'
@@ -101,8 +111,8 @@ def main():
         except Exception as error:
             row['status'] = 'FAIL'
             row['error'] = repr(error)
-            row['failure_receipt'] = fi.process_failure(command, mode, run, error, helpers)
-            report['issues'].append(mode + ': ' + repr(error))
+            row['failure_receipt'] = fi.process_failure(command, label, run, error, helpers)
+            report['issues'].append(label + ': ' + repr(error))
         helpers.write(run/'result.json', report)
     try:
         after = fi.capture_inputs(args, helpers)

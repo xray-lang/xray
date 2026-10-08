@@ -222,7 +222,11 @@ def process_run(command: list[str], label: str, run: Path, deadline: float, help
               "pid": None, "entered": False, "launch_error": None, "execution_error": None,
               "termination_errors": [], "termination_observed": False,
               "started_at": datetime.now(timezone.utc).isoformat(),
-              "stdout": str(stdout), "stderr": str(stderr), "reap_deadline_seconds": 118}
+              "stdout": str(stdout), "stderr": str(stderr),
+              "budget_clock_origin": "process_run entry",
+              "wait_budget_seconds": max(0.0, deadline - started),
+              "reap_grace_seconds": 8,
+              "reap_deadline_seconds": max(0.0, deadline + 8 - started)}
     with stdout.open("wb") as out, stderr.open("wb") as err:
         helpers.write(run / (label + ".json"), result)
         remaining = deadline - time.monotonic()

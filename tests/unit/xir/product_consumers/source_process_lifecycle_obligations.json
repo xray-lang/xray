@@ -559,5 +559,39 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "runner_budget_qualification": {
+    "result": "PASS_ACTUAL_PROCESS_BUDGET_METADATA",
+    "purpose": "Receipt budgets now use the actual caller deadline relative to process_run entry. Both original runners preserve their wait,kill,reap,full-gate budgets and fault ordinals.",
+    "matrix": "faults and axes helpers each run normal/nonzero/timeout native host fixture in both configurations;12 real child processes",
+    "reap_grace_seconds": 8,
+    "normal_nonzero_wait_seconds": 20,
+    "timeout_wait_seconds": 3,
+    "prior_evidence": "Existing six-child results and original-helper-unchanged claims describe commit23eb58e;retained as historical input,not claimed for the updated runner.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "reap_error": "NOT_RUN",
+    "retired": 0,
+    "evidence": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-process-budget-r1",
+    "registered_commands": 2,
+    "real_child_processes": 12,
+    "normal_process_contracts": "4 PASS",
+    "nonzero_process_contracts": "4 FAIL preserved, actual return23",
+    "timeout_process_contracts": "4 FAIL preserved, actual timed_out, kill and wait/reap return1",
+    "physical_release": "8 ordinary exits checked0blocks/0bytes;4 killed owners do not claim cleanup",
+    "terminal_state": "All12 Windows PIDs independently absent after actual wait completion",
+    "observed_budgets": "20second wait/28second reap deadline for normal and nonzero;3second wait/11second reap deadline for timeout;8second grace;all relative to process_run entry",
+    "inputs": {
+      "msvc": 2565,
+      "asan": 2565,
+      "preservation": "SHA,size,mtime before==after"
+    },
+    "policy_proof": "Whole original module AST identical after stripping only the four receipt metadata keys;original570/110 runner budgets,8second reaping grace,CTest600/120,PROCESSORS,jobs and fault ordinals unchanged",
+    "build": "Both builds no work;zero fresh TUs. Reused prior fresh C11/W4/WX andClangASan+UBSan consumer binaries andobjects exact,10 actual archives and6 members/config revalidated.",
+    "protection": "10924 tracked inputs:10920 nonowned unchanged;598 protected inputs all exact;12 generated dirty files preserved",
+    "parser_self_test": "PASS, parser-only;not product or fault coverage",
+    "annotation": "Added after actual run;run inputs bind saved preannotation map;no annotation rerun claimed",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN"
   }
 }
