@@ -1,0 +1,1063 @@
+{
+  "schema": 1,
+  "controls": 3,
+  "rejects": 19,
+  "cases": [
+    {
+      "name": "diamond",
+      "expected": "XR_XIR_OK",
+      "bytes": 850,
+      "sha256": "84188c44261180ac05fa0b53d003c4d75c49105f92e5500225fe45466ef5f7c9",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "reversed_edges",
+      "expected": "XR_XIR_OK",
+      "bytes": 850,
+      "sha256": "53516d09fa154e2d78a58a3d2fb002ac44f16a16539529a22c097c91c97304aa",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            2,
+            1
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "forward_acyclic",
+      "expected": "XR_XIR_OK",
+      "bytes": 850,
+      "sha256": "5dca2ff0eb59ac626a933d011ef0b6b2dc40575dad8914176f54f4750b677a67",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": [
+            1,
+            2
+          ]
+        },
+        {
+          "offset": 589,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            3
+          ]
+        },
+        {
+          "offset": 609,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            3
+          ]
+        },
+        {
+          "offset": 630,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": []
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        0
+      ],
+      "root": 0,
+      "entry": 4
+    },
+    {
+      "name": "empty_identity",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 846,
+      "sha256": "293711a1a6b8db2306b623e665140c754efcd15b2631c174b776703174c28e6e",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 0,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 597,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 618,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "duplicate_identity",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "5b3566744e4daf052d92b82ae4bf8a7a9d53f7242e68e17c597b3c27198380ce",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "foreign_initializer",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "a7308131979c35b10c37ae0850621024b9ff4d30baf1ba5284033b02974d34ea",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "stolen_function_owner",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "061d42b8e8b31ebd79b714195a881b47ea31b83ac7ed885a1f3a6eb6477796af",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        1,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "initializer_out_of_range",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "b2fca9c074ec5ef48a9838f640dc14b4923dae5c49a67a7acba447e163ae700d",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 5,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "function_module_out_of_range",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "1135c032fc841f952bee6d67a37df1fec85a76f068343d311c136eb166229d45",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        4,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "empty_module_ownership",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "b8c76e2d72b09449855140ee87b0361250561a9296bdd22d40722363ecc256fe",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        0,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "self_dependency",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "8361b1019ba8f3bedde1340389a921d5728a10751970c46d6a4e2d2aa23fc50d",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            1
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "forward_cycle",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "bb519fb70f15db212406cb8d72f8633a893b396e694c0dd715592097e244c7a4",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            3
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "duplicate_dependency",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "d67fb9afa61f57e50a184f5b2e0f3b4196e5b8d09914e4078a517551bddcb83d",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            1
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "missing_dependency",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "5a5dc437688f5f82a39d8ecd7dfc680b2224e04850dbc34148709b4fe7efa4b4",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            4
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "missing_initializer",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "1ec4c6cb2f1928f6f0f4776f5a1537738c308f31ce0b6a58b68b7271356fd48e",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 4294967295,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "foreign_entry",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "3f59a14d92c21777c44c24e2485ac76d33724fd2f4138460fff4d5ce71cf8e32",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        1
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "exported_initializer",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "08b73fe43f28223cf8c4963632d1de60af0d8a2bb57009d339a1d9732ac1d80e",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "test_initializer",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "d3b29005ba6c286e9cdfad48541453e52c8de46ed1969c1c1f1c8f5da1e4ec1b",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "nul_identity",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 851,
+      "sha256": "e21995a36a38499e9b34ca9c631bfe50361fee5ed69a2e7cbc2fe475674f4238",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 5,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 602,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 623,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "invalid_utf8_identity",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 847,
+      "sha256": "720d4babc670ce6dbb15c55d52cdd53112397ae319274cab7382b86f24ec3cc3",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 1,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 598,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 619,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 4
+    },
+    {
+      "name": "root_out_of_range",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "23e7ac215ef36631ee16b48c9bc3d0ce35d0e41eaf874f5278cc21f3d46f404c",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 4,
+      "entry": 4
+    },
+    {
+      "name": "entry_out_of_range",
+      "expected": "XR_XIR_BAD_STRUCTURE",
+      "bytes": 850,
+      "sha256": "fe49e4b7cbd39a8825f98e7a2b12ed6a899a866adf3123e00612d47fd3915397",
+      "modules": [
+        {
+          "offset": 565,
+          "length": 4,
+          "initializer": 0,
+          "dependencies": []
+        },
+        {
+          "offset": 581,
+          "length": 4,
+          "initializer": 1,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 601,
+          "length": 5,
+          "initializer": 2,
+          "dependencies": [
+            0
+          ]
+        },
+        {
+          "offset": 622,
+          "length": 4,
+          "initializer": 3,
+          "dependencies": [
+            1,
+            2
+          ]
+        }
+      ],
+      "owners": [
+        0,
+        1,
+        2,
+        3,
+        3
+      ],
+      "root": 3,
+      "entry": 5
+    }
+  ]
+}

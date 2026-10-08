@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "result": "PASS_FOCUSED_BOTH_CONFIGURATIONS",
+  "legacy": [
+    {
+      "name": "test_module_initialization_hostile_wire",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 1064,
+      "body_lf_sha256": "114c7453839f670b7d82b62a03ecf33d0bd67e58dddf343f415e8d146092508a",
+      "assertion_sites": 7,
+      "loop_sites": 3,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_initialization_construction",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 1158,
+      "body_lf_sha256": "8f6a13d25ffcf7d382251e434258e46fe7fd0a1d6613cba72d05f23fbc74e6c0",
+      "assertion_sites": 18,
+      "loop_sites": 6,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h",
+  "new_shape": "The same base/left/right/main diamond has four private Unit initializers and a separate I64 root entry; the old entry shared an initializer.",
+  "cases": "22 independent complete Checked packets: 3 controls and 19 structural rejection cases; each NULL and occupied output.",
+  "legacy_wire_mutations": [
+    {
+      "ordinal": 0,
+      "new_case": "empty_identity",
+      "boundary": "Old zero opaque key has no byte-equivalent name; retains missing-identity rejection, original wire remains OPEN."
+    },
+    {
+      "ordinal": 1,
+      "new_case": "duplicate_identity"
+    },
+    {
+      "ordinal": 2,
+      "new_case": "foreign_initializer"
+    },
+    {
+      "ordinal": 3,
+      "new_case": "stolen_function_owner",
+      "boundary": "Current schema has one module field per function; a duplicate owner list cannot be represented. Reject inconsistent initializer ownership."
+    },
+    {
+      "ordinal": 4,
+      "new_case": "initializer_out_of_range"
+    },
+    {
+      "ordinal": 5,
+      "new_case": "function_module_out_of_range",
+      "boundary": "Old owned-function list index is absent in current schema; current inverse owner bound does not retire the original byte duty."
+    },
+    {
+      "ordinal": 6,
+      "new_case": "empty_module_ownership"
+    },
+    {
+      "ordinal": 7,
+      "new_case": "self_dependency"
+    },
+    {
+      "ordinal": 8,
+      "new_case": "forward_cycle",
+      "boundary": "This old diamond mutation is a cycle. The additional forward_acyclic positive prevents rejecting all forward IDs."
+    },
+    {
+      "ordinal": 9,
+      "new_case": "duplicate_dependency"
+    }
+  ],
+  "construction_facets": {
+    "positive": "Original four-module dependency graph, names/dependencies survive poisoned and freed caller storage.",
+    "negative": [
+      "foreign_initializer",
+      "missing_dependency",
+      "self_dependency",
+      "duplicate_dependency",
+      "forward_cycle",
+      "missing_initializer"
+    ],
+    "remaining": [
+      "NULL dependency pointer construction has no wire representation",
+      "original builder allocation sweep",
+      "old opaque identity and canonical variable-integer encoding"
+    ]
+  },
+  "current_contract": "Fixed producer spec section 17.8: dependencies first, duplicate edges/cycles rejected, private zero-argument Unit initializers and distinct I64 root entry.",
+  "new_controls": [
+    "diamond",
+    "reversed_edges",
+    "forward_acyclic"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-graph-wire-r1",
+  "remaining": [
+    "Actual initialization trace/order and once-per-Instance execution",
+    "Program root closure qualification",
+    "SourceProduct graph producer",
+    "VM/native/mixed equivalence",
+    "full compiler/runtime FI",
+    "all resource axes",
+    "full safety",
+    "Main integration"
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "reads_per_configuration": 44,
+    "accepted_per_configuration": 6,
+    "rejected_per_configuration": 38,
+    "encoding_gates": 2,
+    "first_build": "PASS",
+    "first_execution": "PASS",
+    "physical_release": "Each read refunds actual compiler allocation count/bytes; final physical=0/0 and observer table freed.",
+    "ownership": "Heap input unchanged, then poisoned/freed before admitted owner reverify and full packet write; occupied actual owner remains valid after every read."
+  },
+  "postrun_note": "Result annotation appended after execution; no claim that the final map was rerun.",
+  "candidate_gates": [
+    {
+      "name": "test_source_product_module_graph",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_graph_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ]
+}
