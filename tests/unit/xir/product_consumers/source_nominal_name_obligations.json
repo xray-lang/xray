@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67",
+  "legacy_path": "tests/unit/program/xr_program_display_name_checks.inc.c",
+  "legacy_functions": [
+    {
+      "name": "test_display_names_roundtrip_and_wire",
+      "body_lf_sha256": "2ef2bdb6e870208ca16a9607cf3a0507581db0455c706681bb7c60cc33ae9c2c",
+      "status": "OPEN",
+      "replacement_gates": []
+    },
+    {
+      "name": "test_display_names_invalid_construction",
+      "body_lf_sha256": "fe59d6f838926442a37981858f9821f9c16e0714806639cb5b5cb1770ef9294a",
+      "status": "OPEN",
+      "replacement_gates": []
+    },
+    {
+      "name": "test_display_names_are_not_type_identity",
+      "body_lf_sha256": "effb2d9b48fe08392288d829ee33913c5689ae7b1c3f328eace27a3d49acbcc8",
+      "status": "OPEN",
+      "replacement_gates": []
+    }
+  ],
+  "new_gate": "test_source_product_nominal_names",
+  "static_gate": "source_product_nominal_name_encoding",
+  "encoder": "scripts/source_product_consumer_nominal_names.py",
+  "manifest": "tests/unit/xir/product_consumers/nominal_name_cases.json",
+  "matrix": {
+    "packets": 18,
+    "controls": 4,
+    "negative_cases": 14,
+    "output_states": 2,
+    "reads": 36
+  },
+  "independent_model": "Complete one-module Checked with Unit initializer, I64(42) entry, one TopErr enum with Failed(I64 value) and Empty variants. Typed semantic names have an independent encoding and correct digest; no production writer builds or repairs inputs.",
+  "original_invalid_bytes": [
+    "empty",
+    "line\\nbreak",
+    "7f",
+    "80",
+    "c080",
+    "4097 ASCII a bytes"
+  ],
+  "wire_NUL": "Two additional interior-NUL probes retain the old type/variant embedded-NUL wire defense.",
+  "controls": [
+    "TopErr/Failed/Empty ASCII",
+    "Chinese type and variant UTF-8",
+    "4096-byte type name",
+    "4096-byte variant name"
+  ],
+  "oracle": "Strict original byte and size rejection duty: BAD_STRUCTURE for empty/control/invalid UTF-8/NUL; BUDGET for 4097 bytes. Expectations fixed before execution. These are migration expectations, not claims that the current format already implements the old name policy.",
+  "ownership": "Caller heap input is compared, poisoned and freed immediately after read. Any admitted owner then reverifies and rewrites exact full independent bytes, proving detached names. Real occupied original owner preserved and rewrites after every read; final physical zero even on expectation mismatches.",
+  "remaining": [
+    "New nominal names also carry semantic identity; old optional display names, duplicate names independent of type identity and old 61-byte row are not equivalent.",
+    "Old variable-length integer and type-table representation hostile cases require separate reviewed mapping.",
+    "Exact UTF-8/control/4096 policy adoption in the new semantic name representation requires Main disposition if absent.",
+    "All full FI/axes/safety/Main integration remain unrun."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "retired": 0,
+  "result": "FAIL_LEGACY_NAME_DEFENSE_GAP_BOTH_CONFIGURATIONS",
+  "observed": {
+    "archive": "build-consumer-evidence/current67-nominal-name-responsibilities-r1",
+    "product_processes": 2,
+    "encoding_processes": 2,
+    "reads_per_process": 36,
+    "mismatches_per_process": 20,
+    "controls_each": 8,
+    "correct_rejects_each": 8,
+    "unexpected_admissions_each": 20,
+    "unexpected_families": [
+      "type/variant newline",
+      "type/variant DEL",
+      "type/variant lone continuation byte80",
+      "type/variant overlong UTF8 c080",
+      "type/variant length4097"
+    ],
+    "correct_rejections": [
+      "type/variant empty",
+      "type/variant interior NUL"
+    ],
+    "final_physical": "0/0",
+    "fresh_consumer_TUs": 2,
+    "reader": "Existing public reader object matches one member of linked protected admission archive; ten public archives per configuration unchanged; VALID dependencies and both sanitizer flags bound.",
+    "gate": "Exit1, no WILL_FAIL, strict original expectations unchanged; expected-gap evidence does not turn the product gate green.",
+    "map_timing": "Original execution binds initial NOT_RUN map; this result annotation is post-run."
+  },
+  "production_evidence": [
+    {
+      "path": "src/xir/xxir_nominal.inc.c",
+      "sha256": "3bee4f2a3852d33d276b158793cd8e4170115286e33f93a7b6aec6762f19b521"
+    },
+    {
+      "path": "src/xir/xxir_checked_codec.inc.c",
+      "sha256": "039b1aa3e4c7eec090f79d3deda70dd85326d9e07924cb99d995e7b9ea245b3d"
+    },
+    {
+      "path": "src/xir/xxir_checked.c",
+      "sha256": "8506dcdd592ea682cf09920de13c8332849a6957cbf7adcc8c229a80c6a57f92"
+    }
+  ],
+  "disposition": "OPEN: Main must decide the equivalent semantic-name policy and the old 4096-byte cap. This worker does not modify production or reinterpret unexpected admission as success."
+}

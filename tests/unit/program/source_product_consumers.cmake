@@ -293,3 +293,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_check
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_f64_transport.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_source_f64_transport.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_nominal_names.cmake")
