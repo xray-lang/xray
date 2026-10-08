@@ -80,6 +80,8 @@ static void rejection(const XrXirCompileContext *context, XrXirArtifact *owner,
     if (input) { xr_free(input); CHECK(caller_buffers); --caller_buffers; }
 }
 
+#include "checked_semantic_scalar.inc.c"
+
 int main(void) {
     const Semantic67NamedVector *v = &semantic67_named_vectors[0];
     CHECK(v->index == 0 && v->reader_positive && v->current_size == 224);
@@ -106,6 +108,7 @@ int main(void) {
     memset(mutated + 24, 0xff, 8);
     rejection(context, owner, mutated, v->current_size, "max-payload", 0, XR_XIR_BAD_STRUCTURE);
     CHECK(rejected_reads == 902 && !caller_buffers);
+    semantic_scalar_cases_run(context, owner);
     owner_preserved(owner);
     xr_xir_compile_artifact_free(owner);
     source_program_owners_free();

@@ -12,3 +12,7 @@ endif()
 add_test(NAME test_source_product_checked_hostile_frame COMMAND test_source_product_checked_hostile_frame)
 set_tests_properties(test_source_product_checked_hostile_frame PROPERTIES TIMEOUT 120 PROCESSORS 1
     LABELS "unit;xir;program-consumer;checked;ownership;framing")
+add_test(NAME source_product_checked_semantic_fixture_encoding
+    COMMAND ${XRAY_PYTHON} -B -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_checked_semantics.py" check)
+set_tests_properties(source_product_checked_semantic_fixture_encoding PROPERTIES TIMEOUT 120 PROCESSORS 1
+    LABELS "unit;xir;program-consumer;checked;inventory")

@@ -89,5 +89,67 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "map_timing": "Product input snapshots bind the initial map. These result notes are appended after execution and are not a new product run."
+  },
+  "semantic_scalar_facet": {
+    "status": "IMPLEMENTED_NOT_QUALIFIED",
+    "independent_encoder": "scripts/source_product_consumer_checked_semantics.py",
+    "packet_manifest": "tests/unit/xir/product_consumers/checked_semantic_scalar_cases.json",
+    "matrix": {
+      "complete_current_packets": 71,
+      "positive_controls": 5,
+      "negative_cases": 66,
+      "output_states": 2,
+      "successful_reads": 10,
+      "rejected_reads": 132
+    },
+    "input_model": "Complete fixed Checked25/semantic67 framing plus named scalar module/function/block/instruction fields. Baseline encoder must reproduce the independent existing 224-byte golden exactly. Every body has a correct SHA256. No production writer creates or repairs inputs.",
+    "positive_controls": [
+      "I64(42)",
+      "Unit result with unused I64(42)",
+      "coherent I32(42)",
+      "I8(-128)",
+      "U8(255)"
+    ],
+    "negative_families": [
+      "22 incorrect constant types, including reserved/unknown/constructed/unbound type IDs",
+      "21 return-signature type mismatches or invalid IDs",
+      "4 narrow integer range failures",
+      "3 invalid return value references",
+      "12 nonzero unused argument/target/immediate/type-argument fields",
+      "2 invalid opcode values",
+      "2 invalid block instruction coverage cases"
+    ],
+    "publication": "Each failed read leaves NULL or a real pre-existing owner unchanged; decoder allocations and work must actually occur. Every call refunds live bytes/physical blocks, preserves input, and reverifies/rewrites the original owner. Positive occupied-output calls publish a distinct new owner while retaining the original; the new owner is verified, rewritten against its independent input and freed.",
+    "legacy_scope": "This adds scalar roles and invalid-value/operation/body validation beyond raw integrity failure. It does not prove equivalence to the old 20x4 builtin table identity/kind/ownership mutations, old import/feature/directory representations, complete verifier families or byte-budget responsibilities; all remain OPEN.",
+    "runtime": "NOT_RUN_SOURCE_FREE_CHECKED_ONLY",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN_SCALAR_SEMANTICS_ONLY",
+    "normal_qualification": {
+      "archive": "build-consumer-evidence/current67-checked-semantic-rejections-r1",
+      "product_processes": 2,
+      "reads_per_process": 142,
+      "accepted_per_process": 10,
+      "rejected_per_process": 132,
+      "original_framing_rejects_per_process": 902,
+      "static_encoding_processes": 2,
+      "fresh_consumer_TUs": 2,
+      "observed_per_configuration": {
+        "allocated_bytes": 481891,
+        "peak_bytes": 1176,
+        "work": 1099642,
+        "peak_physical_blocks": 12,
+        "observer_peak_capacity": 512,
+        "final_physical_blocks": 0,
+        "final_physical_bytes": 0
+      },
+      "reader": "Actual public reader object matches one member of the protected linked admission archive. All ten public archives per configuration match prebuild bytes and mtime; both sanitizer flags and VALID consumer/reader dependencies recorded.",
+      "first_build": "MSVC /W4 /WX rejected a constant-condition runtime CHECK in the new test; changed to _Static_assert, preserved first failure, freshly rebuilt both configurations without flag changes.",
+      "audit_correction": "Audit combined sanitizer flag assumption corrected to actual separate clang-cl ASan and UBSan flags; no product change.",
+      "map_timing": "Product runs bind the initial semantic facet with result NOT_RUN. These result notes were appended afterward; no claim of a product rerun with this final map."
+    }
   }
 }
