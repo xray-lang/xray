@@ -201,7 +201,26 @@ static void wait_authority(XrXirInstance *instance, XrXirInstanceResult pending)
         !request.subject && !request.generation && !request.ticket);
 }
 
-static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, unsigned graph, unsigned mode) {
+static void stop_pending(XrXirInstance *instance, XrXirInstanceResult pending,
+    const OutputCapture *capture, unsigned graph, unsigned mode) {
+    XrXirCallStatus expected = capture->action == 3 ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_READY;
+    XrXirCallStatus actual = xr_xir_instance_stop(instance);
+    CHECK(actual == expected && xr_xir_instance_state(instance) == XR_XIR_INSTANCE_DRAINING);
+    CHECK(capture->groups == 3 && capture->length == (capture->action == 3 ? 4u : 6u));
+    CHECK(!memcmp(capture->bytes, cancelled_output, capture->length));
+    size_t attempts = runtime_attempts;
+    XrXirWaitRequest sentinel, before; memset(&sentinel, 0xa5, sizeof(sentinel)); memcpy(&before, &sentinel, sizeof(before));
+    CHECK(xr_xir_instance_start(instance, 4, NULL, 0) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_resume(instance, pending.epoch, pending.outcome.wake) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_wait_request(instance, pending.epoch, pending.outcome.wake, &sentinel) == XR_XIR_CALL_BAD_STATE);
+    CHECK(!memcmp(&sentinel, &before, sizeof(sentinel)));
+    CHECK(xr_xir_instance_cancel_current(instance) == XR_XIR_CALL_BAD_STATE);
+    CHECK(runtime_attempts == attempts);
+    printf("module-stop scenario=%u mode=%u status=%u state=DRAINING groups=3 bytes=%zu admission-revoked=4 sentinel=preserved new-allocations=0 result=PASS\n",
+        graph, mode, actual, capture->length);
+}
+
+static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, unsigned graph, unsigned mode, bool stop) {
     unsigned failures_before = failures;
     const XrXirCallEntry *native = native_entries(graph); if (mode) CHECK(native);
     memset(trace, 0, sizeof(trace)); memset(trace_count, 0, sizeof(trace_count));
@@ -259,14 +278,15 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
         XrXirCallStatus expected = action == 3 ? XR_XIR_CALL_OUTPUT_ERROR : action ? XR_XIR_CALL_CANCELLED : XR_XIR_CALL_RETURNED;
         size_t attempts = runtime_attempts;
         if (!repeat) {
-            if (action) CHECK(xr_xir_instance_cancel_current(instances[i]) == XR_XIR_CALL_CANCEL_REQUESTED);
+            if (stop && action) stop_pending(instances[i], pending[i], &captures[i], graph, mode);
+            else if (action) CHECK(xr_xir_instance_cancel_current(instances[i]) == XR_XIR_CALL_CANCEL_REQUESTED);
             else CHECK(xr_xir_instance_resume(instances[i], pending[i].epoch, pending[i].outcome.wake) == XR_XIR_CALL_READY);
         } else CHECK(xr_xir_instance_start(instances[i], 4, NULL, 0) == (action ? expected : XR_XIR_CALL_READY));
         XrXirInstanceResult result = poll_terminal(instances[i]);
         CHECK(result.outcome.status == expected);
         CHECK(xr_xir_instance_resume(instances[i], pending[i].epoch, pending[i].outcome.wake) == XR_XIR_CALL_BAD_STATE);
         if (action) {
-            CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_FAILED && captures[i].groups == 3 && captures[i].length == (action == 3 ? 4u : 6u));
+            CHECK(xr_xir_instance_state(instances[i]) == (stop ? XR_XIR_INSTANCE_DRAINING : XR_XIR_INSTANCE_FAILED) && captures[i].groups == 3 && captures[i].length == (action == 3 ? 4u : 6u));
             CHECK(lifecycle_count[i] == 3 && trace_count[i] == 1);
             if (repeat) CHECK(runtime_attempts == attempts);
             else CHECK(xr_xir_instance_copy_failure(instances[i], &retained_failure) == expected);
@@ -315,14 +335,16 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
 
 int main(int argc, char **argv) {
     CHECK(argc == 2 || argc == 3);
-    bool emit = !strcmp(argv[1], "emit");
-    unsigned mode = !strcmp(argv[1], "vm") ? 0 : !strcmp(argv[1], "native") ? 1 :
-        !strcmp(argv[1], "alternating-native") ? 2 : !strcmp(argv[1], "alternating-vm") ? 3 : 4;
+    const char *choice = argv[1]; bool stop = !strncmp(choice, "stop-", 5); if (stop) choice += 5;
+    bool emit = !strcmp(choice, "emit") && !stop;
+    unsigned mode = !strcmp(choice, "vm") ? 0 : !strcmp(choice, "native") ? 1 :
+        !strcmp(choice, "alternating-native") ? 2 : !strcmp(choice, "alternating-vm") ? 3 : 4;
     CHECK((emit && argc == 3) || (!emit && argc == 2 && mode < 4));
     XrXirCompileContext context = {0}; context.limits = xr_xir_compile_default_limits();
     XrCompileResourceLimits limits = {67108864, 8388608, 128000000};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     for (unsigned graph = 0; graph < 5; ++graph) {
+        if (stop && graph != 1 && graph != 3) continue;
         XrXirArtifact *lowered = read_lower(&context, graph);
         XrXirCSource source = {0}; char digest[65]; emit_source(lowered, graph, &source, digest);
         if (emit) {
@@ -335,7 +357,7 @@ int main(int argc, char **argv) {
 #if defined(XR_MODULE_CLEANUP_NATIVE)
             if (mode) CHECK(!strcmp(digest, native_digest(graph)));
 #endif
-            execute(&context, lowered, graph, mode);
+            execute(&context, lowered, graph, mode, stop);
         }
         xr_xir_compile_c_source_free(&source);
     }

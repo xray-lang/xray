@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "FOCUSED_PASS_NOT_QUALIFIED",
+  "result": "PASS_NEW_STOP_GATES_EXISTING_DESTRUCTOR_FAIL",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_instance.c",
+      "legacy_line": 102,
+      "body_lf_sha256": "6668ca83f758cbe4c127827867b7d9686ce8fb99fcbde0828c86fcf39ecf78cf",
+      "assertion_sites": 58,
+      "loop_sites": 6,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "original_facet": "Native module instance main modes6/7 revoke admission before initializer cancellation cleanup; output refusal must preserve 1\\n2\\n and report failure.",
+  "representation": "Current Instance.stop revokes admission and synchronously drains execution. Reuse the independent owned completion Cell fixture; graph1 accepts cleanup output, graph3 refuses it. Peer instance resumes normally.",
+  "oracle": {
+    "graphs": [
+      1,
+      3
+    ],
+    "stop_status": [
+      "READY",
+      "OUTPUT_ERROR"
+    ],
+    "terminal_status": [
+      "CANCELLED",
+      "OUTPUT_ERROR"
+    ],
+    "state": "DRAINING",
+    "cleanup_output_hex": [
+      "310a320a320a",
+      "310a320a"
+    ],
+    "stopped_admission": [
+      "entry start",
+      "resume original wake",
+      "read original wait request",
+      "cancel current"
+    ],
+    "rejections": "BAD_STATE before terminal poll; wait sentinel unchanged and runtime allocation count unchanged",
+    "sticky": "After terminal poll, three retries retain the failure without allocating; DRAINING state and no repeated output",
+    "peer": "Four normal entry returns42; normal 1\\n2\\n3\\n4\\n output once"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_stop_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_stop_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_stop_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_stop_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "fixture": "module_cancel_cleanup_cases.h; unchanged complete independent Checked input",
+  "ownership": "Failure copy and peer scalar results survive both instances and code/Lowered owner destruction. Compiler/runtime physical counters and observer tables return to zero.",
+  "representation_boundary": "Old begin_drain only revokes admission while existing execution leases remain live. Current stop synchronously drains. This proves cleanup-under-revocation observables, not equivalence of old separate drain/retire/waiter leases or concurrent execution handles.",
+  "remaining": [
+    "Original separate begin_drain/retire execution lease protocol requires Main representation adjudication",
+    "Old shared initialization concurrency and waiter semantics",
+    "Direct destructor cleanup failure from previous batch remains FAIL",
+    "SourceProduct graph producer",
+    "Full cancellation/cleanup failure injection",
+    "Full FI",
+    "Resource axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-stop-r1",
+  "retired": 0,
+  "replacement_gates": [],
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "fresh_translation_units_per_configuration": 7,
+    "stop_processes": 8,
+    "stop_results": "8 PASS",
+    "old_runtime_regression": "8 FAIL with unchanged destructor READY instead of OUTPUT_ERROR",
+    "encoding": "2 PASS",
+    "total_processes": 18,
+    "first_build": "PASS",
+    "first_stop_execution": "PASS",
+    "first_aggregate_execution": "FAIL from preserved destructor regression",
+    "stop_cases": 16,
+    "revoked_admission_rejections": 64,
+    "pending_wait_requests": 32,
+    "bad_epoch_wake_rejections": 128,
+    "allocation_free_sticky_retries": 48,
+    "retained_failure_copies": 16,
+    "retained_scalar_results": 64,
+    "cleanup_calls": 32,
+    "cleanup_returns": 24,
+    "physical": "compiler=0/0 runtime=0/0 table=0 in all stop and regression runtime processes",
+    "newest_evidence": "revalidated-r2/results.json",
+    "revalidated_results": "8 stop PASS, 8 unchanged destructor FAIL, 2 encoding PASS"
+  },
+  "postrun_note": "Result annotation appended after revalidation; no final-map rerun claimed. First passing stop run included an ordinary entry passed to the test entry API, which is already invalid before stop. That redundant check was removed before the final fresh build/run; four valid operation classes remain. Original source, binaries and process receipts are preserved."
+}

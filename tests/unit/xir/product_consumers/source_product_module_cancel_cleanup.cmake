@@ -31,3 +31,9 @@ add_test(NAME source_product_module_cancel_cleanup_encoding
     COMMAND ${XRAY_PYTHON} -B -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_module_cancel_cleanup.py" check)
 set_tests_properties(source_product_module_cancel_cleanup_encoding PROPERTIES TIMEOUT 120 PROCESSORS 1
     LABELS "unit;xir;program-consumer;inventory")
+
+foreach(mode IN ITEMS vm native alternating-native alternating-vm)
+    add_test(NAME source_product_module_stop_${mode} COMMAND test_source_product_module_cancel_cleanup stop-${mode})
+    set_tests_properties(source_product_module_stop_${mode} PROPERTIES TIMEOUT 120 PROCESSORS 1
+        LABELS "unit;xir;program-consumer;module-graph;ownership")
+endforeach()
