@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "path": "tests/unit/program/test_xr_program.c",
+    "name": "test_f64_constant_bits_and_wire",
+    "body_lf_sha256": "9ef2126049b004d7ef1d7fd1e22eb724749ef0692f1e9b47de190c8c1cd35ff7",
+    "status": "OPEN",
+    "replacement_gates": []
+  },
+  "source": "tests/unit/xir/product_consumers/source_f64_transport.xr",
+  "model": "Ordinary exported caller(value:f64) calls private carrier, stores to a mutable f64 local and returns it. No arithmetic, bit-cast literal or authority override.",
+  "pipeline": "Exact source file -> SourceProduct verify -> original and closed Checked read/write full-byte roundtrip -> destroy SourceProduct/session -> reverify both -> detached Lowered verify -> real native emission or VM bindings -> Program/Instance.",
+  "roles": "Resolve caller/carrier by actual function names in source/closed/Lowered; require matching F64 parameters/results, unchanged root exported/private permissions, one call edge. Canonical entry and initializer remain distinct.",
+  "modes": [
+    "vm",
+    "native",
+    "native-to-vm",
+    "vm-to-native"
+  ],
+  "oracle": "Reuse all ten original binary64 constants as runtime inputs, including signaling and payload NaNs. Two instances x two repeats x ten =40 calls/mode, original-bit expected values independent of backend.",
+  "ownership": "Program caller drops before execution; outcomes retain intrinsic bits after two instances and last code owner die. Scalar copies and drops preserve outcomes; compiler/runtime physical zero.",
+  "original_independent_consumer": "Shared engine now uses explicit caller/carrier IDs; default independent IDs0/1 unchanged and full four-mode regression required.",
+  "remaining": [
+    "Legacy noncanonical NaN CONST_FLOAT conflict remains OPEN.",
+    "Original constant-pool sorting/dedup and full malformed wire responsibilities.",
+    "Exhaustive FI, resource axes, full safety, Main integration."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "retired": 0,
+  "result": "PASS_BOTH_CONFIGURATIONS_SOURCE_AND_INDEPENDENT_FOUR_MODES",
+  "source_sha256": "3346aa42ac7319c0eae2ce6477feab0a1793970aefbba0bb23569a3d89b1025b",
+  "qualification": {
+    "archive": "build-consumer-evidence/current67-source-f64-transport-r1",
+    "source_processes": 8,
+    "independent_regression_processes": 8,
+    "registered_encoding_processes": 2,
+    "source_calls": 320,
+    "independent_calls": 320,
+    "private_entry_rejections": 640,
+    "post_owner_result_checks": 640,
+    "fresh_TUs_per_configuration": 6,
+    "generated_C_instrumented": true,
+    "source_roles": {
+      "caller": 1,
+      "carrier": 2,
+      "entry": 3,
+      "initializer": 0
+    },
+    "independent_roles": {
+      "caller": 0,
+      "carrier": 1,
+      "entry": 2,
+      "initializer": 3
+    },
+    "final_compiler_physical": "0/0",
+    "final_runtime_physical": "0/0",
+    "first_failure": "Shared standalone-packet harness passed NULL types to Program seal. Eight Source processes stopped at exact proof mismatch before runtime calls; fixed by passing actual Lowered types with its declarations/proof. Eight independent processes passed in that first run. No producer change.",
+    "map_timing": "Results appended after product runs; initial map is retained in exact input snapshots. No product rerun with final map is claimed."
+  }
+}

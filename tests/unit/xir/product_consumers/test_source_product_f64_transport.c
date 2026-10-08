@@ -46,6 +46,7 @@ typedef struct TransportOwner {
 } TransportOwner;
 static TransportOwner *active_owner;
 static size_t resumed[2], crossings, releases;
+static uint32_t caller_entry = 0, carrier_entry = 1;
 
 static XrXirAction observed_resume(XrXirCallView *view) {
     uint32_t id = xr_xir_call_current_entry(view->activation);
@@ -54,8 +55,8 @@ static XrXirAction observed_resume(XrXirCallView *view) {
     CHECK(view->environment == entry->environment);
     ++resumed[active_owner->native[id] ? 1 : 0];
     XrXirAction action = entry->resume(view);
-    if (id == 0 && action.kind == XR_XIR_ACTION_CALL) {
-        CHECK(action.callee == 1);
+    if (id == caller_entry && action.kind == XR_XIR_ACTION_CALL) {
+        CHECK(action.callee == carrier_entry);
         ++crossings;
     }
     return action;
@@ -80,6 +81,9 @@ static void hex_digest(const char *bytes, size_t length, char output[65]) {
     output[64] = 0;
 }
 
+#if defined(XR_F64_SOURCE)
+#include "source_f64_transport_read.inc.c"
+#else
 static XrXirArtifact *read_lower(const XrXirCompileContext *context) {
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
@@ -105,6 +109,7 @@ static XrXirArtifact *read_lower(const XrXirCompileContext *context) {
     CHECK(xr_xir_compile_artifact_verify(lowered, &diagnostic) == XR_XIR_OK);
     return lowered;
 }
+#endif
 
 static void emit_source(XrXirArtifact *lowered, XrXirCSource *source, char digest[65]) {
     CHECK(xr_xir_compile_emit_c(lowered, "source_f64_transport", 1048576, source) == XR_XIR_OK);
@@ -125,17 +130,18 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
     CHECK(xr_compile_resources_calloc(context->resources, 1, sizeof(*owner), (void **)&owner) == XR_COMPILE_RESOURCE_OK);
     owner->lowered = lowered;
     for (uint32_t f = 0; f < 4; ++f) {
-        owner->native[f] = mode == 1 || (mode == 2 && f == 0) || (mode == 3 && f == 1);
+        owner->native[f] = mode == 1 || (mode == 2 && f == caller_entry) || (mode == 3 && f == carrier_entry);
         if (owner->native[f]) owner->actual[f] = native[f];
         else CHECK(xr_xir_compile_vm_bind(lowered, f, &owner->bindings[f], &owner->actual[f]) == XR_XIR_OK);
-        if (f < 2) {
+        if (f == caller_entry || f == carrier_entry) {
             CHECK(owner->actual[f].parameter_count == 1 && owner->actual[f].parameters[0] == XR_XIR_F64);
             CHECK(owner->actual[f].result == XR_XIR_F64);
         }
         owner->observed[f] = owner->actual[f]; owner->observed[f].resume = observed_resume;
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
-        owner->observed, 4, xr_xir_compile_artifact_module(lowered)->declarations, {owner, release_code}, NULL, proof};
+        owner->observed, 4, xr_xir_compile_artifact_module(lowered)->declarations, {owner, release_code},
+        xr_xir_compile_artifact_module(lowered)->types, proof};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(context, &spec, &program) == XR_XIR_OK);
     active_owner = owner;
@@ -152,8 +158,8 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
             memcpy(&payload, &bits, sizeof(payload));
             XrXirValue input = {XR_XIR_F64, 0, payload}, saved = input;
             size_t calls = crossings;
-            CHECK(xr_xir_instance_start(instances[i], 1, &input, 1) == XR_XIR_CALL_BAD_ARGUMENT);
-            CHECK(xr_xir_instance_start(instances[i], 0, &input, 1) == XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_start(instances[i], carrier_entry, &input, 1) == XR_XIR_CALL_BAD_ARGUMENT);
+            CHECK(xr_xir_instance_start(instances[i], caller_entry, &input, 1) == XR_XIR_CALL_READY);
             XrXirInstanceResult result = {0}; size_t polls = 0;
             do { CHECK(++polls < 32); result = xr_xir_instance_poll_bounded(instances[i], 10000); }
             while (result.outcome.status == XR_XIR_CALL_READY);
@@ -187,6 +193,11 @@ static void execute(const XrXirCompileContext *context, XrXirArtifact *lowered, 
 }
 
 int main(int argc, char **argv) {
+#if defined(XR_F64_SOURCE)
+    CHECK(argc == 4 || argc == 5);
+    transport_source_root = argv[1]; transport_source_file = argv[2];
+    argc -= 2; argv += 2;
+#endif
     CHECK(argc == 2 || argc == 3);
     bool emit = !strcmp(argv[1], "emit");
     unsigned mode = !strcmp(argv[1], "vm") ? 0 : !strcmp(argv[1], "native") ? 1 :

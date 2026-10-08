@@ -1,0 +1,2 @@
+export fn caller(value: f64) -> f64 { return carrier(value) }
+fn carrier(value: f64) -> f64 { var saved: f64 = value; return saved }
