@@ -114,5 +114,88 @@
     "Cover all legacy default admission mutations with independent public Built/Checked negatives and exact diagnostics.",
     "Preserve full compiler/runtime FI, rollback, recovery, original bounded runtime fault search, cancellation, resource axes and security qualification.",
     "Qualify complete replacement before retiring original fixture, consumers or dependencies."
-  ]
+  ],
+  "public_admission_20261009_facet": {
+    "status": "PASS_CURRENT_ADMISSION_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-array-default-admission-r1",
+    "legacy_function": {
+      "name": "test_array_default_admission",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 7004,
+      "body_lf_sha256": "b325d05e95c1503a2fe69cd2e9fba2eaba842130a74c33f8030d39bc3e4c379d",
+      "assertion_sites": 6,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    "oracle": "One i64 count, U8 zero, ARRAY_REPEAT Array<u8>, ARRAY_LEN i64 and RETURN. Independent Built and Checked inputs; ten cases times two entrances times empty/occupied output =40 transitions/configuration.",
+    "tests": [
+      "test_source_product_array_default_admission",
+      "source_product_array_default_encoding"
+    ],
+    "registration": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1
+    },
+    "original_mapping": [
+      {
+        "original": "Mutation0 Array<u8> default count accepted",
+        "current": "Explicit typed U8 zero plus ARRAY_REPEAT exact count/element SSA; independently encoded Checked, detached metadata and writer bytes",
+        "status": "PASS_CURRENT_FACET"
+      },
+      {
+        "original": "Mutation1 Bool count instead of i64",
+        "current": "Built and Checked repetition require BAD_TYPE3",
+        "status": "PASS_CURRENT_FACET"
+      },
+      {
+        "original": "Mutation2 Array<String> lacks admitted default initializer",
+        "current": "String array with U8 fill requires BAD_TYPE3; this is element mismatch only",
+        "status": "OPEN",
+        "remaining": "Original no-default-initializer semantics need SourceProduct refusal. Do not substitute this mismatch for full default rejection."
+      },
+      {
+        "original": "Mutation3 construction reports non-owner result",
+        "current": "Current array-valued constructor carrying scalar I64 result requires BAD_TYPE3",
+        "status": "OPEN",
+        "remaining": "No identical current explicit result_ownership field; exact old owner-bit negative remains OPEN."
+      }
+    ],
+    "additional_negatives": "Missing count/fill SSA BAD_VALUE4; inactive immediate/target/typearg BAD_STRUCTURE1; Bool length result BAD_TYPE3",
+    "ownership": "Borrowed fields and names unchanged then poisoned; wire unchanged then poisoned/freed; public owner verification and independent packet comparison afterward; occupied artifact retained and exact; per-call actual stock refund and final ledger/observer physical0/0.",
+    "boundary": "Admission only. No new SourceProduct, Lowered, execution, managed default, explicit owner/drop/copy semantics or runtime qualification. Previously recorded existing native facet remains separate and OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "actual_evidence": {
+      "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-array-default-admission-r1",
+      "receipts": "results.json",
+      "registered_commands": 4,
+      "admission_passed": 2,
+      "encoding_passed": 2,
+      "total_transitions": 80,
+      "transitions_per_configuration": 40,
+      "admissions": 8,
+      "exact_rejections": 72,
+      "mismatches": 0,
+      "input_capture": {
+        "counts": {
+          "msvc": 2764,
+          "asan": 2764
+        },
+        "preservation": "Actual SHA,size,mtime before==after;final nonmap inputs rebound"
+      },
+      "physical": "Actual stock refund after each invocation;artifacts,caller ledger and observer destroyed0/0 in both configurations.",
+      "fresh_build": "First build PASS both configurations;one fresh C11/W4/WX consumer TU per configuration;Clang ASan+UBSan flags andVALID Ninja dependencies.",
+      "production_reuse": "10 actual linked libraries/config preserved SHA,size,mtime;4 actual production object bodies matched archive members;no production TU rebuilt.",
+      "protection": "10980 tracked pre-snapshot:10978 nonowned exact;12 historical dirty files preserved.598 protected:594 exact+4 expected Ninja/CTest metadata changes;remove4new CTest lines/config restores old raw registry.",
+      "original_input": "Original complete default admission function and fixture preserved;all3 old negative mutations dispositioned. Explicit zero and U8 array fields checked independently;Source no-default initializer and exact old owner-bit semantics remain OPEN.",
+      "boundary": "Admission only. Runtime negative panic422 versus452 and INT64_MAX LIMIT versusOOM remain in separate existing native facet. No additional SourceProduct/Lowered/Program/VM/native/mixed/FI/axes/safety/Main qualification.",
+      "annotation": "After actual execution;preannotation map captured andsaved;no annotation rerun claimed.",
+      "retired": 0
+    }
+  }
 }

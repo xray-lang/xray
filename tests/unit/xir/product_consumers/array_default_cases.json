@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "functions": 1,
+  "instructions": 4,
+  "cases": [
+    {
+      "name": "default_u8",
+      "mutation": 0,
+      "expected": 0,
+      "bytes": 329,
+      "sha256": "6c6c9efff78567b29fd251f425bc8c7b4c895ae6dc42a71bb3eab629a536dcc3"
+    },
+    {
+      "name": "boolean_count",
+      "mutation": 1,
+      "expected": 3,
+      "bytes": 329,
+      "sha256": "4efc864d7ebd40659dfd66a0d4aa1beaaca758d38b2c66d13dd7ec6d6ba9b56f"
+    },
+    {
+      "name": "string_element_u8_fill",
+      "mutation": 2,
+      "expected": 3,
+      "bytes": 329,
+      "sha256": "c73830748a07e77ca3e09867732598c466256690de1df41d98acf639cb7d96eb"
+    },
+    {
+      "name": "scalar_array_result",
+      "mutation": 3,
+      "expected": 3,
+      "bytes": 329,
+      "sha256": "7184352b5f52025dea3cee564d363cadfff1c1288bea3b79dc0f7dd4e6c49376"
+    },
+    {
+      "name": "missing_count",
+      "mutation": 4,
+      "expected": 4,
+      "bytes": 329,
+      "sha256": "8254c1b66fd2946945ff486ed838673b5e602dce4d4253a8458aa7500246ef88"
+    },
+    {
+      "name": "missing_fill",
+      "mutation": 5,
+      "expected": 4,
+      "bytes": 329,
+      "sha256": "6ff0434f49e54d23ec9019d564b6579b315764761ecf60571c76395b3f716031"
+    },
+    {
+      "name": "inactive_immediate",
+      "mutation": 6,
+      "expected": 1,
+      "bytes": 329,
+      "sha256": "4d54c96fd4eae75141593732ac66f0cadf7d2a51aedfa5c0b93814321b9ded83"
+    },
+    {
+      "name": "unused_target",
+      "mutation": 7,
+      "expected": 1,
+      "bytes": 329,
+      "sha256": "1a6888a89c84c6d6ea7755a1ccb0b1461777f8bbf8d18cb076c6067d8e3dfab4"
+    },
+    {
+      "name": "unused_type_argument",
+      "mutation": 8,
+      "expected": 1,
+      "bytes": 329,
+      "sha256": "c32138af013ab2bd9b4a8d6e291fa236f6cad0b3aed12f9e5f69d675d465fc6a"
+    },
+    {
+      "name": "wrong_length_result",
+      "mutation": 9,
+      "expected": 3,
+      "bytes": 329,
+      "sha256": "fcb668e90197bf89963c86bd361dbec6008f69f65c35d87bb042352036e9cb23"
+    }
+  ],
+  "boundary": "Admission of explicit typed zero plus ARRAY_REPEAT only. This does not prove Source default-initializer rejection for String, legacy owner bits or runtime outcomes."
+}
