@@ -1,153 +1,237 @@
 {
-  "status": "CANDIDATE_ONLY_NOT_BUILT_NOT_RUN",
+  "schema": 2,
+  "status": "NORMAL_PATH_REVALIDATED_ORIGINAL_QUALIFICATION_OPEN",
   "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
-  "worker_commit": "1e4ad536537d2723b5fb649b5f8e8c51b600a738",
+  "worker_parent": "7dd781f6e16b9401679542645206688edd3023a2",
   "target": "test_source_product_semantic67_writer_stage_normal",
-  "new_translation_units": 1,
-  "new_CTests": 1,
-  "budgets": {
-    "allocated_bytes": 67108864,
-    "live_bytes": 8388608,
-    "work": 128000000
-  },
-  "pipeline": "Single public finite owner -> Built definition Check -> Checked writer -> artifact drop -> packet drop -> owner release",
-  "public_calls": {
-    "built_check": "xr_xir_compile_check",
-    "checked_write": "xr_xir_compile_checked_write (including its real public artifact verification)",
-    "cleanup": [
-      "xr_xir_compile_artifact_free",
-      "xr_xir_compile_checked_packet_free",
-      "source_program_owners_free -> xr_compile_resources_release"
-    ]
-  },
-  "no_extra_semantic_operations": [
-    "No extra artifact_verify outside write",
-    "No Checked reader",
-    "No specialization/Lower/VM/native execution",
-    "No private artifact/codec access beyond the existing allocator observer include",
-    "No FI or resource exact-minus1 replay"
-  ],
-  "normal_observation_phases": [
-    "owner_new",
-    "built_check",
-    "checked_write",
-    "checked_drop",
-    "packet_drop",
-    "owner_drop"
-  ],
-  "per_phase_site_indices": "Actual global compiler allocator attempts begin/end, contiguous zero-based future replay boundaries; no injection now",
-  "per_phase_delta_fields": [
-    "allocation_count",
-    "allocated_bytes",
-    "work"
-  ],
-  "cumulative_fields": [
-    "allocated_bytes",
-    "live_bytes",
-    "peak_bytes",
-    "work",
-    "compiler physical blocks/bytes/peak"
-  ],
-  "peak_scope": "All peaks are cumulative in one owner; no ledger or observer reset/replenishment. No per-stage peak claim.",
-  "owner_new_zero_baseline": "Before owner_new no ledger exists; zero resource fields describe absence, allocator counters are actually observed.",
-  "owner_drop_stats_rule": "Final resource query occurs before resources release. After release only physical counters/table pointer and allocator sites are queried; no dead ledger access.",
-  "normal_operation_summary_scope": "Owner creation + Check + public writer, captured before cleanup. Cleanup phase deltas logged separately.",
-  "normal_denominator_numbers": "UNMEASURED_NOT_RUN",
-  "known_answer": {
-    "bytes": 224,
-    "sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784",
-    "original_repository_header": "tests/unit/xir/product_consumers/semantic67_named/semantic67_public_writer_goldens.h",
-    "original_header_sha256": "8c275074db761d7f5bd6f01d5a86e22c146cc93890214a0888c4606e347b3453",
-    "original_symbol": "writer_named67_0",
-    "candidate_copy": "Exact literal legal bytes only, independent frozen named model, not production writer output or patched header.",
-    "assertions": [
-      "main name remains independently owned after stack name poison",
-      "full224B equality after public write",
-      "full224B still equal after Checked artifact destroy",
-      "packet output reset and live returns to owner baseline",
-      "final all compiler physical blocks/bytes zero and observer table released"
-    ]
-  },
-  "pinned_readonly_source_inputs": [
-    {
-      "path": "tests/unit/xir/xir_source_program_compile_owner.h",
-      "sha256": "c78b6b05f2f504e9639a7ad4769b65c94f81bd41215e72b7b4ecd74329ef95ac",
-      "bytes": 8889,
-      "source": "exact25f private source readonly"
-    },
-    {
-      "path": "src/base/xcompile_resources.h",
-      "sha256": "e4c57af086738868aaf23c57dede04ddcaaa11ad892cc73ef1d033743392894c",
-      "bytes": 4897,
-      "source": "exact25f private source readonly"
-    },
-    {
-      "path": "src/base/xcompile_resources.c",
-      "sha256": "0c42d53bfdc251c6dee1464461874d558b778e6cb77d91b9519f15bd6855aedf",
-      "bytes": 11531,
-      "source": "exact25f private source readonly"
-    },
-    {
-      "path": "src/xir/xxir_compile_context.h",
-      "sha256": "acf27ce6cf7cd8874d35a6fe97646f4ecf414f850ee63d62589f10e47e715ade",
-      "bytes": 1015,
-      "source": "exact25f private source readonly"
-    },
-    {
-      "path": "src/xir/xxir_checked.h",
-      "sha256": "8d1a9dc9186e8c55b0613d0d1f403f30e08b5ccd757546ea1e429beba4b6865a",
-      "bytes": 1023,
-      "source": "exact25f private source readonly"
-    },
-    {
-      "path": "src/xir/xxir_checked.c",
-      "sha256": "8506dcdd592ea682cf09920de13c8332849a6957cbf7adcc8c229a80c6a57f92",
-      "bytes": 4044,
-      "source": "exact25f private source readonly"
-    },
-    {
-      "path": "src/xir/xxir.c",
-      "sha256": "36cf393dc56ee374bd0446d8576dcd353716ec4c431c57b6117a170d29ea0c7d",
-      "bytes": 17888,
-      "source": "exact25f private source readonly"
-    }
-  ],
-  "parent_include": {
-    "path": "tests/unit/program/source_product_consumers.cmake",
-    "observed_git_HEAD_bytes": 15542,
-    "observed_git_HEAD_sha256": "50fc181acf7a86ed3f70aa6cc67f1ff3490f7ebe1e2f760ea6bbde9ebe5e9452",
-    "observed_working_bytes": 15636,
-    "observed_working_sha256": "7b37eec3e098ade6d04c9e70231cc9ebfba7cdb99e4fbb919b735e7a8a343f8b",
-    "observed_working_normalized_bytes": 15636,
-    "classification": "HEAD_PLUS_TIMER_CGEN_EOF_INCLUDE",
-    "EOF_fragment_path": "parent-EOF-append.txt",
-    "frozen_full_parent_afterimage": false,
-    "application_rule": "Parent owner binds actual final preimage and appends one include. Do not replace parent with a snapshot."
-  },
-  "resource_responsibilities_OPEN": {
-    "original_private_writer_only": [
-      1,
-      2
+  "retired": 0,
+  "replacement_gates": [],
+  "current_qualification": {
+    "evidence_directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1",
+    "scope": "Current normal paths only. Prepared-candidate claims below are historical, not the current build/execution state.",
+    "build": "Both targeted UTF8 Ninja checks: no work to do. Existing three consumer objects/executables and ten current67 libraries rebound; no fresh compilation claim.",
+    "normal_execution": "Actual unchanged registered commands ran once per configuration, each exit0; independent reparse verified fixed normal totals, output ownership and physical0/0.",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
     ],
-    "original_private_work_prefixes": 1932,
-    "original_private_two_resource_axes_exact_minus1": 12,
-    "original_private_FI_positions": 6,
-    "private_work_values": [
-      648,
-      648,
-      636
+    "actual": [
+      {
+        "configuration": "msvc",
+        "test": "test_source_product_semantic67_writer_stage_normal",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-msvc/tests/unit/test_source_product_semantic67_writer_stage_normal.exe"
+        ],
+        "pid": 39024,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 10,
+          "allocated": 979,
+          "peak": 748,
+          "work": 1271,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_stage_normal.stdout.raw",
+        "stdout_sha256": "7f941c2522b0b6ed89fe6135459999289848dff0ceb2013168862dc28a9eb622",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_stage_normal.stderr.raw",
+        "stderr_sha256": "344fee32ebce8a526ff48c6ba7d0ddc9599b6ed0246d56f69519c61f51d6c5f5",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\tests\\unit\\test_source_product_semantic67_writer_stage_normal.exe",
+          "sha256": "c16346ae8438a52ed6951708e0687052a77571367bfde850802c15ef990582f4",
+          "bytes": 392704,
+          "mtime_ns": 1791309076813051100
+        }
+      },
+      {
+        "configuration": "asan",
+        "test": "test_source_product_semantic67_writer_stage_normal",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-asan/tests/unit/test_source_product_semantic67_writer_stage_normal.exe"
+        ],
+        "pid": 19704,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 10,
+          "allocated": 979,
+          "peak": 748,
+          "work": 1271,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_stage_normal.stdout.raw",
+        "stdout_sha256": "7f941c2522b0b6ed89fe6135459999289848dff0ceb2013168862dc28a9eb622",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_stage_normal.stderr.raw",
+        "stderr_sha256": "344fee32ebce8a526ff48c6ba7d0ddc9599b6ed0246d56f69519c61f51d6c5f5",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\tests\\unit\\test_source_product_semantic67_writer_stage_normal.exe",
+          "sha256": "3247afb8f2e7d0df344104f73bb2e7b5fd9424db62fa517482d33717955673d4",
+          "bytes": 3339264,
+          "mtime_ns": 1791309571286828100
+        }
+      }
     ],
-    "private_storage_formula": "not imported into public writer",
-    "original23families": "All original allocation/work/FI responsibilities remain OPEN; this normal census discharges none until actually measured and separately replayed.",
-    "Task_Source_native_ABI_default_safety": "OPEN_UNCHANGED"
+    "registered_fault_command": {},
+    "normal_count_binding": "Normal empty N10 and occupied N12 measured from these exact current binaries. Counts describe the complete cold public graph; they do not replace original private writer-only denominators.",
+    "preservation": "Each configuration:2521 input records and9 consumer source/object/binary build records unchanged before/after;all598 protected metadata unchanged.",
+    "audit_correction": "Initial run wrapper incorrectly required stage-normal stderr to be empty. Its3 standard allocation-statistics lines were independently validated. Initial2 audit-only FAIL records and all raw exit0 receipts preserved; no product rerun. The initial archive audit assumed xxir.c belonged to xray_xir; the actual compile database showed xray_xir_admission. Initial audit script retained and binding corrected.",
+    "annotation_order": "This map reconciliation follows execution. Runtime input snapshots bind the original candidate map; no claim that the new JSON was re-executed.",
+    "fault_execution": "NOT_RUN_IN_THIS_BATCH",
+    "resource_axes": "NOT_RUN_IN_THIS_BATCH",
+    "VM_native": "NOT_RUN_IN_THIS_BATCH",
+    "full_safety": "NOT_RUN",
+    "Main_integration": "NOT_RUN"
   },
-  "existing_test_reuse_assessment": {
-    "test_source_product_semantic67_public_writer": "Existing legal+8 admissions checks and final physical assertions; no per-stage normal counter output/CLI. Fresh total allocator cost also includes negative packet allocations, so cannot infer legal-only operation denominator.",
-    "new_target_reason": "One isolated legal cold graph exposes Check/write actual charge boundaries for later Root-authorized FI without changing existing writer or public APIs."
+  "candidate_snapshot": {
+    "status": "CANDIDATE_ONLY_NOT_BUILT_NOT_RUN",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "worker_commit": "1e4ad536537d2723b5fb649b5f8e8c51b600a738",
+    "target": "test_source_product_semantic67_writer_stage_normal",
+    "new_translation_units": 1,
+    "new_CTests": 1,
+    "budgets": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000
+    },
+    "pipeline": "Single public finite owner -> Built definition Check -> Checked writer -> artifact drop -> packet drop -> owner release",
+    "public_calls": {
+      "built_check": "xr_xir_compile_check",
+      "checked_write": "xr_xir_compile_checked_write (including its real public artifact verification)",
+      "cleanup": [
+        "xr_xir_compile_artifact_free",
+        "xr_xir_compile_checked_packet_free",
+        "source_program_owners_free -> xr_compile_resources_release"
+      ]
+    },
+    "no_extra_semantic_operations": [
+      "No extra artifact_verify outside write",
+      "No Checked reader",
+      "No specialization/Lower/VM/native execution",
+      "No private artifact/codec access beyond the existing allocator observer include",
+      "No FI or resource exact-minus1 replay"
+    ],
+    "normal_observation_phases": [
+      "owner_new",
+      "built_check",
+      "checked_write",
+      "checked_drop",
+      "packet_drop",
+      "owner_drop"
+    ],
+    "per_phase_site_indices": "Actual global compiler allocator attempts begin/end, contiguous zero-based future replay boundaries; no injection now",
+    "per_phase_delta_fields": [
+      "allocation_count",
+      "allocated_bytes",
+      "work"
+    ],
+    "cumulative_fields": [
+      "allocated_bytes",
+      "live_bytes",
+      "peak_bytes",
+      "work",
+      "compiler physical blocks/bytes/peak"
+    ],
+    "peak_scope": "All peaks are cumulative in one owner; no ledger or observer reset/replenishment. No per-stage peak claim.",
+    "owner_new_zero_baseline": "Before owner_new no ledger exists; zero resource fields describe absence, allocator counters are actually observed.",
+    "owner_drop_stats_rule": "Final resource query occurs before resources release. After release only physical counters/table pointer and allocator sites are queried; no dead ledger access.",
+    "normal_operation_summary_scope": "Owner creation + Check + public writer, captured before cleanup. Cleanup phase deltas logged separately.",
+    "normal_denominator_numbers": "UNMEASURED_NOT_RUN",
+    "known_answer": {
+      "bytes": 224,
+      "sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784",
+      "original_repository_header": "tests/unit/xir/product_consumers/semantic67_named/semantic67_public_writer_goldens.h",
+      "original_header_sha256": "8c275074db761d7f5bd6f01d5a86e22c146cc93890214a0888c4606e347b3453",
+      "original_symbol": "writer_named67_0",
+      "candidate_copy": "Exact literal legal bytes only, independent frozen named model, not production writer output or patched header.",
+      "assertions": [
+        "main name remains independently owned after stack name poison",
+        "full224B equality after public write",
+        "full224B still equal after Checked artifact destroy",
+        "packet output reset and live returns to owner baseline",
+        "final all compiler physical blocks/bytes zero and observer table released"
+      ]
+    },
+    "pinned_readonly_source_inputs": [
+      {
+        "path": "tests/unit/xir/xir_source_program_compile_owner.h",
+        "sha256": "c78b6b05f2f504e9639a7ad4769b65c94f81bd41215e72b7b4ecd74329ef95ac",
+        "bytes": 8889,
+        "source": "exact25f private source readonly"
+      },
+      {
+        "path": "src/base/xcompile_resources.h",
+        "sha256": "e4c57af086738868aaf23c57dede04ddcaaa11ad892cc73ef1d033743392894c",
+        "bytes": 4897,
+        "source": "exact25f private source readonly"
+      },
+      {
+        "path": "src/base/xcompile_resources.c",
+        "sha256": "0c42d53bfdc251c6dee1464461874d558b778e6cb77d91b9519f15bd6855aedf",
+        "bytes": 11531,
+        "source": "exact25f private source readonly"
+      },
+      {
+        "path": "src/xir/xxir_compile_context.h",
+        "sha256": "acf27ce6cf7cd8874d35a6fe97646f4ecf414f850ee63d62589f10e47e715ade",
+        "bytes": 1015,
+        "source": "exact25f private source readonly"
+      },
+      {
+        "path": "src/xir/xxir_checked.h",
+        "sha256": "8d1a9dc9186e8c55b0613d0d1f403f30e08b5ccd757546ea1e429beba4b6865a",
+        "bytes": 1023,
+        "source": "exact25f private source readonly"
+      },
+      {
+        "path": "src/xir/xxir_checked.c",
+        "sha256": "8506dcdd592ea682cf09920de13c8332849a6957cbf7adcc8c229a80c6a57f92",
+        "bytes": 4044,
+        "source": "exact25f private source readonly"
+      },
+      {
+        "path": "src/xir/xxir.c",
+        "sha256": "36cf393dc56ee374bd0446d8576dcd353716ec4c431c57b6117a170d29ea0c7d",
+        "bytes": 17888,
+        "source": "exact25f private source readonly"
+      }
+    ],
+    "parent_include": {
+      "path": "tests/unit/program/source_product_consumers.cmake",
+      "observed_git_HEAD_bytes": 15542,
+      "observed_git_HEAD_sha256": "50fc181acf7a86ed3f70aa6cc67f1ff3490f7ebe1e2f760ea6bbde9ebe5e9452",
+      "observed_working_bytes": 15636,
+      "observed_working_sha256": "7b37eec3e098ade6d04c9e70231cc9ebfba7cdb99e4fbb919b735e7a8a343f8b",
+      "observed_working_normalized_bytes": 15636,
+      "classification": "HEAD_PLUS_TIMER_CGEN_EOF_INCLUDE",
+      "EOF_fragment_path": "parent-EOF-append.txt",
+      "frozen_full_parent_afterimage": false,
+      "application_rule": "Parent owner binds actual final preimage and appends one include. Do not replace parent with a snapshot."
+    },
+    "resource_responsibilities_OPEN": {
+      "original_private_writer_only": [
+        1,
+        2
+      ],
+      "original_private_work_prefixes": 1932,
+      "original_private_two_resource_axes_exact_minus1": 12,
+      "original_private_FI_positions": 6,
+      "private_work_values": [
+        648,
+        648,
+        636
+      ],
+      "private_storage_formula": "not imported into public writer",
+      "original23families": "All original allocation/work/FI responsibilities remain OPEN; this normal census discharges none until actually measured and separately replayed.",
+      "Task_Source_native_ABI_default_safety": "OPEN_UNCHANGED"
+    },
+    "existing_test_reuse_assessment": {
+      "test_source_product_semantic67_public_writer": "Existing legal+8 admissions checks and final physical assertions; no per-stage normal counter output/CLI. Fresh total allocator cost also includes negative packet allocations, so cannot infer legal-only operation denominator.",
+      "new_target_reason": "One isolated legal cold graph exposes Check/write actual charge boundaries for later Root-authorized FI without changing existing writer or public APIs."
+    },
+    "future_owner_qualification": "Root only: exact afterimage apply, targeted fresh1TU MSVC/ASan under C11/W4WX/utf8, verify actual source/object/exe/10 product closure+san3, run1 normal CTest per configuration with120 seconds. Source/artifact drift expands real affected revalidation. No FI before separate Root window.",
+    "FI": "NOT_RUN",
+    "VM_native": "NOT_RUN",
+    "build": "NOT_RUN",
+    "product_execution": "NOT_RUN"
   },
-  "future_owner_qualification": "Root only: exact afterimage apply, targeted fresh1TU MSVC/ASan under C11/W4WX/utf8, verify actual source/object/exe/10 product closure+san3, run1 normal CTest per configuration with120 seconds. Source/artifact drift expands real affected revalidation. No FI before separate Root window.",
-  "FI": "NOT_RUN",
-  "VM_native": "NOT_RUN",
-  "build": "NOT_RUN",
-  "product_execution": "NOT_RUN"
+  "remaining": "All original23family/private1932work-prefix/12resource-axis/FI6 responsibilities and any broader consumer responsibilities retained exactly in candidate_snapshot. Normal measurements are partial evidence, not retirement or complete fault/resource qualification."
 }

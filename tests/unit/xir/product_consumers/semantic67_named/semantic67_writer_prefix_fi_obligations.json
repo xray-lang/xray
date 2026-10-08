@@ -1,72 +1,216 @@
 {
-  "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+  "schema": 2,
+  "status": "NORMAL_PATH_REVALIDATED_ORIGINAL_QUALIFICATION_OPEN",
   "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
-  "fixture": {
-    "Built": "PROGRAM, one main owned-name4, I64 result, one block and CONST_INT I64 42 + RETURN Unit",
-    "pipeline": "resources_new -> public compile_check -> public checked_write -> optional occupied checked_write",
-    "one_owner": "Exactly one fresh finite ledger per process; no ledger/counter reset between public operations",
-    "golden": {
-      "bytes": 224,
-      "sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784"
-    },
-    "independent_complete_golden": true,
-    "golden_source": "tests/unit/xir/product_consumers/semantic67_named/test_source_product_semantic67_writer_budget_occupied.c",
-    "owner_limits": {
-      "allocated_bytes": 67108864,
-      "live_bytes": 8388608,
-      "work": 128000000
-    }
-  },
-  "normal": {
-    "CLI": [
-      "--normal empty",
-      "--normal occupied"
+  "worker_parent": "7dd781f6e16b9401679542645206688edd3023a2",
+  "target": "test_source_product_semantic67_writer_prefix_fi",
+  "retired": 0,
+  "replacement_gates": [],
+  "current_qualification": {
+    "evidence_directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1",
+    "scope": "Current normal paths only. Prepared-candidate claims below are historical, not the current build/execution state.",
+    "build": "Both targeted UTF8 Ninja checks: no work to do. Existing three consumer objects/executables and ten current67 libraries rebound; no fresh compilation claim.",
+    "normal_execution": "Actual unchanged registered commands ran once per configuration, each exit0; independent reparse verified fixed normal totals, output ownership and physical0/0.",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
     ],
-    "default_CTests": 2,
-    "processes": "Each CTest launches a separate cold process; never run both graphs in one process",
-    "N": "UNMEASURED_FOR_NEW_TU. No N10/N12 assertion or FI registration call is present",
-    "measurement": "Raw phase begin/end plus N/allocated/live/cumulative_peak/work and physical counters; full224B afterCheckeddrop; physical0/0",
-    "required_owner_binding": "Before FI, freeze perconfiguration actual source/model/producer/headers/objects/executable/public10libs/CRT/flags/san3 + normal raw outputs and phase ranges",
-    "success": "Actual owner/check/write1 all OK; occupied write2 OK and distinct224B packets; copied main name+same resources; all stage intervals continuous/nonempty; cleanup0; no hook hit"
+    "actual": [
+      {
+        "configuration": "msvc",
+        "test": "test_source_product_semantic67_writer_prefix_normal_empty",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-msvc/tests/unit/test_source_product_semantic67_writer_prefix_fi.exe",
+          "--normal",
+          "empty"
+        ],
+        "pid": 40012,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 10,
+          "allocated": 979,
+          "peak": 748,
+          "work": 1271,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_prefix_normal_empty.stdout.raw",
+        "stdout_sha256": "52c7812ef73f93064e06039653bed4532f815cbc589cd81d1a721d72cccdbe2e",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_prefix_normal_empty.stderr.raw",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\tests\\unit\\test_source_product_semantic67_writer_prefix_fi.exe",
+          "sha256": "6340bae9bfb0187624be74a81a8c93451265706d7e22aa3e201d9a6a25ce6090",
+          "bytes": 392704,
+          "mtime_ns": 1791316605683235300
+        }
+      },
+      {
+        "configuration": "msvc",
+        "test": "test_source_product_semantic67_writer_prefix_normal_occupied",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-msvc/tests/unit/test_source_product_semantic67_writer_prefix_fi.exe",
+          "--normal",
+          "occupied"
+        ],
+        "pid": 39584,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 12,
+          "allocated": 1296,
+          "peak": 988,
+          "work": 2008,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_prefix_normal_occupied.stdout.raw",
+        "stdout_sha256": "034f7e80fd54195c6ab7d793985262c456e15ed62d7ffb91f8c94eed7468df9e",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_prefix_normal_occupied.stderr.raw",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\tests\\unit\\test_source_product_semantic67_writer_prefix_fi.exe",
+          "sha256": "6340bae9bfb0187624be74a81a8c93451265706d7e22aa3e201d9a6a25ce6090",
+          "bytes": 392704,
+          "mtime_ns": 1791316605683235300
+        }
+      },
+      {
+        "configuration": "asan",
+        "test": "test_source_product_semantic67_writer_prefix_normal_empty",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-asan/tests/unit/test_source_product_semantic67_writer_prefix_fi.exe",
+          "--normal",
+          "empty"
+        ],
+        "pid": 25604,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 10,
+          "allocated": 979,
+          "peak": 748,
+          "work": 1271,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_prefix_normal_empty.stdout.raw",
+        "stdout_sha256": "52c7812ef73f93064e06039653bed4532f815cbc589cd81d1a721d72cccdbe2e",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_prefix_normal_empty.stderr.raw",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\tests\\unit\\test_source_product_semantic67_writer_prefix_fi.exe",
+          "sha256": "99b1d5e61765b3a940cff1e56c165cad45bdb251e6f5708d2eadd89aaad947d1",
+          "bytes": 3412480,
+          "mtime_ns": 1791316968599514100
+        }
+      },
+      {
+        "configuration": "asan",
+        "test": "test_source_product_semantic67_writer_prefix_normal_occupied",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-asan/tests/unit/test_source_product_semantic67_writer_prefix_fi.exe",
+          "--normal",
+          "occupied"
+        ],
+        "pid": 46400,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 12,
+          "allocated": 1296,
+          "peak": 988,
+          "work": 2008,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_prefix_normal_occupied.stdout.raw",
+        "stdout_sha256": "034f7e80fd54195c6ab7d793985262c456e15ed62d7ffb91f8c94eed7468df9e",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_prefix_normal_occupied.stderr.raw",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\tests\\unit\\test_source_product_semantic67_writer_prefix_fi.exe",
+          "sha256": "99b1d5e61765b3a940cff1e56c165cad45bdb251e6f5708d2eadd89aaad947d1",
+          "bytes": 3412480,
+          "mtime_ns": 1791316968599514100
+        }
+      }
+    ],
+    "registered_fault_command": {},
+    "normal_count_binding": "Normal empty N10 and occupied N12 measured from these exact current binaries. Counts describe the complete cold public graph; they do not replace original private writer-only denominators.",
+    "preservation": "Each configuration:2521 input records and9 consumer source/object/binary build records unchanged before/after;all598 protected metadata unchanged.",
+    "audit_correction": "Initial run wrapper incorrectly required stage-normal stderr to be empty. Its3 standard allocation-statistics lines were independently validated. Initial2 audit-only FAIL records and all raw exit0 receipts preserved; no product rerun. The initial archive audit assumed xxir.c belonged to xray_xir; the actual compile database showed xray_xir_admission. Initial audit script retained and binding corrected.",
+    "annotation_order": "This map reconciliation follows execution. Runtime input snapshots bind the original candidate map; no claim that the new JSON was re-executed.",
+    "fault_execution": "NOT_RUN_IN_THIS_BATCH",
+    "resource_axes": "NOT_RUN_IN_THIS_BATCH",
+    "VM_native": "NOT_RUN_IN_THIS_BATCH",
+    "full_safety": "NOT_RUN",
+    "Main_integration": "NOT_RUN"
   },
-  "fault": {
-    "CLI": "--fault empty|occupied PER_CONFIGURATION_NEW_NORMAL_N zero_based_site",
-    "domain": "One new process per site; arm once before the cold public owner constructor; one hook ordinal and no counter/ledger reset",
-    "coverage_when_bound": "All sites [0,Nempty) + [0,Noccupied), including constructor ordinal0 and both verify/finalpacket positions of each reached writer",
-    "count_binding": "N args only bound site range; external owner must prove the exact executable normal N and stage oracle. A shorter N cannot establish full coverage.",
-    "hit": "Monotone postincrement hook at site; injected true; final failed-phase attempts=site+1 and before<=site<after prove one hit. Helpers preserve first failure, so later copies do not add allocation attempts after OOM.",
-    "stage_oracle": {
-      "owner_new": "XR_COMPILE_RESOURCE_OUT_OF_MEMORY; checked/write1/write2 NOT_ENTERED; unchanged null owner pointer and A5empty packet wholeobject",
-      "check": "XR_XIR_OUT_OF_MEMORY+diagnostic.status same; owner actualOK; no writer calls; unchanged checked pointer and A5empty wholeobject; owned partial clones freed before return",
-      "write1": "XR_XIR_OUT_OF_MEMORY+diagnostic.status same; owner/check actualOK and ownedCheckedidentity; write2 NOT_ENTERED; unchanged A5empty fullobject",
-      "write2": "XR_XIR_OUT_OF_MEMORY+diagnostic.status same; owner/check/write1 actualOK; real owned224B prefix; whole occupied packet object and all224B preserved"
+  "candidate_snapshot": {
+    "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "fixture": {
+      "Built": "PROGRAM, one main owned-name4, I64 result, one block and CONST_INT I64 42 + RETURN Unit",
+      "pipeline": "resources_new -> public compile_check -> public checked_write -> optional occupied checked_write",
+      "one_owner": "Exactly one fresh finite ledger per process; no ledger/counter reset between public operations",
+      "golden": {
+        "bytes": 224,
+        "sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784"
+      },
+      "independent_complete_golden": true,
+      "golden_source": "tests/unit/xir/product_consumers/semantic67_named/test_source_product_semantic67_writer_budget_occupied.c",
+      "owner_limits": {
+        "allocated_bytes": 67108864,
+        "live_bytes": 8388608,
+        "work": 128000000
+      }
     },
-    "diagnostic_locations": "Dump exact returned function/block/instruction/reason. Do not force MAX for verifier scratch OOM; only statusOOM is uniformly guaranteed for all public phases.",
-    "prior_stages": "Each earlier public stage called and OK; each later stage explicitly called0/NOT_ENTERED; no arbitrary error is accepted",
-    "failed_return_resources": "Exact before/after ledger-live validity and value, physical blocks and bytes; allocated/work/cumulative peaks may grow and are not refunded",
-    "post_Checked_drop": "A5empty wholeobject still equal or every224B of retained output/prefix still matches the independent golden",
-    "cleanup": "Common unconditional Checkedfree and deduplicating packetfree; drops preserve actual attempts/count/allocated/work/cumulative peak/physical peaks, live and physical stock only decrease; failed afterChecked rechecks entireA5empty or entireoccupiedoutput+prefix objects plus224B; constructor-live restored; ownerrelease keeps attempts/physical peaks unchanged without stats access after destruction; actual tablefree and physical0/0 precede status decision",
-    "packet_frees": "Owner/Check/write1 failures0; write2 failures1; normal empty1/occupied2",
-    "registration": "Only source_product_register_writer_prefix_fi(empty_sites,occupied_sites) definition, never invoked by this candidate; all FI NOT_REGISTERED/NOT_RUN"
+    "normal": {
+      "CLI": [
+        "--normal empty",
+        "--normal occupied"
+      ],
+      "default_CTests": 2,
+      "processes": "Each CTest launches a separate cold process; never run both graphs in one process",
+      "N": "UNMEASURED_FOR_NEW_TU. No N10/N12 assertion or FI registration call is present",
+      "measurement": "Raw phase begin/end plus N/allocated/live/cumulative_peak/work and physical counters; full224B afterCheckeddrop; physical0/0",
+      "required_owner_binding": "Before FI, freeze perconfiguration actual source/model/producer/headers/objects/executable/public10libs/CRT/flags/san3 + normal raw outputs and phase ranges",
+      "success": "Actual owner/check/write1 all OK; occupied write2 OK and distinct224B packets; copied main name+same resources; all stage intervals continuous/nonempty; cleanup0; no hook hit"
+    },
+    "fault": {
+      "CLI": "--fault empty|occupied PER_CONFIGURATION_NEW_NORMAL_N zero_based_site",
+      "domain": "One new process per site; arm once before the cold public owner constructor; one hook ordinal and no counter/ledger reset",
+      "coverage_when_bound": "All sites [0,Nempty) + [0,Noccupied), including constructor ordinal0 and both verify/finalpacket positions of each reached writer",
+      "count_binding": "N args only bound site range; external owner must prove the exact executable normal N and stage oracle. A shorter N cannot establish full coverage.",
+      "hit": "Monotone postincrement hook at site; injected true; final failed-phase attempts=site+1 and before<=site<after prove one hit. Helpers preserve first failure, so later copies do not add allocation attempts after OOM.",
+      "stage_oracle": {
+        "owner_new": "XR_COMPILE_RESOURCE_OUT_OF_MEMORY; checked/write1/write2 NOT_ENTERED; unchanged null owner pointer and A5empty packet wholeobject",
+        "check": "XR_XIR_OUT_OF_MEMORY+diagnostic.status same; owner actualOK; no writer calls; unchanged checked pointer and A5empty wholeobject; owned partial clones freed before return",
+        "write1": "XR_XIR_OUT_OF_MEMORY+diagnostic.status same; owner/check actualOK and ownedCheckedidentity; write2 NOT_ENTERED; unchanged A5empty fullobject",
+        "write2": "XR_XIR_OUT_OF_MEMORY+diagnostic.status same; owner/check/write1 actualOK; real owned224B prefix; whole occupied packet object and all224B preserved"
+      },
+      "diagnostic_locations": "Dump exact returned function/block/instruction/reason. Do not force MAX for verifier scratch OOM; only statusOOM is uniformly guaranteed for all public phases.",
+      "prior_stages": "Each earlier public stage called and OK; each later stage explicitly called0/NOT_ENTERED; no arbitrary error is accepted",
+      "failed_return_resources": "Exact before/after ledger-live validity and value, physical blocks and bytes; allocated/work/cumulative peaks may grow and are not refunded",
+      "post_Checked_drop": "A5empty wholeobject still equal or every224B of retained output/prefix still matches the independent golden",
+      "cleanup": "Common unconditional Checkedfree and deduplicating packetfree; drops preserve actual attempts/count/allocated/work/cumulative peak/physical peaks, live and physical stock only decrease; failed afterChecked rechecks entireA5empty or entireoccupiedoutput+prefix objects plus224B; constructor-live restored; ownerrelease keeps attempts/physical peaks unchanged without stats access after destruction; actual tablefree and physical0/0 precede status decision",
+      "packet_frees": "Owner/Check/write1 failures0; write2 failures1; normal empty1/occupied2",
+      "registration": "Only source_product_register_writer_prefix_fi(empty_sites,occupied_sites) definition, never invoked by this candidate; all FI NOT_REGISTERED/NOT_RUN"
+    },
+    "axes": {
+      "CLI": "--axis empty|occupied allocated|live|work exact|minus1 PER_CONFIGURATION_NEW_NORMAL_TOTAL",
+      "counts": "Two public graphs x3axes x2cuts =12 candidate cases; never substitutes for the private original12",
+      "registration": "Only six-argument function definition; not invoked/default registered; all axes NOT_RUN",
+      "binding": "Fresh successor normal allocated total/cumulative peak/work pergraph/config/source/model/executable/headers/public10libs/CRT/flags/san3; no old thresholds copied",
+      "exact": "Full graph succeeds with normal ownership/golden/physical0, and selected final ledger metric equals the supplied normal total",
+      "minus1": "Cap exactly normal total-1; only actual first entered resourceBUDGET or XIRBUDGET accepted; diagnostic status matches XIRBUDGET; prior stages actualOK/laterNOT_ENTERED; no injected hit",
+      "preservation": "Same fullobject/224B/before-after-live/physical and common unconditional cleanup as fullprefixFI; allocated/work/cumulative peaks may grow, never refilled/refunded",
+      "owner_boundary": "Small caps can fail before any physical attempt at constructor; record real called/status and no XIR diagnostic, do not label writer failure"
+    },
+    "original_responsibilities_OPEN": {
+      "private_work_prefixes": 1932,
+      "private_exact_minus1_axes": 12,
+      "private_FI_positions": 6,
+      "two_illegal_name_resource_and_FI_denominators": "OPEN",
+      "other_23_families": "Not covered by the legal I64 fixture; prior21reader green cannot close whole23",
+      "source_Task_GO_Await_native_ABI_safety": "OPEN_UNCHANGED"
+    },
+    "scope": "New independent consumer C + new dedicatedCMake + new obligationsJSON + one parent EOFinclude; adjacent occupied and empty consumers/helpers/producers are read-only",
+    "build_normal_fault_axes": "NOT_RUN"
   },
-  "axes": {
-    "CLI": "--axis empty|occupied allocated|live|work exact|minus1 PER_CONFIGURATION_NEW_NORMAL_TOTAL",
-    "counts": "Two public graphs x3axes x2cuts =12 candidate cases; never substitutes for the private original12",
-    "registration": "Only six-argument function definition; not invoked/default registered; all axes NOT_RUN",
-    "binding": "Fresh successor normal allocated total/cumulative peak/work pergraph/config/source/model/executable/headers/public10libs/CRT/flags/san3; no old thresholds copied",
-    "exact": "Full graph succeeds with normal ownership/golden/physical0, and selected final ledger metric equals the supplied normal total",
-    "minus1": "Cap exactly normal total-1; only actual first entered resourceBUDGET or XIRBUDGET accepted; diagnostic status matches XIRBUDGET; prior stages actualOK/laterNOT_ENTERED; no injected hit",
-    "preservation": "Same fullobject/224B/before-after-live/physical and common unconditional cleanup as fullprefixFI; allocated/work/cumulative peaks may grow, never refilled/refunded",
-    "owner_boundary": "Small caps can fail before any physical attempt at constructor; record real called/status and no XIR diagnostic, do not label writer failure"
-  },
-  "original_responsibilities_OPEN": {
-    "private_work_prefixes": 1932,
-    "private_exact_minus1_axes": 12,
-    "private_FI_positions": 6,
-    "two_illegal_name_resource_and_FI_denominators": "OPEN",
-    "other_23_families": "Not covered by the legal I64 fixture; prior21reader green cannot close whole23",
-    "source_Task_GO_Await_native_ABI_safety": "OPEN_UNCHANGED"
-  },
-  "scope": "New independent consumer C + new dedicatedCMake + new obligationsJSON + one parent EOFinclude; adjacent occupied and empty consumers/helpers/producers are read-only",
-  "build_normal_fault_axes": "NOT_RUN"
+  "remaining": "All original23family/private1932work-prefix/12resource-axis/FI6 responsibilities and any broader consumer responsibilities retained exactly in candidate_snapshot. Normal measurements are partial evidence, not retirement or complete fault/resource qualification."
 }

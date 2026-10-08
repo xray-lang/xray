@@ -1,75 +1,182 @@
 {
-  "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+  "schema": 2,
+  "status": "NORMAL_PATH_REVALIDATED_ORIGINAL_QUALIFICATION_OPEN",
   "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
-  "worker_commit_at_prepare": "ef78aa8cd39448abe86ec333272f9ef94b9dc5f5",
-  "normal_preimage_sha256": "9aa8010a555b205eb30ae1cc1839ae3c1a86377ab1c57b8e297051529003bf6d",
-  "model": {
-    "linkage": "PROGRAM",
-    "name_raw": "main",
-    "name_length": 4,
-    "result": "I64",
-    "blocks": 1,
-    "instructions": [
-      "CONST_INT:I64:42",
-      "RETURN:Unit:value0"
+  "worker_parent": "7dd781f6e16b9401679542645206688edd3023a2",
+  "target": "test_source_product_semantic67_writer_stage_normal",
+  "retired": 0,
+  "replacement_gates": [],
+  "current_qualification": {
+    "evidence_directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1",
+    "scope": "Current normal paths only. Prepared-candidate claims below are historical, not the current build/execution state.",
+    "build": "Both targeted UTF8 Ninja checks: no work to do. Existing three consumer objects/executables and ten current67 libraries rebound; no fresh compilation claim.",
+    "normal_execution": "Actual unchanged registered commands ran once per configuration, each exit0; independent reparse verified fixed normal totals, output ownership and physical0/0.",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
     ],
-    "original_224B_golden_sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784"
-  },
-  "input_normal_N": "MANDATORY_EXTERNALLY_FROZEN_PER_CONFIGURATION_UNMEASURED_NOT_RUN",
-  "N_scope": "Fresh process zero-based actual compiler malloc attempts over cold owner creation + exact Built Check + public Checked write; real normal full224B oracle and complete owner release must PASS independently before using N.",
-  "fault_phase": "Separate new process, fresh public finite ledger. No in-process baseline, no counter reset, no released-ledger refill.",
-  "fault_site": "N-1; installed only after successful public resources_new+Check; must lie in checked_write range; shared postincrement index can match once at most; injected=true and attempts=N proves exactly one hit.",
-  "oracle": {
-    "owner": "XR_COMPILE_RESOURCE_OK",
-    "check": "XR_XIR_OK; independently owned main and public context same resources",
-    "write": "XR_XIR_OUT_OF_MEMORY",
-    "hit_count": 1,
-    "write_end": "N",
-    "output": "Valid empty bytes=NULL,length=0; full object initialized A5 then valid fields set; memcpy snapshot and sizeof-object memcmp must be unchanged before cleanup",
-    "diagnostic": {
-      "status": "XR_XIR_OUT_OF_MEMORY",
-      "function": "UINT32_MAX",
-      "block": "UINT32_MAX",
-      "instruction": "UINT32_MAX",
-      "reason": "XR_XIR_DIAGNOSTIC_NONE"
+    "actual": [
+      {
+        "configuration": "msvc",
+        "test": "test_source_product_semantic67_writer_stage_normal",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-msvc/tests/unit/test_source_product_semantic67_writer_stage_normal.exe"
+        ],
+        "pid": 39024,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 10,
+          "allocated": 979,
+          "peak": 748,
+          "work": 1271,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_stage_normal.stdout.raw",
+        "stdout_sha256": "7f941c2522b0b6ed89fe6135459999289848dff0ceb2013168862dc28a9eb622",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_stage_normal.stderr.raw",
+        "stderr_sha256": "344fee32ebce8a526ff48c6ba7d0ddc9599b6ed0246d56f69519c61f51d6c5f5",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\tests\\unit\\test_source_product_semantic67_writer_stage_normal.exe",
+          "sha256": "c16346ae8438a52ed6951708e0687052a77571367bfde850802c15ef990582f4",
+          "bytes": 392704,
+          "mtime_ns": 1791309076813051100
+        }
+      },
+      {
+        "configuration": "asan",
+        "test": "test_source_product_semantic67_writer_stage_normal",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-asan/tests/unit/test_source_product_semantic67_writer_stage_normal.exe"
+        ],
+        "pid": 19704,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 10,
+          "allocated": 979,
+          "peak": 748,
+          "work": 1271,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_stage_normal.stdout.raw",
+        "stdout_sha256": "7f941c2522b0b6ed89fe6135459999289848dff0ceb2013168862dc28a9eb622",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_stage_normal.stderr.raw",
+        "stderr_sha256": "344fee32ebce8a526ff48c6ba7d0ddc9599b6ed0246d56f69519c61f51d6c5f5",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\tests\\unit\\test_source_product_semantic67_writer_stage_normal.exe",
+          "sha256": "3247afb8f2e7d0df344104f73bb2e7b5fd9424db62fa517482d33717955673d4",
+          "bytes": 3339264,
+          "mtime_ns": 1791309571286828100
+        }
+      }
+    ],
+    "registered_fault_command": {
+      "msvc": {
+        "name": "test_source_product_semantic67_writer_packet_oom",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-msvc/tests/unit/test_source_product_semantic67_writer_stage_normal.exe",
+          "--packet-oom-last",
+          "10"
+        ],
+        "normal_N": 10,
+        "execution": "NOT_RUN_BY_THIS_RECONCILIATION",
+        "meaning": "A registered command and a matching normal N are not evidence that its fault path executed."
+      },
+      "asan": {
+        "name": "test_source_product_semantic67_writer_packet_oom",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-asan/tests/unit/test_source_product_semantic67_writer_stage_normal.exe",
+          "--packet-oom-last",
+          "10"
+        ],
+        "normal_N": 10,
+        "execution": "NOT_RUN_BY_THIS_RECONCILIATION",
+        "meaning": "A registered command and a matching normal N are not evidence that its fault path executed."
+      }
     },
-    "cleanup": "Always free Checked+packet, query still-live resources, live equals constructor baseline, release resources, actual compiler physical0/0 and observer table actual xr_free+NULL"
+    "normal_count_binding": "Normal empty N10 and occupied N12 measured from these exact current binaries. Counts describe the complete cold public graph; they do not replace original private writer-only denominators.",
+    "preservation": "Each configuration:2521 input records and9 consumer source/object/binary build records unchanged before/after;all598 protected metadata unchanged.",
+    "audit_correction": "Initial run wrapper incorrectly required stage-normal stderr to be empty. Its3 standard allocation-statistics lines were independently validated. Initial2 audit-only FAIL records and all raw exit0 receipts preserved; no product rerun. The initial archive audit assumed xxir.c belonged to xray_xir; the actual compile database showed xray_xir_admission. Initial audit script retained and binding corrected.",
+    "annotation_order": "This map reconciliation follows execution. Runtime input snapshots bind the original candidate map; no claim that the new JSON was re-executed.",
+    "fault_execution": "NOT_RUN_IN_THIS_BATCH",
+    "resource_axes": "NOT_RUN_IN_THIS_BATCH",
+    "VM_native": "NOT_RUN_IN_THIS_BATCH",
+    "full_safety": "NOT_RUN",
+    "Main_integration": "NOT_RUN"
   },
-  "budgets": {
-    "allocated_bytes": 67108864,
-    "live_bytes": 8388608,
-    "work": 128000000
+  "candidate_snapshot": {
+    "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "worker_commit_at_prepare": "ef78aa8cd39448abe86ec333272f9ef94b9dc5f5",
+    "normal_preimage_sha256": "9aa8010a555b205eb30ae1cc1839ae3c1a86377ab1c57b8e297051529003bf6d",
+    "model": {
+      "linkage": "PROGRAM",
+      "name_raw": "main",
+      "name_length": 4,
+      "result": "I64",
+      "blocks": 1,
+      "instructions": [
+        "CONST_INT:I64:42",
+        "RETURN:Unit:value0"
+      ],
+      "original_224B_golden_sha256": "21a7b7f1c576adc08ac4c4b2488ad243055cb97daecac1a04b34f4b175774784"
+    },
+    "input_normal_N": "MANDATORY_EXTERNALLY_FROZEN_PER_CONFIGURATION_UNMEASURED_NOT_RUN",
+    "N_scope": "Fresh process zero-based actual compiler malloc attempts over cold owner creation + exact Built Check + public Checked write; real normal full224B oracle and complete owner release must PASS independently before using N.",
+    "fault_phase": "Separate new process, fresh public finite ledger. No in-process baseline, no counter reset, no released-ledger refill.",
+    "fault_site": "N-1; installed only after successful public resources_new+Check; must lie in checked_write range; shared postincrement index can match once at most; injected=true and attempts=N proves exactly one hit.",
+    "oracle": {
+      "owner": "XR_COMPILE_RESOURCE_OK",
+      "check": "XR_XIR_OK; independently owned main and public context same resources",
+      "write": "XR_XIR_OUT_OF_MEMORY",
+      "hit_count": 1,
+      "write_end": "N",
+      "output": "Valid empty bytes=NULL,length=0; full object initialized A5 then valid fields set; memcpy snapshot and sizeof-object memcmp must be unchanged before cleanup",
+      "diagnostic": {
+        "status": "XR_XIR_OUT_OF_MEMORY",
+        "function": "UINT32_MAX",
+        "block": "UINT32_MAX",
+        "instruction": "UINT32_MAX",
+        "reason": "XR_XIR_DIAGNOSTIC_NONE"
+      },
+      "cleanup": "Always free Checked+packet, query still-live resources, live equals constructor baseline, release resources, actual compiler physical0/0 and observer table actual xr_free+NULL"
+    },
+    "budgets": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000
+    },
+    "fault_branch_no_CHECK_exit_helpers": [
+      "No source_program_owner",
+      "No writer_check",
+      "No writer_observe",
+      "No source_program_owners_free",
+      "Public status handling then common cleanup"
+    ],
+    "shared_observer": "Read/use existing test allocator observer unchanged. The observer's internal consistency CHECKs remain; no private codec calls, no helper mutation.",
+    "CMake": {
+      "normal": "Original 1 normal CTest unchanged",
+      "fault": "One registration function; owner invokes it only after per-configuration N is frozen. No default guessed N and no fake registered test before binding.",
+      "binding_fragment": "xray_register_writer_packet_oom(<EXACT_NORMAL_N_FOR_THIS_CONFIGURATION>)",
+      "extra_TU": 0,
+      "new_CTest_when_bound": 1,
+      "timeout": 120
+    },
+    "responsibilities_OPEN": {
+      "private_work_prefixes": 1932,
+      "private_resource_axes": 12,
+      "private_FI_positions": 6,
+      "public_complete_FI": "OPEN; exactly one packet allocation candidate is not the entire domain",
+      "occupied_output": "OPEN_NOT_IMPLEMENTED",
+      "three_resource_axes": "OPEN_NOT_IMPLEMENTED",
+      "23families": "OPEN_UNCHANGED",
+      "VM_native_ABI_default_safety": "OPEN_UNCHANGED"
+    },
+    "normal_source_cost_same": "Fault path uses the identical public Built model; additional public owned-name/context queries are nonallocating. Fresh qualification must bind headers/libraries to fixed25f, never worker contract65.",
+    "source_proof_readonly": {
+      "checked_encode": "src/xir/xxir_checked_codec.inc.c:547-583: final actual allocation is packet xir_compile_calloc; failed allocation returns status before output publication; remaining write/digest path does not allocate",
+      "status": "src/xir/xxir_compile_memory.h maps RESOURCE_OUT_OF_MEMORY to XIR_OUT_OF_MEMORY; checked_error sets all indices max and reason NONE",
+      "runtime_measurement": "NOT_RUN"
+    }
   },
-  "fault_branch_no_CHECK_exit_helpers": [
-    "No source_program_owner",
-    "No writer_check",
-    "No writer_observe",
-    "No source_program_owners_free",
-    "Public status handling then common cleanup"
-  ],
-  "shared_observer": "Read/use existing test allocator observer unchanged. The observer's internal consistency CHECKs remain; no private codec calls, no helper mutation.",
-  "CMake": {
-    "normal": "Original 1 normal CTest unchanged",
-    "fault": "One registration function; owner invokes it only after per-configuration N is frozen. No default guessed N and no fake registered test before binding.",
-    "binding_fragment": "xray_register_writer_packet_oom(<EXACT_NORMAL_N_FOR_THIS_CONFIGURATION>)",
-    "extra_TU": 0,
-    "new_CTest_when_bound": 1,
-    "timeout": 120
-  },
-  "responsibilities_OPEN": {
-    "private_work_prefixes": 1932,
-    "private_resource_axes": 12,
-    "private_FI_positions": 6,
-    "public_complete_FI": "OPEN; exactly one packet allocation candidate is not the entire domain",
-    "occupied_output": "OPEN_NOT_IMPLEMENTED",
-    "three_resource_axes": "OPEN_NOT_IMPLEMENTED",
-    "23families": "OPEN_UNCHANGED",
-    "VM_native_ABI_default_safety": "OPEN_UNCHANGED"
-  },
-  "normal_source_cost_same": "Fault path uses the identical public Built model; additional public owned-name/context queries are nonallocating. Fresh qualification must bind headers/libraries to fixed25f, never worker contract65.",
-  "source_proof_readonly": {
-    "checked_encode": "src/xir/xxir_checked_codec.inc.c:547-583: final actual allocation is packet xir_compile_calloc; failed allocation returns status before output publication; remaining write/digest path does not allocate",
-    "status": "src/xir/xxir_compile_memory.h maps RESOURCE_OUT_OF_MEMORY to XIR_OUT_OF_MEMORY; checked_error sets all indices max and reason NONE",
-    "runtime_measurement": "NOT_RUN"
-  }
+  "remaining": "All original23family/private1932work-prefix/12resource-axis/FI6 responsibilities and any broader consumer responsibilities retained exactly in candidate_snapshot. Normal measurements are partial evidence, not retirement or complete fault/resource qualification."
 }

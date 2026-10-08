@@ -1,66 +1,173 @@
 {
-  "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+  "schema": 2,
+  "status": "NORMAL_PATH_REVALIDATED_ORIGINAL_QUALIFICATION_OPEN",
   "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
-  "worker_commit_at_prepare": "3dc410282b035f7f146fc71322e9ee46954f3227",
-  "prior_r2_manifest_sha256": "800e65399f2e4d63a7dd05449a190da2ef60654b5d2593782cae4f671bd2491a",
-  "CLI": [
-    "--occupied-packet-oom-last",
-    "PER_CONFIGURATION_FROZEN_NORMAL_N"
-  ],
-  "N": "UNMEASURED_NOT_BOUND; must use real r2 occupied normal evidence for this exact source/model/libs/flags/CRT configuration; never N10 or a guessed occupied count",
-  "budgets": {
-    "allocated_bytes": 67108864,
-    "live_bytes": 8388608,
-    "work": 128000000
-  },
-  "domain": "One new process, one newly allocated public finite ledger; unchanged same-context Built Check and write1 real owned224B prefix, then write2 into that occupied slot",
-  "oracle": {
-    "called": {
-      "owner_new": true,
-      "check": true,
-      "write1": true,
-      "write2": true
+  "worker_parent": "7dd781f6e16b9401679542645206688edd3023a2",
+  "target": "test_source_product_semantic67_writer_budget_occupied",
+  "retired": 0,
+  "replacement_gates": [],
+  "current_qualification": {
+    "evidence_directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1",
+    "scope": "Current normal paths only. Prepared-candidate claims below are historical, not the current build/execution state.",
+    "build": "Both targeted UTF8 Ninja checks: no work to do. Existing three consumer objects/executables and ten current67 libraries rebound; no fresh compilation claim.",
+    "normal_execution": "Actual unchanged registered commands ran once per configuration, each exit0; independent reparse verified fixed normal totals, output ownership and physical0/0.",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "actual": [
+      {
+        "configuration": "msvc",
+        "test": "test_source_product_semantic67_writer_occupied_normal",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-msvc/tests/unit/test_source_product_semantic67_writer_budget_occupied.exe"
+        ],
+        "pid": 11632,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 12,
+          "allocated": 1296,
+          "peak": 988,
+          "work": 2008,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_occupied_normal.stdout.raw",
+        "stdout_sha256": "0898d10fd021da6539d8e906abbcd75db6e3d6b277cc02234602aa10596af2b1",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\msvc-test_source_product_semantic67_writer_occupied_normal.stderr.raw",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-msvc\\tests\\unit\\test_source_product_semantic67_writer_budget_occupied.exe",
+          "sha256": "3391d95b8cc8d21c6581d456f384bd3142aa4eb5143bc00cfe51c7f8e51fe613",
+          "bytes": 391680,
+          "mtime_ns": 1791313601380672700
+        }
+      },
+      {
+        "configuration": "asan",
+        "test": "test_source_product_semantic67_writer_occupied_normal",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-asan/tests/unit/test_source_product_semantic67_writer_budget_occupied.exe"
+        ],
+        "pid": 28716,
+        "returncode": 0,
+        "normal_measurements": {
+          "sites": 12,
+          "allocated": 1296,
+          "peak": 988,
+          "work": 2008,
+          "physical": "0/0"
+        },
+        "raw_stdout": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_occupied_normal.stdout.raw",
+        "stdout_sha256": "0898d10fd021da6539d8e906abbcd75db6e3d6b277cc02234602aa10596af2b1",
+        "raw_stderr": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-writer-qualification-reconcile-r1\\asan-test_source_product_semantic67_writer_occupied_normal.stderr.raw",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "binary": {
+          "path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-c67-asan\\tests\\unit\\test_source_product_semantic67_writer_budget_occupied.exe",
+          "sha256": "64c1faf70db01a6704db72ff0c11046d434559a8734b026af0a6618aadd024f7",
+          "bytes": 3386368,
+          "mtime_ns": 1791313663857440400
+        }
+      }
+    ],
+    "registered_fault_command": {
+      "msvc": {
+        "name": "test_source_product_semantic67_writer_occupied_packet_oom",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-msvc/tests/unit/test_source_product_semantic67_writer_budget_occupied.exe",
+          "--occupied-packet-oom-last",
+          "12"
+        ],
+        "normal_N": 12,
+        "execution": "NOT_RUN_BY_THIS_RECONCILIATION",
+        "meaning": "A registered command and a matching normal N are not evidence that its fault path executed."
+      },
+      "asan": {
+        "name": "test_source_product_semantic67_writer_occupied_packet_oom",
+        "argv": [
+          "E:/xxl/xray-lang/.worktrees/318-program-consumer-migration/build-c67-asan/tests/unit/test_source_product_semantic67_writer_budget_occupied.exe",
+          "--occupied-packet-oom-last",
+          "12"
+        ],
+        "normal_N": 12,
+        "execution": "NOT_RUN_BY_THIS_RECONCILIATION",
+        "meaning": "A registered command and a matching normal N are not evidence that its fault path executed."
+      }
     },
-    "successful_prefix": "Public resources_new+Check+write1 OK; exact independent224B; owned copied name; same context.resources; saved original packet handle",
-    "injection": "Only after before_second sample and prefix saved: N positive/nonMAX and N-1>=write2_begin, then arm; actual write2 call; postincrement unique index gives at most1 hit; injected flag and observed sitesN and in-range ordinalN-1 prove hit1",
-    "write2": "XR_XIR_OUT_OF_MEMORY",
-    "diagnostic": {
-      "status": "XR_XIR_OUT_OF_MEMORY",
-      "function": "UINT32_MAX",
-      "block": "UINT32_MAX",
-      "instruction": "UINT32_MAX",
-      "reason": "XR_XIR_DIAGNOSTIC_NONE",
-      "precall_poison_indices": [
-        17,
-        18,
-        19
-      ],
-      "scope": "Assert these only when actual write2 call returnsOOM; never assignMAX to prior stage diagnostics or label uncalled status as returned"
+    "normal_count_binding": "Normal empty N10 and occupied N12 measured from these exact current binaries. Counts describe the complete cold public graph; they do not replace original private writer-only denominators.",
+    "preservation": "Each configuration:2521 input records and9 consumer source/object/binary build records unchanged before/after;all598 protected metadata unchanged.",
+    "audit_correction": "Initial run wrapper incorrectly required stage-normal stderr to be empty. Its3 standard allocation-statistics lines were independently validated. Initial2 audit-only FAIL records and all raw exit0 receipts preserved; no product rerun. The initial archive audit assumed xxir.c belonged to xray_xir; the actual compile database showed xray_xir_admission. Initial audit script retained and binding corrected.",
+    "annotation_order": "This map reconciliation follows execution. Runtime input snapshots bind the original candidate map; no claim that the new JSON was re-executed.",
+    "fault_execution": "NOT_RUN_IN_THIS_BATCH",
+    "resource_axes": "NOT_RUN_IN_THIS_BATCH",
+    "VM_native": "NOT_RUN_IN_THIS_BATCH",
+    "full_safety": "NOT_RUN",
+    "Main_integration": "NOT_RUN"
+  },
+  "candidate_snapshot": {
+    "status": "CANDIDATE_ONLY_NOT_APPLIED_NOT_BUILT_NOT_RUN",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "worker_commit_at_prepare": "3dc410282b035f7f146fc71322e9ee46954f3227",
+    "prior_r2_manifest_sha256": "800e65399f2e4d63a7dd05449a190da2ef60654b5d2593782cae4f671bd2491a",
+    "CLI": [
+      "--occupied-packet-oom-last",
+      "PER_CONFIGURATION_FROZEN_NORMAL_N"
+    ],
+    "N": "UNMEASURED_NOT_BOUND; must use real r2 occupied normal evidence for this exact source/model/libs/flags/CRT configuration; never N10 or a guessed occupied count",
+    "budgets": {
+      "allocated_bytes": 67108864,
+      "live_bytes": 8388608,
+      "work": 128000000
     },
-    "output": "Entire original occupied packet object memcpy snapshot unchanged, pointer/length kept by full object equality; every224B compares independent golden immediately on failure and afterChecked drop",
-    "at_failed_return": "Actual live_bytes, compiler physical blocks and bytes exactly equal before_second; cumulative allocated/work and cumulative peaks may legitimately increase, never refunded",
-    "cleanup": "Common deduplicating cleanup: failed write2 same pointer means one actual packet free; Checked+packetdrop restores constructor ledger baseline; release owner and actual observer table free; physicalblocks0/bytes0; decide pass only after cleanup"
+    "domain": "One new process, one newly allocated public finite ledger; unchanged same-context Built Check and write1 real owned224B prefix, then write2 into that occupied slot",
+    "oracle": {
+      "called": {
+        "owner_new": true,
+        "check": true,
+        "write1": true,
+        "write2": true
+      },
+      "successful_prefix": "Public resources_new+Check+write1 OK; exact independent224B; owned copied name; same context.resources; saved original packet handle",
+      "injection": "Only after before_second sample and prefix saved: N positive/nonMAX and N-1>=write2_begin, then arm; actual write2 call; postincrement unique index gives at most1 hit; injected flag and observed sitesN and in-range ordinalN-1 prove hit1",
+      "write2": "XR_XIR_OUT_OF_MEMORY",
+      "diagnostic": {
+        "status": "XR_XIR_OUT_OF_MEMORY",
+        "function": "UINT32_MAX",
+        "block": "UINT32_MAX",
+        "instruction": "UINT32_MAX",
+        "reason": "XR_XIR_DIAGNOSTIC_NONE",
+        "precall_poison_indices": [
+          17,
+          18,
+          19
+        ],
+        "scope": "Assert these only when actual write2 call returnsOOM; never assignMAX to prior stage diagnostics or label uncalled status as returned"
+      },
+      "output": "Entire original occupied packet object memcpy snapshot unchanged, pointer/length kept by full object equality; every224B compares independent golden immediately on failure and afterChecked drop",
+      "at_failed_return": "Actual live_bytes, compiler physical blocks and bytes exactly equal before_second; cumulative allocated/work and cumulative peaks may legitimately increase, never refunded",
+      "cleanup": "Common deduplicating cleanup: failed write2 same pointer means one actual packet free; Checked+packetdrop restores constructor ledger baseline; release owner and actual observer table free; physicalblocks0/bytes0; decide pass only after cleanup"
+    },
+    "not_entered": "Four explicit called flags set immediately before each public operation. Boundary mismatch/earlier failure makes write2 statusNOT_ENTERED; constructor/check failures do not fabricate writerOOM or diagnosticMAX.",
+    "normal_path": "Original r2 public operation order/full224B unchanged. Added booleans and OOM-only branches do not reset/refill/contextoverride. Normal transcript labels/cost constants remain, but successor fresh build must rerun normal and rebind actual measurements before fault execution.",
+    "CTest": {
+      "default_new": 0,
+      "original_default_normal": 1,
+      "fault_register_function": "source_product_register_writer_occupied_packet_oom(normal_sites)",
+      "function_called": false,
+      "new_fault_CTest_only_after_owner_binds": 1,
+      "TIMEOUT": 120,
+      "axes_registration": "Preserved6 interfaces/functions uncalled"
+    },
+    "scope": "Modify this one new occupied consumer C and its ownCMake; addone new occupiedOOM obligations JSON. Never modify emptyOOM code/CMake/JSON or parentinclude, r2 frozen candidates, producer/shared helper.",
+    "OPEN": {
+      "original_work_prefixes": 1932,
+      "original_resource_axes": 12,
+      "original_FI_positions": 6,
+      "all_occupied_fi_sites": "OPEN; this is one candidate point only",
+      "occupied_axes": "OPEN_UNREGISTERED_UNRUN",
+      "normal_N_binding": "OPEN_PENDING_REAL_NORMAL_TWO_CONFIGS",
+      "default_safety_VM_native_ABI": "OPEN_UNCHANGED"
+    },
+    "build_normal_fault_axes": "NOT_RUN"
   },
-  "not_entered": "Four explicit called flags set immediately before each public operation. Boundary mismatch/earlier failure makes write2 statusNOT_ENTERED; constructor/check failures do not fabricate writerOOM or diagnosticMAX.",
-  "normal_path": "Original r2 public operation order/full224B unchanged. Added booleans and OOM-only branches do not reset/refill/contextoverride. Normal transcript labels/cost constants remain, but successor fresh build must rerun normal and rebind actual measurements before fault execution.",
-  "CTest": {
-    "default_new": 0,
-    "original_default_normal": 1,
-    "fault_register_function": "source_product_register_writer_occupied_packet_oom(normal_sites)",
-    "function_called": false,
-    "new_fault_CTest_only_after_owner_binds": 1,
-    "TIMEOUT": 120,
-    "axes_registration": "Preserved6 interfaces/functions uncalled"
-  },
-  "scope": "Modify this one new occupied consumer C and its ownCMake; addone new occupiedOOM obligations JSON. Never modify emptyOOM code/CMake/JSON or parentinclude, r2 frozen candidates, producer/shared helper.",
-  "OPEN": {
-    "original_work_prefixes": 1932,
-    "original_resource_axes": 12,
-    "original_FI_positions": 6,
-    "all_occupied_fi_sites": "OPEN; this is one candidate point only",
-    "occupied_axes": "OPEN_UNREGISTERED_UNRUN",
-    "normal_N_binding": "OPEN_PENDING_REAL_NORMAL_TWO_CONFIGS",
-    "default_safety_VM_native_ABI": "OPEN_UNCHANGED"
-  },
-  "build_normal_fault_axes": "NOT_RUN"
+  "remaining": "All original23family/private1932work-prefix/12resource-axis/FI6 responsibilities and any broader consumer responsibilities retained exactly in candidate_snapshot. Normal measurements are partial evidence, not retirement or complete fault/resource qualification."
 }
