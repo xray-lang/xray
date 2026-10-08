@@ -1,0 +1,225 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_array_type_roundtrip",
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "legacy_line": 42,
+      "body_lf_sha256": "eba59ab1041733599637afaab5893ab522a98386030726e69aceaf98bb02c9cb",
+      "assertion_sites": 12,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_array_type_invalid_construction",
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "legacy_line": 71,
+      "body_lf_sha256": "6e00e51e75ef4910adabd8c135c32cc50f6f3c6d7f112897a2342dee374b5864",
+      "assertion_sites": 2,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_array_type_hostile_wire",
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "legacy_line": 99,
+      "body_lf_sha256": "88317def29ff30317ac5864b993c83c22d40ca0202244aec972a1067b1f40caa",
+      "assertion_sites": 8,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_array_type_allocation_failures",
+      "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
+      "legacy_line": 150,
+      "body_lf_sha256": "5dfd0aa6b5ab0a7ef19c96d16ec8f2fdf12d57fb371e8abc12232135dd4b14ce",
+      "assertion_sites": 8,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL_LEGACY_NESTED_PANIC_REJECTION_CURRENT_ADMISSION_ACCEPTS",
+  "original_mapping": [
+    {
+      "legacy": "test_array_type_roundtrip",
+      "current_facet": "Three Array descriptors (String,nested String,PanicInfo), public owned snapshot and independent writer bytes through both Built check and reader. Two topological node orders each have distinct valid goldens.",
+      "remaining": "Old local IDs90..92 and key-sorted canonical IDs32..34 have no direct current representation. Equal bytes after arbitrary legacy input reorder and old explicit/forbidden copy flags remain OPEN.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_array_type_invalid_construction",
+      "current_facet": "Unit,unresolved/self/forward/cycle edges; inactive callable/nominal fields; exact duplicate and span rejection through public Built check. Original nested PanicInfo reject retained as strict BAD_TYPE expectation.",
+      "remaining": "All12original mutations preserved below; ownership/copy flags,view element,aggregate retirement require Main decision. Current zero-span type parameter rejection does not prove full generic binder equivalence.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_array_type_hostile_wire",
+      "current_facet": "16 independent digest-correct packets test valid graph and semantic rejection,empty and occupied outputs,input death,exact roundtrip,and compiler physical refund.",
+      "remaining": "Old38-byte row and structural-vs-semantic split differ from Checked25; all7old mutations retained below. Cannot claim their retirement.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_array_type_allocation_failures",
+      "current_facet": "Normal compiler physical live/bytes refund after every operation and complete owner/table cleanup.",
+      "remaining": "Original constructor/writer and validator fail-each-ordinal loops1..<256 until first success remain NOT_RUN. No fault denominator replaced with normal counts.",
+      "status": "OPEN"
+    }
+  ],
+  "original_invalid_construction": [
+    {
+      "ordinal": 0,
+      "obligation": "Unit element",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "obligation": "unresolved type variable",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "obligation": "UINT16_MAX unresolved element",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "obligation": "nominal class payload",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "obligation": "trivial ownership",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "obligation": "trivial copy",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "obligation": "PanicInfo array explicit copy",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 7,
+      "obligation": "String array forbidden copy",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 8,
+      "obligation": "field types payload",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 9,
+      "obligation": "view element payload",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 10,
+      "obligation": "nested Array<PanicInfo> forbidden copy propagation",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 11,
+      "obligation": "aggregate kind",
+      "status": "OPEN"
+    }
+  ],
+  "original_hostile_wire": [
+    {
+      "ordinal": 0,
+      "obligation": "element0 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "obligation": "element11 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "obligation": "ownership0/copy0 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "obligation": "kind40 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "obligation": "first copy2 structuralOK semanticreject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "obligation": "second copy1 structuralOK semanticreject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "obligation": "first element33 structuralOK semanticreject",
+      "status": "OPEN"
+    }
+  ],
+  "matrix": "16wire/25Built inputs times empty and occupied output;82transitions per configuration. Legacy nested PanicInfo reject is strict;do not accept unexpected success.",
+  "boundary": [
+    "Admission only;no SourceProduct,specialization,Lowered,Program,VM/native/mixed execution claimed.",
+    "Inactive Built fields are not serialized;their baseline packets are writer goldens only,never presented as distinct hostile wire cases.",
+    "Current descriptor ownership does not prove runtime copy policy or old affine ownership equivalence.",
+    "Census source108=88fixtures+20other;additional26files/160functions;shared7 unchanged. All whole-functions OPEN;retired0."
+  ],
+  "tests": [
+    "test_source_product_array_types",
+    "source_product_array_types_encoding"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-array-types-r1",
+    "final_receipts": "run-r2/results.json",
+    "final_processes": 4,
+    "product_failed": 2,
+    "encoding_passed": 2,
+    "transitions": 164,
+    "positive_matches": 16,
+    "exact_rejections": 140,
+    "strict_legacy_mismatches": 8,
+    "actual_mismatch": "legacy_nested_panic_reject:expectedBAD_TYPE3,actualOK0;Built and wire;empty and occupied outputs;both configurations.",
+    "interpretation": "A preserved legacy obligation disagreement,not a verified current production defect. Legacy copy_forbidden/explicit flags do not exist in current descriptors;current type_component explicitly allows PanicInfo and earlier Array nodes. Runtime copy semantics and retirement require Main adjudication.",
+    "compiler_physical": "Final complete matrix:0blocks/0bytes after real owners and observer table destruction,both configurations;per-case live/bytes restored.",
+    "input_capture": {
+      "msvc": 2648,
+      "asan": 2648,
+      "comparison": "SHA,size,mtime before==after"
+    },
+    "fresh_build": "One consumer translation unit per configuration rebuilt after encoder correction;C11/W4/WX;Clang ASan+UBSan flags and VALID Ninja header dependencies verified.",
+    "production_reuse": "10linked libraries/config raw SHA,size,mtime unchanged;actual xxir.c/checked/verifier/types object bytes matched archive members;producer25f source compared.",
+    "protection": "10886tracked pre-snapshot:10885nonowned unchanged;12dirtygenerated files preserved;598protected inputs:594exact+4expectedNinja/CTest metadata deltas.",
+    "first_build": "MSVC initial test used nonexistentCONST_I64;first source/log preserved;public nameCONST_INT correction rebuilt successfully. ASAN first build passed.",
+    "first_execution": "First4process receipts retained at evidence root:2encodingPASS;2productFAIL at independent writer-byte assertion because encoder included an implementation-count word despite absent declarations. No complete cleanup assertion for aborted runs. Saved first encoder/header/manifest/binaries/objects;fixed format then rebuilt both configurations.",
+    "postrun_annotation": "This evidence annotation was added after execution. Final runs bind the saved pre-annotation map;no claim of re-executing against this annotation.",
+    "retired": 0
+  }
+}
