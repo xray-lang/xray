@@ -82,7 +82,7 @@ static RuntimeProbe runtime_probe(const Consumer *run, size_t failure) {
 
 static void runtime_faults(unsigned mode) {
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
-    CHECK(run.status == XR_XIR_OK);
+    CHECK_BUILT_RUN(run, run.status == XR_XIR_OK);
     RuntimeProbe baseline = runtime_probe(&run, SIZE_MAX);
     CHECK(baseline.status == XR_XIR_CALL_RETURNED && baseline.sites && baseline.ticks);
     for (size_t ordinal = 0; ordinal < baseline.sites; ++ordinal) {
@@ -184,7 +184,7 @@ static void consumer_stateful_cancel_drain(XrXirInstance *instance) {
 static void consumer_stateful_cancel_prefixes(unsigned mode, size_t selected) {
     CHECK(consumer_stateful_case());
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
-    CHECK(run.status == XR_XIR_OK && run.state_probe != UINT32_MAX);
+    CHECK_BUILT_RUN(run, run.status == XR_XIR_OK && run.state_probe != UINT32_MAX);
     ConsumerOutput output = {0};
     XrXirOutputSink sink = {0};
     XrXirInstance *instance = initialized(&run, &output, &sink);
@@ -237,7 +237,7 @@ static void cancel_prefixes(unsigned mode) {
     }
     CHECK(!consumer_stateful_case());
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
-    CHECK(run.status == XR_XIR_OK);
+    CHECK_BUILT_RUN(run, run.status == XR_XIR_OK);
     ConsumerOutput output = {0};
     XrXirOutputSink sink = {0};
     XrXirInstance *instance = initialized(&run, &output, &sink);
@@ -302,7 +302,7 @@ static void initializer_output_statuses(unsigned mode) {
     const XrXirCallStatus expected[] = {XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_OOM, XR_XIR_CALL_LIMIT,
         XR_XIR_CALL_BAD_ARGUMENT, XR_XIR_CALL_BAD_ABI, XR_XIR_CALL_BAD_ARGUMENT};
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
-    CHECK(run.status == XR_XIR_OK);
+    CHECK_BUILT_RUN(run, run.status == XR_XIR_OK);
     for (unsigned kind = 0; kind < sizeof(statuses) / sizeof(statuses[0]); ++kind) {
         ConsumerOutput output = {0};
         XrXirOutputSink sink = {0};
@@ -353,7 +353,7 @@ static void output_statuses(unsigned mode) {
         XR_XIR_CALL_BAD_ARGUMENT, XR_XIR_CALL_BAD_ABI, XR_XIR_CALL_BAD_ARGUMENT};
     const size_t prefixes[] = {0, 13, 30};
     Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
-    CHECK(run.status == XR_XIR_OK);
+    CHECK_BUILT_RUN(run, run.status == XR_XIR_OK);
     for (unsigned kind = 0; kind < sizeof(statuses) / sizeof(statuses[0]); ++kind) {
         for (unsigned at = 0; at < 3; ++at) {
             ConsumerOutput output = {0};

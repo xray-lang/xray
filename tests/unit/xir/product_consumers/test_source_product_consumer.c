@@ -305,6 +305,19 @@ static void release(Consumer *run) {
     CHECK(!runtime_live && !runtime_bytes);
 }
 
+/* A rejected build predicate still owns its caller ledger. Release that owner
+ * before the assertion terminates the process, keeping the failed requirement. */
+static void consumer_check_build(Consumer *run, bool accepted, const char *predicate) {
+    if (accepted) return;
+    release(run);
+    instance_compile_report();
+    fprintf(stderr, "consumer-build-guard case=%s actual=%u predicate=%s "
+        "compiler-physical=0/0 runtime-physical=0/0 result=FAIL\n",
+        XR_CONSUMER_NAME, run->status, predicate);
+    CHECK(accepted);
+}
+#define CHECK_BUILT_RUN(run, condition) consumer_check_build(&(run), (condition), #condition)
+
 #include "source_product_consumer_drive.inc.c"
 
 static XrXirValue execute(XrXirInstance *instance, uint32_t entry, unsigned expected_resumes) {
@@ -373,7 +386,7 @@ static void normal(Consumer *run) {
 
 static void compiler_axes(unsigned mode) {
     Consumer baseline = build(mode, NULL, SIZE_MAX, compiler_limits());
-    CHECK(baseline.status == XR_XIR_OK);
+    CHECK_BUILT_RUN(baseline, baseline.status == XR_XIR_OK);
     XrCompileResourceStats measured = baseline.stats;
     release(&baseline);
     for (unsigned axis = 0; axis < 3; ++axis) {
@@ -382,13 +395,13 @@ static void compiler_axes(unsigned mode) {
         *boundary = !axis ? measured.allocated_bytes : axis == 1 ? measured.peak_bytes : measured.work;
         CHECK(*boundary);
         Consumer exact = build(mode, NULL, SIZE_MAX, limits);
-        CHECK(exact.status == XR_XIR_OK);
+        CHECK_BUILT_RUN(exact, exact.status == XR_XIR_OK);
         release(&exact);
         --*boundary;
         Consumer refused = build(mode, NULL, SIZE_MAX, limits);
         if (refused.status != XR_XIR_BUDGET)
             fprintf(stderr, "axis=%u minus1 status=%u\n", axis, refused.status);
-        CHECK(refused.status == XR_XIR_BUDGET && !refused.program);
+        CHECK_BUILT_RUN(refused, refused.status == XR_XIR_BUDGET && !refused.program);
         release(&refused);
     }
     printf("axes case=%s mode=%u allocated=%llu peak=%llu work=%llu boundaries=6 physical=0/0\n",
@@ -399,7 +412,7 @@ static void compiler_axes(unsigned mode) {
 static void compiler_shard(unsigned mode, size_t shard, size_t shards) {
     CHECK(shards && shard < shards);
     Consumer baseline = build(mode, NULL, SIZE_MAX, compiler_limits());
-    CHECK(baseline.status == XR_XIR_OK && baseline.attempts);
+    CHECK_BUILT_RUN(baseline, baseline.status == XR_XIR_OK && baseline.attempts);
     size_t sites = baseline.attempts, covered = 0;
     release(&baseline);
     for (size_t ordinal = shard; ordinal < sites; ordinal += shards) {
@@ -407,8 +420,8 @@ static void compiler_shard(unsigned mode, size_t shard, size_t shards) {
         if (fault.status != XR_XIR_OUT_OF_MEMORY || !instance_compile_injected)
             fprintf(stderr, "compiler case=%s mode=%u ordinal=%zu/%zu attempts=%zu status=%u injected=%u\n",
                 XR_CONSUMER_NAME, mode, ordinal, sites, fault.attempts, fault.status, instance_compile_injected);
-        CHECK(instance_compile_injected && fault.status == XR_XIR_OUT_OF_MEMORY && !fault.program);
-        CHECK(fault.attempts > ordinal);
+        CHECK_BUILT_RUN(fault, instance_compile_injected && fault.status == XR_XIR_OUT_OF_MEMORY && !fault.program);
+        CHECK_BUILT_RUN(fault, fault.attempts > ordinal);
         release(&fault);
         printf("compiler ordinal=%zu physical=0/0\n", ordinal);
         ++covered;
@@ -439,7 +452,7 @@ int xr_source_product_consumer_main(const SourceProductConsumerFixture *fixture,
     }
     if (argc == 3 && !strcmp(argv[2], "--runtime-baseline")) {
         Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
-        CHECK(run.status == XR_XIR_OK);
+        CHECK_BUILT_RUN(run, run.status == XR_XIR_OK);
         RuntimeProbe probe = runtime_probe(&run, SIZE_MAX);
         CHECK(probe.status == XR_XIR_CALL_RETURNED);
         release(&run);
@@ -467,7 +480,7 @@ int xr_source_product_consumer_main(const SourceProductConsumerFixture *fixture,
     if (argc == 4 && !strcmp(argv[2], "--runtime-site")) {
         size_t ordinal = (size_t)strtoull(argv[3], NULL, 10);
         Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
-        CHECK(run.status == XR_XIR_OK);
+        CHECK_BUILT_RUN(run, run.status == XR_XIR_OK);
         RuntimeProbe probe = runtime_probe(&run, ordinal);
         CHECK(probe.status == XR_XIR_CALL_OOM && probe.sites > ordinal);
         release(&run);
@@ -481,7 +494,7 @@ int xr_source_product_consumer_main(const SourceProductConsumerFixture *fixture,
         CHECK(!strcmp(argv[2], "--compiler-site"));
     Consumer run = build(mode, emit, failure, compiler_limits());
     if (failure != SIZE_MAX) {
-        CHECK(instance_compile_injected && run.status == XR_XIR_OUT_OF_MEMORY);
+        CHECK_BUILT_RUN(run, instance_compile_injected && run.status == XR_XIR_OUT_OF_MEMORY);
     } else {
         if (run.status != XR_XIR_OK) {
             CHECK(!run.program);

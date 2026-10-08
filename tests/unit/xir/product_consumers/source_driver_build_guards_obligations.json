@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "replacement_gates": [],
+  "retired": 0,
+  "result": "PASS_BUILD_GUARD_CLEANUP_EVIDENCE_ORIGINAL_POSITIVES_FAIL",
+  "change": "Preserve fourteen exact build predicates across shared compiler budget/FI baselines and runtime/output/cancellation entry baselines. On false predicate, release the completed Consumer graph and caller ledger, verify compiler/runtime physical stocks0, then fail the original boolean requirement. True predicates return without allocation or graph mutation.",
+  "preserved_predicates": {
+    "tests/unit/xir/product_consumers/test_source_product_consumer.c": [
+      {
+        "owner": "baseline",
+        "condition": "baseline.status == XR_XIR_OK",
+        "count": 1
+      },
+      {
+        "owner": "baseline",
+        "condition": "baseline.status == XR_XIR_OK && baseline.attempts",
+        "count": 1
+      },
+      {
+        "owner": "exact",
+        "condition": "exact.status == XR_XIR_OK",
+        "count": 1
+      },
+      {
+        "owner": "refused",
+        "condition": "refused.status == XR_XIR_BUDGET && !refused.program",
+        "count": 1
+      },
+      {
+        "owner": "fault",
+        "condition": "instance_compile_injected && fault.status == XR_XIR_OUT_OF_MEMORY && !fault.program",
+        "count": 1
+      },
+      {
+        "owner": "fault",
+        "condition": "fault.attempts > ordinal",
+        "count": 1
+      },
+      {
+        "owner": "run",
+        "condition": "run.status == XR_XIR_OK",
+        "count": 2
+      },
+      {
+        "owner": "run",
+        "condition": "instance_compile_injected && run.status == XR_XIR_OUT_OF_MEMORY",
+        "count": 1
+      }
+    ],
+    "tests/unit/xir/product_consumers/source_product_consumer_runtime.inc.c": [
+      {
+        "owner": "run",
+        "condition": "run.status == XR_XIR_OK",
+        "count": 4
+      },
+      {
+        "owner": "run",
+        "condition": "run.status == XR_XIR_OK && run.state_probe != UINT32_MAX",
+        "count": 1
+      }
+    ]
+  },
+  "before": "Four actual pre-fix runtime-baseline invocations on two original failing source positives across MSVC/Clang configurations exit at the original build-status assertion; final physical release remains unproven. Raw driver source/object and two binaries/configuration preserved and rebound to captured SHA. Before/after input captures equal; old source mtime is preserved as a historical capture, not recreated on disk.",
+  "validation": "Focused runtime-baseline and runtime-site0 entry build refusals on original generic_value_struct/integer_width retain positive FAIL. Existing explicit-literal control VM/native/mixed baseline and actual runtime ordinal0 retain their independent status/results. No full scan.",
+  "boundaries": [
+    "Shared build status/attempt/injection predicates only. CHECK failures inside build() or executing runtime_probe(), arbitrary shapes/results, process termination and other assertions are not made cleanup-safe by this helper.",
+    "Compiler budget/axes/full FI loops and cancellation/output-specific baseline branches receive the preserved guard but remain unexecuted in this batch; no heavy-window authorization or completion claim.",
+    "Original source fixtures, required success0, independent42 results, whole-function responsibility census and full FI/axes budgets remain unchanged.",
+    "Four original pre-fix receipts remain failed with cleanup unproven; new runs do not retroactively qualify historical processes.",
+    "Guard assertions for compiler budgets/full FI, stateful/output/cancellation baselines are preserved but not executed in this batch. Only two runtime entry refusal sites and focused actual runtime ordinal0 are covered; original2036/32 full FI and12axes requirements remain NOT_RUN.",
+    "All legacy whole-function statuses remain OPEN/replacement_gates empty, retired0; Source108=88+20, other26files160functions/shared7 remain unchanged."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "original_positive_failures": {
+    "actual": 8,
+    "required_exit": 0,
+    "actual_exit": 1,
+    "generic_value_struct": "CHECK1/BAD_STRUCTURE1 facade re-export node90, line1",
+    "integer_width": "CHECK1/BAD_TYPE3 equality mismatch, line11",
+    "runtime_entered": false,
+    "cleanup": "Current runtime-baseline/runtime-site entry guard releases caller ledger and verifies compiler physical0/0 and runtime live/bytes0 before assertion exit. Original source gaps remain failures."
+  },
+  "control_results": {
+    "source": "Existing integer_width_explicit_literal control only; never replaces original fixture",
+    "backends": [
+      "VM",
+      "native",
+      "mixed-even",
+      "mixed-odd"
+    ],
+    "runtime_baseline_passed": 8,
+    "baseline_instances": 8,
+    "baseline_answer_42_results": 16,
+    "baseline_canonical_0_results": 8,
+    "actual_runtime_ordinal0_passed": 8,
+    "ordinal0_status": "OOM6",
+    "ordinal0_allocation_attempts": 1,
+    "ordinal0_instance": "First allocation rejects, no completed Instance or result published; physical refund checked by original runtime probe",
+    "physical": "Original release() checks actual compiler and runtime stock on every completed probe. Positive predicates do not allocate, mutate the graph or change expected statuses."
+  },
+  "evidence": {
+    "directory": "build-consumer-evidence/current67-driver-build-guards-r1",
+    "before_results": "before-results.json",
+    "final_results": "results.json",
+    "audit": "final-audit.json",
+    "pre_fix_PIDs": 4,
+    "final_PIDs": 24,
+    "final_failed_originals": 8,
+    "final_passed_controls": 16,
+    "preserved_build_assertion_sites": 14,
+    "actually_refused_build_assertion_sites": 2,
+    "before_inputs_per_binary": 2734,
+    "final_inputs_per_binary": 2735,
+    "fresh_shared_driver_TUs": 2,
+    "fresh_generated_C_TUs": 2,
+    "protected_inputs_unchanged": 598,
+    "generated_C": "Real regenerated C, exact bytes and payload SHA unchanged; strict C11/W4/WX compile under both providers",
+    "annotation": "Execution captured pre-annotation SHA256 b81c7f60d59847578c8626c1605eb66c63153d17946865710184e60f59de13ab. Map annotated afterward; no execution of annotated map is claimed."
+  },
+  "audit_history": "Initial exact semantic reconstruction assumed LF bytes while Windows writer emitted CRLF; audit corrected to explicit LF normalization for semantic hunk reconstruction only. Raw worker/mirror/prepared expected bytes and execution SHA/size/mtime binding remain exact. First audit and correction are retained; no product failure was masked."
+}
