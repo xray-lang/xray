@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy_function": {
+    "name": "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 2896,
+    "body_lf_sha256": "a49569e21d93f6f24e31a26a901698d8942774eea3abd5957fa8a86877ff2b61",
+    "assertion_sites": 116,
+    "loop_sites": 12,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "generic_value_struct",
+      "expected_exit": 42,
+      "labels": [
+        "module-graph",
+        "namespace",
+        "generic",
+        "value-representation",
+        "aggregate"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "library_source": {
+        "bytes": 152,
+        "sha256": "96036b42ffd1073661ae462cc7ccd57d88bccb788ed6b2ac29128978a01b9a75"
+      },
+      "facade_source": {
+        "bytes": 132,
+        "sha256": "cd05da74d8ed285d4d55be89e745ea05a36ec50f26a3422655eaaea81e92d2be"
+      },
+      "entry_source": {
+        "bytes": 769,
+        "sha256": "34cd2ecad81517cdfa0651fbf4feb35dc274a3cf98ade6e93ea7dd35622ca9c9"
+      }
+    },
+    "initial_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/root.xr",
+      "sha256": "7294a9ded3d1e555713afc934da5e919f908736ef7205c9669665e6e7d3aeb79",
+      "original_prefix_sha256": "34cd2ecad81517cdfa0651fbf4feb35dc274a3cf98ade6e93ea7dd35622ca9c9",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "additional_files": {
+        "library.xr": {
+          "bytes": 152,
+          "sha256": "96036b42ffd1073661ae462cc7ccd57d88bccb788ed6b2ac29128978a01b9a75"
+        },
+        "facade.xr": {
+          "bytes": 132,
+          "sha256": "cd05da74d8ed285d4d55be89e745ea05a36ec50f26a3422655eaaea81e92d2be"
+        }
+      },
+      "probe_target": "test_source_product_probe"
+    },
+    "pending_admission": "The exact original facade re-export is rejected at the assigned production baseline with statement syntax is not implemented in XIR (node 90). Root, library and facade bytes, the positive 42 oracle and all nominal-identity assertions remain OPEN."
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL_ORIGINAL_POSITIVE_ADMISSION",
+  "tests": [
+    "test_source_product_generic_value_struct_vm",
+    "test_source_product_generic_value_struct_native",
+    "test_source_product_generic_value_struct_mixed_even",
+    "test_source_product_generic_value_struct_mixed_odd",
+    "test_source_product_generic_value_struct_owned"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "independent_expectation": "All registered positive admission/execution commands require exit0. consumerAnswer returns owned I64 42, canonical entry Unit0; no rejection is accepted as positive qualification.",
+  "preserved_inputs": "Exact legacy library152/facade132/root769 bytes plus the existing54-byte export adapter, independently measured from the adapter bytes rather than assumed. No source rewrite, substitute control, import removal or compatibility layer. First pre-annotation description miscounted the adapter as52 bytes; actual raw source never changed.",
+  "facets": {
+    "execution": "VM, generated C native, mixed even/odd: shared normal driver constructs two independent Instances, two answer42 and canonical0 calls per Instance, releases returned Values and tracks physical release after borrowed Source/Session/Product death. Qualification requires actual execution.",
+    "owned_admission": "SourceProduct public verification and closed Checked read; after Session/Product/request/authority/path death, public verify detached Checked, lower and verify detached Lowered. On failure, owned diagnostic object/path/message remains exact after those deaths; free diagnostics and all compile owners, check physical0/0/table0, keep required positive status0.",
+    "nominal_identity": "OPEN: original three trivial aggregate constructs, re-exported origin equality, same-name decoy inequality, i64/bool specialization identity, field projection/update and exact generic receiver/marker/result/call target contracts. No runtime return42 substitutes these assertions.",
+    "determinism": "OPEN: original full repeated product equality and precise legacy function/opcode counts require equivalent current representation coverage.",
+    "whole_function": "OPEN: 116 assertion sites and12 loops preserved by original census; current registration adds facets only, not a whole replacement."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual": {
+    "status": "XR_XIR_BAD_STRUCTURE1",
+    "stage": "XR_XIR_SOURCE_PRODUCT_CHECK1",
+    "path": "fixtures/generic_value_struct/facade.xr",
+    "module": "Not separately printed by this helper; do not infer from line/path",
+    "line": 1,
+    "column": 0,
+    "message": "statement syntax is not implemented in XIR (node 90)",
+    "product": "NULL",
+    "classification": "Historical legacy census already records this exact Source admission gap; freshly reproduced here, not caused by the new test registration."
+  },
+  "evidence": {
+    "directory": "build-consumer-evidence/current67-generic-value-struct-r1",
+    "results": "results.json",
+    "audit": "final-audit.json",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "registered": 10,
+    "executed": 4,
+    "failed": 4,
+    "not_run": 6,
+    "fresh_compile_events": 4,
+    "final_fresh_TUs": 4,
+    "shared_driver": "Exact unchanged object reuse",
+    "inputs_per_configuration_per_binary": 2733,
+    "annotation": "Execution captured pre-annotation SHA256 fe3ded5271f8fbd98da991e0c5d127d4772ec51ce30aee6b7e3b010a32503b1f. Map annotated afterward; no claim that annotated map was executed."
+  },
+  "qualification": {
+    "vm": "FAIL Source admission; no Instance or result created",
+    "owned": "FAIL required positive status0, actual1; independently verified diagnostic lifetime and final compiler physical0/0/table0",
+    "native": "NOT_RUN; no generated C emitted or native binary built",
+    "mixed_even": "NOT_RUN; native binary not built",
+    "mixed_odd": "NOT_RUN; native binary not built"
+  },
+  "boundaries": [
+    "Four actual registered direct commands fail in two configurations. Required status0 and the independent return42 oracle remain unchanged. Native/mixed registered but unbuilt/unrun; no expected-failure property and no success interpretation of rejection.",
+    "Owned diagnostics remain unchanged after Session and borrowed root/file/request/authority storage death, then all compile resource owners release with physical0/0 and observer table0. Caller ledger remains live until diagnostic disposal; no escaped-diagnostic-after-ledger-drop claim here.",
+    "Generic normal driver exits at its positive Source assertion; its failure cleanup is unproven. No runtime/native/mixed execution or detached positive Checked/Lowered success is claimed.",
+    "Original 116 assertion sites,12 loops, nominal identity, re-export equality, same-name decoy distinction, i64/bool generic specialization and exact receiver/call/field/opcode identities remain OPEN. New tests do not replace the whole function.",
+    "Source108=88fixtures+20other; other26files160functions/shared7 unchanged; retired0. Full FI, resource axes, cancellation, full safety, Main integration and new producer qualification are NOT_RUN."
+  ]
+}
