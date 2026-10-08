@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "family": "legacy Array default construction",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "legacy": {
+    "fixture": "tests/unit/program/xr_program_array_default_fixture.h",
+    "native_generator": "tests/unit/aot/test_xr_program_aot.c",
+    "native_function": "write_array_default_fixture",
+    "function_lf_sha256": "6ca90d04b2e1a7684c4dc607c6760ca74418c91ddadc87eeade3e676acb5b84c",
+    "element": "u8",
+    "parameter": "i64 count",
+    "result": "i64 length",
+    "counts": [
+      "3",
+      "0",
+      "-1",
+      "INT64_MIN",
+      "INT64_MAX",
+      "4"
+    ],
+    "oracle": {
+      "nonnegative_finite": "returned length equals input count",
+      "negative": "panic outcome 3; panic code 452",
+      "maximum": "OOM outcome 4",
+      "release": "context.allocations zero after each return before context destruction"
+    },
+    "admission": "test_array_default_admission remains wholly OPEN"
+  },
+  "existing_native_execution_20261009_facet": {
+    "evidence": "build-consumer-evidence/current67-array-default-existing-r1",
+    "scope": "Reuse existing immutable generated Array suite mode10 only. No new fixture, consumer, CMake or production change.",
+    "source": "tests/fixtures/xir_array_generated/root.xr",
+    "source_function": "export fn defaultCount(count:i64)->i64 { var values=Array<u8>(count); return len(values) }",
+    "consumer": "tests/unit/xir/test_xir_array_generated_native.c",
+    "case_header": "tests/unit/xir/xir_array_generated_cases.h",
+    "function": "array_default_values",
+    "function_lf_sha256": "a5c5587c900f8d1af8ccb670e71e946e1dd3c8febd0d8f1d2e8c1752ec0caea2",
+    "native_mode": 10,
+    "source_product_identity": "Checked25/semantic67/Value22/Call28/Program29",
+    "generated_c_sha256": "b027aa4aa3eb27e3941785626a6c87ebe896c65a18d1f1c5a7913f56b72ec395",
+    "build": "Each configuration freshly compiled Source generator, native wrapper and real generated C under C11/W4/WX. All pre-existing production libraries preserved; six producer archive object bodies bound per configuration.",
+    "sanitizers": "Clang configuration actual address/undefined instrumentation on all three fresh units; actual executions have no sanitizer diagnostics.",
+    "input_preservation": {
+      "count_per_process": 2644,
+      "checks": "SHA256/size/mtime before and after each actual command",
+      "tracked_worker_unchanged": 10979,
+      "protected_exact": 598,
+      "directly_compiled_producer_inputs": 154,
+      "map_timing": "This map was created after execution and is not a product execution input.",
+      "additional_header_binding": "339 actual Ninja dependency entries per configuration; three test headers use independently saved pre-build/after-run original snapshots. Other dependencies bind per-process input captures. All exact."
+    },
+    "processes": [
+      {
+        "configuration": "msvc",
+        "kind": "emit",
+        "name": "independent Source C emission",
+        "status": "PASS",
+        "receipt": "msvc-emit.json",
+        "inputs": 2644
+      },
+      {
+        "configuration": "msvc",
+        "kind": "native",
+        "name": "test_xr_program_aot_array_default",
+        "status": "PASS",
+        "receipt": "msvc-native.json",
+        "inputs": 2644
+      },
+      {
+        "configuration": "asan",
+        "kind": "emit",
+        "name": "independent Source C emission",
+        "status": "PASS",
+        "receipt": "asan-emit.json",
+        "inputs": 2644
+      },
+      {
+        "configuration": "asan",
+        "kind": "native",
+        "name": "test_xr_program_aot_array_default",
+        "status": "PASS",
+        "receipt": "asan-native.json",
+        "inputs": 2644
+      }
+    ],
+    "checked_cases": 12,
+    "current_oracle": {
+      "nonnegative_finite": "RETURNED=1; owned result I64 payload equals input count; value dropped",
+      "negative": "NUMERIC_RANGE=14; panic detail code422",
+      "maximum": "LIMIT=5",
+      "release": "runtime blocks/bytes zero after each Instance free; Program and compiler ledger freed at final cleanup"
+    },
+    "independent_emission": "Separate Source emission process per configuration produced byte-identical C to the freshly compiled generated input; namespace array_generated, selection index defaultCount=7.",
+    "execution_boundary": "Two registered Python checker commands actually ran, each invoking its native executable; no CTest invocation claimed. Two separate emission commands also ran. Build-driven emission subprocesses are in build logs and not counted as independently receipted processes.",
+    "ownership_boundary": "Existing headers include production implementation and internal instance/value access. This reuse does not establish an independently buildable public migration consumer.",
+    "faults": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "vm": "NOT_RUN: existing source no-argument entry runs all15 cases including runtime fault scans",
+    "mixed": "NOT_RUN",
+    "legacy_equivalence": "OPEN",
+    "whole_admission": "OPEN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "audit_correction": "339 dependency entries/configuration resolved from build directory. Three test headers bind separate saved pre-build/after-run original snapshots; remaining dependencies bind actual process input snapshots. First audit zero count resulted from incorrect relative-path resolution; corrected independently, with initial audit preserved and no new product execution."
+  },
+  "open_obligations": [
+    "Resolve negative panic452 versus422 and INT64_MAX OOM versus bounded LIMIT under an authorized production contract. Do not rewrite either oracle to force equivalence.",
+    "Preserve legacy per-return context allocation obligation separately from current post-Instance runtime zero.",
+    "Build independently owned public SourceProduct/Checked/Lowered/Program/Instance consumer and verify producer death, detached ownership, VM and both mixed directions.",
+    "Cover all legacy default admission mutations with independent public Built/Checked negatives and exact diagnostics.",
+    "Preserve full compiler/runtime FI, rollback, recovery, original bounded runtime fault search, cancellation, resource axes and security qualification.",
+    "Qualify complete replacement before retiring original fixture, consumers or dependencies."
+  ]
+}
