@@ -23,6 +23,7 @@
 #include "../xir_runtime_allocations.h"
 #include "array_default_source_shape.h"
 #include "array_default_escape_shape.h"
+#include "array_managed_escape_shape.h"
 
 static const SourceProductConsumerFixture *consumer_fixture;
 #define XR_CONSUMER_NAME (consumer_fixture->name)
@@ -254,7 +255,8 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     closed_shape(module, run.private_answer);
     run.parameterized_answer = !strcmp(XR_CONSUMER_NAME, "array_default_source") ?
         array_default_source_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_default_escape") ?
-        array_default_escape_shape(module) : UINT32_MAX;
+        array_default_escape_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_managed_escape") ?
+        array_managed_escape_shape(module) : UINT32_MAX;
     /* Subsequent reads and execution own all data after the parse session dies. */
     xr_compile_session_free(session);
     session = NULL;
@@ -349,8 +351,13 @@ static XrXirValue execute(XrXirInstance *instance, uint32_t entry, unsigned expe
 #include "source_product_consumer_stateful.inc.c"
 #include "source_product_consumer_array_default.inc.c"
 #include "source_product_consumer_array_escape.inc.c"
+#include "source_product_consumer_managed_escape.inc.c"
 
 static void normal(Consumer *run) {
+    if (!strcmp(XR_CONSUMER_NAME, "array_managed_escape")) {
+        consumer_managed_escape_normal(run);
+        return;
+    }
     if (!strcmp(XR_CONSUMER_NAME, "array_default_escape")) {
         consumer_array_escape_normal(run);
         return;

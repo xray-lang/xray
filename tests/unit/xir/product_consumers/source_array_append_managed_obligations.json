@@ -203,5 +203,63 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "public_managed_escape_20261009_facet": {
+    "status": "PASS_PUBLIC_MANAGED_ESCAPE_LEGACY_OPEN",
+    "whole_replacement": "OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67/Value22/Call28/Program29/ABI351",
+    "evidence": "build-consumer-evidence/current67-array-managed-escape-r1",
+    "fixture": "tests/unit/xir/product_consumers/array_managed_escape/root.xr",
+    "fixture_native_sha256": "dfa5e805626c81774de08545028c65b3f88ad74d52d5a7efe54fab8ca6a21d48",
+    "original_fixture_native_sha256": "96687e34a62955db941de5c52d59f3717a6df4a4841d378193e0024ea4b61b5e",
+    "public_function": "export managedValues(i64)->Array<string>; fixed consumerAnswer returns len(managedValues(42))",
+    "original_relation": "Preserves unused i64 argument 42, three-byte a/NUL/b literal, empty Array<string>, all nine pushes, String length3 and nine exact element assertions. Only function name/export/result and scalar adapter change. The original scalar fixture remains untouched; restoring these three changes reproduces its whole source text.",
+    "metadata": "Public root export, i64 parameter and owned Array<String> result; nine pushes of one exact literal through distinct CELL_PLACE projections of one CELL initialized from ARRAY_NEW; RETURN has the Array result type. Detached Checked owner reverified and full packet preserved after Source/Session/request/authority/path buffers die. Checked freed before Lowered verification.",
+    "execution": "Eight actual VM/native/mixed_even/mixed_odd commands across MSVC Release and Clang ASan/UBSan. Two retained Instances each execute the original argument42 twice, yielding four Arrays per command. Source/Session/Closed/generated text dead before calls; caller Program reference dropped after two Instances retain it. Canonical entry0 and private NEW refusal without allocation preserved.",
+    "array_ownership": "After both Instances free, inspect each Array length9 and every String through public value_arena/array_len/array_get/string_view, with no private object cast. Copy Array, drop original, inspect copy and drop it. Arrays pin compiler arena stock above baseline until their final drop.",
+    "string_ownership": "Retain one element from each Array after Instance destruction. After every Array and Array copy drops, compiler arena stock returns to baseline while runtime storage remains live. Validate each retained String as exactly three bytes a/NUL/b; copy String, drop original, validate copy and drop it. Final runtime physical blocks/bytes zero, followed by caller ledger/observer compiler physical zero.",
+    "output_guard": "Successful result take into occupied I64 sentinel returns BAD_ARGUMENT with exact sentinel bytes and runtime allocation attempts unchanged; taking into empty output then returns the original Array.",
+    "actual_evidence": {
+      "actual_commands": 14,
+      "initial_product_failures": 0,
+      "backend_passes": 8,
+      "owned_passes": 2,
+      "unchanged_managed_length_controls": 4,
+      "returned_arrays": 32,
+      "array_copies": 32,
+      "strings_after_array_death": 32,
+      "string_copies": 32,
+      "receipts": [
+        "results-source.json",
+        "results-native.json"
+      ],
+      "all_attempts": "actual-execution-attempts.xml",
+      "input_capture": "2654 actual inputs per PID; all14 before==after SHA,size,mtime, including three explicit compiler/runtime observer headers. Map appended after execution with raw preimage retained; no new-map execution claim.",
+      "fresh_build": "12 fresh final test TUs/12 compile events: shared driver,new VM wrapper,owner checker,native wrapper,new real C and original managed control real C per configuration. C11/W4/WX, actual Clang ASan/UBSan and VALID Ninja dependencies. Original control wrapper source/object exact reuse.",
+      "production_reuse": "All11 production libraries per configuration exact SHA,size,mtime; ten actual linked archives and six actual producer object bodies matched archive members. No production TU/archive rebuilt.",
+      "generated_C_payload_sha256": {
+        "msvc": "044e9186c7bfd293ce44d83af0e2dd8712ff4360b132f3917fc87048444079ec",
+        "asan": "044e9186c7bfd293ce44d83af0e2dd8712ff4360b132f3917fc87048444079ec"
+      },
+      "control_C_payload_sha256": "02780a3efb5f3800c1e2f2994966acb1c262b32818eb29d021b458cacc5e4d8c",
+      "protection": "11004 initial tracked:11001 nonowned exact,6 new scoped files. Twelve historical dirty generated files preserved. 598 protected:594 exact+4 expected Ninja/CTest deltas; removing42 new CTest lines/config restores all old raw registry bytes.",
+      "audit_history": "First pure audit mistakenly required scalar append payload770f for managed control. Both current raw managed C files match immutable715 source SHA; corrected expected payload02780 after independent raw binding. Initial audit/script retained; all14 product runs first PASS, no product rerun.",
+      "scope_preparation": "Initial scope list accidentally named the prior U8 runtime include. Before any build or product execution, corrected it to the new managed runtime include; original list retained. Prior U8 include remains exact and outside this commit."
+    },
+    "registration": "42 new rows across two configurations:ten normal/owned PASS,32 heavy NOT_RUN; four extra original managed VM/native controls PASS. Compiler existing generic runner actual arguments TIMEOUT600/PROCESSORS8/jobs8/COST300/RUN_SERIAL; axes --axes TIMEOUT120/PROCESSORS1/RUN_SERIAL; runtime --runtime and cancel --cancel TIMEOUT120/PROCESSORS1. No WILL_FAIL.",
+    "heavy_scope": "Registered runtime/cancel drives fixed scalar consumerAnswer9, not the exported heap result escape sequence. Full heap result allocation failures, rollback, recovery, cancellation, axes and family qualification remain unrun pending a Main window.",
+    "legacy_gaps": [
+      "Original builder admission/refusals, explicit owner/read/move/copy/drop metadata and old bounded runtime scan remain OPEN.",
+      "Returned Array and retained String ownership is additional projection evidence; it does not replace legacy per-return allocation0 for scalar results.",
+      "No COW mutation isolation, nested Array elements, allocation failure sweep, safety or Main integration qualification is claimed.",
+      "All earlier responsibility maps and historical failures remain intact; no old consumer or dependency retired."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }
