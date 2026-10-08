@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_module_state.c",
+      "legacy_line": 169,
+      "body_lf_sha256": "a3fb45f5b9d851ebed93ae9a15ac3b2fc8b3d1901405d22701fedf0e7f544b0e",
+      "assertion_sites": 94,
+      "loop_sites": 10,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "status": "ORIGINAL_BASE_MUTABLE_OPEN_ROOT_CLASS_CONTROLS_VERIFIED",
+  "result": "FAIL_ORIGINAL_ADMISSION_ROOT_CONTROLS_PASS",
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h:xr_program_module_cleanup_fixture_write finish0; native scenario5",
+  "original": {
+    "instances": 2,
+    "repeats": 24,
+    "class_fields": [
+      "string x"
+    ],
+    "slots": 4,
+    "owner": "base",
+    "mutable": true,
+    "flags": "Old slots[] zero initialized; XR_PROGRAM_MODULE_SLOT_CONST=1, so flags0 is mutable. Do not silently call them immutable.",
+    "publication_order": [
+      1,
+      0,
+      3,
+      2
+    ],
+    "reclaim_object_order": [
+      4,
+      3,
+      2,
+      1
+    ],
+    "initialization": "construct string/class, alias, publish alias, replace string field with another x, drop old field and local class reference"
+  },
+  "representation": "Original base mutable shape retains positive Checked admission expectation. Two root-owned mutable controls keep four classes, aliasing, field write and publication order but change declaring module explicitly; these never replace the original dependency-owned responsibility. Control0 retains x bytes, control1 uses changed to make field replacement observable. Whole original function remains OPEN.",
+  "compiler_oracle": "Heap Checked input poisoned/freed before exact independent rewrite. Explicit Checked specialize; original Checked dies before specialized verification/lowering. Specialized artifact dies before Lowered verify. Deterministic real emitted C and compiled SHA binding.",
+  "runtime_oracle": {
+    "instances": 2,
+    "repeats": 24,
+    "main_result": 0,
+    "inspection": "Four root-owned exported helpers return class handles. Every round proves all eight identities unique and stable, exact field content, initializer once.",
+    "publication": [
+      1,
+      0,
+      3,
+      2
+    ],
+    "release": [
+      2,
+      3,
+      0,
+      1
+    ],
+    "physical": "At every SLOT_RELEASED, check the real allocator live set for saved class and string addresses, including still-live unreleased slots. Original lifecycle event ABI numbers are not equated to these observations.",
+    "escape": "Second policy retains last-constructed class at slot2. It and its field survive Instances, caller Program/code and Lowered; field survives final class copy/drop then is itself released. First policy retains none.",
+    "native": "VM, actual C native, even-native/odd-VM and inverse"
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_class_state_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_alternating-native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_alternating-vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_class_state_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "remaining": [
+    "Original base-owned mutable admission and representation adjudication",
+    "Original affine/copy and exact local drop timing versus current SSA lifetime",
+    "Original lifecycle event ABI and generation/lease drain semantics",
+    "Original12 allocation fault ordinals scenario5; current graph denominator must be independently measured under an approved window",
+    "Other native class scenarios6-13 including trap, suspension, helper/error/panic",
+    "Original explicitCORE_TRAP4 has no direct current opcode",
+    "Full SourceProduct producer for this graph",
+    "Full FI2036/32",
+    "Two-configuration12 resource axes",
+    "Full safety",
+    "Main integration"
+  ],
+  "evidence": "build-consumer-evidence/current67-module-class-state-r1",
+  "first_build": "MSVC emitter BAD_TYPE before runtime. Proposed base immutable controls were invalid because non-root slots require Sendable and class is not Sendable. Raw first build and original sources/emitter retained. Initial ASan build was NOT_RUN. Root controls correct the proposed fixture; original mutable expectation unchanged.",
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "root_control_executions": 32,
+    "main_calls": 1536,
+    "inspection_calls": 6144,
+    "classes": 256,
+    "initializer_returns": 256,
+    "module_events": 512,
+    "slot_publications": 256,
+    "slot_releases": 256,
+    "detached_class_results": 32,
+    "detached_field_results": 32,
+    "output_groups": 0,
+    "original_positive_admissions": 8,
+    "original_actual": "All8 BAD_STRUCTURE vs expectedOK;8 exit1 FAIL, no WILL_FAIL",
+    "physical": "At each slot release compare allocator live set with expected reverse order. Copied class escapes then field escapes independently. Finalcompiler0/0 runtime0/0 table0 each process.",
+    "fresh_build": "Both configurations:emitter+consumer+two real C payloads,4TUs/config",
+    "first_execution": "root-controls-r2 all32 root executions PASS,8 original-positive admission failures retained. Added explicit specialize/reverify and rebuilt both configurations for final specialization-r3; counts only final run.",
+    "evidence": "specialization-r3/results.json and actual-process-results.xml"
+  },
+  "postrun_note": "Only result annotations appended after final runtime commands; captured map is the pre-annotation version. No final-map rerun claimed."
+}
