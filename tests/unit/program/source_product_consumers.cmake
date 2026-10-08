@@ -343,3 +343,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integ
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_bitwise_admission.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_width.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_rejections_occupied.cmake")

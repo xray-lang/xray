@@ -1,0 +1,202 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "source_owner_bare_nullable_condition_has_no_product",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 1090,
+      "body_lf_sha256": "54339acee67b18e9f756fd6ed21f1182e2c3dcbfb00c1f34863adec49c01ff8e",
+      "assertion_sites": 5,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": null,
+      "static_input_literals": {},
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/bare_nullable/main.xr",
+        "sha256": "f646347acc7d2c421f3f68e585f38dcd7535e97d4cb8652de6f12e10768a15e1",
+        "input_bytes": 109,
+        "entry_adapter": null,
+        "stage": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "status": "XR_XIR_BAD_TYPE",
+        "message": "if requires bool",
+        "module": 0,
+        "line": 1,
+        "column": "NOT_REQUIRED_BY_ORIGINAL_TEST",
+        "scope": "Exact negative source input; reject before any executable product or backend projection."
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_rejections_bare_nullable",
+        "test_source_product_rejections_bare_nullable_axes",
+        "test_source_product_rejections_bare_nullable_compiler"
+      ],
+      "projected_obligations": {
+        "semantic_rejection": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Exact Check status, semantic module/line/path and diagnostic text; structured missing-name position is column 29; product remains NULL."
+        },
+        "diagnostic_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Diagnostic path remains readable after parser/session and caller ledger ownership are released."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every measured actual allocation ordinal returns OOM, with no partial product and physical release."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Measured allocated/live/work exact threshold preserves the semantic rejection; minus1 reports BUDGET."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head qualification remain required."
+        }
+      },
+      "additional_diagnostic_precision": {
+        "status": "OPEN",
+        "note": "The original only requires the condition-type rejection. Current AST_IF retains line 1 but no column; accurate if-token column is a production gap outside this lane."
+      }
+    },
+    {
+      "name": "source_owner_reports_structured_analysis_failure",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 8869,
+      "body_lf_sha256": "c6a117dcb83ae6d22651cdf70787e83d7a9b227c09597726b2d38c4014793300",
+      "assertion_sites": 10,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": null,
+      "static_input_literals": {
+        "source": {
+          "bytes": 38,
+          "sha256": "9f18e6111b1f759a8b7d4099b765479367defe4a8d264eab972ef73796a520ce"
+        }
+      },
+      "initial_projection": {
+        "fixture": "tests/unit/xir/product_consumers/fixtures/missing_name/main.xr",
+        "sha256": "9f18e6111b1f759a8b7d4099b765479367defe4a8d264eab972ef73796a520ce",
+        "input_bytes": 38,
+        "entry_adapter": null,
+        "stage": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "status": "XR_XIR_BAD_VALUE",
+        "message": "name is not an initialized value",
+        "module": 0,
+        "line": 1,
+        "column": 29,
+        "scope": "Exact negative source input; reject before any executable product or backend projection."
+      },
+      "candidate_replacement_gates": [
+        "test_source_product_rejections_missing_name",
+        "test_source_product_rejections_missing_name_axes",
+        "test_source_product_rejections_missing_name_compiler"
+      ],
+      "projected_obligations": {
+        "semantic_rejection": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Exact Check status, semantic module/line/path and diagnostic text; structured missing-name position is column 29; product remains NULL."
+        },
+        "diagnostic_ownership": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Diagnostic path remains readable after parser/session and caller ledger ownership are released."
+        },
+        "compiler_failures": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Every measured actual allocation ordinal returns OOM, with no partial product and physical release."
+        },
+        "compiler_budgets": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Measured allocated/live/work exact threshold preserves the semantic rejection; minus1 reports BUDGET."
+        },
+        "full_safety": {
+          "status": "PENDING_FULL_QUALIFICATION",
+          "verification": "Complete applicable sanitizer gates and integration-head qualification remain required."
+        }
+      }
+    }
+  ],
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_REJECTION_OUTPUT_AND_DIAGNOSTIC_OWNERS_LEGACY_OPEN",
+  "tests": [
+    "test_source_product_rejections_occupied"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "matrix": "Per configuration: four original-negative-source output transitions (two empty outputs enter semantic checking, two occupied outputs reject the input precondition); two additional empty-output semantic failures retain owned diagnostics; four calls with those already-owned diagnostics reject without mutation. Two configurations execute twenty expected rejection calls plus two positive owner builds.",
+  "original_mapping": [
+    {
+      "original": "BareNullable condition rejectedatAnalysis withcondition-type diagnostic,noProgram andnoartifactbytes",
+      "current": "Unchanged original source with an empty output rejects CHECK1/BAD_TYPE3, module0/line1, exact if-requires-bool text and owned canonical path. Actual column0 is retained; original requires no positive column. Output remains NULL. Occupied output rejects INPUT0/BAD_STRUCTURE1 before semantic checking, preserving the existing product; this is a distinct API precondition test.",
+      "status": "NORMAL_TWO_CONFIGURATIONS_PASS_FULL_QUALIFICATION_OPEN"
+    },
+    {
+      "original": "Missingname rejectsAnalysis,rootmodule0,line1,positivecolumn,main.xrpath,nonemptydiagnostic,noProgram/artifact",
+      "current": "Unchanged original source with an empty output rejects CHECK1/BAD_VALUE4, module0/line1/column29, exact uninitialized-name text and owned canonical path. Output remains NULL. Occupied output rejects INPUT0/BAD_STRUCTURE1 before semantic checking, preserving the existing product; this is a distinct API precondition test.",
+      "status": "NORMAL_TWO_CONFIGURATIONS_PASS_FULL_QUALIFICATION_OPEN"
+    }
+  ],
+  "occupied_owner": "Real SourceProduct from unchanged single_module root: three source functions, Unit init and canonical entry, one module and no slots. Session and borrowed request/path/authority storage die before testing. Public verification, complete Facts bytes and a closed Checked reader/writer golden packet remain exact after each rejection. Occupied-output calls allocate nothing and preserve allocated/live/peak/work ledger statistics; they do not qualify semantic rejection.",
+  "diagnostics": "Failed request Session is freed and borrowed request/path/authority storage is poisoned before diagnostic inspection. Four transition diagnostics per configuration are freed twice with zeroed owned fields and actual physical stock refunded. Two additional owned semantic diagnostics per configuration survive positive Product, Checked/golden packet death and caller ledger reference drop. Resource allocations still retain the ledger until diagnostics are freed. Four calls with already-owned diagnostics preserve complete diagnostic bytes, path/message, output, allocation attempts and ledger statistics. Final compiler physical blocks/bytes are 0/0.",
+  "boundaries": [
+    "Normal deterministic Source failures and distinct API precondition guards only. Legacy whole functions remain OPEN, with replacement_gates empty and retired0.",
+    "Existing negative fixtures, legacy assertions and normal/FI/axes registrations are unchanged. Source108=88fixtures+20other; other26files160functions/shared7 remain unchanged.",
+    "The old Program/artifact representation and stage/status enums are not claimed bit-equivalent to current SourceProduct. No new executable product is published on semantic rejection.",
+    "No runtime execution, actual fault injection, complete resource-axis scan, full safety, Main integration or new-producer qualification is claimed.",
+    "Earlier failure receipts and input images are historical captures; overwritten early executable bytes are not independently rebound to the final executable."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "first_failures": [
+    {
+      "phase": "first execution",
+      "result": "FAIL both configurations",
+      "cause": "Added positive-column assertion contradicted original bare-nullable obligation; actual column0. Test oracle corrected, production untouched.",
+      "evidence": "first-execution-results.json; first-execution-source.c; first-execution-input-image.json; original receipts and stdout/stderr preserved",
+      "cleanup": "Early exit: whole physical cleanup unproven"
+    },
+    {
+      "phase": "r2 execution",
+      "result": "FAIL both configurations",
+      "cause": "Assumed occupied SourceProduct output enters semantic checking. Authorized producer requires empty output and rejects INPUT0/BAD_STRUCTURE1. Test oracle corrected, production untouched.",
+      "evidence": "results-r2.json; r2-execution-source.c; r2-execution-input-image.json; original receipts and stdout/stderr preserved",
+      "cleanup": "First empty-output transition refund passed; whole physical cleanup unproven"
+    },
+    {
+      "phase": "r3 execution",
+      "result": "PASS both configurations",
+      "evidence": "results-r3.json; preserved input captures and receipts",
+      "note": "Final r4 adjusts the source comment only to distinguish semantic and precondition rejection; fresh builds and execution repeated"
+    }
+  ],
+  "evidence": {
+    "directory": "build-consumer-evidence/current67-rejections-occupied-r1",
+    "final_results": "results-r4.json",
+    "audit": "final-audit.json",
+    "actual_commands": 2,
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "output_transitions": 8,
+    "owned_diagnostic_guards": 8,
+    "escaped_diagnostics": 4,
+    "semantic_rejections": 8,
+    "occupied_output_rejections": 4,
+    "diagnostic_precondition_rejections": 8,
+    "inputs_per_configuration": 2729,
+    "compile_events_all_attempts": 8,
+    "final_fresh_consumer_translation_units": 2,
+    "production_rebuilt": false,
+    "annotation": "Execution captured pre-annotation obligations SHA256 0607a15077d5c80927d428b7756c67b1ed3fabd6e8b8b2026ed46aac7692ef1d. This annotation follows execution; no execution of the new map is claimed."
+  }
+}
