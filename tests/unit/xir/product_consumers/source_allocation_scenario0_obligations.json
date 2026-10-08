@@ -258,10 +258,10 @@
     "new_translation_units": 1,
     "default_normal_tests": 1,
     "TIMEOUT_seconds": 120,
-    "FI_registered": 0,
+    "FI_registered": 2,
     "axes_registered": 0,
     "native_targets": 0,
-    "scope": "Only separate source consumer; no shared driver/inventory/status denominator edits"
+    "scope": "Separate Source0 consumer with two complete FI gates; no shared driver/inventory/status denominator edits"
   },
   "validation": {
     "build": "APPLIED_TARGET_MSVC_AND_CLANG_ASAN_UBSAN_FRESH_1_TU_1_LINK_PASS; existing public archives reused, not rebuilt here",
@@ -312,5 +312,43 @@
     "finding": "Missing explicit ordinary initializer refusal",
     "fix": "Add initializer ordinary BAD_ARGUMENT, freeze both allocation domains and all public ledger stats around complete permission-refusal prefix; no source/budget/API change",
     "scope": "STATIC_ONLY_NOT_BUILT_NOT_RUN"
+  },
+  "allocation_fault_shard_facet": {
+    "status": "IMPLEMENTED_NOT_FULLY_QUALIFIED",
+    "source_sha256": "41846d5c8fcf3b322e388f200169d42e806201ec92e0de20d8278d108bd56524",
+    "registration_sha256": "a68ce5176185c622ab2bf84e2c19d907f2b03f8290807b331c205505aad19f37",
+    "runner_sha256": "27b305dd16e118ba70ef098d219c8c5d4d4c26e3c4cd82db888df77146961ab6",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711 / Checked25 semantic67 Value22 Call28 Program29 only; Main integration requires a fresh producer-bound rebuild and census.",
+    "source_preservation": "Original119B source,20700B compiler FI,4680B runtime/normal,77 observations and old CLI remain byte-exact. Only a new faithful strided wrapper and strict new selector dispatch are appended.",
+    "owners": "Each ordinal calls the original run with a newly created finite compiler owner. Before resetting host observations, actual compiler/runtime blocks and bytes plus runtime table must be zero, both fault switches disabled and runtime tracing inactive; no resource ledger is reset or reused.",
+    "fresh_build": "MSVC Release/MT and Clang Debug/MD ASan+UBSan each compiled one C TU and linked one EXE. Each new object has159 actual Ninja dependencies, VALID. Existing10 public libraries per configuration and3 ASan support runtimes retained their original bytes and mtimes.",
+    "normal": "One actual CTest normal per configuration: N2036,R32,43 continuous unfaulted records and final five physical zeros.",
+    "light_shards": "Each configuration: compiler first0,last2035,paired0/1018; runtime first0,last31,paired0/16. Total12 actual shard processes:8 single-point FOCUSED plus4 partial two-point SHARD. Strict replay validates every per-ordinal trace and permitted OOM diagnostic; this is not complete coverage.",
+    "argument_rejections": "Each configuration34 malformed new selector cases: missing/extra args, negative/plus/whitespace/nondecimal, empty, zero count, index out of range and SIZE_MAX/overflow reject with exit2 and empty stdout/stderr before pipeline entry;68 total.",
+    "complete_gate_registration": [
+      {
+        "CTest": "test_source_product_allocation_scenario0_compiler",
+        "kind": "compiler",
+        "TIMEOUT": 600,
+        "PROCESSORS": 8,
+        "RUN_SERIAL": true,
+        "jobs": 8,
+        "status": "NOT_RUN"
+      },
+      {
+        "CTest": "test_source_product_allocation_scenario0_runtime",
+        "kind": "runtime",
+        "TIMEOUT": 600,
+        "PROCESSORS": 8,
+        "RUN_SERIAL": true,
+        "jobs": 8,
+        "status": "NOT_RUN"
+      }
+    ],
+    "complete_runner_plan": "570s process deadline begins before input capture. Two independent fresh normal processes plus one normal inside each of8 shard processes must agree on N/R/43; exact ordinal union must cover every measured site once. Each process retains raw stdout/stderr, PID, status, timeout, commands and hashes. No full coverage or timing result is claimed before the queued real gates run.",
+    "parser_checks": "Normal/compiler stderr must be empty; runtime stderr must consist only of original finite OOM diagnostics in exact per-ordinal order. Runtime records must be continuous per fault run, with one last hit whose stage/status/site window match the corresponding summary; additional sanitizer output is rejected.",
+    "evidence": "build-consumer-evidence/current67-source0-full-fi-applied-r1/",
+    "retirement": "0. All original legacy obligations and OPEN statuses retained; no old target, format or build dependency deleted.",
+    "remaining": "Complete2036 compiler and32 runtime ordinals, allocated/live/work axes, complete input-packet preservation, initialization FAILED/sticky OOM, sibling continuation, other7 original sources, native/mixed/owned string/partial initialization/reverse cleanup, complete default and applicable safety, Main producer rebind and integration remain OPEN. No completed capability or release is claimed."
   }
 }

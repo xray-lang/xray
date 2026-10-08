@@ -24,3 +24,19 @@ add_test(NAME test_source_product_allocation_scenario0_normal
         "${source_allocation0_fixture}" "${source_allocation0_fixture}/root.xr")
 set_tests_properties(test_source_product_allocation_scenario0_normal PROPERTIES
     TIMEOUT 120 LABELS "unit;xir;source-product;program-consumer;source-allocation;ownership;vm-projection")
+
+# Each process creates and releases fresh owners for its exact fault ordinals.
+foreach(source_allocation0_kind IN ITEMS compiler runtime)
+    set(source_allocation0_test "test_source_product_allocation_scenario0_${source_allocation0_kind}")
+    add_test(NAME ${source_allocation0_test}
+        COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_allocation_faults.py"
+            --binary $<TARGET_FILE:test_source_product_allocation_scenario0>
+            --root "${source_allocation0_fixture}" --file "${source_allocation0_fixture}/root.xr"
+            --kind ${source_allocation0_kind} --jobs 8 --input-root "${CMAKE_SOURCE_DIR}"
+            --source-file "${source_allocation0_dir}/test_source_product_allocation_scenario0.c"
+            --registration-file "${CMAKE_CURRENT_LIST_FILE}"
+            --evidence "${CMAKE_BINARY_DIR}/consumer-fault-evidence/source-allocation0-${source_allocation0_kind}")
+    set_tests_properties(${source_allocation0_test} PROPERTIES
+        TIMEOUT 600 PROCESSORS 8 RUN_SERIAL TRUE
+        LABELS "unit;xir;source-product;program-consumer;source-allocation;ownership;${source_allocation0_kind}-faults")
+endforeach()

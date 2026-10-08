@@ -936,7 +936,55 @@ static int allocation_runtime_run(const char *root, const char *file, size_t nor
     return passed && released && cleanup_uncharged && allocation_runtime.ok ? 0 : 1;
 }
 
+/* Reset only host observations after every real owner has been released. */
+static void allocation_shard_reset(void) {
+    instance_compile_zero();
+    CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
+    CHECK(instance_compile_fail_at == SIZE_MAX && runtime_fail_at == SIZE_MAX && !allocation_runtime.active);
+    instance_compile_attempts = instance_compile_peak = 0;
+    instance_compile_injected = false;
+    runtime_attempts = 0;
+    allocation_runtime = (AllocationRuntimeFault){0};
+}
+
+static int allocation_fault_shard(const char *root, const char *file, bool compiler, size_t index, size_t shards) {
+    const char *kind = compiler ? "compiler" : "runtime";
+    allocation_shard_reset();
+    int status = allocation_runtime_run(root, file, 0, SIZE_MAX);
+    if (status) return status;
+    size_t normal_n = instance_compile_attempts, normal_r = runtime_attempts;
+    size_t records = allocation_runtime.records;
+    CHECK(normal_n && normal_r && records == 43 && allocation_runtime.ok && !allocation_runtime.hits);
+    CHECK(!allocation_runtime.injecting && !allocation_runtime.stopped && !instance_compile_injected);
+    size_t total = compiler ? normal_n : normal_r, covered = 0;
+    allocation_shard_reset();
+    for (size_t site = index; site < total;) {
+        status = compiler ? allocation_fault_run(root, file, normal_n, site) :
+            allocation_runtime_run(root, file, normal_r, site);
+        if (status) return status;
+        allocation_shard_reset();
+        printf("source-allocation0 fault-ordinal kind=%s ordinal=%zu frozen-N=%zu frozen-R=%zu "
+            "shard=%zu shards=%zu compiler-physical=0/0 runtime-physical=0/0 table=0\n",
+            kind, site, normal_n, normal_r, index, shards);
+        ++covered;
+        if (total - site <= shards) break;
+        site += shards;
+    }
+    printf("source-allocation0 fault-summary kind=%s frozen-N=%zu frozen-R=%zu normal-records=%zu "
+        "shard=%zu shards=%zu ordinal-start=%zu ordinal-limit=%zu ordinal-step=%zu covered=%zu scope=%s "
+        "compiler-physical=0/0 runtime-physical=0/0 table=0\n",
+        kind, normal_n, normal_r, records, index, shards, index, total, shards, covered,
+        shards == total ? "FOCUSED" : "SHARD");
+    return 0;
+}
+
 int main(int argc, char **argv) {
+    if (argc >= 4 && (!strcmp(argv[3], "--compiler-shard") || !strcmp(argv[3], "--runtime-shard"))) {
+        size_t index = 0, shards = 0;
+        if (argc != 6 || !allocation_fault_number(argv[4], &index) ||
+            !allocation_fault_number(argv[5], &shards) || !shards || index >= shards) return 2;
+        return allocation_fault_shard(argv[1], argv[2], !strcmp(argv[3], "--compiler-shard"), index, shards);
+    }
     if (argc == 6 && !strcmp(argv[3], "--compiler-fault")) {
         size_t normal_sites = 0, site = 0;
         if (!allocation_fault_number(argv[4], &normal_sites) || !normal_sites ||
