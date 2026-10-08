@@ -1,0 +1,754 @@
+{
+  "schema": 1,
+  "wire_cases": 21,
+  "built_cases": 30,
+  "output_modes": 2,
+  "cases": [
+    {
+      "name": "i64_bool_f64",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 0,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "independent_nodes_reordered",
+      "nodes": [
+        [
+          7,
+          0,
+          13
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          2
+        ]
+      ],
+      "expected": 0,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "0ea8aabd5cac4d38d0dec3c941c5cd799ab9cd89424714a0d47525d2152148c6"
+    },
+    {
+      "name": "deduplicated_i64_bool_i64_references",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ]
+      ],
+      "expected": 0,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 347,
+      "sha256": "5f7ad0ee1e9c281bdc2f51a6217c6bbfc4c124f49ec92a9be023216583b340b3"
+    },
+    {
+      "name": "duplicate_descriptor",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          2
+        ]
+      ],
+      "expected": 1,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "c3ffa98575e5b59389ffabb6483032336f7849471efc32680fb87acf559810f9"
+    },
+    {
+      "name": "unit_element",
+      "nodes": [
+        [
+          7,
+          0,
+          0
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "dc031b9402a5756e64cca202a8fcd25b3af4713d4835548f6fc63f1f5f6f720c"
+    },
+    {
+      "name": "string_element",
+      "nodes": [
+        [
+          7,
+          0,
+          3
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "ab40d7ce9d6035ab7b61c910ee172da2e84dc6854c039122a1aea89494196324"
+    },
+    {
+      "name": "panic_element",
+      "nodes": [
+        [
+          7,
+          0,
+          15
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "36130caa9f681dcc45044b54e1ae5317b2a0accab6aa0b22927d6952dce407f8"
+    },
+    {
+      "name": "rune_element",
+      "nodes": [
+        [
+          7,
+          0,
+          16
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "656148a9f33340e7339190edc4afc5820ea1241b823a922786815c0a6e88c450"
+    },
+    {
+      "name": "i8_element",
+      "nodes": [
+        [
+          7,
+          0,
+          5
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "0e692ef4d41544deb2af98df78fe09c158a6f66f946ceea1c535247fc1a1135b"
+    },
+    {
+      "name": "f32_element",
+      "nodes": [
+        [
+          7,
+          0,
+          12
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "97211a34cf1028faa467acf88c3642c2bedda89823d570d0cbb01de651625dd7"
+    },
+    {
+      "name": "reserved_element",
+      "nodes": [
+        [
+          7,
+          0,
+          4
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "276e14bfce2ef4b7f2943a9f55f83c31a349e4fd36f0cdd26c332f44e67ac540"
+    },
+    {
+      "name": "unresolved_element",
+      "nodes": [
+        [
+          7,
+          0,
+          65535
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "595da0b93cba0d37294e87e0ec9a2b15dadc33f7eb7035da0ad3cd8451e8e570"
+    },
+    {
+      "name": "maximum_element",
+      "nodes": [
+        [
+          7,
+          0,
+          4294967295
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "07ecbdeb417aaad10580559351fa8ffb7e153263a40d4c2d486ab46f5ee5f1d9"
+    },
+    {
+      "name": "self_edge",
+      "nodes": [
+        [
+          7,
+          0,
+          256
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "8b6e0ee3137d7c4727dd2f778d18d3bbe46ad833d81ee5ac786cb70f90735f57"
+    },
+    {
+      "name": "forward_edge",
+      "nodes": [
+        [
+          7,
+          0,
+          258
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "0173816eb9b13dbdc3e6fa37d9b718468a215226a7e277216c5f84aab1e556c1"
+    },
+    {
+      "name": "missing_node",
+      "nodes": [
+        [
+          7,
+          0,
+          259
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "ce295ce4c5ee8074d5a3c6dd3082524ccf7030c4994057cb28bca6db975220b5"
+    },
+    {
+      "name": "unbound_span",
+      "nodes": [
+        [
+          7,
+          0,
+          65536
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "f8bcf68a4edff727a586a93679a4f2dbb3b081d90cc3f9edcd5c80a1cd2e339c"
+    },
+    {
+      "name": "nested_atomic_element",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          256
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "1b10ee050a2eef31415a434b60acda7f51dff3894f3eda8ef75de52393a36dc5"
+    },
+    {
+      "name": "array_element",
+      "nodes": [
+        [
+          2,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          256
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "15ac88eb2e3d5b582e6e843d0ef27315e28ea3a456d0c294b152b471347e9ae4"
+    },
+    {
+      "name": "closed_span_mismatch",
+      "nodes": [
+        [
+          7,
+          1,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "b1e73a8b0a2bc65e9b3669bd4d4f64cc7ae17136829f1858756ae818de6fbf69"
+    },
+    {
+      "name": "unknown_kind",
+      "nodes": [
+        [
+          99,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 3,
+      "inactive": 0,
+      "wire": true,
+      "bytes": 359,
+      "sha256": "cf0d96b5f9931b0782cff0aae550ede05046d73606d647da19d682e8db5378d0"
+    },
+    {
+      "name": "inactive_parameters",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 1,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_parameter_count",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 2,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_result",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 3,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_flags",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 4,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_nominal_declaration",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 5,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_nominal_arguments",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 6,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_nominal_argument_count",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 7,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_nominal_fields",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 8,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    },
+    {
+      "name": "inactive_nominal_field_count",
+      "nodes": [
+        [
+          7,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1
+        ],
+        [
+          7,
+          0,
+          13
+        ]
+      ],
+      "expected": 1,
+      "inactive": 9,
+      "wire": false,
+      "bytes": 359,
+      "sha256": "44cea26d21e57191e43336c48e396afc1b96fcb73425a2ba1d5cad1d223d6568"
+    }
+  ],
+  "boundary": "Current Built/Checked admission only. Two interned Atomic nodes support i64/bool/i64 references;duplicate node records reject. Old opaque-key canonicalization/copy flags and full FI remain OPEN;no runtime equivalence or retirement."
+}

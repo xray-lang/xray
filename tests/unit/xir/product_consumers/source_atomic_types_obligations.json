@@ -1,0 +1,230 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_atomic_type_roundtrip",
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "legacy_line": 37,
+      "body_lf_sha256": "42069726d4dd98fd893f2aa2144132f6cff07ae3bb30efa3853274783fd794ea",
+      "assertion_sites": 12,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_atomic_type_invalid_construction",
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "legacy_line": 66,
+      "body_lf_sha256": "e82e1893c53c8d762151dde222ae8750f2e68cb8136bd6703d8e43a956f91b1b",
+      "assertion_sites": 2,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_atomic_type_hostile_wire",
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "legacy_line": 92,
+      "body_lf_sha256": "e30910e3e91f0e4b42e1d9435fb040a333841a34e7306d933c3e5aceea89ffc3",
+      "assertion_sites": 8,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_atomic_type_allocation_failures",
+      "legacy_path": "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+      "legacy_line": 142,
+      "body_lf_sha256": "665b5570ec6bcf5ad383e35842e71a965888e4106dc733dd13fa7f07ba4562bb",
+      "assertion_sites": 8,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_CURRENT_ATOMIC_ADMISSION_FACET_LEGACY_OPEN",
+  "original_mapping": [
+    {
+      "legacy": "test_atomic_type_roundtrip",
+      "current_facet": "Current i64/bool/f64 descriptor controls;two-node i64/bool table supports ordinary parameter references[256,257,256];input-dead ownership and exact public writer bytes. Duplicate descriptor record rejects BAD_STRUCTURE.",
+      "remaining": "Original three opaque-key identities and sorted equal-byte reorder have no current direct representation. Structural interning is a candidate mapping,not verified retirement of key/ownership/copy contracts or runtime synchronization identity.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_atomic_type_invalid_construction",
+      "current_facet": "Unit,String,nested Atomic,unknown type,unsupported scalar,cycle/forward edges,span and inactive nominal/callable payload rejects through public Built check.",
+      "remaining": "12original variants retained below. Old ownership/copy/array-element/view-element fields and aggregate kind differ;their whole legacy responsibility remains OPEN.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_atomic_type_hostile_wire",
+      "current_facet": "21independent valid-digest Checked packets;current structural/type rejects;empty and occupied outputs,input death,physical refunds.",
+      "remaining": "7original mutations retained. Old38byte canonical row/key/copy flags and old structural NONCANONICAL layer have no equivalent byte representation;not retired.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_atomic_type_allocation_failures",
+      "current_facet": "Normal physical refunds after every invocation and complete owner/table destruction.",
+      "remaining": "Both original fail-each-ordinal loops1..<256 until firstsuccess andOOM/output-null checks remain NOT_RUN;normal admission is not FI qualification.",
+      "status": "OPEN"
+    }
+  ],
+  "original_invalid_construction": [
+    {
+      "ordinal": 0,
+      "obligation": "Unit element",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "obligation": "String element",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "obligation": "Atomic<bool> element",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "obligation": "nominal class payload",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "obligation": "trivial ownership",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "obligation": "trivial copy",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "obligation": "forbidden copy",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 7,
+      "obligation": "array element payload",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 8,
+      "obligation": "field types payload",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 9,
+      "obligation": "view element payload",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 10,
+      "obligation": "UINT16_MAX element",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 11,
+      "obligation": "aggregate kind",
+      "status": "OPEN"
+    }
+  ],
+  "original_hostile_wire": [
+    {
+      "ordinal": 0,
+      "obligation": "element0 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "obligation": "element11 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "obligation": "ownership0/copy0 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "obligation": "kind40 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "obligation": "first copy2 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "obligation": "second copy2 structural reject",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "obligation": "first element33 structural reject",
+      "status": "OPEN"
+    }
+  ],
+  "matrix": "21wire/30Built inputs,empty+occupied output;102transitions/config;3current positive shapes and exact current rejects.",
+  "boundary": [
+    "Admission only;the handles function is not executed. No synchronization/copy/atomicity behavior proved.",
+    "Original duplicate opaque-key records are not relabeled a language negative;the current duplicate structural-node reject is a representation invariant. Original whole positive stays OPEN.",
+    "F64 is a current control,not a replacement for either original I64 node. The two-node i64/bool case separately exercises repeated I64 type references.",
+    "Inactive Built fields have no wire encoding;their packet is the unmutated writer golden and is not executed as a distinct wire reject.",
+    "No SourceProduct,specialization,Lowered,Program,VM/native/mixed or fullFI by this target. Existing source_atomic_source_families_obligations.json evidence is historical and not rerun or promoted.",
+    "Census source108=88fixtures+20other;additional26files/160functions;shared7 unchanged;all whole-functionsOPEN;retired0."
+  ],
+  "tests": [
+    "test_source_product_atomic_types",
+    "source_product_atomic_types_encoding"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "producer_evidence": [
+    "src/xir/xxir_types.c:type_payload restricts closed Atomic elements to I64,F64,Bool;inactive fields fail;type_unique rejects duplicate structural nodes.",
+    "src/xir/xxir_checked_codec.inc.c:kind7/span/element descriptor encoding;no legacy opaque keys or ownership/copy flags.",
+    "src/xir/xxir.c:public Built check verifies before creating owned artifact;Checked reader/writer use the same owned boundary."
+  ],
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-atomic-types-r1",
+    "receipts": "results.json",
+    "processes": 4,
+    "product_passed": 2,
+    "encoding_passed": 2,
+    "transitions": 204,
+    "positive_matches": 24,
+    "exact_rejections": 180,
+    "mismatches": 0,
+    "compiler_physical": "Both complete matrices:0blocks/0bytes after actual owners and observer table destruction;per-call physical live/bytes restored.",
+    "input_capture": {
+      "msvc": 2654,
+      "asan": 2654,
+      "comparison": "SHA,size,mtime before==after"
+    },
+    "fresh_build": "First build and first execution passed both configurations. One consumer translation unit/config freshly compiled;C11/W4/WX;Clang ASan+UBSan flags and VALID Ninja header dependencies verified.",
+    "production_reuse": "10linked libraries/config raw SHA,size,mtime unchanged;xxir.c/checked/verifier/types object bytes matched their actual archive members;producer25f source compared.",
+    "protection": "10892tracked pre-snapshot:10891nonowned unchanged;12dirtygenerated files preserved;598protected inputs:594exact+4expectedNinja/CTest metadata deltas.",
+    "representation": "Three positive shapes:current i64/bool/f64 nodes,independent node reorder,and deduplicated i64/bool nodes with three function parameter references[256,257,256]. Duplicate node rejection is a current representation test,not conversion of the old opaque-key positive into a negative. Old positive remains OPEN.",
+    "execution_boundary": "The handles function is only admitted and serialized;no actual Atomic objects/copy/operations/runtime executed. No full old-function replacement,retirement,or synchronization identity qualification.",
+    "postrun_annotation": "Annotation added after execution;receipts bind saved pre-annotation map;no new-map rerun claimed.",
+    "retired": 0
+  }
+}
