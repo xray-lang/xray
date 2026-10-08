@@ -16,3 +16,7 @@ add_test(NAME source_product_checked_semantic_fixture_encoding
     COMMAND ${XRAY_PYTHON} -B -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_checked_semantics.py" check)
 set_tests_properties(source_product_checked_semantic_fixture_encoding PROPERTIES TIMEOUT 120 PROCESSORS 1
     LABELS "unit;xir;program-consumer;checked;inventory")
+add_test(NAME source_product_checked_f64_fixture_encoding
+    COMMAND ${XRAY_PYTHON} -B -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_checked_f64.py" check)
+set_tests_properties(source_product_checked_f64_fixture_encoding PROPERTIES TIMEOUT 120 PROCESSORS 1
+    LABELS "unit;xir;program-consumer;checked;inventory")

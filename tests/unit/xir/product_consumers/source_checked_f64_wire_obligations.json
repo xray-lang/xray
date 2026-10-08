@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67",
+  "legacy": {
+    "path": "tests/unit/program/test_xr_program.c",
+    "name": "test_f64_constant_bits_and_wire",
+    "body_lf_sha256": "9ef2126049b004d7ef1d7fd1e22eb724749ef0692f1e9b47de190c8c1cd35ff7",
+    "status": "OPEN",
+    "replacement_gates": []
+  },
+  "current_contract": {
+    "path": "spec/source/sections/003-2-type-system.md",
+    "sha256": "679a08936c9c9f577eba1b4f0a6878488b70544509163114083b30150a625539",
+    "line": 175,
+    "rule": "Runtime f64 admits all binary64 payloads and transports exact bits. CONST_FLOAT wire permits only canonical NaN. These are distinct contracts."
+  },
+  "new_gate": "test_source_product_checked_hostile_frame",
+  "static_gate": "source_product_checked_f64_fixture_encoding",
+  "independent_encoder": "scripts/source_product_consumer_checked_f64.py",
+  "manifest": "tests/unit/xir/product_consumers/checked_f64_wire_cases.json",
+  "matrix": {
+    "original_bit_patterns": 10,
+    "original_accepted_constants": 7,
+    "original_noncanonical_nan_constants_rejected": 3,
+    "extra_canonical_nan_control": 1,
+    "wrong_I64_type_cases": 10,
+    "complete_packets": 21,
+    "output_states": 2,
+    "accepted_reads": 16,
+    "rejected_reads": 26
+  },
+  "mapping": {
+    "original_bit_preservation": "Seven admissible original constant patterns are verified exactly and serialize against full independent input bytes, including negative zero and infinities.",
+    "original_noncanonical_nan": "OPEN: three old positive constant patterns now fail BAD_TYPE under the frozen constant rule. Rejection does not replace the old positive runtime bit-carrier responsibility. Original corpus is unchanged.",
+    "wrong_type": "All ten original patterns with CONST_FLOAT and I64 type reject BAD_TYPE under correct digest; output NULL or real owned artifact is preserved.",
+    "determinism_reverse_constants": "OPEN: old keyed sorted constant-pool reversal has no equivalent construction in this one-function inline-constant test.",
+    "hostile_constant_directory": "OPEN: old type/kind, duplicate positive zero and unsigned-bit sorting mutations require representation review; new typed opcode rejection alone is incomplete.",
+    "allocation_failures": "OPEN: original independent verifier and writer exhaustive failure loops have not been replaced or run.",
+    "runtime": "OPEN: VM, native and mixed arbitrary binary64 transport are not tested by this source-free wire consumer."
+  },
+  "ownership": "All reads reach actual decoder allocation, preserve caller bytes and original occupied owner, and refund physical/live stock. Successful new owners are verified and completely rewritten against independent bytes before release.",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "retired": 0,
+  "result": "PASS_MSVC_RELEASE_AND_CLANG_ASAN_UBSAN_CURRENT_WIRE_ONLY",
+  "qualification": {
+    "archive": "build-consumer-evidence/current67-checked-f64-wire-r1",
+    "product_processes": 2,
+    "encoding_processes": 2,
+    "accepted_reads_each": 16,
+    "rejected_reads_each": 26,
+    "original_framing_rejects_each": 902,
+    "original_scalar_reads_each": 142,
+    "fresh_consumer_TUs": 2,
+    "allocated_bytes_each": 523951,
+    "peak_bytes_each": 1176,
+    "work_each": 1181632,
+    "final_physical": "0/0",
+    "first_failure": "Independent encoder confused CONST_FLOAT stage mask7 with enum ordinal63. Compile-time assertion stopped the first MSVC build before execution; corrected fixture/model and freshly rebuilt both configurations without changing flags.",
+    "binding": "Actual reader object byte-identical to a member of linked admission archive; all ten public archives per configuration match prebuild bytes/mtime. Consumer and reader flags and VALID dependencies recorded.",
+    "map_timing": "Product input snapshots include the initial map with result NOT_RUN; this result annotation is post-run and is not a new product execution."
+  }
+}

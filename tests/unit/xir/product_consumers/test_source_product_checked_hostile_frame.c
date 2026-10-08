@@ -81,6 +81,7 @@ static void rejection(const XrXirCompileContext *context, XrXirArtifact *owner,
 }
 
 #include "checked_semantic_scalar.inc.c"
+#include "checked_f64_wire.inc.c"
 
 int main(void) {
     const Semantic67NamedVector *v = &semantic67_named_vectors[0];
@@ -109,6 +110,7 @@ int main(void) {
     rejection(context, owner, mutated, v->current_size, "max-payload", 0, XR_XIR_BAD_STRUCTURE);
     CHECK(rejected_reads == 902 && !caller_buffers);
     semantic_scalar_cases_run(context, owner);
+    f64_wire_cases_run(context, owner);
     owner_preserved(owner);
     xr_xir_compile_artifact_free(owner);
     source_program_owners_free();
