@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_module_const_place_survives_branch",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 138,
+      "body_lf_sha256": "066cab5790243e68934d9b48b0ad807ead6b8f00c2c9eb34e57ad92910f9c15f",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_place_ref_call_admission",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 203,
+      "body_lf_sha256": "e6941558aa35fd21ba9f325caed982896b95dc23dd529e5c90a925ceb5f2ae39",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_place_ref_interface_admission",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 265,
+      "body_lf_sha256": "cc0748223b0a357bfebbdf6a8f696e195ccad3c45ffb4f0abc605871ef488b96",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_CURRENT_PLACE_ADMISSION_FACET_LEGACY_OPEN",
+  "matrix": "26 independently encoded Checked inputs:9 current Array controls;17 exact structural/type/value/dominance rejects;empty and occupied output each.",
+  "original_mapping": [
+    {
+      "legacy": "test_module_const_place_survives_branch",
+      "original": "Base-module I64 place is forwarded as a block argument; mutable succeeds, const fails OPERATION_TYPE.",
+      "current_facet": "Array root with direct dominated place identity and projected element preserves slot write authority across a JUMP. Owned PLACE_READ results may cross PHI; places cannot.",
+      "remaining": "No scalar SLOT_PLACE, place block arguments or mutable base module equivalence. Current shape controls do not replace the old positive.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_module_place_ref_call_admission",
+      "original": "Direct sealed I64 REF parameter accepts mutable module place; const rejects OPERATION_TYPE; missing TRAP rejects EFFECT.",
+      "current_facet": "Ordinary Array value parameter accepts PLACE_READ result and rejects the logical place itself.",
+      "remaining": "Ordinary value role rejection is not a ref-call migration. Explicit ref/cell lowering, scalar module loan, writeback, original base authority and effect-mask duties remain OPEN.",
+      "status": "OPEN"
+    },
+    {
+      "legacy": "test_module_place_ref_interface_admission",
+      "original": "Existential ref receiver variants preserve mutable/const authority and missing TRAP effects.",
+      "current_facet": "No interface dispatch exercised by this consumer.",
+      "remaining": "All three old variants remain OPEN. No replacement or retirement.",
+      "status": "OPEN"
+    }
+  ],
+  "producer_evidence": [
+    "src/xir/xxir_ops.def: SLOT_PLACE ROOT rule, PLACE_READ/WRITE and PHI operations",
+    "src/xir/xxir_verify.c: RULE_ROOT array/nominal restriction, phi_uses local_operand, place_write_authority follows INDEX to SLOT, role_operand and dominance",
+    "src/xir/xxir_operand_roles.h: parameters/PHI are not logical places; CALL ordinary values",
+    "src/xir/xxir_source_methods.inc.c: method ref parameters use Cell<T>; this packet does not test that lowering",
+    "spec/source/sections/006-5-declarations.md: legal ref syntax remains a separate language responsibility"
+  ],
+  "boundary": [
+    "Admission only; module initializers do not publish these slots. No Program/Instance/runtime result claimed.",
+    "No full Source import, specialization, Lowered, VM/native/mixed or fault injection executed by this target.",
+    "Scalar representation reject and place-as-value rejects preserve current representation rules, not retirement of legal legacy scenarios.",
+    "Original census source108(88fixtures+20other),additional26files/160functions,shared7 unchanged;all whole legacy functions and replacement gates unchanged."
+  ],
+  "tests": [
+    "test_source_product_module_place",
+    "source_product_module_place_encoding"
+  ],
+  "registration": {
+    "TIMEOUT": 120,
+    "PROCESSORS": 1
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-module-place-r1",
+    "processes": 4,
+    "encoding_pass": 2,
+    "product_pass": 2,
+    "reads": 104,
+    "positive_reads": 36,
+    "exact_rejections": 68,
+    "compiler_physical": "0/0 with observer table destroyed",
+    "fresh_consumer_translation_units": 2,
+    "production": "Exact preserved current67 production libraries; reader/verifier/constraint object-to-archive member bindings audited. Production was not recompiled.",
+    "first_build": "PASS both",
+    "first_run": "PASS both;no retries or oracle changes",
+    "postrun_annotation": "This result annotation was appended after execution; captured input snapshots bind the pre-annotation map. No claim of re-executing the final annotation.",
+    "unexecuted": [
+      "Full Source/lowering/runtime/native/mixed",
+      "Full FI and axes",
+      "Full safety and Main integration"
+    ]
+  }
+}

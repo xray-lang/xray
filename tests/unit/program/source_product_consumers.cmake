@@ -321,3 +321,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_modul
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_class_panic.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_operation.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_place.cmake")
