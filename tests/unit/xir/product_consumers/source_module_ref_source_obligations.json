@@ -1,0 +1,353 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "result": "FAIL_LEGAL_MODULE_REF_SOURCE_POSITIVES_LOCAL_CONTROLS_PASS",
+  "retired": 0,
+  "replacement_gates": [],
+  "legacy": [
+    {
+      "name": "test_module_place_ref_call_admission",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 203,
+      "body_lf_sha256": "e6941558aa35fd21ba9f325caed982896b95dc23dd529e5c90a925ceb5f2ae39",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_place_ref_interface_admission",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 265,
+      "body_lf_sha256": "cc0748223b0a357bfebbdf6a8f696e195ccad3c45ffb4f0abc605871ef488b96",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "input_origin": "New standalone Source witnesses, not literal extraction of the original CoreIR fixtures. Original helper file and body hashes retained. Original module/ref positive expectations are not inverted.",
+  "mapping": [
+    {
+      "legacy": "test_module_place_ref_call_admission",
+      "original": "Base I64 place passed to sealed REF parameter; mutable positive, const OPERATION_TYPE rejection, missing TRAP EFFECT rejection.",
+      "new": "root_scalar/root_array/imported_scalar retain positive SourceProduct expectations. local_scalar/local_array are separate local Cell controls with forward ref, repeated mutation and independent fixed42 runtime result.",
+      "remaining": "Original base mutable authority, module place writeback, legacy explicit TRAP effects, exact old CoreIR representation and whole-function equivalence remain OPEN."
+    },
+    {
+      "legacy": "test_module_place_ref_interface_admission",
+      "original": "Existential ref call MODULE_REF positive, CONST_MODULE_REF type reject, MODULE_REF_MISSING_TRAP effect reject.",
+      "new": "No existential dispatch exercised by this batch.",
+      "remaining": "All original interface variants remain OPEN; no replacement gate."
+    }
+  ],
+  "negative_boundary": "root_const matching BAD_TYPE cannot prove const authority when rejected first by unsupported module-state ref. local_const, local_missing_ref and local_alias exercise independent local parameter rules.",
+  "source_reference": "src/xir/xxir_source_call_plan.inc.c source_reference_argument explicitly admits only mutable local binding cells; module slots reject as not implemented. Source ordinary function ref parameters are Cell<T> in xxir_source.c.",
+  "runtime_controls": {
+    "cases": [
+      "local_scalar",
+      "local_array"
+    ],
+    "expected": 42,
+    "instances": 2,
+    "repeats_each": 2,
+    "modes": [
+      "VM",
+      "real generated native",
+      "mixed even",
+      "mixed odd"
+    ],
+    "array": "const original [40] copied to var; two ref mutations produce42 while assert(original[0]==40) protects logical copy",
+    "ownership": "Parse session and SourceProduct destroyed before runtime; external Program owner dropped before calls; two Instance owners and final real runtime/compiler physical counts checked.",
+    "not_claimed": [
+      "Module ref runtime execution",
+      "Interface dispatch",
+      "Owned return escape: controls return I64",
+      "Full FI",
+      "Resource axes",
+      "Cancellation",
+      "Full safety",
+      "Main integration"
+    ]
+  },
+  "scope": "Only new consumer sources/scripts/fixtures/map and narrow CMake include. Existing shared consumer driver source unmodified and compiled into a new dedicated object target.",
+  "census": "source108=88fixtures+20other,extra26files/160functions,shared7 unchanged; retired0.",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "actual_evidence": {
+    "directory": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-module-ref-source-r1",
+    "configuration": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "processes": 20,
+    "runtime_pass": 16,
+    "inputs_pass": 2,
+    "admission_fail": 2,
+    "instances": 32,
+    "fixed42_results": 64,
+    "canonical_zero_results": 32,
+    "source_cases": 18,
+    "positive_admissions_pass": 4,
+    "positive_admissions_fail": 6,
+    "type_rejects_match": 8,
+    "root_const_masked": 2,
+    "compiler_and_runtime_physical": "0/0 after all applicable owners destroyed",
+    "fresh_translation_units_each": 8,
+    "inputs_each": 2531,
+    "extra_build_inputs_each": 21,
+    "native": "2 real generated C payloads in each configuration; deterministic source SHA trailer checked; /W4 /WX C11 and ASan/UBSan on actual native TUs",
+    "archives": "10 current67 libraries exact against598 pre-snapshot;11th runtime-host SHA equals historical sealed archive with4 actual object/member bindings, current metadata recorded. No fresh production claim.",
+    "first_build": "MSVC PASS. Clang first failed test-only always-true diagnostic array address check. First source/logs and existing new target artifacts saved under first-build. Corrected message[0], both builds then PASS.",
+    "first_execution": "All20 commands ran once after corrected build;no product reruns or oracle changes.",
+    "postrun_annotation": "Result annotation added after execution; before/after input snapshots bind the pre-annotation map, not a retest of this annotation."
+  },
+  "actual_admission": [
+    {
+      "configuration": "msvc",
+      "status": "FAIL",
+      "records": [
+        {
+          "case": "local_scalar",
+          "expected": "0",
+          "actual": "0",
+          "stage": "6",
+          "source-status": "0",
+          "module": "0",
+          "line": "0",
+          "column": "0",
+          "result": "PASS"
+        },
+        {
+          "case": "local_array",
+          "expected": "0",
+          "actual": "0",
+          "stage": "6",
+          "source-status": "0",
+          "module": "0",
+          "line": "0",
+          "column": "0",
+          "result": "PASS"
+        },
+        {
+          "case": "root_scalar",
+          "expected": "0",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "4",
+          "column": "32",
+          "result": "FAIL"
+        },
+        {
+          "case": "root_array",
+          "expected": "0",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "4",
+          "column": "32",
+          "result": "FAIL"
+        },
+        {
+          "case": "imported_scalar",
+          "expected": "0",
+          "actual": "1",
+          "stage": "1",
+          "source-status": "1",
+          "module": "1",
+          "line": "3",
+          "column": "5",
+          "result": "FAIL"
+        },
+        {
+          "case": "root_const",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "4",
+          "column": "32",
+          "result": "PASS"
+        },
+        {
+          "case": "local_const",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "3",
+          "column": "50",
+          "result": "PASS"
+        },
+        {
+          "case": "local_missing_ref",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "3",
+          "column": "44",
+          "result": "PASS"
+        },
+        {
+          "case": "local_alias",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "2",
+          "column": "58",
+          "result": "PASS"
+        }
+      ],
+      "diagnostics": [
+        "module-ref-diagnostic case=root_scalar message=ref argument of module state is not implemented in XIR",
+        "module-ref-diagnostic case=root_array message=ref argument of module state is not implemented in XIR",
+        "module-ref-diagnostic case=imported_scalar message=library mutable or exported state is not admitted",
+        "module-ref-diagnostic case=root_const message=ref argument of module state is not implemented in XIR",
+        "module-ref-diagnostic case=local_const message=ref argument requires a mutable local binding",
+        "module-ref-diagnostic case=local_missing_ref message=a ref parameter requires a ref argument",
+        "module-ref-diagnostic case=local_alias message=ref arguments of one call must not alias"
+      ],
+      "shape": [
+        "module-ref-shape case=local_scalar refs=2 calls=4 cell-reads=2 cell-writes=1 array-writes=0 cell-places=0 slots=0",
+        "module-ref-shape case=local_array refs=2 calls=6 cell-reads=0 cell-writes=0 array-writes=1 cell-places=3 slots=0"
+      ],
+      "receipt": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-module-ref-source-r1\\msvc-test_source_product_module_ref_source.stdout.raw",
+      "sha256": "d28c5c9b9cf89304612dab971329703de19bb2157d5cb094996e92532b53699e"
+    },
+    {
+      "configuration": "asan",
+      "status": "FAIL",
+      "records": [
+        {
+          "case": "local_scalar",
+          "expected": "0",
+          "actual": "0",
+          "stage": "6",
+          "source-status": "0",
+          "module": "0",
+          "line": "0",
+          "column": "0",
+          "result": "PASS"
+        },
+        {
+          "case": "local_array",
+          "expected": "0",
+          "actual": "0",
+          "stage": "6",
+          "source-status": "0",
+          "module": "0",
+          "line": "0",
+          "column": "0",
+          "result": "PASS"
+        },
+        {
+          "case": "root_scalar",
+          "expected": "0",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "4",
+          "column": "32",
+          "result": "FAIL"
+        },
+        {
+          "case": "root_array",
+          "expected": "0",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "4",
+          "column": "32",
+          "result": "FAIL"
+        },
+        {
+          "case": "imported_scalar",
+          "expected": "0",
+          "actual": "1",
+          "stage": "1",
+          "source-status": "1",
+          "module": "1",
+          "line": "3",
+          "column": "5",
+          "result": "FAIL"
+        },
+        {
+          "case": "root_const",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "4",
+          "column": "32",
+          "result": "PASS"
+        },
+        {
+          "case": "local_const",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "3",
+          "column": "50",
+          "result": "PASS"
+        },
+        {
+          "case": "local_missing_ref",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "3",
+          "column": "44",
+          "result": "PASS"
+        },
+        {
+          "case": "local_alias",
+          "expected": "3",
+          "actual": "3",
+          "stage": "1",
+          "source-status": "3",
+          "module": "0",
+          "line": "2",
+          "column": "58",
+          "result": "PASS"
+        }
+      ],
+      "diagnostics": [
+        "module-ref-diagnostic case=root_scalar message=ref argument of module state is not implemented in XIR",
+        "module-ref-diagnostic case=root_array message=ref argument of module state is not implemented in XIR",
+        "module-ref-diagnostic case=imported_scalar message=library mutable or exported state is not admitted",
+        "module-ref-diagnostic case=root_const message=ref argument of module state is not implemented in XIR",
+        "module-ref-diagnostic case=local_const message=ref argument requires a mutable local binding",
+        "module-ref-diagnostic case=local_missing_ref message=a ref parameter requires a ref argument",
+        "module-ref-diagnostic case=local_alias message=ref arguments of one call must not alias"
+      ],
+      "shape": [
+        "module-ref-shape case=local_scalar refs=2 calls=4 cell-reads=2 cell-writes=1 array-writes=0 cell-places=0 slots=0",
+        "module-ref-shape case=local_array refs=2 calls=6 cell-reads=0 cell-writes=0 array-writes=1 cell-places=3 slots=0"
+      ],
+      "receipt": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-module-ref-source-r1\\asan-test_source_product_module_ref_source.stdout.raw",
+      "sha256": "d28c5c9b9cf89304612dab971329703de19bb2157d5cb094996e92532b53699e"
+    }
+  ]
+}

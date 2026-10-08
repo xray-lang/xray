@@ -1,0 +1,4 @@
+import { next } from "./library"
+fn answer() -> i64 { return next() }
+export fn consumerAnswer() -> i64 { return answer() }
+fn main() -> i64 { return 0 }

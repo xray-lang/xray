@@ -1,0 +1,5 @@
+fn bump(value: ref i64) { value += 1 }
+fn relay(value: ref i64) { bump(ref value) }
+fn answer() -> i64 { var value = 40; relay(ref value); bump(ref value); return value }
+export fn consumerAnswer() -> i64 { return answer() }
+fn main() -> i64 { return 0 }

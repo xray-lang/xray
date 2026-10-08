@@ -1,0 +1,4 @@
+fn bump(value: ref i64) { value += 1 }
+fn relay(value: ref i64) { bump(ref value) }
+var value = 40
+export fn next() -> i64 { relay(ref value); bump(ref value); return value }

@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "local_scalar",
+      "expected": 0,
+      "files": {
+        "root.xr": "cfe5970610802be972c9b496d91b70c657fc7ae75d197504574aa86dd05b9000"
+      },
+      "runtime_expected": 42
+    },
+    {
+      "name": "local_array",
+      "expected": 0,
+      "files": {
+        "root.xr": "907533bce7f30d514d5473114277bbcd080c9fcc2db3062cb1bd956868f8a874"
+      },
+      "runtime_expected": 42
+    },
+    {
+      "name": "root_scalar",
+      "expected": 0,
+      "files": {
+        "root.xr": "8a9367b598e5093518183e6858ec7a06d33536d7477ab76578e47417cf35aed7"
+      },
+      "runtime_expected": 42
+    },
+    {
+      "name": "root_array",
+      "expected": 0,
+      "files": {
+        "root.xr": "72aeb5232134c631887437e6f4b2e2a437a362cc4dabc185971605435b4641c4"
+      },
+      "runtime_expected": 42
+    },
+    {
+      "name": "imported_scalar",
+      "expected": 0,
+      "files": {
+        "root.xr": "fa78c65b7bbe4db1a88aae4c060eca8b0ef83fab77235d2c1a5bfb2e72edbc4f",
+        "library.xr": "c5b81d8846e5122005a253020dd3537581582792c2bc6becc2fd86555f0d86d2"
+      },
+      "runtime_expected": 42
+    },
+    {
+      "name": "root_const",
+      "expected": 3,
+      "files": {
+        "root.xr": "3bb0fd878318761f8b363f2093ba87730e6c2a34e10a469d12e4ac40c64978c1"
+      },
+      "runtime_expected": null
+    },
+    {
+      "name": "local_const",
+      "expected": 3,
+      "files": {
+        "root.xr": "0d18ccee5fc685e2306e5ccc95fbc842199ad823498e4b960b96f30d915577b4"
+      },
+      "runtime_expected": null
+    },
+    {
+      "name": "local_missing_ref",
+      "expected": 3,
+      "files": {
+        "root.xr": "bfbe327288993963521351bdc1b9d00fd22a8b458f751fec417a47a42563066e"
+      },
+      "runtime_expected": null
+    },
+    {
+      "name": "local_alias",
+      "expected": 3,
+      "files": {
+        "root.xr": "b127035bc0437bd0fc84f32fd96c3ddc3a2cfc7a4dce9bd13ff051e3e1462e83"
+      },
+      "runtime_expected": null
+    }
+  ],
+  "boundary": "New Source witnesses of old ref duties; not literal extraction of old CoreIR fixtures. Module positives are not converted into rejects. Local Cell controls are separate and do not retire module/ref/interface obligations."
+}

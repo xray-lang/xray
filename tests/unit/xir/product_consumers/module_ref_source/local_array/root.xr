@@ -1,0 +1,5 @@
+fn bump(value: ref Array<i64>) { value[0] = value[0] + 1 }
+fn relay(value: ref Array<i64>) { bump(ref value) }
+fn answer() -> i64 { const original = [40]; var value = original; relay(ref value); bump(ref value); assert(original[0] == 40); return value[0] }
+export fn consumerAnswer() -> i64 { return answer() }
+fn main() -> i64 { return 0 }
