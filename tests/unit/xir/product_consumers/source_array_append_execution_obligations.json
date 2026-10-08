@@ -94,5 +94,28 @@
     "audit_history": "First audit required binding overwritten initial owner executable andbothrelative/absolute owner source capture keys tosavedpreimages. Initial audit script retained;no productresult changed.",
     "annotation": "Added afteractualexecution;preannotationmapsnapshot preserved;no newmapexecution claimed.",
     "retired": 0
+  },
+  "registration_grammar_20261009_facet": {
+    "status": "REGISTRATION_REPAIRED_NORMAL_RECHECKED_FULL_QUALIFICATION_OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67/Value22/Call28/Program29/ABI351",
+    "evidence": "build-consumer-evidence/current67-array-append-registration-r1",
+    "scope": "Two existing append registrations and two append obligation maps only;no product,test C,fixture or runner edits.",
+    "registration": "Existing21rows/config/family unchanged names. Per family across two configurations:24argv corrections and8 compiler RUN_SERIAL additions. Combined84names exact;48argv corrections;16 RUN_SERIAL additions;unrelated raw CTest registry exact.",
+    "driver_grammar": "Replace unrecognized --compiler-axes and --runtime-allocations with actual --axes and --runtime. The old unknown three-argument driver route is C emission, so a zero exit from those old flags cannot qualify resource axes or runtime faults.",
+    "compiler_grammar": "Use existing source_product_consumer_faults.py with only --binary,--mode,--jobs8,--evidence;remove source0 runner run positional and unsupported mode,timeout,source input flags. Across both families/configurations16 old commands rejected and16new commands accepted by extracted actual argparse prefix only;no product body or child process executed in this parser check.",
+    "budgets": "Compiler TIMEOUT600/PROCESSORS8/jobs8/COST300,now RUN_SERIAL. Axes TIMEOUT120/PROCESSORS1/RUN_SERIAL;runtime,cancel,normal,owned TIMEOUT120/PROCESSORS1. NoWILL_FAIL and no denominator reduction.",
+    "execution": "Per family:10 actual exact registered normal/owned commands PASS:VM/native/mixed_even/mixed_odd/owned across MSVC Release and Clang ASan/UBSan. Both families combined20PASS. Original four fixed9 backend assertions,detached owners and final compiler/runtime physical zero retained. No FI,axes or cancellation command run.",
+    "build": "UTF-8 Ninja parallel2. Exactly one scalar generated-C TU rebuilt/config;two fresh real C11/W4/WX units with VALID dependencies and Clang ASan/UBSan. Shared driver source/object and all three managed binaries exact reuse. Production archives exact SHA/size/mtime;6 linked production object bodies/config matched archive members.",
+    "generated_C_payload_sha256": "770fbe385c6fecbd231e0a46e3771a817c0ac0ad4d776da02df73c2edca4c96a",
+    "input_capture": "20 actual PIDs;2632 files per process;before==after SHA,size,mtime. Both maps appended only after execution;raw pre-annotation files and metadata retained,no new-map execution claim.",
+    "protection": "10991 tracked snapshot:all nonowned files exact;12historical dirty generated files preserved.598 protected:594exact+4expected Ninja/CTest metadata deltas. Existing registry budgets and unrelated raw rows preserved.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "legacy": "All earlier fields and first failures retained verbatim as JSON values. Grammar repair and normal results do not qualify full faults,old builder refusals,read/move,owner/copy/drop metadata or legacy per-return cleanup;all replacement obligations remain OPEN.",
+    "retired": 0
   }
 }

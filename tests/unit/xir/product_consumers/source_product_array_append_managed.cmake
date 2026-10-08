@@ -39,19 +39,17 @@ foreach(mode RANGE 0 3)
     else()
         set(binary test_source_product_array_append_managed_native)
     endif()
-    add_test(NAME test_source_product_array_append_managed_axes_${mode} COMMAND ${binary} ${mode} --compiler-axes)
-    add_test(NAME test_source_product_array_append_managed_runtime_${mode} COMMAND ${binary} ${mode} --runtime-allocations)
+    add_test(NAME test_source_product_array_append_managed_axes_${mode} COMMAND ${binary} ${mode} --axes)
+    add_test(NAME test_source_product_array_append_managed_runtime_${mode} COMMAND ${binary} ${mode} --runtime)
     add_test(NAME test_source_product_array_append_managed_cancel_${mode} COMMAND ${binary} ${mode} --cancel)
     set_tests_properties(test_source_product_array_append_managed_axes_${mode} test_source_product_array_append_managed_runtime_${mode}
         test_source_product_array_append_managed_cancel_${mode} PROPERTIES TIMEOUT 120 PROCESSORS 1
         LABELS "unit;xir;source-product;program-consumer;array;ownership;allocations")
     set_tests_properties(test_source_product_array_append_managed_axes_${mode} PROPERTIES RUN_SERIAL TRUE)
     add_test(NAME test_source_product_array_append_managed_compiler_${mode}
-        COMMAND ${XRAY_PYTHON} -B -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_allocation_faults.py" run
-            --binary $<TARGET_FILE:${binary}> --mode ${mode} --jobs 8 --timeout 600
-            --root "${array_append_root}" --file "${array_append_root}/root.xr" --input-root "${CMAKE_SOURCE_DIR}"
-            --source-file "${array_append_managed}" --registration-file "${CMAKE_CURRENT_LIST_FILE}"
+        COMMAND ${XRAY_PYTHON} -B -X utf8 "${product_consumer_fault_runner}"
+            --binary $<TARGET_FILE:${binary}> --mode ${mode} --jobs 8
             --evidence "${CMAKE_BINARY_DIR}/consumer-fi/array_append_managed-${mode}")
-    set_tests_properties(test_source_product_array_append_managed_compiler_${mode} PROPERTIES TIMEOUT 600 PROCESSORS 8 COST 300
+    set_tests_properties(test_source_product_array_append_managed_compiler_${mode} PROPERTIES TIMEOUT 600 PROCESSORS 8 COST 300 RUN_SERIAL TRUE
         LABELS "unit;xir;source-product;program-consumer;array;ownership;allocations;compiler-fi")
 endforeach()
