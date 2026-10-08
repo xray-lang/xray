@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "replacement_gates": [],
+  "retired": 0,
+  "result": "PASS_FAILURE_CLEANUP_EVIDENCE_WITH_ORIGINAL_POSITIVES_FAIL",
+  "change": "Ordinary build rejection leaves no sealed Program. Existing build() cleanup frees temporary SourceProduct, Session, owned diagnostic, Checked and generated C. Shared normal/emit entry now releases the remaining caller ledger, verifies actual compiler and runtime stock0/0 and returns failure1 while preserving the original required success0.",
+  "legacy_owners": [
+    "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates",
+    "source_owner_integer_bitwise_exact_width"
+  ],
+  "validation": "Original generic value struct and original integer-width inputs are strict positive requirements; both fail Source admission. Run each in VM and emit mode with actual PID/receipt, require original status/message and failure1 after physical release. Positive explicit-literal control independently runs VM/native/mixed-even/mixed-odd with result42.",
+  "boundaries": [
+    "This handles ordinary build status refusal in the shared entry, including emit requests. It does not claim cleanup after arbitrary CHECK assertions inside build(), runtime execution, FI/axes/cancel handlers or process termination.",
+    "Existing production failures remain failures, original inputs and return42 requirements are unchanged. Positive explicit-literal source is a separate existing control, never a replacement for the original failing fixture.",
+    "No producer update, production source changes, legacy deletion, full FI/axes/full safety/Main qualification.",
+    "Prior historical generic driver failure receipts still lack final physical cleanup; this new execution proves the repaired current path and does not retroactively qualify earlier processes.",
+    "Old whole functions remain OPEN/replacement_gates=[] and retired0. Source108=88fixtures+20other; additional26files160functions/shared7 unchanged."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "original_positive_results": {
+    "generic_value_struct": "FAIL CHECK1/BAD_STRUCTURE1 facade re-export node90; original positive0 remains required",
+    "integer_width": "FAIL CHECK1/BAD_TYPE3 line11 equality operand type mismatch; original positive0 remains required",
+    "total_failed": 8,
+    "emit_failure_files": "Four targets absent; no output opened before source rejection"
+  },
+  "control_results": {
+    "source": "Existing integer_width_explicit_literal control only",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "backends": [
+      "VM",
+      "native",
+      "mixed-even",
+      "mixed-odd"
+    ],
+    "passed": 8,
+    "instances": 16,
+    "answer_42_results": 32,
+    "canonical_0_results": 16,
+    "generated_C": "Real regenerated C, payload/trailer bytes identical to the immediately preceding built image and across configurations; freshly compiled as strict C11 with warnings as errors"
+  },
+  "evidence": {
+    "directory": "build-consumer-evidence/current67-driver-rejection-cleanup-r1",
+    "results": "results.json",
+    "audit": "final-audit.json",
+    "registered_normal_commands": 12,
+    "explicit_emit_argument_commands": 4,
+    "actual_PIDs": 16,
+    "fresh_shared_driver_TUs": 2,
+    "fresh_generated_C_TUs": 2,
+    "inputs_per_configuration_per_binary": 2734,
+    "physical": "Compiler0/0 and runtime live/bytes0 after caller ledger release on eight current failures; same final checks retained on eight positive control executions",
+    "production": "No production TU/archive rebuilt. Six actual Source/admission/declaration object archive bodies per configuration matched. Twenty source archives + sanitizer libraries in protected598 unchanged; extra linked runtime archives also match immediately preceding all-library baseline and current execution input captures.",
+    "annotation": "Execution captured pre-annotation SHA256 88cca247b802db79ccaca094838e133d2ea2e0628a8575d337711585d7d159a6. Map annotated after execution; no new-map execution claim."
+  },
+  "audit_history": "First evidence audit assumed all linked runtime archives were in the source-only protected library list and raised KeyError for runtime_host.lib. Audit corrected to bind additional archives to the immediately preceding all-library raw SHA/size/mtime snapshot; actual bytes matched. Initial audit script and correction record retained. This was an audit assumption error, not a product failure."
+}

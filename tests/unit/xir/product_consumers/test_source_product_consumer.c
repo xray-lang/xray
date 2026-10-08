@@ -483,7 +483,15 @@ int xr_source_product_consumer_main(const SourceProductConsumerFixture *fixture,
     if (failure != SIZE_MAX) {
         CHECK(instance_compile_injected && run.status == XR_XIR_OUT_OF_MEMORY);
     } else {
-        CHECK(run.status == XR_XIR_OK);
+        if (run.status != XR_XIR_OK) {
+            CHECK(!run.program);
+            release(&run);
+            instance_compile_report();
+            fprintf(stderr, "consumer-build-failure case=%s mode=%u actual=%u required=0 "
+                "compiler-physical=0/0 runtime-physical=0/0 result=FAIL\n",
+                XR_CONSUMER_NAME, mode, run.status);
+            return 1;
+        }
         if (!emit)
             normal(&run);
     }
