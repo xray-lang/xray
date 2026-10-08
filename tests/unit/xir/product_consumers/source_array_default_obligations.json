@@ -472,5 +472,76 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "public_array_escape_20261009_facet": {
+    "status": "PASS_PUBLIC_ARRAY_ESCAPE_LEGACY_OPEN",
+    "whole_replacement": "OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67/Value22/Call28/Program29/ABI351",
+    "evidence": "build-consumer-evidence/current67-array-default-escape-r1",
+    "fixture": "tests/unit/xir/product_consumers/array_default_escape/root.xr",
+    "fixture_native_sha256": "3c2007204060999acbe0167156c0a7bbbdeb8cbdf2cd7fb30f1fde01e1634cea",
+    "public_function": "export defaultValues(i64)->Array<u8>;fixed consumerAnswer returnslen(defaultValues(3))",
+    "counts": [
+      "3",
+      "0",
+      "-1",
+      "INT64_MIN",
+      "INT64_MAX",
+      "4"
+    ],
+    "required_outcomes": [
+      "RETURNED1/Array3 typedU8zeros",
+      "RETURNED1/Array0",
+      "NUMERIC_RANGE14/panic422",
+      "NUMERIC_RANGE14/panic422",
+      "LIMIT5",
+      "RETURNED1/Array4 typedU8zeros"
+    ],
+    "legacy_relation": "Keeps original six count inputs;the returned owned Array projection isadditional whole-pipeline ownership evidence. Original tests return scalar length. Do not substitute this projection for original exact panic452,maximumOOM or per-return allocator semantics.",
+    "metadata": "Public root/export/countI64/resultownedArrayU8. One ARRAY_REPEAT withcountSSA0 andprior CONST_INT U8 zero;RETURN takesexact repeatSSA. Dedicated owner kills SourceProduct/Session/request/authority/path buffers before Checkedverify andcompletepacket preservation;Checked dies before Loweredverify.",
+    "execution": "Eight actual VM/native/mixed_even/mixed_odd commands across MSVC andClang ASan/UBSan. Two retained Instances/command,canonical0 andprivate-answer refusal withoutallocation. Source/Session/Closed/generatedtext dead before calls;callerProgram reference dropped after2Instancesretain. EachInstance executes3,0,-1,MIN,MAX,4 inoriginalorder andrecovers at4.",
+    "returned_ownership": "48 heap Arrays and48 copied faultrecords across8backend commands. AllInstances freedbefore Arraydata inspection;public xr_xir_value_arena/array_len/array_get checkexact count andevery U8zero,no internalobject casts. Public copythenoriginaldropthenreadcopythenfinaldrop covers48Arraycopies. Physicalruntime remainsnonzero andcompilerstockabovebaseline whileArraysownarenas;finalArray/faultdrops restoreactualcompilerstock andruntimephysical0/0 beforecallerledger/observer finalrelease.",
+    "output_guards": "Failure take intoempty output isBAD_STATE;occupiedI64sentinel isBAD_ARGUMENT,exactbytes preserved andruntimeattemptsunchanged. Original negativeNUMERIC_RANGE paniccode422 andvalidcopiedfaults retainedafterInstancesfree. No heapStringpanic-message ownership proven.",
+    "actual_evidence": {
+      "actual_commands": 14,
+      "initial_product_failures": 0,
+      "backend_passes": 8,
+      "owned_passes": 2,
+      "unchanged_default_controls": 4,
+      "parameter_outcomes": 96,
+      "escaped_arrays": 48,
+      "array_copies": 48,
+      "retained_faults": 48,
+      "receipts": [
+        "results-source.json",
+        "results-native.json"
+      ],
+      "all_attempts": "actual-execution-attempts.xml",
+      "input_capture": "2648 actualinputs/PID;all14before==afterSHA,size,mtime,includingexplicit3compiler/runtimeobserverheaders. Postexecutionmap annotation hasrawpreimage;no newmapexecution claimed.",
+      "fresh_build": "12 fresh final test units and12compileevents:sharedDriver,newVMwrapper,newowned,newnativewrapper,newrealC andunchangeddefaultcontrolrealC perconfiguration. C11/W4/WX,actualClang ASan/UBSan andVALID Ninja dependencies;oldcontrolwrapper source/object exactreuse.",
+      "production_reuse": "All11production archives/config exact SHA,size,mtime;10+actual linked archives and6actual production object bodies matchedarchive member bytes. No productionTU/archive rebuilt.",
+      "generated_C_payload_sha256": {
+        "msvc": "0b2a710e04bff4d3f8e5b421f204de394c4fa17b3e64e5456ec7ffd812c38095",
+        "asan": "0b2a710e04bff4d3f8e5b421f204de394c4fa17b3e64e5456ec7ffd812c38095"
+      },
+      "control_C_payload_sha256": "4a9f1a61750b6e245f889a89558aab3688053ca737807ffe94f4e74da71805c3",
+      "protection": "10998tracked initial:10995nonowned exact,6newscoped files;12historicaldirtypreserved.598protected594exact+4expectedNinja/CTest changes;remove42newCTestlines/config restoresalloldrawregistry.",
+      "audit_history": "Firstpureaudit used sourcephase registry fornative rows before theirbinaries existed;corrected bybindingallactualargv tofinalnativephase registry. Bothsnapshots/error/scriptretained;14productresultsfirstPASS,none rerun."
+    },
+    "registration": "42newrows across2configurations=10normal/ownedPASS+32heavyNOT_RUN;4additionalolddefaultVM/nativecontrolsPASS. Compiler existinggenericfault_runner actualargv T600/P8/jobs8/COST300/RUN_SERIAL;axes --axes T120/P1/RUN_SERIAL,runtime --runtime andcancel --cancel T120/P1. NoWILL_FAIL.",
+    "heavy_scope": "Generic compiler fault driver checksits full Source/emit/Program census;genericruntime/cancel usesfixed consumerAnswer3. Neither registration provesall6count faultrollback/arrayescape failures or fullfamily qualification. Allheavygates NOT_RUN pendingMain window.",
+    "legacy_gaps": [
+      "Original negativepanic452 versuscurrent422 andmaximumOOM versusboundedLIMIT remainOPEN.",
+      "Original explicitowner-bit refusal andper-return contextallocations0 are not reconstructed bythis addedheapresult consumer.",
+      "Copy/drop exercised afterowner death;logicalCOW mutation independence,managedStringelements andfullnestedownership remain separate.",
+      "Full compiler/runtimeFI,allocated/live/work axes,cancel,security,Main integration andoldconsumer retirement remainOPEN."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }

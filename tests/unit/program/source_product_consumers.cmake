@@ -361,3 +361,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_default_source.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_source_refusals.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_default_escape.cmake")

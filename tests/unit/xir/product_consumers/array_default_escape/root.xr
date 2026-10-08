@@ -1,0 +1,5 @@
+export fn defaultValues(count:i64)->Array<u8> {
+    return Array<u8>(count)
+}
+fn answer()->i64 { return len(defaultValues(3)) }
+export fn consumerAnswer()->i64 { return answer() }
