@@ -1,0 +1,175 @@
+{
+  "schema": 1,
+  "identity": "Checked25/semantic67",
+  "case_count": 14,
+  "transitions_per_configuration": 56,
+  "positive_transitions": 8,
+  "rejection_transitions": 48,
+  "cases": [
+    {
+      "ordinal": 0,
+      "name": "cell_place",
+      "expected_status": 0,
+      "bytes": 709,
+      "sha256": "0dca64256f7a06180a6cd394289b93caa388f227cf66798af5e9fe14ce45517f",
+      "change": null
+    },
+    {
+      "ordinal": 1,
+      "name": "value_read",
+      "expected_status": 0,
+      "bytes": 709,
+      "sha256": "5eb632c271e1f84eff8bad25884c4f56756c9ff71c99960c70d834a4f0968dcf",
+      "change": [
+        6,
+        8,
+        1
+      ]
+    },
+    {
+      "ordinal": 2,
+      "name": "get_result_u64",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "675ae4c5224faee9e14e56f96c75ff0046d1fef1dc2e61b9a0e64be705ac8217",
+      "change": [
+        6,
+        4,
+        11
+      ]
+    },
+    {
+      "ordinal": 3,
+      "name": "get_scalar_receiver",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "a3c2338843ac25e2113f84f3e5ce998b46400e547ead69703d8e655e636522ec",
+      "change": [
+        6,
+        8,
+        0
+      ]
+    },
+    {
+      "ordinal": 4,
+      "name": "get_array_index",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "b3cd679ac494953388fae1753a0a88fd0abac7425e22c460ce5e2997b0542b94",
+      "change": [
+        6,
+        12,
+        1
+      ]
+    },
+    {
+      "ordinal": 5,
+      "name": "set_value_receiver",
+      "expected_status": 4,
+      "bytes": 709,
+      "sha256": "67b6fefa34396cd4d3d02848a5d60ea7638e029f625116a784274e3a5c14ead8",
+      "change": [
+        "operand",
+        1,
+        1
+      ]
+    },
+    {
+      "ordinal": 6,
+      "name": "set_scalar_receiver",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "d63753eea43d88c82ea2712b81a6424f2b29454483c93a4e506f2d66e0a492a4",
+      "change": [
+        "operand",
+        1,
+        0
+      ]
+    },
+    {
+      "ordinal": 7,
+      "name": "set_array_index",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "c9ae7432895d5fbe28e3c5283f9f94a2c5b2ab88194483745bf332500aff3f15",
+      "change": [
+        "operand",
+        2,
+        1
+      ]
+    },
+    {
+      "ordinal": 8,
+      "name": "set_array_element",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "6f134f08a26c880677e02c2a30e0d6dab06630485ac2bc84b2a1e9fd835f0561",
+      "change": [
+        "operand",
+        3,
+        1
+      ]
+    },
+    {
+      "ordinal": 9,
+      "name": "set_non_unit_result",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "f96530402f832c91a02e90a8063e6adeff025b6cfac72c663b74f3d580495ee3",
+      "change": [
+        5,
+        4,
+        2
+      ]
+    },
+    {
+      "ordinal": 10,
+      "name": "cell_place_wrong_result",
+      "expected_status": 3,
+      "bytes": 709,
+      "sha256": "7ce6985396f0e8db91032350083265b0b349c288a9b934ebbaf47b5cdf644fe2",
+      "change": [
+        3,
+        4,
+        2
+      ]
+    },
+    {
+      "ordinal": 11,
+      "name": "set_short_group",
+      "expected_status": 1,
+      "bytes": 709,
+      "sha256": "54e50a102e743a741aa74fa1827c511c97d0742dec393c36066df13ecf3a4614",
+      "change": [
+        5,
+        12,
+        2
+      ]
+    },
+    {
+      "ordinal": 12,
+      "name": "set_group_out_of_range",
+      "expected_status": 1,
+      "bytes": 709,
+      "sha256": "be0f0744fda6ce215a1e04aa69ff8fbee9b314f03e8b4b9d08eb4f8aad8bd58e",
+      "change": [
+        5,
+        8,
+        4
+      ]
+    },
+    {
+      "ordinal": 13,
+      "name": "get_unknown_index",
+      "expected_status": 4,
+      "bytes": 709,
+      "sha256": "8538df97e8b8cca1db07af4946151afd34e425623d7a77df0983e7c7ec39256b",
+      "change": [
+        6,
+        12,
+        4294967295
+      ]
+    }
+  ],
+  "boundary": "Scalar predicate components only; old element place, read-parameter representation, loan, owner exchange, cleanup CFG and full qualification remain OPEN."
+}

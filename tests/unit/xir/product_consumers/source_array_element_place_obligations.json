@@ -163,5 +163,109 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "checked_element_admission_20261009_facet": {
+    "status": "PASS_SCALAR_PREDICATE_COMPONENTS_WHOLE_LEGACY_OPEN",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67",
+    "legacy_function": {
+      "name": "test_array_element_place_admission",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 7166,
+      "body_lf_sha256": "38344c2eeabf083de6dedadb6c9b6b7fc242ec52b0be1f59b328e29d0059d86d",
+      "assertion_sites": 5,
+      "loop_sites": 5,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    "legacy_fixture": {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "function": "xr_program_array_place_fixture_write",
+      "function_lf_sha256": "733547291ddab0fd88660675af805e3072266f22086e5df570dfaa13ae0b3252"
+    },
+    "evidence": "build-consumer-evidence/current67-array-element-admission-r1",
+    "matrix": {
+      "cases": 14,
+      "entrances": [
+        "public Built compile_check",
+        "independent authentic Checked compile_checked_read"
+      ],
+      "outputs": [
+        "empty",
+        "real occupied owner"
+      ],
+      "transitions_per_configuration": 56,
+      "positive": 8,
+      "refusal": 48,
+      "total_final_transitions": 112,
+      "total_final_positive": 16,
+      "total_final_refusals": 96
+    },
+    "predicate_components": [
+      {
+        "legacy_mutation": 1,
+        "current_case": "get_result_u64",
+        "current_status": "BAD_TYPE3",
+        "scope": "Exact result element type predicate; current GET is a value, not the retired element-place representation."
+      },
+      {
+        "legacy_mutation": 2,
+        "current_cases": [
+          "get_scalar_receiver",
+          "set_scalar_receiver"
+        ],
+        "current_status": "BAD_TYPE3",
+        "scope": "Non-Array receiver predicate."
+      },
+      {
+        "legacy_mutation": 3,
+        "current_cases": [
+          "get_array_index",
+          "set_array_index"
+        ],
+        "current_status": "BAD_TYPE3",
+        "scope": "Index must be I64 predicate."
+      },
+      {
+        "legacy_mutation": 9,
+        "current_case": "set_value_receiver",
+        "current_status": "BAD_VALUE4",
+        "scope": "Writable-place authority predicate only. Old READ parameter and its OPERATION_TYPE diagnostic are not current owned value representation or status encoding."
+      }
+    ],
+    "ownership": "Every stack Built field/name/type/declaration/instruction/operand remains byte-identical after public check and is poisoned before owner use. Heap wire remains unchanged then is poisoned/freed before owner validation. Both positive cases verify metadata and complete independent writer bytes. Every refusal preserves empty/occupied output; real prior owner is reverified and writer-compared after input death; actual compiler observer stock returns to the prior baseline after each transition and final physical/table are0/0.",
+    "first_red": {
+      "product_failures": 2,
+      "actual_unknown_index_status": "BAD_VALUE4",
+      "wrong_fixed_expectation": "BAD_STRUCTURE1",
+      "location": "value_use rejects IDs outside parameter_count+instruction_count before type/dominance use",
+      "classification": "Test oracle category error; production was unchanged. Preserved original script/packets/manifest/trace/binaries/objects and6initial raw receipts. All56 initial transitions/config reached cleanup; each hadphysical refund and final physical/table0/0 despite4status mismatches.",
+      "repair": "Changed only independent expected status for the unchanged UINT32_MAX operand. Both new consumers freshly rebuilt; final6commandsPASS."
+    },
+    "build": "Four successful compilation events:initial andfinal one new consumer TU/config;finalC11/W4/WX with actualClang ASan+UBSan. Oldframe control binary/object and11archives/config reused exactly.",
+    "actual_evidence": {
+      "initial_commands": 6,
+      "initial_pass": 4,
+      "initial_fail": 2,
+      "final_commands": 6,
+      "final_pass": 6,
+      "inputs_per_command": 2673,
+      "all12_input_snapshots": "Every before==after SHA,size,mtime including3explicitobserverheaders. Overwritten firstpayloads andnewbinary/objects retained with original metadata. Runtime map/trace preimages retained; annotation is later static evidence.",
+      "old_frame_control": "Four actualcontrol executions (initial+final across2cfg),each4064refusal transitions. No broadened or changed oracle.",
+      "final_receipts": "final/results.json",
+      "initial_receipts": "results.json"
+    },
+    "remaining": [
+      "Original loan accepted0/2/3/5/8/10 and rejected1/4/6/9/11/12 preserve whole VALUE_USE/loan/explicit exchange obligations; current scalar get/set is not replacement qualification.",
+      "Original place accepted0/8,one SEQUENCE_ELEMENT_PLACE,no module slots,READ parameter identity andoriginaldiagnostic categories remainwholeOPEN.",
+      "Mutation5explicit owner drop beforeplace load,panic cleanup CFG,loans,owner exchanges,complete FI/axes/cancel/safety/Mainintegration andretirement remainOPEN."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }

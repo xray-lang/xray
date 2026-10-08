@@ -377,3 +377,5 @@ foreach(action IN ITEMS check self-test)
     set_tests_properties(source_product_consumer_responsibility_trace_${action}
         PROPERTIES TIMEOUT 30 LABELS "unit;xir;source-product;program-consumer;inventory")
 endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_element_admission.cmake")
