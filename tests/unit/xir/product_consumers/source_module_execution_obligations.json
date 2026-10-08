@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "IMPLEMENTED_NOT_QUALIFIED",
+  "result": "PASS_FOCUSED_BOTH_CONFIGURATIONS",
+  "legacy": [
+    {
+      "name": "test_module_initialization_construction",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 1158,
+      "body_lf_sha256": "8f6a13d25ffcf7d382251e434258e46fe7fd0a1d6613cba72d05f23fbc74e6c0",
+      "assertion_sites": 18,
+      "loop_sites": 6,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "prior_wire_map": "source_module_graph_obligations.json",
+  "original_fixture": "tests/unit/program/xr_program_module_fixture.h",
+  "responsibility": "Dependency-ordered diamond initialization with owned declarations, extended to actual per-instance execution and independent lexical-order controls.",
+  "representation_boundary": "Four private zero-argument Unit initializers plus a distinct I64 entry; legacy entry shared an initializer. This does not preserve old artifact identity bytes.",
+  "oracle": {
+    "graphs": [
+      "diamond",
+      "reversed_edges",
+      "forward_acyclic",
+      "lexical_tie_break"
+    ],
+    "orders": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        3,
+        1,
+        2,
+        0
+      ],
+      [
+        0,
+        2,
+        1,
+        3
+      ]
+    ],
+    "entry": 4,
+    "entry_result": 42,
+    "calls_per_graph": 6,
+    "instances_per_graph": 2,
+    "repeats_per_instance": 3,
+    "initializers_per_graph": 8,
+    "private_initializer_rejects_per_graph": 24,
+    "backend_resumes_per_graph": {
+      "vm": [
+        20,
+        0
+      ],
+      "native": [
+        0,
+        20
+      ],
+      "native-inits": [
+        12,
+        8
+      ],
+      "vm-inits": [
+        8,
+        12
+      ]
+    },
+    "lifecycle_events_per_graph": 16
+  },
+  "candidate_gates": [
+    {
+      "name": "source_product_module_execution_vm",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_execution_native",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_execution_native-inits",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_execution_vm-inits",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    },
+    {
+      "name": "source_product_module_execution_encoding",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "WILL_FAIL": false
+    }
+  ],
+  "ownership": "Heap Checked input poisoned/freed before reverify/write; Checked freed before Lowered verification; caller Program dropped before starts; two interleaved instances own the code lease until both die; six scalar results copied/dropped after Program/Lowered/code owners die.",
+  "evidence": "build-consumer-evidence/current67-module-graph-execution-r1",
+  "remaining": [
+    "SourceProduct graph producer",
+    "module slot publication/state isolation",
+    "initializer failure stickiness",
+    "cancellation and cleanup",
+    "original builder allocation sweep",
+    "full compiler/runtime FI",
+    "resource axes",
+    "full safety",
+    "Main integration"
+  ],
+  "retired": 0,
+  "replacement_gates": [],
+  "first_execution": "Eight runtime processes failed a harness assumption: the entry CONST_INT returns CONTINUE before RETURN, so one entry activation resumes twice. Strict dependency order and once obligations were unchanged; the observer now counts returned activations and independently checks public BEGIN/READY callbacks.",
+  "execution": {
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan+UBSan"
+    ],
+    "runtime_processes": 8,
+    "encoding_processes": 2,
+    "graphs_per_process": 4,
+    "entry_calls": 192,
+    "initializer_completions": 256,
+    "lifecycle_callbacks": 512,
+    "private_initializer_rejections": 768,
+    "retained_scalar_results": 192,
+    "final_physical": "compiler=0/0 runtime=0/0 table=0",
+    "result_evidence": "corrected-r3/results.json",
+    "first_failure_evidence": "results.json and diagnostic-r2/results.json",
+    "actual_native": "Four emitted C translation units per configuration; generated digest compared to reemitted payload."
+  },
+  "postrun_note": "Final results appended after execution, not a rerun using this annotated map."
+}

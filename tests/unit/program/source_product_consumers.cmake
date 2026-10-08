@@ -297,3 +297,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_sourc
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_nominal_names.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_graph.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_module_execution.cmake")
