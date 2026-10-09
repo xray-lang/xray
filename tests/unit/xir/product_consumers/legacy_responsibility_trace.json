@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 137,
-    "other_without_digest_reference": 23,
-    "digest_reference_values": 359,
+    "other_with_digest_reference": 139,
+    "other_without_digest_reference": 21,
+    "digest_reference_values": 363,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -486,6 +486,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_affine_copy_lowering_obligations.json",
       "lf_sha256": "fbc1bbdd65a839f662fb4cfde4d45e044bd014f913d1346a5c7aaf222b0ef288"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
+      "lf_sha256": "8509936bd2d260f9928603a15bd92cabe1e19fa3f840e034302c521d6c360d68"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_coroutine_state_edge_cancel_lowering_obligations.json",
@@ -5486,7 +5490,18 @@
       "body_lf_sha256": "7c9268fd2f44def13c98b4e512c506841cb2eb6ef1a231f0e535a3eda79066d8",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
@@ -5631,7 +5646,18 @@
       "body_lf_sha256": "5b9066bce2ce13d676be63481cac1cdf1abca1ac8d218cee5d1a9ca0ece4341a",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
